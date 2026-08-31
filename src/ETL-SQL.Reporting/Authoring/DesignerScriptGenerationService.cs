@@ -257,6 +257,10 @@ public sealed class DesignerScriptGenerationService
             .Where(option => !IsReservedOption(option.Key))
             .Select(option => $"{option.Key.ToUpperInvariant()} = {FormatOptionValue(option.Value)}")
             .ToList();
+        var xAxis = FormatAxisOption("X", visual.Formatting?.XAxis);
+        if (xAxis is not null) regularOptions.Add(xAxis);
+        var yAxis = FormatAxisOption("Y", visual.Formatting?.YAxis);
+        if (yAxis is not null) regularOptions.Add(yAxis);
         if (regularOptions.Count > 0)
             AppendLine(sb, $"    OPTIONS ({string.Join(", ", regularOptions)}),", nl);
 
@@ -309,9 +313,6 @@ public sealed class DesignerScriptGenerationService
             styleOptions.Add($"PALETTE = ({string.Join(", ", palette.Select(color => $"'{EscapeStr(color)}'"))})");
         if (styleOptions.Count > 0)
             AppendLine(sb, $"    STYLE ({string.Join(", ", styleOptions)}),", nl);
-
-        AppendAxisClause(sb, "X", visual.Formatting?.XAxis, nl);
-        AppendAxisClause(sb, "Y", visual.Formatting?.YAxis, nl);
 
         if (visual.Formatting?.ConditionalRules is { Count: > 0 } rules)
         {
@@ -513,18 +514,16 @@ public sealed class DesignerScriptGenerationService
         return builder.ToString();
     }
 
-    private static void AppendAxisClause(
-        StringBuilder builder,
+    private static string? FormatAxisOption(
         string axis,
-        Dictionary<string, string>? options,
-        string lineEnding)
+        Dictionary<string, string>? options)
     {
-        if (options is not { Count: > 0 }) return;
+        if (options is not { Count: > 0 }) return null;
         var body = options
             .Where(option => !string.IsNullOrWhiteSpace(option.Value))
             .Select(option => $"{option.Key.ToUpperInvariant()} = {FormatOptionValue(option.Value)}")
             .ToList();
-        if (body.Count > 0) AppendLine(builder, $"    {axis}_AXIS ({string.Join(", ", body)}),", lineEnding);
+        return body.Count > 0 ? $"{axis}_AXIS ({string.Join(", ", body)})" : null;
     }
 
     private static string FormatOptionValue(string value)

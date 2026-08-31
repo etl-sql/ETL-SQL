@@ -423,10 +423,19 @@ function splitTopLevel(list) {
   const out = [];
   let depth = 0;
   let cur = '';
-  for (const ch of list) {
-    if (ch === '(') depth++;
-    else if (ch === ')') depth = Math.max(0, depth - 1);
-    if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+  let inString = false;
+  for (let index = 0; index < list.length; index++) {
+    const ch = list[index];
+    if (ch === "'") {
+      if (inString && list[index + 1] === "'") {
+        cur += "''";
+        index++;
+        continue;
+      }
+      inString = !inString;
+    } else if (!inString && ch === '(') depth++;
+    else if (!inString && ch === ')') depth = Math.max(0, depth - 1);
+    if (!inString && ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
   }
   if (cur.trim()) out.push(cur);
   return out;
@@ -868,18 +877,58 @@ function mockPatchScript(script, state) {
   return out;
 }
 
-// Finds `KEYWORD ( ... )` by balancing parentheses, so a nested clause does not end the span early.
+// Finds either `KEYWORD ( ... )` or `KEYWORD = value` inside a statement. The formatting inspector
+// upgrades scalar TITLE/SUBTITLE clauses into structured ones, so a parenthesis-only finder would
+// miss the old scalar, append a second TITLE, and hand the next parse an invalid visual.
 function mockFindClause(text, keyword, from = 0) {
-  const pattern = new RegExp('\\b' + keyword + '\\s*\\(', 'gi');
-  pattern.lastIndex = from;
-  const match = pattern.exec(text);
-  if (!match) return null;
   let depth = 0;
-  for (let i = match.index + match[0].length - 1; i < text.length; i++) {
-    if (text[i] === '(') depth++;
-    else if (text[i] === ')') {
-      depth--;
-      if (depth === 0) return { start: match.index, end: i + 1, text: text.slice(match.index, i + 1) };
+  let inString = false;
+  const upperKeyword = keyword.toUpperCase();
+  for (let index = 0; index < text.length; index++) {
+    const current = text[index];
+    if (current === "'") {
+      if (inString && text[index + 1] === "'") { index++; continue; }
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (current === '(') { depth++; continue; }
+    if (current === ')') { depth--; continue; }
+    if (index < from || depth < 1 || text.slice(index, index + keyword.length).toUpperCase() !== upperKeyword) continue;
+    const before = index > 0 ? text[index - 1] : '';
+    const after = text[index + keyword.length] || '';
+    if (/[A-Za-z0-9_]/.test(before) || /[A-Za-z0-9_]/.test(after)) continue;
+
+    let cursor = index + keyword.length;
+    while (/\s/.test(text[cursor] || '')) cursor++;
+    if (text[cursor] === '(') {
+      let clauseDepth = 0;
+      let clauseString = false;
+      for (let end = cursor; end < text.length; end++) {
+        if (text[end] === "'") {
+          if (clauseString && text[end + 1] === "'") { end++; continue; }
+          clauseString = !clauseString;
+        } else if (!clauseString && text[end] === '(') clauseDepth++;
+        else if (!clauseString && text[end] === ')' && --clauseDepth === 0)
+          return { start: index, end: end + 1, text: text.slice(index, end + 1) };
+      }
+      return null;
+    }
+    if (text[cursor] === '=') {
+      let valueDepth = depth;
+      let valueString = false;
+      for (let end = cursor + 1; end < text.length; end++) {
+        if (text[end] === "'") {
+          if (valueString && text[end + 1] === "'") { end++; continue; }
+          valueString = !valueString;
+        } else if (!valueString && text[end] === '(') valueDepth++;
+        else if (!valueString && text[end] === ')') {
+          if (valueDepth === depth) return { start: index, end, text: text.slice(index, end) };
+          valueDepth--;
+        } else if (!valueString && text[end] === ',' && valueDepth === depth)
+          return { start: index, end, text: text.slice(index, end) };
+      }
+      return { start: index, end: text.length, text: text.slice(index) };
     }
   }
   return null;
@@ -1000,21 +1049,73 @@ function mockVisualStatement(visual) {
     || (visual.dataset ? (String(visual.dataset).startsWith('&') ? visual.dataset : '&' + visual.dataset) : null);
   const clauses = [];
   if (source) clauses.push('    SOURCE = ' + source);
-  const maps = Object.entries(visual.mappings ?? {}).filter(([, column]) => column).map(([role, column]) => role + ' = ' + column);
+  const maps = mockVisualMappings(visual);
   if (maps.length) clauses.push('    MAPPINGS (' + maps.join(', ') + ')');
-  if (visual.title) clauses.push("    TITLE = '" + String(visual.title).replace(/'/g, "''") + "'");
-  const options = mockOptionsClause(visual.options);
+  const title = mockTextClause('TITLE', visual.formatting?.title, visual.title);
+  if (title) clauses.push('    ' + title);
+  const subtitle = mockTextClause('SUBTITLE', visual.formatting?.subtitle, null);
+  if (subtitle) clauses.push('    ' + subtitle);
+  const options = mockOptionsClause(visual.options, visual.formatting);
   if (options) clauses.push('    ' + options);
+  const palette = visual.formatting?.palette ?? [];
+  if (palette.length) clauses.push('    STYLE (PALETTE = (' + palette.map(mockQuote).join(', ') + '))');
+  const rules = mockFormattingClause(visual.formatting?.conditionalRules);
+  if (rules) clauses.push('    ' + rules);
   if (visual.options?.print_layout) clauses.push('    ' + visual.options.print_layout);
   return 'CREATE VISUAL ' + name + ' AS ' + visual.type + ' (\n' + clauses.join(',\n') + '\n);';
 }
 
 // `inline_source` and `print_layout` are carried as their own clauses, not as OPTIONS entries.
-function mockOptionsClause(options) {
+function mockOptionsClause(options, formatting) {
   const entries = Object.entries(options ?? {}).filter(([key]) => key !== 'inline_source' && key !== 'print_layout');
-  if (!entries.length) return '';
-  const body = entries.map(([key, value]) => key + " = '" + String(value).replace(/'/g, "''") + "'").join(', ');
-  return 'OPTIONS (' + body + ')';
+  const body = entries.map(([key, value]) => key + ' = ' + mockOptionValue(value));
+  for (const [axis, values] of [['X', formatting?.xAxis], ['Y', formatting?.yAxis]]) {
+    const axisEntries = Object.entries(values ?? {}).filter(([, value]) => String(value || '').trim());
+    if (axisEntries.length) body.push(axis + '_AXIS (' + axisEntries.map(([key, value]) => key.toUpperCase() + ' = ' + mockOptionValue(value)).join(', ') + ')');
+  }
+  return body.length ? 'OPTIONS (' + body.join(', ') + ')' : '';
+}
+
+function mockQuote(value) { return "'" + String(value ?? '').replace(/'/g, "''") + "'"; }
+
+function mockOptionValue(value) {
+  const text = String(value ?? '').trim();
+  return /^-?\d+(?:\.\d+)?$/.test(text) || /^(?:ON|OFF|TRUE|FALSE)$/i.test(text) ? text.toUpperCase() : mockQuote(text);
+}
+
+function mockTextClause(keyword, formatting, fallback) {
+  const text = formatting?.text ?? fallback;
+  const styled = formatting && ['color', 'font', 'size', 'weight', 'align'].some(key => formatting[key]);
+  if (!styled) return text ? keyword + ' = ' + mockQuote(text) : '';
+  const parts = [];
+  if (text) parts.push('TEXT = ' + mockQuote(text));
+  if (formatting.color) parts.push('COLOR = ' + mockQuote(formatting.color));
+  if (formatting.font) parts.push('FONT = ' + mockQuote(formatting.font));
+  if (formatting.size) parts.push('SIZE = ' + mockQuote(formatting.size));
+  if (formatting.weight) parts.push('WEIGHT = ' + mockQuote(formatting.weight));
+  if (formatting.align) parts.push('ALIGN = ' + String(formatting.align).toUpperCase());
+  return keyword + ' (' + parts.join(', ') + ')';
+}
+
+function mockVisualMappings(visual) {
+  const fields = visual.formatting?.fields ?? {};
+  return Object.entries(visual.mappings ?? {}).filter(([, column]) => column).map(([role, column]) => {
+    const field = fields[role] || fields[role.toUpperCase()];
+    if (!field) return role + ' = ' + column;
+    let text = String(column);
+    if (field.format) text += ' FORMAT ' + mockQuote(field.format);
+    if (field.align) text += ' ALIGN ' + mockQuote(field.align);
+    if (field.dataBar) text += ' DATA_BAR' + (field.dataBarColor ? ' COLOR ' + mockQuote(field.dataBarColor) : '');
+    if (field.displayName) text += ' AS ' + mockQuote(field.displayName);
+    return text;
+  });
+}
+
+function mockFormattingClause(rules) {
+  const entries = (rules ?? []).filter(rule => rule.condition && rule.backgroundColor).map(rule =>
+    'WHEN ' + rule.condition + ' THEN ' + mockQuote(rule.backgroundColor)
+      + (rule.fontColor ? ' FONT_COLOR ' + mockQuote(rule.fontColor) : ''));
+  return entries.length ? 'FORMATTING (' + entries.join(', ') + ')' : '';
 }
 
 function mockPatchVisuals(script, state) {
@@ -1061,7 +1162,14 @@ function mockPatchVisuals(script, state) {
 // Only the clauses the Studio workflows write are reconciled; everything else the author typed stays.
 function mockRewriteVisualClauses(statement, visual) {
   let out = statement;
-  out = mockReplaceClause(out, 'OPTIONS', mockOptionsClause(visual.options));
+  out = mockReplaceClause(out, 'TITLE', mockTextClause('TITLE', visual.formatting?.title, visual.title));
+  out = mockReplaceClause(out, 'SUBTITLE', mockTextClause('SUBTITLE', visual.formatting?.subtitle, null));
+  const mappings = mockVisualMappings(visual);
+  out = mockReplaceClause(out, 'MAPPINGS', mappings.length ? 'MAPPINGS (' + mappings.join(', ') + ')' : '');
+  out = mockReplaceClause(out, 'OPTIONS', mockOptionsClause(visual.options, visual.formatting));
+  const palette = visual.formatting?.palette ?? [];
+  out = mockReplaceClause(out, 'STYLE', palette.length ? 'STYLE (PALETTE = (' + palette.map(mockQuote).join(', ') + '))' : '');
+  out = mockReplaceClause(out, 'FORMATTING', mockFormattingClause(visual.formatting?.conditionalRules));
   out = mockReplaceClause(out, 'PRINT_LAYOUT', visual.options?.print_layout || '');
   return out;
 }
@@ -1167,7 +1275,9 @@ function mockParseVisuals(script) {
     const optionsClause = mockFindClause(body, 'OPTIONS');
     if (optionsClause) {
       const inner = optionsClause.text.slice(optionsClause.text.indexOf('(') + 1, -1);
-      for (const entry of inner.split(',')) {
+      for (const entry of splitTopLevel(inner)) {
+        const axis = /^([XY])_AXIS\s*\(([\s\S]*)\)$/i.exec(entry.trim());
+        if (axis) continue;
         const [key, ...rest] = entry.split('=');
         if (!key || !rest.length) continue;
         options[key.trim()] = rest.join('=').trim().replace(/^'|'$/g, '');
@@ -1179,15 +1289,55 @@ function mockParseVisuals(script) {
     if (textDefault) options.text_default = textDefault;
 
     const mappings = {};
+    const fields = {};
     const mappingClause = mockFindClause(body, 'MAPPINGS');
     if (mappingClause) {
       const inner = mappingClause.text.slice(mappingClause.text.indexOf('(') + 1, -1);
-      inner.split(',').forEach((entry, index) => {
+      splitTopLevel(inner).forEach((entry, index) => {
         const parts = entry.split('=');
         if (parts.length >= 2) mappings[parts[0].trim().toUpperCase()] = parts.slice(1).join('=').trim();
-        else if (entry.trim()) mappings[`COLUMN${index + 1}`] = entry.trim();
+        else if (entry.trim()) {
+          const column = /^([A-Za-z_][A-Za-z0-9_]*)/.exec(entry.trim())?.[1] || `COLUMN${index + 1}`;
+          mappings[column.toUpperCase()] = column;
+          const format = /\bFORMAT\s+'((?:[^']|'')*)'/i.exec(entry)?.[1]?.replace(/''/g, "'");
+          const align = /\bALIGN\s+'((?:[^']|'')*)'/i.exec(entry)?.[1]?.replace(/''/g, "'");
+          const dataBar = /\bDATA_BAR\b/i.test(entry);
+          const dataBarColor = /\bDATA_BAR\s+COLOR\s+'((?:[^']|'')*)'/i.exec(entry)?.[1]?.replace(/''/g, "'");
+          const displayName = /\bAS\s+'((?:[^']|'')*)'/i.exec(entry)?.[1]?.replace(/''/g, "'");
+          if (format || align || dataBar || displayName) fields[column.toUpperCase()] = { format, align, dataBar, dataBarColor, displayName };
+        }
       });
     }
+
+    const titleBlock = mockFindClause(body, 'TITLE');
+    const titleText = titleBlock?.text.includes('(')
+      ? /\bTEXT\s*=\s*'((?:[^']|'')*)'/i.exec(titleBlock.text)?.[1]?.replace(/''/g, "'")
+      : /\bTITLE\s*=\s*'((?:[^']|'')*)'/i.exec(body)?.[1]?.replace(/''/g, "'");
+    const textFormatting = (keyword) => {
+      const clause = mockFindClause(body, keyword);
+      if (!clause || !clause.text.includes('(')) return null;
+      const read = key => new RegExp('\\b' + key + "\\s*=\\s*'((?:[^']|'')*)'", 'i').exec(clause.text)?.[1]?.replace(/''/g, "'") || null;
+      return { text: read('TEXT'), color: read('COLOR'), font: read('FONT'), size: read('SIZE'), weight: read('WEIGHT'), align: /\bALIGN\s*=\s*([A-Za-z0-9_]+)/i.exec(clause.text)?.[1] || null };
+    };
+    const axisOptions = axis => {
+      const optionsText = optionsClause?.text || '';
+      const clause = mockFindClause(optionsText, axis + '_AXIS');
+      if (!clause) return {};
+      const values = {};
+      for (const entry of splitTopLevel(clause.text.slice(clause.text.indexOf('(') + 1, -1))) {
+        const [key, ...rest] = entry.split('=');
+        if (key && rest.length) values[key.trim().toUpperCase()] = rest.join('=').trim().replace(/^'|'$/g, '');
+      }
+      return values;
+    };
+    const paletteClause = mockFindClause(body, 'STYLE');
+    const paletteBody = paletteClause ? /\bPALETTE\s*=\s*\(([\s\S]*?)\)/i.exec(paletteClause.text)?.[1] : null;
+    const palette = paletteBody ? splitTopLevel(paletteBody).map(value => value.trim().replace(/^'|'$/g, '')) : [];
+    const formattingClause = mockFindClause(body, 'FORMATTING');
+    const conditionalRules = formattingClause ? splitTopLevel(formattingClause.text.slice(formattingClause.text.indexOf('(') + 1, -1)).map(entry => {
+      const rule = /^\s*WHEN\s+([\s\S]+?)\s+THEN\s+'((?:[^']|'')*)'(?:\s+FONT_COLOR\s+'((?:[^']|'')*)')?\s*$/i.exec(entry);
+      return rule ? { condition: rule[1].trim(), backgroundColor: rule[2].replace(/''/g, "'"), fontColor: rule[3]?.replace(/''/g, "'") || null } : null;
+    }).filter(Boolean) : [];
 
     const type = match[2].toUpperCase();
     const wide = type === 'TABLE' || type === 'MATRIX' || type === 'TEXT';
@@ -1201,10 +1351,22 @@ function mockParseVisuals(script) {
       gridRow: visuals.reduce((row, visual) => row + visual.gridRowSpan, 1),
       gridColSpan: wide ? 12 : 6,
       gridRowSpan: type === 'TEXT' ? 2 : type === 'CARD' ? 2 : 4,
-      title: /\bTITLE\s*=\s*'((?:[^']|'')*)'/i.exec(body)?.[1]?.replace(/''/g, "'") || null,
+      title: titleText || null,
       dataset,
       mappings,
       options,
+      formatting: {
+        title: textFormatting('TITLE'),
+        subtitle: textFormatting('SUBTITLE') || (() => {
+          const text = /\bSUBTITLE\s*=\s*'((?:[^']|'')*)'/i.exec(body)?.[1]?.replace(/''/g, "'");
+          return text ? { text } : null;
+        })(),
+        xAxis: axisOptions('X'),
+        yAxis: axisOptions('Y'),
+        palette,
+        conditionalRules,
+        fields,
+      },
     });
   }
   return visuals;

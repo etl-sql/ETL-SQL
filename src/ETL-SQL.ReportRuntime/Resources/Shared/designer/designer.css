@@ -2308,6 +2308,89 @@ body.vscode-dark .cm-diagnostic-source {
     margin-bottom: 6px;
 }
 
+/* Studio's visual-format rail. The thin cyan rule is the one deliberate signature: it reads as a
+   live connection from controls to source, while the rest stays quiet enough for a dense IDE pane. */
+.etlsql-format-inspector {
+    margin: 0 -4px 14px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-top: 2px solid var(--portal-accent, #58a6ff);
+    border-radius: 6px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--portal-surface, #161b22) 88%, var(--portal-accent, #58a6ff) 12%);
+}
+
+.etlsql-format-profile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px;
+    border-bottom: 1px solid var(--portal-border, #30363d);
+}
+.etlsql-format-profile > div:first-child { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.etlsql-format-profile span { color: var(--portal-text-soft, #8b949e); font-size: 0.625rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.etlsql-format-profile strong { color: var(--portal-text, #f0f6fc); font: 600 0.75rem/1.2 var(--portal-font-mono, "Cascadia Code", Consolas, monospace); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.etlsql-format-profile-palette { display: flex; align-items: center; }
+.etlsql-format-profile-palette i { width: 14px; height: 24px; margin-left: -4px; border: 1px solid var(--portal-surface, #161b22); border-radius: 3px; background: var(--format-color); transform: skewX(-8deg); }
+.etlsql-format-profile-palette i:first-child { margin-left: 0; }
+
+.etlsql-format-group { border-bottom: 1px solid var(--portal-border, #30363d); }
+.etlsql-format-group:last-child { border-bottom: 0; }
+.etlsql-format-group > summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    color: var(--portal-text, #f0f6fc);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+.etlsql-format-group > summary::before { content: '›'; color: var(--portal-text-soft, #8b949e); font-size: 1rem; line-height: 0.7; transition: transform 120ms ease; }
+.etlsql-format-group[open] > summary::before { transform: rotate(90deg); }
+.etlsql-format-group > summary::-webkit-details-marker { display: none; }
+.etlsql-format-group > summary span { margin-left: auto; padding: 1px 5px; border-radius: 999px; background: var(--portal-bg, #0d1117); color: var(--portal-text-soft, #8b949e); font: 0.625rem var(--portal-font-mono, monospace); }
+.etlsql-format-group-body { padding: 4px 10px 10px 26px; }
+.etlsql-format-hint { margin: 0 0 8px; color: var(--portal-text-soft, #8b949e); font-size: 0.6875rem; line-height: 1.4; }
+
+.etlsql-format-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 28px; color: var(--portal-text-soft, #8b949e); font-size: 0.75rem; }
+.etlsql-format-toggle input { accent-color: var(--portal-accent, #58a6ff); }
+.etlsql-format-axis-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; margin-top: 6px; }
+.etlsql-format-axis-grid strong { color: var(--portal-text-soft, #8b949e); font-size: 0.6875rem; text-align: center; }
+.etlsql-format-axis-grid .form-control { padding: 4px 6px; font-size: 0.6875rem; }
+
+.etlsql-format-palette-list { display: flex; flex-direction: column; gap: 5px; }
+.etlsql-format-palette-list > div { display: grid; grid-template-columns: 28px minmax(0, 1fr) 24px; gap: 5px; align-items: center; }
+.etlsql-format-palette-list input[type="color"] { width: 28px; height: 26px; padding: 1px; border: 1px solid var(--portal-border, #30363d); border-radius: 4px; background: transparent; }
+.etlsql-format-palette-list button,
+.etlsql-format-rule-result button { border: 0; background: transparent; color: var(--portal-text-soft, #8b949e); cursor: pointer; }
+.etlsql-format-palette-list button:hover,
+.etlsql-format-rule-result button:hover { color: var(--portal-danger, #f85149); }
+.etlsql-format-add { margin-top: 7px; padding: 4px 8px; border: 1px dashed var(--portal-border, #30363d); border-radius: 4px; background: transparent; color: var(--portal-accent, #58a6ff); font: inherit; font-size: 0.6875rem; cursor: pointer; }
+.etlsql-format-add:hover { border-style: solid; background: var(--portal-accent-soft, rgba(88,166,255,.12)); }
+
+.etlsql-format-field-list { display: flex; flex-direction: column; gap: 6px; }
+.etlsql-format-field { display: grid; grid-template-columns: minmax(0, 1fr) 76px 72px 28px; gap: 5px; align-items: center; }
+.etlsql-format-field strong { overflow: hidden; color: var(--portal-text, #f0f6fc); font: 0.6875rem var(--portal-font-mono, monospace); text-overflow: ellipsis; white-space: nowrap; }
+.etlsql-format-field input[type="color"] { width: 28px; height: 26px; padding: 1px; border: 1px solid var(--portal-border, #30363d); border-radius: 4px; background: transparent; }
+
+.etlsql-format-rule-list { display: flex; flex-direction: column; gap: 8px; }
+.etlsql-format-rule { padding: 7px; border: 1px solid var(--portal-border, #30363d); border-radius: 5px; background: var(--portal-bg, #0d1117); }
+.etlsql-format-rule-line { display: grid; grid-template-columns: 20px minmax(0, 1.5fr) 52px minmax(0, 1fr); gap: 4px; align-items: center; }
+.etlsql-format-rule-line > span,
+.etlsql-format-rule-result > span { color: var(--portal-accent, #58a6ff); font: 600 0.625rem var(--portal-font-mono, monospace); }
+.etlsql-format-rule-line .form-control { padding: 3px 5px; font-size: 0.6875rem; }
+.etlsql-format-rule-result { display: flex; align-items: center; gap: 9px; margin-top: 6px; }
+.etlsql-format-rule-result label { display: inline-flex; align-items: center; gap: 4px; color: var(--portal-text-soft, #8b949e); font-size: 0.625rem; }
+.etlsql-format-rule-result input[type="color"] { width: 24px; height: 20px; padding: 0; border: 1px solid var(--portal-border, #30363d); border-radius: 3px; background: transparent; }
+.etlsql-format-rule-result button { margin-left: auto; font-size: 0.625rem; }
+
+@media (prefers-reduced-motion: reduce) {
+    .etlsql-format-group > summary::before { transition: none; }
+}
+
 .etlsql-dsgn-modal-bg {
     position: absolute;
     inset: 0;

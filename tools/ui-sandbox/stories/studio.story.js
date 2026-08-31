@@ -18,13 +18,17 @@ CREATE DATASET &orders AS (
 CREATE VISUAL RevenueCard AS CARD (
   SOURCE = &orders,
   TITLE = 'Total Revenue',
-  MAPPINGS (VALUE = total_amount)
+  MAPPINGS (VALUE = total_amount),
+  OPTIONS (FORMAT = '$#,##0.00'),
+  FORMATTING (WHEN total_amount < 1000 THEN '#3f1d24' FONT_COLOR '#ffb4ab')
 );
 
 CREATE VISUAL SalesByRegion AS BAR (
   SOURCE = &orders,
-  TITLE = 'Sales by Region',
-  MAPPINGS (X = region, Y = total_amount)
+  TITLE (TEXT = 'Sales by Region', COLOR = '#f0f6fc', FONT = 'Segoe UI', SIZE = '14px', WEIGHT = 'BOLD', ALIGN = LEFT),
+  MAPPINGS (X = region, Y = total_amount),
+  OPTIONS (LEGEND = OFF, Y_AXIS (LABEL = 'Revenue', MIN = 0, FORMAT = '$#,##0')),
+  STYLE (PALETTE = ('#58a6ff', '#2ea043', '#d29922'))
 );
 
 CREATE PAGE [Executive Overview] AS DASHBOARD (
@@ -83,8 +87,8 @@ SELECT TOP 10 * FROM raw_test.users;`,
 const STUDIO_DESIGN_STATE = {
   pages: [{
     id: 'p1', name: 'Executive Overview', mode: 'Dashboard', visuals: [
-      { id: 'v1', name: 'RevenueCard', type: 'CARD', gridCol: 1, gridRow: 1, gridColSpan: 6, gridRowSpan: 4, title: 'Total Revenue', dataset: '&orders', mappings: { VALUE: 'total_amount' }, options: {} },
-      { id: 'v2', name: 'SalesByRegion', type: 'BAR', gridCol: 7, gridRow: 1, gridColSpan: 6, gridRowSpan: 4, title: 'Sales by Region', dataset: '&orders', mappings: { X: 'region', Y: 'total_amount' }, options: {} },
+      { id: 'v1', name: 'RevenueCard', type: 'CARD', gridCol: 1, gridRow: 1, gridColSpan: 6, gridRowSpan: 4, title: 'Total Revenue', dataset: '&orders', mappings: { VALUE: 'total_amount' }, options: { FORMAT: '$#,##0.00' }, formatting: { title: { text: 'Total Revenue' }, conditionalRules: [{ condition: 'total_amount < 1000', backgroundColor: '#3f1d24', fontColor: '#ffb4ab' }] } },
+      { id: 'v2', name: 'SalesByRegion', type: 'BAR', gridCol: 7, gridRow: 1, gridColSpan: 6, gridRowSpan: 4, title: 'Sales by Region', dataset: '&orders', mappings: { X: 'region', Y: 'total_amount' }, options: { LEGEND: 'OFF' }, formatting: { title: { text: 'Sales by Region', color: '#f0f6fc', font: 'Segoe UI', size: '14px', weight: 'BOLD', align: 'LEFT' }, yAxis: { LABEL: 'Revenue', MIN: '0', FORMAT: '$#,##0' }, palette: ['#58a6ff', '#2ea043', '#d29922'] } },
     ],
   }],
   datasets: [{ id: 'ds1', name: '&orders', query: "SELECT order_date, total_amount, region FROM corp_db.orders WHERE status = 'Completed'" }],

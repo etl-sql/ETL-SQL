@@ -147,6 +147,13 @@ CREATE VISUAL LineChart AS LINE (
             Assert.Equal(2, stmt!.AxisOptions.Count);
             Assert.Equal("X", stmt.AxisOptions[0].Axis);
             Assert.Equal("Y", stmt.AxisOptions[1].Axis);
+
+            var formatted = stmt.ToSql();
+            Assert.Contains("OPTIONS", formatted, StringComparison.Ordinal);
+            Assert.Contains("X_AXIS", formatted, StringComparison.Ordinal);
+            Assert.DoesNotContain("\n    X_AXIS", formatted, StringComparison.Ordinal);
+            Assert.DoesNotContain(Parse(formatted).Diagnostics,
+                diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
         }
 
         [Theory]
@@ -662,6 +669,8 @@ CREATE VISUAL T AS TABLE (
             Assert.Equal("#cc0000", stmt.FormattingRules[0].FontColor);
             Assert.Equal("#d4edda", stmt.FormattingRules[1].Color);
             Assert.Null(stmt.FormattingRules[1].FontColor);
+            Assert.Contains("FORMATTING", stmt.ToSql(), StringComparison.Ordinal);
+            Assert.Contains("FONT_COLOR '#cc0000'", stmt.ToSql(), StringComparison.Ordinal);
         }
 
         [Fact]

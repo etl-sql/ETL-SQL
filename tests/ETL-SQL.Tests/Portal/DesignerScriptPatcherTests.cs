@@ -592,6 +592,67 @@ public class DesignerScriptPatcherTests
         Assert.Contains("OPACITY = '0.95'", patched, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void PatchesVisualFormattingInspectorClauses_AndRoundTripsTypedState()
+    {
+        const string original = """
+            SELECT 'North' AS region, -125.5 AS margin INTO #data;
+
+            CREATE VISUAL MarginTable AS TABLE (
+                TITLE = 'Margin by region',
+                SOURCE = #data,
+                MAPPINGS (region, margin)
+            );
+
+            CREATE PAGE [Dashboard] AS DASHBOARD (
+                LAYOUT (STRUCTURE = 'A', MAP ('A' = MarginTable))
+            );
+            """;
+
+        var formatting = new DesignerVisualFormattingDto(
+            Title: new DesignerTextFormattingDto(
+                "Margin by region", "#f8fafc", "Segoe UI", "16px", "BOLD", "LEFT"),
+            Subtitle: new DesignerTextFormattingDto("Negative values need review"),
+            XAxis: new Dictionary<string, string> { ["LABEL"] = "Region" },
+            YAxis: new Dictionary<string, string>
+            {
+                ["LABEL"] = "Margin",
+                ["MIN"] = "-500",
+                ["MAX"] = "500",
+                ["FORMAT"] = "$#,##0.00"
+            },
+            Palette: ["#2563eb", "#dc2626"],
+            ConditionalRules:
+            [
+                new DesignerConditionalFormattingRuleDto("margin < 0", "#fee2e2", "#991b1b")
+            ],
+            Fields: new Dictionary<string, DesignerFieldFormattingDto>
+            {
+                ["MARGIN"] = new("$#,##0.00", "right", "Margin", true, "#dc2626")
+            });
+        var visual = new DesignerVisualDto(
+            "v1", "MarginTable", "TABLE", 1, 1, 12, 4, "Margin by region", null,
+            new Dictionary<string, string> { ["REGION"] = "region", ["MARGIN"] = "margin" },
+            new Dictionary<string, string> { ["LEGEND"] = "OFF", ["inline_source"] = "#data" },
+            Formatting: formatting);
+
+        var state = State(Page("p1", "Dashboard", visual));
+        var patched = _patcher.Patch(original, state);
+        var roundTripped = new ETL_SQL.Reporting.Authoring.DesignerScriptParsingService().Parse(patched);
+        var actual = Assert.Single(Assert.Single(roundTripped.Pages).Visuals);
+
+        Assert.Contains("TITLE (TEXT = 'Margin by region', COLOR = '#f8fafc'", patched, StringComparison.Ordinal);
+        Assert.Contains("SUBTITLE = 'Negative values need review'", patched, StringComparison.Ordinal);
+        Assert.Contains("margin FORMAT '$#,##0.00' ALIGN 'right' DATA_BAR COLOR '#dc2626' AS 'Margin'", patched, StringComparison.Ordinal);
+        Assert.Contains("STYLE (PALETTE = ('#2563eb', '#dc2626'))", patched, StringComparison.Ordinal);
+        Assert.Contains("OPTIONS (LEGEND = OFF, X_AXIS (LABEL = 'Region'), Y_AXIS (LABEL = 'Margin', MIN = -500, MAX = 500, FORMAT = '$#,##0.00'))", patched, StringComparison.Ordinal);
+        Assert.Contains("FORMATTING (WHEN margin < 0 THEN '#fee2e2' FONT_COLOR '#991b1b')", patched, StringComparison.Ordinal);
+        Assert.Equal("$#,##0.00", actual.Formatting!.Fields!["MARGIN"].Format);
+        Assert.True(actual.Formatting.Fields["MARGIN"].DataBar);
+        Assert.Equal("#991b1b", Assert.Single(actual.Formatting.ConditionalRules!).FontColor);
+        Assert.Equal(["#2563eb", "#dc2626"], actual.Formatting.Palette);
+    }
+
     private static DesignerStateDto State(params DesignerPageDto[] pages) =>
         new(pages.ToList(), []);
 

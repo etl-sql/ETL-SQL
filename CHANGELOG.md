@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added a visual formatting inspector to Studio's selected-chart sidebar. Authors can edit title
+  typography, subtitles, number formats, axes, legends, palettes, table data bars, and conditional
+  table/KPI rules while the corresponding Report-SQL clauses stay synchronized with the canvas.
+
 - Added a reproducible Studio performance-budget gate for full workbench startup, post-GC browser
   heap, CodeMirror keystroke latency, 250-row visual aggregation, and canvas redraw/layout. The
   checked-in Windows, Linux, and macOS ceilings run in a dedicated CI matrix and publish JSON

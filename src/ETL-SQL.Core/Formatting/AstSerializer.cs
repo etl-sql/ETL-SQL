@@ -1422,14 +1422,19 @@ public static class AstSerializer
             sb.AppendLine($"    SOURCE = {s.Source.ToSql()},");
         if (s.Mappings.Count > 0)
             sb.AppendLine($"    MAPPINGS ( {string.Join(", ", s.Mappings.Select(m => FormatMapping(m)))} ),");
-        if (s.Options.Count > 0)
-            sb.AppendLine($"    OPTIONS ( {string.Join(", ", s.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} ),");
+        var visualOptions = s.Options
+            .Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'")
+            .ToList();
+        visualOptions.AddRange(s.AxisOptions.Select(axis =>
+            $"{axis.Axis}_AXIS ( {string.Join(", ", axis.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} )"));
+        if (visualOptions.Count > 0)
+            sb.AppendLine($"    OPTIONS ( {string.Join(", ", visualOptions)} ),");
         if (s.StyleName != null)
             sb.AppendLine($"    STYLE = {s.StyleName},");
         if (s.Styles.Count > 0 || !s.Palette.IsDefaultOrEmpty)
             sb.AppendLine($"    STYLE ( {FormatStyleAssignments(s.Styles, s.Palette)} ),");
-        foreach (var axis in s.AxisOptions)
-            sb.AppendLine($"    {axis.Axis}_AXIS ( {string.Join(", ", axis.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} ),");
+        if (s.FormattingRules.Count > 0)
+            sb.AppendLine($"    FORMATTING ( {string.Join(", ", s.FormattingRules.Select(FormatFormattingRule))} ),");
         if (s.Actions.Count > 0)
             sb.AppendLine($"    ACTIONS ( {FormatActions(s.Actions)} ),");
         if (s.Cascade != null)
@@ -1954,6 +1959,12 @@ public static class AstSerializer
 
         return sb.ToString();
     }
+
+    private static string FormatFormattingRule(FormattingRule rule) =>
+        $"WHEN {rule.Condition.ToSql()} THEN '{rule.Color.Replace("'", "''")}'"
+        + (string.IsNullOrWhiteSpace(rule.FontColor)
+            ? string.Empty
+            : $" FONT_COLOR '{rule.FontColor.Replace("'", "''")}'");
 
     private static string FormatSecurityOverride(SetSecurityOverrideStatement s)
     {

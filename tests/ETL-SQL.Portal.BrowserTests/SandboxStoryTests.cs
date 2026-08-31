@@ -1214,6 +1214,68 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task Studio_VisualFormattingInspector_PatchesReportSqlAndKeepsAuthoredValues()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        var chart = page.Locator(".etlsql-studio-canvas-card[data-visual-id='v_SalesByRegion_1']");
+        await chart.WaitForAsync();
+        await chart.ClickAsync();
+        await page.WaitForTimeoutAsync(500);
+
+        var inspector = page.Locator(".etlsql-format-inspector");
+        await inspector.WaitForAsync();
+        Assert.Contains("BAR · Auto", await inspector.InnerTextAsync());
+        Assert.Equal("Segoe UI", await page.Locator("#pp-title-font").InputValueAsync());
+        Assert.False(await page.Locator("#pp-format-legend").IsCheckedAsync());
+        Assert.Equal("Revenue", await page.Locator("[data-axis='y'][data-axis-key='LABEL']").InputValueAsync());
+        Assert.Equal("$#,##0", await page.Locator("[data-axis='y'][data-axis-key='FORMAT']").InputValueAsync());
+        Assert.Equal(3, await page.Locator("[data-palette-text]").CountAsync());
+
+        await page.Locator("#pp-format-subtitle").FillAsync("FY26 booked revenue");
+        await page.Locator("#pp-format-subtitle").DispatchEventAsync("change");
+        await page.WaitForFunctionAsync("() => document.querySelector('.cm-content')?.textContent.includes(\"SUBTITLE = 'FY26 booked revenue'\")");
+        await page.WaitForTimeoutAsync(300);
+        await inspector.Locator("summary", new() { HasText = "Axes & legend" }).ClickAsync();
+        await page.Locator("#pp-format-legend").CheckAsync();
+        await page.Locator("[data-axis='y'][data-axis-key='MAX']").FillAsync("500000");
+        await page.Locator("[data-axis='y'][data-axis-key='MAX']").DispatchEventAsync("change");
+        await page.WaitForFunctionAsync("() => document.querySelector('.cm-content')?.textContent.includes('LEGEND = ON')");
+        await page.WaitForFunctionAsync("() => document.querySelector('.cm-content')?.textContent.includes('MAX = 500000')");
+        await page.WaitForTimeoutAsync(300);
+        await inspector.Locator("summary", new() { HasText = "Series palette" }).ClickAsync();
+        await page.Locator("[data-palette-add]").ClickAsync();
+
+        await page.WaitForFunctionAsync(
+            """
+            () => {
+                const doc = window.__STUDIO_INSTANCE__?.state.documents.find(
+                    item => item.id === window.__STUDIO_INSTANCE__.state.activeDocId);
+                return doc?.content.includes("SUBTITLE = 'FY26 booked revenue'")
+                    && doc.content.includes('LEGEND = ON')
+                    && doc.content.includes('MAX = 500000')
+                    && doc.content.includes("'#dc2626'");
+            }
+            """);
+
+        var activeScript = await page.EvaluateAsync<string>(
+            """
+            () => window.__STUDIO_INSTANCE__.state.documents.find(
+                item => item.id === window.__STUDIO_INSTANCE__.state.activeDocId).content
+            """);
+        Assert.Contains("TITLE (TEXT = 'Sales by Region'", activeScript, StringComparison.Ordinal);
+        Assert.Contains("Y_AXIS (LABEL = 'Revenue', MIN = 0, FORMAT = '$#,##0', MAX = 500000)", activeScript, StringComparison.Ordinal);
+        Assert.Contains("STYLE (PALETTE = ('#58a6ff', '#2ea043', '#d29922', '#dc2626'))", activeScript, StringComparison.Ordinal);
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
     public async Task Studio_SourceControl_ShowsLocalHistoryAndSideBySideDiff()
     {
         await using var session = await fixture.NewSessionAsync();

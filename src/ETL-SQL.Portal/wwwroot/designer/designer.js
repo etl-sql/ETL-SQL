@@ -4785,6 +4785,15 @@ export function createDesigner(container, opts = {}) {
                     <button class="etlsql-dsgn-vcard-del" data-del="${v.id}" title="Remove visual" aria-label="Remove visual"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8"/></svg></button>
                 </div>
             `;
+            const titleButton = cardHdr.querySelector('.etlsql-dsgn-vcard-name');
+            const titleFormatting = v.formatting?.title;
+            if (titleButton && titleFormatting) {
+                if (titleFormatting.color) titleButton.style.color = titleFormatting.color;
+                if (titleFormatting.font) titleButton.style.fontFamily = titleFormatting.font;
+                if (titleFormatting.size) titleButton.style.fontSize = titleFormatting.size;
+                if (titleFormatting.weight) titleButton.style.fontWeight = titleFormatting.weight;
+                if (titleFormatting.align) titleButton.style.textAlign = titleFormatting.align.toLowerCase();
+            }
             card.appendChild(cardHdr);
 
             const cardBody = document.createElement('div');
@@ -4982,10 +4991,7 @@ export function createDesigner(container, opts = {}) {
         const fieldOptions = value => availableFields.map(field =>
             `<option value="${esc(field)}"${field === value ? ' selected' : ''}>${esc(field)}</option>`).join('');
 
-        const tableFields = isTable ? [...new Set([
-            ...Object.keys(v.mappings || {}),
-            ...availableFields
-        ])] : [];
+        const tableFields = isTable ? availableFields : [];
 
         return `
             <section class="etlsql-format-inspector" aria-label="Visual formatting">
@@ -5100,7 +5106,7 @@ export function createDesigner(container, opts = {}) {
                                 return `<div class="etlsql-format-rule" data-rule-index="${index}">
                                     <div class="etlsql-format-rule-line"><span>IF</span>
                                         <select data-rule-field class="form-control">${fieldOptions(condition.field)}${availableFields.includes(condition.field) ? '' : `<option selected>${esc(condition.field)}</option>`}</select>
-                                        <select data-rule-operator class="form-control">${['<', '<=', '=', '!=', '>=', '>'].map(operator => `<option${operator === condition.operator ? ' selected' : ''}>${operator}</option>`).join('')}</select>
+                                        <select data-rule-operator class="form-control">${['<', '<=', '=', '!=', '>=', '>'].map(operator => `<option${operator === condition.operator ? ' selected' : ''}>${esc(operator)}</option>`).join('')}</select>
                                         <input data-rule-value class="form-control" value="${esc(condition.value)}" aria-label="Comparison value">
                                     </div>
                                     <div class="etlsql-format-rule-result"><span>THEN</span><label>Fill <input type="color" data-rule-background value="${toHexColor(rule.backgroundColor, '#fee2e2')}"></label><label>Text <input type="color" data-rule-font value="${toHexColor(rule.fontColor, '#991b1b')}"></label><button type="button" data-rule-remove aria-label="Remove rule">Remove</button></div>
