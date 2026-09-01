@@ -8,6 +8,20 @@ CREATE VISUAL VisualName AS COMBO (
   SOURCE = #tableName,
   MAPPINGS (
     ...
+  ),
+  OPTIONS (
+    [GRID_LINES = ON|OFF],
+    [GRID_LINE_COLOR = '#rrggbb'],
+    [GRID_LINE_DASH = SOLID|DASHED|DOTTED],
+    [GRID_LINE_WIDTH = n],
+    [MINOR_GRID_LINES = ON|OFF],
+    [SERIES_GAP = 0..1],
+    [OUTER_PADDING = 0..1],
+    [ZERO_LINE = ON|OFF],
+    [ZERO_LINE_COLOR = '#rrggbb'],
+    [ZERO_LINE_DASH = SOLID|DASHED|DOTTED],
+    [ZERO_LINE_WIDTH = n],
+    [X_AXIS (...)], [Y_AXIS (...)], [Y2_AXIS (...)]
   )
 );
 ```
@@ -23,10 +37,20 @@ CREATE VISUAL VisualName AS COMBO (
 
 - **STACKED = ON|OFF** - stack the bars (default OFF)
 - **SMOOTH = ON|OFF** - smooth the line (default OFF)
+- **SERIES_GAP = 0..1** - set the gap between grouped bar series as a fraction of bar width
+- **OUTER_PADDING = 0..1** - add category-band padding before the first and after the last bar (default 0)
+- **GRID_LINES = ON|OFF** - show or hide background value-axis grid lines (default ON)
+- **GRID_LINE_COLOR = '#rrggbb'** - set the major and minor gridline color
+- **GRID_LINE_DASH = SOLID|DASHED|DOTTED** - set the gridline stroke pattern (default SOLID)
+- **GRID_LINE_WIDTH = n** - set gridline width in pixels; the value must be positive (default 1)
+- **MINOR_GRID_LINES = ON|OFF** - draw one lighter gridline between each pair of major ticks (default OFF)
+- **ZERO_LINE = ON|OFF** - emphasize zero when the primary value-axis domain contains it (default OFF)
+- **ZERO_LINE_COLOR = '#rrggbb'** - set the zero-line color
+- **ZERO_LINE_DASH = SOLID|DASHED|DOTTED** - set the zero-line stroke pattern (default SOLID)
+- **ZERO_LINE_WIDTH = n** - set zero-line width in pixels; the value must be positive (default 1.5)
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - category-axis order; SOURCE preserves query order
-  Y_AXIS  (LABEL = 'left axis label')
-  Y2_AXIS (LABEL = 'right axis label')
-  LEGEND  = ON|OFF
+- **X_AXIS (...) / Y_AXIS (...) / Y2_AXIS (...)** - each accepts `LABEL`, `MIN`, `MAX`, `INCLUDE_ZERO`, `REVERSE`, `MAJOR_TICK_COUNT`, `TICK_INTERVAL`, `MINOR_TICKS`, `LABEL_ROTATION`, `LABEL_SKIP`, and `AXIS_LINE`. Rotation accepts `AUTO`, `0`, `45`, or `90`; skip accepts `AUTO` or a non-negative integer.
+- **LEGEND = ON|OFF** - shows or hides the series legend
 
 ## Examples
 

@@ -156,6 +156,28 @@ CREATE VISUAL LineChart AS LINE (
                 diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
         }
 
+        [Fact]
+        public void ParseCreateVisual_WithCompleteAxisControls_RoundTripsAllAxes()
+        {
+            const string sql = """
+CREATE VISUAL ComboChart AS COMBO (
+    SOURCE = #data,
+    OPTIONS (
+        X_AXIS (LABEL = 'Period', MIN = 1, MAX = 12, INCLUDE_ZERO = OFF, REVERSE = ON, MAJOR_TICK_COUNT = 6, TICK_INTERVAL = 2, MINOR_TICKS = ON, LABEL_ROTATION = 45, LABEL_SKIP = 1),
+        Y_AXIS (LABEL = 'Revenue', INCLUDE_ZERO = ON),
+        Y2_AXIS (LABEL = 'Margin', MIN = 0, MAX = 100)
+    )
+);
+""";
+            var statement = Assert.Single(Parse(sql).Statements.OfType<CreateVisualStatement>());
+
+            Assert.Equal(["X", "Y", "Y2"], statement.AxisOptions.Select(axis => axis.Axis));
+            Assert.Contains(statement.AxisOptions[0].Options, option => option.Key == "REVERSE" && option.Value == "True");
+            Assert.Contains(statement.AxisOptions[0].Options, option => option.Key == "MAJOR_TICK_COUNT" && option.Value == "6");
+            Assert.DoesNotContain(Parse(statement.ToSql()).Diagnostics,
+                diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+        }
+
         [Theory]
         [InlineData("BAR", VisualType.Bar)]
         [InlineData("LINE", VisualType.Line)]

@@ -32,11 +32,12 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
 
         var bindings = BuildBindings(statement, manifest).ToImmutableArray();
         var layers = BuildLayers(statement, bindings).ToImmutableArray();
-        if (IsOn(manifest.Options.GetValueOrDefault("STACKED")) || IsOn(manifest.Styles?.GetValueOrDefault("STACKED")))
+        var stackMode = ResolveNamedStackMode(manifest);
+        if (stackMode != StackMode.None)
             layers = layers.Select(layer => layer with
             {
                 Bindings = layer.Bindings.Select(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2
-                    ? binding with { Stack = StackMode.Zero }
+                    ? binding with { Stack = stackMode }
                     : binding).ToImmutableArray()
             }).ToImmutableArray();
         var scales = BuildScales(statement, bindings, manifest).ToImmutableArray();
@@ -251,19 +252,42 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 DataSemanticKind.Ordinal => ScaleKind.Point,
                 _ => binding.Channel is FieldChannel.Color ? ScaleKind.Ordinal : ScaleKind.Band
             };
+            var axis = AxisName(scaleChannel);
+            var includeZero = ParseAxisBool(manifest, axis, "include_zero") ??
+                ((scaleChannel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or FieldChannel.Size)
+                    && statement.VisualType is not VisualType.Scatter and not VisualType.Bubble);
             yield return new ScaleSpec(group.Key, scaleChannel, kind,
-                IncludeZero: (scaleChannel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or FieldChannel.Size)
-                    && statement.VisualType is not VisualType.Scatter and not VisualType.Bubble,
+                IncludeZero: includeZero,
                 CategoryOrder: [],
                 DomainMinimum: GaugeBound(statement, manifest, binding.Channel, "MIN")
                     ?? ParseDomain(manifest, binding.Channel, "min") ?? ParseStandardDomain(manifest, "MIN"),
                 DomainMaximum: GaugeBound(statement, manifest, binding.Channel, "MAX")
-                    ?? ParseDomain(manifest, binding.Channel, "max") ?? ParseStandardDomain(manifest, "MAX"));
+                    ?? ParseDomain(manifest, binding.Channel, "max") ?? ParseStandardDomain(manifest, "MAX"),
+                Reverse: ParseAxisBool(manifest, axis, "reverse") ?? false,
+                MajorTickCount: ParseAxisInt(manifest, axis, "major_tick_count"),
+                TickInterval: ParseAxisDecimal(manifest, axis, "tick_interval"),
+                MinorTicks: ParseAxisBool(manifest, axis, "minor_ticks") ?? false,
+                LabelRotation: ParseAxisText(manifest, axis, "label_rotation"),
+                LabelSkip: ParseAxisInt(manifest, axis, "label_skip"),
+                OuterPadding: kind == ScaleKind.Band && scaleChannel == FieldChannel.X
+                    ? ResolveUnitInterval(manifest.Options.GetValueOrDefault("OUTER_PADDING"), "OUTER_PADDING")
+                    : 0m);
         }
     }
 
     private static bool IsOn(string? value) => value is not null &&
         (value.Equals("ON", StringComparison.OrdinalIgnoreCase) || value.Equals("TRUE", StringComparison.OrdinalIgnoreCase));
+
+    private static StackMode ResolveNamedStackMode(VisualManifest manifest)
+    {
+        var value = manifest.Options.GetValueOrDefault("STACKED") ?? manifest.Styles?.GetValueOrDefault("STACKED");
+        return value?.ToUpperInvariant() switch
+        {
+            "100PCT" => StackMode.Normalize,
+            "ON" or "TRUE" => StackMode.Zero,
+            _ => StackMode.None
+        };
+    }
 
     private static FieldChannel? MapChannel(VisualType type, string role) => role.ToUpperInvariant() switch
     {
@@ -406,7 +430,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         options?.FirstOrDefault(option => option.Key.Equals("CHART_TYPE", StringComparison.OrdinalIgnoreCase))?.Value.ToUpperInvariant() ?? "BAR";
     private static ChartValue? ParseDomain(VisualManifest manifest, FieldChannel channel, string bound)
     {
-        var axis = channel == FieldChannel.X ? "x" : "y";
+        var axis = AxisName(channel);
         var text = manifest.Options.GetValueOrDefault($"axis:{axis}:{bound}");
         return decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var value)
             ? ChartValue.From(value)
@@ -432,6 +456,27 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             ? Math.Clamp(value > 1m ? value / 100m : value, 0m, 0.9m)
             : 0.45m;
     }
+    private static string AxisName(FieldChannel channel) => channel switch
+    {
+        FieldChannel.X or FieldChannel.X2 => "x",
+        FieldChannel.Y2 => "y2",
+        _ => "y"
+    };
+    private static string? ParseAxisText(VisualManifest manifest, string axis, string option) =>
+        manifest.Options.GetValueOrDefault($"axis:{axis}:{option}");
+    private static bool? ParseAxisBool(VisualManifest manifest, string axis, string option)
+    {
+        var value = ParseAxisText(manifest, axis, option);
+        if (value is null) return null;
+        return value.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || value == "1";
+    }
+    private static int? ParseAxisInt(VisualManifest manifest, string axis, string option) =>
+        int.TryParse(ParseAxisText(manifest, axis, option), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            ? value : null;
+    private static decimal? ParseAxisDecimal(VisualManifest manifest, string axis, string option) =>
+        decimal.TryParse(ParseAxisText(manifest, axis, option), NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
+            ? value : null;
 
     private static decimal ResolveBandSize(CreateVisualStatement statement)
     {
@@ -441,6 +486,16 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         if (!decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
             throw new InvalidDataException(
                 $"BAND_SIZE must be a number greater than zero and at most one, but got '{text}'.");
+        if (value is <= 0m or > 1m)
+            throw new InvalidDataException($"BAND_SIZE must be greater than zero and at most one, but got '{text}'.");
+        return value;
+    }
+
+    private static decimal ResolveUnitInterval(string? text, string option)
+    {
+        if (text is null) return 0m;
+        if (!decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var value) || value is < 0m or > 1m)
+            throw new InvalidDataException($"{option} must be a number between zero and one, but got '{text}'.");
         return value;
     }
 

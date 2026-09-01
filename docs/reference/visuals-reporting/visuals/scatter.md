@@ -8,6 +8,18 @@ CREATE VISUAL VisualName AS SCATTER (
   SOURCE = #tableName,
   MAPPINGS (
     ...
+  ),
+  OPTIONS (
+    [SHOW_REGRESSION = ON|OFF],
+    [GRID_LINES = ON|OFF],
+    [GRID_LINE_COLOR = '#rrggbb'],
+    [GRID_LINE_DASH = SOLID|DASHED|DOTTED],
+    [GRID_LINE_WIDTH = n],
+    [MINOR_GRID_LINES = ON|OFF],
+    [X_AXIS (LABEL = 'text', MIN = n, MAX = n, INCLUDE_ZERO = ON|OFF, REVERSE = ON|OFF,
+      MAJOR_TICK_COUNT = n, TICK_INTERVAL = n, MINOR_TICKS = ON|OFF,
+      LABEL_ROTATION = AUTO|0|45|90, LABEL_SKIP = AUTO|n, AXIS_LINE = ON|OFF)],
+    [Y_AXIS (...same axis properties...)]
   )
 );
 ```
@@ -23,7 +35,13 @@ CREATE VISUAL VisualName AS SCATTER (
 ## Options
 
 - **SHOW_REGRESSION = ON|OFF** - overlay a linear regression line (default OFF)
-  TITLE           = 'text'
+- **GRID_LINES = ON|OFF** - show or hide background value-axis grid lines (default ON)
+- **GRID_LINE_COLOR = '#rrggbb'** - set the major and minor gridline color
+- **GRID_LINE_DASH = SOLID|DASHED|DOTTED** - set the gridline stroke pattern (default SOLID)
+- **GRID_LINE_WIDTH = n** - set gridline width in pixels; the value must be positive (default 1)
+- **MINOR_GRID_LINES = ON|OFF** - draw one lighter gridline between each pair of major ticks (default OFF)
+- **X_AXIS (...) / Y_AXIS (...)** - axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`).
+- **TITLE = 'text'** - visual title
 
 ## Examples
 

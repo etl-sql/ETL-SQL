@@ -220,7 +220,14 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         scale.Name, Channel(scale.Channel), Scale(scale.Kind), scale.IncludeZero,
         scale.ExplicitOrder.Select(item => Display(EvaluateLiteral(item, scale))).ToImmutableArray(),
         scale.Minimum is null ? null : EvaluateLiteral(scale.Minimum, scale),
-        scale.Maximum is null ? null : EvaluateLiteral(scale.Maximum, scale))
+        scale.Maximum is null ? null : EvaluateLiteral(scale.Maximum, scale),
+        scale.Reverse,
+        scale.MajorTickCount,
+        scale.TickInterval,
+        scale.MinorTicks,
+        scale.LabelRotation,
+        scale.LabelSkip,
+        scale.OuterPadding)
     {
         ColorRange = scale.ColorRange is null ? null : new ColorRangeSpec(
             AdvancedChartEnumBridge.ColorRange(scale.ColorRange.Kind),

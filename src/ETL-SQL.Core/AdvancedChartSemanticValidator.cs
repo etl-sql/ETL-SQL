@@ -95,6 +95,10 @@ public static class AdvancedChartSemanticValidator
                 Add(results, node, $"Scale '{scale.Name}' MIN must be a literal or parameter.");
             if (scale.Maximum is not null && !IsConstant(scale.Maximum))
                 Add(results, node, $"Scale '{scale.Name}' MAX must be a literal or parameter.");
+            if (scale.OuterPadding is < 0m or > 1m)
+                Add(results, node, $"Scale '{scale.Name}' OUTER_PADDING must be between zero and one.");
+            if (scale.OuterPadding != 0m && scale.Kind != AdvancedChartScaleKind.Band)
+                Add(results, node, $"Scale '{scale.Name}' OUTER_PADDING is valid only for BAND scales.");
             if (scale.ColorRange is not { } range) continue;
 
             var rangeNode = Anchor(range, node);

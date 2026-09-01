@@ -210,41 +210,41 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 
 ### Axis Controls
 
-- [ ] **Axis titles on named charts**: BAR, LINE, HBAR, and SCATTER have no axis label option. COMBO
+- [x] **Axis titles on named charts**: BAR, LINE, HBAR, and SCATTER have no axis label option. COMBO
   exposes `Y_AXIS (LABEL = ...)` and `Y2_AXIS (LABEL = ...)` but nothing else does. Add `X_AXIS` and
   `Y_AXIS` title options to all named Cartesian charts. Trivial addition; high-visibility gap.
-- [ ] **Explicit axis MIN / MAX on named charts**: `CUSTOM CHART` scales accept `MIN = literal` and
+- [x] **Explicit axis MIN / MAX on named charts**: `CUSTOM CHART` scales accept `MIN = literal` and
   `MAX = literal`. BAR, LINE, HBAR, COMBO, and SCATTER have no equivalent. Add `Y_AXIS (MIN = n,
   MAX = n)` and `X_AXIS (MIN = n, MAX = n)` options. Prerequisite for synchronized dual axes.
-- [ ] **INCLUDE_ZERO on named charts**: `CUSTOM CHART` scales expose `INCLUDE_ZERO = ON`. Named charts
+- [x] **INCLUDE_ZERO on named charts**: `CUSTOM CHART` scales expose `INCLUDE_ZERO = ON`. Named charts
   have no equivalent. Add `Y_AXIS (INCLUDE_ZERO = ON|OFF)` alongside axis MIN/MAX above.
-- [ ] **Reverse axis**: No `REVERSE = ON` on any quantitative axis in any surface. Add to `CUSTOM CHART`
+- [x] **Reverse axis**: No `REVERSE = ON` on any quantitative axis in any surface. Add to `CUSTOM CHART`
   LINEAR/TIME scales and to the named-chart `Y_AXIS` / `X_AXIS` block.
-- [ ] **Tick mark controls**: No tick count, tick interval, or minor-tick option anywhere. Add
+- [x] **Tick mark controls**: No tick count, tick interval, or minor-tick option anywhere. Add
   `MAJOR_TICK_COUNT`, `TICK_INTERVAL`, and `MINOR_TICKS = ON|OFF` to axis options in both surfaces.
-- [ ] **Axis label overlap handling**: No rotate, skip, or truncate option. Axis tick-label density is
+- [x] **Axis label overlap handling**: No rotate, skip, or truncate option. Axis tick-label density is
   fully renderer-inferred. Add `LABEL_ROTATION = AUTO|0|45|90` and `LABEL_SKIP = AUTO|n` to named-
   chart axis options and to `CUSTOM CHART` scale declarations.
 
 ### Gridline and Line Styling
 
-- [ ] **Zero-value reference line on named charts**: `CUSTOM CHART` can approximate with a `RULE` layer
+- [x] **Zero-value reference line on named charts**: `CUSTOM CHART` can approximate with a `RULE` layer
   at `DATUM(0)`, but named charts have nothing. Add `ZERO_LINE = ON|OFF` (with optional color/style)
   to BAR, LINE, HBAR, and COMBO.
-- [ ] **Gridline styling**: `GRID_LINES = ON|OFF` is all-or-nothing. Add `GRID_LINE_COLOR`,
+- [x] **Gridline styling**: `GRID_LINES = ON|OFF` is all-or-nothing. Add `GRID_LINE_COLOR`,
   `GRID_LINE_DASH` (`SOLID|DASHED|DOTTED`), and `GRID_LINE_WIDTH` options to named charts. Also add a
   separate `MINOR_GRID_LINES = ON|OFF`.
-- [ ] **Axis spine control**: No option to show or hide the axis spine (the outer border line of the
+- [x] **Axis spine control**: No option to show or hide the axis spine (the outer border line of the
   plot area). Add `AXIS_LINE = ON|OFF` to named chart axis options.
 
 ### Bar and Area Layout
 
-- [ ] **100% / normalized stacking on named charts**: `STACK = NORMALIZE` exists in `CUSTOM CHART`.
+- [x] **100% / normalized stacking on named charts**: `STACK = NORMALIZE` exists in `CUSTOM CHART`.
   Named BAR, HBAR, and LINE/AREA have no `STACKED = 100PCT` or equivalent. Add alongside the existing
   `STACKED = ON|OFF`.
-- [ ] **Series gap in grouped bars**: No `SERIES_GAP` option. Spacing between bars within a grouped
+- [x] **Series gap in grouped bars**: No `SERIES_GAP` option. Spacing between bars within a grouped
   cluster is renderer-inferred. Add `SERIES_GAP = 0.0..1.0` to BAR, HBAR, and COMBO.
-- [ ] **Outer category padding**: `BAND_SIZE` controls bar width but not padding before the first and
+- [x] **Outer category padding**: `BAND_SIZE` controls bar width but not padding before the first and
   after the last category. Add `OUTER_PADDING = 0.0..1.0` to BAR, HBAR, and `CUSTOM CHART` BAND
   scales.
 

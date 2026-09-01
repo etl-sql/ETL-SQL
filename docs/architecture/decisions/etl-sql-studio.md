@@ -308,13 +308,54 @@ component. Both desktop and Portal expose the same authenticated `/api/designer/
 - **Navigation** — selecting a node reveals its source line. Search, stage-type filters, focus mode,
   pan, zoom, and fit-to-view are graph interactions only.
 
-The script remains authoritative. Projection requests never patch it, and graph interactions do not
-write to it. A parse failure leaves the last valid graph visible with an error state while the editor
-keeps the exact invalid intermediate bytes. Any future add/connect editing must use a canonical
-parser/patcher contract and prove byte preservation before it is enabled.
+The script remains authoritative. Projection requests never patch it, and graph interactions that are
+only graph interactions — search, filter, focus, pan, zoom, navigate — do not write to it. A parse
+failure leaves the last valid graph visible with an error state while the editor keeps the exact
+invalid intermediate bytes.
 
-The projection is intentionally read-only. It is an accurate execution map, not yet a visual pipeline
-editor, and the UI does not claim that nodes can be added, connected, or reordered on the canvas.
+## 7.1 Pipeline task authoring
+
+Editing on the canvas was gated on a canonical parser/patcher contract that proved byte preservation
+first. That gate has been met, and the canvas can now author one specific thing: a **task**, which is
+a top-level section label plus the single statement it introduces.
+
+- **Identity is the label, never the node id.** Node ids are positional (`s0`, `s1`, …), so a hand
+  edit above a task renumbers everything below it and a canvas tracking ids would follow the wrong
+  box. The label is written into the script, is what the author sees, and is carried into the
+  projection as `ScriptDagNode.Key`.
+- **Every edit is a span replacement computed from the parse.** Add, move, relabel, repoint, remove,
+  connect, and disconnect each rewrite one span; bytes outside it — line endings, comments,
+  indentation, and every statement the canvas does not model — come through unchanged. The result is
+  reparsed before it is returned, and an edit that would not parse is refused with its reason rather
+  than applied or silently dropped.
+- **Four task kinds**, each writing one statement: `EXECUTE <connection> BEGIN … END`, `COPY FILE`,
+  `ASSERT`, and `SEND EMAIL`. A kind appears in the palette only once its emitted statement passes a
+  focused parse, lint, formatter, and reference check (`PipelineTaskEmissionTests`). That gate is
+  load-bearing: `SEND EMAIL` failed it, because the parser requires a `FROM` clause whatever the
+  connector's `DEFAULT_FROM` says, so the notification task carries a sender field rather than
+  emitting something that would not parse.
+- **The execution task is authored in the shared query workbench**, so the SQL a task runs gets the
+  same completions, hover, diagnostics, run, and results as the script pane.
+
+### Dependencies
+
+An explicit dependency is written as an `-- @after: a, b` tag above the task's label. The lexer reads
+`-- @tag:` as a tag and the parser skips tags between statements, so the declaration is free at run
+time, survives the canonical formatter, and keeps the graph in the file rather than in a sidecar the
+script knows nothing about.
+
+- Dragging a card's **connector handle** declares a dependency; dragging the **card body** reorders.
+  Two gestures because they mean different things.
+- **Several incoming edges are a join** — the task waits for all of them. They never imply
+  concurrency: ETL-SQL expresses that only as a `PARALLEL` block, and the canvas writes none.
+- ETL-SQL runs a script top to bottom, so a declared dependency that contradicted the physical order
+  would be the canvas lying about the file. Connecting therefore also reorders when it must, and
+  cycles and self-edges are refused.
+- A task that declares dependencies has its implicit "runs after the statement above" edge replaced
+  by the ones it named.
+
+Statements the canvas does not model stay visible on the map and are deliberately not draggable: an
+accurate read-only stage is better than an editable one that cannot round-trip.
 
 ---
 
@@ -413,7 +454,8 @@ To ensure zero regression risk and maintain business continuity:
 - **Slice 5 — Collapsible Code Drawer & Bi-Directional Sync**: Slide-up CodeMirror 6 editor (`Alt+C`), surgical AST text patching, debounced code-to-canvas synchronization, and inline lint diagnostics.
 - **Slice 6 — Governed Data Preview & Multi-Surface Packaging**: Interactive preview execution under caller RLS and memory arbiters; shared asset packaging across Portal Studio (`/studio/index.html`), VS Code Webview, and Workstation Editor.
 - **Slice 7 — Pipeline Studio Foundational DAG**: Parser-derived execution-map canvas for multi-stage
-  ETL pipelines; visual add/connect authoring remains future work behind a lossless patcher contract.
+  ETL pipelines, plus the task authoring described in §7.1 — add, edit, reorder, connect, and
+  disconnect labelled tasks through a lossless span patcher.
 - **Slice 8 — Stabilization & Legacy Retirement**: Full parity certification, deprecation notices, and clean retirement of legacy `ReportBuilder` and `WorkstationEditor`.
 
 ---

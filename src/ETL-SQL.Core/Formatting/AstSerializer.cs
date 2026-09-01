@@ -1533,6 +1533,13 @@ public static class AstSerializer
         };
         if (scale.Minimum != null) options.Add($"MIN = {scale.Minimum.ToSql()}");
         if (scale.Maximum != null) options.Add($"MAX = {scale.Maximum.ToSql()}");
+        if (scale.Reverse) options.Add("REVERSE = ON");
+        if (scale.MajorTickCount.HasValue) options.Add($"MAJOR_TICK_COUNT = {scale.MajorTickCount.Value}");
+        if (scale.TickInterval.HasValue) options.Add($"TICK_INTERVAL = {Number(scale.TickInterval.Value)}");
+        if (scale.MinorTicks) options.Add("MINOR_TICKS = ON");
+        if (scale.LabelRotation is not null) options.Add($"LABEL_ROTATION = {scale.LabelRotation}");
+        if (scale.LabelSkip.HasValue) options.Add($"LABEL_SKIP = {scale.LabelSkip.Value}");
+        if (scale.OuterPadding != 0m) options.Add($"OUTER_PADDING = {Number(scale.OuterPadding)}");
         options.Add(scale.ExplicitOrder.IsDefaultOrEmpty
             ? $"ORDER = {Upper(scale.Order)}"
             : "ORDER = (" + string.Join(", ", scale.ExplicitOrder.Select(Format)) + ")");

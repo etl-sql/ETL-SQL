@@ -24,6 +24,12 @@ studio-contracts.js text eol=lf
 studio-query-workbench.js text eol=lf
 studio-sql-mutations.js text eol=lf
 studio-pipeline-canvas.js text eol=lf
+studio-data.js      text eol=lf
+studio-git-diff.js  text eol=lf
+studio-host.js      text eol=lf
+studio-lifecycle.js text eol=lf
+studio-security.js  text eol=lf
+studio-state.js     text eol=lf
 visual-preview.js   text eol=lf
 
 # Reporting golden artifacts are compared and hashed byte for byte across Windows and Linux runners.

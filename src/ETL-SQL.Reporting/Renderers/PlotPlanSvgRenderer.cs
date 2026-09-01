@@ -128,8 +128,10 @@ internal sealed class PlotPlanSvgRenderer
         var plotHeight = plan.Bounds.Height - Top - Bottom;
         var overlayLabels = new List<OverlayLabel>();
         var smartLabels = new List<SmartLabel>();
-        builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
-        builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
+        if (AxisLineEnabled(plan, "y"))
+            builder.AppendLine($"<line class='plot-axis-line' x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
+        if (AxisLineEnabled(plan, "x"))
+            builder.AppendLine($"<line class='plot-axis-line' x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
         var xScale = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.X);
         var categories = xScale?.Categories ?? ImmutableArray<string>.Empty;
         var yScale = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.Y);
@@ -141,10 +143,31 @@ internal sealed class PlotPlanSvgRenderer
 
         if (yScale is not null && IsEnabledByDefault(plan.Style, "GRID_LINES"))
         {
+            decimal? previousGridValue = null;
             foreach (var tick in yScale.Ticks)
             {
-                var y = MapY(PlotPlanResolver.Number(tick.Value) ?? 0m, yScale, plotHeight);
-                builder.AppendLine($"<line x1='{N(Left)}' y1='{N(y)}' x2='{N(Left + plotWidth)}' y2='{N(y)}' stroke='#e5e7eb'/>");
+                var value = PlotPlanResolver.Number(tick.Value) ?? 0m;
+                var y = MapY(value, yScale, plotHeight);
+                RenderGridLine(builder, plan, Left, y, Left + plotWidth, y);
+                if (previousGridValue.HasValue && IsEnabled(plan.Style, "MINOR_GRID_LINES"))
+                {
+                    var minorY = MapY((previousGridValue.Value + value) / 2m, yScale, plotHeight);
+                    RenderGridLine(builder, plan, Left, minorY, Left + plotWidth, minorY, minor: true);
+                }
+                previousGridValue = value;
+            }
+        }
+
+        if (yScale is not null && IsEnabled(plan.Style, "ZERO_LINE"))
+        {
+            var (minimum, maximum) = Domain(yScale);
+            if (minimum <= 0m && maximum >= 0m)
+            {
+                var zeroY = MapY(0m, yScale, plotHeight);
+                var color = SafePaint(Style(plan, "ZERO_LINE_COLOR"), "#6b7280");
+                var width = SafeLineWidth(Style(plan, "ZERO_LINE_WIDTH"), "1.5");
+                var dash = DashAttribute(Style(plan, "ZERO_LINE_DASH"));
+                builder.AppendLine($"<line class='plot-zero-line' x1='{N(Left)}' y1='{N(zeroY)}' x2='{N(Left + plotWidth)}' y2='{N(zeroY)}' stroke='{Esc(color)}' stroke-width='{width}'{dash}/>");
             }
         }
 
@@ -175,12 +198,12 @@ internal sealed class PlotPlanSvgRenderer
                 case MarkKind.Line:
                     var lineScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale;
                     if (layer.Stack != StackMode.None && overlayType is null)
-                        RenderStackedLine(builder, plan, layer, lineLayers, categories.Length, plotWidth, plotHeight, lineScale, color, showLabels);
+                        RenderStackedLine(builder, plan, layer, lineLayers, categories.Length, plotWidth, plotHeight, xScale, lineScale, color, showLabels);
                     else
                         RenderLine(builder, plan, layer, categories.Length, plotWidth, plotHeight, xScale, lineScale, color, showLabels, overlayLabels, smartLabels);
                     break;
                 case MarkKind.Area:
-                    RenderArea(builder, layer, categories.Length, plotWidth, plotHeight, yScale, color);
+                    RenderArea(builder, layer, categories.Length, plotWidth, plotHeight, xScale, yScale, color);
                     break;
                 case MarkKind.Point:
                     var pointScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null)
@@ -197,7 +220,7 @@ internal sealed class PlotPlanSvgRenderer
                         color, smartLabels);
                     break;
                 case MarkKind.Tick:
-                    RenderTicks(builder, plan, layer, categories.Length, plotWidth, plotHeight, yScale, color);
+                    RenderTicks(builder, plan, layer, categories.Length, plotWidth, plotHeight, xScale, yScale, color);
                     break;
             }
             if (overlayType is not null) builder.AppendLine("</g>");
@@ -207,24 +230,47 @@ internal sealed class PlotPlanSvgRenderer
         RenderOverlayLabels(builder, overlayLabels, plotHeight);
 
         if (categories.Length > 0)
-            RenderHorizontalCategoryAxisLabels(builder, categories, plotWidth, plotHeight);
+            RenderHorizontalCategoryAxisLabels(builder, categories, plotWidth, plotHeight, xScale);
+        else if (xScale is not null && Continuous(xScale))
+        {
+            for (var index = 0; index < xScale.Ticks.Length; index++)
+            {
+                var tick = xScale.Ticks[index];
+                var x = MapX(PlotPlanResolver.Number(tick.Value) ?? 0m, xScale, plotWidth);
+                builder.AppendLine($"<line x1='{N(x)}' y1='{N(Top + plotHeight)}' x2='{N(x)}' y2='{N(Top + plotHeight + 4m)}' stroke='#bbb'/>");
+                if (!SkipTickLabel(xScale, index))
+                {
+                    var angle = AxisLabelAngle(xScale.LabelRotation, 0);
+                    var y = Top + plotHeight + 16m;
+                    var rotation = angle == 0 ? string.Empty : $" transform='rotate(-{angle} {N(x)} {N(y)})'";
+                    builder.AppendLine($"<text class='plot-axis-label' data-axis-index='{index}' x='{N(x)}' y='{N(y)}' text-anchor='{(angle == 0 ? "middle" : "end")}' font-size='9' fill='#666'{rotation}>{Esc(tick.Label)}</text>");
+                }
+            }
+            RenderHorizontalMinorTicks(builder, xScale, plotWidth, Top + plotHeight);
+        }
         if (yScale is not null)
         {
-            foreach (var tick in yScale.Ticks)
+            for (var index = 0; index < yScale.Ticks.Length; index++)
             {
+                var tick = yScale.Ticks[index];
                 var y = MapY(PlotPlanResolver.Number(tick.Value) ?? 0m, yScale, plotHeight);
                 builder.AppendLine($"<line x1='{N(Left - 4)}' y1='{N(y)}' x2='{N(Left)}' y2='{N(y)}' stroke='#bbb'/>");
-                builder.AppendLine($"<text x='{N(Left - 6)}' y='{N(y + 4)}' text-anchor='end' font-size='9' fill='#666'>{Esc(tick.Label)}</text>");
+                if (!SkipTickLabel(yScale, index))
+                    builder.AppendLine($"<text x='{N(Left - 6)}' y='{N(y + 4)}' text-anchor='end' font-size='9' fill='#666'>{Esc(tick.Label)}</text>");
             }
+            RenderVerticalMinorTicks(builder, yScale, plotHeight, Left, -4m);
         }
         if (y2Scale is not null)
         {
-            foreach (var tick in y2Scale.Ticks)
+            for (var index = 0; index < y2Scale.Ticks.Length; index++)
             {
+                var tick = y2Scale.Ticks[index];
                 var y = MapY(PlotPlanResolver.Number(tick.Value) ?? 0m, y2Scale, plotHeight);
                 builder.AppendLine($"<line x1='{N(Left + plotWidth)}' y1='{N(y)}' x2='{N(Left + plotWidth + 4m)}' y2='{N(y)}' stroke='#bbb'/>");
-                builder.AppendLine($"<text x='{N(Left + plotWidth + 6m)}' y='{N(y + 4m)}' font-size='9' fill='#666'>{Esc(tick.Label)}</text>");
+                if (!SkipTickLabel(y2Scale, index))
+                    builder.AppendLine($"<text x='{N(Left + plotWidth + 6m)}' y='{N(y + 4m)}' font-size='9' fill='#666'>{Esc(tick.Label)}</text>");
             }
+            RenderVerticalMinorTicks(builder, y2Scale, plotHeight, Left + plotWidth, 4m);
         }
 
         var xTitle = Style(plan, "axis:x:label") ?? Style(plan, "axis:x:title");
@@ -245,22 +291,44 @@ internal sealed class PlotPlanSvgRenderer
         var categories = bandScale?.Categories ?? [];
         var rectLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Rect).ToList();
         var stacked = rectLayers.Any(layer => layer.Stack != StackMode.None);
-        var slot = plotHeight / Math.Max(1, categories.Length);
+        var (slot, outerOffset) = CategoryLayout(categories.Length, plotHeight, bandScale);
         var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
         var isGrouped = rectLayers.Count > 1 && rectLayers.Any(l => LayerStyle(l, "series") is not null);
-        builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
-        builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
+        if (AxisLineEnabled(plan, "x"))
+            builder.AppendLine($"<line class='plot-axis-line' x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
+        if (AxisLineEnabled(plan, "y"))
+            builder.AppendLine($"<line class='plot-axis-line' x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
         if (IsEnabledByDefault(plan.Style, "GRID_LINES"))
         {
             var gridScale = plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y);
             if (gridScale is not null)
             {
+                decimal? previousGridValue = null;
                 foreach (var tick in gridScale.Ticks)
                 {
                     var value = PlotPlanResolver.Number(tick.Value) ?? 0m;
                     var x = MapHorizontal(value, gridScale, plotWidth);
-                    builder.AppendLine($"<line x1='{N(x)}' y1='{N(Top)}' x2='{N(x)}' y2='{N(Top + plotHeight)}' stroke='#e5e7eb'/>");
+                    RenderGridLine(builder, plan, x, Top, x, Top + plotHeight);
+                    if (previousGridValue.HasValue && IsEnabled(plan.Style, "MINOR_GRID_LINES"))
+                    {
+                        var minorX = MapHorizontal((previousGridValue.Value + value) / 2m, gridScale, plotWidth);
+                        RenderGridLine(builder, plan, minorX, Top, minorX, Top + plotHeight, minor: true);
+                    }
+                    previousGridValue = value;
                 }
+            }
+        }
+        var transposedValueScale = plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y);
+        if (transposedValueScale is not null && IsEnabled(plan.Style, "ZERO_LINE"))
+        {
+            var (minimum, maximum) = Domain(transposedValueScale);
+            if (minimum <= 0m && maximum >= 0m)
+            {
+                var zeroX = MapHorizontal(0m, transposedValueScale, plotWidth);
+                var color = SafePaint(Style(plan, "ZERO_LINE_COLOR"), "#6b7280");
+                var width = SafeLineWidth(Style(plan, "ZERO_LINE_WIDTH"), "1.5");
+                var dash = DashAttribute(Style(plan, "ZERO_LINE_DASH"));
+                builder.AppendLine($"<line class='plot-zero-line' x1='{N(zeroX)}' y1='{N(Top)}' x2='{N(zeroX)}' y2='{N(Top + plotHeight)}' stroke='{Esc(color)}' stroke-width='{width}'{dash}/>");
             }
         }
         foreach (var layer in plan.Layers)
@@ -288,7 +356,7 @@ internal sealed class PlotPlanSvgRenderer
                 value ??= rangedY ? rangeEnd : null;
                 if (datum.IsGap || !value.HasValue) continue;
                 var x = MapHorizontal(value.Value, scale, plotWidth) + datum.DisplayOffsetX;
-                var y = Top + slot * (index + .5m) + datum.DisplayOffsetY;
+                var y = Top + outerOffset + slot * (index + .5m) + datum.DisplayOffsetY;
                 var datumColor = EncodingText(datum, ConditionalEncodingChannel.Color) is { } candidate ? SafePaint(candidate, color) : color;
                 var datumOpacity = EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? layerOpacity;
                 if (layer.Mark == MarkKind.Rect)
@@ -316,8 +384,14 @@ internal sealed class PlotPlanSvgRenderer
                     }
                     else if (isGrouped)
                     {
-                        barHeight = groupHeight / Math.Max(1, rectLayers.Count);
-                        top = y - groupHeight / 2m + layerIndex * barHeight;
+                        var seriesGap = UnitStyle(plan, "SERIES_GAP");
+                        var gapHeight = seriesGap.HasValue
+                            ? groupHeight * seriesGap.Value / (rectLayers.Count + seriesGap.Value * (rectLayers.Count - 1))
+                            : 0m;
+                        barHeight = seriesGap.HasValue
+                            ? (groupHeight - gapHeight * (rectLayers.Count - 1)) / Math.Max(1, rectLayers.Count)
+                            : groupHeight / Math.Max(1, rectLayers.Count);
+                        top = y - groupHeight / 2m + layerIndex * (barHeight + gapHeight);
                     }
                     else if (rectLayers.Count > 1 && layer.BandSize < .75m)
                     {
@@ -329,7 +403,7 @@ internal sealed class PlotPlanSvgRenderer
                         barHeight = groupHeight;
                         top = y - groupHeight / 2m;
                     }
-                    var drawHeight = Math.Max(1m, barHeight - 1m);
+                    var drawHeight = Math.Max(1m, barHeight - (UnitStyle(plan, "SERIES_GAP").HasValue ? 0m : 1m));
                     // Transposing swaps the axes, so an X_START/X_END span becomes the vertical extent and
                     // replaces the category band this datum would otherwise occupy.
                     var spanStart = layer.Stack == StackMode.None ? PositionNumber(Channel(datum, FieldChannel.XStart)) : null;
@@ -405,7 +479,7 @@ internal sealed class PlotPlanSvgRenderer
                 builder.AppendLine($"<path d='M {N(baseline)} {N(pointCoordinates[0].Y)} L {string.Join(" L ", points)} L {N(baseline)} {N(pointCoordinates[^1].Y)} Z' fill='{Esc(color)}' fill-opacity='0.25' stroke='{Esc(color)}' stroke-width='2'/>");
             }
         }
-        RenderVerticalCategoryAxisLabels(builder, categories, slot, plotHeight);
+        RenderVerticalCategoryAxisLabels(builder, categories, plotHeight, bandScale);
         var xTitle = Style(plan, "axis:x:label");
         var yTitle = Style(plan, "axis:y:label");
         if (!string.IsNullOrWhiteSpace(yTitle))
@@ -467,7 +541,8 @@ internal sealed class PlotPlanSvgRenderer
     private static decimal MapHorizontal(decimal value, ResolvedScale scale, decimal plotWidth)
     {
         var (minimum, maximum) = Domain(scale);
-        return Left + Ratio(value, minimum, maximum, scale.Kind) * plotWidth;
+        var ratio = Ratio(value, minimum, maximum, scale.Kind);
+        return Left + (scale.Reverse ? 1m - ratio : ratio) * plotWidth;
     }
 
     private static void RenderMicroSparkline(StringBuilder builder, PlotPlan plan)
@@ -533,7 +608,7 @@ internal sealed class PlotPlanSvgRenderer
     }
 
     private static void RenderArea(StringBuilder builder, ResolvedMarkLayer layer, int categoryCount,
-        decimal plotWidth, decimal plotHeight, ResolvedScale? scale, string color)
+        decimal plotWidth, decimal plotHeight, ResolvedScale? xScale, ResolvedScale? scale, string color)
     {
         if (scale is null || layer.Data.IsDefaultOrEmpty) return;
         var ribbon = layer.Data.Any(datum => Channel(datum, FieldChannel.YStart) is not null || Channel(datum, FieldChannel.YEnd) is not null);
@@ -551,7 +626,7 @@ internal sealed class PlotPlanSvgRenderer
                     if (ribbonSegments[^1].Upper.Count > 0) ribbonSegments.Add((new(), new()));
                     continue;
                 }
-                var x = CategoryX(index, categoryCount, plotWidth) + datum.DisplayOffsetX;
+                var x = CategoryX(index, categoryCount, plotWidth, xScale) + datum.DisplayOffsetX;
                 ribbonSegments[^1].Upper.Add((x, MapY(end.Value, scale, plotHeight) + datum.DisplayOffsetY));
                 ribbonSegments[^1].Lower.Add((x, MapY(start.Value, scale, plotHeight) + datum.DisplayOffsetY));
             }
@@ -573,7 +648,7 @@ internal sealed class PlotPlanSvgRenderer
                 if (segments[^1].Count > 0) segments.Add(new());
                 continue;
             }
-            segments[^1].Add((CategoryX(index, categoryCount, plotWidth) + datum.DisplayOffsetX,
+            segments[^1].Add((CategoryX(index, categoryCount, plotWidth, xScale) + datum.DisplayOffsetX,
                 MapY(value.Value, scale, plotHeight) + datum.DisplayOffsetY));
         }
         foreach (var points in segments.Where(segment => segment.Count > 1))
@@ -609,9 +684,15 @@ internal sealed class PlotPlanSvgRenderer
         if (categoryCount == 0 && !rangedX) return;
         var layerIndex = Enumerable.Range(0, layers.Count).First(index => ReferenceEquals(layers[index], layer));
         var layerCount = Math.Max(1, layers.Count);
-        var slot = plotWidth / Math.Max(1, categoryCount);
+        var (slot, outerOffset) = CategoryLayout(categoryCount, plotWidth, xScale);
         var groupWidth = slot * layer.BandSize;
-        var barWidth = stacked ? groupWidth : groupWidth / layerCount;
+        var seriesGap = !stacked && layerCount > 1 ? UnitStyle(plan, "SERIES_GAP") : null;
+        var gapWidth = seriesGap.HasValue
+            ? groupWidth * seriesGap.Value / (layerCount + seriesGap.Value * (layerCount - 1))
+            : 0m;
+        var barWidth = stacked ? groupWidth : seriesGap.HasValue
+            ? (groupWidth - gapWidth * (layerCount - 1)) / layerCount
+            : groupWidth / layerCount;
         // Loop-invariant: style lookups are linear scans over the token array and the extent
         // attributes depend only on the layer, so both resolve once per layer, not once per mark.
         var dataFormat = DataFormat(plan);
@@ -642,8 +723,9 @@ internal sealed class PlotPlanSvgRenderer
                     : start + value!.Value;
             var startY = MapY(start, scale, plotHeight) + datum.DisplayOffsetY;
             var endY = MapY(end, scale, plotHeight) + datum.DisplayOffsetY;
-            var x = Left + slot * index + (slot - groupWidth) / 2m + (stacked ? 0m : layerIndex * barWidth) + datum.DisplayOffsetX;
-            var width = Math.Max(1m, barWidth - 1m);
+            var x = Left + outerOffset + slot * index + (slot - groupWidth) / 2m +
+                (stacked ? 0m : layerIndex * (barWidth + gapWidth)) + datum.DisplayOffsetX;
+            var width = Math.Max(1m, barWidth - (seriesGap.HasValue ? 0m : 1m));
             if (rangedX)
             {
                 var spanStart = PositionNumber(Channel(datum, FieldChannel.XStart));
@@ -701,10 +783,10 @@ internal sealed class PlotPlanSvgRenderer
     }
 
     private static void RenderTicks(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
-        decimal plotWidth, decimal plotHeight, ResolvedScale? yScale, string color)
+        decimal plotWidth, decimal plotHeight, ResolvedScale? xScale, ResolvedScale? yScale, string color)
     {
         if (categoryCount == 0 || yScale is null) return;
-        var slot = plotWidth / categoryCount;
+        var (slot, _) = CategoryLayout(categoryCount, plotWidth, xScale);
         var length = slot * layer.BandSize;
         var strokeWidth = Math.Clamp(layer.TickThickness * 8m, 1m, 8m);
         var colorScale = ColorScale(plan);
@@ -713,7 +795,7 @@ internal sealed class PlotPlanSvgRenderer
             var datum = layer.Data[index];
             var value = PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
             if (datum.IsGap || !value.HasValue) continue;
-            var x = CategoryX(index, categoryCount, plotWidth) + datum.DisplayOffsetX;
+            var x = CategoryX(index, categoryCount, plotWidth, xScale) + datum.DisplayOffsetX;
             var y = MapY(value.Value, yScale, plotHeight) + datum.DisplayOffsetY;
             var vertical = layer.TickOrientation == TickOrientation.Vertical;
             var x1 = vertical ? x : x - length / 2m;
@@ -750,7 +832,7 @@ internal sealed class PlotPlanSvgRenderer
             var xValue = PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
             var x = xScale is not null && xScale.Kind is ScaleKind.Linear or ScaleKind.Logarithmic && xValue.HasValue
                 ? MapX(xValue.Value, xScale, plotWidth)
-                : CategoryX(index, categoryCount, plotWidth);
+                : CategoryX(index, categoryCount, plotWidth, xScale);
             x += datum.DisplayOffsetX;
             var y = MapY(value.Value, scale, plotHeight) + datum.DisplayOffsetY;
             lastPoint = (x, y);
@@ -773,7 +855,7 @@ internal sealed class PlotPlanSvgRenderer
 
     private static void RenderStackedLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
         IReadOnlyList<ResolvedMarkLayer> layers, int categoryCount, decimal plotWidth, decimal plotHeight,
-        ResolvedScale? scale, string color, bool showLabels)
+        ResolvedScale? xScale, ResolvedScale? scale, string color, bool showLabels)
     {
         if (scale is null || layer.Data.IsDefaultOrEmpty) return;
         var topPoints = new List<(decimal X, decimal Y)>();
@@ -799,7 +881,7 @@ internal sealed class PlotPlanSvgRenderer
             if (datum.IsGap || !value.HasValue) { Flush(); continue; }
             var start = PlotPlanResolver.Number(Channel(datum, FieldChannel.YStart) ?? ChartValue.From(0m)) ?? 0m;
             var end = PlotPlanResolver.Number(Channel(datum, FieldChannel.YEnd) ?? ChartValue.From(start + value.Value)) ?? start + value.Value;
-            var x = CategoryX(index, categoryCount, plotWidth) + datum.DisplayOffsetX;
+            var x = CategoryX(index, categoryCount, plotWidth, xScale) + datum.DisplayOffsetX;
             var topY = MapY(end, scale, plotHeight) + datum.DisplayOffsetY;
             topPoints.Add((x, topY));
             basePoints.Add((x, MapY(start, scale, plotHeight) + datum.DisplayOffsetY));
@@ -811,8 +893,18 @@ internal sealed class PlotPlanSvgRenderer
         Flush();
     }
 
-    private static decimal CategoryX(int index, int categoryCount, decimal plotWidth) =>
-        Left + plotWidth * (index + .5m) / Math.Max(1, categoryCount);
+    private static decimal CategoryX(int index, int categoryCount, decimal plotWidth, ResolvedScale? scale = null)
+    {
+        var (slot, outerOffset) = CategoryLayout(categoryCount, plotWidth, scale);
+        return Left + outerOffset + slot * (index + .5m);
+    }
+
+    private static (decimal Slot, decimal OuterOffset) CategoryLayout(int categoryCount, decimal length, ResolvedScale? scale)
+    {
+        var padding = scale?.Kind == ScaleKind.Band ? Math.Clamp(scale.OuterPadding, 0m, 1m) : 0m;
+        var slot = length / Math.Max(1m, categoryCount + 2m * padding);
+        return (slot, slot * padding);
+    }
 
     private static string PathData(IReadOnlyList<(decimal X, decimal Y)> points, bool smooth)
     {
@@ -880,7 +972,7 @@ internal sealed class PlotPlanSvgRenderer
                 var category = DisplayChannel(datum, FieldChannel.X);
                 var categoryIndex = category is null ? -1 : xScale.Categories.IndexOf(category);
                 if (categoryIndex < 0) continue;
-                x = CategoryX(categoryIndex, categoryCount, plotWidth);
+                x = CategoryX(categoryIndex, categoryCount, plotWidth, xScale);
             }
             else
             {
@@ -1378,6 +1470,30 @@ internal sealed class PlotPlanSvgRenderer
         _ => string.Empty
     };
 
+    private static bool AxisLineEnabled(PlotPlan plan, string axis)
+    {
+        var value = Style(plan, $"axis:{axis}:axis_line");
+        return value is null || !value.Equals("OFF", StringComparison.OrdinalIgnoreCase) &&
+            !value.Equals("FALSE", StringComparison.OrdinalIgnoreCase) && value != "0";
+    }
+
+    private static void RenderGridLine(StringBuilder builder, PlotPlan plan,
+        decimal x1, decimal y1, decimal x2, decimal y2, bool minor = false)
+    {
+        var color = SafePaint(Style(plan, "GRID_LINE_COLOR"), "#e5e7eb");
+        var width = SafeLineWidth(Style(plan, "GRID_LINE_WIDTH"), "1");
+        var dash = DashAttribute(Style(plan, "GRID_LINE_DASH"));
+        var opacity = minor ? " stroke-opacity='.55'" : string.Empty;
+        builder.AppendLine($"<line class='{(minor ? "plot-minor-grid-line" : "plot-grid-line")}' x1='{N(x1)}' y1='{N(y1)}' x2='{N(x2)}' y2='{N(y2)}' stroke='{Esc(color)}' stroke-width='{width}'{dash}{opacity}/>");
+    }
+
+    private static string SafeLineWidth(string? value, string fallback) =>
+        decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var width)
+            ? N(Math.Clamp(width, .1m, 10m))
+            : fallback;
+
+    private static string DashAttribute(string? value) => LineStyleAttributes(value);
+
     private static decimal FontSize(string? value) =>
         decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)
             ? Math.Clamp(parsed, 7m, 24m)
@@ -1588,13 +1704,15 @@ internal sealed class PlotPlanSvgRenderer
         StringBuilder builder,
         ImmutableArray<string> categories,
         decimal plotWidth,
-        decimal plotHeight)
+        decimal plotHeight,
+        ResolvedScale? scale)
     {
-        var step = plotWidth / categories.Length;
+        var (step, outerOffset) = CategoryLayout(categories.Length, plotWidth, scale);
         var longest = categories.Max(category => Math.Min(18, category.Length));
         var estimatedWidth = longest * 5.2m;
         var crowded = estimatedWidth > step;
-        var stride = crowded ? Math.Max(1, (int)Math.Ceiling(estimatedWidth / Math.Max(1m, step * 1.7m))) : 1;
+        var stride = scale?.LabelSkip is { } labelSkip ? Math.Max(1, labelSkip + 1)
+            : crowded ? Math.Max(1, (int)Math.Ceiling(estimatedWidth / Math.Max(1m, step * 1.7m))) : 1;
         var hidden = new List<string>();
         for (var index = 0; index < categories.Length; index++)
         {
@@ -1603,10 +1721,11 @@ internal sealed class PlotPlanSvgRenderer
                 hidden.Add(categories[index]);
                 continue;
             }
-            var x = Left + step * (index + .5m);
+            var x = Left + outerOffset + step * (index + .5m);
             var y = Top + plotHeight + 16m + (crowded && index % 2 == 1 ? 10m : 0m);
-            var rotation = crowded ? $" transform='rotate(-35 {N(x)} {N(y)})'" : string.Empty;
-            builder.AppendLine($"<text class='plot-axis-label' data-axis-index='{index}' x='{N(x)}' y='{N(y)}' text-anchor='{(crowded ? "end" : "middle")}' font-size='9' fill='#666'{rotation}>{Esc(Truncate(categories[index], crowded ? 18 : 12))}</text>");
+            var angle = AxisLabelAngle(scale?.LabelRotation, crowded ? 35 : 0);
+            var rotation = angle == 0 ? string.Empty : $" transform='rotate(-{angle} {N(x)} {N(y)})'";
+            builder.AppendLine($"<text class='plot-axis-label' data-axis-index='{index}' x='{N(x)}' y='{N(y)}' text-anchor='{(angle == 0 ? "middle" : "end")}' font-size='9' fill='#666'{rotation}>{Esc(Truncate(categories[index], crowded ? 18 : 12))}</text>");
         }
         if (hidden.Count > 0)
             builder.AppendLine($"<desc class='plot-axis-label-occluded'>Additional categories: {Esc(string.Join(", ", hidden))}</desc>");
@@ -1615,11 +1734,13 @@ internal sealed class PlotPlanSvgRenderer
     private static void RenderVerticalCategoryAxisLabels(
         StringBuilder builder,
         ImmutableArray<string> categories,
-        decimal slot,
-        decimal plotHeight)
+        decimal plotHeight,
+        ResolvedScale? scale)
     {
         if (categories.IsDefaultOrEmpty) return;
-        var stride = slot >= 12m ? 1 : Math.Max(1, (int)Math.Ceiling(12m / Math.Max(1m, slot)));
+        var (slot, outerOffset) = CategoryLayout(categories.Length, plotHeight, scale);
+        var stride = scale?.LabelSkip is { } labelSkip ? Math.Max(1, labelSkip + 1)
+            : slot >= 12m ? 1 : Math.Max(1, (int)Math.Ceiling(12m / Math.Max(1m, slot)));
         var hidden = new List<string>();
         for (var index = 0; index < categories.Length; index++)
         {
@@ -1628,7 +1749,7 @@ internal sealed class PlotPlanSvgRenderer
                 hidden.Add(categories[index]);
                 continue;
             }
-            var y = Math.Clamp(Top + slot * (index + .5m) + 3m, Top + 9m, Top + plotHeight - 1m);
+            var y = Math.Clamp(Top + outerOffset + slot * (index + .5m) + 3m, Top + 9m, Top + plotHeight - 1m);
             builder.AppendLine($"<text class='plot-axis-label' data-axis-index='{index}' x='{N(Left - 6m)}' y='{N(y)}' text-anchor='end' font-size='9' fill='#666'>{Esc(Truncate(categories[index], 12))}</text>");
         }
         if (hidden.Count > 0)
@@ -1651,7 +1772,7 @@ internal sealed class PlotPlanSvgRenderer
             var xValue = PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
             var x = xScale is not null && Continuous(xScale) && xValue.HasValue
                 ? MapX(xValue.Value, xScale, plotWidth)
-                : CategoryX(index, categoryCount, plotWidth);
+                : CategoryX(index, categoryCount, plotWidth, xScale);
             x += datum.DisplayOffsetX;
             var y = MapY(value.Value, scale, plotHeight) + datum.DisplayOffsetY;
             smartLabels.Add(new SmartLabel(datum.RowIndex, x, y, text, color, 200 + layer.ZIndex, 10m));
@@ -1774,20 +1895,23 @@ internal sealed class PlotPlanSvgRenderer
     private static decimal MapX(decimal value, ResolvedScale scale, decimal plotWidth)
     {
         var (minimum, maximum) = Domain(scale);
-        return Left + Ratio(value, minimum, maximum, scale.Kind) * plotWidth;
+        var ratio = Ratio(value, minimum, maximum, scale.Kind);
+        return Left + (scale.Reverse ? 1m - ratio : ratio) * plotWidth;
     }
 
     /// <summary>Maps a transposed positional value onto the vertical axis in category order, top to bottom.</summary>
     private static decimal MapVertical(decimal value, ResolvedScale scale, decimal plotHeight)
     {
         var (minimum, maximum) = Domain(scale);
-        return Top + Ratio(value, minimum, maximum, scale.Kind) * plotHeight;
+        var ratio = Ratio(value, minimum, maximum, scale.Kind);
+        return Top + (scale.Reverse ? 1m - ratio : ratio) * plotHeight;
     }
 
     private static decimal MapY(decimal value, ResolvedScale scale, decimal plotHeight)
     {
         var (minimum, maximum) = Domain(scale);
-        return Top + plotHeight - Ratio(value, minimum, maximum, scale.Kind) * plotHeight;
+        var ratio = Ratio(value, minimum, maximum, scale.Kind);
+        return Top + plotHeight - (scale.Reverse ? 1m - ratio : ratio) * plotHeight;
     }
 
     /// <summary>True when a resolved scale carries a continuous domain that interval endpoints can map onto.</summary>
@@ -1884,6 +2008,47 @@ internal sealed class PlotPlanSvgRenderer
         return false;
     }
 
+    private static int AxisLabelAngle(string? value, int automatic) => value?.ToUpperInvariant() switch
+    {
+        "0" => 0,
+        "45" => 45,
+        "90" => 90,
+        _ => automatic
+    };
+
+    private static bool SkipTickLabel(ResolvedScale scale, int index) =>
+        scale.LabelSkip is { } skip && skip > 0 && index % (skip + 1) != 0 && index != scale.Ticks.Length - 1;
+
+    private static void RenderHorizontalMinorTicks(StringBuilder builder, ResolvedScale scale, decimal width, decimal y)
+    {
+        if (!scale.MinorTicks) return;
+        foreach (var value in MinorTickValues(scale))
+        {
+            var x = MapX(value, scale, width);
+            builder.AppendLine($"<line class='plot-minor-tick' x1='{N(x)}' y1='{N(y)}' x2='{N(x)}' y2='{N(y + 2m)}' stroke='#bbb'/>");
+        }
+    }
+
+    private static void RenderVerticalMinorTicks(StringBuilder builder, ResolvedScale scale, decimal height, decimal x, decimal length)
+    {
+        if (!scale.MinorTicks) return;
+        foreach (var value in MinorTickValues(scale))
+        {
+            var y = MapY(value, scale, height);
+            builder.AppendLine($"<line class='plot-minor-tick' x1='{N(x)}' y1='{N(y)}' x2='{N(x + length / 2m)}' y2='{N(y)}' stroke='#bbb'/>");
+        }
+    }
+
+    private static IEnumerable<decimal> MinorTickValues(ResolvedScale scale)
+    {
+        for (var index = 1; index < scale.Ticks.Length; index++)
+        {
+            var previous = PlotPlanResolver.Number(scale.Ticks[index - 1].Value);
+            var current = PlotPlanResolver.Number(scale.Ticks[index].Value);
+            if (previous.HasValue && current.HasValue) yield return (previous.Value + current.Value) / 2m;
+        }
+    }
+
     private static bool IsEnabledByDefault(ImmutableArray<StyleToken> tokens, string name)
     {
         if (tokens.IsDefault) return true;
@@ -1932,6 +2097,15 @@ internal sealed class PlotPlanSvgRenderer
                 return scales[i];
         }
         return null;
+    }
+
+    private static decimal? UnitStyle(PlotPlan plan, string name)
+    {
+        var value = Style(plan, name);
+        if (value is null) return null;
+        if (!decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var number) || number is < 0m or > 1m)
+            throw new InvalidOperationException($"{name} must be between zero and one.");
+        return number;
     }
 
     private static string ResolveDatumColor(ResolvedScale? scale, ResolvedDatum datum, string fallback)

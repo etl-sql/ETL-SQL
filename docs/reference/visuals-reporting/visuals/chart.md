@@ -17,6 +17,13 @@ CREATE VISUAL name AS CUSTOM (
         INCLUDE_ZERO = ON,
         MIN = literal,
         MAX = literal,
+        REVERSE = ON|OFF,
+        MAJOR_TICK_COUNT = 2..100,
+        TICK_INTERVAL = positive_number,
+        MINOR_TICKS = ON|OFF,
+        LABEL_ROTATION = AUTO|0|45|90,
+        LABEL_SKIP = AUTO|non_negative_integer,
+        OUTER_PADDING = 0..1,
         ORDER = SOURCE | ASCENDING | DESCENDING | (literal, ...),
         RANGE = GRADIENT(LOW = '#RRGGBB', HIGH = '#RRGGBB') |
                 DIVERGING(LOW = '#RRGGBB', MID = '#RRGGBB', HIGH = '#RRGGBB', MIDPOINT = number)
@@ -66,6 +73,7 @@ CREATE VISUAL name AS CUSTOM (
 - **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and currently requires quantitative primary Cartesian X/Y scales.
 - **SCALES** — Optionally declares named `LINEAR`, `LOGARITHMIC`, `TIME`, `BAND`, `POINT`, `ORDINAL`, or `IDENTITY` scales. Encoding `SCALE` references must name a declared scale; omission requests deterministic inference from the required `TYPE`, channel, mark, and coordinate.
 - **RANGE** — Adds a dependency-free sRGB sequential or diverging output range to a quantitative `COLOR` scale. Colors use portable `#RRGGBB`; values clamp at the domain, nulls use `NULL_COLOR`, and a diverging midpoint must lie inside the resolved domain.
+- **Scale axis controls** — `MIN`/`MAX` set the domain, `INCLUDE_ZERO` expands a quantitative domain to zero, `REVERSE` flips its display direction, `MAJOR_TICK_COUNT` or `TICK_INTERVAL` controls major ticks, `MINOR_TICKS` adds midpoint ticks, and `LABEL_ROTATION`/`LABEL_SKIP` control crowded tick labels. `OUTER_PADDING = 0..1` adds space before the first and after the last category on `BAND` scales only.
 - **LAYERS** — Declares marks in deterministic `Z_INDEX` order. A layer consumes the visual's single `SOURCE`; stage differently prepared inputs into one visible `#temp` table before authoring the visual.
 - **ENCODINGS** — At `CHART` scope, declares bindings inherited by layers. At layer scope, overrides individual channels. A layer defaults to `INHERIT_ENCODINGS = ON`; `OFF` makes its bindings isolated. Duplicate channels within either scope are errors.
 - **Binding sources** — A bare field reads a source column; `DATUM(literal-or-parameter)` supplies a typed data-domain constant that may use a scale; `VALUE(literal-or-parameter)` supplies a visual-range value and cannot use a scale or positional channel. Expressions, functions, aggregates, column references inside wrappers, null positional constants, and secret parameters are rejected.

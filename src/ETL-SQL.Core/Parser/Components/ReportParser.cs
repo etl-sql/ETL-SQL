@@ -594,6 +594,13 @@ public class ReportParser : ParserComponent
             AdvancedChartChannel? channel = null;
             var includeZero = false;
             Expression? minimum = null, maximum = null;
+            var reverse = false;
+            int? majorTickCount = null;
+            decimal? tickInterval = null;
+            var minorTicks = false;
+            string? labelRotation = null;
+            int? labelSkip = null;
+            var outerPadding = 0m;
             var order = AdvancedChartSortDirection.Source;
             var explicitOrder = new List<Expression>();
             AdvancedChartColorRange? colorRange = null;
@@ -607,6 +614,22 @@ public class ReportParser : ParserComponent
                     case "INCLUDE_ZERO": includeZero = ParseAdvancedOnOff(); break;
                     case "MIN": minimum = NormalizeAdvancedScalar(_parser.ParseExpression()); break;
                     case "MAX": maximum = NormalizeAdvancedScalar(_parser.ParseExpression()); break;
+                    case "REVERSE": reverse = ParseAdvancedOnOff(); break;
+                    case "MAJOR_TICK_COUNT":
+                        majorTickCount = int.Parse(Consume(TokenType.NUMBER, "Expected integer MAJOR_TICK_COUNT").Value, CultureInfo.InvariantCulture);
+                        break;
+                    case "TICK_INTERVAL":
+                        tickInterval = decimal.Parse(ParseSignedNumberText(), CultureInfo.InvariantCulture);
+                        break;
+                    case "MINOR_TICKS": minorTicks = ParseAdvancedOnOff(); break;
+                    case "LABEL_ROTATION":
+                        labelRotation = ConsumeAdvancedWord("Expected AUTO, 0, 45, or 90 for LABEL_ROTATION").ToUpperInvariant();
+                        break;
+                    case "LABEL_SKIP":
+                        var skip = ConsumeAdvancedWord("Expected AUTO or a positive integer for LABEL_SKIP").ToUpperInvariant();
+                        labelSkip = skip == "AUTO" ? null : int.Parse(skip, CultureInfo.InvariantCulture);
+                        break;
+                    case "OUTER_PADDING": outerPadding = decimal.Parse(ParseSignedNumberText(), CultureInfo.InvariantCulture); break;
                     case "ORDER":
                         if (Match(TokenType.LPAREN))
                         {
@@ -638,6 +661,13 @@ public class ReportParser : ParserComponent
                 IncludeZero = includeZero,
                 Minimum = minimum,
                 Maximum = maximum,
+                Reverse = reverse,
+                MajorTickCount = majorTickCount,
+                TickInterval = tickInterval,
+                MinorTicks = minorTicks,
+                LabelRotation = labelRotation,
+                LabelSkip = labelSkip,
+                OuterPadding = outerPadding,
                 Order = order,
                 ExplicitOrder = explicitOrder.ToImmutableArray(),
                 ColorRange = colorRange,
@@ -3314,6 +3344,7 @@ public class ReportParser : ParserComponent
         {
             bool isX = _parser.Current.Type == TokenType.X_AXIS || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("X_AXIS", StringComparison.OrdinalIgnoreCase));
             bool isY = _parser.Current.Type == TokenType.Y_AXIS || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("Y_AXIS", StringComparison.OrdinalIgnoreCase));
+            bool isY2 = _parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("Y2_AXIS", StringComparison.OrdinalIgnoreCase);
 
             if (isX)
             {
@@ -3331,6 +3362,15 @@ public class ReportParser : ParserComponent
                 Consume(TokenType.LPAREN, "Expected '(' after Y_AXIS");
                 ParseAxisOptionBody(axisOpts.Options);
                 Consume(TokenType.RPAREN, "Expected ')' to close Y_AXIS");
+                axisOptions.Add(axisOpts);
+            }
+            else if (isY2)
+            {
+                Advance();
+                var axisOpts = new AxisOptions { Axis = "Y2" };
+                Consume(TokenType.LPAREN, "Expected '(' after Y2_AXIS");
+                ParseAxisOptionBody(axisOpts.Options);
+                Consume(TokenType.RPAREN, "Expected ')' to close Y2_AXIS");
                 axisOptions.Add(axisOpts);
             }
             else if (Match(TokenType.COLORS))
@@ -3408,6 +3448,15 @@ public class ReportParser : ParserComponent
                         keyToken.Column);
                 }
                 Match(TokenType.EQUALS);
+                if (key == "STACKED" && _parser.Current.Type == TokenType.NUMBER && _parser.Current.Value == "100" &&
+                    _parser.Peek.Type == TokenType.IDENTIFIER && _parser.Peek.Value.Equals("PCT", StringComparison.OrdinalIgnoreCase))
+                {
+                    Advance();
+                    Advance();
+                    options.Add(new VisualOption { Key = key, Value = "100PCT" });
+                    Match(TokenType.COMMA);
+                    continue;
+                }
                 var val = ParseExpression();
                 options.Add(new VisualOption { Key = key, Value = val is LiteralExpression lit ? lit.Value?.ToString() ?? "" : val.ToSql() });
             }

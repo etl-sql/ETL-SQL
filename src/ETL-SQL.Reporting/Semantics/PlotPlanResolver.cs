@@ -248,7 +248,8 @@ public sealed class PlotPlanResolver
                         : !inferred.IsDefaultOrEmpty ? inferred : categories;
                 yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                     values.Select(ChartValue.From).ToImmutableArray(), values,
-                    values.Select(value => new PlotTick(ChartValue.From(value), value)).ToImmutableArray(), scale.IncludeZero);
+                    values.Select(value => new PlotTick(ChartValue.From(value), value)).ToImmutableArray(), scale.IncludeZero,
+                    scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding);
                 continue;
             }
 
@@ -300,7 +301,8 @@ public sealed class PlotPlanResolver
                 yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                     temporalValues.Select(item => item.Value).ToImmutableArray(),
                     temporalValues.Select(item => item.Display).ToImmutableArray(),
-                    temporalValues.Select(item => new PlotTick(item.Value, item.Display)).ToImmutableArray(), scale.IncludeZero);
+                    temporalValues.Select(item => new PlotTick(item.Value, item.Display)).ToImmutableArray(), scale.IncludeZero,
+                    scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding);
                 continue;
             }
 
@@ -330,14 +332,23 @@ public sealed class PlotPlanResolver
                 if (scale.DomainMaximum is null) maximum += padding;
                 if ((!scale.IncludeZero || scale.Channel == FieldChannel.X) && scale.DomainMinimum is null) minimum -= padding;
             }
-            var ticks = scale.Kind == ScaleKind.Logarithmic
-                ? Enumerable.Range(0, 5).Select(index => (decimal)Math.Pow(10d,
-                    Math.Log10((double)minimum) + (Math.Log10((double)maximum) - Math.Log10((double)minimum)) * index / 4d)).ToList()
-                : Enumerable.Range(0, 5).Select(index => minimum + ((maximum - minimum) * index / 4m)).ToList();
+            if (scale.MajorTickCount is < 2 or > 100)
+                throw new InvalidOperationException($"MAJOR_TICK_COUNT for scale '{scale.Id}' must be between 2 and 100.");
+            if (scale.TickInterval is <= 0m)
+                throw new InvalidOperationException($"TICK_INTERVAL for scale '{scale.Id}' must be greater than zero.");
+            var tickCount = scale.MajorTickCount ?? 5;
+            var ticks = scale.TickInterval is { } interval
+                ? Enumerable.Range(0, Math.Min(100, (int)Math.Floor((maximum - minimum) / interval) + 2))
+                    .Select(index => Math.Ceiling(minimum / interval) * interval + index * interval)
+                    .Where(value => value <= maximum).ToList()
+                : scale.Kind == ScaleKind.Logarithmic
+                ? Enumerable.Range(0, tickCount).Select(index => (decimal)Math.Pow(10d,
+                    Math.Log10((double)minimum) + (Math.Log10((double)maximum) - Math.Log10((double)minimum)) * index / (tickCount - 1d))).ToList()
+                : Enumerable.Range(0, tickCount).Select(index => minimum + ((maximum - minimum) * index / (tickCount - 1m))).ToList();
             var resolved = new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                 [ChartValue.From(minimum), ChartValue.From(maximum)], [],
                 ticks.Select(value => new PlotTick(ChartValue.From(value), formatter.Number(value))).ToImmutableArray(),
-                scale.IncludeZero);
+                scale.IncludeZero, scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding);
             if (scale.ColorRange is { } colorRange)
             {
                 if (colorRange.Midpoint is { } midpoint && (midpoint < minimum || midpoint > maximum))

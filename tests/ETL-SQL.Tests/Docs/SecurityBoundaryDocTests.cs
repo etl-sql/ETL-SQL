@@ -129,7 +129,10 @@ public sealed class SecurityBoundaryDocTests
         var raw = System.IO.File.ReadAllText(System.IO.Path.Combine(RepoRoot, "TODO.md"));
 
         var release = System.Text.RegularExpressions.Regex.Match(
-            raw, @"^##\s+v(\d+\.\d+\.\d+)\s+Release",
+            // TODO.md numbers its top-level sections ("## 2. v0.19.0 Release Evidence Gates"), so the
+            // number is optional here. Without it this guard has been red against the very document
+            // it guards, and a guard that is always red is one people learn to scroll past.
+            raw, @"^##\s+(?:\d+\.\s*)?v(\d+\.\d+\.\d+)\s+Release",
             System.Text.RegularExpressions.RegexOptions.Multiline);
         Assert.True(release.Success,
             "TODO.md must name the active release with a '## vX.Y.Z Release' heading so the release " +

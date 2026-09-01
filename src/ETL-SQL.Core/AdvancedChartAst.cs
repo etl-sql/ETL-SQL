@@ -123,6 +123,13 @@ public sealed record AdvancedChartScale : AstNode
     public bool IncludeZero { get; init; }
     public Expression? Minimum { get; init; }
     public Expression? Maximum { get; init; }
+    public bool Reverse { get; init; }
+    public int? MajorTickCount { get; init; }
+    public decimal? TickInterval { get; init; }
+    public bool MinorTicks { get; init; }
+    public string? LabelRotation { get; init; }
+    public int? LabelSkip { get; init; }
+    public decimal OuterPadding { get; init; }
     public AdvancedChartSortDirection Order { get; init; }
     public ImmutableArray<Expression> ExplicitOrder { get; init; } = [];
     public AdvancedChartColorRange? ColorRange { get; init; }

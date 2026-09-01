@@ -908,6 +908,68 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void BandScaleOuterPadding_RoundTripsAndReachesResolvedScale()
+    {
+        const string sql = """
+            CREATE VISUAL Padded AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (categories = BAND (CHANNEL = X, OUTER_PADDING = 0.5)),
+                ENCODINGS (X = Category (TYPE = NOMINAL, SCALE = categories)),
+                LAYERS (bars = RECT (ENCODINGS (Y = Value (TYPE = QUANTITATIVE))))
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        Assert.Empty(script.Diagnostics);
+        var statement = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        Assert.Contains("OUTER_PADDING = 0.5", statement.ToSql());
+        var manifest = new VisualManifest { Name = "Padded", Columns = ["Category", "Value"], Rows = [["A", "10"], ["B", "20"]] };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, new VisualChartDataBuilder().Build(spec, manifest));
+
+        Assert.Equal(0.5m, plan.Scales.Single(scale => scale.Id == "categories").OuterPadding);
+    }
+
+    [Fact]
+    public void CustomChartScaleControls_RoundTripAndReachTheResolvedPlan()
+    {
+        const string sql = """
+            CREATE VISUAL Native AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                COORDINATE (TYPE = CARTESIAN),
+                SCALES (
+                  x = BAND (CHANNEL = X, LABEL_ROTATION = 90, LABEL_SKIP = 1),
+                  y = LINEAR (CHANNEL = Y, INCLUDE_ZERO = OFF, MIN = 10, MAX = 30,
+                    REVERSE = ON, MAJOR_TICK_COUNT = 3, TICK_INTERVAL = 10, MINOR_TICKS = ON)
+                ),
+                LAYERS (line = LINE (ENCODINGS (
+                  X = Category (TYPE = NOMINAL, SCALE = x),
+                  Y = Value (TYPE = QUANTITATIVE, SCALE = y)
+                )))
+              )
+            );
+            """;
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        var statement = Assert.Single(script.Statements.OfType<CreateVisualStatement>());
+        var formatted = statement.ToSql();
+        Assert.Contains("REVERSE = ON", formatted);
+        Assert.Contains("MAJOR_TICK_COUNT = 3", formatted);
+        Assert.DoesNotContain(new Parser(new Lexer(formatted).Tokenize(), formatted).Parse().Diagnostics,
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+
+        var manifest = new VisualManifest { Name = "Native", Columns = ["Category", "Value"], Rows = [["A", "12"], ["B", "20"]] };
+        var spec = new AdvancedChartLowerer(new SystemExecutionContext()).Lower(statement, manifest);
+        var plan = new PlotPlanResolver().Resolve(spec, new VisualChartDataBuilder().Build(spec, manifest));
+        var y = plan.Scales.Single(scale => scale.Channel == FieldChannel.Y);
+        Assert.True(y.Reverse);
+        Assert.True(y.MinorTicks);
+        Assert.Equal(3, y.Ticks.Length);
+    }
+
+    [Fact]
     public void DenseMultiSeriesLabelsAndBandAxis_UseDeterministicBoundedPlacement()
     {
         var bindings = ImmutableArray.Create(

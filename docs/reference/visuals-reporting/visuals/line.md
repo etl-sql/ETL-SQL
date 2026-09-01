@@ -11,9 +11,22 @@ CREATE VISUAL VisualName AS LINE (
   ),
   OPTIONS (
     [SYMBOLS = ON|OFF],
+    [STACKED = ON|OFF|100PCT],
     [GRID_LINES = ON|OFF],
+    [GRID_LINE_COLOR = '#rrggbb'],
+    [GRID_LINE_DASH = SOLID|DASHED|DOTTED],
+    [GRID_LINE_WIDTH = n],
+    [MINOR_GRID_LINES = ON|OFF],
+    [ZERO_LINE = ON|OFF],
+    [ZERO_LINE_COLOR = '#rrggbb'],
+    [ZERO_LINE_DASH = SOLID|DASHED|DOTTED],
+    [ZERO_LINE_WIDTH = n],
     [ZOOM_SLIDER = ON|OFF],
-    [DATA_LABELS = ON|OFF WITH (POSITION = OUTSIDE_TOP|OUTSIDE_BOTTOM)]
+    [DATA_LABELS = ON|OFF WITH (POSITION = OUTSIDE_TOP|OUTSIDE_BOTTOM)],
+    [X_AXIS (LABEL = 'text', MIN = n, MAX = n, INCLUDE_ZERO = ON|OFF, REVERSE = ON|OFF,
+      MAJOR_TICK_COUNT = n, TICK_INTERVAL = n, MINOR_TICKS = ON|OFF,
+      LABEL_ROTATION = AUTO|0|45|90, LABEL_SKIP = AUTO|n, AXIS_LINE = ON|OFF)],
+    [Y_AXIS (...same axis properties...)]
   )
 );
 ```
@@ -29,12 +42,21 @@ CREATE VISUAL VisualName AS LINE (
 - **SMOOTH = ON|OFF** - Bezier-smoothed curves instead of straight segments (default OFF)
 - **SYMBOLS = ON|OFF** - show data-point markers on the line (default ON)
 - **GRID_LINES = ON|OFF** - show background value-axis grid lines (default ON)
+- **GRID_LINE_COLOR = '#rrggbb'** - set the major and minor gridline color
+- **GRID_LINE_DASH = SOLID|DASHED|DOTTED** - set the gridline stroke pattern (default SOLID)
+- **GRID_LINE_WIDTH = n** - set gridline width in pixels; the value must be positive (default 1)
+- **MINOR_GRID_LINES = ON|OFF** - draw one lighter gridline between each pair of major ticks (default OFF)
+- **ZERO_LINE = ON|OFF** - emphasize zero when the value-axis domain contains it (default OFF)
+- **ZERO_LINE_COLOR = '#rrggbb'** - set the zero-line color
+- **ZERO_LINE_DASH = SOLID|DASHED|DOTTED** - set the zero-line stroke pattern (default SOLID)
+- **ZERO_LINE_WIDTH = n** - set zero-line width in pixels; the value must be positive (default 1.5)
 - **ZOOM_SLIDER = ON|OFF** - show a browser range selector below the chart (default OFF)
 - **DATA_LABELS = ON|OFF WITH (...)** - show and format point values (default OFF)
 - **AREA = ON|OFF** - fill the region below the line (default OFF)
-- **STACKED = ON|OFF** - stack multiple series vertically (default OFF)
+- **STACKED = ON|OFF|100PCT** - draw independent series, cumulative stacks, or normalized 100% stacks (default OFF)
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - category-axis order; SOURCE preserves query order
-  TITLE   = 'text'
+- **X_AXIS (...) / Y_AXIS (...)** - axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`). `MAJOR_TICK_COUNT` is 2–100 and `TICK_INTERVAL` must be positive.
+- **TITLE = 'text'** - visual title
 
 ## Examples
 

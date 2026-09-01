@@ -43,7 +43,12 @@ public sealed record ResolvedScale(
     ImmutableArray<ChartValue> Domain,
     ImmutableArray<string> Categories,
     ImmutableArray<PlotTick> Ticks,
-    bool IncludesZero)
+    bool IncludesZero,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Reverse = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool MinorTicks = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? LabelRotation = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? LabelSkip = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] decimal OuterPadding = 0m)
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ResolvedColorRange? ColorRange { get; init; }

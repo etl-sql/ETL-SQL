@@ -4954,6 +4954,10 @@ export function createDesigner(container, opts = {}) {
         'RADAR', 'HEATMAP', 'FUNNEL', 'WATERFALL', 'TREEMAP', 'BOXPLOT', 'COMBO',
         'CANDLESTICK', 'GANTT', 'MAP', 'SANKEY', 'SUNBURST', 'NETWORK', 'TRELLIS', 'MATRIX'
     ]);
+    const FORMAT_INSPECTOR_CARTESIAN = new Set([
+        'BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'SCATTER', 'BUBBLE', 'HEATMAP',
+        'WATERFALL', 'BOXPLOT', 'COMBO', 'CANDLESTICK', 'GANTT', 'TRELLIS'
+    ]);
 
     function visualFormatting(v) {
         v.formatting ||= {};
@@ -4987,6 +4991,10 @@ export function createDesigner(container, opts = {}) {
             .map(([key, color]) => ({ name: key.slice('COLOR:'.length), color }));
         const overlays = v.options?.overlays || '';
         const isChart = FORMAT_INSPECTOR_CHARTS.has(v.type);
+        const isCartesian = FORMAT_INSPECTOR_CARTESIAN.has(v.type);
+        const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
+        const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
+        const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
         const isTable = v.type === 'TABLE';
         const supportsRules = isChart || isTable || v.type === 'CARD' || v.type === 'KPI';
         const availableFields = [...new Set([
@@ -5060,8 +5068,26 @@ export function createDesigner(container, opts = {}) {
                             </select>
                         </label>
                         <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-grid-lines" ${(v.options?.GRID_LINES || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show background grid lines</span></label>
+                        ${isCartesian ? `<div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Grid color
+                                <input type="color" id="pp-format-grid-color" value="${toHexColor(v.options?.GRID_LINE_COLOR, '#e5e7eb')}">
+                            </label>
+                            <label class="etlsql-dsgn-label">Grid line
+                                <select id="pp-format-grid-dash" class="form-control">${['SOLID', 'DASHED', 'DOTTED'].map(value => `<option${(v.options?.GRID_LINE_DASH || 'SOLID').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}</select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Grid width
+                                <input type="number" id="pp-format-grid-width" class="form-control" min="0.1" max="10" step="0.1" value="${esc(v.options?.GRID_LINE_WIDTH || '1')}">
+                            </label>
+                            <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-minor-grid-lines" ${(v.options?.MINOR_GRID_LINES || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Minor grid lines</span></label>
+                        </div>` : ''}
+                        ${supportsZeroLine ? `<label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-zero-line" ${(v.options?.ZERO_LINE || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show zero line</span></label>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Zero-line color<input type="color" id="pp-format-zero-line-color" value="${toHexColor(v.options?.ZERO_LINE_COLOR, '#6b7280')}"></label>
+                            <label class="etlsql-dsgn-label">Zero-line style<select id="pp-format-zero-line-dash" class="form-control">${['SOLID', 'DASHED', 'DOTTED'].map(value => `<option${(v.options?.ZERO_LINE_DASH || 'SOLID').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}</select></label>
+                            <label class="etlsql-dsgn-label">Zero-line width<input type="number" id="pp-format-zero-line-width" class="form-control" min="0.1" max="10" step="0.1" value="${esc(v.options?.ZERO_LINE_WIDTH || '1.5')}"></label>
+                        </div>` : ''}
                         <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-zoom-slider" ${(v.options?.ZOOM_SLIDER || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show zoom slider</span></label>
-                        <div class="etlsql-format-axis-grid">
+                        ${isCartesian ? `<div class="etlsql-format-axis-grid">
                             <strong>X axis</strong><strong>Y axis</strong>
                             <input data-axis="x" data-axis-key="LABEL" class="form-control" value="${esc(xAxis.LABEL || xAxis.label || '')}" placeholder="Label">
                             <input data-axis="y" data-axis-key="LABEL" class="form-control" value="${esc(yAxis.LABEL || yAxis.label || '')}" placeholder="Label">
@@ -5071,7 +5097,23 @@ export function createDesigner(container, opts = {}) {
                             <input data-axis="y" data-axis-key="MAX" class="form-control" value="${esc(yAxis.MAX || yAxis.max || '')}" placeholder="Max · Auto">
                             <input data-axis="x" data-axis-key="FORMAT" class="form-control" value="${esc(xAxis.FORMAT || xAxis.format || '')}" placeholder="Format">
                             <input data-axis="y" data-axis-key="FORMAT" class="form-control" value="${esc(yAxis.FORMAT || yAxis.format || '')}" placeholder="Format">
-                        </div>
+                            <label class="etlsql-format-toggle"><input type="checkbox" data-axis="x" data-axis-key="INCLUDE_ZERO" data-axis-boolean ${(xAxis.INCLUDE_ZERO || '').toUpperCase() === 'ON' ? 'checked' : ''}><span>Include zero</span></label>
+                            <label class="etlsql-format-toggle"><input type="checkbox" data-axis="y" data-axis-key="INCLUDE_ZERO" data-axis-boolean ${(yAxis.INCLUDE_ZERO || '').toUpperCase() === 'ON' ? 'checked' : ''}><span>Include zero</span></label>
+                            <label class="etlsql-format-toggle"><input type="checkbox" data-axis="x" data-axis-key="REVERSE" data-axis-boolean ${(xAxis.REVERSE || '').toUpperCase() === 'ON' ? 'checked' : ''}><span>Reverse</span></label>
+                            <label class="etlsql-format-toggle"><input type="checkbox" data-axis="y" data-axis-key="REVERSE" data-axis-boolean ${(yAxis.REVERSE || '').toUpperCase() === 'ON' ? 'checked' : ''}><span>Reverse</span></label>
+                            <input type="number" min="2" max="100" data-axis="x" data-axis-key="MAJOR_TICK_COUNT" class="form-control" value="${esc(xAxis.MAJOR_TICK_COUNT || '')}" placeholder="Major ticks · Auto">
+                            <input type="number" min="2" max="100" data-axis="y" data-axis-key="MAJOR_TICK_COUNT" class="form-control" value="${esc(yAxis.MAJOR_TICK_COUNT || '')}" placeholder="Major ticks · Auto">
+                            <input type="number" min="0" step="any" data-axis="x" data-axis-key="TICK_INTERVAL" class="form-control" value="${esc(xAxis.TICK_INTERVAL || '')}" placeholder="Tick interval · Auto">
+                            <input type="number" min="0" step="any" data-axis="y" data-axis-key="TICK_INTERVAL" class="form-control" value="${esc(yAxis.TICK_INTERVAL || '')}" placeholder="Tick interval · Auto">
+                            <label class="etlsql-format-toggle"><input type="checkbox" data-axis="x" data-axis-key="MINOR_TICKS" data-axis-boolean ${(xAxis.MINOR_TICKS || '').toUpperCase() === 'ON' ? 'checked' : ''}><span>Minor ticks</span></label>
+                            <label class="etlsql-format-toggle"><input type="checkbox" data-axis="y" data-axis-key="MINOR_TICKS" data-axis-boolean ${(yAxis.MINOR_TICKS || '').toUpperCase() === 'ON' ? 'checked' : ''}><span>Minor ticks</span></label>
+                            <label class="etlsql-format-toggle"><input type="checkbox" data-axis="x" data-axis-key="AXIS_LINE" data-axis-boolean ${(xAxis.AXIS_LINE || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Axis line</span></label>
+                            <label class="etlsql-format-toggle"><input type="checkbox" data-axis="y" data-axis-key="AXIS_LINE" data-axis-boolean ${(yAxis.AXIS_LINE || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Axis line</span></label>
+                            <select data-axis="x" data-axis-key="LABEL_ROTATION" class="form-control">${['AUTO', '0', '45', '90'].map(value => `<option value="${value}"${(xAxis.LABEL_ROTATION || 'AUTO').toUpperCase() === value ? ' selected' : ''}>${value === 'AUTO' ? 'Rotation · Auto' : `${value}°`}</option>`).join('')}</select>
+                            <select data-axis="y" data-axis-key="LABEL_ROTATION" class="form-control">${['AUTO', '0', '45', '90'].map(value => `<option value="${value}"${(yAxis.LABEL_ROTATION || 'AUTO').toUpperCase() === value ? ' selected' : ''}>${value === 'AUTO' ? 'Rotation · Auto' : `${value}°`}</option>`).join('')}</select>
+                            <input type="number" min="0" data-axis="x" data-axis-key="LABEL_SKIP" class="form-control" value="${esc(xAxis.LABEL_SKIP || '')}" placeholder="Label skip · Auto">
+                            <input type="number" min="0" data-axis="y" data-axis-key="LABEL_SKIP" class="form-control" value="${esc(yAxis.LABEL_SKIP || '')}" placeholder="Label skip · Auto">
+                        </div>` : ''}
                     </div>
                 </details>` : ''}
 
@@ -5085,9 +5127,22 @@ export function createDesigner(container, opts = {}) {
                             </select>
                         </label>
                         ${v.type === 'LINE' || v.type === 'COMBO' ? `<label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-symbols" ${(v.options?.SYMBOLS || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show data points</span></label>` : ''}
+                        ${supportsStacking ? `<label class="etlsql-dsgn-label">Stacking
+                            <select id="pp-format-stacked" class="form-control">
+                                <option value="OFF"${(v.options?.STACKED || 'OFF').toUpperCase() === 'OFF' ? ' selected' : ''}>Off</option>
+                                <option value="ON"${(v.options?.STACKED || '').toUpperCase() === 'ON' ? ' selected' : ''}>Stacked</option>
+                                <option value="100PCT"${(v.options?.STACKED || '').toUpperCase() === '100PCT' ? ' selected' : ''}>100% stacked</option>
+                            </select>
+                        </label>` : ''}
                         ${v.type === 'BAR' || v.type === 'HBAR' || v.type === 'HORIZONTALBAR' || v.type === 'COMBO' ? `<label class="etlsql-dsgn-label">Bar width
                             <div class="etlsql-dsgn-slider-row"><input type="range" id="pp-format-band-size" min="0.1" max="1" step="0.05" value="${esc(v.options?.BAND_SIZE || '0.75')}"><output id="pp-format-band-size-value">${esc(v.options?.BAND_SIZE || '0.75')}</output></div>
                             <span class="etlsql-format-hint">Narrower bars create more spacing.</span>
+                        </label>
+                        <label class="etlsql-dsgn-label">Series gap
+                            <div class="etlsql-dsgn-slider-row"><input type="range" id="pp-format-series-gap" min="0" max="1" step="0.05" value="${esc(v.options?.SERIES_GAP || '0')}"><output id="pp-format-series-gap-value">${esc(v.options?.SERIES_GAP || '0')}</output></div>
+                        </label>
+                        <label class="etlsql-dsgn-label">Outer padding
+                            <div class="etlsql-dsgn-slider-row"><input type="range" id="pp-format-outer-padding" min="0" max="1" step="0.05" value="${esc(v.options?.OUTER_PADDING || '0')}"><output id="pp-format-outer-padding-value">${esc(v.options?.OUTER_PADDING || '0')}</output></div>
                         </label>` : ''}
                         <label class="etlsql-dsgn-label">Overlays
                             <textarea id="pp-format-overlays" class="form-control etlsql-code-editor" rows="3" placeholder="OVERLAYS (GOAL(100) AS DASHED)">${esc(overlays)}</textarea>
@@ -5280,6 +5335,27 @@ export function createDesigner(container, opts = {}) {
             v.options.GRID_LINES = event.target.checked ? 'ON' : 'OFF';
             sync();
         });
+        const bindOption = (selector, key, eventName = 'change') => panel.querySelector(selector)?.addEventListener(eventName, event => {
+            v.options ||= {};
+            v.options[key] = event.target.value;
+            sync();
+        });
+        bindOption('#pp-format-grid-color', 'GRID_LINE_COLOR', 'input');
+        bindOption('#pp-format-grid-dash', 'GRID_LINE_DASH');
+        bindOption('#pp-format-grid-width', 'GRID_LINE_WIDTH');
+        bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
+        bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
+        bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');
+        panel.querySelector('#pp-format-minor-grid-lines')?.addEventListener('change', event => {
+            v.options ||= {};
+            v.options.MINOR_GRID_LINES = event.target.checked ? 'ON' : 'OFF';
+            sync();
+        });
+        panel.querySelector('#pp-format-zero-line')?.addEventListener('change', event => {
+            v.options ||= {};
+            v.options.ZERO_LINE = event.target.checked ? 'ON' : 'OFF';
+            sync();
+        });
         panel.querySelector('#pp-format-zoom-slider')?.addEventListener('change', event => {
             v.options ||= {};
             v.options.ZOOM_SLIDER = event.target.checked ? 'ON' : 'OFF';
@@ -5300,10 +5376,21 @@ export function createDesigner(container, opts = {}) {
             v.options.SYMBOLS = event.target.checked ? 'ON' : 'OFF';
             sync();
         });
+        bindOption('#pp-format-stacked', 'STACKED');
         panel.querySelector('#pp-format-band-size')?.addEventListener('input', event => {
             v.options ||= {};
             v.options.BAND_SIZE = event.target.value;
             const output = panel.querySelector('#pp-format-band-size-value');
+            if (output) output.value = event.target.value;
+            sync();
+        });
+        for (const [selector, key, outputSelector] of [
+            ['#pp-format-series-gap', 'SERIES_GAP', '#pp-format-series-gap-value'],
+            ['#pp-format-outer-padding', 'OUTER_PADDING', '#pp-format-outer-padding-value']
+        ]) panel.querySelector(selector)?.addEventListener('input', event => {
+            v.options ||= {};
+            v.options[key] = event.target.value;
+            const output = panel.querySelector(outputSelector);
             if (output) output.value = event.target.value;
             sync();
         });
@@ -5317,7 +5404,9 @@ export function createDesigner(container, opts = {}) {
         panel.querySelectorAll('[data-axis]').forEach(input => input.addEventListener('change', () => {
             const axis = input.dataset.axis === 'x' ? formatting.xAxis : formatting.yAxis;
             const key = input.dataset.axisKey;
-            const value = input.value.trim();
+            const value = input.hasAttribute('data-axis-boolean')
+                ? (input.checked ? 'ON' : 'OFF')
+                : input.value.trim();
             if (value) axis[key] = value;
             else delete axis[key];
             sync();
