@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -213,10 +213,24 @@ internal static class PlotPlanTerminalRenderer
             ? $"[grey]X: {minX.ToString(CultureInfo.InvariantCulture)} … {maxX.ToString(CultureInfo.InvariantCulture)}  │  Y: {min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]"
             : $"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]";
 
-        return new Rows(
+        var errorDetails = layers.SelectMany(l => l.Data.Select(d =>
+        {
+            var detail = ErrorBarDetail(d);
+            return detail != null ? $"{Label(d)}: {detail}" : null;
+        })).Where(d => d != null).ToList();
+
+        var contentRows = new List<IRenderable>
+        {
             new Markup(string.Join("  ", headerParts) + headerSuffix),
             canvas.ToRenderableWithAxis(min, max),
-            new Markup(axisRange));
+            new Markup(axisRange)
+        };
+        if (errorDetails.Count > 0)
+        {
+            contentRows.Add(new Markup($"[grey]{Markup.Escape(string.Join(", ", errorDetails))}[/]"));
+        }
+
+        return new Rows(contentRows);
     }
 
     private static IRenderable RenderCompositeBarLine(
@@ -312,10 +326,24 @@ internal static class PlotPlanTerminalRenderer
 
         var catAxis = string.Join("    ", categories.Select(c => Truncate(c, 8)));
 
-        return new Rows(
+        var errorDetails = rectLayers.Concat(lineLayers).SelectMany(l => l.Data.Select(d =>
+        {
+            var detail = ErrorBarDetail(d);
+            return detail != null ? $"{Label(d)}: {detail}" : null;
+        })).Where(d => d != null).ToList();
+
+        var contentRows = new List<IRenderable>
+        {
             new Markup(string.Join("  ", headerParts)),
             canvas.ToRenderableWithAxis(min, max),
-            new Markup($"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]  [bold]{Markup.Escape(catAxis)}[/]"));
+            new Markup($"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]  [bold]{Markup.Escape(catAxis)}[/]")
+        };
+        if (errorDetails.Count > 0)
+        {
+            contentRows.Add(new Markup($"[grey]{Markup.Escape(string.Join(", ", errorDetails))}[/]"));
+        }
+
+        return new Rows(contentRows);
     }
 
     private static IRenderable RenderRectangles(PlotPlan plan, ResolvedMarkLayer layer, IReadOnlyList<ResolvedDatum> data, string series, string color, int width)
@@ -366,7 +394,8 @@ internal static class PlotPlanTerminalRenderer
                     var value = Value(datum) ?? 0m;
                     var bar = FractionalBar(Math.Abs(value) / maximum, barWidth);
                     var sign = value < 0m ? "◀" : value == 0m ? "│" : "▶";
-                    subRows.Add(new Markup($"  {Markup.Escape(subLabel)} [{seriesAnsi}]{sign}{bar}[/] {Markup.Escape(DisplayValue(datum))}"));
+                    var errorInfo = ErrorBarDetail(datum);
+                    subRows.Add(new Markup($"  {Markup.Escape(subLabel)} [{seriesAnsi}]{sign}{bar}[/] {Markup.Escape(DisplayValue(datum))}{(errorInfo != null ? $" [grey]({errorInfo})[/]" : "")}"));
                 }
             }
             return new Rows(subRows);
@@ -380,13 +409,25 @@ internal static class PlotPlanTerminalRenderer
             var value = Value(datum) ?? 0m;
             var bar = FractionalBar(Math.Abs(value) / maximum, barWidth);
             var sign = value < 0m ? "◀" : value == 0m ? "│" : "▶";
-            return new Markup($"{Markup.Escape(label)} [{ansi}]{sign}{bar}[/] {Markup.Escape(DisplayValue(datum))}");
+            var errorInfo = ErrorBarDetail(datum);
+            return new Markup($"{Markup.Escape(label)} [{ansi}]{sign}{bar}[/] {Markup.Escape(DisplayValue(datum))}{(errorInfo != null ? $" [grey]({errorInfo})[/]" : "")}");
         }).ToList();
         rows.Insert(0, new Markup($"[bold]{Markup.Escape(series)}[/] [grey](fractional bars)[/]"));
         return new Rows(rows);
     }
 
     /// <summary>True when the author supplied both interval endpoints; resolver-computed stack endpoints do not count.</summary>
+    private static string? ErrorBarDetail(ResolvedDatum datum)
+    {
+        var low = Channel(datum, FieldChannel.ErrorLow);
+        var high = Channel(datum, FieldChannel.ErrorHigh);
+        if (low is null || high is null || low.Kind == ChartValueKind.Null || high.Kind == ChartValueKind.Null)
+            return null;
+        var lowDisplay = DisplayChannel(datum, FieldChannel.ErrorLow) ?? PlotPlanResolver.Number(low)?.ToString(CultureInfo.InvariantCulture);
+        var highDisplay = DisplayChannel(datum, FieldChannel.ErrorHigh) ?? PlotPlanResolver.Number(high)?.ToString(CultureInfo.InvariantCulture);
+        return $"error {lowDisplay} to {highDisplay}";
+    }
+
     private static bool IsRangedRect(ResolvedMarkLayer layer, IReadOnlyList<ResolvedDatum> data) =>
         layer.Mark == MarkKind.Rect && layer.Stack == StackMode.None &&
         data.Any(datum => IntervalStart(datum).HasValue && IntervalEnd(datum).HasValue);
@@ -549,9 +590,12 @@ internal static class PlotPlanTerminalRenderer
     {
         var glyph = PointGlyphs[Math.Abs(seriesOrder) % PointGlyphs.Length];
         var ansi = SafeAnsiColor(color);
-        var rows = data.Select(datum => datum.IsGap
-            ? (IRenderable)new Markup($"[grey]○ {Markup.Escape(Label(datum))}: gap[/]")
-            : new Markup($"[{ansi}]{glyph}[/] {Markup.Escape(Label(datum))}: {Markup.Escape(DisplayValue(datum))}"));
+        var rows = data.Select(datum =>
+        {
+            if (datum.IsGap) return (IRenderable)new Markup($"[grey]○ {Markup.Escape(Label(datum))}: gap[/]");
+            var errorInfo = ErrorBarDetail(datum);
+            return new Markup($"[{ansi}]{glyph}[/] {Markup.Escape(Label(datum))}: {Markup.Escape(DisplayValue(datum))}{(errorInfo != null ? $" [grey]({errorInfo})[/]" : "")}");
+        });
         return new Rows(new[] { (IRenderable)new Markup($"[bold]{Markup.Escape(series)}[/] [grey](point glyph {glyph})[/]") }.Concat(rows));
     }
 

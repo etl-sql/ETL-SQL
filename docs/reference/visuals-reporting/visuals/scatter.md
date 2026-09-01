@@ -1,5 +1,6 @@
 # SCATTER / BUBBLE
-A scatter plot for exploring correlations between two numeric dimensions. Add a SIZE mapping to render a bubble chart where point area encodes a third variable.
+
+A scatter plot for exploring correlations between two numeric dimensions, with optional statistical error bars. Add a SIZE mapping to render a bubble chart where point area encodes a third variable.
 
 ## Syntax
 
@@ -7,9 +8,15 @@ A scatter plot for exploring correlations between two numeric dimensions. Add a 
 CREATE VISUAL VisualName AS SCATTER (
   SOURCE = #tableName,
   MAPPINGS (
-    ...
+    X = xColumn,
+    Y = yColumn,
+    [ERROR_LOW = lowColumn, ERROR_HIGH = highColumn],
+    [SIZE = sizeColumn],
+    [COLOR = colorColumn],
+    [LABEL = labelColumn]
   ),
   OPTIONS (
+    [ERROR_BAR_STYLE = CAPS|NO_CAPS],
     [SHOW_REGRESSION = ON|OFF],
     [GRID_LINES = ON|OFF],
     [GRID_LINE_COLOR = '#rrggbb'],
@@ -26,22 +33,25 @@ CREATE VISUAL VisualName AS SCATTER (
 
 ## Mappings
 
-- **X** - horizontal numeric axis (required)
-- **Y** - vertical numeric axis (required)
-- **SIZE** - numeric column controlling bubble radius (BUBBLE form)
-- **COLOR** - column used to colour-code points by category
-- **LABEL** - column shown as a tooltip or annotation label
+- **X** — horizontal numeric axis (required)
+- **Y** — vertical numeric axis (required)
+- **ERROR_LOW** — lower bound for vertical error bars (pre-computed in SQL; required as a pair with ERROR_HIGH)
+- **ERROR_HIGH** — upper bound for vertical error bars (pre-computed in SQL; required as a pair with ERROR_LOW)
+- **SIZE** — numeric column controlling bubble radius (BUBBLE form)
+- **COLOR** — column used to colour-code points by category
+- **LABEL** — column shown as a tooltip or annotation label
 
 ## Options
 
-- **SHOW_REGRESSION = ON|OFF** - overlay a linear regression line (default OFF)
-- **GRID_LINES = ON|OFF** - show or hide background value-axis grid lines (default ON)
-- **GRID_LINE_COLOR = '#rrggbb'** - set the major and minor gridline color
-- **GRID_LINE_DASH = SOLID|DASHED|DOTTED** - set the gridline stroke pattern (default SOLID)
-- **GRID_LINE_WIDTH = n** - set gridline width in pixels; the value must be positive (default 1)
-- **MINOR_GRID_LINES = ON|OFF** - draw one lighter gridline between each pair of major ticks (default OFF)
-- **X_AXIS (...) / Y_AXIS (...)** - axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`).
-- **TITLE = 'text'** - visual title
+- **ERROR_BAR_STYLE = CAPS|NO_CAPS** — whisker cap style for error bars (default CAPS when error mappings are present)
+- **SHOW_REGRESSION = ON|OFF** — overlay a linear regression line (default OFF)
+- **GRID_LINES = ON|OFF** — show or hide background value-axis grid lines (default ON)
+- **GRID_LINE_COLOR = '#rrggbb'** — set the major and minor gridline color
+- **GRID_LINE_DASH = SOLID|DASHED|DOTTED** — set the gridline stroke pattern (default SOLID)
+- **GRID_LINE_WIDTH = n** — set gridline width in pixels; the value must be positive (default 1)
+- **MINOR_GRID_LINES = ON|OFF** — draw one lighter gridline between each pair of major ticks (default OFF)
+- **X_AXIS (...) / Y_AXIS (...)** — axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`).
+- **TITLE = 'text'** — visual title
 
 ## Examples
 
@@ -55,6 +65,22 @@ CREATE VISUAL PriceVsQty AS SCATTER (
   SOURCE   = #scatter_data,
   MAPPINGS (X = unit_price, Y = quantity_sold, LABEL = product_name),
   OPTIONS  (SHOW_REGRESSION = ON, TITLE = 'Price vs. Quantity')
+);
+
+-- Scatter with pre-computed error bars
+SELECT trial_num, estimate, ci_low, ci_high
+  INTO #trial_data
+  FROM dbo.ExperimentalTrials;
+
+CREATE VISUAL TrialEstimates AS SCATTER (
+  SOURCE   = #trial_data,
+  MAPPINGS (
+    X = trial_num,
+    Y = estimate,
+    ERROR_LOW = ci_low,
+    ERROR_HIGH = ci_high
+  ),
+  OPTIONS  (ERROR_BAR_STYLE = CAPS, TITLE = 'Trial Estimates with 95% CI')
 );
 
 -- Bubble chart: revenue by margin by volume
@@ -83,3 +109,4 @@ CREATE VISUAL MarketBubble AS SCATTER (
 ## References
 
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)
+- [Error Bars Sample](../../../../samples/08_Reporting/error_bars_statistical_intervals.rptsql)

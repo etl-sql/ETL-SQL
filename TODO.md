@@ -250,7 +250,7 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 
 ### Analytical Overlays
 
-- [ ] **Error bars**: No error bar support anywhere. Add `ERROR_LOW` and `ERROR_HIGH` encoding channels
+- [x] **Error bars**: No error bar support anywhere. Add `ERROR_LOW` and `ERROR_HIGH` encoding channels
   to `CUSTOM CHART` POINT and RECT layers. For named SCATTER, add `ERROR_LOW` / `ERROR_HIGH` mappings
   with optional `ERROR_BAR_STYLE = CAPS|NO_CAPS`. Values are pre-computed in SQL.
 - [ ] **Forecast / anomaly visual encoding**: No forecast overlay type. Data-side calculation in SQL is

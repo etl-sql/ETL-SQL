@@ -1610,6 +1610,14 @@ public static class AstSerializer
     private static string Upper<T>(T value) where T : struct, Enum => value switch
     {
         AdvancedChartCoordinateKind.TransposedCartesian => "TRANSPOSED_CARTESIAN",
+        AdvancedChartChannel.XStart => "X_START",
+        AdvancedChartChannel.XEnd => "X_END",
+        AdvancedChartChannel.XOffset => "X_OFFSET",
+        AdvancedChartChannel.YStart => "Y_START",
+        AdvancedChartChannel.YEnd => "Y_END",
+        AdvancedChartChannel.YOffset => "Y_OFFSET",
+        AdvancedChartChannel.ErrorLow => "ERROR_LOW",
+        AdvancedChartChannel.ErrorHigh => "ERROR_HIGH",
         _ => value.ToString().ToUpperInvariant()
     };
 

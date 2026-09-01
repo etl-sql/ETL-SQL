@@ -133,7 +133,7 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd => FieldChannel.X,
         FieldChannel.YStart or FieldChannel.YEnd or
         FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or
-        FieldChannel.Open or FieldChannel.Close => FieldChannel.Y,
+        FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh => FieldChannel.Y,
         _ => channel
     };
 
@@ -146,7 +146,21 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         return new(
         layer.Name, Mark(layer.Mark), layer.ZIndex,
         effective,
-        layer.Styles.Select(style => new StyleToken(style.Name, Display(EvaluateLiteral(style.Value, style)))).ToImmutableArray(),
+        layer.Styles.Select(style =>
+        {
+            var value = Display(EvaluateLiteral(style.Value, style));
+            if (style.Name.Equals("ERROR_BAR_STYLE", StringComparison.OrdinalIgnoreCase))
+            {
+                var upper = value.ToUpperInvariant();
+                if (upper is not ("CAPS" or "NO_CAPS"))
+                {
+                    throw AdvancedChartSemanticException.At(style,
+                        $"Layer '{layer.Name}' ERROR_BAR_STYLE accepts only CAPS or NO_CAPS; found '{value}'.");
+                }
+                return new StyleToken(style.Name, upper);
+            }
+            return new StyleToken(style.Name, value);
+        }).ToImmutableArray(),
         layer.Name)
         {
             Conditions = layer.Conditions.Select(Condition).ToImmutableArray(),

@@ -45,7 +45,7 @@ CREATE VISUAL name AS CUSTOM (
                    NUDGE(X = number, Y = number, UNIT = DATA | BAND | EM),
         ENCODINGS (
           X | X2 | X_START | X_END | X_OFFSET | Y | Y2 | Y_START | Y_END | Y_OFFSET |
-          LOW | Q1 | MEDIAN | Q3 | HIGH | OPEN | CLOSE |
+          LOW | Q1 | MEDIAN | Q3 | HIGH | OPEN | CLOSE | ERROR_LOW | ERROR_HIGH |
           COLOR | SIZE | SHAPE | THETA | RADIUS | LONGITUDE | LATITUDE | REGION | ROUTE |
           TEXT | TOOLTIP | DETAIL = field | DATUM(scalar) | VALUE(scalar) (
             TYPE = QUANTITATIVE | TEMPORAL | NOMINAL | ORDINAL,
@@ -85,6 +85,7 @@ CREATE VISUAL name AS CUSTOM (
 - **Placement** — `STACK` accumulates quantitative Y/Y2 values for Cartesian and transposed Cartesian layouts; polar/radial stacking is rejected until it has portable geometry. Offset channels dodge categories, `BAND_SIZE` controls relative thickness, and `Z_INDEX` controls paint order. `JITTER` uses a stable key and deterministic hash; `NUDGE` is resolved after domains without changing raw values.
 - **Intervals** — Paired `Y_START`/`Y_END` creates an AREA ribbon, a vertical RULE span, or a ranged RECT such as a qualitative band or a floating variance bar; `X_START`/`X_END` supplies the symmetric horizontal range, which on a RECT with a continuous X scale is an explicit-bin histogram. Both endpoints are required, must share a quantitative or temporal `TYPE`, and both take part in scale-domain resolution. A ranged RECT owns its extent on that axis, so it rejects `Y`/`Y2` alongside `Y_START`/`Y_END` and `X`/`X2` alongside `X_START`/`X_END`; `STACK` computes its own endpoints and is unaffected. Endpoint calculations stay in SQL.
 - **TICK** — Draws a short category-local quantitative observation or target. It requires nominal/ordinal X and quantitative Y. `ORIENTATION = AUTO` resolves to a horizontal segment across the category band; `HORIZONTAL` and `VERTICAL` make that choice explicit. TICK is distinct from plot-spanning/ranged `RULE`; its `BAND_SIZE` is relative to the category band and `THICKNESS` is bounded to `(0, 1]` em.
+- **Error bars** — `POINT` and `RECT` layers support paired `ERROR_LOW` and `ERROR_HIGH` encoding channels under Cartesian or transposed Cartesian coordinates. Both channels require quantitative type, share the primary Y scale, and expand the scale domain to encompass the whiskers. Absolute endpoints are pre-computed in SQL. Optional layer style `STYLE (ERROR_BAR_STYLE = 'CAPS')` or `STYLE (ERROR_BAR_STYLE = 'NO_CAPS')` controls whether endpoint caps are drawn (defaults to `'CAPS'`). On `RECT`, whiskers anchor to the category position and primary quantitative value, and error channels cannot be combined with ranged rectangle or boxplot/candlestick channels.
 - **Statistical and financial rectangles** — A `RECT` with `X`, `LOW`, `Q1`, `MEDIAN`, `Q3`, and `HIGH` renders a box-plot glyph. A `RECT` with `X`, `OPEN`, `CLOSE`, `LOW`, and `HIGH` renders a candlestick glyph. These channels are quantitative and share the primary Y scale. Keep derived summaries in SQL. Add ordinary layers to the same `CUSTOM` chart for combinations such as box plot plus mean `TICK` or candlestick plus volume on `Y2`.
 - **Geographic composition** — `GEOGRAPHIC` requires an explicit `EQUIRECTANGULAR` or `MERCATOR` projection and exactly one geometry authority: a built-in `MAP_NAME` (`WORLD`, `US_STATES`, `US_COUNTIES`, `MN_COUNTIES`, `CANADA_PROVINCES`, or `EUROPE`) or a GeoJSON `MAP_FILE`. `MAP_FILE` is resolved through the engine path policy and is limited to 5 MiB, 10,000 features, 200,000 coordinates, and nesting depth 32. `FEATURE_KEY` names the GeoJSON property matched by `REGION`. Geographic `RECT` fills regions; `POINT` and `TEXT` require quantitative `LONGITUDE` and `LATITUDE`; `LINE` also requires nominal `ROUTE` and connects rows in source order. Rendering is bounded to 20,000 points/labels and 500 routes. Region and route fields are the default interaction keys. Terminal and assistive surfaces receive an ordered table/transition fallback, while browser and PDF use the same resolved SVG geometry. Resolved filesystem paths are never serialized.
 - **FACET** — Creates a row/column grid or a mutually exclusive one-dimensional `WRAP`. Wrap uses stable first-seen row-major ordering, 1–12 columns, at most 100 panels, render-work limits, and minimum panel dimensions.
@@ -187,9 +188,31 @@ CREATE VISUAL ServiceMap AS CUSTOM (
 );
 ```
 
+```sql
+CREATE VISUAL TrialIntervals AS CUSTOM (
+  SOURCE = #trials,
+  TITLE = 'Trial Estimates with Error Bars',
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    LAYERS (
+      points = POINT (
+        STYLE (ERROR_BAR_STYLE = 'CAPS'),
+        ENCODINGS (
+          X = Trial (TYPE = NOMINAL),
+          Y = Estimate (TYPE = QUANTITATIVE),
+          ERROR_LOW = LowerBound (TYPE = QUANTITATIVE),
+          ERROR_HIGH = UpperBound (TYPE = QUANTITATIVE)
+        )
+      )
+    )
+  )
+);
+```
+
 ## References
 
 - [Report-SQL Guide](../../../guides/feature-guides/report-sql.md)
 - [Native Advanced Chart Authoring Decision](../../../architecture/decisions/native-advanced-chart-authoring.md)
 - [Script Composition Standards](../../../architecture/standards/script-composition-standards.md)
 - [Statistical and Financial CUSTOM Sample](../../../../samples/08_Reporting/custom_statistical_financial_layers.rptsql)
+- [Error Bars Sample](../../../../samples/08_Reporting/error_bars_statistical_intervals.rptsql)

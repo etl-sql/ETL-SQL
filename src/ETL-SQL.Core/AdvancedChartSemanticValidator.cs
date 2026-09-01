@@ -64,11 +64,16 @@ public static class AdvancedChartSemanticValidator
         scale == AdvancedChartChannel.X && binding is AdvancedChartChannel.X2 or AdvancedChartChannel.XStart or AdvancedChartChannel.XEnd ||
         scale == AdvancedChartChannel.Y && binding is AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
             AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
-            AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close;
+            AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close or
+            AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh;
 
     /// <summary>The scale identifier the lowerer synthesizes for an un-declared binding.</summary>
     public static string InferredScaleId(AdvancedChartCoordinateKind coordinate, AdvancedChartAxisRole axis, AdvancedChartChannel channel) =>
         $"inferred-{coordinate.ToString().ToLowerInvariant()}-{(axis == AdvancedChartAxisRole.Secondary ? "secondary" : "primary")}-{BaseScaleChannel(channel).ToString().ToLowerInvariant()}";
+
+    /// <summary>Resolves the scale ID for an encoding: author-declared scale or deterministic inferred fallback.</summary>
+    public static string EffectiveScaleId(AdvancedChartCoordinateKind coordinate, AdvancedChartEncoding encoding) =>
+        encoding.Scale ?? InferredScaleId(coordinate, encoding.Axis, encoding.Channel);
 
     /// <summary>Collapses interval and secondary channels onto the positional channel that owns the scale.</summary>
     public static AdvancedChartChannel BaseScaleChannel(AdvancedChartChannel channel) => channel switch
@@ -76,7 +81,8 @@ public static class AdvancedChartSemanticValidator
         AdvancedChartChannel.X2 or AdvancedChartChannel.XStart or AdvancedChartChannel.XEnd => AdvancedChartChannel.X,
         AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
         AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
-        AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close => AdvancedChartChannel.Y,
+        AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close or
+        AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh => AdvancedChartChannel.Y,
         _ => channel
     };
 
@@ -142,6 +148,15 @@ public static class AdvancedChartSemanticValidator
 
             foreach (var style in layer.Styles.Where(style => !IsConstant(style.Value)))
                 Add(results, Anchor(style, layerNode), $"Layer '{layer.Name}' style '{style.Name}' must be a literal or parameter.");
+            var errorStyle = layer.Styles.FirstOrDefault(s => s.Name.Equals("ERROR_BAR_STYLE", StringComparison.OrdinalIgnoreCase));
+            if (errorStyle is not null)
+            {
+                var text = LiteralText(errorStyle.Value);
+                if (text is not null && !text.Equals("CAPS", StringComparison.OrdinalIgnoreCase) && !text.Equals("NO_CAPS", StringComparison.OrdinalIgnoreCase))
+                {
+                    Add(results, Anchor(errorStyle, layerNode), $"Layer '{layer.Name}' ERROR_BAR_STYLE accepts only CAPS or NO_CAPS; found '{text}'.");
+                }
+            }
 
             if (layer.ZIndex < 0)
                 Add(results, layerNode, $"Layer '{layer.Name}' has a negative Z_INDEX.");
@@ -336,6 +351,8 @@ public static class AdvancedChartSemanticValidator
                 break;
         }
 
+        ValidateErrorBars(results, chart, layer, effective, channels, layerNode);
+
         if (chart.Coordinate.Kind == AdvancedChartCoordinateKind.Polar && layer.Mark != AdvancedChartMarkKind.Arc)
             Add(results, layerNode, "The native POLAR slice supports ARC layers only.");
         if (chart.Coordinate.Kind == AdvancedChartCoordinateKind.Geographic)
@@ -350,6 +367,79 @@ public static class AdvancedChartSemanticValidator
                 Add(results, layerNode, $"Geographic LINE layer '{layer.Name}' requires LONGITUDE, LATITUDE, and ROUTE.");
             else if (layer.Mark is not (AdvancedChartMarkKind.Rect or AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Text or AdvancedChartMarkKind.Line))
                 Add(results, layerNode, $"GEOGRAPHIC coordinates support RECT, POINT, TEXT, and LINE layers only; found {layer.Mark.ToString().ToUpperInvariant()}.");
+        }
+    }
+
+    private static void ValidateErrorBars(
+        List<Diagnostic> results,
+        AdvancedChartDefinition chart,
+        AdvancedChartLayer layer,
+        IReadOnlyList<AdvancedChartEncoding> effective,
+        HashSet<AdvancedChartChannel> channels,
+        AstNode layerNode)
+    {
+        var hasLow = channels.Contains(AdvancedChartChannel.ErrorLow);
+        var hasHigh = channels.Contains(AdvancedChartChannel.ErrorHigh);
+        if (!hasLow && !hasHigh) return;
+
+        var markUpper = layer.Mark.ToString().ToUpperInvariant();
+        if (layer.Mark is not (AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Rect))
+        {
+            Add(results, layerNode, $"{markUpper} layer '{layer.Name}' does not support error bar channels; only POINT and RECT marks support error bars.");
+        }
+
+        if (chart.Coordinate.Kind is not (AdvancedChartCoordinateKind.Cartesian or AdvancedChartCoordinateKind.TransposedCartesian))
+        {
+            Add(results, layerNode, $"Layer '{layer.Name}' error bar channels ERROR_LOW and ERROR_HIGH require CARTESIAN or TRANSPOSED_CARTESIAN coordinates.");
+        }
+
+        if (!hasLow || !hasHigh)
+        {
+            Add(results, layerNode, $"{markUpper} layer '{layer.Name}' requires both ERROR_LOW and ERROR_HIGH as a pair.");
+        }
+        else
+        {
+            var lowEnc = effective.First(e => e.Channel == AdvancedChartChannel.ErrorLow);
+            var highEnc = effective.First(e => e.Channel == AdvancedChartChannel.ErrorHigh);
+            if (lowEnc.DataKind != AdvancedChartDataKind.Quantitative)
+                Add(results, Anchor(lowEnc, layerNode), $"{markUpper} layer '{layer.Name}' channel ERROR_LOW requires QUANTITATIVE TYPE.");
+            if (highEnc.DataKind != AdvancedChartDataKind.Quantitative)
+                Add(results, Anchor(highEnc, layerNode), $"{markUpper} layer '{layer.Name}' channel ERROR_HIGH requires QUANTITATIVE TYPE.");
+
+            var yEnc = effective.FirstOrDefault(e => e.Channel == AdvancedChartChannel.Y);
+            if (yEnc is null || yEnc.DataKind != AdvancedChartDataKind.Quantitative)
+            {
+                Add(results, layerNode, $"{markUpper} layer '{layer.Name}' with error bars requires a quantitative Y encoding.");
+            }
+            else
+            {
+                if (yEnc.Axis == AdvancedChartAxisRole.Secondary)
+                    Add(results, Anchor(yEnc, layerNode), $"{markUpper} layer '{layer.Name}' Y encoding with error bars must use the primary axis.");
+                if (lowEnc.Axis == AdvancedChartAxisRole.Secondary)
+                    Add(results, Anchor(lowEnc, layerNode), $"{markUpper} layer '{layer.Name}' ERROR_LOW encoding must use the primary axis.");
+                if (highEnc.Axis == AdvancedChartAxisRole.Secondary)
+                    Add(results, Anchor(highEnc, layerNode), $"{markUpper} layer '{layer.Name}' ERROR_HIGH encoding must use the primary axis.");
+
+                var yScale = EffectiveScaleId(chart.Coordinate.Kind, yEnc);
+                var lowScale = EffectiveScaleId(chart.Coordinate.Kind, lowEnc);
+                var highScore = EffectiveScaleId(chart.Coordinate.Kind, highEnc);
+
+                if (!string.Equals(lowScale, yScale, StringComparison.OrdinalIgnoreCase))
+                    Add(results, Anchor(lowEnc, layerNode), $"{markUpper} layer '{layer.Name}' ERROR_LOW must resolve to the same scale as Y ('{yScale}'); found '{lowScale}'.");
+                if (!string.Equals(highScore, yScale, StringComparison.OrdinalIgnoreCase))
+                    Add(results, Anchor(highEnc, layerNode), $"{markUpper} layer '{layer.Name}' ERROR_HIGH must resolve to the same scale as Y ('{yScale}'); found '{highScore}'.");
+            }
+        }
+
+        if (layer.Mark == AdvancedChartMarkKind.Rect)
+        {
+            if (channels.Contains(AdvancedChartChannel.YStart) || channels.Contains(AdvancedChartChannel.XStart))
+                Add(results, layerNode, $"RECT layer '{layer.Name}' cannot combine error bars with ranged rectangle channels (Y_START/Y_END, X_START/X_END).");
+            if (channels.Contains(AdvancedChartChannel.Low) || channels.Contains(AdvancedChartChannel.Q1) ||
+                channels.Contains(AdvancedChartChannel.Median) || channels.Contains(AdvancedChartChannel.Q3) ||
+                channels.Contains(AdvancedChartChannel.High) || channels.Contains(AdvancedChartChannel.Open) ||
+                channels.Contains(AdvancedChartChannel.Close))
+                Add(results, layerNode, $"RECT layer '{layer.Name}' cannot combine error bars with box-plot or candlestick channels.");
         }
     }
 
@@ -401,6 +491,8 @@ public static class AdvancedChartSemanticValidator
         AdvancedChartChannel.YStart => "Y_START",
         AdvancedChartChannel.YEnd => "Y_END",
         AdvancedChartChannel.YOffset => "Y_OFFSET",
+        AdvancedChartChannel.ErrorLow => "ERROR_LOW",
+        AdvancedChartChannel.ErrorHigh => "ERROR_HIGH",
         _ => channel.ToString().ToUpperInvariant()
     };
 
@@ -543,7 +635,8 @@ public static class AdvancedChartSemanticValidator
         AdvancedChartChannel.X or AdvancedChartChannel.X2 or AdvancedChartChannel.XStart or AdvancedChartChannel.XEnd or
         AdvancedChartChannel.Y or AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
         AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
-        AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close;
+        AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close or
+        AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh;
 
     private static bool IsConstant(Expression expression) => expression is LiteralExpression or VariableExpression;
 

@@ -1,0 +1,54 @@
+-- Error bars and statistical interval overlays in named SCATTER and CUSTOM charts.
+
+SET REPORT TITLE = 'Error Bars & Statistical Intervals';
+
+SELECT 1 AS TrialNum, 24.5 AS Estimate, 20.0 AS LowerBound, 28.0 AS UpperBound,
+       'Group A' AS Category, 45.0 AS MeanScore, 38.0 AS MinScore, 52.0 AS MaxScore
+INTO #measurements
+UNION ALL SELECT 2, 32.0, 29.5, 36.0, 'Group B', 62.0, 55.0, 68.0
+UNION ALL SELECT 3, 28.5, 23.0, 31.0, 'Group C', 54.0, 48.0, 60.0
+UNION ALL SELECT 4, 41.0, 37.0, 46.5, 'Group D', 71.0, 66.0, 78.0;
+
+-- Named SCATTER with paired ERROR_LOW and ERROR_HIGH mappings
+CREATE VISUAL TrialEstimates AS SCATTER (
+  SOURCE = #measurements,
+  MAPPINGS (
+    X = TrialNum,
+    Y = Estimate,
+    ERROR_LOW = LowerBound,
+    ERROR_HIGH = UpperBound
+  ),
+  OPTIONS (
+    TITLE = 'Trial Estimates (95% CI)',
+    ERROR_BAR_STYLE = CAPS
+  )
+);
+
+-- Advanced CUSTOM chart with category RECT and paired error channels
+CREATE VISUAL CategoryMeans AS CUSTOM (
+  SOURCE = #measurements,
+  TITLE = 'Category Means & Range Bounds',
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      cat_scale = BAND (CHANNEL = X, ORDER = SOURCE),
+      val_scale = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+    ),
+    LAYERS (
+      bars = RECT (
+        STYLE (ERROR_BAR_STYLE = 'CAPS'),
+        ENCODINGS (
+          X = Category (TYPE = NOMINAL, SCALE = cat_scale),
+          Y = MeanScore (TYPE = QUANTITATIVE, SCALE = val_scale),
+          ERROR_LOW = MinScore (TYPE = QUANTITATIVE, SCALE = val_scale),
+          ERROR_HIGH = MaxScore (TYPE = QUANTITATIVE, SCALE = val_scale)
+        )
+      )
+    )
+  )
+);
+
+CREATE PAGE Overview AS DASHBOARD (
+  STRUCTURE = 'A B',
+  MAP ('A' = TrialEstimates, 'B' = CategoryMeans)
+);

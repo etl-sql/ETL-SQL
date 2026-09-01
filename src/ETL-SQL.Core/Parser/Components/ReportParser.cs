@@ -1228,6 +1228,8 @@ public class ReportParser : ParserComponent
         "HIGH" => AdvancedChartChannel.High,
         "OPEN" => AdvancedChartChannel.Open,
         "CLOSE" => AdvancedChartChannel.Close,
+        "ERROR_LOW" => AdvancedChartChannel.ErrorLow,
+        "ERROR_HIGH" => AdvancedChartChannel.ErrorHigh,
         "COLOR" => AdvancedChartChannel.Color,
         "SIZE" => AdvancedChartChannel.Size,
         "SHAPE" => AdvancedChartChannel.Shape,

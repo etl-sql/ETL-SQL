@@ -29,6 +29,21 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
     {
         if (!Supports(statement.VisualType))
             throw new NotSupportedException($"Visual type {statement.VisualType} is not in the representative GoG slice.");
+        if (statement.VisualType == VisualType.Scatter)
+        {
+            var hasErrorLow = statement.Mappings.Any(m => m.Role.Equals("ERROR_LOW", StringComparison.OrdinalIgnoreCase));
+            var hasErrorHigh = statement.Mappings.Any(m => m.Role.Equals("ERROR_HIGH", StringComparison.OrdinalIgnoreCase));
+            if (hasErrorLow != hasErrorHigh)
+                throw new InvalidOperationException("SCATTER visual requires both ERROR_LOW and ERROR_HIGH mappings as a pair.");
+
+            var errorBarStyleOption = statement.Options.FirstOrDefault(o => o.Key.Equals("ERROR_BAR_STYLE", StringComparison.OrdinalIgnoreCase))?.Value;
+            if (errorBarStyleOption is not null)
+            {
+                var upper = errorBarStyleOption.ToUpperInvariant();
+                if (upper is not ("CAPS" or "NO_CAPS"))
+                    throw new InvalidOperationException($"Invalid ERROR_BAR_STYLE '{errorBarStyleOption}'. Valid values are CAPS or NO_CAPS.");
+            }
+        }
 
         var bindings = BuildBindings(statement, manifest).ToImmutableArray();
         var layers = BuildLayers(statement, bindings).ToImmutableArray();
@@ -163,6 +178,13 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 VisualType.Candlestick => ImmutableArray.Create(new StyleToken("layout", "candlestick"), new StyleToken("preserveRows", "true")),
                 VisualType.Gantt => ImmutableArray.Create(new StyleToken("layout", "gantt"), new StyleToken("preserveRows", "true")),
                 VisualType.Radar => ImmutableArray.Create(new StyleToken("layout", "radar"), new StyleToken("preserveRows", "true")),
+                VisualType.Scatter when bindings.Any(b => b.Channel == FieldChannel.ErrorLow) && bindings.Any(b => b.Channel == FieldChannel.ErrorHigh) =>
+                    ImmutableArray.Create(new StyleToken("errorBarStyle",
+                        (statement.Options.FirstOrDefault(o => o.Key.Equals("ERROR_BAR_STYLE", StringComparison.OrdinalIgnoreCase))?.Value ?? "CAPS").ToUpperInvariant())),
+                VisualType.Scatter =>
+                    statement.Options.FirstOrDefault(o => o.Key.Equals("ERROR_BAR_STYLE", StringComparison.OrdinalIgnoreCase)) is { } styleOpt
+                        ? ImmutableArray.Create(new StyleToken("errorBarStyle", styleOpt.Value.ToUpperInvariant()))
+                        : ImmutableArray<StyleToken>.Empty,
                 _ => ImmutableArray<StyleToken>.Empty
             };
             var mark = statement.VisualType switch
@@ -242,7 +264,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 ? FieldChannel.X
                 : group.Key.Equals("y", StringComparison.OrdinalIgnoreCase) &&
                 binding.Channel is FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or
-                    FieldChannel.High or FieldChannel.Open or FieldChannel.Close
+                    FieldChannel.High or FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh
                 ? FieldChannel.Y
                 : binding.Channel;
             var kind = binding.SemanticKind switch
@@ -292,6 +314,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
     private static FieldChannel? MapChannel(VisualType type, string role) => role.ToUpperInvariant() switch
     {
         "X" or "START" => FieldChannel.X,
+        "ERROR_LOW" when type == VisualType.Scatter => FieldChannel.ErrorLow,
+        "ERROR_HIGH" when type == VisualType.Scatter => FieldChannel.ErrorHigh,
         "X2" or "END" when type == VisualType.Gantt => FieldChannel.X2,
         "Y" or "LABEL" when type == VisualType.Gantt => FieldChannel.Y,
         "PROGRESS" when type == VisualType.Gantt => FieldChannel.Size,
@@ -331,8 +355,10 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
 
     public static IReadOnlyList<string> ValidRolesFor(VisualType type) => type switch
     {
-        VisualType.Bar or VisualType.HorizontalBar or VisualType.Line or VisualType.Scatter
+        VisualType.Bar or VisualType.HorizontalBar or VisualType.Line
             => ["X", "Y", "Y2", "SERIES", "COLOR", "SIZE", "TOOLTIP"],
+        VisualType.Scatter
+            => ["X", "Y", "Y2", "ERROR_LOW", "ERROR_HIGH", "SERIES", "COLOR", "SIZE", "TOOLTIP"],
         VisualType.Bubble
             => ["X", "Y", "Y2", "SERIES", "COLOR", "SIZE", "LABEL", "TOOLTIP"],
         VisualType.Pie or VisualType.Donut
@@ -370,7 +396,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             return DataSemanticKind.Nominal;
         if (channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd or
             FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or
-            FieldChannel.Open or FieldChannel.Close or FieldChannel.Radius or FieldChannel.Size)
+            FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.Radius or FieldChannel.Size)
             return DataSemanticKind.Quantitative;
         if ((type is VisualType.Scatter or VisualType.Bubble ||
             type == VisualType.Trellis && TrellisChartTypeFromOptions(options) == "SCATTER") && channel == FieldChannel.X)
@@ -389,7 +415,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         FieldChannel.Y => "y",
         FieldChannel.Y2 => "y2",
         FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or
-            FieldChannel.Q3 or FieldChannel.High or FieldChannel.Open or FieldChannel.Close => "y",
+            FieldChannel.Q3 or FieldChannel.High or FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh => "y",
         FieldChannel.Color => "color",
         FieldChannel.Theta => "theta",
         FieldChannel.Radius => "radius",

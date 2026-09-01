@@ -340,6 +340,8 @@ internal sealed class PlotPlanSvgRenderer
             var defaultColor = plan.Palette.FirstOrDefault(item => item.SeriesKey == layer.SeriesKey)?.Color ?? "#5470c6";
             var color = SafePaint(LayerStyle(layer, "fill") ?? LayerStyle(layer, "color"), defaultColor);
             var layerOpacity = decimal.TryParse(LayerStyle(layer, "opacity"), NumberStyles.Any, CultureInfo.InvariantCulture, out var o) ? o : 1m;
+            var errorBarStyle = LayerStyle(layer, "errorBarStyle") ?? LayerStyle(layer, "ERROR_BAR_STYLE") ?? LayerStyle(layer, "error_bar_style") ?? "CAPS";
+            var hasCaps = !errorBarStyle.Equals("NO_CAPS", StringComparison.OrdinalIgnoreCase);
             var points = new List<string>();
             var pointCoordinates = new List<(decimal X, decimal Y)>();
             for (var index = 0; index < layer.Data.Length; index++)
@@ -425,6 +427,22 @@ internal sealed class PlotPlanSvgRenderer
                     var rangedClass = rangedY || rangedBand ? " class='plot-range-rect'" : string.Empty;
                     var extent = rangedY || rangedBand ? string.Empty : ExtentAttributes(layer);
                     builder.AppendLine($"<rect{rangedClass} x='{N(barLeft)}' y='{N(top)}' width='{N(barWidth)}' height='{N(drawHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(datumOpacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'{extent}><title>{Esc(rectTitle)}</title></rect>");
+                    var errorLow = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorLow) ?? ChartValue.Null());
+                    var errorHigh = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorHigh) ?? ChartValue.Null());
+                    if (errorLow.HasValue && errorHigh.HasValue)
+                    {
+                        var lowX = MapHorizontal(errorLow.Value, scale, plotWidth) + datum.DisplayOffsetX;
+                        var highX = MapHorizontal(errorHigh.Value, scale, plotWidth) + datum.DisplayOffsetX;
+                        var capHeight = Math.Max(2m, Math.Min(drawHeight * 0.3m, 6m));
+                        builder.AppendLine($"<g class='plot-error-bar' data-row-index='{datum.RowIndex}'>");
+                        builder.AppendLine($"<line class='plot-error-bar-stem' x1='{N(lowX)}' y1='{N(y)}' x2='{N(highX)}' y2='{N(y)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                        if (hasCaps)
+                        {
+                            builder.AppendLine($"<line class='plot-error-bar-cap' x1='{N(lowX)}' y1='{N(y - capHeight)}' x2='{N(lowX)}' y2='{N(y + capHeight)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                            builder.AppendLine($"<line class='plot-error-bar-cap' x1='{N(highX)}' y1='{N(y - capHeight)}' x2='{N(highX)}' y2='{N(y + capHeight)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                        }
+                        builder.AppendLine("</g>");
+                    }
                     if (showLabels)
                     {
                         var position = Style(plan, "DATA_LABELS:POSITION") ?? "OUTSIDE_RIGHT";
@@ -461,6 +479,22 @@ internal sealed class PlotPlanSvgRenderer
                 }
                 else if (layer.Mark == MarkKind.Point)
                 {
+                    var errorLow = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorLow) ?? ChartValue.Null());
+                    var errorHigh = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorHigh) ?? ChartValue.Null());
+                    if (errorLow.HasValue && errorHigh.HasValue)
+                    {
+                        var lowX = MapHorizontal(errorLow.Value, scale, plotWidth) + datum.DisplayOffsetX;
+                        var highX = MapHorizontal(errorHigh.Value, scale, plotWidth) + datum.DisplayOffsetX;
+                        const decimal capHeight = 4m;
+                        builder.AppendLine($"<g class='plot-error-bar' data-row-index='{datum.RowIndex}'>");
+                        builder.AppendLine($"<line class='plot-error-bar-stem' x1='{N(lowX)}' y1='{N(y)}' x2='{N(highX)}' y2='{N(y)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                        if (hasCaps)
+                        {
+                            builder.AppendLine($"<line class='plot-error-bar-cap' x1='{N(lowX)}' y1='{N(y - capHeight)}' x2='{N(lowX)}' y2='{N(y + capHeight)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                            builder.AppendLine($"<line class='plot-error-bar-cap' x1='{N(highX)}' y1='{N(y - capHeight)}' x2='{N(highX)}' y2='{N(y + capHeight)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                        }
+                        builder.AppendLine("</g>");
+                    }
                     builder.AppendLine($"<circle cx='{N(x)}' cy='{N(y)}' r='3' fill='{Esc(datumColor)}'/>");
                 }
                 if (layer.Mark == MarkKind.Line && IsEnabledByDefault(plan.Style, "SYMBOLS"))
@@ -702,6 +736,8 @@ internal sealed class PlotPlanSvgRenderer
         var labelSize = showLabels ? Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9" : "9";
         var labelWeight = showLabels ? Style(plan, "DATA_LABELS:FONT_WEIGHT") : null;
         var colorScale = ColorScale(plan);
+        var errorBarStyle = LayerStyle(layer, "errorBarStyle") ?? LayerStyle(layer, "ERROR_BAR_STYLE") ?? LayerStyle(layer, "error_bar_style") ?? "CAPS";
+        var hasCaps = !errorBarStyle.Equals("NO_CAPS", StringComparison.OrdinalIgnoreCase);
         for (var index = 0; index < layer.Data.Length; index++)
         {
             var datum = layer.Data[index];
@@ -747,6 +783,23 @@ internal sealed class PlotPlanSvgRenderer
             var rangedClass = rangedY || rangedX ? " class='plot-range-rect'" : string.Empty;
             var extent = rangedY || rangedX ? string.Empty : extentAttributes;
             builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}' fill='{Esc(datumColor)}'{OpacityAttribute(opacity)} data-row-index='{datum.RowIndex}'{extent}><title>{Esc(title)}</title></rect>");
+            var errorLow = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorLow) ?? ChartValue.Null());
+            var errorHigh = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorHigh) ?? ChartValue.Null());
+            if (errorLow.HasValue && errorHigh.HasValue)
+            {
+                var centerX = x + width / 2m;
+                var lowY = MapY(errorLow.Value, scale, plotHeight) + datum.DisplayOffsetY;
+                var highY = MapY(errorHigh.Value, scale, plotHeight) + datum.DisplayOffsetY;
+                var capWidth = Math.Max(2m, Math.Min(width * 0.3m, 6m));
+                builder.AppendLine($"<g class='plot-error-bar' data-row-index='{datum.RowIndex}'>");
+                builder.AppendLine($"<line class='plot-error-bar-stem' x1='{N(centerX)}' y1='{N(lowY)}' x2='{N(centerX)}' y2='{N(highY)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                if (hasCaps)
+                {
+                    builder.AppendLine($"<line class='plot-error-bar-cap' x1='{N(centerX - capWidth)}' y1='{N(lowY)}' x2='{N(centerX + capWidth)}' y2='{N(lowY)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                    builder.AppendLine($"<line class='plot-error-bar-cap' x1='{N(centerX - capWidth)}' y1='{N(highY)}' x2='{N(centerX + capWidth)}' y2='{N(highY)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                }
+                builder.AppendLine("</g>");
+            }
             if (showLabels)
             {
                 var position = labelPosition;
@@ -953,6 +1006,8 @@ internal sealed class PlotPlanSvgRenderer
         var labelColor = showLabels ? SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444") : "#444";
         var labelFontSize = showLabels ? FontSize(Style(plan, "DATA_LABELS:FONT_SIZE")) : 9m;
         var colorScale = ColorScale(plan);
+        var errorBarStyle = LayerStyle(layer, "errorBarStyle") ?? LayerStyle(layer, "ERROR_BAR_STYLE") ?? LayerStyle(layer, "error_bar_style") ?? "CAPS";
+        var hasCaps = !errorBarStyle.Equals("NO_CAPS", StringComparison.OrdinalIgnoreCase);
         builder.AppendLine("<g class='plot-point-layer' stroke='white' stroke-width='1.5'>");
         foreach (var datum in layer.Data.Where(item => !item.IsGap))
         {
@@ -982,6 +1037,22 @@ internal sealed class PlotPlanSvgRenderer
             }
             x += datum.DisplayOffsetX;
             var y = MapY(yValue.Value, yScale, plotHeight) + datum.DisplayOffsetY;
+            var errorLow = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorLow) ?? ChartValue.Null());
+            var errorHigh = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorHigh) ?? ChartValue.Null());
+            if (errorLow.HasValue && errorHigh.HasValue)
+            {
+                var lowY = MapY(errorLow.Value, yScale, plotHeight) + datum.DisplayOffsetY;
+                var highY = MapY(errorHigh.Value, yScale, plotHeight) + datum.DisplayOffsetY;
+                const decimal capWidth = 4m;
+                builder.AppendLine($"<g class='plot-error-bar' data-row-index='{datum.RowIndex}'>");
+                builder.AppendLine($"<line class='plot-error-bar-stem' x1='{N(x)}' y1='{N(lowY)}' x2='{N(x)}' y2='{N(highY)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                if (hasCaps)
+                {
+                    builder.AppendLine($"<line class='plot-error-bar-cap' x1='{N(x - capWidth)}' y1='{N(lowY)}' x2='{N(x + capWidth)}' y2='{N(lowY)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                    builder.AppendLine($"<line class='plot-error-bar-cap' x1='{N(x - capWidth)}' y1='{N(highY)}' x2='{N(x + capWidth)}' y2='{N(highY)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                }
+                builder.AppendLine("</g>");
+            }
             builder.AppendLine($"<circle class='plot-point' cx='{N(x)}' cy='{N(y)}' r='{N(Math.Clamp(radius, 1m, 30m))}' fill='{Esc(datumColor)}'{OpacityAttribute(opacity)} data-row-index='{datum.RowIndex}'>{(string.IsNullOrWhiteSpace(label) ? string.Empty : $"<title>{Esc(label)}</title>")}</circle>");
             if (showLabels)
                 smartLabels.Add(new SmartLabel(datum.RowIndex, x, y,

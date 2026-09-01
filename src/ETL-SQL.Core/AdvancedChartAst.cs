@@ -9,6 +9,7 @@ public enum AdvancedChartChannel
     X, X2, XStart, XEnd, XOffset,
     Y, Y2, YStart, YEnd, YOffset,
     Low, Q1, Median, Q3, High, Open, Close,
+    ErrorLow, ErrorHigh,
     Color, Size, Shape, Theta, Radius, Longitude, Latitude, Region, Route, Text, Tooltip, Detail
 }
 public enum AdvancedChartAxisRole { None, Primary, Secondary }
@@ -33,7 +34,8 @@ public static class AdvancedChartScaleInference
             AdvancedChartChannel.X or AdvancedChartChannel.X2 or AdvancedChartChannel.XStart or AdvancedChartChannel.XEnd or
             AdvancedChartChannel.Y or AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
             AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
-            AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close => dataKind switch
+            AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close or
+            AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh => dataKind switch
             {
                 AdvancedChartDataKind.Quantitative => AdvancedChartScaleKind.Linear,
                 AdvancedChartDataKind.Temporal => AdvancedChartScaleKind.Time,

@@ -271,11 +271,11 @@ public sealed class PlotPlanResolver
                 // ranged layer sharing the chart still owns its authored endpoints and must stay inside the domain.
                 raw = resolvedLayers.Where(layer => layer.Stack != StackMode.None).SelectMany(layer => layer.Data)
                     .SelectMany(datum => datum.Channels)
-                    .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd && channel.Value.Kind != ChartValueKind.Null)
+                    .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh && channel.Value.Kind != ChartValueKind.Null)
                     .Select(channel => channel.Value)
                     .Concat(resolvedLayers.Where(layer => layer.Stack == StackMode.None).SelectMany(layer => layer.Data)
                         .SelectMany(datum => datum.Channels)
-                        .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd && channel.Value.Kind != ChartValueKind.Null)
+                        .Where(channel => channel.Channel is FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh && channel.Value.Kind != ChartValueKind.Null)
                         .Select(channel => channel.Value))
                     .ToList();
             }
@@ -898,6 +898,14 @@ public sealed class PlotPlanResolver
     }
 
     /// <summary>Describes an author-supplied ranged rectangle so non-visual surfaces keep both endpoints.</summary>
+    private static string? ErrorIntervalDetail(ResolvedDatum datum, ChartValueFormatter formatter)
+    {
+        var first = datum.Channels.FirstOrDefault(channel => channel.Channel == FieldChannel.ErrorLow);
+        var second = datum.Channels.FirstOrDefault(channel => channel.Channel == FieldChannel.ErrorHigh);
+        if (first is null || second is null || first.Value.Kind == ChartValueKind.Null || second.Value.Kind == ChartValueKind.Null) return null;
+        return $"error {first.DisplayValue ?? formatter.Format(first.Value)} to {second.DisplayValue ?? formatter.Format(second.Value)}";
+    }
+
     private static string? IntervalDetail(ResolvedDatum datum, ChartValueFormatter formatter)
     {
         var parts = new List<string>();
@@ -931,10 +939,11 @@ public sealed class PlotPlanResolver
             var conditionDetail = datum.Encodings.IsDefaultOrEmpty ? null : string.Join(", ", datum.Encodings.Select(encoding =>
                 $"conditional {encoding.Channel}: {formatter.Format(encoding.Value)}"));
             var interval = layer.Mark == MarkKind.Rect && layer.Stack == StackMode.None ? IntervalDetail(datum, formatter) : null;
+            var errorDetail = ErrorIntervalDetail(datum, formatter);
             return new SemanticFallbackItem(label ?? $"Row {index + 1}", datum.IsGap ? "gap" : value is null ? "" : value.DisplayValue ?? formatter.Format(value.Value), (layerIndex * 100000) + index)
             {
                 Group = layer.SeriesKey,
-                Detail = datum.IsGap ? "null gap" : interval ?? conditionDetail ?? (layer.Mark == MarkKind.Arc && numeric.HasValue && total > 0m
+                Detail = datum.IsGap ? "null gap" : errorDetail ?? interval ?? conditionDetail ?? (layer.Mark == MarkKind.Arc && numeric.HasValue && total > 0m
                     ? $"{numeric.Value / total:P1} of total"
                     : null)
             };

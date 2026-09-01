@@ -30,6 +30,8 @@ public enum FieldChannel
     High,
     Open,
     Close,
+    ErrorLow,
+    ErrorHigh,
     Color,
     Size,
     Shape,
@@ -461,7 +463,7 @@ public sealed record ChartSpec(
                     throw new InvalidDataException("A VALUE binding bypasses data scales and cannot declare SCALE.");
                 if (binding.SourceKind == BindingSourceKind.Value && binding.Axis != AxisRole.None)
                     throw new InvalidDataException("A VALUE binding cannot declare an axis.");
-                if (binding.SourceKind == BindingSourceKind.Value && binding.Channel is FieldChannel.X or FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd or FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd)
+                if (binding.SourceKind == BindingSourceKind.Value && binding.Channel is FieldChannel.X or FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd or FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh)
                     throw new InvalidDataException($"A visual-range VALUE cannot bind positional channel {binding.Channel}.");
             }
             if (binding.ScaleId is not null && !scaleIds.Contains(binding.ScaleId))
@@ -508,6 +510,10 @@ public sealed record ChartSpec(
                     throw new InvalidDataException($"Layer '{layer.Id}' offset channel {binding.Channel} requires NOMINAL or ORDINAL TYPE.");
                 if (binding.Channel is FieldChannel.XOffset or FieldChannel.YOffset && binding.SourceKind == BindingSourceKind.Value)
                     throw new InvalidDataException($"Layer '{layer.Id}' offset channel {binding.Channel} cannot use a visual VALUE source.");
+                if (binding.Channel is FieldChannel.ErrorLow or FieldChannel.ErrorHigh &&
+                    (binding.SemanticKind != DataSemanticKind.Quantitative || binding.SourceKind == BindingSourceKind.Value ||
+                     binding.Axis == AxisRole.Secondary))
+                    throw new InvalidDataException($"Statistical error bar channel {binding.Channel} requires primary quantitative data.");
                 if (binding.Stack != StackMode.None &&
                     (binding.SemanticKind != DataSemanticKind.Quantitative || binding.SourceKind == BindingSourceKind.Value ||
                      binding.Channel is not (FieldChannel.Y or FieldChannel.Y2) || Coordinate.Kind == CoordinateKind.Polar))
@@ -520,6 +526,35 @@ public sealed record ChartSpec(
                 layer.Bindings.Any(binding => binding.Channel is FieldChannel.XOffset or FieldChannel.YOffset))
                 throw new InvalidDataException($"Layer '{layer.Id}' cannot combine STACK with an offset channel.");
             var channels = layer.Bindings.Select(binding => binding.Channel).ToHashSet();
+            var hasErrorLow = channels.Contains(FieldChannel.ErrorLow);
+            var hasErrorHigh = channels.Contains(FieldChannel.ErrorHigh);
+            if (hasErrorLow || hasErrorHigh)
+            {
+                if (layer.Mark is not (MarkKind.Point or MarkKind.Rect))
+                    throw new InvalidDataException($"{layer.Mark.ToString().ToUpperInvariant()} layer '{layer.Id}' does not support error bars; only POINT and RECT marks support error bars.");
+                if (Coordinate.Kind is not (CoordinateKind.Cartesian or CoordinateKind.TransposedCartesian))
+                    throw new InvalidDataException($"Layer '{layer.Id}' error bars require Cartesian or TransposedCartesian coordinates.");
+                if (!hasErrorLow || !hasErrorHigh)
+                    throw new InvalidDataException($"{layer.Mark.ToString().ToUpperInvariant()} layer '{layer.Id}' requires both ERROR_LOW and ERROR_HIGH.");
+                var low = layer.Bindings.First(b => b.Channel == FieldChannel.ErrorLow);
+                var high = layer.Bindings.First(b => b.Channel == FieldChannel.ErrorHigh);
+                if (low.SemanticKind != DataSemanticKind.Quantitative || high.SemanticKind != DataSemanticKind.Quantitative)
+                    throw new InvalidDataException($"{layer.Mark.ToString().ToUpperInvariant()} layer '{layer.Id}' error bar endpoints require QUANTITATIVE type.");
+
+                var y = layer.Bindings.FirstOrDefault(b => b.Channel == FieldChannel.Y);
+                if (y is null || y.SemanticKind != DataSemanticKind.Quantitative)
+                    throw new InvalidDataException($"{layer.Mark.ToString().ToUpperInvariant()} layer '{layer.Id}' with error bars requires a quantitative primary Y binding.");
+
+                if (y.Axis == AxisRole.Secondary || low.Axis == AxisRole.Secondary || high.Axis == AxisRole.Secondary)
+                    throw new InvalidDataException($"Layer '{layer.Id}' error bars and Y binding must use the primary axis.");
+
+                var yScaleId = y.ScaleId ?? Scales.FirstOrDefault(s => s.Channel == FieldChannel.Y)?.Id ?? "y";
+                var lowScaleId = low.ScaleId ?? Scales.FirstOrDefault(s => s.Channel == FieldChannel.Y)?.Id ?? "y";
+                var highScoreId = high.ScaleId ?? Scales.FirstOrDefault(s => s.Channel == FieldChannel.Y)?.Id ?? "y";
+                if (!string.Equals(lowScaleId, highScoreId, StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(lowScaleId, yScaleId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException($"Layer '{layer.Id}' ERROR_LOW, ERROR_HIGH, and Y must resolve to the same scale ID.");
+            }
             if (Coordinate.Kind == CoordinateKind.Geographic)
             {
                 var hasPoint = channels.Contains(FieldChannel.Longitude) && channels.Contains(FieldChannel.Latitude);
@@ -629,7 +664,7 @@ public sealed record ChartSpec(
         scale == FieldChannel.X && binding is FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd ||
         scale == FieldChannel.Y && binding is FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd or
             FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or
-            FieldChannel.Open or FieldChannel.Close;
+            FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh;
 
     private static void ValidatePredicate(EncodingPredicate predicate, string layerId)
     {
