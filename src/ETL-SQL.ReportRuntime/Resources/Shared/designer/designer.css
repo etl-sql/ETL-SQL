@@ -6716,3 +6716,41 @@ body.vscode-dark .etlsql-cw-missing-hint {
 .etlsql-studio-dep-chip button:hover {
     color: var(--portal-danger, #f85149);
 }
+
+/* ── Conditional precedence edges ──────────────────────────────────────────
+   The chip carries the condition because that is where the author changes it; the map carries the
+   same condition as a colour, a dash pattern, and the words on the badge. */
+
+.etlsql-studio-dep-chip select {
+    max-width: 120px;
+    padding: 1px 2px;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+    cursor: pointer;
+}
+
+.etlsql-studio-dep-chip select:focus-visible {
+    outline: 2px solid var(--portal-accent, #58a6ff);
+    outline-offset: 1px;
+}
+
+.etlsql-studio-dep-expression {
+    width: 140px;
+    padding: 1px 6px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 999px;
+    background: var(--portal-surface, #161b22);
+    color: var(--portal-text, #f0f6fc);
+    font-family: var(--portal-mono, ui-monospace, monospace);
+    font-size: 0.6875rem;
+}
+
+/* The chip's left edge repeats the colour its edge is drawn in, so the inspector and the map agree
+   at a glance about which prerequisite is the failure path. */
+.etlsql-studio-dep-chip.is-onsuccess { border-left: 3px solid var(--portal-success, #3fb950); }
+.etlsql-studio-dep-chip.is-onfailure { border-left: 3px dashed var(--portal-danger, #f85149); }
+.etlsql-studio-dep-chip.is-oncompletion { border-left: 3px dotted var(--portal-accent, #58a6ff); }
+.etlsql-studio-dep-chip.is-expression { border-left: 3px double var(--portal-warning, #d29922); }

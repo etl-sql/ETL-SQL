@@ -50,6 +50,9 @@ public static class ScriptDagBuilder
         public List<ScriptDagEdge> Edges { get; } = [];
         public int Sequence { get; set; }
 
+        /// <summary>Wrapper start offset → the start offset of the task inside it.</summary>
+        public IReadOnlyDictionary<int, int> Collapsed { get; set; } = new Dictionary<int, int>();
+
         /// <summary>The section label introducing this statement, or null.</summary>
         public string? KeyFor(Statement statement) => keys.TryGetValue(statement, out var key) ? key : null;
 
@@ -57,11 +60,42 @@ public static class ScriptDagBuilder
         public bool NamesAStatement(Statement label) => namedLabels.Contains(label);
     }
 
-    public static ScriptDag Build(Script script)
+    /// <summary>
+    /// Builds the flow graph.
+    /// </summary>
+    /// <param name="collapsed">
+    /// Wrapper statements to draw as the task inside them, as start offset → inner start offset.
+    ///
+    /// <para>A conditional precedence edge is written into the script as a <c>BEGIN TRY</c> guard
+    /// around the task it watches and an <c>IF</c> around the task that waits. Drawn literally, one
+    /// task becomes three stages — a TRY/CATCH, an IF, and the statement — and the card the author
+    /// dragged is no longer the card the label names. Collapsed, the map shows the tasks and puts
+    /// the condition on the edge, which is where the author drew it.</para>
+    ///
+    /// <para>Offsets rather than statement references because the caller identifies a task by
+    /// re-reading the source, not by walking this AST.</para>
+    /// </param>
+    public static ScriptDag Build(Script script, IReadOnlyDictionary<int, int>? collapsed = null)
     {
         var graph = MapLabels(script.Statements);
+        graph.Collapsed = collapsed ?? new Dictionary<int, int>();
         AppendSequence(script.Statements, graph, []);
         return new ScriptDag(graph.Nodes, graph.Edges);
+    }
+
+    /// <summary>The statement at this offset, anywhere inside <paramref name="statement"/>.</summary>
+    private static Statement? StatementAt(Statement statement, int offset)
+    {
+        if (statement.StartOffset == offset) return statement;
+        foreach (var block in NestedBlocks(statement))
+        {
+            foreach (var nested in block.Statements)
+            {
+                if (StatementAt(nested, offset) is { } found) return found;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -144,6 +178,15 @@ public static class ScriptDagBuilder
         FlowGraph graph,
         IReadOnlyList<FlowExit> incoming)
     {
+        // A guard or a gate the pipeline canvas wrote is not a stage of its own: it is how the
+        // script says when the task inside it runs, and that belongs on the edge.
+        if (graph.Collapsed.TryGetValue(statement.StartOffset, out var innerOffset)
+            && StatementAt(statement, innerOffset) is { } task)
+        {
+            var (taskLabel, taskType) = Classify(task);
+            return [new FlowExit(AddNode(taskLabel, taskType, statement.Line, graph, incoming, graph.KeyFor(statement)))];
+        }
+
         if (statement is BlockStatement block)
             return AppendSequence(block.Statements, graph, incoming);
 

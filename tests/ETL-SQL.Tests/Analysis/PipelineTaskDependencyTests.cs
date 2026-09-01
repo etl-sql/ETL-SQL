@@ -49,7 +49,7 @@ public class PipelineTaskDependencyTests
     }
 
     private List<string> DependenciesOf(string script, string id) =>
-        _tasks.Read(script).Single(task => task.Id == id).DependsOn.ToList();
+        _tasks.Read(script).Single(task => task.Id == id).DependsOn.Select(dependency => dependency.Id).ToList();
 
     [Fact]
     public void ConnectDeclaresTheEdgeInTheScriptAndTheScriptStillParses()
@@ -123,8 +123,8 @@ public class PipelineTaskDependencyTests
         {
             foreach (var dependency in task.DependsOn)
             {
-                Assert.True(positions[dependency] < positions[task.Id],
-                    $"'{task.Id}' declares it runs after '{dependency}', but the script runs it first.");
+                Assert.True(positions[dependency.Id] < positions[task.Id],
+                    $"'{task.Id}' declares it runs after '{dependency.Id}', but the script runs it first.");
             }
         }
     }

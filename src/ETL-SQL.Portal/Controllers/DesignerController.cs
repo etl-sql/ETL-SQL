@@ -178,7 +178,9 @@ public class DesignerController : ControllerBase
                 "move" => _pipelineTasks.Move(script, req.Id ?? string.Empty, req.After),
                 // Read as "this task runs after that one": `id` is the dependent, `after` the
                 // dependency, the same way the tag reads in the script.
-                "connect" => _pipelineTasks.Connect(script, req.After ?? string.Empty, req.Id ?? string.Empty),
+                "connect" => ParseEdgeCondition(req.Edge) is { } edge
+                    ? _pipelineTasks.Connect(script, req.After ?? string.Empty, req.Id ?? string.Empty, edge, req.Expression)
+                    : PipelineEditResult.Refused(script, $"Unknown edge condition '{req.Edge}'."),
                 "disconnect" => _pipelineTasks.Disconnect(script, req.After ?? string.Empty, req.Id ?? string.Empty),
                 "remove" => _pipelineTasks.Remove(script, req.Id ?? string.Empty),
                 "read" => PipelineEditResult.Ok(script),
@@ -192,7 +194,13 @@ public class DesignerController : ControllerBase
                 _pipelineTasks.Read(result.Script)
                     .Select(task => new PipelineTaskDto(
                         task.Id, task.Kind.ToString().ToLowerInvariant(), task.Connection, task.Body, task.Line,
-                        task.DependsOn.ToList()))
+                        task.DependsOn
+                            .Select(dependency => new PipelineDependencyDto(
+                                dependency.Id,
+                                dependency.Condition.ToString().ToLowerInvariant(),
+                                dependency.Expression))
+                            .ToList(),
+                        task.Guarded))
                     .ToList()));
         }
         finally
@@ -210,6 +218,18 @@ public class DesignerController : ControllerBase
         Enum.TryParse<PipelineTaskKind>(kind, ignoreCase: true, out var parsed)
             ? parsed
             : PipelineTaskKind.Execution;
+
+    /// <summary>
+    /// The edge condition a connect request names, or null when it names one that does not exist.
+    ///
+    /// <para>Unlike a task kind, this does not fall back. The condition decides which control flow
+    /// gets written into the author's file, so a request the server does not understand has to be
+    /// refused out loud rather than silently written as plain precedence.</para>
+    /// </summary>
+    private static PipelineEdgeCondition? ParseEdgeCondition(string? edge) =>
+        string.IsNullOrWhiteSpace(edge) ? PipelineEdgeCondition.Always
+        : Enum.TryParse<PipelineEdgeCondition>(edge, ignoreCase: true, out var parsed) ? parsed
+        : null;
 
     // ── POST /api/designer/parse ──────────────────────────────────────────────
 

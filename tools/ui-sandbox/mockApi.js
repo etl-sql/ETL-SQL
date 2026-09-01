@@ -1484,13 +1484,19 @@ function mockParseTasks(script) {
       }
     }
 
-    // The -- @after: line immediately above the label, if there is one.
-    const lineStart = script.lastIndexOf('\n', Math.max(0, match.index - 1)) + 1;
-    const previousStart = lineStart === 0 ? 0 : script.lastIndexOf('\n', lineStart - 2) + 1;
-    const previous = lineStart === 0 ? '' : script.slice(previousStart, lineStart).trim();
-    const dependsOn = previous.startsWith('-- @after:')
-      ? previous.slice('-- @after:'.length).split(',').map(name => name.trim()).filter(Boolean)
-      : [];
+    // The run of -- @after: lines immediately above the label, if there is one. Each declares one
+    // or more prerequisites; an edge carrying the author's own expression gets a line of its own,
+    // because a comma inside that expression would otherwise read as the next prerequisite.
+    let lineStart = script.lastIndexOf('\n', Math.max(0, match.index - 1)) + 1;
+    const tagLines = [];
+    while (lineStart > 0) {
+      const previousStart = script.lastIndexOf('\n', lineStart - 2) + 1;
+      const previous = script.slice(previousStart, lineStart).trim();
+      if (!previous.startsWith('-- @after:')) break;
+      tagLines.unshift(previous.slice('-- @after:'.length).trim());
+      lineStart = previousStart;
+    }
+    const dependsOn = tagLines.flatMap(mockParseDependencyLine);
 
     tasks.push({
       id: match[1],
@@ -1499,7 +1505,7 @@ function mockParseTasks(script) {
       body,
       dependsOn,
       line: script.slice(0, match.index).split('\n').length,
-      start: dependsOn.length ? previousStart : match.index,
+      start: tagLines.length ? lineStart : match.index,
       end,
     });
     head.lastIndex = end;
@@ -1549,6 +1555,32 @@ function mockWithScriptTasks(script, base) {
 }
 
 /** True when `taskId` waits on `candidate`, directly or through other tasks. */
+/** One `-- @after:` line as the dependencies it declares. Mirrors the host's tag grammar. */
+function mockParseDependencyLine(line) {
+  const when = line.search(/\swhen\s/i);
+  if (when >= 0) {
+    const id = line.slice(0, when).trim();
+    const expression = line.slice(when).replace(/^\s*when\s+/i, '').trim();
+    return id && expression ? [{ id, condition: 'expression', expression }] : [];
+  }
+
+  return line.split(',').map(item => item.trim()).filter(Boolean).map(item => {
+    const suffix = /\s+on\s+(success|failure|completion)$/i.exec(item);
+    return suffix
+      ? { id: item.slice(0, suffix.index).trim(), condition: `on${suffix[1].toLowerCase()}`, expression: null }
+      : { id: item, condition: 'always', expression: null };
+  });
+}
+
+/** A dependency as the tag spells it. */
+function mockRenderDependency(dependency) {
+  if (dependency.condition === 'expression') return `${dependency.id} when ${dependency.expression}`;
+  if (dependency.condition === 'onsuccess') return `${dependency.id} on success`;
+  if (dependency.condition === 'onfailure') return `${dependency.id} on failure`;
+  if (dependency.condition === 'oncompletion') return `${dependency.id} on completion`;
+  return dependency.id;
+}
+
 function waitsOn(tasks, taskId, candidate) {
   const seen = new Set();
   const pending = [taskId];
@@ -1558,7 +1590,7 @@ function waitsOn(tasks, taskId, candidate) {
     seen.add(current);
     if (current === String(candidate).toLowerCase()) return true;
     const task = tasks.find(entry => entry.id.toLowerCase() === current);
-    for (const name of task?.dependsOn ?? []) pending.push(name);
+    for (const dependency of task?.dependsOn ?? []) pending.push(dependency.id);
   }
   return false;
 }
@@ -1610,20 +1642,49 @@ function mockPipelineTask(body) {
       return refuse(`'${dependency}' already waits on '${target.id}', so this would make a cycle.`);
     }
 
-    const declared = new Set(target.dependsOn.map(name => name.toLowerCase()));
-    if (op === 'connect' && declared.has(dependency.toLowerCase())) {
+    const edge = String(body.edge || 'always').toLowerCase();
+    if (!['always', 'onsuccess', 'onfailure', 'oncompletion', 'expression'].includes(edge)) {
+      return refuse(`Unknown edge condition '${body.edge}'.`);
+    }
+    if (op === 'connect' && edge === 'expression' && !String(body.expression || '').trim()) {
+      return refuse('A conditional edge needs the expression it runs on.');
+    }
+
+    const existing = target.dependsOn.find(entry => entry.id.toLowerCase() === dependency.toLowerCase());
+    const declaration = { id: dependency, condition: edge, expression: body.expression?.trim() ?? null };
+    if (op === 'connect' && existing
+      && existing.condition === declaration.condition
+      && (existing.expression ?? null) === declaration.expression) {
       return { applied: true, script, error: null, tasks: strip(tasks) };
     }
-    if (op === 'disconnect' && !declared.has(dependency.toLowerCase())) {
+    if (op === 'disconnect' && !existing) {
       return refuse(`'${target.id}' does not wait on '${dependency}'.`);
     }
 
-    const names = op === 'connect'
-      ? [...target.dependsOn, dependency]
-      : target.dependsOn.filter(name => name.toLowerCase() !== dependency.toLowerCase());
+    // Re-declaring an edge replaces it rather than adding a second prerequisite on the same task.
+    const declared = op === 'disconnect'
+      ? target.dependsOn.filter(entry => entry.id.toLowerCase() !== dependency.toLowerCase())
+      : existing
+        ? target.dependsOn.map(entry => (entry === existing ? declaration : entry))
+        : [...target.dependsOn, declaration];
 
-    const tagEnd = target.dependsOn.length ? script.indexOf('\n', target.start) + 1 : target.start;
-    const tag = names.length ? `-- @after: ${names.join(', ')}\n` : '';
+    // The sandbox stops at the declaration on purpose. The host also lowers a conditional edge into
+    // a BEGIN TRY guard and an IF gate; reproducing that here would be a second emitter to keep in
+    // step with the first, and the emitter is covered where it lives, in PipelineConditionalEdgeTests.
+    const shared = declared.filter(entry => entry.condition !== 'expression');
+    const lines = [
+      ...(shared.length ? [shared.map(mockRenderDependency).join(', ')] : []),
+      ...declared.filter(entry => entry.condition === 'expression').map(mockRenderDependency),
+    ];
+
+    let tagEnd = target.start;
+    for (let i = 0; i < target.dependsOn.length; i++) {
+      const nextLine = script.indexOf('\n', tagEnd);
+      if (nextLine === -1 || !script.slice(tagEnd, nextLine).trim().startsWith('-- @after:')) break;
+      tagEnd = nextLine + 1;
+    }
+
+    const tag = lines.map(line => `-- @after: ${line}\n`).join('');
     next = script.slice(0, target.start) + tag + script.slice(tagEnd);
   } else if (op === 'update') {
     if (body.newId && find(body.newId) && body.newId.toLowerCase() !== target.id.toLowerCase()) {

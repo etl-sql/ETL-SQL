@@ -216,6 +216,118 @@ describe('Pipeline task editing layer', () => {
         expect(host.textContent).toContain('Runs in script order');
     });
 
+    test('an edge reports its condition, and choosing another one asks the host to rewrite it', () => {
+        card('archive_orders');
+        const edges: any[] = [];
+
+        attach(host, canvas, {
+            tasks: [
+                tasks[0],
+                { ...tasks[1], dependsOn: [{ id: 'load_orders', condition: 'onfailure' }] },
+            ],
+            selectedId: 'archive_orders',
+            onSetEdge: (edge: any) => { edges.push(edge); },
+        });
+
+        const picker = host.querySelector('[data-task-edge="load_orders"]') as HTMLSelectElement;
+        expect(picker.value).toBe('onfailure');
+
+        picker.value = 'onsuccess';
+        picker.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+
+        expect(edges).toEqual([{ from: 'load_orders', to: 'archive_orders', edge: 'onsuccess' }]);
+    });
+
+    test('choosing "When…" asks for nothing until the expression is typed', () => {
+        card('archive_orders');
+        const edges: any[] = [];
+
+        attach(host, canvas, {
+            tasks: [
+                tasks[0],
+                { ...tasks[1], dependsOn: [{ id: 'load_orders', condition: 'always' }] },
+            ],
+            selectedId: 'archive_orders',
+            onSetEdge: (edge: any) => { edges.push(edge); },
+        });
+
+        const field = host.querySelector('[data-task-expression="load_orders"]') as HTMLInputElement;
+        expect(field.hidden).toBe(true);
+
+        const picker = host.querySelector('[data-task-edge="load_orders"]') as HTMLSelectElement;
+        picker.value = 'expression';
+        picker.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+
+        // The edge is not describable yet. Writing a gate on an empty condition would be a change
+        // the author did not make.
+        expect(field.hidden).toBe(false);
+        expect(edges).toEqual([]);
+
+        field.value = '@@ROWCOUNT > 0';
+        field.dispatchEvent(new dom.window.Event('blur', { bubbles: true }));
+
+        expect(edges).toEqual([
+            { from: 'load_orders', to: 'archive_orders', edge: 'expression', expression: '@@ROWCOUNT > 0' },
+        ]);
+    });
+
+    test('an unchanged expression is not resent every time the field loses focus', () => {
+        card('archive_orders');
+        const edges: any[] = [];
+
+        attach(host, canvas, {
+            tasks: [
+                tasks[0],
+                {
+                    ...tasks[1],
+                    dependsOn: [{ id: 'load_orders', condition: 'expression', expression: '@@ROWCOUNT > 0' }],
+                },
+            ],
+            selectedId: 'archive_orders',
+            onSetEdge: (edge: any) => { edges.push(edge); },
+        });
+
+        const field = host.querySelector('[data-task-expression="load_orders"]') as HTMLInputElement;
+        expect(field.hidden).toBe(false);
+        expect(field.value).toBe('@@ROWCOUNT > 0');
+
+        field.dispatchEvent(new dom.window.Event('blur', { bubbles: true }));
+        expect(edges).toEqual([]);
+    });
+
+    test('a dependency reported as a bare label still reads as plain precedence', () => {
+        card('archive_orders');
+
+        attach(host, canvas, {
+            tasks: [tasks[0], { ...tasks[1], dependsOn: ['load_orders'] }],
+            selectedId: 'archive_orders',
+        });
+
+        // An older host, or a response cached before conditional edges existed, reports a string.
+        // Guessing a condition for it would put a gate in the script nobody asked for.
+        const picker = host.querySelector('[data-task-edge="load_orders"]') as HTMLSelectElement;
+        expect(picker.value).toBe('always');
+    });
+
+    test('an expression is escaped, never rendered as markup', () => {
+        card('archive_orders');
+
+        attach(host, canvas, {
+            tasks: [
+                tasks[0],
+                {
+                    ...tasks[1],
+                    dependsOn: [{ id: 'load_orders', condition: 'expression', expression: '"><img src=x onerror=alert(1)>' }],
+                },
+            ],
+            selectedId: 'archive_orders',
+        });
+
+        expect(host.querySelector('img')).toBeNull();
+        const field = host.querySelector('[data-task-expression="load_orders"]') as HTMLInputElement;
+        expect(field.value).toBe('"><img src=x onerror=alert(1)>');
+    });
+
     test('dispose removes the handlers it added', () => {
         const target = card('archive_orders');
         const moves: any[] = [];

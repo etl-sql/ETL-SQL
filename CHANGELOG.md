@@ -12,6 +12,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added conditional precedence edges to the Studio pipeline canvas. An edge can hand over on
+  success, on failure, on completion, or on an expression the author writes, and the choice is
+  lowered into the script as a `BEGIN TRY` / `BEGIN CATCH` guard on the task being watched and an
+  `IF` on the task that waits, so the pipeline runs what the canvas draws. Each condition has its
+  own edge colour, stroke pattern, and label.
+
 - Added a visual formatting inspector to Studio's selected-chart sidebar. Authors can edit title
   typography, subtitles, number formats, axes, legends, palettes, table data bars, and conditional
   table/KPI rules while the corresponding Report-SQL clauses stay synchronized with the canvas.

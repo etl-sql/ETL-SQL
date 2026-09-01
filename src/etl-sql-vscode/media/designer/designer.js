@@ -181,6 +181,22 @@ function _lineageReach(rootId, allEdges, allNodes) {
  *   resize()  — re-fits the chart to the current container size (call on panel resize)
  *   showDetail(id) — opens a node detail panel programmatically (used by tests/sandbox)
  */
+/**
+ * How a precedence edge is drawn, from the label the projection put on it.
+ *
+ * Shared by every host for the same reason the graph shape is: an on-failure edge has to look like
+ * an on-failure edge in the Portal, in VS Code, and in the Workstation editor, or the same script
+ * reads as a different pipeline depending on where it is opened.
+ */
+export function _edgeStyle(label) {
+    const text = String(label ?? '').trim().toUpperCase();
+    if (text === 'ON SUCCESS') return { kind: 'success', color: '#3fb950', dash: null };
+    if (text === 'ON FAILURE') return { kind: 'failure', color: '#f85149', dash: '6 4' };
+    if (text === 'ON COMPLETION') return { kind: 'completion', color: '#58a6ff', dash: '2 3' };
+    if (text.startsWith('WHEN ')) return { kind: 'expression', color: '#d29922', dash: '10 3 2 3' };
+    return { kind: null, color: '#64748b', dash: null };
+}
+
 export function renderDag(container, { nodes, edges }, options = {}) {
     const graphNodes = (nodes ?? []).map(n => ({ ...n, type: n.type || 'table' }));
     const graphEdges = edges ?? [];
@@ -642,11 +658,21 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         const a = centerOf(fromPort, rect);
         const b = centerOf(toPort, rect);
         const inPath = !focusSet || (focusSet.has(edge.source) && focusSet.has(edge.target));
-        const path = drawLink(a.x, a.y, b.x, b.y, inPath ? '#64748b' : 'rgba(71,85,105,0.08)', inPath ? 1.8 : 0.8);
+        const style = _edgeStyle(edge.label);
+        const path = drawLink(
+            a.x, a.y, b.x, b.y,
+            inPath ? style.color : 'rgba(71,85,105,0.08)',
+            inPath ? 1.8 : 0.8);
+        // The dash is not decoration. Colour alone would leave the difference between "only if this
+        // succeeded" and "only if this failed" invisible to a red/green colour-blind reader, and to
+        // anyone printing the map, so every conditional edge also has its own stroke pattern and
+        // keeps the words on its badge.
+        if (style.dash && inPath) path.setAttribute('stroke-dasharray', style.dash);
         path.dataset.dagSource = edge.source;
         path.dataset.dagTarget = edge.target;
         if (edge.label) path.dataset.dagLabel = edge.label;
-        if (edge.label && inPath) drawEdgeBadge(a.x, a.y, b.x, b.y, edge.label, false, false);
+        if (style.kind) path.dataset.dagEdgeKind = style.kind;
+        if (edge.label && inPath) drawEdgeBadge(a.x, a.y, b.x, b.y, edge.label, false, false, style.color);
     }
 
     function drawColumnEdges(rect) {
@@ -683,14 +709,16 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         return path;
     }
 
-    function drawEdgeBadge(x1, y1, x2, y2, text, inPath, dim) {
+    function drawEdgeBadge(x1, y1, x2, y2, text, inPath, dim, accent = null) {
         const badgeEl = document.createElement('div');
         badgeEl.className = 'etlsql-dag-edge-badge';
         badgeEl.style.left = `${(x1 + x2) / 2}px`;
         badgeEl.style.top = `${(y1 + y2) / 2}px`;
         badgeEl.style.background = inPath ? '#0f766e' : '#1e293b';
-        badgeEl.style.border = inPath ? '1px solid #14b8a6' : '1px solid #3b82f6';
-        badgeEl.style.color = inPath ? '#ccfbf1' : '#93c5fd';
+        // A conditional edge borders and letters its badge in the line's own colour, so the words
+        // and the stroke are read as one thing rather than as a label that happens to sit near it.
+        badgeEl.style.border = `1px solid ${accent ?? (inPath ? '#14b8a6' : '#3b82f6')}`;
+        badgeEl.style.color = accent ?? (inPath ? '#ccfbf1' : '#93c5fd');
         badgeEl.style.opacity = dim ? '0.12' : '1';
         badgeEl.textContent = text;
         badgeLayer.appendChild(badgeEl);

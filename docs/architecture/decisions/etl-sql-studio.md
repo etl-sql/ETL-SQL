@@ -357,6 +357,39 @@ script knows nothing about.
 Statements the canvas does not model stay visible on the map and are deliberately not draggable: an
 accurate read-only stage is better than an editable one that cannot round-trip.
 
+### Conditional precedence edges
+
+An edge can hand over on success, on failure, on completion, or on the author's own expression. The
+condition is declared in the same tag — `-- @after: extract on failure`, or
+`-- @after: extract when @@ROWCOUNT > 0` on a line of its own so a comma inside the expression is not
+read as the next prerequisite — and is **lowered into the script**, because an edge that only coloured
+the diagram would be the canvas describing a pipeline the engine does not run.
+
+The lowering is two wrappers, both derived from the declaration:
+
+- The task being watched is wrapped in `BEGIN TRY` / `BEGIN CATCH` and records its outcome into
+  `@<label>_status`, declared `INT = 0` directly above it.
+- The task that waits is wrapped in `IF <condition>`, reading those variables.
+
+The status variable is **three-valued** — `0` never ran, `1` succeeded, `-1` threw — and the guard is
+written *outside* the gate. A task whose own gate was false therefore stays at `0`, so a downstream
+`on failure` edge does not fire for a task that was skipped: skipped is not failed.
+
+Deriving the wrappers from the declaration rather than tracking them beside it is what keeps the two
+from drifting. A hand-edited tag produces the control flow it describes, a removed edge takes its
+wrapper with it, and a rename carries both. Only a wrapper carrying that bookkeeping — a `TRY` body
+that sets `@<label>_status`, or an `IF` whose conjuncts are all status terms or conditions the task
+still declares — is treated as the canvas's. Anything else is the author's control flow and is left
+exactly as written; the task simply stays outside the editable set.
+
+`on completion` writes no gate at all. What it asks for is the guard on the task above it, without
+which an error there would end the run before the dependent was reached.
+
+Every conditional edge is drawn with its own colour **and** its own stroke pattern, and keeps the
+words on its badge — colour alone would make on-success and on-failure indistinguishable to a
+red/green colour-blind reader or on a printed map. The style is derived from the edge label in the
+shared renderer, so the same script reads the same way in every host.
+
 ---
 
 ## 8. Measured Performance Contract

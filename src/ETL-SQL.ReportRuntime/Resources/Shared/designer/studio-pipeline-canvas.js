@@ -52,6 +52,52 @@ export const PIPELINE_TASK_KINDS = Object.freeze([
     }),
 ]);
 
+/**
+ * When an edge hands over.
+ *
+ * `always` is plain precedence and costs the script nothing. Every other condition is written into
+ * the file as real control flow — a `BEGIN TRY` guard around the task being watched and an `IF`
+ * around the task that waits — which is why each one says what it does to the script rather than
+ * only what it means on the diagram.
+ */
+export const PIPELINE_EDGE_CONDITIONS = Object.freeze([
+    Object.freeze({
+        id: 'always',
+        label: 'Always',
+        summary: 'runs next',
+        hint: 'Plain precedence. A failure upstream still stops the run.',
+    }),
+    Object.freeze({
+        id: 'onsuccess',
+        label: 'On success',
+        summary: 'on success',
+        hint: 'Runs only when that task finished without an error.',
+    }),
+    Object.freeze({
+        id: 'onfailure',
+        label: 'On failure',
+        summary: 'on failure',
+        hint: 'Runs only when that task threw. The error is caught, so the run continues.',
+    }),
+    Object.freeze({
+        id: 'oncompletion',
+        label: 'On completion',
+        summary: 'either way',
+        hint: 'Runs either way. The error upstream is caught and no longer stops the run.',
+    }),
+    Object.freeze({
+        id: 'expression',
+        label: 'When…',
+        summary: 'when',
+        hint: 'Runs when your own condition is true, checked after that task.',
+    }),
+]);
+
+function edgeCondition(id) {
+    return PIPELINE_EDGE_CONDITIONS.find(entry => entry.id === String(id || 'always').toLowerCase())
+        ?? PIPELINE_EDGE_CONDITIONS[0];
+}
+
 /** The palette entry for a kind the host reported, so a card can say what it is. */
 export function taskKindLabel(kind) {
     return PIPELINE_TASK_KINDS.find(entry => entry.id === String(kind || '').toLowerCase())?.label ?? 'Task';
@@ -69,6 +115,7 @@ export function taskKindLabel(kind) {
  * @param onAdd      `({ kind, after }) => Promise<void>`
  * @param onEdit     `({ id }) => Promise<void>`, opens the task editor.
  * @param onConnect  `({ from, to }) => Promise<void>`, declares that `to` runs after `from`.
+ * @param onSetEdge  `({ from, to, edge, expression }) => Promise<void>`, changes one edge's condition.
  * @param onDisconnect `({ from, to }) => Promise<void>`, removes one declared edge.
  * @param onMove     `({ id, after }) => Promise<void>` — after null means "run first".
  * @param onRemove   `({ id }) => Promise<void>`
@@ -82,6 +129,7 @@ export function attachPipelineTaskEditing(host, canvas, {
     onAdd = async () => {},
     onEdit = async () => {},
     onConnect = async () => {},
+    onSetEdge = async () => {},
     onDisconnect = async () => {},
     onMove = async () => {},
     onUpdate = async () => {},
@@ -130,6 +178,41 @@ export function attachPipelineTaskEditing(host, canvas, {
 
     for (const chip of inspector.querySelectorAll('[data-task-disconnect]')) {
         on(chip, 'click', () => onDisconnect({ from: chip.dataset.taskDisconnect, to: selected.id }));
+    }
+
+    // ── Edge conditions ──────────────────────────────────────────────────────
+    // Choosing `When…` does not send anything: the edge is not describable until the expression is
+    // typed, and writing a gate on an empty condition would be a change the author did not make.
+    for (const picker of inspector.querySelectorAll('[data-task-edge]')) {
+        const from = picker.dataset.taskEdge;
+        const field = inspector.querySelector(`[data-task-expression="${cssEscape(from)}"]`);
+        on(picker, 'change', () => {
+            if (picker.value !== 'expression') {
+                void onSetEdge({ from, to: selected.id, edge: picker.value });
+                return;
+            }
+            if (field) {
+                field.hidden = false;
+                field.focus();
+                field.select();
+            }
+        });
+    }
+
+    for (const field of inspector.querySelectorAll('[data-task-expression]')) {
+        const from = field.dataset.taskExpression;
+        const commit = () => {
+            const expression = field.value.trim();
+            if (!expression || expression === field.dataset.taskExpressionValue) return;
+            void onSetEdge({ from, to: selected.id, edge: 'expression', expression });
+        };
+        on(field, 'keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                commit();
+            }
+        });
+        on(field, 'blur', commit);
     }
 
     // ── The cards ────────────────────────────────────────────────────────────
@@ -234,7 +317,7 @@ function sameId(left, right) {
 function hint(tasks, selected) {
     if (!tasks.length) return 'No editable tasks yet. Add one from the palette, or keep writing the script — the map follows either way.';
     if (!selected) return `${tasks.length} editable task${tasks.length === 1 ? '' : 's'}. Select one to edit it, or drag it onto another to run it after that one.`;
-    return `${selected.id} selected. Drag it onto another task to run it after that one.`;
+    return `${selected.id} selected. Drag it onto another task to run it after that one, then set when the edge hands over.`;
 }
 
 function inspectorMarkup(task) {
@@ -274,18 +357,62 @@ function inspectorMarkup(task) {
  * instruction to run anything at the same time.
  */
 function dependencyMarkup(task) {
-    const dependencies = task.dependsOn ?? [];
+    const dependencies = (task.dependsOn ?? []).map(normalizeDependency);
     if (!dependencies.length) {
         return `<p class="etlsql-studio-pipeline-deps-empty">Runs in script order. Drag another task's
             connector onto this one to make it wait for that task.</p>`;
     }
 
+    // Read as a list of prerequisites, each with the condition it hands over on. Several of them is
+    // a join — this task runs when all of them are satisfied — and never an instruction to run
+    // anything at the same time.
+
     return `<div class="etlsql-studio-pipeline-deps">
         <span>${dependencies.length === 1 ? 'Waits for' : `Waits for all ${dependencies.length}`}</span>
-        ${dependencies.map(name => `<span class="etlsql-studio-dep-chip">
-            <code>${escapeHtml(name)}</code>
-            <button type="button" data-task-disconnect="${escapeHtml(name)}"
-                aria-label="Stop waiting for ${escapeHtml(name)}" title="Remove this dependency">&times;</button>
-        </span>`).join('')}
+        ${dependencies.map(dependencyRow).join('')}
     </div>`;
+}
+
+/**
+ * The host reports a dependency as an object, but an older host — or a cached response written
+ * before conditional edges existed — reports a bare label. Both mean "waits for this task", so both
+ * are read; guessing a condition for the bare form would put a gate in the script nobody asked for.
+ */
+function normalizeDependency(entry) {
+    if (typeof entry === 'string') return { id: entry, condition: 'always', expression: null };
+    return {
+        id: String(entry?.id ?? ''),
+        condition: String(entry?.condition ?? 'always').toLowerCase(),
+        expression: entry?.expression ?? null,
+    };
+}
+
+function dependencyRow(dependency) {
+    const condition = edgeCondition(dependency.condition);
+    const expression = dependency.expression ?? '';
+    const isExpression = condition.id === 'expression';
+
+    return `<span class="etlsql-studio-dep-chip is-${escapeHtml(condition.id)}">
+        <code>${escapeHtml(dependency.id)}</code>
+        <select data-task-edge="${escapeHtml(dependency.id)}"
+            aria-label="When ${escapeHtml(dependency.id)} hands over" title="${escapeHtml(condition.hint)}">
+            ${PIPELINE_EDGE_CONDITIONS.map(entry => `<option value="${escapeHtml(entry.id)}"
+                ${entry.id === condition.id ? 'selected' : ''}>${escapeHtml(entry.label)}</option>`).join('')}
+        </select>
+        <input type="text" class="etlsql-studio-dep-expression"
+            data-task-expression="${escapeHtml(dependency.id)}"
+            data-task-expression-value="${escapeHtml(expression)}"
+            value="${escapeHtml(expression)}"
+            placeholder="@@ROWCOUNT > 0"
+            aria-label="Condition for the edge from ${escapeHtml(dependency.id)}"
+            ${isExpression ? '' : 'hidden'}>
+        <button type="button" data-task-disconnect="${escapeHtml(dependency.id)}"
+            aria-label="Stop waiting for ${escapeHtml(dependency.id)}" title="Remove this dependency">&times;</button>
+    </span>`;
+}
+
+/** `CSS.escape` where the host has it, and a conservative fallback where it does not. */
+function cssEscape(value) {
+    const text = String(value ?? '');
+    return typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(text) : text.replace(/[^\w-]/g, '\\$&');
 }

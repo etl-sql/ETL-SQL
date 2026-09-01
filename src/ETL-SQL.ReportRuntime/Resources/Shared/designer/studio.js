@@ -743,6 +743,11 @@ export async function createStudioWorkbench(container, opts = {}) {
                 // `id` is the dependent and `after` the dependency, so the request reads the same way
                 // the tag reads in the script: this task runs after that one.
                 onConnect: ({ from, to }) => canonicalPipelineMutation('Connect tasks', { op: 'connect', id: to, after: from }),
+                // Re-declaring an existing edge is how its condition changes: the host replaces the
+                // prerequisite in place and rewrites the control flow that enforces it, so there is
+                // no window in which the tag and the script disagree about when the task runs.
+                onSetEdge: ({ from, to, edge, expression }) => canonicalPipelineMutation(
+                    'Set edge condition', { op: 'connect', id: to, after: from, edge, expression }),
                 onDisconnect: ({ from, to }) => canonicalPipelineMutation('Remove dependency', { op: 'disconnect', id: to, after: from }),
                 onRemove: async ({ id }) => {
                     const result = await canonicalPipelineMutation('Delete task', { op: 'remove', id });

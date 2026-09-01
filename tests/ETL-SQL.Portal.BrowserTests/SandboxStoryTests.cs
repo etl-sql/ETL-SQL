@@ -1183,6 +1183,16 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await page.Locator(".etlsql-feedback-toast", new() { HasText = "cycle" }).First.WaitForAsync();
         Assert.Equal(trimmed, Script());
 
+        // An edge carries a condition, and choosing one rewrites the declaration in place rather
+        // than adding a second prerequisite naming the same task.
+        await page.SelectOptionAsync("[data-task-edge='fetch_rates']", "onfailure");
+        await page.WaitForFunctionAsync(
+            """() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content.includes('@after: fetch_rates on failure')""");
+
+        var conditional = Script();
+        Assert.Equal(1, conditional.Split("-- @after:", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("PARALLEL", conditional, StringComparison.OrdinalIgnoreCase);
+
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }

@@ -68,9 +68,18 @@ and `.etlsql` without losing hand edits.
 **Outcome:** The DAG expresses ETL-SQL control flow honestly and can inspect execution state at a
 selected point.
 
-- [ ] **Add conditional precedence edges**: Support on-success, on-failure, on-completion, and custom
-  expression edges. Lower them to parser-valid `BEGIN TRY` / `BEGIN CATCH` and `IF` branches. Use
-  distinct accessible styles in addition to green, red, and blue edge colors.
+- [x] **Add conditional precedence edges**: An edge hands over on success, on failure, on completion,
+  or on the author's own expression, declared in the same `-- @after:` tag and lowered into the
+  script: a `BEGIN TRY` / `BEGIN CATCH` guard on the task being watched, recording its outcome into
+  a three-valued `@<label>_status`, and an `IF` on the task that waits. The guard sits outside the
+  gate, so a task whose gate was false stays at "never ran" and does not fire a downstream
+  `on failure` edge — skipped is not failed. Both wrappers are derived from the declaration rather
+  than tracked beside it, so a hand-edited tag produces the control flow it describes, and removing
+  an edge, deleting a task, or renaming one carries the wrappers with it; only a wrapper carrying
+  that bookkeeping is treated as the canvas's, so a hand-authored `TRY` or `IF` is never rewritten.
+  Each condition has its own colour, its own stroke pattern, and its words on the badge, because
+  colour alone would hide the success/failure difference from a red/green colour-blind reader. The
+  four runtime tests execute the emitted script and assert which branch actually ran.
 - [ ] **Add draggable control-flow containers**: Support explicit `PARALLEL`, `FOREACH`, and
   transaction scopes with child tasks inside the container. Concurrency must always appear as a
   `PARALLEL` block in the script; never infer it from layout or multiple edges.

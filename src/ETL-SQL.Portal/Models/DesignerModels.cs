@@ -134,6 +134,12 @@ public record BuildDesignerOptionSourceRequest(string Source, string Column);
 /// <param name="Id">The task being edited, or the label of the task being added.</param>
 /// <param name="NewId">update only: the new label.</param>
 /// <param name="After">add and move: the task this one follows; null means end (add) or start (move).</param>
+/// <param name="Edge">
+/// connect only: always | onsuccess | onfailure | oncompletion | expression. Anything else is
+/// refused rather than quietly downgraded to plain precedence — a canvas that asked for "only on
+/// failure" and got "always" would have drawn one pipeline and written another.
+/// </param>
+/// <param name="Expression">connect only: the author's condition, for an <c>expression</c> edge.</param>
 public record PipelineTaskRequest(
     string? Script,
     string? Op,
@@ -149,7 +155,9 @@ public record PipelineTaskRequest(
     string? Recipient = null,
     string? Sender = null,
     string? Subject = null,
-    string? After = null);
+    string? After = null,
+    string? Edge = null,
+    string? Expression = null);
 
 /// <summary>
 /// The result of a pipeline edit. <c>Applied</c> false with an <c>Error</c> is an ordinary answer —
@@ -157,9 +165,17 @@ public record PipelineTaskRequest(
 /// </summary>
 public record PipelineTaskResponse(bool Applied, string Script, string? Error, List<PipelineTaskDto> Tasks);
 
-/// <param name="DependsOn">Labels this task declares it runs after; several of them is a join.</param>
+/// <param name="DependsOn">What this task declares it runs after; several of them is a join.</param>
+/// <param name="Guarded">
+/// True when the script wraps this task in the <c>BEGIN TRY</c> that records its outcome, because
+/// another task's edge asks how it finished.
+/// </param>
 public record PipelineTaskDto(
-    string Id, string Kind, string Connection, string Body, int Line, List<string> DependsOn);
+    string Id, string Kind, string Connection, string Body, int Line,
+    List<PipelineDependencyDto> DependsOn, bool Guarded = false);
+
+/// <param name="Condition">always | onsuccess | onfailure | oncompletion | expression.</param>
+public record PipelineDependencyDto(string Id, string Condition, string? Expression = null);
 
 public record DesignerStateDto(
     List<DesignerPageDto> Pages,
