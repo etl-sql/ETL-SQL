@@ -538,9 +538,13 @@ public sealed class DesignerScriptParsingService
             OverlayType.Goal => $"GOAL({parameter ?? "0"})",
             OverlayType.MovingAvg => $"MOVING_AVG({parameter ?? "1"})",
             OverlayType.Polynomial => $"POLYNOMIAL({parameter ?? "2"})",
+            OverlayType.Forecast => $"FORECAST({overlay.ForecastField ?? string.Empty})",
             _ => overlay.OverlayType.ToString().ToUpperInvariant()
         };
         var details = new List<string>();
+        if (!string.IsNullOrWhiteSpace(overlay.ConfidenceLowField)) details.Add($"CONFIDENCE_LOW = {overlay.ConfidenceLowField}");
+        if (!string.IsNullOrWhiteSpace(overlay.ConfidenceHighField)) details.Add($"CONFIDENCE_HIGH = {overlay.ConfidenceHighField}");
+        if (!string.IsNullOrWhiteSpace(overlay.AnomalyField)) details.Add($"ANOMALY = {overlay.AnomalyField}");
         if (!string.IsNullOrWhiteSpace(overlay.Color)) details.Add($"COLOR = '{Escape(overlay.Color)}'");
         if (!string.IsNullOrWhiteSpace(overlay.Label)) details.Add($"LABEL = '{Escape(overlay.Label)}'");
         return $"{type} AS {overlay.LineStyle.ToString().ToUpperInvariant()}"

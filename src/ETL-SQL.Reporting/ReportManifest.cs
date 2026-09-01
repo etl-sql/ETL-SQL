@@ -1003,6 +1003,18 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("label")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Label { get; set; }
+        [JsonPropertyName("forecastField")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ForecastField { get; set; }
+        [JsonPropertyName("confidenceLowField")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ConfidenceLowField { get; set; }
+        [JsonPropertyName("confidenceHighField")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ConfidenceHighField { get; set; }
+        [JsonPropertyName("anomalyField")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? AnomalyField { get; set; }
     }
 
     public class SeriesDefManifest

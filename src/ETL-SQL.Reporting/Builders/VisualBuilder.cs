@@ -312,7 +312,11 @@ namespace ETL_SQL.Reporting.Builders
                     Parameter = o.Parameter,
                     LineStyle = o.LineStyle.ToString().ToLowerInvariant(),
                     Color = o.Color,
-                    Label = o.Label
+                    Label = o.Label,
+                    ForecastField = o.ForecastField,
+                    ConfidenceLowField = o.ConfidenceLowField,
+                    ConfidenceHighField = o.ConfidenceHighField,
+                    AnomalyField = o.AnomalyField
                 }).ToList();
 
             // Conditional formatting rules (TABLE)

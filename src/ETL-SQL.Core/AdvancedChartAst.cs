@@ -10,6 +10,7 @@ public enum AdvancedChartChannel
     Y, Y2, YStart, YEnd, YOffset,
     Low, Q1, Median, Q3, High, Open, Close,
     ErrorLow, ErrorHigh,
+    ConfidenceLow, ConfidenceHigh,
     Color, Size, Shape, Theta, Radius, Longitude, Latitude, Region, Route, Text, Tooltip, Detail
 }
 public enum AdvancedChartAxisRole { None, Primary, Secondary }
@@ -35,12 +36,13 @@ public static class AdvancedChartScaleInference
             AdvancedChartChannel.Y or AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
             AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
             AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close or
-            AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh => dataKind switch
+            AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh or
+            AdvancedChartChannel.ConfidenceLow or AdvancedChartChannel.ConfidenceHigh => dataKind switch
             {
                 AdvancedChartDataKind.Quantitative => AdvancedChartScaleKind.Linear,
                 AdvancedChartDataKind.Temporal => AdvancedChartScaleKind.Time,
                 AdvancedChartDataKind.Nominal or AdvancedChartDataKind.Ordinal when mark is AdvancedChartMarkKind.Rect or AdvancedChartMarkKind.Tick => AdvancedChartScaleKind.Band,
-                AdvancedChartDataKind.Nominal or AdvancedChartDataKind.Ordinal when mark is AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Line => AdvancedChartScaleKind.Point,
+                AdvancedChartDataKind.Nominal or AdvancedChartDataKind.Ordinal when mark is AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area => AdvancedChartScaleKind.Point,
                 _ => null
             },
             AdvancedChartChannel.Color => dataKind == AdvancedChartDataKind.Quantitative ? AdvancedChartScaleKind.Linear : AdvancedChartScaleKind.Ordinal,

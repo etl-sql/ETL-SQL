@@ -1,0 +1,88 @@
+-- Forecast overlays, confidence interval ribbons, and anomaly markers.
+
+SET REPORT TITLE = 'Sales Forecast & Confidence Bands';
+
+-- 1. Pre-computed time-series with actuals, transition row, forecast projection,
+--    confidence bounds, and detected anomaly points.
+SELECT 'Jan' AS Month, 100 AS Actual, CAST(NULL AS INT) AS Forecast,
+       CAST(NULL AS INT) AS ConfLow, CAST(NULL AS INT) AS ConfHigh, CAST(NULL AS INT) AS Anomaly
+INTO #sales_forecast
+UNION ALL SELECT 'Feb', 115, NULL, NULL, NULL, NULL
+UNION ALL SELECT 'Mar', 108, NULL, NULL, NULL, 108
+UNION ALL SELECT 'Apr', 125, NULL, NULL, NULL, NULL
+UNION ALL SELECT 'May', 140, 140, 130, 150, NULL
+UNION ALL SELECT 'Jun', NULL, 155, 142, 168, NULL
+UNION ALL SELECT 'Jul', NULL, 162, 148, 176, NULL
+UNION ALL SELECT 'Aug', NULL, 180, 160, 200, 180;
+
+-- 2. Named LINE chart with FORECAST overlay, confidence ribbon, and anomaly glyphs
+CREATE VISUAL RevenueForecastLine AS LINE (
+  SOURCE = #sales_forecast,
+  MAPPINGS (
+    X = Month,
+    Y = Actual
+  ),
+  OPTIONS (
+    TITLE = 'Revenue Trend & Outlook',
+    AXIS_SORT = SOURCE,
+    Y_AXIS (LABEL = 'Revenue ($K)', INCLUDE_ZERO = ON)
+  ),
+  OVERLAYS (
+    FORECAST(Forecast) AS DASHED WITH (
+      CONFIDENCE_LOW = ConfLow,
+      CONFIDENCE_HIGH = ConfHigh,
+      ANOMALY = Anomaly,
+      COLOR = '#2563eb',
+      LABEL = 'Projected Revenue'
+    )
+  )
+);
+
+-- 3. Advanced CUSTOM chart with AREA confidence ribbon and LINE projection
+CREATE VISUAL CustomForecastRibbon AS CUSTOM (
+  SOURCE = #sales_forecast,
+  TITLE = 'Custom Ribbon with Confidence Channels',
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    SCALES (
+      month_scale = BAND (CHANNEL = X, ORDER = SOURCE),
+      rev_scale = LINEAR (CHANNEL = Y, INCLUDE_ZERO = ON)
+    ),
+    LAYERS (
+      confidence_band = AREA (
+        STYLE (color = '#2563eb'),
+        ENCODINGS (
+          X = Month (TYPE = NOMINAL, SCALE = month_scale),
+          CONFIDENCE_LOW = ConfLow (TYPE = QUANTITATIVE, SCALE = rev_scale),
+          CONFIDENCE_HIGH = ConfHigh (TYPE = QUANTITATIVE, SCALE = rev_scale)
+        )
+      ),
+      actual_line = LINE (
+        STYLE (color = '#0284c7'),
+        ENCODINGS (
+          X = Month (TYPE = NOMINAL, SCALE = month_scale),
+          Y = Actual (TYPE = QUANTITATIVE, SCALE = rev_scale)
+        )
+      ),
+      forecast_line = LINE (
+        STYLE (color = '#2563eb', lineStyle = 'dashed'),
+        ENCODINGS (
+          X = Month (TYPE = NOMINAL, SCALE = month_scale),
+          Y = Forecast (TYPE = QUANTITATIVE, SCALE = rev_scale)
+        )
+      ),
+      anomaly_points = POINT (
+        STYLE (color = '#2563eb'),
+        ENCODINGS (
+          X = Month (TYPE = NOMINAL, SCALE = month_scale),
+          Y = Anomaly (TYPE = QUANTITATIVE, SCALE = rev_scale)
+        )
+      )
+    )
+  )
+);
+
+CREATE PAGE Overview AS DASHBOARD (
+  STRUCTURE = 'A B',
+  MAP ('A' = RevenueForecastLine, 'B' = CustomForecastRibbon)
+);

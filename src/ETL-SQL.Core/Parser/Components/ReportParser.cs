@@ -1230,6 +1230,8 @@ public class ReportParser : ParserComponent
         "CLOSE" => AdvancedChartChannel.Close,
         "ERROR_LOW" => AdvancedChartChannel.ErrorLow,
         "ERROR_HIGH" => AdvancedChartChannel.ErrorHigh,
+        "CONFIDENCE_LOW" => AdvancedChartChannel.ConfidenceLow,
+        "CONFIDENCE_HIGH" => AdvancedChartChannel.ConfidenceHigh,
         "COLOR" => AdvancedChartChannel.Color,
         "SIZE" => AdvancedChartChannel.Size,
         "SHAPE" => AdvancedChartChannel.Shape,
@@ -3845,6 +3847,10 @@ public class ReportParser : ParserComponent
         {
             OverlayType overlayType;
             double? parameter = null;
+            string? forecastField = null;
+            string? confidenceLowField = null;
+            string? confidenceHighField = null;
+            string? anomalyField = null;
 
             if (Match(TokenType.GOAL))
             {
@@ -3874,6 +3880,14 @@ public class ReportParser : ParserComponent
                 parameter = double.Parse(Consume(TokenType.NUMBER, "Expected degree for POLYNOMIAL").Value,
                     System.Globalization.CultureInfo.InvariantCulture);
                 Consume(TokenType.RPAREN, "Expected ')' after POLYNOMIAL degree");
+            }
+            else if (IsCurrentValue("FORECAST"))
+            {
+                Advance();
+                overlayType = OverlayType.Forecast;
+                Consume(TokenType.LPAREN, "Expected '(' after FORECAST");
+                forecastField = ConsumeIdentifier("Expected forecast field name").Value;
+                Consume(TokenType.RPAREN, "Expected ')' after forecast field name");
             }
             else throw new SyntaxException(
                 $"Expected overlay type (GOAL, AVERAGE, MOVING_AVG, LINEAR, ...) but got '{_parser.Current.Value}'",
@@ -3906,6 +3920,24 @@ public class ReportParser : ParserComponent
                         Consume(TokenType.EQUALS, "Expected = after LABEL");
                         label = Consume(TokenType.STRING_LITERAL, "Expected label string").Value;
                     }
+                    else if (IsCurrentValue("CONFIDENCE_LOW"))
+                    {
+                        Advance();
+                        Consume(TokenType.EQUALS, "Expected = after CONFIDENCE_LOW");
+                        confidenceLowField = ConsumeIdentifier("Expected confidence low field name").Value;
+                    }
+                    else if (IsCurrentValue("CONFIDENCE_HIGH"))
+                    {
+                        Advance();
+                        Consume(TokenType.EQUALS, "Expected = after CONFIDENCE_HIGH");
+                        confidenceHighField = ConsumeIdentifier("Expected confidence high field name").Value;
+                    }
+                    else if (IsCurrentValue("ANOMALY"))
+                    {
+                        Advance();
+                        Consume(TokenType.EQUALS, "Expected = after ANOMALY");
+                        anomalyField = ConsumeIdentifier("Expected anomaly field name").Value;
+                    }
                     else break;
                     Match(TokenType.COMMA);
                 }
@@ -3918,7 +3950,11 @@ public class ReportParser : ParserComponent
                 Parameter = parameter,
                 LineStyle = lineStyle,
                 Color = color,
-                Label = label
+                Label = label,
+                ForecastField = forecastField,
+                ConfidenceLowField = confidenceLowField,
+                ConfidenceHighField = confidenceHighField,
+                AnomalyField = anomalyField
             });
             Match(TokenType.COMMA);
         }

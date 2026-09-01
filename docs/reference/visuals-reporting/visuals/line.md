@@ -27,7 +27,17 @@ CREATE VISUAL VisualName AS LINE (
       MAJOR_TICK_COUNT = n, TICK_INTERVAL = n, MINOR_TICKS = ON|OFF,
       LABEL_ROTATION = AUTO|0|45|90, LABEL_SKIP = AUTO|n, AXIS_LINE = ON|OFF)],
     [Y_AXIS (...same axis properties...)]
-  )
+  ),
+  [OVERLAYS (
+    FORECAST(forecastCol) AS SOLID|DASHED|DOTTED [WITH (
+      [CONFIDENCE_LOW = lowCol,]
+      [CONFIDENCE_HIGH = highCol,]
+      [ANOMALY = anomalyCol,]
+      [COLOR = '#rrggbb',]
+      [LABEL = 'text']
+    )],
+    ...
+  )]
 );
 ```
 
@@ -57,6 +67,7 @@ CREATE VISUAL VisualName AS LINE (
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - category-axis order; SOURCE preserves query order
 - **X_AXIS (...) / Y_AXIS (...)** - axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`). `MAJOR_TICK_COUNT` is 2–100 and `TICK_INTERVAL` must be positive.
 - **TITLE = 'text'** - visual title
+- **OVERLAYS (...)** - visual overlays including `FORECAST(field) AS SOLID|DASHED|DOTTED [WITH (...)]`. Supports paired `CONFIDENCE_LOW` / `CONFIDENCE_HIGH` quantitative interval ribbon (`fill-opacity='.2'`) and `ANOMALY` marker glyphs. Forecast values are pre-computed in SQL and participate in primary Y domain resolution.
 
 ## Examples
 
@@ -72,6 +83,22 @@ CREATE VISUAL RevenueTrend AS LINE (
   SOURCE   = #daily,
   MAPPINGS (X = date, Y = revenue),
   OPTIONS  (SMOOTH = ON, SYMBOLS = ON, AXIS_SORT = SOURCE, TITLE = 'Daily Revenue')
+);
+
+-- Time-series forecast with confidence band and anomaly markers
+CREATE VISUAL SalesForecast AS LINE (
+  SOURCE = #forecast_data,
+  MAPPINGS (X = Month, Y = Revenue),
+  OPTIONS (TITLE = 'Revenue Forecast (95% CI)'),
+  OVERLAYS (
+    FORECAST(ForecastRev) AS DASHED WITH (
+      CONFIDENCE_LOW = LowBound,
+      CONFIDENCE_HIGH = HighBound,
+      ANOMALY = AnomalyValue,
+      COLOR = '#2563eb',
+      LABEL = 'Forecast'
+    )
+  )
 );
 
 -- Multi-series by region using COLOR grouping

@@ -78,7 +78,7 @@ Titles and subtitles support simple string assignment, inline markdown, or struc
 - **DATA_LABELS POSITION** — Accepts `OUTSIDE_TOP`, `OUTSIDE_MIDDLE`, `OUTSIDE_BOTTOM`, `INSIDE_TOP`, `INSIDE_MIDDLE`, or `INSIDE_BOTTOM`.
 - **STYLE (COLOR:name = '#RRGGBB')** — Assigns a stable color to a named series or category. Use `PALETTE = (...)` for order-based colors.
 - **FORMATTING (WHEN predicate THEN color ...)** — Applies the first matching rule color to each mark in a named chart. `CUSTOM` charts use layer `CONDITIONS` instead.
-- **OVERLAYS (...)** — Adds goals, averages, moving averages, or fitted trend lines to named charts.
+- **OVERLAYS (...)** — Adds goals, averages, moving averages, fitted trend lines, or forecast overlays with optional confidence bands and anomaly markers to named charts.
 
 ## Display Types
 

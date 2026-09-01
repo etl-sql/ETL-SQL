@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -133,7 +133,8 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd => FieldChannel.X,
         FieldChannel.YStart or FieldChannel.YEnd or
         FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or
-        FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh => FieldChannel.Y,
+        FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or
+        FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh => FieldChannel.Y,
         _ => channel
     };
 

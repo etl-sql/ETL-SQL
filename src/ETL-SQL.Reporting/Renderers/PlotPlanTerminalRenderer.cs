@@ -132,7 +132,11 @@ internal static class PlotPlanTerminalRenderer
         IReadOnlyList<(ResolvedMarkLayer Layer, List<ResolvedDatum> Data, ResolvedSeries? Series, string Label, string Color)> ruleLayers,
         int width)
     {
-        var allNumeric = layers.SelectMany(l => l.Data.Select(Value)).Where(v => v.HasValue).Select(v => v!.Value).ToList();
+        var allNumeric = layers.SelectMany(l => l.Data.SelectMany(d => new[] {
+            Value(d),
+            PlotPlanResolver.Number(Channel(d, FieldChannel.ConfidenceLow) ?? ChartValue.Null()),
+            PlotPlanResolver.Number(Channel(d, FieldChannel.ConfidenceHigh) ?? ChartValue.Null())
+        })).Where(v => v.HasValue).Select(v => v!.Value).ToList();
         var ruleNumeric = ruleLayers.SelectMany(r => r.Data.Select(Value)).Where(v => v.HasValue).Select(v => v!.Value).ToList();
         var combinedNumeric = allNumeric.Concat(ruleNumeric).ToList();
         if (combinedNumeric.Count == 0) return new Markup("[grey]all values are gaps[/]");
@@ -182,7 +186,23 @@ internal static class PlotPlanTerminalRenderer
                     if (previous.HasValue) canvas.Line(previous.Value.X, previous.Value.Y, x, y, ansi);
                     else canvas.Set(x, y, ansi);
                     if (item.Layer.Mark == MarkKind.Area)
-                        for (var fill = y + 1; fill < canvas.DotHeight; fill += 2) canvas.Set(x, fill, ansi);
+                    {
+                        var cLow = PlotPlanResolver.Number(Channel(item.Data[index], FieldChannel.ConfidenceLow) ?? ChartValue.Null());
+                        var cHigh = PlotPlanResolver.Number(Channel(item.Data[index], FieldChannel.ConfidenceHigh) ?? ChartValue.Null());
+                        if (cLow.HasValue && cHigh.HasValue)
+                        {
+                            var yL = canvas.DotHeight - 1 - (int)((cLow.Value - min) / (max - min) * (canvas.DotHeight - 1));
+                            var yH = canvas.DotHeight - 1 - (int)((cHigh.Value - min) / (max - min) * (canvas.DotHeight - 1));
+                            yL = Math.Clamp(yL, 0, canvas.DotHeight - 1);
+                            yH = Math.Clamp(yH, 0, canvas.DotHeight - 1);
+                            for (var fill = Math.Min(yL, yH); fill <= Math.Max(yL, yH); fill++)
+                                canvas.Set(x, fill, ansi);
+                        }
+                        else
+                        {
+                            for (var fill = y + 1; fill < canvas.DotHeight; fill += 2) canvas.Set(x, fill, ansi);
+                        }
+                    }
                 }
                 previous = (x, y);
             }
@@ -215,7 +235,7 @@ internal static class PlotPlanTerminalRenderer
 
         var errorDetails = layers.SelectMany(l => l.Data.Select(d =>
         {
-            var detail = ErrorBarDetail(d);
+            var detail = ConfidenceIntervalDetail(d) ?? ErrorBarDetail(d);
             return detail != null ? $"{Label(d)}: {detail}" : null;
         })).Where(d => d != null).ToList();
 
@@ -245,6 +265,8 @@ internal static class PlotPlanTerminalRenderer
         var allValues = rectLayers.SelectMany(l => l.Data.Select(Value))
             .Concat(rectLayers.Where(l => IsRangedRect(l.Layer, l.Data)).SelectMany(l => l.Data.Select(IntervalStart)))
             .Concat(lineLayers.SelectMany(l => l.Data.Select(Value)))
+            .Concat(lineLayers.SelectMany(l => l.Data.Select(d => PlotPlanResolver.Number(Channel(d, FieldChannel.ConfidenceLow) ?? ChartValue.Null()))))
+            .Concat(lineLayers.SelectMany(l => l.Data.Select(d => PlotPlanResolver.Number(Channel(d, FieldChannel.ConfidenceHigh) ?? ChartValue.Null()))))
             .Concat(ruleLayers.SelectMany(r => r.Data.Select(Value)))
             .Where(v => v.HasValue)
             .Select(v => v!.Value)
@@ -328,7 +350,7 @@ internal static class PlotPlanTerminalRenderer
 
         var errorDetails = rectLayers.Concat(lineLayers).SelectMany(l => l.Data.Select(d =>
         {
-            var detail = ErrorBarDetail(d);
+            var detail = ConfidenceIntervalDetail(d) ?? ErrorBarDetail(d);
             return detail != null ? $"{Label(d)}: {detail}" : null;
         })).Where(d => d != null).ToList();
 
@@ -394,7 +416,7 @@ internal static class PlotPlanTerminalRenderer
                     var value = Value(datum) ?? 0m;
                     var bar = FractionalBar(Math.Abs(value) / maximum, barWidth);
                     var sign = value < 0m ? "◀" : value == 0m ? "│" : "▶";
-                    var errorInfo = ErrorBarDetail(datum);
+                    var errorInfo = ConfidenceIntervalDetail(datum) ?? ErrorBarDetail(datum);
                     subRows.Add(new Markup($"  {Markup.Escape(subLabel)} [{seriesAnsi}]{sign}{bar}[/] {Markup.Escape(DisplayValue(datum))}{(errorInfo != null ? $" [grey]({errorInfo})[/]" : "")}"));
                 }
             }
@@ -409,11 +431,22 @@ internal static class PlotPlanTerminalRenderer
             var value = Value(datum) ?? 0m;
             var bar = FractionalBar(Math.Abs(value) / maximum, barWidth);
             var sign = value < 0m ? "◀" : value == 0m ? "│" : "▶";
-            var errorInfo = ErrorBarDetail(datum);
+            var errorInfo = ConfidenceIntervalDetail(datum) ?? ErrorBarDetail(datum);
             return new Markup($"{Markup.Escape(label)} [{ansi}]{sign}{bar}[/] {Markup.Escape(DisplayValue(datum))}{(errorInfo != null ? $" [grey]({errorInfo})[/]" : "")}");
         }).ToList();
         rows.Insert(0, new Markup($"[bold]{Markup.Escape(series)}[/] [grey](fractional bars)[/]"));
         return new Rows(rows);
+    }
+
+    private static string? ConfidenceIntervalDetail(ResolvedDatum datum)
+    {
+        var low = Channel(datum, FieldChannel.ConfidenceLow);
+        var high = Channel(datum, FieldChannel.ConfidenceHigh);
+        if (low is null || high is null || low.Kind == ChartValueKind.Null || high.Kind == ChartValueKind.Null)
+            return null;
+        var lowDisplay = DisplayChannel(datum, FieldChannel.ConfidenceLow) ?? PlotPlanResolver.Number(low)?.ToString(CultureInfo.InvariantCulture);
+        var highDisplay = DisplayChannel(datum, FieldChannel.ConfidenceHigh) ?? PlotPlanResolver.Number(high)?.ToString(CultureInfo.InvariantCulture);
+        return $"confidence {lowDisplay} to {highDisplay}";
     }
 
     /// <summary>True when the author supplied both interval endpoints; resolver-computed stack endpoints do not count.</summary>
@@ -537,8 +570,13 @@ internal static class PlotPlanTerminalRenderer
 
     private static IRenderable RenderLine(IReadOnlyList<ResolvedDatum> data, string series, string color, int width, bool area)
     {
+        var isConfidence = data.Any(d => Channel(d, FieldChannel.ConfidenceLow) is not null || Channel(d, FieldChannel.ConfidenceHigh) is not null);
+        var lowValues = isConfidence ? data.Select(d => PlotPlanResolver.Number(Channel(d, FieldChannel.ConfidenceLow) ?? ChartValue.Null())).ToList() : null;
+        var highValues = isConfidence ? data.Select(d => PlotPlanResolver.Number(Channel(d, FieldChannel.ConfidenceHigh) ?? ChartValue.Null())).ToList() : null;
         var values = data.Select(Value).ToList();
-        var numeric = values.Where(value => value.HasValue).Select(value => value!.Value).ToList();
+        var numeric = (isConfidence
+            ? lowValues!.Concat(highValues!)
+            : values).Where(value => value.HasValue).Select(value => value!.Value).ToList();
         if (numeric.Count == 0) return new Markup($"[bold]{Markup.Escape(series)}[/]: [grey]all values are gaps[/]");
         var min = numeric.Min(); var max = numeric.Max();
         if (min == max) max = min + 1m;
@@ -547,17 +585,30 @@ internal static class PlotPlanTerminalRenderer
         (int X, int Y)? previous = null;
         for (var index = 0; index < data.Count; index++)
         {
+            if (isConfidence)
+            {
+                if (data[index].IsGap || !lowValues![index].HasValue || !highValues![index].HasValue) continue;
+                var x = data.Count == 1 ? 0 : index * (canvas.DotWidth - 1) / (data.Count - 1);
+                var yL = canvas.DotHeight - 1 - (int)((lowValues[index]!.Value - min) / (max - min) * (canvas.DotHeight - 1));
+                var yH = canvas.DotHeight - 1 - (int)((highValues[index]!.Value - min) / (max - min) * (canvas.DotHeight - 1));
+                yL = Math.Clamp(yL, 0, canvas.DotHeight - 1);
+                yH = Math.Clamp(yH, 0, canvas.DotHeight - 1);
+                for (var fill = Math.Min(yL, yH); fill <= Math.Max(yL, yH); fill++)
+                    canvas.Set(x, fill, ansi);
+                continue;
+            }
             if (data[index].IsGap || !values[index].HasValue) { previous = null; continue; }
-            var x = data.Count == 1 ? 0 : index * (canvas.DotWidth - 1) / (data.Count - 1);
-            var y = canvas.DotHeight - 1 - (int)((values[index]!.Value - min) / (max - min) * (canvas.DotHeight - 1));
-            if (previous.HasValue) canvas.Line(previous.Value.X, previous.Value.Y, x, y, ansi);
-            else canvas.Set(x, y, ansi);
-            if (area) for (var fill = y + 1; fill < canvas.DotHeight; fill += 2) canvas.Set(x, fill, ansi);
-            previous = (x, y);
+            var ptX = data.Count == 1 ? 0 : index * (canvas.DotWidth - 1) / (data.Count - 1);
+            var ptY = canvas.DotHeight - 1 - (int)((values[index]!.Value - min) / (max - min) * (canvas.DotHeight - 1));
+            if (previous.HasValue) canvas.Line(previous.Value.X, previous.Value.Y, ptX, ptY, ansi);
+            else canvas.Set(ptX, ptY, ansi);
+            if (area) for (var fill = ptY + 1; fill < canvas.DotHeight; fill += 2) canvas.Set(ptX, fill, ansi);
+            previous = (ptX, ptY);
         }
         var gaps = data.Count(datum => datum.IsGap);
+        var areaLabel = isConfidence ? "Confidence interval" : area ? "Braille area" : "Braille line";
         return new Rows(
-            new Markup($"[{ansi}]●[/] [bold]{Markup.Escape(series)}[/] [grey]({(area ? "Braille area" : "Braille line")}; {gaps} gaps)[/]"),
+            new Markup($"[{ansi}]●[/] [bold]{Markup.Escape(series)}[/] [grey]({areaLabel}; {gaps} gaps)[/]"),
             canvas.ToRenderableWithAxis(min, max),
             new Markup($"[grey]{min.ToString(CultureInfo.InvariantCulture)} … {max.ToString(CultureInfo.InvariantCulture)}[/]"));
     }
@@ -593,7 +644,7 @@ internal static class PlotPlanTerminalRenderer
         var rows = data.Select(datum =>
         {
             if (datum.IsGap) return (IRenderable)new Markup($"[grey]○ {Markup.Escape(Label(datum))}: gap[/]");
-            var errorInfo = ErrorBarDetail(datum);
+            var errorInfo = ConfidenceIntervalDetail(datum) ?? ErrorBarDetail(datum);
             return new Markup($"[{ansi}]{glyph}[/] {Markup.Escape(Label(datum))}: {Markup.Escape(DisplayValue(datum))}{(errorInfo != null ? $" [grey]({errorInfo})[/]" : "")}");
         });
         return new Rows(new[] { (IRenderable)new Markup($"[bold]{Markup.Escape(series)}[/] [grey](point glyph {glyph})[/]") }.Concat(rows));
@@ -712,11 +763,12 @@ internal static class PlotPlanTerminalRenderer
     private static decimal? Value(ResolvedDatum datum) =>
         PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ??
             Channel(datum, FieldChannel.Radius) ?? Channel(datum, FieldChannel.Median) ??
-            Channel(datum, FieldChannel.Close) ?? Channel(datum, FieldChannel.Size) ?? Channel(datum, FieldChannel.YEnd) ?? ChartValue.Null());
+            Channel(datum, FieldChannel.Close) ?? Channel(datum, FieldChannel.Size) ?? Channel(datum, FieldChannel.YEnd) ??
+            Channel(datum, FieldChannel.ConfidenceHigh) ?? ChartValue.Null());
     private static string DisplayValue(ResolvedDatum datum)
     {
         var channel = datum.Channels.FirstOrDefault(item => item.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or
-            FieldChannel.Median or FieldChannel.Close or FieldChannel.Size or FieldChannel.YEnd);
+            FieldChannel.Median or FieldChannel.Close or FieldChannel.Size or FieldChannel.YEnd or FieldChannel.ConfidenceHigh);
         var value = channel is null ? "" : channel.DisplayValue ?? PlotPlanResolver.Display(channel.Value);
         if (datum.Encodings.IsDefaultOrEmpty) return value;
         return value + " (" + string.Join(", ", datum.Encodings.Select(encoding =>

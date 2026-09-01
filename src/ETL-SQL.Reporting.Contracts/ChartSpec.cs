@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 
 namespace ETL_SQL.Reporting.Semantics;
@@ -32,6 +32,8 @@ public enum FieldChannel
     Close,
     ErrorLow,
     ErrorHigh,
+    ConfidenceLow,
+    ConfidenceHigh,
     Color,
     Size,
     Shape,
@@ -463,7 +465,7 @@ public sealed record ChartSpec(
                     throw new InvalidDataException("A VALUE binding bypasses data scales and cannot declare SCALE.");
                 if (binding.SourceKind == BindingSourceKind.Value && binding.Axis != AxisRole.None)
                     throw new InvalidDataException("A VALUE binding cannot declare an axis.");
-                if (binding.SourceKind == BindingSourceKind.Value && binding.Channel is FieldChannel.X or FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd or FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh)
+                if (binding.SourceKind == BindingSourceKind.Value && binding.Channel is FieldChannel.X or FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd or FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh)
                     throw new InvalidDataException($"A visual-range VALUE cannot bind positional channel {binding.Channel}.");
             }
             if (binding.ScaleId is not null && !scaleIds.Contains(binding.ScaleId))
@@ -514,6 +516,10 @@ public sealed record ChartSpec(
                     (binding.SemanticKind != DataSemanticKind.Quantitative || binding.SourceKind == BindingSourceKind.Value ||
                      binding.Axis == AxisRole.Secondary))
                     throw new InvalidDataException($"Statistical error bar channel {binding.Channel} requires primary quantitative data.");
+                if (binding.Channel is FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh &&
+                    (binding.SemanticKind != DataSemanticKind.Quantitative || binding.SourceKind == BindingSourceKind.Value ||
+                     binding.Axis == AxisRole.Secondary))
+                    throw new InvalidDataException($"Confidence channel {binding.Channel} requires primary quantitative data.");
                 if (binding.Stack != StackMode.None &&
                     (binding.SemanticKind != DataSemanticKind.Quantitative || binding.SourceKind == BindingSourceKind.Value ||
                      binding.Channel is not (FieldChannel.Y or FieldChannel.Y2) || Coordinate.Kind == CoordinateKind.Polar))
@@ -554,6 +560,36 @@ public sealed record ChartSpec(
                 if (!string.Equals(lowScaleId, highScoreId, StringComparison.OrdinalIgnoreCase) ||
                     !string.Equals(lowScaleId, yScaleId, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException($"Layer '{layer.Id}' ERROR_LOW, ERROR_HIGH, and Y must resolve to the same scale ID.");
+            }
+            var hasConfLow = channels.Contains(FieldChannel.ConfidenceLow);
+            var hasConfHigh = channels.Contains(FieldChannel.ConfidenceHigh);
+            if (hasConfLow || hasConfHigh)
+            {
+                if (layer.Mark != MarkKind.Area)
+                    throw new InvalidDataException($"{layer.Mark.ToString().ToUpperInvariant()} layer '{layer.Id}' does not support confidence channels; only AREA marks support confidence channels.");
+                if (Coordinate.Kind is not (CoordinateKind.Cartesian or CoordinateKind.TransposedCartesian))
+                    throw new InvalidDataException($"Layer '{layer.Id}' confidence channels require Cartesian or TransposedCartesian coordinates.");
+                if (!hasConfLow || !hasConfHigh)
+                    throw new InvalidDataException($"{layer.Mark.ToString().ToUpperInvariant()} layer '{layer.Id}' requires both CONFIDENCE_LOW and CONFIDENCE_HIGH.");
+                var low = layer.Bindings.First(b => b.Channel == FieldChannel.ConfidenceLow);
+                var high = layer.Bindings.First(b => b.Channel == FieldChannel.ConfidenceHigh);
+                if (low.SemanticKind != DataSemanticKind.Quantitative || high.SemanticKind != DataSemanticKind.Quantitative)
+                    throw new InvalidDataException($"{layer.Mark.ToString().ToUpperInvariant()} layer '{layer.Id}' confidence endpoints require QUANTITATIVE type.");
+
+                if (low.Axis == AxisRole.Secondary || high.Axis == AxisRole.Secondary)
+                    throw new InvalidDataException($"Layer '{layer.Id}' confidence channels must use the primary axis.");
+
+                var lowScaleId = low.ScaleId ?? Scales.FirstOrDefault(s => s.Channel == FieldChannel.Y)?.Id ?? "y";
+                var highScoreId = high.ScaleId ?? Scales.FirstOrDefault(s => s.Channel == FieldChannel.Y)?.Id ?? "y";
+                if (!string.Equals(lowScaleId, highScoreId, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException($"Layer '{layer.Id}' CONFIDENCE_LOW and CONFIDENCE_HIGH must resolve to the same scale ID.");
+
+                if (!channels.Contains(FieldChannel.X))
+                    throw new InvalidDataException($"{layer.Mark.ToString().ToUpperInvariant()} layer '{layer.Id}' with confidence channels requires an X binding.");
+
+                if (channels.Contains(FieldChannel.Y) || channels.Contains(FieldChannel.Y2) ||
+                    channels.Contains(FieldChannel.YStart) || channels.Contains(FieldChannel.YEnd))
+                    throw new InvalidDataException($"AREA layer '{layer.Id}' cannot combine CONFIDENCE_LOW/CONFIDENCE_HIGH with Y, Y2, Y_START, or Y_END; confidence endpoints own the band's extent.");
             }
             if (Coordinate.Kind == CoordinateKind.Geographic)
             {
@@ -664,7 +700,8 @@ public sealed record ChartSpec(
         scale == FieldChannel.X && binding is FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd ||
         scale == FieldChannel.Y && binding is FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd or
             FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or
-            FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh;
+            FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or
+            FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh;
 
     private static void ValidatePredicate(EncodingPredicate predicate, string layerId)
     {

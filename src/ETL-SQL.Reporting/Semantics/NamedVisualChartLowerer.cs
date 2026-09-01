@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -42,6 +42,31 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 var upper = errorBarStyleOption.ToUpperInvariant();
                 if (upper is not ("CAPS" or "NO_CAPS"))
                     throw new InvalidOperationException($"Invalid ERROR_BAR_STYLE '{errorBarStyleOption}'. Valid values are CAPS or NO_CAPS.");
+            }
+        }
+
+        foreach (var overlay in statement.Overlays)
+        {
+            if (overlay.OverlayType == OverlayType.Forecast)
+            {
+                if (statement.VisualType is not (VisualType.Line or VisualType.Combo))
+                    throw new InvalidOperationException($"FORECAST overlay is supported only on LINE and COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+
+                if (string.IsNullOrWhiteSpace(overlay.ForecastField))
+                    throw new InvalidOperationException("FORECAST overlay requires a forecast field name: FORECAST(field).");
+
+                var hasConfLow = !string.IsNullOrWhiteSpace(overlay.ConfidenceLowField);
+                var hasConfHigh = !string.IsNullOrWhiteSpace(overlay.ConfidenceHighField);
+                if (hasConfLow != hasConfHigh)
+                    throw new InvalidOperationException("FORECAST overlay requires both CONFIDENCE_LOW and CONFIDENCE_HIGH as a pair.");
+
+                var hasX = statement.Mappings.Any(m => m.Role.Equals("X", StringComparison.OrdinalIgnoreCase));
+                var hasY = statement.Mappings.Any(m => m.Role.Equals("Y", StringComparison.OrdinalIgnoreCase))
+                    || statement.TypedSeries.Count > 0;
+                if (!hasX)
+                    throw new InvalidOperationException("FORECAST overlay requires an X mapping.");
+                if (!hasY)
+                    throw new InvalidOperationException("FORECAST overlay requires a primary quantitative Y mapping.");
             }
         }
 
@@ -217,6 +242,72 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         for (var index = 0; index < statement.Overlays.Count; index++)
         {
             var overlay = statement.Overlays[index];
+            if (overlay.OverlayType == OverlayType.Forecast)
+            {
+                var xField = statement.Mappings.FirstOrDefault(m => m.Role.Equals("X", StringComparison.OrdinalIgnoreCase))?.Column;
+                var xSemanticKind = bindings.FirstOrDefault(b => b.Channel == FieldChannel.X)?.SemanticKind ?? DataSemanticKind.Nominal;
+                var overlayColor = overlay.Color ?? "#2563eb";
+                var overlayLabel = overlay.Label ?? "Forecast";
+
+                // 1. Confidence band (if supplied)
+                if (!string.IsNullOrWhiteSpace(overlay.ConfidenceLowField) && !string.IsNullOrWhiteSpace(overlay.ConfidenceHighField))
+                {
+                    yield return new MarkLayerSpec(
+                        $"forecast-confidence-{index:D2}",
+                        MarkKind.Area,
+                        98 + index * 10,
+                        [
+                            new FieldBinding(FieldChannel.X, xField, xSemanticKind),
+                            new FieldBinding(FieldChannel.ConfidenceLow, overlay.ConfidenceLowField, DataSemanticKind.Quantitative, ScaleId: "y"),
+                            new FieldBinding(FieldChannel.ConfidenceHigh, overlay.ConfidenceHighField, DataSemanticKind.Quantitative, ScaleId: "y")
+                        ],
+                        [
+                            new StyleToken("overlayType", "ForecastConfidence"),
+                            new StyleToken("color", overlayColor),
+                            new StyleToken("label", $"{overlayLabel} Confidence")
+                        ],
+                        $"{overlayLabel} Confidence");
+                }
+
+                // 2. Forecast line
+                yield return new MarkLayerSpec(
+                    $"forecast-line-{index:D2}",
+                    MarkKind.Line,
+                    100 + index * 10,
+                    [
+                        new FieldBinding(FieldChannel.X, xField, xSemanticKind),
+                        new FieldBinding(FieldChannel.Y, overlay.ForecastField, DataSemanticKind.Quantitative, ScaleId: "y")
+                    ],
+                    [
+                        new StyleToken("overlayType", "Forecast"),
+                        new StyleToken("lineStyle", overlay.LineStyle.ToString().ToLowerInvariant()),
+                        new StyleToken("color", overlayColor),
+                        new StyleToken("label", overlayLabel)
+                    ],
+                    overlayLabel);
+
+                // 3. Anomaly markers (if supplied)
+                if (!string.IsNullOrWhiteSpace(overlay.AnomalyField))
+                {
+                    yield return new MarkLayerSpec(
+                        $"forecast-anomaly-{index:D2}",
+                        MarkKind.Point,
+                        102 + index * 10,
+                        [
+                            new FieldBinding(FieldChannel.X, xField, xSemanticKind),
+                            new FieldBinding(FieldChannel.Y, overlay.AnomalyField, DataSemanticKind.Quantitative, ScaleId: "y")
+                        ],
+                        [
+                            new StyleToken("overlayType", "ForecastAnomaly"),
+                            new StyleToken("color", overlayColor),
+                            new StyleToken("label", $"{overlayLabel} Anomalies")
+                        ],
+                        $"{overlayLabel} Anomalies");
+                }
+
+                continue;
+            }
+
             yield return new MarkLayerSpec(
                 $"rule-{index:D2}-{overlay.OverlayType.ToString().ToLowerInvariant()}",
                 overlay.OverlayType is OverlayType.Goal or OverlayType.Average ? MarkKind.Rule : MarkKind.Line,
@@ -264,7 +355,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 ? FieldChannel.X
                 : group.Key.Equals("y", StringComparison.OrdinalIgnoreCase) &&
                 binding.Channel is FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or
-                    FieldChannel.High or FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh
+                    FieldChannel.High or FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or
+                    FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh
                 ? FieldChannel.Y
                 : binding.Channel;
             var kind = binding.SemanticKind switch
@@ -396,7 +488,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             return DataSemanticKind.Nominal;
         if (channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd or
             FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or
-            FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.Radius or FieldChannel.Size)
+            FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or
+            FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh or FieldChannel.Radius or FieldChannel.Size)
             return DataSemanticKind.Quantitative;
         if ((type is VisualType.Scatter or VisualType.Bubble ||
             type == VisualType.Trellis && TrellisChartTypeFromOptions(options) == "SCATTER") && channel == FieldChannel.X)
@@ -415,7 +508,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         FieldChannel.Y => "y",
         FieldChannel.Y2 => "y2",
         FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or
-            FieldChannel.Q3 or FieldChannel.High or FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh => "y",
+            FieldChannel.Q3 or FieldChannel.High or FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or
+            FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh => "y",
         FieldChannel.Color => "color",
         FieldChannel.Theta => "theta",
         FieldChannel.Radius => "radius",

@@ -507,10 +507,39 @@ internal sealed class PlotPlanSvgRenderer
             }
             if (layer.Mark == MarkKind.Line && points.Count > 1)
                 builder.AppendLine($"<path d='M {string.Join(" L ", points)}' fill='none' stroke='{Esc(color)}' stroke-width='2'/>");
-            else if (layer.Mark == MarkKind.Area && points.Count > 1)
+            else if (layer.Mark == MarkKind.Area)
             {
-                var baseline = MapHorizontal(0m, scale, plotWidth);
-                builder.AppendLine($"<path d='M {N(baseline)} {N(pointCoordinates[0].Y)} L {string.Join(" L ", points)} L {N(baseline)} {N(pointCoordinates[^1].Y)} Z' fill='{Esc(color)}' fill-opacity='0.25' stroke='{Esc(color)}' stroke-width='2'/>");
+                var isConfidence = layer.Data.Any(datum => Channel(datum, FieldChannel.ConfidenceLow) is not null || Channel(datum, FieldChannel.ConfidenceHigh) is not null);
+                if (isConfidence)
+                {
+                    var ribbonSegments = new List<(List<(decimal X, decimal Y)> Upper, List<(decimal X, decimal Y)> Lower)>
+                        { (new(), new()) };
+                    for (var i = 0; i < layer.Data.Length; i++)
+                    {
+                        var datum = layer.Data[i];
+                        var lowVal = PositionNumber(Channel(datum, FieldChannel.ConfidenceLow));
+                        var highVal = PositionNumber(Channel(datum, FieldChannel.ConfidenceHigh));
+                        if (datum.IsGap || !lowVal.HasValue || !highVal.HasValue)
+                        {
+                            if (ribbonSegments[^1].Upper.Count > 0) ribbonSegments.Add((new(), new()));
+                            continue;
+                        }
+                        var y = Top + outerOffset + slot * (i + .5m) + datum.DisplayOffsetY;
+                        ribbonSegments[^1].Upper.Add((MapHorizontal(highVal.Value, scale, plotWidth), y));
+                        ribbonSegments[^1].Lower.Add((MapHorizontal(lowVal.Value, scale, plotWidth), y));
+                    }
+                    foreach (var segment in ribbonSegments.Where(segment => segment.Upper.Count > 1))
+                    {
+                        var path = $"M {string.Join(" L ", segment.Upper.Select(p => $"{N(p.X)} {N(p.Y)}"))} " +
+                            $"L {string.Join(" L ", segment.Lower.AsEnumerable().Reverse().Select(p => $"{N(p.X)} {N(p.Y)}"))} Z";
+                        builder.AppendLine($"<path class='plot-confidence-band' d='{path}' fill='{Esc(color)}' fill-opacity='.2' stroke='{Esc(color)}' stroke-width='1'/>");
+                    }
+                }
+                else if (points.Count > 1)
+                {
+                    var baseline = MapHorizontal(0m, scale, plotWidth);
+                    builder.AppendLine($"<path d='M {N(baseline)} {N(pointCoordinates[0].Y)} L {string.Join(" L ", points)} L {N(baseline)} {N(pointCoordinates[^1].Y)} Z' fill='{Esc(color)}' fill-opacity='0.25' stroke='{Esc(color)}' stroke-width='2'/>");
+                }
             }
         }
         RenderVerticalCategoryAxisLabels(builder, categories, plotHeight, bandScale);
@@ -645,7 +674,8 @@ internal sealed class PlotPlanSvgRenderer
         decimal plotWidth, decimal plotHeight, ResolvedScale? xScale, ResolvedScale? scale, string color)
     {
         if (scale is null || layer.Data.IsDefaultOrEmpty) return;
-        var ribbon = layer.Data.Any(datum => Channel(datum, FieldChannel.YStart) is not null || Channel(datum, FieldChannel.YEnd) is not null);
+        var isConfidence = layer.Data.Any(datum => Channel(datum, FieldChannel.ConfidenceLow) is not null || Channel(datum, FieldChannel.ConfidenceHigh) is not null);
+        var ribbon = isConfidence || layer.Data.Any(datum => Channel(datum, FieldChannel.YStart) is not null || Channel(datum, FieldChannel.YEnd) is not null);
         if (ribbon)
         {
             var ribbonSegments = new List<(List<(decimal X, decimal Y)> Upper, List<(decimal X, decimal Y)> Lower)>
@@ -653,8 +683,8 @@ internal sealed class PlotPlanSvgRenderer
             for (var index = 0; index < layer.Data.Length; index++)
             {
                 var datum = layer.Data[index];
-                var start = PositionNumber(Channel(datum, FieldChannel.YStart));
-                var end = PositionNumber(Channel(datum, FieldChannel.YEnd));
+                var start = PositionNumber(Channel(datum, isConfidence ? FieldChannel.ConfidenceLow : FieldChannel.YStart));
+                var end = PositionNumber(Channel(datum, isConfidence ? FieldChannel.ConfidenceHigh : FieldChannel.YEnd));
                 if (datum.IsGap || !start.HasValue || !end.HasValue)
                 {
                     if (ribbonSegments[^1].Upper.Count > 0) ribbonSegments.Add((new(), new()));
@@ -668,7 +698,8 @@ internal sealed class PlotPlanSvgRenderer
             {
                 var path = $"M {string.Join(" L ", segment.Upper.Select(point => $"{N(point.X)} {N(point.Y)}"))} " +
                     $"L {string.Join(" L ", segment.Lower.AsEnumerable().Reverse().Select(point => $"{N(point.X)} {N(point.Y)}"))} Z";
-                builder.AppendLine($"<path class='plot-ribbon' d='{path}' fill='{Esc(color)}' fill-opacity='.2' stroke='{Esc(color)}' stroke-width='1'/>");
+                var ribbonClass = isConfidence ? "plot-confidence-band" : "plot-ribbon";
+                builder.AppendLine($"<path class='{ribbonClass}' d='{path}' fill='{Esc(color)}' fill-opacity='.2' stroke='{Esc(color)}' stroke-width='1'/>");
             }
             return;
         }
@@ -870,11 +901,13 @@ internal sealed class PlotPlanSvgRenderer
         var isOverlay = LayerStyle(layer, "overlayType") is not null;
         var smooth = IsEnabled(plan.Style, "SMOOTH") && !isOverlay;
         var strokeWidth = isOverlay ? "3" : "2";
+        var overlayType = LayerStyle(layer, "overlayType");
+        var lineClass = overlayType == "Forecast" ? " class='plot-forecast-line'" : string.Empty;
         (decimal X, decimal Y)? lastPoint = null;
         var segment = new List<(decimal X, decimal Y)>();
         void Flush()
         {
-            if (segment.Count > 1) builder.AppendLine($"<path d='{PathData(segment, smooth)}' fill='none' stroke='{Esc(color)}' stroke-width='{strokeWidth}' stroke-linejoin='round' stroke-linecap='round'{dashAttributes}/>");
+            if (segment.Count > 1) builder.AppendLine($"<path{lineClass} d='{PathData(segment, smooth)}' fill='none' stroke='{Esc(color)}' stroke-width='{strokeWidth}' stroke-linejoin='round' stroke-linecap='round'{dashAttributes}/>");
             segment.Clear();
         }
         for (var index = 0; index < layer.Data.Length; index++)
@@ -890,7 +923,7 @@ internal sealed class PlotPlanSvgRenderer
             var y = MapY(value.Value, scale, plotHeight) + datum.DisplayOffsetY;
             lastPoint = (x, y);
             segment.Add((x, y));
-            if ((isOverlay || IsEnabledByDefault(plan.Style, "SYMBOLS")) &&
+            if (((isOverlay && overlayType != "Forecast") || IsEnabledByDefault(plan.Style, "SYMBOLS")) &&
                 (!isOverlay || !plan.Layers.Any(candidate => candidate.Mark == MarkKind.Point && LayerStyle(candidate, "overlayType") is null)))
                 builder.AppendLine($"<circle cx='{N(x)}' cy='{N(y)}' r='{(isOverlay ? "4" : "3")}' fill='{Esc(color)}'{(isOverlay ? " stroke='white' stroke-width='1.5'" : string.Empty)} data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></circle>");
             if (showLabels)
@@ -1008,7 +1041,11 @@ internal sealed class PlotPlanSvgRenderer
         var colorScale = ColorScale(plan);
         var errorBarStyle = LayerStyle(layer, "errorBarStyle") ?? LayerStyle(layer, "ERROR_BAR_STYLE") ?? LayerStyle(layer, "error_bar_style") ?? "CAPS";
         var hasCaps = !errorBarStyle.Equals("NO_CAPS", StringComparison.OrdinalIgnoreCase);
-        builder.AppendLine("<g class='plot-point-layer' stroke='white' stroke-width='1.5'>");
+        var overlayKind = LayerStyle(layer, "overlayType");
+        var isAnomaly = overlayKind == "ForecastAnomaly";
+        var groupClass = isAnomaly ? "plot-point-layer plot-anomaly-layer" : "plot-point-layer";
+        var pointClass = isAnomaly ? "plot-point plot-anomaly-marker" : "plot-point";
+        builder.AppendLine($"<g class='{groupClass}' stroke='white' stroke-width='1.5'>");
         foreach (var datum in layer.Data.Where(item => !item.IsGap))
         {
             var xChannel = Channel(datum, FieldChannel.X) ?? ChartValue.Null();
@@ -1053,7 +1090,7 @@ internal sealed class PlotPlanSvgRenderer
                 }
                 builder.AppendLine("</g>");
             }
-            builder.AppendLine($"<circle class='plot-point' cx='{N(x)}' cy='{N(y)}' r='{N(Math.Clamp(radius, 1m, 30m))}' fill='{Esc(datumColor)}'{OpacityAttribute(opacity)} data-row-index='{datum.RowIndex}'>{(string.IsNullOrWhiteSpace(label) ? string.Empty : $"<title>{Esc(label)}</title>")}</circle>");
+            builder.AppendLine($"<circle class='{pointClass}' cx='{N(x)}' cy='{N(y)}' r='{N(Math.Clamp(radius, 1m, 30m))}' fill='{Esc(datumColor)}'{OpacityAttribute(opacity)} data-row-index='{datum.RowIndex}'>{(string.IsNullOrWhiteSpace(label) ? string.Empty : $"<title>{Esc(label)}</title>")}</circle>");
             if (showLabels)
                 smartLabels.Add(new SmartLabel(datum.RowIndex, x, y,
                     label ?? FormatDataLabel(yValue.Value, labelFormat),

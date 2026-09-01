@@ -1618,6 +1618,8 @@ public static class AstSerializer
         AdvancedChartChannel.YOffset => "Y_OFFSET",
         AdvancedChartChannel.ErrorLow => "ERROR_LOW",
         AdvancedChartChannel.ErrorHigh => "ERROR_HIGH",
+        AdvancedChartChannel.ConfidenceLow => "CONFIDENCE_LOW",
+        AdvancedChartChannel.ConfidenceHigh => "CONFIDENCE_HIGH",
         _ => value.ToString().ToUpperInvariant()
     };
 
@@ -1990,9 +1992,13 @@ public static class AstSerializer
             OverlayType.Goal => $"GOAL({overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? "0"})",
             OverlayType.MovingAvg => $"MOVING_AVG({overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? "1"})",
             OverlayType.Polynomial => $"POLYNOMIAL({overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? "2"})",
+            OverlayType.Forecast => $"FORECAST({overlay.ForecastField ?? string.Empty})",
             _ => overlay.OverlayType.ToString().ToUpperInvariant()
         };
         var options = new List<string>();
+        if (!string.IsNullOrWhiteSpace(overlay.ConfidenceLowField)) options.Add($"CONFIDENCE_LOW = {overlay.ConfidenceLowField}");
+        if (!string.IsNullOrWhiteSpace(overlay.ConfidenceHighField)) options.Add($"CONFIDENCE_HIGH = {overlay.ConfidenceHighField}");
+        if (!string.IsNullOrWhiteSpace(overlay.AnomalyField)) options.Add($"ANOMALY = {overlay.AnomalyField}");
         if (!string.IsNullOrWhiteSpace(overlay.Color)) options.Add($"COLOR = {Quote(overlay.Color)}");
         if (!string.IsNullOrWhiteSpace(overlay.Label)) options.Add($"LABEL = {Quote(overlay.Label)}");
         return $"{type} AS {overlay.LineStyle.ToString().ToUpperInvariant()}"

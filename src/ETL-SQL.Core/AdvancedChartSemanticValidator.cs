@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core.Common;
@@ -65,7 +65,8 @@ public static class AdvancedChartSemanticValidator
         scale == AdvancedChartChannel.Y && binding is AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
             AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
             AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close or
-            AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh;
+            AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh or
+            AdvancedChartChannel.ConfidenceLow or AdvancedChartChannel.ConfidenceHigh;
 
     /// <summary>The scale identifier the lowerer synthesizes for an un-declared binding.</summary>
     public static string InferredScaleId(AdvancedChartCoordinateKind coordinate, AdvancedChartAxisRole axis, AdvancedChartChannel channel) =>
@@ -82,7 +83,8 @@ public static class AdvancedChartSemanticValidator
         AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
         AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
         AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close or
-        AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh => AdvancedChartChannel.Y,
+        AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh or
+        AdvancedChartChannel.ConfidenceLow or AdvancedChartChannel.ConfidenceHigh => AdvancedChartChannel.Y,
         _ => channel
     };
 
@@ -352,6 +354,7 @@ public static class AdvancedChartSemanticValidator
         }
 
         ValidateErrorBars(results, chart, layer, effective, channels, layerNode);
+        ValidateConfidenceChannels(results, chart, layer, effective, channels, layerNode);
 
         if (chart.Coordinate.Kind == AdvancedChartCoordinateKind.Polar && layer.Mark != AdvancedChartMarkKind.Arc)
             Add(results, layerNode, "The native POLAR slice supports ARC layers only.");
@@ -440,6 +443,65 @@ public static class AdvancedChartSemanticValidator
                 channels.Contains(AdvancedChartChannel.High) || channels.Contains(AdvancedChartChannel.Open) ||
                 channels.Contains(AdvancedChartChannel.Close))
                 Add(results, layerNode, $"RECT layer '{layer.Name}' cannot combine error bars with box-plot or candlestick channels.");
+        }
+    }
+
+    private static void ValidateConfidenceChannels(
+        List<Diagnostic> results,
+        AdvancedChartDefinition chart,
+        AdvancedChartLayer layer,
+        IReadOnlyList<AdvancedChartEncoding> effective,
+        HashSet<AdvancedChartChannel> channels,
+        AstNode layerNode)
+    {
+        var hasLow = channels.Contains(AdvancedChartChannel.ConfidenceLow);
+        var hasHigh = channels.Contains(AdvancedChartChannel.ConfidenceHigh);
+        if (!hasLow && !hasHigh) return;
+
+        var markUpper = layer.Mark.ToString().ToUpperInvariant();
+        if (layer.Mark != AdvancedChartMarkKind.Area)
+        {
+            Add(results, layerNode, $"{markUpper} layer '{layer.Name}' does not support confidence channels; only AREA marks support confidence channels.");
+        }
+
+        if (chart.Coordinate.Kind is not (AdvancedChartCoordinateKind.Cartesian or AdvancedChartCoordinateKind.TransposedCartesian))
+        {
+            Add(results, layerNode, $"Layer '{layer.Name}' confidence channels CONFIDENCE_LOW and CONFIDENCE_HIGH require CARTESIAN or TRANSPOSED_CARTESIAN coordinates.");
+        }
+
+        if (!hasLow || !hasHigh)
+        {
+            Add(results, layerNode, $"{markUpper} layer '{layer.Name}' requires both CONFIDENCE_LOW and CONFIDENCE_HIGH as a pair.");
+        }
+        else
+        {
+            var lowEnc = effective.First(e => e.Channel == AdvancedChartChannel.ConfidenceLow);
+            var highEnc = effective.First(e => e.Channel == AdvancedChartChannel.ConfidenceHigh);
+            if (lowEnc.DataKind != AdvancedChartDataKind.Quantitative)
+                Add(results, Anchor(lowEnc, layerNode), $"{markUpper} layer '{layer.Name}' channel CONFIDENCE_LOW requires QUANTITATIVE TYPE.");
+            if (highEnc.DataKind != AdvancedChartDataKind.Quantitative)
+                Add(results, Anchor(highEnc, layerNode), $"{markUpper} layer '{layer.Name}' channel CONFIDENCE_HIGH requires QUANTITATIVE TYPE.");
+
+            if (lowEnc.Axis == AdvancedChartAxisRole.Secondary)
+                Add(results, Anchor(lowEnc, layerNode), $"{markUpper} layer '{layer.Name}' CONFIDENCE_LOW encoding must use the primary axis.");
+            if (highEnc.Axis == AdvancedChartAxisRole.Secondary)
+                Add(results, Anchor(highEnc, layerNode), $"{markUpper} layer '{layer.Name}' CONFIDENCE_HIGH encoding must use the primary axis.");
+
+            var lowScale = EffectiveScaleId(chart.Coordinate.Kind, lowEnc);
+            var highScore = EffectiveScaleId(chart.Coordinate.Kind, highEnc);
+            if (!string.Equals(lowScale, highScore, StringComparison.OrdinalIgnoreCase))
+                Add(results, Anchor(highEnc, layerNode), $"{markUpper} layer '{layer.Name}' CONFIDENCE_LOW and CONFIDENCE_HIGH must resolve to the same scale ID; found '{lowScale}' and '{highScore}'.");
+        }
+
+        if (!channels.Contains(AdvancedChartChannel.X))
+        {
+            Add(results, layerNode, $"{markUpper} layer '{layer.Name}' with confidence channels requires an X encoding.");
+        }
+
+        if (channels.Contains(AdvancedChartChannel.Y) || channels.Contains(AdvancedChartChannel.Y2) ||
+            channels.Contains(AdvancedChartChannel.YStart) || channels.Contains(AdvancedChartChannel.YEnd))
+        {
+            Add(results, layerNode, $"AREA layer '{layer.Name}' cannot combine CONFIDENCE_LOW/CONFIDENCE_HIGH with Y, Y2, Y_START, or Y_END; confidence endpoints own the band's extent.");
         }
     }
 
@@ -636,7 +698,8 @@ public static class AdvancedChartSemanticValidator
         AdvancedChartChannel.Y or AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
         AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
         AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close or
-        AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh;
+        AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh or
+        AdvancedChartChannel.ConfidenceLow or AdvancedChartChannel.ConfidenceHigh;
 
     private static bool IsConstant(Expression expression) => expression is LiteralExpression or VariableExpression;
 

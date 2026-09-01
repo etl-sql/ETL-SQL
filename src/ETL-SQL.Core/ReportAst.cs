@@ -111,7 +111,7 @@ public enum ReportObjectType
 
 public enum OverlayType
 {
-    Goal, Average, MovingAvg, Linear, Exponential, Logarithmic, Polynomial, Power
+    Goal, Average, MovingAvg, Linear, Exponential, Logarithmic, Polynomial, Power, Forecast
 }
 
 public enum OverlayLineStyle { Solid, Dashed, Dotted }
@@ -123,6 +123,10 @@ public record VisualOverlay : AstNode
     public OverlayLineStyle LineStyle { get; init; } = OverlayLineStyle.Dashed;
     public string? Color { get; init; }
     public string? Label { get; init; }
+    public string? ForecastField { get; init; }
+    public string? ConfidenceLowField { get; init; }
+    public string? ConfidenceHighField { get; init; }
+    public string? AnomalyField { get; init; }
 }
 
 public enum VisualType

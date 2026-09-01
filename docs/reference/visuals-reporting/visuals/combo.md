@@ -22,7 +22,17 @@ CREATE VISUAL VisualName AS COMBO (
     [ZERO_LINE_DASH = SOLID|DASHED|DOTTED],
     [ZERO_LINE_WIDTH = n],
     [X_AXIS (...)], [Y_AXIS (...)], [Y2_AXIS (...)]
-  )
+  ),
+  [OVERLAYS (
+    FORECAST(forecastCol) AS SOLID|DASHED|DOTTED [WITH (
+      [CONFIDENCE_LOW = lowCol,]
+      [CONFIDENCE_HIGH = highCol,]
+      [ANOMALY = anomalyCol,]
+      [COLOR = '#rrggbb',]
+      [LABEL = 'text']
+    )],
+    ...
+  )]
 );
 ```
 
@@ -51,6 +61,7 @@ CREATE VISUAL VisualName AS COMBO (
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - category-axis order; SOURCE preserves query order
 - **X_AXIS (...) / Y_AXIS (...) / Y2_AXIS (...)** - each accepts `LABEL`, `MIN`, `MAX`, `INCLUDE_ZERO`, `REVERSE`, `MAJOR_TICK_COUNT`, `TICK_INTERVAL`, `MINOR_TICKS`, `LABEL_ROTATION`, `LABEL_SKIP`, and `AXIS_LINE`. Rotation accepts `AUTO`, `0`, `45`, or `90`; skip accepts `AUTO` or a non-negative integer.
 - **LEGEND = ON|OFF** - shows or hides the series legend
+- **OVERLAYS (...)** - visual overlays including `FORECAST(field) AS SOLID|DASHED|DOTTED [WITH (...)]` on the primary quantitative axis. Supports paired `CONFIDENCE_LOW` / `CONFIDENCE_HIGH` quantitative interval ribbon and `ANOMALY` marker glyphs. Forecast values are pre-computed in SQL.
 
 ## Examples
 
