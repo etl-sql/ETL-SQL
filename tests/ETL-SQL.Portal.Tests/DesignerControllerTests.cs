@@ -415,6 +415,104 @@ public class DesignerControllerTests
         Assert.Equal(4, full.GridRowSpan);
     }
 
+    [Fact]
+    public void Parse_ReportsEveryTopLevelConnectionAsAuthored()
+    {
+        // The embedded query workbench builds its run preamble from these. It used to cut the
+        // statement at the first semicolon with a regex, which is wrong for a body that spans lines
+        // or carries a semicolon inside a quoted option, so an author's own connection came back
+        // truncated and the run failed with "unknown connection" against a script that declares it.
+        var controller = new DesignerController();
+        const string script = """
+            CREATE CONNECTION sales AS MOCKDB();
+
+            -- A body that a first-semicolon scan cannot read correctly.
+            CREATE CONNECTION [warehouse] AS SQLSERVER(
+                SERVER = 'db01;failover=db02',
+                DATABASE = 'ops'
+            );
+
+            SELECT Region INTO #r FROM sales.Orders;
+            """;
+
+        var result = Assert.IsType<OkObjectResult>(controller.Parse(new ParseDesignerRequest(script)));
+        var parsed = Assert.IsType<ParseDesignerResponse>(result.Value);
+        Assert.Null(parsed.Error);
+
+        var connections = parsed.DesignState.Connections!;
+        Assert.Equal(2, connections.Count);
+        Assert.Equal("sales", connections[0].Name);
+        Assert.Equal("CREATE CONNECTION sales AS MOCKDB()", connections[0].Text.TrimEnd(';'));
+
+        Assert.Equal("warehouse", connections[1].Name);
+        Assert.Contains("db01;failover=db02", connections[1].Text, StringComparison.Ordinal);
+        Assert.Contains("DATABASE = 'ops'", connections[1].Text, StringComparison.Ordinal);
+
+        // Whatever the preamble carries has to parse on its own, or the embedded run fails.
+        foreach (var connection in connections)
+        {
+            var text = connection.Text.TrimEnd(';') + ";";
+            var ast = new CoreParser(new Lexer(text).Tokenize(), text).Parse();
+            Assert.DoesNotContain(ast.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+            Assert.Single(ast.Statements.OfType<ETL_SQL.Core.CreateConnectionStatement>());
+        }
+    }
+
+    [Fact]
+    public void PipelineTask_AddsThroughTheRouteAndReportsTheTasksBack()
+    {
+        var controller = new DesignerController();
+        const string script = """
+            CREATE CONNECTION staging_db AS MOCKDB();
+
+            load_orders:
+            EXECUTE staging_db BEGIN
+                SELECT 1;
+            END;
+            """;
+
+        var result = Assert.IsType<OkObjectResult>(controller.PipelineTask(
+            new PipelineTaskRequest(script, "add", Id: "archive_orders", Connection: "staging_db",
+                Body: "SELECT 2;", After: "load_orders")));
+        var response = Assert.IsType<PipelineTaskResponse>(result.Value);
+
+        Assert.True(response.Applied, response.Error);
+        Assert.Null(response.Error);
+        Assert.Equal(["load_orders", "archive_orders"], response.Tasks.Select(task => task.Id));
+
+        // The script the route hands back has to be script the engine would accept.
+        var ast = new CoreParser(new Lexer(response.Script).Tokenize(), response.Script).Parse();
+        Assert.DoesNotContain(ast.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+        Assert.Contains("CREATE CONNECTION staging_db AS MOCKDB();", response.Script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PipelineTask_ReturnsARefusalRatherThanAnUnchangedScriptThatLooksLikeSuccess()
+    {
+        // The canvas repaints from whatever comes back. If a refused edit returned applied:true with
+        // the original bytes, the author would see the map redraw and conclude the edit landed.
+        var controller = new DesignerController();
+        const string script = """
+            load_orders:
+            EXECUTE staging_db BEGIN
+                SELECT 1;
+            END;
+            """;
+
+        var duplicate = Assert.IsType<PipelineTaskResponse>(
+            Assert.IsType<OkObjectResult>(controller.PipelineTask(
+                new PipelineTaskRequest(script, "add", Id: "load_orders", Connection: "staging_db", Body: "SELECT 1;"))).Value);
+        Assert.False(duplicate.Applied);
+        Assert.Contains("already has a task", duplicate.Error!, StringComparison.Ordinal);
+        Assert.Equal(script, duplicate.Script);
+
+        var unknownOp = Assert.IsType<PipelineTaskResponse>(
+            Assert.IsType<OkObjectResult>(controller.PipelineTask(
+                new PipelineTaskRequest(script, "reticulate", Id: "load_orders"))).Value);
+        Assert.False(unknownOp.Applied);
+        Assert.Equal(script, unknownOp.Script);
+    }
+
     private static IReadOnlyList<string> SplitLines(string script)
     {
         return script.Replace("\r\n", "\n", StringComparison.Ordinal)

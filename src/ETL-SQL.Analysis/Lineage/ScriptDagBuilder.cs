@@ -6,7 +6,15 @@ namespace ETL_SQL.Analysis.Lineage;
 
 /// <summary>A single node in a script flow DAG.</summary>
 /// <param name="Type">dataset | visual | page | container | table | statement | conditional | loop | parallel | validation | io | outbound | destructive | procedure | connection</param>
-public sealed record ScriptDagNode(string Id, string Label, string Type, int Line);
+/// <param name="Key">
+/// The section label introducing this statement, when it has one, or null.
+///
+/// <para><c>Id</c> is positional — inserting a statement by hand renumbers every node after it — so
+/// it cannot say "this is still the same box" across an edit. A section label is written into the
+/// script by the author, so a node that has one is addressable: the pipeline canvas tracks selection
+/// and editing by this key rather than by id.</para>
+/// </param>
+public sealed record ScriptDagNode(string Id, string Label, string Type, int Line, string? Key = null);
 
 /// <summary>A directed edge between two flow nodes.</summary>
 public sealed record ScriptDagEdge(string Source, string Target, string? Label = null);
@@ -29,20 +37,88 @@ public static class ScriptDagBuilder
 {
     private sealed record FlowExit(string NodeId, string? Label = null);
 
+    /// <summary>
+    /// One walk's accumulating graph plus the section labels found in the source.
+    ///
+    /// <para>Passed explicitly rather than held in a static: the builder is called concurrently by
+    /// the designer route on every host, and a shared mutable index is the kind of hidden coupling
+    /// that shows up later as a node wearing another statement's name under load.</para>
+    /// </summary>
+    private sealed class FlowGraph(IReadOnlyDictionary<Statement, string> keys, IReadOnlySet<Statement> namedLabels)
+    {
+        public List<ScriptDagNode> Nodes { get; } = [];
+        public List<ScriptDagEdge> Edges { get; } = [];
+        public int Sequence { get; set; }
+
+        /// <summary>The section label introducing this statement, or null.</summary>
+        public string? KeyFor(Statement statement) => keys.TryGetValue(statement, out var key) ? key : null;
+
+        /// <summary>True when this label names a following statement, so it is that node's key.</summary>
+        public bool NamesAStatement(Statement label) => namedLabels.Contains(label);
+    }
+
     public static ScriptDag Build(Script script)
     {
-        var nodes = new List<ScriptDagNode>();
-        var edges = new List<ScriptDagEdge>();
-        var seq = 0;
-        AppendSequence(script.Statements, nodes, edges, ref seq, []);
-        return new ScriptDag(nodes, edges);
+        var graph = MapLabels(script.Statements);
+        AppendSequence(script.Statements, graph, []);
+        return new ScriptDag(graph.Nodes, graph.Edges);
+    }
+
+    /// <summary>
+    /// Indexes each section label against the statement it introduces.
+    ///
+    /// <para>Reference equality is required: statements are records, so two identical statements are
+    /// equal by value, and a value-keyed map would put one statement's label on the other.</para>
+    /// </summary>
+    private static FlowGraph MapLabels(IReadOnlyList<Statement> statements)
+    {
+        var keys = new Dictionary<Statement, string>(ReferenceEqualityComparer.Instance);
+        var named = new HashSet<Statement>(ReferenceEqualityComparer.Instance);
+        Walk(statements);
+        return new FlowGraph(keys, named);
+
+        void Walk(IReadOnlyList<Statement> list)
+        {
+            for (var i = 0; i < list.Count; i++)
+            {
+                if (list[i] is SectionLabelStatement label && i + 1 < list.Count)
+                {
+                    keys[list[i + 1]] = label.LabelName;
+                    named.Add(label);
+                }
+
+                foreach (var nested in NestedBlocks(list[i]))
+                    Walk(nested.Statements);
+            }
+        }
+    }
+
+    private static IEnumerable<BlockStatement> NestedBlocks(Statement statement)
+    {
+        switch (statement)
+        {
+            case BlockStatement block: yield return block; break;
+            case ParallelStatement parallel: yield return parallel.Body; break;
+            case IfStatement conditional:
+                if (conditional.IfBody is BlockStatement ifBody) yield return ifBody;
+                foreach (var clause in conditional.ElseIfClauses ?? [])
+                    if (clause.Body is BlockStatement elseIfBody) yield return elseIfBody;
+                if (conditional.ElseBody is BlockStatement elseBody) yield return elseBody;
+                break;
+            case TryCatchStatement tryCatch:
+                if (tryCatch.TryBody is BlockStatement tryBody) yield return tryBody;
+                if (tryCatch.CatchBody is BlockStatement catchBody) yield return catchBody;
+                break;
+            case WhileStatement loop when loop.Body is BlockStatement body: yield return body; break;
+            case ForStatement loop when loop.Body is BlockStatement body: yield return body; break;
+            case ForeachStatement loop when loop.Body is BlockStatement body: yield return body; break;
+            case ParallelForStatement loop when loop.Body is BlockStatement body: yield return body; break;
+        }
     }
 
     private static IReadOnlyList<FlowExit> AppendSequence(
         IEnumerable<Statement> statements,
-        List<ScriptDagNode> nodes,
-        List<ScriptDagEdge> edges,
-        ref int seq,
+        FlowGraph graph,
         IReadOnlyList<FlowExit> incoming)
     {
         var exits = incoming;
@@ -52,7 +128,12 @@ public static class ScriptDagBuilder
             if (statement is DeclareStatement or SetVariableStatement or PrintStatement)
                 continue;
 
-            exits = AppendStatement(statement, nodes, edges, ref seq, exits);
+            // A label that names the next statement becomes that node's key instead of a node of its
+            // own: on the canvas the label *is* the task's name, not a separate stage before it.
+            if (statement is SectionLabelStatement label && graph.NamesAStatement(label))
+                continue;
+
+            exits = AppendStatement(statement, graph, exits);
         }
 
         return exits;
@@ -60,60 +141,56 @@ public static class ScriptDagBuilder
 
     private static IReadOnlyList<FlowExit> AppendStatement(
         Statement statement,
-        List<ScriptDagNode> nodes,
-        List<ScriptDagEdge> edges,
-        ref int seq,
+        FlowGraph graph,
         IReadOnlyList<FlowExit> incoming)
     {
         if (statement is BlockStatement block)
-            return AppendSequence(block.Statements, nodes, edges, ref seq, incoming);
+            return AppendSequence(block.Statements, graph, incoming);
 
         if (statement is IfStatement conditional)
-            return AppendConditional(conditional, nodes, edges, ref seq, incoming);
+            return AppendConditional(conditional, graph, incoming);
 
         if (statement is ParallelStatement parallel)
-            return AppendParallel(parallel, nodes, edges, ref seq, incoming);
+            return AppendParallel(parallel, graph, incoming);
 
         if (statement is TryCatchStatement tryCatch)
-            return AppendTryCatch(tryCatch, nodes, edges, ref seq, incoming);
+            return AppendTryCatch(tryCatch, graph, incoming);
 
         if (statement is WhileStatement whileStatement)
-            return AppendLoop(statement, whileStatement.Body, nodes, edges, ref seq, incoming);
+            return AppendLoop(statement, whileStatement.Body, graph, incoming);
 
         if (statement is ForStatement forStatement)
-            return AppendLoop(statement, forStatement.Body, nodes, edges, ref seq, incoming);
+            return AppendLoop(statement, forStatement.Body, graph, incoming);
 
         if (statement is ForeachStatement foreachStatement)
-            return AppendLoop(statement, foreachStatement.Body, nodes, edges, ref seq, incoming);
+            return AppendLoop(statement, foreachStatement.Body, graph, incoming);
 
         if (statement is ParallelForStatement parallelFor)
-            return AppendLoop(statement, parallelFor.Body, nodes, edges, ref seq, incoming);
+            return AppendLoop(statement, parallelFor.Body, graph, incoming);
 
-        var id = AddNode(statement, nodes, edges, ref seq, incoming);
+        var id = AddNode(statement, graph, incoming);
         return [new FlowExit(id)];
     }
 
     private static IReadOnlyList<FlowExit> AppendConditional(
         IfStatement conditional,
-        List<ScriptDagNode> nodes,
-        List<ScriptDagEdge> edges,
-        ref int seq,
+        FlowGraph graph,
         IReadOnlyList<FlowExit> incoming)
     {
         var branchExits = new List<FlowExit>();
-        var conditionId = AddNode("IF", "conditional", conditional.Line, nodes, edges, ref seq, incoming);
-        branchExits.AddRange(AppendBody(conditional.IfBody, nodes, edges, ref seq, [new FlowExit(conditionId, "TRUE")]));
+        var conditionId = AddNode("IF", "conditional", conditional.Line, graph, incoming);
+        branchExits.AddRange(AppendBody(conditional.IfBody, graph, [new FlowExit(conditionId, "TRUE")]));
 
         var falseExit = new FlowExit(conditionId, "FALSE");
         foreach (var elseIf in conditional.ElseIfClauses ?? [])
         {
-            var elseIfId = AddNode("ELSE IF", "conditional", elseIf.Line, nodes, edges, ref seq, [falseExit]);
-            branchExits.AddRange(AppendBody(elseIf.Body, nodes, edges, ref seq, [new FlowExit(elseIfId, "TRUE")]));
+            var elseIfId = AddNode("ELSE IF", "conditional", elseIf.Line, graph, [falseExit]);
+            branchExits.AddRange(AppendBody(elseIf.Body, graph, [new FlowExit(elseIfId, "TRUE")]));
             falseExit = new FlowExit(elseIfId, "FALSE");
         }
 
         if (conditional.ElseBody is not null)
-            branchExits.AddRange(AppendBody(conditional.ElseBody, nodes, edges, ref seq, [falseExit with { Label = "ELSE" }]));
+            branchExits.AddRange(AppendBody(conditional.ElseBody, graph, [falseExit with { Label = "ELSE" }]));
         else
             branchExits.Add(falseExit);
 
@@ -122,12 +199,10 @@ public static class ScriptDagBuilder
 
     private static IReadOnlyList<FlowExit> AppendParallel(
         ParallelStatement parallel,
-        List<ScriptDagNode> nodes,
-        List<ScriptDagEdge> edges,
-        ref int seq,
+        FlowGraph graph,
         IReadOnlyList<FlowExit> incoming)
     {
-        var parallelId = AddNode(parallel, nodes, edges, ref seq, incoming);
+        var parallelId = AddNode(parallel, graph, incoming);
         var exits = new List<FlowExit>();
         var branchNumber = 0;
 
@@ -139,9 +214,7 @@ public static class ScriptDagBuilder
             branchNumber++;
             exits.AddRange(AppendStatement(
                 branch,
-                nodes,
-                edges,
-                ref seq,
+                graph,
                 [new FlowExit(parallelId, $"BRANCH {branchNumber}")]));
         }
 
@@ -150,66 +223,58 @@ public static class ScriptDagBuilder
 
     private static IReadOnlyList<FlowExit> AppendTryCatch(
         TryCatchStatement tryCatch,
-        List<ScriptDagNode> nodes,
-        List<ScriptDagEdge> edges,
-        ref int seq,
+        FlowGraph graph,
         IReadOnlyList<FlowExit> incoming)
     {
-        var tryId = AddNode("TRY / CATCH", "conditional", tryCatch.Line, nodes, edges, ref seq, incoming);
+        var tryId = AddNode("TRY / CATCH", "conditional", tryCatch.Line, graph, incoming);
         var exits = new List<FlowExit>();
-        exits.AddRange(AppendBody(tryCatch.TryBody, nodes, edges, ref seq, [new FlowExit(tryId, "TRY")]));
-        exits.AddRange(AppendBody(tryCatch.CatchBody, nodes, edges, ref seq, [new FlowExit(tryId, "CATCH")]));
+        exits.AddRange(AppendBody(tryCatch.TryBody, graph, [new FlowExit(tryId, "TRY")]));
+        exits.AddRange(AppendBody(tryCatch.CatchBody, graph, [new FlowExit(tryId, "CATCH")]));
         return exits;
     }
 
     private static IReadOnlyList<FlowExit> AppendLoop(
         Statement loop,
         Statement body,
-        List<ScriptDagNode> nodes,
-        List<ScriptDagEdge> edges,
-        ref int seq,
+        FlowGraph graph,
         IReadOnlyList<FlowExit> incoming)
     {
-        var loopId = AddNode(loop, nodes, edges, ref seq, incoming);
-        var bodyExits = AppendBody(body, nodes, edges, ref seq, [new FlowExit(loopId, "BODY")]);
+        var loopId = AddNode(loop, graph, incoming);
+        var bodyExits = AppendBody(body, graph, [new FlowExit(loopId, "BODY")]);
         return [.. bodyExits, new FlowExit(loopId, "DONE")];
     }
 
     private static IReadOnlyList<FlowExit> AppendBody(
         Statement body,
-        List<ScriptDagNode> nodes,
-        List<ScriptDagEdge> edges,
-        ref int seq,
+        FlowGraph graph,
         IReadOnlyList<FlowExit> incoming) =>
         body is BlockStatement block
-            ? AppendSequence(block.Statements, nodes, edges, ref seq, incoming)
-            : AppendStatement(body, nodes, edges, ref seq, incoming);
+            ? AppendSequence(block.Statements, graph, incoming)
+            : AppendStatement(body, graph, incoming);
 
     private static string AddNode(
         Statement statement,
-        List<ScriptDagNode> nodes,
-        List<ScriptDagEdge> edges,
-        ref int seq,
+        FlowGraph graph,
         IReadOnlyList<FlowExit> incoming)
     {
         var (label, type) = Classify(statement);
-        return AddNode(label, type, statement.Line, nodes, edges, ref seq, incoming);
+        var key = graph.KeyFor(statement);
+        return AddNode(label, type, statement.Line, graph, incoming, key);
     }
 
     private static string AddNode(
         string label,
         string type,
         int line,
-        List<ScriptDagNode> nodes,
-        List<ScriptDagEdge> edges,
-        ref int seq,
-        IReadOnlyList<FlowExit> incoming)
+        FlowGraph graph,
+        IReadOnlyList<FlowExit> incoming,
+        string? key = null)
     {
-        var id = $"s{seq++}";
-        nodes.Add(new ScriptDagNode(id, label, type, line));
+        var id = $"s{graph.Sequence++}";
+        graph.Nodes.Add(new ScriptDagNode(id, label, type, line, key));
 
         foreach (var exit in incoming)
-            edges.Add(new ScriptDagEdge(exit.NodeId, id, exit.Label));
+            graph.Edges.Add(new ScriptDagEdge(exit.NodeId, id, exit.Label));
 
         return id;
     }
@@ -245,6 +310,10 @@ public static class ScriptDagBuilder
         ValidateBundleStatement s => ($"VALIDATE BUNDLE {s.BundleName}", "validation"),
         ValidatePortalReportStatement => ("VALIDATE PORTAL REPORT", "validation"),
         ExecuteStatement s => ($"CALL {s.ProcedureName}", "procedure"),
+        ExecutePushdownStatement s => ($"EXECUTE {s.ConnectionName.ToSql()}", "procedure"),
+        ExecuteRemoteBlockStatement s => ($"EXECUTE {s.ConnectionName.ToSql()}", "procedure"),
+        // A label with no statement after it still marks a checkpoint the engine can resume from.
+        SectionLabelStatement s => ($"{s.LabelName}:", "statement"),
         RunScriptStatement => ("RUN SCRIPT", "io"),
         BulkInsertStatement s => ($"BULK INSERT → {s.TargetTable.TableName}", "io"),
         ExportStatement s => ($"EXPORT → {s.TargetPath}", "outbound"),

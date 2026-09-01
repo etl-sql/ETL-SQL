@@ -8,6 +8,7 @@
 //   POST /api/designer/complete {script,line,column,connectionRef} -> { items }
 //   POST /api/designer/run      {script,selection,connectionRef} -> { columns, rows }
 //   POST /api/designer/dag      {script,documentUri} -> { parsed, dag }
+//   POST /api/designer/pipeline-task {script,op,...} -> { applied, script, error, tasks }
 //   GET  /api/designer/schema?connection=demo -> { tables }
 //   (save endpoints are bypassed via opts.onSaveScript in the story)
 //
@@ -80,6 +81,9 @@ export function makeMockApi(seedState) {
         // Parameters were not reported at all, so a DECLARE the canvas wrote was invisible to
         // every reader of the design state.
         designState.parameters = mockParseParameters(scriptText);
+        // The query workbench builds its run preamble from these, so a mock that omitted them would
+        // make every embedded run in the sandbox look like an undeclared connection.
+        designState.connections = mockParseConnections(scriptText);
         data = { designState };
       }
     } else if (path.endsWith('/api/designer/dag')) {
@@ -90,7 +94,10 @@ export function makeMockApi(seedState) {
       } : {
         parsed: true,
         error: null,
-        dag: {
+        // The canned multi-stage demo graph, plus a node for every labelled task the script
+        // actually declares — so the editable layer has real cards to decorate without the
+        // read-only stories losing the stages they assert on.
+        dag: mockWithScriptTasks(body.script || '', {
           nodes: [
             { id: 'staging_db', label: 'CONNECT staging_db', type: 'connection', meta: { line: 1 } },
             { id: '#raw_sales', label: 'SELECT INTO #raw_sales', type: 'io', meta: { line: 8 } },
@@ -107,8 +114,10 @@ export function makeMockApi(seedState) {
             { source: '#ready_sales', target: 'quality_gate' },
             { source: '#quarantine_sales', target: 'quality_gate' },
           ],
-        },
+        }),
       };
+    } else if (path.endsWith('/api/designer/pipeline-task')) {
+      data = mockPipelineTask(body);
     } else if (path.endsWith('/api/designer/analyze')) {
       data = { diagnostics: analyzeMockScript(body.script ?? '') };
     } else if (path.endsWith('/api/designer/complete')) {
@@ -1394,6 +1403,143 @@ function mockParseParameters(script) {
     });
   }
   return parameters;
+}
+
+/**
+ * The CREATE CONNECTION statements a script declares, as authored.
+ *
+ * The mock is a scanner, so it does what a scanner can do honestly: it walks to the terminating
+ * semicolon while skipping quoted strings and line comments, rather than stopping at the first `;`
+ * the way the workbench's old regex did. The real hosts answer this from the parser.
+ */
+function mockParseConnections(script) {
+  const connections = [];
+  const head = /\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?CONNECTION\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\[([^\]]+)\]|([A-Za-z_][A-Za-z0-9_]*))/gi;
+  let match;
+  while ((match = head.exec(script)) !== null) {
+    let i = head.lastIndex;
+    let quote = null;
+    while (i < script.length) {
+      const ch = script[i];
+      if (quote) {
+        if (ch === quote) quote = null;
+      } else if (ch === "'" || ch === '"') {
+        quote = ch;
+      } else if (ch === '-' && script[i + 1] === '-') {
+        const newline = script.indexOf('\n', i);
+        i = newline === -1 ? script.length : newline;
+      } else if (ch === ';') {
+        break;
+      }
+      i++;
+    }
+    connections.push({ name: match[1] || match[2], text: script.slice(match.index, i).trim() });
+    head.lastIndex = Math.min(i + 1, script.length);
+  }
+  return connections;
+}
+
+/**
+ * The labelled EXECUTE blocks a script declares: the sandbox's stand-in for the host's parse.
+ *
+ * Text scanning is honest here in a way it would not be in a host: the sandbox has no parser, and
+ * this only has to be good enough to drive the UI. The real contract — that an edit never disturbs a
+ * byte it did not claim — is the host's, and is proved against the parser in its own test lane.
+ */
+function mockParseTasks(script) {
+  const tasks = [];
+  const head = /^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*:[ \t]*\r?\n[ \t]*EXEC(?:UTE)?[ \t]+([A-Za-z_][A-Za-z0-9_]*)[^\n]*\bBEGIN\b/gim;
+  let match;
+  while ((match = head.exec(script)) !== null) {
+    const bodyStart = head.lastIndex;
+    const end = script.toUpperCase().indexOf('\nEND', bodyStart);
+    const stop = end === -1 ? script.length : end;
+    tasks.push({
+      id: match[1],
+      connection: match[2],
+      body: script.slice(bodyStart, stop).replace(/^\r?\n/, '').trimEnd(),
+      line: script.slice(0, match.index).split('\n').length,
+      start: match.index,
+      end: end === -1 ? script.length : Math.min(script.length, script.indexOf(';', stop) + 1 || stop + 4),
+    });
+    head.lastIndex = stop;
+  }
+  return tasks;
+}
+
+/**
+ * The base graph with one node per labelled task appended, chained after the last existing stage.
+ *
+ * The task nodes carry their label as `meta.key`, which is what marks a card editable. Ids stay
+ * positional, exactly as the real projection's are — that is the whole point of the key.
+ */
+function mockWithScriptTasks(script, base) {
+  const tasks = mockParseTasks(script);
+  if (!tasks.length) return base;
+
+  const nodes = tasks.map((task, index) => ({
+    id: `s${index}`,
+    label: `EXECUTE ${task.connection}`,
+    type: 'procedure',
+    meta: { line: task.line, key: task.id },
+  }));
+  const tail = base.nodes[base.nodes.length - 1];
+  const edges = tasks.slice(1).map((task, index) => ({ source: `s${index}`, target: `s${index + 1}` }));
+  if (tail) edges.unshift({ source: tail.id, target: 's0' });
+
+  return { nodes: [...base.nodes, ...nodes], edges: [...base.edges, ...edges] };
+}
+
+/** The sandbox's pipeline editor. Refusals are real, so the UI's error path gets exercised. */
+function mockPipelineTask(body) {
+  const script = body.script || '';
+  const tasks = mockParseTasks(script);
+  const find = id => tasks.find(task => task.id.toLowerCase() === String(id || '').toLowerCase());
+  const refuse = error => ({ applied: false, script, error, tasks: strip(tasks) });
+  const strip = list => list.map(({ id, connection, body: text, line }) => ({ id, connection, body: text, line }));
+  const lineEnd = offset => {
+    const next = script.indexOf('\n', offset);
+    return next === -1 ? script.length : next + 1;
+  };
+
+  const op = String(body.op || '').toLowerCase();
+  if (op === 'read') return { applied: true, script, error: null, tasks: strip(tasks) };
+
+  const target = op === 'add' ? null : find(body.id);
+  if (op !== 'add' && !target) return refuse(`No task called '${body.id}'.`);
+
+  let next = script;
+  if (op === 'add') {
+    if (find(body.id)) return refuse(`This script already has a task called '${body.id}'.`);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(String(body.id || ''))) return refuse(`'${body.id}' is not a usable task label.`);
+    const text = `${body.id}:\nEXECUTE ${body.connection} BEGIN\n${String(body.body || 'SELECT 1;').split('\n').map(line => `    ${line}`).join('\n')}\nEND;\n`;
+    const anchor = body.after ? find(body.after) : null;
+    const at = anchor ? lineEnd(anchor.end) : script.length;
+    next = `${script.slice(0, at)}${at >= script.length ? '\n' : ''}${text}${at >= script.length ? '' : '\n'}${script.slice(at)}`;
+  } else if (op === 'remove') {
+    next = script.slice(0, target.start) + script.slice(lineEnd(target.end));
+  } else if (op === 'move') {
+    const moved = script.slice(target.start, target.end);
+    const without = script.slice(0, target.start) + script.slice(lineEnd(target.end));
+    const anchor = body.after ? mockParseTasks(without).find(t => t.id.toLowerCase() === String(body.after).toLowerCase()) : null;
+    if (body.after && !anchor) return refuse(`No task called '${body.after}' to move after.`);
+    const at = anchor ? lineEnd(anchor.end) : (mockParseTasks(without)[0]?.start ?? without.length);
+    next = `${without.slice(0, at)}${moved}\n\n${without.slice(at)}`;
+  } else if (op === 'update') {
+    if (body.newId && find(body.newId) && body.newId.toLowerCase() !== target.id.toLowerCase()) {
+      return refuse(`This script already has a task called '${body.newId}'.`);
+    }
+    let slice = script.slice(target.start, target.end);
+    // String.raw, because a plain template literal reads \b as a backspace and the rename silently
+    // does nothing — which is exactly how a mock ends up disagreeing with the host it stands in for.
+    if (body.newId) slice = slice.replace(new RegExp(String.raw`^([ \t]*)${target.id}\b`), `$1${body.newId}`);
+    if (body.connection) slice = slice.replace(/(\bEXEC(?:UTE)?[ \t]+)[A-Za-z_][A-Za-z0-9_]*/i, `$1${body.connection}`);
+    next = script.slice(0, target.start) + slice + script.slice(target.end);
+  } else {
+    return refuse(`Unknown pipeline task operation '${body.op}'.`);
+  }
+
+  return { applied: true, script: next, error: null, tasks: strip(mockParseTasks(next)) };
 }
 
 /** The SOURCE clause value, honouring parentheses so a derived-table select survives intact. */

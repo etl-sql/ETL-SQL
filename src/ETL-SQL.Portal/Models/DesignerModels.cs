@@ -127,6 +127,30 @@ public record ApplyDesignerQueryFiltersResponse(string Source);
 
 public record BuildDesignerOptionSourceRequest(string Source, string Column);
 
+/// <summary>
+/// One edit to the pipeline canvas, addressed by task label.
+/// </summary>
+/// <param name="Op">read | add | update | move | remove.</param>
+/// <param name="Id">The task being edited, or the label of the task being added.</param>
+/// <param name="NewId">update only: the new label.</param>
+/// <param name="After">add and move: the task this one follows; null means end (add) or start (move).</param>
+public record PipelineTaskRequest(
+    string? Script,
+    string? Op,
+    string? Id = null,
+    string? NewId = null,
+    string? Connection = null,
+    string? Body = null,
+    string? After = null);
+
+/// <summary>
+/// The result of a pipeline edit. <c>Applied</c> false with an <c>Error</c> is an ordinary answer —
+/// the script comes back unchanged and the canvas says why, rather than redrawing as if it worked.
+/// </summary>
+public record PipelineTaskResponse(bool Applied, string Script, string? Error, List<PipelineTaskDto> Tasks);
+
+public record PipelineTaskDto(string Id, string Connection, string Body, int Line);
+
 public record DesignerStateDto(
     List<DesignerPageDto> Pages,
     List<DesignerDatasetDto> Datasets,
@@ -135,7 +159,13 @@ public record DesignerStateDto(
     // left alone. An empty list is an explicit "no bookmarks" and removes them.
     List<DesignerBookmarkDto>? Bookmarks = null,
     // Null preserves declarations for clients that do not edit parameters. Empty removes them.
-    List<DesignerParameterDto>? Parameters = null);
+    List<DesignerParameterDto>? Parameters = null,
+    // Read-only: reported by parse so a surface can reproduce the script's connection context, and
+    // ignored by generate and patch, because no surface edits a connection through design state.
+    List<DesignerConnectionDto>? Connections = null);
+
+/// <summary><c>Text</c> is the authored <c>CREATE CONNECTION</c> statement, exactly as written.</summary>
+public record DesignerConnectionDto(string Name, string Text);
 
 public record DesignerParameterDto(
     string Name,

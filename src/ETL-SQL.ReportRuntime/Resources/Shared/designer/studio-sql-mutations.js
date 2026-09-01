@@ -105,6 +105,46 @@ export function createStudioSqlMutationService({
         return context.patchQueue;
     }
 
+    /**
+     * The canonical pipeline mutation: one edit to one labelled task, by label.
+     *
+     * The report path is parse → edit design state → patch. A pipeline task has no design state: the
+     * script *is* the model, so the host does the edit on the exact bytes in the buffer and hands
+     * back either a new script or the reason it refused. The refusal is raised rather than absorbed,
+     * because a canvas that redraws unchanged after a refused edit is indistinguishable from one
+     * that applied it.
+     */
+    function canonicalPipelineMutation(label, operation) {
+        const document = getActiveDocument();
+        if (!document) return Promise.resolve(null);
+        const context = document.studioContext;
+        context.patchQueue ||= Promise.resolve();
+        context.patchQueue = context.patchQueue.catch(() => {}).then(async () => {
+            const script = getActiveDocument() === document && state.editorInstance
+                ? state.editorInstance.getValue()
+                : document.content;
+
+            const result = await designerApiJson(routes.pipelineTask, { script, ...operation });
+            if (!result.applied) throw new Error(result.error || 'The edit was refused.');
+            if (typeof result.script !== 'string') throw new Error('The pipeline editor returned no script.');
+            if (result.script === script) return result;
+
+            document.content = result.script;
+            document.isDirty = true;
+            if (getActiveDocument() === document) {
+                const changed = state.editorInstance?.replaceAll?.(result.script);
+                if (changed) state.editorInstance?.revealRange?.(changed.from, changed.to);
+                renderVisualStage();
+            }
+            renderTabs();
+            return result;
+        }).catch(error => {
+            feedback.notify(`${label} failed: ${error.message}`, { title: 'Script Not Changed', tone: 'error' });
+            return null;
+        });
+        return context.patchQueue;
+    }
+
     function persistFilter(field, removedFilter = null) {
         const context = activeDocumentContext();
         const filter = removedFilter || context.activeFilters[field];
@@ -125,6 +165,7 @@ export function createStudioSqlMutationService({
 
     return {
         canonicalDesignerMutation,
+        canonicalPipelineMutation,
         composeFilteredSource,
         filterContract,
         findDesignerVisual,

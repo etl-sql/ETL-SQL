@@ -540,6 +540,7 @@ public static class WorkstationEditorApp
         });
 
         var designerParsing = new ETL_SQL.Reporting.Authoring.DesignerScriptParsingService();
+        var pipelineTasks = new ETL_SQL.Analysis.Services.PipelineTaskAuthoringService();
         var designerGen = new ETL_SQL.Reporting.Authoring.DesignerScriptGenerationService();
         var designerPatcher = new ETL_SQL.Reporting.Authoring.DesignerScriptPatcher(designerGen);
         var designerQueryFilters = new ETL_SQL.Reporting.Authoring.DesignerQueryFilterService();
@@ -562,6 +563,33 @@ public static class WorkstationEditorApp
         {
             var state = designerParsing.Parse(request.Script);
             return Results.Json(new { designState = state, error = (string?)null }, JsonOptions);
+        });
+
+        // The editable half of the pipeline canvas — same contract as the Portal's, so one shared
+        // Studio module drives both hosts. A refusal is a 200 with applied:false and the reason.
+        app.MapPost("/api/designer/pipeline-task", (PipelineTaskAuthoringRequest request) =>
+        {
+            var script = request.Script ?? string.Empty;
+            var result = (request.Op ?? string.Empty).ToLowerInvariant() switch
+            {
+                "add" => pipelineTasks.Add(script, new ETL_SQL.Analysis.Services.PipelineTaskDraft(
+                    request.Id ?? string.Empty, request.Connection ?? string.Empty, request.Body ?? string.Empty, request.After)),
+                "update" => pipelineTasks.Update(script, request.Id ?? string.Empty, request.NewId, request.Connection, request.Body),
+                "move" => pipelineTasks.Move(script, request.Id ?? string.Empty, request.After),
+                "remove" => pipelineTasks.Remove(script, request.Id ?? string.Empty),
+                "read" => ETL_SQL.Analysis.Services.PipelineEditResult.Ok(script),
+                _ => ETL_SQL.Analysis.Services.PipelineEditResult.Refused(script, $"Unknown pipeline task operation '{request.Op}'."),
+            };
+
+            return Results.Json(new
+            {
+                applied = result.Applied,
+                script = result.Script,
+                error = result.Error,
+                tasks = pipelineTasks.Read(result.Script)
+                    .Select(task => new { id = task.Id, connection = task.Connection, body = task.Body, line = task.Line })
+                    .ToList(),
+            }, JsonOptions);
         });
 
         app.MapPost("/api/designer/query-filter", (ApplyDesignerQueryFiltersAuthoringRequest request) =>
@@ -912,6 +940,14 @@ public sealed record TestConnectionRequest(string? Alias, string? ConnectorType,
 public sealed record GenerateDesignerAuthoringRequest(ETL_SQL.Reporting.Authoring.DesignerAuthoringState DesignState, string? Script = null);
 public sealed record PatchDesignerAuthoringRequest(string Script, ETL_SQL.Reporting.Authoring.DesignerAuthoringState DesignState);
 public sealed record ParseDesignerAuthoringRequest(string Script);
+public sealed record PipelineTaskAuthoringRequest(
+    string? Script,
+    string? Op,
+    string? Id = null,
+    string? NewId = null,
+    string? Connection = null,
+    string? Body = null,
+    string? After = null);
 public sealed record ApplyDesignerQueryFiltersAuthoringRequest(
     string Source,
     List<ETL_SQL.Reporting.Authoring.DesignerQueryFilter> Filters,

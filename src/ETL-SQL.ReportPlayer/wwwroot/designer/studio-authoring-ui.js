@@ -34,9 +34,36 @@ export function sqlPreviewMarkup(sql, label = 'Writes this Report-SQL') {
     return `<div class="etlsql-studio-sql-preview"><span>${escapeHtml(label)}</span><pre>${escapeHtml(sql)}</pre></div>`;
 }
 
-/** An inline note. `text` is trusted markup so callers can emphasise; escape anything from a server. */
-export function noteMarkup(text, tone = 'info') {
-    return `<div class="etlsql-studio-guided-note is-${escapeHtml(tone)}">${text}</div>`;
+/**
+ * Renders a structured inline model to markup.
+ *
+ * A bare string is plain text and is escaped. Emphasis is asked for explicitly, as an array of
+ * segments — a string, or one of `{ text }`, `{ strong }`, `{ em }`, `{ code }`, `{ br: true }` —
+ * each of which escapes its own content. There is deliberately no "raw markup" segment: the whole
+ * point is that a caller cannot hand a server message straight into innerHTML by accident.
+ *
+ * An unrecognised segment throws rather than rendering nothing. A note that silently loses a
+ * sentence is the failure shape this repo keeps paying for; a segment shape is a programming error
+ * and every caller lives in this repo, so it should fail where it is written.
+ */
+export function inlineMarkup(content) {
+    if (content === null || content === undefined) return '';
+    if (typeof content === 'string' || typeof content === 'number') return escapeHtml(content);
+    if (Array.isArray(content)) return content.map(inlineMarkup).join('');
+    if (content.br) return '<br>';
+    if ('text' in content) return escapeHtml(content.text);
+    if ('strong' in content) return `<strong>${escapeHtml(content.strong)}</strong>`;
+    if ('em' in content) return `<em>${escapeHtml(content.em)}</em>`;
+    if ('code' in content) return `<code>${escapeHtml(content.code)}</code>`;
+    throw new TypeError(`inlineMarkup: unsupported segment ${JSON.stringify(content)}`);
+}
+
+/**
+ * An inline note. `content` is a structured model rendered by `inlineMarkup`, so plain text — a
+ * server error message included — is escaped by default and emphasis has to be asked for.
+ */
+export function noteMarkup(content, tone = 'info') {
+    return `<div class="etlsql-studio-guided-note is-${escapeHtml(tone)}">${inlineMarkup(content)}</div>`;
 }
 
 /**

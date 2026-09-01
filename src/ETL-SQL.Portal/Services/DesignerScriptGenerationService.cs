@@ -51,7 +51,11 @@ internal static class DesignerAuthoringStateAdapter
             parameter.IsOutput,
             parameter.IsRequired,
             parameter.IsSensitive,
-            parameter.IsBlockScoped)).ToList());
+            parameter.IsBlockScoped)).ToList(),
+        // Carried across so a client that echoes parse output back is not silently reshaped. Nothing
+        // downstream reads it: the generator and the patcher never write CREATE CONNECTION.
+        state.Connections?.Select(connection =>
+            new DesignerAuthoringConnection(connection.Name, connection.Text)).ToList());
 
     /// <summary>
     /// The way back: host-neutral authoring state to the DTO shape the browser consumes. The
@@ -91,7 +95,9 @@ internal static class DesignerAuthoringStateAdapter
             parameter.IsOutput,
             parameter.IsRequired,
             parameter.IsSensitive,
-            parameter.IsBlockScoped)).ToList());
+            parameter.IsBlockScoped)).ToList(),
+        state.Connections?.Select(connection =>
+            new DesignerConnectionDto(connection.Name, connection.Text)).ToList());
 
     private static DesignerBookmarkDto ToBookmarkDto(DesignerAuthoringBookmark bookmark) => new(
         bookmark.Id,

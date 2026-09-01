@@ -43,6 +43,7 @@ public class DesignerController : ControllerBase
     private readonly IMetadataManager? _metadata;
     private readonly DesignerSnapshotService? _snapshots;
     private readonly ScriptDagProjectionService _scriptDag;
+    private readonly PipelineTaskAuthoringService _pipelineTasks = new();
     private readonly DesignerQueryFilterService _queryFilters = new();
     private readonly LanguageHoverService? _hoverService;
 
@@ -131,6 +132,51 @@ public class DesignerController : ControllerBase
         try
         {
             return Ok(_scriptDag.Project(req.Script));
+        }
+        finally
+        {
+            gate?.Release();
+        }
+    }
+
+    // ── POST /api/designer/pipeline-task ─────────────────────────────────────
+    // The editable half of the pipeline canvas. The canvas never assembles ETL-SQL itself: it asks
+    // for an edit by task label, and this returns either the new script or the reason it was
+    // refused. Refusals are ordinary answers here — a duplicate label, a GOTO target, a script that
+    // does not parse — so the canvas can say what happened instead of appearing to do nothing.
+
+    [HttpPost("pipeline-task")]
+    [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public IActionResult PipelineTask([FromBody] PipelineTaskRequest req)
+    {
+        if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
+            return limitResult;
+
+        if (!TryEnterDesignerGate(out var gate))
+            return DesignerBusy();
+
+        try
+        {
+            var script = req.Script ?? string.Empty;
+            var result = (req.Op ?? string.Empty).ToLowerInvariant() switch
+            {
+                "add" => _pipelineTasks.Add(script, new PipelineTaskDraft(
+                    req.Id ?? string.Empty, req.Connection ?? string.Empty, req.Body ?? string.Empty, req.After)),
+                "update" => _pipelineTasks.Update(script, req.Id ?? string.Empty, req.NewId, req.Connection, req.Body),
+                "move" => _pipelineTasks.Move(script, req.Id ?? string.Empty, req.After),
+                "remove" => _pipelineTasks.Remove(script, req.Id ?? string.Empty),
+                "read" => PipelineEditResult.Ok(script),
+                _ => PipelineEditResult.Refused(script, $"Unknown pipeline task operation '{req.Op}'."),
+            };
+
+            return Ok(new PipelineTaskResponse(
+                result.Applied,
+                result.Script,
+                result.Error,
+                _pipelineTasks.Read(result.Script)
+                    .Select(task => new PipelineTaskDto(task.Id, task.Connection, task.Body, task.Line))
+                    .ToList()));
         }
         finally
         {

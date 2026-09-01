@@ -966,7 +966,8 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         var sourceBefore = await page.EvaluateAsync<string>(
             "() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content");
         var dagNodes = page.Locator("[data-dag-node]");
-        Assert.Equal(6, await dagNodes.CountAsync());
+        // Six projected stages plus the one labelled task the sample script declares.
+        Assert.Equal(7, await dagNodes.CountAsync());
         Assert.Contains("IF", await page.Locator("[data-dag-node='quality_branch']").InnerTextAsync());
         Assert.Contains("ASSERT", await page.Locator("[data-dag-node='quality_gate']").InnerTextAsync());
 
@@ -1001,8 +1002,57 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.setValue('>>> INVALID <<<')");
         await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Last valid flow')");
-        Assert.Equal(6, await page.Locator("[data-dag-node]").CountAsync());
+        Assert.Equal(7, await page.Locator("[data-dag-node]").CountAsync());
         Assert.Contains("Unexpected token", await status.InnerTextAsync());
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
+    public async Task Studio_PipelineTasks_AreEditableOnTheCanvasAndLeaveTheRestOfTheScriptAlone()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
+        await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Engine projection')");
+
+        string Script() => page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content").Result;
+
+        var before = Script();
+
+        // Only the labelled statement is editable. Everything else on the map is projection-only.
+        var task = page.Locator("[data-task-key='load_orders']");
+        await task.WaitForAsync();
+        Assert.Equal(1, await page.Locator("[data-task-key]").CountAsync());
+        Assert.True(await task.EvaluateAsync<bool>("element => element.draggable"));
+        Assert.False(await page.Locator("[data-dag-node='quality_gate']").EvaluateAsync<bool>("element => element.draggable"));
+
+        // Selecting shows the inspector, and renaming writes only the label.
+        await task.ClickAsync();
+        var labelField = page.Locator("[data-task-field='label']");
+        await labelField.WaitForAsync();
+        await labelField.FillAsync("load_orders_v2");
+        await page.ClickAsync("[data-task-save]");
+        await page.WaitForFunctionAsync(
+            """() => !!document.querySelector("[data-task-key='load_orders_v2']")""");
+
+        var renamed = Script();
+        Assert.Equal(before.Replace("load_orders:", "load_orders_v2:", StringComparison.Ordinal), renamed);
+
+        // Adding a task appends one labelled block and touches nothing else.
+        await page.ClickAsync("[data-task-add]");
+        await page.WaitForFunctionAsync("() => document.querySelectorAll('[data-task-key]').length === 2");
+
+        var added = Script();
+        Assert.Contains("EXECUTE", added, StringComparison.Ordinal);
+        Assert.StartsWith(renamed.TrimEnd(), added.TrimEnd()[..renamed.TrimEnd().Length], StringComparison.Ordinal);
+        Assert.Equal(2, await page.Locator("[data-task-key]").CountAsync());
 
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);

@@ -6381,3 +6381,92 @@ body.vscode-dark .etlsql-cw-missing-hint {
     color: var(--portal-text, #f0f6fc);
     font-size: 0.6875rem;
 }
+
+/* ── Editable pipeline tasks ───────────────────────────────────────────────── */
+/* The map itself stays the read-only engine projection. These styles only mark which cards carry a
+   section label, and therefore which ones the canvas can edit and reorder. */
+
+.etlsql-studio-pipeline-editor {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--portal-border, #30363d);
+    background: var(--portal-surface, #161b22);
+}
+
+.etlsql-studio-pipeline-tools {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.etlsql-studio-pipeline-hint {
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+    line-height: 1.4;
+}
+
+.etlsql-studio-pipeline-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.etlsql-studio-pipeline-fields label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 180px;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.etlsql-studio-pipeline-fields input {
+    padding: 4px 8px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 4px;
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text, #f0f6fc);
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    font-size: 0.75rem;
+    text-transform: none;
+}
+
+.etlsql-studio-pipeline-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.etlsql-studio-pipeline-actions .etlsql-studio-btn.is-danger {
+    border-color: rgba(248, 81, 73, 0.5);
+    color: var(--portal-danger, #f85149);
+}
+
+/* A card the canvas can edit. Everything else on the map is projection-only and stays inert. */
+.etlsql-dag-card.is-editable-task {
+    cursor: grab;
+    box-shadow: inset 3px 0 0 var(--portal-accent, #58a6ff);
+}
+
+.etlsql-dag-card.is-editable-task:focus-visible,
+.etlsql-dag-card.is-selected-task {
+    outline: 2px solid var(--portal-accent, #58a6ff);
+    outline-offset: 2px;
+}
+
+.etlsql-dag-card.is-dragging-task {
+    opacity: 0.55;
+    cursor: grabbing;
+}
+
+/* The drop target reads as "run after this one", which is what the edit actually does. */
+.etlsql-dag-card.is-drop-target {
+    outline: 2px dashed var(--portal-accent, #58a6ff);
+    outline-offset: 3px;
+}

@@ -43,7 +43,10 @@ public sealed class ScriptDagProjectionService : IScriptDagProjection
             var dag = ScriptDagBuilder.Build(script);
 
             return ScriptDagProjection.Success(new ScriptDagDto(
-                dag.Nodes.Select(n => new ScriptDagNodeDto(n.Id, n.Label, n.Type, new { line = n.Line })).ToList(),
+                // `key` is the section label, when the statement has one. It is what the canvas
+                // tracks a node by across a re-projection: ids are positional and shift under any
+                // hand edit above them, so selection keyed by id follows the wrong box.
+                dag.Nodes.Select(n => new ScriptDagNodeDto(n.Id, n.Label, n.Type, new { line = n.Line, key = n.Key })).ToList(),
                 dag.Edges.Select(e => new ScriptDagEdgeDto(e.Source, e.Target, e.Label)).ToList()));
         }
         catch (Exception ex)

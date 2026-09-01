@@ -35,6 +35,7 @@ public sealed class StudioAuthoringContractTests
         "studio-authoring.js",
         "studio-query-workbench.js",
         "studio-authoring-ui.js",
+        "studio-pipeline-canvas.js",
     };
 
     /// <summary>

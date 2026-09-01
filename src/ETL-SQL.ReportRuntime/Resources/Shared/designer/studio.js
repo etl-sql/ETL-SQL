@@ -19,6 +19,7 @@ import { createStudioHostAdapter } from './studio-host.js';
 import { createStudioLeaseLifecycle } from './studio-lifecycle.js';
 import { detectPlaintextSecrets as _detectPlaintextSecrets, secureStudioScriptForSave } from './studio-security.js';
 import { createStudioSqlMutationService } from './studio-sql-mutations.js';
+import { attachPipelineTaskEditing } from './studio-pipeline-canvas.js';
 import { createStudioContextStore, createStudioState } from './studio-state.js';
 
 export { secureStudioScriptForSave } from './studio-security.js';
@@ -660,12 +661,14 @@ export async function createStudioWorkbench(container, opts = {}) {
     }
 
     function disposePipelineDag() {
+        state.pipelineTaskEditor?.dispose?.();
+        state.pipelineTaskEditor = null;
         state.dagInstance?.dispose?.();
         state.dagInstance = null;
         state.dagDocumentId = null;
     }
 
-    function paintPipelineDag(doc, graph, message, tone = 'neutral') {
+    function paintPipelineDag(doc, graph, message, tone = 'neutral', tasks = [], connections = []) {
         if (getActiveDoc() !== doc) return;
         disposePipelineDag();
         const nodes = graph?.nodes ?? graph?.Nodes ?? [];
@@ -680,6 +683,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                     <span class="etlsql-studio-dag-status is-${_escapeHtml(tone)}" data-dag-status>${_escapeHtml(message)}</span>
                 </header>
                 <div class="etlsql-studio-dag-canvas" data-dag-canvas></div>
+                <div class="etlsql-studio-pipeline-editor" data-pipeline-editor></div>
             </section>`;
         const dagCanvas = canvasContainer.querySelector('[data-dag-canvas]');
         state.dagInstance = renderDag(dagCanvas, { nodes, edges }, {
@@ -693,6 +697,56 @@ export async function createStudioWorkbench(container, opts = {}) {
             },
         });
         state.dagDocumentId = doc.id;
+
+        // The editable layer goes on after the map is drawn: it decorates the cards the projection
+        // already produced rather than rendering its own copy of them, so the two can never disagree
+        // about what the script contains.
+        const known = new Set(tasks.map(task => String(task.id).toLowerCase()));
+        if (state.selectedTaskId && !known.has(String(state.selectedTaskId).toLowerCase())) {
+            state.selectedTaskId = null;
+        }
+
+        state.pipelineTaskEditor = attachPipelineTaskEditing(
+            canvasContainer.querySelector('[data-pipeline-editor]'),
+            dagCanvas,
+            {
+                tasks,
+                selectedId: state.selectedTaskId,
+                onSelect: id => {
+                    state.selectedTaskId = id;
+                    renderVisualStage();
+                },
+                onAdd: async ({ after }) => {
+                    const id = uniqueTaskId(tasks);
+                    const connection = tasks[0]?.connection || connections[0]?.name || 'connection';
+                    state.selectedTaskId = id;
+                    await canonicalPipelineMutation('Add task', {
+                        op: 'add', id, connection, body: '-- Write the statements this task runs.\nSELECT 1;', after,
+                    });
+                },
+                onMove: ({ id, after }) => canonicalPipelineMutation('Move task', { op: 'move', id, after }),
+                onUpdate: async ({ id, newId, connection }) => {
+                    const result = await canonicalPipelineMutation('Update task', { op: 'update', id, newId, connection });
+                    if (result?.applied && newId) state.selectedTaskId = newId;
+                },
+                onRemove: async ({ id }) => {
+                    const result = await canonicalPipelineMutation('Delete task', { op: 'remove', id });
+                    if (result?.applied) state.selectedTaskId = null;
+                },
+                onOpenLine: line => {
+                    if (!line) return;
+                    if (doc.projection === 'canvas') setProjection('split');
+                    state.editorInstance?.gotoLine?.(line);
+                },
+            });
+    }
+
+    /** A label that is not already taken, so Add never fails on a name the author did not choose. */
+    function uniqueTaskId(tasks) {
+        const taken = new Set(tasks.map(task => String(task.id).toLowerCase()));
+        let index = tasks.length + 1;
+        while (taken.has(`task_${index}`)) index++;
+        return `task_${index}`;
     }
 
     function paintPipelineDagMessage(title, detail, tone = 'neutral') {
@@ -709,7 +763,8 @@ export async function createStudioWorkbench(container, opts = {}) {
     async function renderPipelineDag(doc, content) {
         const context = documentContext(doc);
         if (context.lastValidDag?.script === content) {
-            paintPipelineDag(doc, context.lastValidDag.graph, 'Engine projection');
+            paintPipelineDag(doc, context.lastValidDag.graph, 'Engine projection',
+                'neutral', context.lastValidDag.tasks, context.lastValidDag.connections);
             return;
         }
 
@@ -719,18 +774,28 @@ export async function createStudioWorkbench(container, opts = {}) {
         context.dagAbort = controller;
 
         if (context.lastValidDag) {
-            paintPipelineDag(doc, context.lastValidDag.graph, 'Updating from script…', 'pending');
+            paintPipelineDag(doc, context.lastValidDag.graph, 'Updating from script…',
+                'pending', context.lastValidDag.tasks, context.lastValidDag.connections);
         } else {
             paintPipelineDagMessage('Projecting pipeline…', 'Reading control flow and validation stages from the current script.');
         }
 
         try {
-            const response = await authFetch(apiBase + STUDIO_ROUTES.dag, {
+            // The map, the editable tasks in it, and the connections a new task can run against, all
+            // read from the same bytes in one round trip. Reading them separately is how a canvas
+            // ends up offering an edit against a script the projection no longer matches.
+            const post = route => authFetch(apiBase + route, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ script: content, documentUri: doc.path || doc.name }),
+                body: JSON.stringify({ script: content, documentUri: doc.path || doc.name, op: 'read' }),
                 signal: controller.signal,
             });
+
+            const [response, taskResponse, parseResponse] = await Promise.all([
+                post(STUDIO_ROUTES.dag),
+                post(STUDIO_ROUTES.pipelineTask),
+                post(STUDIO_ROUTES.parse),
+            ]);
             if (!response.ok) throw new Error(await _readErrorText(response));
             const projected = await response.json();
             if (projected?.parsed === false || projected?.error) {
@@ -738,14 +803,20 @@ export async function createStudioWorkbench(container, opts = {}) {
             }
             if (controller.signal.aborted || context.dagRevision !== revision || getActiveDoc() !== doc || doc.content !== content) return;
 
+            // A host that does not serve the editing routes still gets the read-only map: the canvas
+            // simply offers no editable tasks, rather than failing to draw.
+            const tasks = taskResponse.ok ? ((await taskResponse.json())?.tasks ?? []) : [];
+            const connections = parseResponse.ok ? ((await parseResponse.json())?.designState?.connections ?? []) : [];
+
             const graph = projected?.dag || projected || { nodes: [], edges: [] };
-            context.lastValidDag = { script: content, graph };
-            paintPipelineDag(doc, graph, 'Engine projection');
+            context.lastValidDag = { script: content, graph, tasks, connections };
+            paintPipelineDag(doc, graph, 'Engine projection', 'neutral', tasks, connections);
         } catch (error) {
             if (controller.signal.aborted || context.dagRevision !== revision || getActiveDoc() !== doc) return;
             const detail = error?.message || String(error);
             if (context.lastValidDag) {
-                paintPipelineDag(doc, context.lastValidDag.graph, `Last valid flow · ${detail}`, 'warning');
+                paintPipelineDag(doc, context.lastValidDag.graph, `Last valid flow · ${detail}`,
+                    'warning', context.lastValidDag.tasks, context.lastValidDag.connections);
             } else {
                 paintPipelineDagMessage('Pipeline projection failed', detail, 'error');
             }
@@ -882,6 +953,7 @@ export async function createStudioWorkbench(container, opts = {}) {
 
     const {
         canonicalDesignerMutation,
+        canonicalPipelineMutation,
         composeFilteredSource,
         filterContract,
         findDesignerVisual,

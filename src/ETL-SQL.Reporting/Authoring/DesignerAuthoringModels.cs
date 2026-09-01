@@ -11,7 +11,19 @@ public sealed record DesignerAuthoringState(
     List<DesignerAuthoringDataset> Datasets,
     DesignerAuthoringReportStyle? ReportStyle = null,
     List<DesignerAuthoringBookmark>? Bookmarks = null,
-    List<DesignerAuthoringParameter>? Parameters = null);
+    List<DesignerAuthoringParameter>? Parameters = null,
+    List<DesignerAuthoringConnection>? Connections = null);
+
+/// <summary>
+/// A <c>CREATE CONNECTION</c> the script declares, carried as its authored source text.
+///
+/// <para>Read-only: the generator and the patcher both ignore it, because no surface edits a
+/// connection through design state. It exists so a surface that has to reproduce the script's
+/// connection context — the embedded query workbench builds a preamble so an alias resolves at
+/// design time exactly as it will at run time — can ask the parser instead of scanning the buffer
+/// with a regex, which cannot see a multiline body, a comment, or a semicolon inside a string.</para>
+/// </summary>
+public sealed record DesignerAuthoringConnection(string Name, string Text);
 
 /// <summary>
 /// A report parameter declaration carried as authored source text for lossless patching.

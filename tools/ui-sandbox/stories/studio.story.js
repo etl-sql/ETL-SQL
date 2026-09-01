@@ -27,7 +27,7 @@ CREATE VISUAL SalesByRegion AS BAR (
   SOURCE = &orders,
   TITLE (TEXT = 'Sales by Region', COLOR = '#f0f6fc', FONT = 'Segoe UI', SIZE = '14px', WEIGHT = 'BOLD', ALIGN = LEFT),
   MAPPINGS (X = region, Y = total_amount),
-  OPTIONS (LEGEND = OFF, Y_AXIS (LABEL = 'Revenue', MIN = 0, FORMAT = '$#,##0')),
+  OPTIONS (LEGEND = OFF, GRID_LINES = ON, BAND_SIZE = 0.75, Y_AXIS (LABEL = 'Revenue', MIN = 0, FORMAT = '$#,##0')),
   STYLE (PALETTE = ('#58a6ff', '#2ea043', '#d29922'))
 );
 
@@ -62,7 +62,13 @@ END ELSE BEGIN
 END;
 
 -- 3. Stop before loading if the quality gate fails
-ASSERT (SELECT COUNT(*) FROM #ready_sales) > 0, 'No clean sales rows were staged.';`,
+ASSERT (SELECT COUNT(*) FROM #ready_sales) > 0, 'No clean sales rows were staged.';
+
+-- 4. A labelled execution task: the canvas can rename, reorder, and delete this one.
+load_orders:
+EXECUTE staging_db BEGIN
+    INSERT INTO warehouse.sales SELECT * FROM staging.ready_sales;
+END;`,
     isDirty: false,
     projection: 'split',
   },
@@ -88,7 +94,7 @@ const STUDIO_DESIGN_STATE = {
   pages: [{
     id: 'p1', name: 'Executive Overview', mode: 'Dashboard', visuals: [
       { id: 'v1', name: 'RevenueCard', type: 'CARD', gridCol: 1, gridRow: 1, gridColSpan: 6, gridRowSpan: 4, title: 'Total Revenue', dataset: '&orders', mappings: { VALUE: 'total_amount' }, options: { FORMAT: '$#,##0.00' }, formatting: { title: { text: 'Total Revenue' }, conditionalRules: [{ condition: 'total_amount < 1000', backgroundColor: '#3f1d24', fontColor: '#ffb4ab' }] } },
-      { id: 'v2', name: 'SalesByRegion', type: 'BAR', gridCol: 7, gridRow: 1, gridColSpan: 6, gridRowSpan: 4, title: 'Sales by Region', dataset: '&orders', mappings: { X: 'region', Y: 'total_amount' }, options: { LEGEND: 'OFF' }, formatting: { title: { text: 'Sales by Region', color: '#f0f6fc', font: 'Segoe UI', size: '14px', weight: 'BOLD', align: 'LEFT' }, yAxis: { LABEL: 'Revenue', MIN: '0', FORMAT: '$#,##0' }, palette: ['#58a6ff', '#2ea043', '#d29922'] } },
+      { id: 'v2', name: 'SalesByRegion', type: 'BAR', gridCol: 7, gridRow: 1, gridColSpan: 6, gridRowSpan: 4, title: 'Sales by Region', dataset: '&orders', mappings: { X: 'region', Y: 'total_amount' }, options: { LEGEND: 'OFF', GRID_LINES: 'ON', BAND_SIZE: '0.75' }, formatting: { title: { text: 'Sales by Region', color: '#f0f6fc', font: 'Segoe UI', size: '14px', weight: 'BOLD', align: 'LEFT' }, yAxis: { LABEL: 'Revenue', MIN: '0', FORMAT: '$#,##0' }, palette: ['#58a6ff', '#2ea043', '#d29922'] } },
     ],
   }],
   datasets: [{ id: 'ds1', name: '&orders', query: "SELECT order_date, total_amount, region FROM corp_db.orders WHERE status = 'Completed'" }],

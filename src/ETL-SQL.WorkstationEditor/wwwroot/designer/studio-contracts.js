@@ -17,6 +17,7 @@ export const STUDIO_ROUTES = Object.freeze({
     format: '/api/designer/format',
     run: '/api/designer/run',
     dag: '/api/designer/dag',
+    pipelineTask: '/api/designer/pipeline-task',
     parse: '/api/designer/parse',
     patch: '/api/designer/patch',
     queryFilter: '/api/designer/query-filter',

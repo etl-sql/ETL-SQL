@@ -99,7 +99,7 @@ export async function createQueryWorkbench(host, {
         try {
             // The query runs in the document's own context: its CREATE CONNECTION statements come
             // along, so an alias the script declares resolves exactly as it will at run time.
-            const script = `${connectionPreamble(connection, scriptText())}${query};`;
+            const script = `${await connectionPreamble(connection, scriptText(), { request, routes })}${query};`;
             const sample = firstResultSet(await request(routes.run, {
                 body: { script, connectionRef: connection || null, documentUri: documentUri() || null },
                 fallbackError: 'The query could not be run.',
@@ -109,7 +109,7 @@ export async function createQueryWorkbench(host, {
             setOutput(sampleGridMarkup(sample));
         } catch (error) {
             onSample?.(null);
-            setOutput(noteMarkup(escapeHtml(error.message || 'The query failed.'), 'error'));
+            setOutput(noteMarkup(error.message || 'The query failed.', 'error'));
         } finally {
             runButton.disabled = false;
         }
@@ -122,13 +122,43 @@ export async function createQueryWorkbench(host, {
     };
 }
 
-/** The document's own CREATE CONNECTION statement, so an embedded run resolves the same alias. */
-export function connectionPreamble(connection, script) {
+/**
+ * The document's own CREATE CONNECTION statement, so an embedded run resolves the same alias.
+ *
+ * The declaration comes from the canonical parse, not a text scan. The regex this replaced ended the
+ * statement at the first `;`, which is wrong for every connection whose body contains one — inside a
+ * quoted password, inside a comment, or spread over several lines with an option list — and it
+ * interpolated the alias into a pattern, so a name with a regex metacharacter matched the wrong
+ * statement or nothing at all. Either way the run failed with "unknown connection" against a script
+ * that declares it.
+ *
+ * A script that does not parse throws rather than silently running without the preamble: the run
+ * would fail anyway, and the parse error is the message that actually explains why.
+ */
+export async function connectionPreamble(connection, script, { request, routes } = {}) {
     if (!connection) return '';
-    const pattern = new RegExp(
-        `CREATE\\s+(?:OR\\s+REPLACE\\s+)?CONNECTION\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?\\[?${connection}\\]?[\\s\\S]*?;`, 'i');
-    const match = pattern.exec(String(script || ''));
-    return match ? `${match[0]}\n` : '';
+    if (!request || !routes?.parse) throw new Error('The query workbench was mounted without a parse route.');
+
+    const text = String(script || '');
+    if (!text.trim()) return '';
+
+    let parsed;
+    try {
+        parsed = await request(routes.parse, { body: { script: text }, fallbackError: 'The script could not be parsed.' });
+    } catch (error) {
+        throw new Error(`The script has to parse before an embedded query can resolve its connections: ${error.message}`);
+    }
+    if (parsed?.error) {
+        throw new Error(`The script has to parse before an embedded query can resolve its connections: ${parsed.error}`);
+    }
+
+    const wanted = String(connection).trim().replace(/^\[|\]$/g, '').toLowerCase();
+    const declaration = (parsed?.designState?.connections || [])
+        .find(entry => String(entry?.name || '').trim().replace(/^\[|\]$/g, '').toLowerCase() === wanted);
+    if (!declaration?.text) return '';
+
+    // Hosts differ on whether the authored slice keeps its terminator; the run needs exactly one.
+    return `${declaration.text.trim().replace(/;+$/, '')};\n`;
 }
 
 /** Both run shapes: a flat `{ columns, rows }` payload, or the first resultset inside a trace. */

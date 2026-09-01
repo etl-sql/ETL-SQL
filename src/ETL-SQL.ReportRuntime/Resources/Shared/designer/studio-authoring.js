@@ -319,7 +319,7 @@ export function createStudioAuthoringSurfaces({
 
         return await studioDialog({ kicker: 'Step 1 · Choose data', title: 'Choose data', wide: true }, api => {
             const fail = message => { wizard.error = message; paint(); };
-            const errorMarkup = () => (wizard.error ? guidedNoteMarkup(escapeHtml(wizard.error), 'error') : '');
+            const errorMarkup = () => (wizard.error ? guidedNoteMarkup(wizard.error, 'error') : '');
 
             const disposeWorkbench = () => {
                 wizard.queryWorkbench?.dispose?.();

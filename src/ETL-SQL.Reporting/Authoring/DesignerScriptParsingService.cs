@@ -178,8 +178,24 @@ public sealed class DesignerScriptParsingService
             pages.Add(new DesignerAuthoringPage("p1", "Page 1", "Dashboard", []));
         }
 
-        return new DesignerAuthoringState(pages, datasets, null, BookmarksToAuthoring(ast), ParametersToAuthoring(ast));
+        return new DesignerAuthoringState(
+            pages, datasets, null, BookmarksToAuthoring(ast), ParametersToAuthoring(ast), ConnectionsToAuthoring(ast, script));
     }
+
+    /// <summary>
+    /// The <c>CREATE CONNECTION</c> statements the script declares, as the author wrote them.
+    ///
+    /// <para>Top level only, which is what a preamble can reproduce: a connection created inside a
+    /// block is scoped to that block, and lifting it out would change what the script means. The
+    /// text is the authored slice rather than a re-serialisation, so a preamble carries the exact
+    /// bytes — secret references, comments, and formatting included — that the run would use.</para>
+    /// </summary>
+    private static List<DesignerAuthoringConnection> ConnectionsToAuthoring(Script ast, string? script) =>
+        ast.Statements.OfType<CreateConnectionStatement>()
+            .Select(connection => new DesignerAuthoringConnection(
+                connection.ConnectionName,
+                ExtractAuthoredNode(script, connection, connection.ToSql()).Trim()))
+            .ToList();
 
     private static List<DesignerAuthoringParameter> ParametersToAuthoring(Script ast) =>
         ast.Statements.SelectMany(statement => statement is BlockStatement block
@@ -253,7 +269,7 @@ public sealed class DesignerScriptParsingService
 
         var options = v.Options.ToDictionary(
             o => o.Key,
-            o => o.Value,
+            o => NormalizeOptionValue(o.Value),
             StringComparer.OrdinalIgnoreCase);
 
         if (v.Source.InlineSelect != null)
@@ -269,7 +285,7 @@ public sealed class DesignerScriptParsingService
 
         foreach (var style in v.Styles)
         {
-            options[style.Key.ToUpper()] = style.Value;
+            options[style.Key] = style.Value;
         }
 
         foreach (var act in v.Actions)
@@ -279,6 +295,10 @@ public sealed class DesignerScriptParsingService
         foreach (var inter in v.Interactions)
         {
             options[$"interaction:{inter.Key.ToUpper()}"] = inter.Value;
+        }
+        if (v.Overlays.Count > 0)
+        {
+            options["overlays"] = "OVERLAYS (" + string.Join(", ", v.Overlays.Select(FormatOverlay)) + ")";
         }
         if (v.Cascade != null)
         {
@@ -509,4 +529,30 @@ public sealed class DesignerScriptParsingService
     // under a name generation would never write stops matching the visual SOURCE that refers to it.
     private static string NormalizeDatasetName(string name) =>
         DesignerScriptGenerationService.NormalizeDatasetName(name);
+
+    private static string FormatOverlay(VisualOverlay overlay)
+    {
+        var parameter = overlay.Parameter?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var type = overlay.OverlayType switch
+        {
+            OverlayType.Goal => $"GOAL({parameter ?? "0"})",
+            OverlayType.MovingAvg => $"MOVING_AVG({parameter ?? "1"})",
+            OverlayType.Polynomial => $"POLYNOMIAL({parameter ?? "2"})",
+            _ => overlay.OverlayType.ToString().ToUpperInvariant()
+        };
+        var details = new List<string>();
+        if (!string.IsNullOrWhiteSpace(overlay.Color)) details.Add($"COLOR = '{Escape(overlay.Color)}'");
+        if (!string.IsNullOrWhiteSpace(overlay.Label)) details.Add($"LABEL = '{Escape(overlay.Label)}'");
+        return $"{type} AS {overlay.LineStyle.ToString().ToUpperInvariant()}"
+            + (details.Count == 0 ? string.Empty : $" WITH ({string.Join(", ", details)})");
+    }
+
+    private static string Escape(string value) => value.Replace("'", "''", StringComparison.Ordinal);
+
+    private static string NormalizeOptionValue(string value) => value.ToUpperInvariant() switch
+    {
+        "TRUE" => "ON",
+        "FALSE" => "OFF",
+        _ => value
+    };
 }

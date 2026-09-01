@@ -54,7 +54,7 @@ namespace ETL_SQL.LSP
 
                 var tokens = new Lexer(request.script).Tokenize();
                 var ast = new CoreParser(tokens, request.script).Parse();
-                var state = ScriptToState(ast);
+                var state = ScriptToState(ast, request.script);
                 return Task.FromResult(new DesignerParseResponse
                 { designStateJson = JsonSerializer.Serialize(state, _json) });
             }
@@ -149,11 +149,25 @@ namespace ETL_SQL.LSP
 
         private const int GridCols = 12;
 
+        /// <summary>The node's own source slice, falling back to a re-serialisation when the parser
+        /// did not record usable offsets.</summary>
+        private static string AuthoredText(string? script, AstNode node, string fallback) =>
+            script is null || node.StartOffset < 0 || node.EndOffset <= node.StartOffset || node.EndOffset > script.Length
+                ? fallback
+                : script[node.StartOffset..node.EndOffset];
+
         private static LspDesignState EmptyState() =>
             new(new List<LspDesignPage>(), new List<LspDesignDataset>());
 
-        private static LspDesignState ScriptToState(Script ast)
+        private static LspDesignState ScriptToState(Script ast, string? script)
         {
+            // The authored CREATE CONNECTION statements, so a surface that has to reproduce the
+            // script's connection context asks the parser rather than scanning the buffer.
+            var connections = ast.Statements.OfType<CreateConnectionStatement>()
+                .Select(c => new LspDesignConnection(
+                    c.ConnectionName, AuthoredText(script, c, c.ToSql()).Trim()))
+                .ToList();
+
             var datasets = ast.Statements.OfType<CreateDatasetStatement>()
                 .Select((ds, i) => new LspDesignDataset(
                     $"ds_{i}", NormalizeDatasetName(ds.TempTableName),
@@ -208,7 +222,7 @@ namespace ETL_SQL.LSP
                 pages.Add(new LspDesignPage("p1", "Page 1", "Dashboard", synth));
             }
 
-            return new LspDesignState(pages, datasets);
+            return new LspDesignState(pages, datasets, connections);
         }
 
         private static LspDesignVisual VisualToDto(
@@ -300,7 +314,12 @@ namespace ETL_SQL.LSP
 
     // ── Local DTOs (parallel to Portal.Models, camelCase JSON output) ──
 
-    record LspDesignState(List<LspDesignPage> Pages, List<LspDesignDataset> Datasets);
+    record LspDesignState(
+        List<LspDesignPage> Pages,
+        List<LspDesignDataset> Datasets,
+        List<LspDesignConnection>? Connections = null);
+    /// <summary><c>Text</c> is the authored CREATE CONNECTION statement, exactly as written.</summary>
+    record LspDesignConnection(string Name, string Text);
     record LspDesignPage(string Id, string Name, string Mode, List<LspDesignVisual> Visuals);
     record LspDesignVisual(
         string Id, string Name, string Type,

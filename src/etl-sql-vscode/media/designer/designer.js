@@ -393,6 +393,9 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         card.style.border = `1px solid ${_nodeColor(node.type)}`;
         card.dataset.nodeId = node.id;
         card.dataset.dagNode = node.id;
+        // A statement introduced by a section label is addressable by that label rather than by its
+        // positional id. The DAG stays read-only; it just says which cards a surface can edit.
+        if (node.meta?.key) card.dataset.taskKey = node.meta.key;
 
         const header = document.createElement('div');
         header.className = 'etlsql-dag-card-header';
