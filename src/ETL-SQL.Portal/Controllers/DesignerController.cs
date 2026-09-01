@@ -176,6 +176,10 @@ public class DesignerController : ControllerBase
                     req.After)),
                 "update" => _pipelineTasks.Update(script, req.Id ?? string.Empty, req.NewId, req.Connection, req.Body),
                 "move" => _pipelineTasks.Move(script, req.Id ?? string.Empty, req.After),
+                // Read as "this task runs after that one": `id` is the dependent, `after` the
+                // dependency, the same way the tag reads in the script.
+                "connect" => _pipelineTasks.Connect(script, req.After ?? string.Empty, req.Id ?? string.Empty),
+                "disconnect" => _pipelineTasks.Disconnect(script, req.After ?? string.Empty, req.Id ?? string.Empty),
                 "remove" => _pipelineTasks.Remove(script, req.Id ?? string.Empty),
                 "read" => PipelineEditResult.Ok(script),
                 _ => PipelineEditResult.Refused(script, $"Unknown pipeline task operation '{req.Op}'."),
@@ -187,7 +191,8 @@ public class DesignerController : ControllerBase
                 result.Error,
                 _pipelineTasks.Read(result.Script)
                     .Select(task => new PipelineTaskDto(
-                        task.Id, task.Kind.ToString().ToLowerInvariant(), task.Connection, task.Body, task.Line))
+                        task.Id, task.Kind.ToString().ToLowerInvariant(), task.Connection, task.Body, task.Line,
+                        task.DependsOn.ToList()))
                     .ToList()));
         }
         finally

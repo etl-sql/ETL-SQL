@@ -155,6 +155,67 @@ describe('Pipeline task editing layer', () => {
         expect(host.innerHTML).toContain('&lt;img src=x onerror=alert(1)&gt;');
     });
 
+    test('dragging a card body reorders, dragging its connector declares a dependency', () => {
+        const source = card('load_orders');
+        const target = card('archive_orders');
+        const moves: any[] = [];
+        const connects: any[] = [];
+
+        attach(host, canvas, {
+            tasks,
+            onMove: (move: any) => { moves.push(move); },
+            onConnect: (connect: any) => { connects.push(connect); },
+        });
+
+        // The card body: a move. Order in the script is the dependency.
+        source.dispatchEvent(dragEvent('dragstart'));
+        target.dispatchEvent(dragEvent('drop', { 'text/plain': 'load_orders' }));
+        expect(moves).toEqual([{ id: 'load_orders', after: 'archive_orders' }]);
+        expect(connects).toEqual([]);
+
+        // The connector handle: a declaration. Two gestures because they mean different things —
+        // one relocates a statement, the other writes down what has to finish first.
+        const handle = source.querySelector('[data-task-connector]') as HTMLElement;
+        expect(handle).not.toBeNull();
+        handle.dispatchEvent(dragEvent('dragstart'));
+        target.dispatchEvent(dragEvent('drop', { 'text/plain': 'load_orders' }));
+        expect(connects).toEqual([{ from: 'load_orders', to: 'archive_orders' }]);
+        expect(moves).toHaveLength(1);
+    });
+
+    test('the inspector lists what a task waits for, and each one can be removed', () => {
+        card('archive_orders');
+        const disconnects: any[] = [];
+
+        attach(host, canvas, {
+            tasks: [
+                tasks[0],
+                { ...tasks[1], dependsOn: ['load_orders', 'fetch_rates'] },
+            ],
+            selectedId: 'archive_orders',
+            onDisconnect: (edge: any) => { disconnects.push(edge); },
+        });
+
+        const chips = [...host.querySelectorAll('[data-task-disconnect]')].map(
+            button => (button as HTMLElement).dataset.taskDisconnect);
+        expect(chips).toEqual(['load_orders', 'fetch_rates']);
+
+        // Several incoming edges read as a join — waits for all of them — never as concurrency.
+        expect(host.textContent).toContain('Waits for all 2');
+        expect(host.textContent).not.toMatch(/parallel|at the same time|concurrent/i);
+
+        (host.querySelector('[data-task-disconnect="fetch_rates"]') as HTMLElement).click();
+        expect(disconnects).toEqual([{ from: 'fetch_rates', to: 'archive_orders' }]);
+    });
+
+    test('a task with no declared dependencies says it simply runs in script order', () => {
+        card('load_orders');
+        attach(host, canvas, { tasks, selectedId: 'load_orders' });
+
+        expect(host.querySelectorAll('[data-task-disconnect]').length).toBe(0);
+        expect(host.textContent).toContain('Runs in script order');
+    });
+
     test('dispose removes the handlers it added', () => {
         const target = card('archive_orders');
         const moves: any[] = [];

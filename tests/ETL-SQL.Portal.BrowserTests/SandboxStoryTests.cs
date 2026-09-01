@@ -1086,6 +1086,108 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     }
 
     [Fact]
+    public async Task Studio_PipelineDependencies_AreDeclaredInTheScriptAndNeverImplyConcurrency()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
+        await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Engine projection')");
+
+        string Script() => page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content").Result;
+
+        // Two more tasks to depend on each other.
+        foreach (var (id, condition) in new[] { ("fetch_rates", "1 = 1"), ("merge_all", "2 = 2") })
+        {
+            await page.ClickAsync("[data-task-kind='validation']");
+            await page.Locator("[data-task-field='condition']").WaitForAsync();
+            await page.Locator("[data-task-id]").FillAsync(id);
+            await page.Locator("[data-task-field='condition']").FillAsync(condition);
+            await page.Locator("[data-task-field='message']").FillAsync($"{id} failed.");
+            await page.ClickAsync("[data-dialog-action='save']");
+            await page.WaitForFunctionAsync(
+                $$"""() => !!document.querySelector("[data-task-key='{{id}}']")""");
+        }
+
+        // Every editable card carries a connector handle; dragging it declares a dependency.
+        Assert.Equal(3, await page.Locator("[data-task-connector]").CountAsync());
+
+        await page.EvaluateAsync("""
+            () => {
+              const drag = (fromKey, toKey) => {
+                const handle = document.querySelector(`[data-task-connector='${fromKey}']`);
+                const target = document.querySelector(`[data-task-key='${toKey}']`);
+                const dt = new DataTransfer();
+                handle.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+                target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+              };
+              drag('load_orders', 'merge_all');
+            }
+            """);
+        await page.WaitForFunctionAsync(
+            """() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content.includes('@after: load_orders')""");
+
+        await page.EvaluateAsync("""
+            () => {
+              const handle = document.querySelector("[data-task-connector='fetch_rates']");
+              const target = document.querySelector("[data-task-key='merge_all']");
+              const dt = new DataTransfer();
+              handle.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+              target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+            }
+            """);
+        await page.WaitForFunctionAsync(
+            """() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content.includes('@after: load_orders, fetch_rates')""");
+
+        var joined = Script();
+
+        // The join is one declaration line, and it says nothing about running anything concurrently:
+        // concurrency in ETL-SQL is only ever a PARALLEL block, and the canvas wrote none.
+        Assert.Equal(1, joined.Split("-- @after:", StringSplitOptions.None).Length - 1);
+        Assert.DoesNotContain("PARALLEL", joined, StringComparison.OrdinalIgnoreCase);
+
+        // Both dependencies run before the task that waits for them.
+        var mergeAt = joined.IndexOf("merge_all:", StringComparison.Ordinal);
+        Assert.True(joined.IndexOf("load_orders:", StringComparison.Ordinal) < mergeAt);
+        Assert.True(joined.IndexOf("fetch_rates:", StringComparison.Ordinal) < mergeAt);
+
+        // The inspector lists both prerequisites, and one can be removed without touching the other.
+        await page.Locator("[data-task-key='merge_all']").ClickAsync();
+        await page.Locator("[data-task-disconnect]").First.WaitForAsync();
+        Assert.Equal(2, await page.Locator("[data-task-disconnect]").CountAsync());
+        Assert.Contains("Waits for all 2", await page.Locator("[data-task-inspector]").InnerTextAsync(), StringComparison.Ordinal);
+
+        await page.ClickAsync("[data-task-disconnect='load_orders']");
+        await page.WaitForFunctionAsync(
+            """() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content.includes('@after: fetch_rates')""");
+
+        var trimmed = Script();
+        Assert.DoesNotContain("@after: load_orders", trimmed, StringComparison.Ordinal);
+        Assert.Contains("load_orders:", trimmed, StringComparison.Ordinal);
+
+        // A cycle is refused with a visible reason. A linear script can never execute one, so a
+        // canvas that drew it would be claiming something the engine cannot do.
+        await page.EvaluateAsync("""
+            () => {
+              const handle = document.querySelector("[data-task-connector='merge_all']");
+              const target = document.querySelector("[data-task-key='fetch_rates']");
+              const dt = new DataTransfer();
+              handle.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+              target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+            }
+            """);
+        await page.Locator(".etlsql-feedback-toast", new() { HasText = "cycle" }).First.WaitForAsync();
+        Assert.Equal(trimmed, Script());
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    [Fact]
     public async Task Studio_TabName_DoubleClickRenamesAndEscapeCancels()
     {
         await using var session = await fixture.NewSessionAsync();

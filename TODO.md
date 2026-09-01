@@ -23,7 +23,7 @@ start their retirement until Phase 6 is complete. A wizard creates a new object;
 the selected object. All authoring surfaces must read current parser state, preview the exact SQL,
 write through the canonical mutation path, and preserve unsupported hand-authored text.
 
-### Phase 1 — Pipeline DAG Authoring Spine (Next)
+### Phase 1 — Pipeline DAG Authoring Spine (Complete)
 
 **Outcome:** An author can drag an execution task onto the existing engine-projected DAG, configure
 it with the shared query workbench, connect it into a sequential flow, and round-trip between canvas
@@ -52,11 +52,18 @@ and `.etlsql` without losing hand edits.
   emitted statement must parse, introduce no lint finding, survive the canonical formatter, and
   reference only connections the script declares. A half-filled task is refused before anything is
   written, so the author never sees a parse error about syntax they did not type.
-- [ ] **Add explicit sequential dependencies**: Authors can connect tasks, remove edges, and reorder
-  a simple flow. Multiple incoming edges represent a dependency join and never imply concurrency.
-  The script remains the source of truth.
+- [x] **Add explicit sequential dependencies**: An edge is written into the script as an
+  `-- @after: a, b` tag above the task's label — the lexer reads it as a tag and the parser skips
+  tags between statements, so the declaration is free at run time and the script stays the source of
+  truth. Dragging a card's connector handle declares a dependency; dragging the card body still
+  reorders. The inspector lists what a task waits for, each removable. Several incoming edges are a
+  join — "waits for all 2" — and the canvas never writes a `PARALLEL` block, which is the only thing
+  in ETL-SQL that means concurrency. Because the engine runs top to bottom, connecting also reorders
+  when it has to, so a declaration can never contradict execution order; cycles and self-edges are
+  refused with a reason. The projection replaces the implicit sequential edge into a task that
+  declares its own.
 
-### Phase 2 — Pipeline Control Flow and Debugging
+### Phase 2 — Pipeline Control Flow and Debugging (Next)
 
 **Outcome:** The DAG expresses ETL-SQL control flow honestly and can inspect execution state at a
 selected point.

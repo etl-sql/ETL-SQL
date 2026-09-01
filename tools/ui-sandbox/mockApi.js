@@ -1484,13 +1484,22 @@ function mockParseTasks(script) {
       }
     }
 
+    // The -- @after: line immediately above the label, if there is one.
+    const lineStart = script.lastIndexOf('\n', Math.max(0, match.index - 1)) + 1;
+    const previousStart = lineStart === 0 ? 0 : script.lastIndexOf('\n', lineStart - 2) + 1;
+    const previous = lineStart === 0 ? '' : script.slice(previousStart, lineStart).trim();
+    const dependsOn = previous.startsWith('-- @after:')
+      ? previous.slice('-- @after:'.length).split(',').map(name => name.trim()).filter(Boolean)
+      : [];
+
     tasks.push({
       id: match[1],
       kind,
       connection,
       body,
+      dependsOn,
       line: script.slice(0, match.index).split('\n').length,
-      start: match.index,
+      start: dependsOn.length ? previousStart : match.index,
       end,
     });
     head.lastIndex = end;
@@ -1539,13 +1548,28 @@ function mockWithScriptTasks(script, base) {
   return { nodes: [...base.nodes, ...nodes], edges: [...base.edges, ...edges] };
 }
 
+/** True when `taskId` waits on `candidate`, directly or through other tasks. */
+function waitsOn(tasks, taskId, candidate) {
+  const seen = new Set();
+  const pending = [taskId];
+  while (pending.length) {
+    const current = String(pending.pop() || '').toLowerCase();
+    if (seen.has(current)) continue;
+    seen.add(current);
+    if (current === String(candidate).toLowerCase()) return true;
+    const task = tasks.find(entry => entry.id.toLowerCase() === current);
+    for (const name of task?.dependsOn ?? []) pending.push(name);
+  }
+  return false;
+}
+
 /** The sandbox's pipeline editor. Refusals are real, so the UI's error path gets exercised. */
 function mockPipelineTask(body) {
   const script = body.script || '';
   const tasks = mockParseTasks(script);
   const find = id => tasks.find(task => task.id.toLowerCase() === String(id || '').toLowerCase());
   const refuse = error => ({ applied: false, script, error, tasks: strip(tasks) });
-  const strip = list => list.map(({ id, kind, connection, body: text, line }) => ({ id, kind, connection, body: text, line }));
+  const strip = list => list.map(({ id, kind, connection, body: text, line, dependsOn }) => ({ id, kind, connection, body: text, line, dependsOn }));
   const lineEnd = offset => {
     const next = script.indexOf('\n', offset);
     return next === -1 ? script.length : next + 1;
@@ -1574,6 +1598,33 @@ function mockPipelineTask(body) {
     if (body.after && !anchor) return refuse(`No task called '${body.after}' to move after.`);
     const at = anchor ? lineEnd(anchor.end) : (mockParseTasks(without)[0]?.start ?? without.length);
     next = `${without.slice(0, at)}${moved}\n\n${without.slice(at)}`;
+  } else if (op === 'connect' || op === 'disconnect') {
+    // `id` is the dependent and `after` the dependency, matching the host's contract.
+    const dependency = String(body.after || '');
+    if (!find(dependency)) return refuse(`No task called '${dependency}'.`);
+    if (dependency.toLowerCase() === target.id.toLowerCase()) return refuse('A task cannot depend on itself.');
+
+    // The host refuses a cycle, because a linear script can never execute one. The sandbox has to
+    // refuse it too, or the mock teaches the UI a behaviour the real host does not have.
+    if (op === 'connect' && waitsOn(tasks, dependency, target.id)) {
+      return refuse(`'${dependency}' already waits on '${target.id}', so this would make a cycle.`);
+    }
+
+    const declared = new Set(target.dependsOn.map(name => name.toLowerCase()));
+    if (op === 'connect' && declared.has(dependency.toLowerCase())) {
+      return { applied: true, script, error: null, tasks: strip(tasks) };
+    }
+    if (op === 'disconnect' && !declared.has(dependency.toLowerCase())) {
+      return refuse(`'${target.id}' does not wait on '${dependency}'.`);
+    }
+
+    const names = op === 'connect'
+      ? [...target.dependsOn, dependency]
+      : target.dependsOn.filter(name => name.toLowerCase() !== dependency.toLowerCase());
+
+    const tagEnd = target.dependsOn.length ? script.indexOf('\n', target.start) + 1 : target.start;
+    const tag = names.length ? `-- @after: ${names.join(', ')}\n` : '';
+    next = script.slice(0, target.start) + tag + script.slice(tagEnd);
   } else if (op === 'update') {
     if (body.newId && find(body.newId) && body.newId.toLowerCase() !== target.id.toLowerCase()) {
       return refuse(`This script already has a task called '${body.newId}'.`);

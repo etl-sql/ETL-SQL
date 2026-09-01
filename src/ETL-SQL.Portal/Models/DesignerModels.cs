@@ -157,7 +157,9 @@ public record PipelineTaskRequest(
 /// </summary>
 public record PipelineTaskResponse(bool Applied, string Script, string? Error, List<PipelineTaskDto> Tasks);
 
-public record PipelineTaskDto(string Id, string Kind, string Connection, string Body, int Line);
+/// <param name="DependsOn">Labels this task declares it runs after; several of them is a join.</param>
+public record PipelineTaskDto(
+    string Id, string Kind, string Connection, string Body, int Line, List<string> DependsOn);
 
 public record DesignerStateDto(
     List<DesignerPageDto> Pages,

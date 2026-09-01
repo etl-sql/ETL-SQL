@@ -22,7 +22,8 @@ public sealed record PipelineTask(
     string Body,
     int Line,
     int StartOffset,
-    int EndOffset);
+    int EndOffset,
+    IReadOnlyList<string> DependsOn);
 
 /// <summary>
 /// What a task does, and therefore which statement the canvas writes for it.
@@ -229,7 +230,10 @@ public sealed class PipelineTaskAuthoringService
 
         var lineEnding = DetectLineEnding(source);
         var (start, end) = RemovableSpan(source, task);
-        var moved = source[task.StartOffset..task.EndOffset];
+
+        // Relocate exactly what the span covers — declaration included — rather than the statement
+        // alone, so a task keeps what it waits on when it is dragged somewhere else.
+        var moved = source[start..end].Trim('\r', '\n');
 
         var insertAt = anchor is null ? FirstTaskAnchor(source, tasks) : EndOfLine(source, anchor.EndOffset);
         if (insertAt >= start && insertAt <= end)
@@ -307,6 +311,161 @@ public sealed class PipelineTaskAuthoringService
         return Commit(source, patched);
     }
 
+    // ── Dependencies ─────────────────────────────────────────────────────────
+
+    /// <summary>The tag a task declares its dependencies with.</summary>
+    private const string AfterTag = "-- @after:";
+
+    /// <summary>
+    /// Declares that <paramref name="toId"/> runs after <paramref name="fromId"/>.
+    ///
+    /// <para>The edge is written into the script as an <c>-- @after:</c> tag above the task's label,
+    /// which the lexer reads as a tag and the parser skips between statements, so the declaration
+    /// costs nothing at run time and the script stays the source of truth.</para>
+    ///
+    /// <para>The engine runs a script top to bottom, so a declared dependency that contradicted the
+    /// physical order would be a lie the canvas told about the file. Connecting therefore also moves
+    /// the dependent task below the one it now waits for, when it was not already.</para>
+    /// </summary>
+    public PipelineEditResult Connect(string? script, string fromId, string toId)
+    {
+        var source = script ?? string.Empty;
+        if (!TryParse(source, out var ast, out var parseError))
+            return PipelineEditResult.Refused(source, parseError);
+
+        var tasks = ReadTasks(source, ast);
+        var from = Find(tasks, fromId);
+        var to = Find(tasks, toId);
+        if (from is null) return PipelineEditResult.Refused(source, $"No task called '{fromId}'.");
+        if (to is null) return PipelineEditResult.Refused(source, $"No task called '{toId}'.");
+        if (string.Equals(from.Id, to.Id, StringComparison.OrdinalIgnoreCase))
+            return PipelineEditResult.Refused(source, "A task cannot depend on itself.");
+
+        if (to.DependsOn.Contains(from.Id, StringComparer.OrdinalIgnoreCase))
+            return PipelineEditResult.Ok(source);
+
+        // A cycle cannot be executed by a linear script, and drawing one would make the canvas claim
+        // something the engine can never do.
+        if (DependsOnTransitively(tasks, from.Id, to.Id))
+            return PipelineEditResult.Refused(source,
+                $"'{from.Id}' already waits on '{to.Id}', so this would make a cycle.");
+
+        var declared = to.DependsOn.Append(from.Id).ToList();
+        var written = WriteDependencies(source, to, declared);
+        if (written is null) return PipelineEditResult.Refused(source, $"Could not write the dependency onto '{to.Id}'.");
+
+        // Re-read against the rewritten script: the tag line shifts every offset below it.
+        var committed = Commit(source, written);
+        if (!committed.Applied || from.StartOffset < to.StartOffset) return committed;
+
+        var reordered = Move(committed.Script, to.Id, from.Id);
+        return reordered.Applied ? reordered : committed;
+    }
+
+    /// <summary>Removes one declared dependency, leaving the tasks and their order alone.</summary>
+    public PipelineEditResult Disconnect(string? script, string fromId, string toId)
+    {
+        var source = script ?? string.Empty;
+        if (!TryParse(source, out var ast, out var parseError))
+            return PipelineEditResult.Refused(source, parseError);
+
+        var to = Find(ReadTasks(source, ast), toId);
+        if (to is null) return PipelineEditResult.Refused(source, $"No task called '{toId}'.");
+        if (!to.DependsOn.Contains(fromId, StringComparer.OrdinalIgnoreCase))
+            return PipelineEditResult.Refused(source, $"'{to.Id}' does not wait on '{fromId}'.");
+
+        var declared = to.DependsOn
+            .Where(name => !string.Equals(name, fromId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var written = WriteDependencies(source, to, declared);
+        return written is null
+            ? PipelineEditResult.Refused(source, $"Could not rewrite the dependencies of '{to.Id}'.")
+            : Commit(source, written);
+    }
+
+    /// <summary>True when <paramref name="taskId"/> waits on <paramref name="candidate"/>, directly or through others.</summary>
+    private static bool DependsOnTransitively(IReadOnlyList<PipelineTask> tasks, string taskId, string candidate)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var pending = new Stack<string>([taskId]);
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            if (!seen.Add(current)) continue;
+            if (string.Equals(current, candidate, StringComparison.OrdinalIgnoreCase)) return true;
+            foreach (var name in Find(tasks, current)?.DependsOn ?? [])
+                pending.Push(name);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Rewrites a task's <c>-- @after:</c> line, adding, replacing, or removing it as needed.
+    ///
+    /// <para>Only that one line is touched. An empty list removes the tag rather than leaving
+    /// <c>-- @after:</c> behind, because a tag declaring nothing reads as a dependency the reader
+    /// cannot see.</para>
+    /// </summary>
+    private static string? WriteDependencies(string script, PipelineTask task, IReadOnlyList<string> declared)
+    {
+        var lineEnding = DetectLineEnding(script);
+        var indent = LabelIndent(script, task.StartOffset);
+        var (tagStart, tagEnd) = DependencyTagSpan(script, task.StartOffset);
+
+        var replacement = declared.Count == 0
+            ? string.Empty
+            : $"{indent}{AfterTag} {string.Join(", ", declared)}{lineEnding}";
+
+        return Splice(script, tagStart, tagEnd, replacement);
+    }
+
+    /// <summary>
+    /// The span of the task's existing <c>-- @after:</c> line, or an empty span where one would go.
+    ///
+    /// <para>Only the line immediately above the label counts. A tag further up belongs to whatever
+    /// sits between them, and claiming it would attach one task's dependencies to another.</para>
+    /// </summary>
+    private static (int Start, int End) DependencyTagSpan(string script, int labelStart)
+    {
+        var lineStart = StartOfLine(script, labelStart);
+        if (lineStart == 0) return (lineStart, lineStart);
+
+        var previousStart = StartOfLine(script, lineStart - 1);
+        var previous = script[previousStart..lineStart];
+        return previous.TrimStart().StartsWith(AfterTag, StringComparison.OrdinalIgnoreCase)
+            ? (previousStart, lineStart)
+            : (lineStart, lineStart);
+    }
+
+    /// <summary>The names on a task's <c>-- @after:</c> line, in the order the author wrote them.</summary>
+    private static List<string> ReadDependencies(string script, int labelStart)
+    {
+        var (start, end) = DependencyTagSpan(script, labelStart);
+        if (end <= start) return [];
+
+        var line = script[start..end].Trim();
+        return line[AfterTag.Length..]
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(IsValidTaskId)
+            .ToList();
+    }
+
+    /// <summary>The whitespace a task's label sits behind, so a written tag lines up with it.</summary>
+    private static string LabelIndent(string script, int labelStart)
+    {
+        var lineStart = StartOfLine(script, labelStart);
+        return script[lineStart..labelStart];
+    }
+
+    private static int StartOfLine(string script, int offset)
+    {
+        var start = Math.Clamp(offset, 0, script.Length);
+        while (start > 0 && script[start - 1] != '\n') start--;
+        return start;
+    }
+
     // ── Reading ──────────────────────────────────────────────────────────────
 
     private static IReadOnlyList<PipelineTask> ReadTasks(string script, Script ast)
@@ -340,7 +499,8 @@ public sealed class PipelineTaskAuthoringService
                     script[spans.Value.BodyStart..spans.Value.BodyEnd].Trim('\r', '\n'),
                     label.Line,
                     start,
-                    end));
+                    end,
+                    ReadDependencies(script, start)));
                 continue;
             }
 
@@ -351,7 +511,8 @@ public sealed class PipelineTaskAuthoringService
                 StatementText(slice),
                 label.Line,
                 start,
-                end));
+                end,
+                ReadDependencies(script, start)));
         }
 
         return tasks;
@@ -529,9 +690,19 @@ public sealed class PipelineTaskAuthoringService
     }
 
     /// <summary>The span a move or a delete takes with it: the task plus the line it sits on.</summary>
+    /// <summary>
+    /// The span a move or a delete takes with it: the task, the line it sits on, and the
+    /// <c>-- @after:</c> declaration above it.
+    ///
+    /// <para>The tag has to travel with the task. Left behind, it lands above whatever moves up into
+    /// its place, silently handing one task's dependencies to another — and the task that was moved
+    /// loses the declaration it was moved to satisfy.</para>
+    /// </summary>
     private static (int Start, int End) RemovableSpan(string script, PipelineTask task)
     {
-        var start = task.StartOffset;
+        var (tagStart, tagEnd) = DependencyTagSpan(script, task.StartOffset);
+        var start = tagEnd > tagStart ? tagStart : task.StartOffset;
+
         while (start > 0 && (script[start - 1] == ' ' || script[start - 1] == '\t')) start--;
         if (start > 0 && script[start - 1] == '\n')
         {

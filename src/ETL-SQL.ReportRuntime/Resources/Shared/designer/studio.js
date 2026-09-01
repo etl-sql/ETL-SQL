@@ -740,6 +740,10 @@ export async function createStudioWorkbench(container, opts = {}) {
                     if (result?.applied) state.selectedTaskId = intent.id;
                 },
                 onMove: ({ id, after }) => canonicalPipelineMutation('Move task', { op: 'move', id, after }),
+                // `id` is the dependent and `after` the dependency, so the request reads the same way
+                // the tag reads in the script: this task runs after that one.
+                onConnect: ({ from, to }) => canonicalPipelineMutation('Connect tasks', { op: 'connect', id: to, after: from }),
+                onDisconnect: ({ from, to }) => canonicalPipelineMutation('Remove dependency', { op: 'disconnect', id: to, after: from }),
                 onRemove: async ({ id }) => {
                     const result = await canonicalPipelineMutation('Delete task', { op: 'remove', id });
                     if (result?.applied) state.selectedTaskId = null;

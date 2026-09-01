@@ -589,6 +589,8 @@ public static class WorkstationEditorApp
                     request.After)),
                 "update" => pipelineTasks.Update(script, request.Id ?? string.Empty, request.NewId, request.Connection, request.Body),
                 "move" => pipelineTasks.Move(script, request.Id ?? string.Empty, request.After),
+                "connect" => pipelineTasks.Connect(script, request.After ?? string.Empty, request.Id ?? string.Empty),
+                "disconnect" => pipelineTasks.Disconnect(script, request.After ?? string.Empty, request.Id ?? string.Empty),
                 "remove" => pipelineTasks.Remove(script, request.Id ?? string.Empty),
                 "read" => ETL_SQL.Analysis.Services.PipelineEditResult.Ok(script),
                 _ => ETL_SQL.Analysis.Services.PipelineEditResult.Refused(script, $"Unknown pipeline task operation '{request.Op}'."),
@@ -607,6 +609,7 @@ public static class WorkstationEditorApp
                         connection = task.Connection,
                         body = task.Body,
                         line = task.Line,
+                        dependsOn = task.DependsOn,
                     })
                     .ToList(),
             }, JsonOptions);

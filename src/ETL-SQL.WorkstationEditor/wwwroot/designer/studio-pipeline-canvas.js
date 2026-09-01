@@ -73,6 +73,8 @@ export function taskKindLabel(kind) {
  * @param onSelect   `(id | null) => void`
  * @param onAdd      `({ kind, after }) => Promise<void>`
  * @param onEdit     `({ id }) => Promise<void>`, opens the task editor.
+ * @param onConnect  `({ from, to }) => Promise<void>`, declares that `to` runs after `from`.
+ * @param onDisconnect `({ from, to }) => Promise<void>`, removes one declared edge.
  * @param onMove     `({ id, after }) => Promise<void>` — after null means "run first".
  * @param onRemove   `({ id }) => Promise<void>`
  * @param onOpenLine `(line) => void`, to reveal the task in the script.
@@ -84,6 +86,8 @@ export function attachPipelineTaskEditing(host, canvas, {
     onSelect = () => {},
     onAdd = async () => {},
     onEdit = async () => {},
+    onConnect = async () => {},
+    onDisconnect = async () => {},
     onMove = async () => {},
     onUpdate = async () => {},
     onRemove = async () => {},
@@ -129,14 +133,20 @@ export function attachPipelineTaskEditing(host, canvas, {
     const first = inspector.querySelector('[data-task-first]');
     if (first) on(first, 'click', () => onMove({ id: selected.id, after: null }));
 
+    for (const chip of inspector.querySelectorAll('[data-task-disconnect]')) {
+        on(chip, 'click', () => onDisconnect({ from: chip.dataset.taskDisconnect, to: selected.id }));
+    }
+
     // ── The cards ────────────────────────────────────────────────────────────
     // Only labelled cards take part. Everything else on the map is a projection stage: real, and
     // deliberately not draggable, because the canvas cannot edit it losslessly yet.
 
-    // The task being dragged. Held here rather than read back off the document: the drag payload is
-    // deliberately unreadable during dragover, and a component that queries the shell to find out
-    // what it is dragging has reached outside its own host.
+    // What is being dragged, and whether the drag started on the card or on its connector handle.
+    // Held here rather than read back off the document: the drag payload is deliberately unreadable
+    // during dragover, and a component that queries the shell to find out what it is dragging has
+    // reached outside its own host.
     let dragging = null;
+    let draggingKind = null;
 
     const cards = [...canvas.querySelectorAll('[data-task-key]')];
     for (const card of cards) {
@@ -145,22 +155,54 @@ export function attachPipelineTaskEditing(host, canvas, {
         card.draggable = true;
         card.classList.toggle('is-selected-task', sameId(id, selectedId));
 
+        // Dragging the card body reorders; dragging this handle declares a dependency. Two gestures
+        // because they mean different things: one moves a statement, the other writes a declaration
+        // about what has to finish first.
+        if (!card.querySelector('[data-task-connector]')) {
+            const handle = card.ownerDocument.createElement('button');
+            handle.type = 'button';
+            handle.className = 'etlsql-dag-connector';
+            handle.dataset.taskConnector = id;
+            handle.draggable = true;
+            handle.title = `Drag onto another task to make it run after ${id}`;
+            handle.setAttribute('aria-label', `Connect ${id} to another task`);
+            card.appendChild(handle);
+
+            on(handle, 'click', event => event.stopPropagation());
+            on(handle, 'dragstart', event => {
+                event.stopPropagation();
+                dragging = id;
+                draggingKind = 'connect';
+                event.dataTransfer.effectAllowed = 'link';
+                event.dataTransfer.setData('text/plain', id);
+                card.classList.add('is-connecting-task');
+            });
+            on(handle, 'dragend', () => {
+                dragging = null;
+                draggingKind = null;
+                card.classList.remove('is-connecting-task');
+                cards.forEach(other => other.classList.remove('is-drop-target'));
+            });
+        }
+
         on(card, 'click', () => onSelect(id));
         on(card, 'dragstart', event => {
             dragging = id;
+            draggingKind = 'move';
             event.dataTransfer.effectAllowed = 'move';
             event.dataTransfer.setData('text/plain', id);
             card.classList.add('is-dragging-task');
         });
         on(card, 'dragend', () => {
             dragging = null;
+            draggingKind = null;
             card.classList.remove('is-dragging-task');
             cards.forEach(other => other.classList.remove('is-drop-target'));
         });
         on(card, 'dragover', event => {
             if (!dragging || sameId(id, dragging)) return;
             event.preventDefault();
-            event.dataTransfer.dropEffect = 'move';
+            event.dataTransfer.dropEffect = draggingKind === 'connect' ? 'link' : 'move';
             card.classList.add('is-drop-target');
         });
         on(card, 'dragleave', () => card.classList.remove('is-drop-target'));
@@ -168,9 +210,17 @@ export function attachPipelineTaskEditing(host, canvas, {
             event.preventDefault();
             card.classList.remove('is-drop-target');
             const moved = event.dataTransfer.getData('text/plain') || dragging;
-            // Dropping a task onto another means "run after this one". Order in the script is the
-            // dependency; nothing here implies concurrency.
-            if (moved && !sameId(moved, id)) onMove({ id: moved, after: id });
+            if (!moved || sameId(moved, id)) return;
+
+            if (draggingKind === 'connect') {
+                // Dropping a connector onto a task declares that the task waits for the one the drag
+                // started from. Several of those on one task is a join, never concurrency.
+                onConnect({ from: moved, to: id });
+            } else {
+                // Dropping a task onto another means "run after this one". Order in the script is the
+                // dependency; nothing here implies concurrency either.
+                onMove({ id: moved, after: id });
+            }
         });
     }
 
@@ -212,10 +262,35 @@ function inspectorMarkup(task) {
             <span class="etlsql-studio-pipeline-selected-name">${escapeHtml(task.id)}</span>
             ${noteMarkup(detail, 'info')}
         </div>
+        ${dependencyMarkup(task)}
         <div class="etlsql-studio-pipeline-actions">
             <button type="button" class="etlsql-studio-btn is-primary" data-task-edit>Edit</button>
             <button type="button" class="etlsql-studio-btn" data-task-first>Run first</button>
             <button type="button" class="etlsql-studio-btn" data-task-reveal>Show in script</button>
             <button type="button" class="etlsql-studio-btn is-danger" data-task-remove>Delete</button>
         </div>`;
+}
+
+/**
+ * What the selected task waits for, each one removable.
+ *
+ * Reads as a list of prerequisites rather than as "edges", because that is what it means to the
+ * author: several of them is a join — this task runs when all of them are done — and never an
+ * instruction to run anything at the same time.
+ */
+function dependencyMarkup(task) {
+    const dependencies = task.dependsOn ?? [];
+    if (!dependencies.length) {
+        return `<p class="etlsql-studio-pipeline-deps-empty">Runs in script order. Drag another task's
+            connector onto this one to make it wait for that task.</p>`;
+    }
+
+    return `<div class="etlsql-studio-pipeline-deps">
+        <span>${dependencies.length === 1 ? 'Waits for' : `Waits for all ${dependencies.length}`}</span>
+        ${dependencies.map(name => `<span class="etlsql-studio-dep-chip">
+            <code>${escapeHtml(name)}</code>
+            <button type="button" data-task-disconnect="${escapeHtml(name)}"
+                aria-label="Stop waiting for ${escapeHtml(name)}" title="Remove this dependency">&times;</button>
+        </span>`).join('')}
+    </div>`;
 }

@@ -6645,3 +6645,79 @@ body.vscode-dark .etlsql-cw-missing-hint {
     border-radius: 6px;
     overflow: hidden;
 }
+
+/* Dependency editing: the connector handle on a card, and the prerequisites in the inspector. */
+
+.etlsql-dag-connector {
+    position: absolute;
+    right: -7px;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    transform: translateY(-50%);
+    border: 2px solid var(--portal-surface, #161b22);
+    border-radius: 50%;
+    background: var(--portal-accent, #58a6ff);
+    cursor: crosshair;
+}
+
+.etlsql-dag-connector:hover,
+.etlsql-dag-connector:focus-visible {
+    outline: 2px solid var(--portal-accent, #58a6ff);
+    outline-offset: 2px;
+}
+
+/* A connect drag reads differently from a move: it links rather than relocates. */
+.etlsql-dag-card.is-connecting-task {
+    outline: 2px solid var(--portal-accent, #58a6ff);
+    outline-offset: 2px;
+}
+
+.etlsql-studio-pipeline-deps {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.etlsql-studio-pipeline-deps > span:first-child,
+.etlsql-studio-pipeline-deps-empty {
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+}
+
+.etlsql-studio-pipeline-deps-empty {
+    margin: 8px 0 0;
+    line-height: 1.4;
+}
+
+.etlsql-studio-dep-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 4px 2px 8px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 999px;
+    background: var(--portal-bg, #0d1117);
+}
+
+.etlsql-studio-dep-chip code {
+    color: var(--portal-text, #f0f6fc);
+    font-size: 0.6875rem;
+}
+
+.etlsql-studio-dep-chip button {
+    padding: 0 4px;
+    border: 0;
+    background: none;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.875rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.etlsql-studio-dep-chip button:hover {
+    color: var(--portal-danger, #f85149);
+}
