@@ -477,6 +477,8 @@ namespace ETL_SQL.Reporting.Builders
                         }
                         vm.ChartData = new VisualChartDataBuilder().Build(vm.ChartSpec, vm);
                         vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData, geography: vm.GeographicGeometry);
+                        if (chartStatement.AdvancedChart is null && vm.RowStyles is { Count: > 0 })
+                            vm.PlotPlan = ApplyChartFormatting(vm.PlotPlan, vm.RowStyles);
                     }
                     if (vm.PlotPlan?.Series is { Length: > 0 } planSeries &&
                         (vm.ChartSpec?.Bindings.Any(b => b.Channel == FieldChannel.Color) == true ||
@@ -1340,6 +1342,28 @@ namespace ETL_SQL.Reporting.Builders
                 vm.MicroCharts.AddRange(inlineMicroCharts);
             }
         }
+
+        internal static PlotPlan ApplyChartFormatting(PlotPlan plan, IReadOnlyList<string?> rowColors) => plan with
+        {
+            Layers = plan.Layers.Select(layer => layer with
+            {
+                Data = layer.Data.Select(datum =>
+                {
+                    if (datum.RowIndex < 0 || datum.RowIndex >= rowColors.Count ||
+                        string.IsNullOrWhiteSpace(rowColors[datum.RowIndex]))
+                        return datum;
+                    return datum with
+                    {
+                        Encodings = datum.Encodings
+                            .Where(encoding => encoding.Channel != ConditionalEncodingChannel.Color)
+                            .Append(new ResolvedEncodingValue(
+                                ConditionalEncodingChannel.Color,
+                                ChartValue.From(rowColors[datum.RowIndex]!)))
+                            .ToImmutableArray()
+                    };
+                }).ToImmutableArray()
+            }).ToImmutableArray()
+        };
 
         private static List<decimal?> ParseHtmlSparklineValues(object? source, string field)
         {

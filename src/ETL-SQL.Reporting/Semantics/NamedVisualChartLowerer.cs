@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using ETL_SQL.Core;
 using ETL_SQL.Reporting.Semantics;
@@ -123,6 +124,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         CreateVisualStatement statement,
         ImmutableArray<FieldBinding> bindings)
     {
+        var bandSize = ResolveBandSize(statement);
         if (statement.VisualType == VisualType.Combo && statement.TypedSeries.Count > 0)
         {
             var x = bindings.Where(binding => binding.Channel == FieldChannel.X).ToImmutableArray();
@@ -133,13 +135,19 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 var secondary = !series.SeriesType.Equals(firstType, StringComparison.OrdinalIgnoreCase);
                 var channel = secondary ? FieldChannel.Y2 : FieldChannel.Y;
                 var y = bindings.First(binding => binding.Field!.Equals(series.Column, StringComparison.OrdinalIgnoreCase));
+                var mark = series.SeriesType.Equals("bar", StringComparison.OrdinalIgnoreCase)
+                    ? MarkKind.Rect
+                    : MarkKind.Line;
                 yield return new MarkLayerSpec(
                     $"series-{index:D2}-{Sanitize(series.Column)}",
-                    series.SeriesType.Equals("bar", StringComparison.OrdinalIgnoreCase) ? MarkKind.Rect : MarkKind.Line,
+                    mark,
                     index,
                     x.Add(y with { Channel = channel, Axis = secondary ? AxisRole.Secondary : AxisRole.Primary }),
                     [new StyleToken("series", series.Column)],
-                    series.Column);
+                    series.Column)
+                {
+                    BandSize = mark == MarkKind.Rect ? bandSize : .75m
+                };
             }
         }
         else
@@ -156,27 +164,31 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 VisualType.Radar => ImmutableArray.Create(new StyleToken("layout", "radar"), new StyleToken("preserveRows", "true")),
                 _ => ImmutableArray<StyleToken>.Empty
             };
+            var mark = statement.VisualType switch
+            {
+                VisualType.Bar or VisualType.HorizontalBar => MarkKind.Rect,
+                VisualType.Line => MarkKind.Line,
+                VisualType.Scatter or VisualType.Bubble => MarkKind.Point,
+                VisualType.HeatMap or VisualType.Funnel => MarkKind.Rect,
+                VisualType.BoxPlot or VisualType.Waterfall or VisualType.Candlestick => MarkKind.Rect,
+                VisualType.Trellis => TrellisMark(statement),
+                VisualType.Gantt => MarkKind.Rect,
+                VisualType.Radar => MarkKind.Line,
+                VisualType.Gauge => MarkKind.Arc,
+                VisualType.Pie or VisualType.Donut => MarkKind.Arc,
+                VisualType.Combo => MarkKind.Line,
+                _ => throw new InvalidOperationException()
+            };
             yield return new MarkLayerSpec(
                 "primary",
-                statement.VisualType switch
-                {
-                    VisualType.Bar or VisualType.HorizontalBar => MarkKind.Rect,
-                    VisualType.Line => MarkKind.Line,
-                    VisualType.Scatter or VisualType.Bubble => MarkKind.Point,
-                    VisualType.HeatMap or VisualType.Funnel => MarkKind.Rect,
-                    VisualType.BoxPlot or VisualType.Waterfall or VisualType.Candlestick => MarkKind.Rect,
-                    VisualType.Trellis => TrellisMark(statement),
-                    VisualType.Gantt => MarkKind.Rect,
-                    VisualType.Radar => MarkKind.Line,
-                    VisualType.Gauge => MarkKind.Arc,
-                    VisualType.Pie or VisualType.Donut => MarkKind.Arc,
-                    VisualType.Combo => MarkKind.Line,
-                    _ => throw new InvalidOperationException()
-                },
+                mark,
                 0,
                 bindings,
                 style,
-                statement.Name);
+                statement.Name)
+            {
+                BandSize = mark == MarkKind.Rect ? bandSize : .75m
+            };
         }
 
         for (var index = 0; index < statement.Overlays.Count; index++)
@@ -420,5 +432,17 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             ? Math.Clamp(value > 1m ? value / 100m : value, 0m, 0.9m)
             : 0.45m;
     }
+
+    private static decimal ResolveBandSize(CreateVisualStatement statement)
+    {
+        var text = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("BAND_SIZE", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (text is null) return .75m;
+        if (!decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var value))
+            throw new InvalidDataException(
+                $"BAND_SIZE must be a number greater than zero and at most one, but got '{text}'.");
+        return value;
+    }
+
     private static string Sanitize(string value) => new(value.Select(character => char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : '-').ToArray());
 }

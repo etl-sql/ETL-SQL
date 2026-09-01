@@ -922,6 +922,12 @@ Common `OPTIONS` keys for report visuals:
 | Key | Applies to | Values | Description |
 | :--- | :--- | :--- | :--- |
 | `FORMAT` | `CARD`, `TABLE`, data labels | .NET format string such as `'N0'`, `'C2'`, `'P1'` | Numeric display format |
+| `GRID_LINES` | Cartesian charts | `ON` / `OFF` | Shows or hides background grid lines. |
+| `ZOOM_SLIDER` | Browser-rendered native charts | `ON` / `OFF` | Adds a visible range selector. |
+| `LEGEND_POSITION` | Charts with legends | `TOP`, `RIGHT`, `BOTTOM`, `LEFT` | Places the legend outside the plot. |
+| `DATA_LABELS` | Charts | `ON` / `OFF` with optional position/font/format settings | Shows values on marks. |
+| `SYMBOLS` | `LINE`, line layers in `COMBO` | `ON` / `OFF` | Shows or hides data-point markers. |
+| `BAND_SIZE` | `BAR`, `HBAR`, bar layers in `COMBO` | Decimal greater than `0` and at most `1` | Controls bar width and therefore spacing. |
 | `AXIS_SORT` | `BAR`, `HBAR`, `LINE`, `AREA`, `COMBO` | `ASC`, `DESC`, `SOURCE`, `VALUE`, `VALUE_DESC` | Controls category-axis order. `ASC` type-sorts datetime, numeric, then text values; `SOURCE` preserves query order; `VALUE` and `VALUE_DESC` sort by the metric value. |
 | `ABBREVIATE` | `CARD` | `ON` / `OFF` | Shortens large numbers, such as `1250000` to `1.25M` |
 | `ALLOW_MAXIMIZE` | Visual `STYLE` | `ON` / `OFF` | Shows or hides the viewer maximize button. Data/chart visuals default `ON`; input/control visuals default `OFF`. |
@@ -1471,6 +1477,9 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql serve` | Start a live preview server for a Report-SQL script | [serve](reference/cli/serve.md) |
 | `etl-sql session clear` | Clear a session state | [session clear](reference/cli/session-clear.md) |
 | `etl-sql session` | Manage ad-hoc execution sessions | [session](reference/cli/session.md) |
+| `etl-sql studio list` | List active ETL-SQL Studio background server instances | [studio list](reference/cli/studio-list.md) |
+| `etl-sql studio open` | Open or ensure an active ETL-SQL Studio server instance and launch in browser | [studio open](reference/cli/studio-open.md) |
+| `etl-sql studio stop` | Stop active ETL-SQL Studio background server instance | [studio stop](reference/cli/studio-stop.md) |
 | `etl-sql studio` | Launch the modern ETL-SQL Studio visual & script workbench on local loopback | [studio](reference/cli/studio.md) |
 | `etl-sql test` | Run native ETL-SQL test suites (*.test.etlsql) and table assertions | [test](reference/cli/test.md) |
 | `etl-sql ui edit` | Start the modern windowed Terminal IDE (default) | [ui edit](reference/cli/ui-edit.md) |
@@ -2014,10 +2023,12 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `BACK` | General | Canonical language token |
 | `BATCHSIZE` | General | Canonical language token |
 | `BITS` | General | Canonical language token |
+| `BLANK` | General | Canonical language token |
 | `BOTH` | General | Canonical language token |
 | `BULK` | General | Canonical language token |
 | `BUTTON` | General | Canonical language token |
 | `CASCADE` | General | Canonical language token |
+| `CASTABLE` | General | Canonical language token |
 | `CHAR_LENGTH` | General | Canonical language token |
 | `CHARACTER_LENGTH` | General | Canonical language token |
 | `CLOSE` | General | Canonical language token |
@@ -2026,7 +2037,6 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `CONNECTION_PREVIEW_LIMIT` | General | Canonical language token |
 | `CONNECTIONS` | General | Canonical language token |
 | `CONVERT` | General | Canonical language token |
-| `EXPECT` | General | Canonical language token |
 | `DATA_QUALITY_DRY_RUN` | General | Canonical language token |
 | `DATA_SOURCE` | General | Canonical language token |
 | `DELETE_EXTRA` | General | Canonical language token |
@@ -2036,10 +2046,12 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `ENCODING` | General | Canonical language token |
 | `ENG` | General | Canonical language token |
 | `EXCLUDE_FROM_PRINT` | General | Canonical language token |
+| `EXPECT` | General | Canonical language token |
 | `EXPECTED_HASH` | General | Canonical language token |
 | `EXPORT_CSV` | General | Canonical language token |
 | `EXPORT_EXCEL` | General | Canonical language token |
 | `EXPORT_PDF` | General | Canonical language token |
+| `EXPR` | General | Canonical language token |
 | `EXTRACT` | General | Canonical language token |
 | `FAILURE` | General | Canonical language token |
 | `FALSE` | General | Canonical language token |
@@ -2047,6 +2059,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `FORMAT` | General | Canonical language token |
 | `FRESHNESS` | General | Canonical language token |
 | `FROM_ENCODING` | General | Canonical language token |
+| `HANDLING` | General | Canonical language token |
 | `HASH_FILE` | General | Canonical language token |
 | `HELP` | General | Canonical language token |
 | `HISTORICAL` | General | Canonical language token |
@@ -2069,12 +2082,14 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `MAP_BY_HEADER_NAME` | General | Canonical language token |
 | `MARGIN` | General | Canonical language token |
 | `MARGINS` | General | Canonical language token |
+| `MATCHES` | General | Canonical language token |
 | `MAX` | General | Canonical language token |
 | `MAXERRORS` | General | Canonical language token |
 | `MIN` | General | Canonical language token |
 | `MODE` | General | Canonical language token |
 | `MULTISELECT` | General | Canonical language token |
 | `NONE` | General | Canonical language token |
+| `NOTIFY` | General | Canonical language token |
 | `NULL_MISSING_COLUMNS` | General | Canonical language token |
 | `NULL_PERCENT` | General | Canonical language token |
 | `OCTET_LENGTH` | General | Canonical language token |
@@ -2098,6 +2113,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `PRINT` | General | Canonical language token |
 | `PRINT_LAYOUT` | General | Canonical language token |
 | `PROGRESS_BAR` | General | Canonical language token |
+| `QUARANTINE` | General | Canonical language token |
 | `QUARANTINE_PERCENT` | General | Canonical language token |
 | `REFRESH` | General | Canonical language token |
 | `REFRESH_REPORT` | General | Canonical language token |
@@ -2119,6 +2135,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `SKIP_ERROR` | General | Canonical language token |
 | `SPARKLINE` | General | Canonical language token |
 | `SPLIT` | General | Canonical language token |
+| `STEWARD` | General | Canonical language token |
 | `SUBSTRING` | General | Canonical language token |
 | `SYNC` | General | Canonical language token |
 | `TABLES` | General | Canonical language token |
@@ -2133,6 +2150,8 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `TRUE` | General | Canonical language token |
 | `TRUNCATE_STRING` | General | Canonical language token |
 | `TYPE` | General | Canonical language token |
+| `UNIQUE_FIRST` | General | Canonical language token |
+| `UNIQUE_LAST` | General | Canonical language token |
 | `UNIT` | General | Canonical language token |
 | `UNITS` | General | Canonical language token |
 | `UNLOCKED` | General | Canonical language token |
@@ -2447,8 +2466,8 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `@domain` | Tag | Standard governance tag |
 | `@encrypted_at_rest` | Tag | Standard governance tag |
 | `@example` | Tag | Standard governance tag |
-| `@expect` | Tag | Projected from `EXPECT` clauses onto lineage; not written by hand |
-| `@fail` | Tag | Projected from `EXPECT … ON FAILURE`; not written by hand |
+| `@expect` | Tag | Standard governance tag |
+| `@fail` | Tag | Standard governance tag |
 | `@format` | Tag | Standard governance tag |
 | `@freshness` | Tag | Standard governance tag |
 | `@load_pattern` | Tag | Standard governance tag |

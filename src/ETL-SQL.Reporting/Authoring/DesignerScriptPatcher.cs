@@ -346,7 +346,7 @@ public sealed class DesignerScriptPatcher
     private static string PatchElementStatement(string original, string desired)
     {
         var patched = PatchHeader(original, desired, @"\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?(?:VISUAL|CONTAINER|BUTTON)\s+[^\s]+(?:\s+AS\s+[^\s(]+)?");
-        foreach (var clause in new[] { "TITLE", "SUBTITLE", "SOURCE", "MODE", "TEMPLATE", "CHART", "DEFAULT", "MAPPINGS", "OPTIONS", "STYLE", "FORMATTING", "ACTIONS", "INTERACTIONS", "FALLBACK", "LAYOUT", "PRINT_LAYOUT" })
+        foreach (var clause in new[] { "TITLE", "SUBTITLE", "SOURCE", "MODE", "TEMPLATE", "CHART", "DEFAULT", "MAPPINGS", "OPTIONS", "STYLE", "FORMATTING", "OVERLAYS", "ACTIONS", "INTERACTIONS", "FALLBACK", "LAYOUT", "PRINT_LAYOUT" })
         {
             // If the desired state does not specify a CHART clause, keep existing CHART trivia intact
             if (clause == "CHART" && FindClause(original, clause) is not null && FindClause(desired, clause) is null)

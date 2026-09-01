@@ -4982,9 +4982,13 @@ export function createDesigner(container, opts = {}) {
         const palette = formatting.palette || [];
         const rules = formatting.conditionalRules || [];
         const fields = formatting.fields || {};
+        const namedColors = Object.entries(v.options || {})
+            .filter(([key]) => key.toUpperCase().startsWith('COLOR:'))
+            .map(([key, color]) => ({ name: key.slice('COLOR:'.length), color }));
+        const overlays = v.options?.overlays || '';
         const isChart = FORMAT_INSPECTOR_CHARTS.has(v.type);
         const isTable = v.type === 'TABLE';
-        const supportsRules = isTable || v.type === 'CARD' || v.type === 'KPI';
+        const supportsRules = isChart || isTable || v.type === 'CARD' || v.type === 'KPI';
         const availableFields = [...new Set([
             ...Object.values(v.mappings || {}).filter(Boolean),
             ...(columns || [])
@@ -5050,6 +5054,13 @@ export function createDesigner(container, opts = {}) {
                     <summary>Axes & legend</summary>
                     <div class="etlsql-format-group-body">
                         <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-legend" ${(v.options?.LEGEND || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show legend</span></label>
+                        <label class="etlsql-dsgn-label">Legend placement
+                            <select id="pp-format-legend-position" class="form-control">
+                                ${['TOP', 'RIGHT', 'BOTTOM', 'LEFT'].map(value => `<option${(v.options?.LEGEND_POSITION || 'BOTTOM').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}
+                            </select>
+                        </label>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-grid-lines" ${(v.options?.GRID_LINES || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show background grid lines</span></label>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-zoom-slider" ${(v.options?.ZOOM_SLIDER || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show zoom slider</span></label>
                         <div class="etlsql-format-axis-grid">
                             <strong>X axis</strong><strong>Y axis</strong>
                             <input data-axis="x" data-axis-key="LABEL" class="form-control" value="${esc(xAxis.LABEL || xAxis.label || '')}" placeholder="Label">
@@ -5065,6 +5076,26 @@ export function createDesigner(container, opts = {}) {
                 </details>` : ''}
 
                 ${isChart ? `<details class="etlsql-format-group">
+                    <summary>Marks & labels</summary>
+                    <div class="etlsql-format-group-body">
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-data-labels" ${(v.options?.DATA_LABELS || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show data labels</span></label>
+                        <label class="etlsql-dsgn-label">Label position
+                            <select id="pp-format-data-label-position" class="form-control">
+                                ${['OUTSIDE_TOP', 'OUTSIDE_MIDDLE', 'OUTSIDE_BOTTOM', 'INSIDE_TOP', 'INSIDE_MIDDLE', 'INSIDE_BOTTOM'].map(value => `<option${(v.options?.['DATA_LABELS:POSITION'] || 'OUTSIDE_TOP').toUpperCase() === value ? ' selected' : ''}>${value.replaceAll('_', ' ')}</option>`).join('')}
+                            </select>
+                        </label>
+                        ${v.type === 'LINE' || v.type === 'COMBO' ? `<label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-symbols" ${(v.options?.SYMBOLS || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show data points</span></label>` : ''}
+                        ${v.type === 'BAR' || v.type === 'HBAR' || v.type === 'HORIZONTALBAR' || v.type === 'COMBO' ? `<label class="etlsql-dsgn-label">Bar width
+                            <div class="etlsql-dsgn-slider-row"><input type="range" id="pp-format-band-size" min="0.1" max="1" step="0.05" value="${esc(v.options?.BAND_SIZE || '0.75')}"><output id="pp-format-band-size-value">${esc(v.options?.BAND_SIZE || '0.75')}</output></div>
+                            <span class="etlsql-format-hint">Narrower bars create more spacing.</span>
+                        </label>` : ''}
+                        <label class="etlsql-dsgn-label">Overlays
+                            <textarea id="pp-format-overlays" class="form-control etlsql-code-editor" rows="3" placeholder="OVERLAYS (GOAL(100) AS DASHED)">${esc(overlays)}</textarea>
+                        </label>
+                    </div>
+                </details>` : ''}
+
+                ${isChart ? `<details class="etlsql-format-group">
                     <summary>Series palette <span>${palette.length || 'Theme'}</span></summary>
                     <div class="etlsql-format-group-body">
                         <p class="etlsql-format-hint">Colors are written to the visual STYLE palette in series order.</p>
@@ -5076,6 +5107,15 @@ export function createDesigner(container, opts = {}) {
                             </div>`).join('')}
                         </div>
                         <button type="button" class="etlsql-format-add" data-palette-add>+ Add series color</button>
+                        <p class="etlsql-format-hint">Named colors stay attached to a series or category when its order changes.</p>
+                        <div class="etlsql-format-palette-list">
+                            ${namedColors.map(({ name, color }, index) => `<div data-named-color-row="${index}">
+                                <input class="form-control" data-named-color-name value="${esc(name)}" aria-label="Series or category name">
+                                <input type="color" data-named-color-value value="${toHexColor(color, '#2563eb')}" aria-label="Assigned color">
+                                <button type="button" data-named-color-remove aria-label="Remove assigned color">×</button>
+                            </div>`).join('')}
+                        </div>
+                        <button type="button" class="etlsql-format-add" data-named-color-add>+ Assign named color</button>
                     </div>
                 </details>` : ''}
 
@@ -5096,7 +5136,7 @@ export function createDesigner(container, opts = {}) {
                 </details>` : ''}
 
                 ${supportsRules ? `<details class="etlsql-format-group" ${rules.length ? 'open' : ''}>
-                    <summary>${isTable ? 'Conditional formatting' : 'Alert states'} <span>${rules.length}</span></summary>
+                    <summary>${isChart || isTable ? 'Conditional formatting' : 'Alert states'} <span>${rules.length}</span></summary>
                     <div class="etlsql-format-group-body">
                         <div class="etlsql-format-rule-list">
                             ${rules.map((rule, index) => {
@@ -5230,6 +5270,50 @@ export function createDesigner(container, opts = {}) {
             v.options.LEGEND = event.target.checked ? 'ON' : 'OFF';
             sync();
         });
+        panel.querySelector('#pp-format-legend-position')?.addEventListener('change', event => {
+            v.options ||= {};
+            v.options.LEGEND_POSITION = event.target.value;
+            sync();
+        });
+        panel.querySelector('#pp-format-grid-lines')?.addEventListener('change', event => {
+            v.options ||= {};
+            v.options.GRID_LINES = event.target.checked ? 'ON' : 'OFF';
+            sync();
+        });
+        panel.querySelector('#pp-format-zoom-slider')?.addEventListener('change', event => {
+            v.options ||= {};
+            v.options.ZOOM_SLIDER = event.target.checked ? 'ON' : 'OFF';
+            sync();
+        });
+        panel.querySelector('#pp-format-data-labels')?.addEventListener('change', event => {
+            v.options ||= {};
+            v.options.DATA_LABELS = event.target.checked ? 'ON' : 'OFF';
+            sync();
+        });
+        panel.querySelector('#pp-format-data-label-position')?.addEventListener('change', event => {
+            v.options ||= {};
+            v.options['DATA_LABELS:POSITION'] = event.target.value.replaceAll(' ', '_');
+            sync();
+        });
+        panel.querySelector('#pp-format-symbols')?.addEventListener('change', event => {
+            v.options ||= {};
+            v.options.SYMBOLS = event.target.checked ? 'ON' : 'OFF';
+            sync();
+        });
+        panel.querySelector('#pp-format-band-size')?.addEventListener('input', event => {
+            v.options ||= {};
+            v.options.BAND_SIZE = event.target.value;
+            const output = panel.querySelector('#pp-format-band-size-value');
+            if (output) output.value = event.target.value;
+            sync();
+        });
+        panel.querySelector('#pp-format-overlays')?.addEventListener('change', event => {
+            v.options ||= {};
+            const value = event.target.value.trim();
+            if (value) v.options.overlays = value;
+            else delete v.options.overlays;
+            sync();
+        });
         panel.querySelectorAll('[data-axis]').forEach(input => input.addEventListener('change', () => {
             const axis = input.dataset.axis === 'x' ? formatting.xAxis : formatting.yAxis;
             const key = input.dataset.axisKey;
@@ -5257,6 +5341,34 @@ export function createDesigner(container, opts = {}) {
         }));
         panel.querySelector('[data-palette-add]')?.addEventListener('click', () => {
             formatting.palette.push(['#2563eb', '#16a34a', '#f59e0b', '#dc2626'][formatting.palette.length % 4]);
+            sync();
+            rerender();
+        });
+
+        const syncNamedColors = () => {
+            v.options ||= {};
+            Object.keys(v.options).filter(key => key.toUpperCase().startsWith('COLOR:')).forEach(key => delete v.options[key]);
+            panel.querySelectorAll('[data-named-color-row]').forEach(row => {
+                const name = row.querySelector('[data-named-color-name]')?.value.trim();
+                const color = row.querySelector('[data-named-color-value]')?.value;
+                if (name && color) v.options[`COLOR:${name}`] = color;
+            });
+            sync();
+        };
+        panel.querySelectorAll('[data-named-color-row]').forEach(row => {
+            row.querySelector('[data-named-color-name]')?.addEventListener('change', syncNamedColors);
+            row.querySelector('[data-named-color-value]')?.addEventListener('input', syncNamedColors);
+            row.querySelector('[data-named-color-remove]')?.addEventListener('click', () => {
+                row.remove();
+                syncNamedColors();
+                rerender();
+            });
+        });
+        panel.querySelector('[data-named-color-add]')?.addEventListener('click', () => {
+            v.options ||= {};
+            let index = 1;
+            while (Object.keys(v.options).some(key => key.toUpperCase() === `COLOR:SERIES${index}`)) index++;
+            v.options[`COLOR:Series${index}`] = '#2563eb';
             sync();
             rerender();
         });
@@ -6078,7 +6190,7 @@ export function createDesigner(container, opts = {}) {
                                 const isFilled = Boolean(mappings[r]);
                                 const badge = isReq
                                     ? (isFilled ? '<span class="etlsql-dsgn-role-badge req-ok">✓ Required</span>' : '<span class="etlsql-dsgn-role-badge req-missing">* Required</span>')
-                                    : '<span class="etlsql-dsgn-role-badge optional">Optional</span>';
+                                    : '';
                                 return `
                                     <div class="etlsql-dsgn-map-row">
                                         <div class="etlsql-dsgn-map-label">
@@ -6760,10 +6872,13 @@ export function createDesigner(container, opts = {}) {
         return scriptEditor ? scriptEditor.getValue() : (opts.script || opts.initialScript || '');
     }
 
-    async function syncScriptFromGrid() {
+    let scriptSyncVersion = 0;
+
+    async function syncScriptFromGrid(requestVersion) {
         try {
             const currentScript = currentScriptText();
             const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
+            if (requestVersion !== scriptSyncVersion) return;
             if (r?.script) {
                 if (typeof opts.onScriptChange === 'function') {
                     opts.onScriptChange(r.script);
@@ -6810,8 +6925,9 @@ export function createDesigner(container, opts = {}) {
     function syncScriptFromGridDebounced() {
         if (suppressScriptSync > 0) return;
         if (!isSplitActive && !scriptEditor && typeof opts.onScriptChange !== 'function') return;
+        const requestVersion = ++scriptSyncVersion;
         clearTimeout(syncTimeout);
-        syncTimeout = setTimeout(syncScriptFromGrid, 400);
+        syncTimeout = setTimeout(() => syncScriptFromGrid(requestVersion), 400);
     }
 
     // ── Script overlay ────────────────────────────────────────────────────────

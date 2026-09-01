@@ -14,8 +14,12 @@ CREATE VISUAL VisualName AS BAR (
     ),
     OPTIONS (
         [STACKED = ON|OFF],
+        [BAND_SIZE = 0.1..1],
+        [GRID_LINES = ON|OFF],
+        [ZOOM_SLIDER = ON|OFF],
         [LEGEND = ON|OFF],
-        [LABEL_POSITION = INSIDE|OUTSIDE|NONE],
+        [LEGEND_POSITION = TOP|RIGHT|BOTTOM|LEFT],
+        [DATA_LABELS = ON|OFF WITH (POSITION = INSIDE_TOP|INSIDE_MIDDLE|INSIDE_BOTTOM|OUTSIDE_TOP|OUTSIDE_MIDDLE|OUTSIDE_BOTTOM)],
         [AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC]
     ),
     ACTIONS (
@@ -35,8 +39,12 @@ CREATE VISUAL VisualName AS BAR (
 
 ## Options
 - **STACKED = ON\|OFF** - Enables stacked bars instead of grouped columns when SERIES is mapped. Default is `OFF`.
+- **BAND_SIZE = 0.1..1** - Sets bar width as a fraction of its category band. Smaller values add more spacing. Default is `0.75`.
+- **GRID_LINES = ON\|OFF** - Shows or hides background value-axis grid lines. Default is `ON`.
+- **ZOOM_SLIDER = ON\|OFF** - Shows a browser range selector below the chart. Default is `OFF`.
 - **LEGEND = ON\|OFF** - Toggles visual series legend. Default is `ON`.
-- **LABEL_POSITION = INSIDE\|OUTSIDE\|NONE** - Toggles and positions data labels. Default is `NONE`.
+- **LEGEND_POSITION = TOP\|RIGHT\|BOTTOM\|LEFT** - Places the legend outside the plot. Default is `BOTTOM`.
+- **DATA_LABELS = ON\|OFF WITH (...)** - Shows value labels and configures their position, color, font, and numeric format. Default is `OFF`.
 - **AXIS_SORT = ASC\|DESC\|SOURCE\|VALUE\|VALUE_DESC** - Category sorting logic. Use `SOURCE` to preserve the query order, or `VALUE_DESC` for ranked bars. Default is `ASC`.
 
 ## Actions
@@ -51,7 +59,7 @@ CREATE VISUAL VisualName AS BAR (
 CREATE VISUAL SalesByRegion AS BAR (
     SOURCE = #data,
     MAPPINGS (X = Region, Y = Sales),
-    OPTIONS (AXIS_SORT = VALUE_DESC)
+    OPTIONS (AXIS_SORT = VALUE_DESC, BAND_SIZE = 0.65, DATA_LABELS = ON WITH (POSITION = OUTSIDE_TOP))
 );
 ```
 

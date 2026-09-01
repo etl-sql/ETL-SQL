@@ -165,6 +165,28 @@ body.theme-dark, body.vscode-dark, .theme-dark {
 
   .chart-wrapper { width: 100%; flex: 1; height: auto; min-height: 0; }
   .native-chart-wrapper svg { display: block; width: 100%; height: 100%; max-width: 100%; }
+  .native-chart-zoom-slider {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0 8px;
+    min-height: 24px;
+    padding: 0 8px 4px;
+    color: var(--report-muted, #64748b);
+    font-size: 11px;
+  }
+  .native-chart-zoom-slider input[type="range"] {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    margin: 0;
+    pointer-events: none;
+    background: transparent;
+  }
+  .native-chart-zoom-slider input[type="range"]::-webkit-slider-thumb { pointer-events: auto; }
+  .native-chart-zoom-slider input[type="range"]::-moz-range-thumb { pointer-events: auto; }
+  .native-chart-zoom-slider output { grid-column: 2; grid-row: 1; min-width: 48px; text-align: right; }
   .native-chart-wrapper [data-row-index].cross-dimmed { opacity: 0.2; }
   .native-chart-wrapper [data-row-index].cross-highlighted { opacity: 1; }
   .native-chart-wrapper .cross-highlight-universe { opacity: 0.28; }

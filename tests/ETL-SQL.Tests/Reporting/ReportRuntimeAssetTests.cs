@@ -34,6 +34,8 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("function applyNativeHighlight", js);
             Assert.Contains("const hasCrossHighlights", js);
             Assert.Contains("cross-highlight-selection", js);
+            Assert.Contains("function attachNativeZoomSlider", js);
+            Assert.Contains("native-chart-zoom-slider", js);
 
             Assert.Contains(".visual-card.visual-maximized", css);
             Assert.Contains("body.visual-maximize-active", css);
@@ -45,6 +47,7 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains(".cross-dimmed", css);
             Assert.Contains(".cross-highlight-universe", css);
             Assert.Contains(".cross-highlight-selection", css);
+            Assert.Contains(".native-chart-zoom-slider", css);
         }
 
         [Fact]

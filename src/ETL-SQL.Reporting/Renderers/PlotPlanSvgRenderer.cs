@@ -139,7 +139,7 @@ internal sealed class PlotPlanSvgRenderer
             LayerStyle(layer, "overlayType") is null).ToList();
         var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
 
-        if (yScale is not null)
+        if (yScale is not null && IsEnabledByDefault(plan.Style, "GRID_LINES"))
         {
             foreach (var tick in yScale.Ticks)
             {
@@ -250,6 +250,19 @@ internal sealed class PlotPlanSvgRenderer
         var isGrouped = rectLayers.Count > 1 && rectLayers.Any(l => LayerStyle(l, "series") is not null);
         builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
         builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
+        if (IsEnabledByDefault(plan.Style, "GRID_LINES"))
+        {
+            var gridScale = plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y);
+            if (gridScale is not null)
+            {
+                foreach (var tick in gridScale.Ticks)
+                {
+                    var value = PlotPlanResolver.Number(tick.Value) ?? 0m;
+                    var x = MapHorizontal(value, gridScale, plotWidth);
+                    builder.AppendLine($"<line x1='{N(x)}' y1='{N(Top)}' x2='{N(x)}' y2='{N(Top + plotHeight)}' stroke='#e5e7eb'/>");
+                }
+            }
+        }
         foreach (var layer in plan.Layers)
         {
             var scale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null)
@@ -339,7 +352,23 @@ internal sealed class PlotPlanSvgRenderer
                     var extent = rangedY || rangedBand ? string.Empty : ExtentAttributes(layer);
                     builder.AppendLine($"<rect{rangedClass} x='{N(barLeft)}' y='{N(top)}' width='{N(barWidth)}' height='{N(drawHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(datumOpacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'{extent}><title>{Esc(rectTitle)}</title></rect>");
                     if (showLabels)
-                        builder.AppendLine($"<text x='{N(endX + (end >= start ? 4m : -4m))}' y='{N(y + 3m)}' text-anchor='{(end >= start ? "start" : "end")}' font-size='{Esc(Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9")}' fill='{Esc(SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#333"))}'>{Esc(rectLabel)}</text>");
+                    {
+                        var position = Style(plan, "DATA_LABELS:POSITION") ?? "OUTSIDE_RIGHT";
+                        var positive = end >= start;
+                        var labelX = endX + (positive ? 4m : -4m);
+                        var anchor = positive ? "start" : "end";
+                        var labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#333");
+                        if (position.Contains("INSIDE", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var ratio = position.Contains("MIDDLE", StringComparison.OrdinalIgnoreCase) ? .5m
+                                : position.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || position.Contains("BOTTOM", StringComparison.OrdinalIgnoreCase) ? .12m
+                                : .88m;
+                            labelX = startX + (endX - startX) * ratio;
+                            anchor = "middle";
+                            labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), "white");
+                        }
+                        builder.AppendLine($"<text x='{N(labelX)}' y='{N(y + 3m)}' text-anchor='{anchor}' font-size='{Esc(Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9")}' fill='{Esc(labelColor)}'>{Esc(rectLabel)}</text>");
+                    }
                 }
                 else if (layer.Mark == MarkKind.Rule)
                 {
@@ -360,6 +389,8 @@ internal sealed class PlotPlanSvgRenderer
                 {
                     builder.AppendLine($"<circle cx='{N(x)}' cy='{N(y)}' r='3' fill='{Esc(datumColor)}'/>");
                 }
+                if (layer.Mark == MarkKind.Line && IsEnabledByDefault(plan.Style, "SYMBOLS"))
+                    builder.AppendLine($"<circle cx='{N(x)}' cy='{N(y)}' r='3' fill='{Esc(datumColor)}' data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></circle>");
                 if (layer.Mark is MarkKind.Line or MarkKind.Area)
                 {
                     points.Add($"{N(x)} {N(y)}");
@@ -649,8 +680,20 @@ internal sealed class PlotPlanSvgRenderer
                 }
                 else if (position.Contains("INSIDE", StringComparison.OrdinalIgnoreCase))
                 {
-                    labelY = end >= start ? top + 13m : top + barHeight - 4m;
+                    labelY = position.Contains("MIDDLE", StringComparison.OrdinalIgnoreCase)
+                        ? top + barHeight / 2m + 3m
+                        : position.Contains("BOTTOM", StringComparison.OrdinalIgnoreCase)
+                            ? top + barHeight - 4m
+                            : top + 13m;
                     labelColor = SafePaint(labelColorToken, "white");
+                }
+                else if (position.Contains("BOTTOM", StringComparison.OrdinalIgnoreCase))
+                {
+                    labelY = top + barHeight + 12m;
+                }
+                else if (position.Contains("MIDDLE", StringComparison.OrdinalIgnoreCase))
+                {
+                    labelY = top + barHeight / 2m + 3m;
                 }
                 builder.AppendLine($"<text x='{N(labelX)}' y='{N(labelY)}' text-anchor='{anchor}' font-size='{Esc(labelSize)}' fill='{Esc(labelColor)}'{(string.IsNullOrWhiteSpace(labelWeight) ? string.Empty : $" font-weight='{Esc(labelWeight)}'")}>{Esc(label)}</text>");
             }
@@ -712,7 +755,8 @@ internal sealed class PlotPlanSvgRenderer
             var y = MapY(value.Value, scale, plotHeight) + datum.DisplayOffsetY;
             lastPoint = (x, y);
             segment.Add((x, y));
-            if (!isOverlay || !plan.Layers.Any(candidate => candidate.Mark == MarkKind.Point && LayerStyle(candidate, "overlayType") is null))
+            if ((isOverlay || IsEnabledByDefault(plan.Style, "SYMBOLS")) &&
+                (!isOverlay || !plan.Layers.Any(candidate => candidate.Mark == MarkKind.Point && LayerStyle(candidate, "overlayType") is null)))
                 builder.AppendLine($"<circle cx='{N(x)}' cy='{N(y)}' r='{(isOverlay ? "4" : "3")}' fill='{Esc(color)}'{(isOverlay ? " stroke='white' stroke-width='1.5'" : string.Empty)} data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></circle>");
             if (showLabels)
                 smartLabels.Add(new SmartLabel(datum.RowIndex, x, y,
@@ -759,7 +803,8 @@ internal sealed class PlotPlanSvgRenderer
             var topY = MapY(end, scale, plotHeight) + datum.DisplayOffsetY;
             topPoints.Add((x, topY));
             basePoints.Add((x, MapY(start, scale, plotHeight) + datum.DisplayOffsetY));
-            builder.AppendLine($"<circle cx='{N(x)}' cy='{N(topY)}' r='3' fill='{Esc(color)}' data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></circle>");
+            if (IsEnabledByDefault(plan.Style, "SYMBOLS"))
+                builder.AppendLine($"<circle cx='{N(x)}' cy='{N(topY)}' r='3' fill='{Esc(color)}' data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></circle>");
             if (showLabels)
                 builder.AppendLine($"<text x='{N(x)}' y='{N(topY - 6m)}' text-anchor='middle' font-size='{Esc(Style(plan, "DATA_LABELS:FONT_SIZE") ?? "9")}' fill='{Esc(SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444"))}'>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</text>");
         }
@@ -1837,6 +1882,19 @@ internal sealed class PlotPlanSvgRenderer
             }
         }
         return false;
+    }
+
+    private static bool IsEnabledByDefault(ImmutableArray<StyleToken> tokens, string name)
+    {
+        if (tokens.IsDefault) return true;
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            if (!tokens[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase)) continue;
+            var value = tokens[i].Value;
+            return value is null || !value.Equals("OFF", StringComparison.OrdinalIgnoreCase) &&
+                !value.Equals("FALSE", StringComparison.OrdinalIgnoreCase) && value != "0";
+        }
+        return true;
     }
 
     private static string? Style(PlotPlan plan, string name)

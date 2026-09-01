@@ -257,6 +257,8 @@ public sealed class DesignerScriptGenerationService
             .Where(option => !IsReservedOption(option.Key))
             .Select(option => $"{option.Key.ToUpperInvariant()} = {FormatOptionValue(option.Value)}")
             .ToList();
+        var dataLabels = FormatDataLabelsOption(visual.Options);
+        if (dataLabels is not null) regularOptions.Add(dataLabels);
         var xAxis = FormatAxisOption("X", visual.Formatting?.XAxis);
         if (xAxis is not null) regularOptions.Add(xAxis);
         var yAxis = FormatAxisOption("Y", visual.Formatting?.YAxis);
@@ -309,6 +311,11 @@ public sealed class DesignerScriptGenerationService
             styleOptions.Add($"FONT_WEIGHT = '{EscapeStr(fontWeight)}'");
         if (visual.Options.TryGetValue("OPACITY", out var opacity) && !string.IsNullOrWhiteSpace(opacity))
             styleOptions.Add($"OPACITY = '{EscapeStr(opacity)}'");
+        foreach (var assignment in visual.Options
+                     .Where(option => option.Key.StartsWith("COLOR:", StringComparison.OrdinalIgnoreCase)
+                         && !string.IsNullOrWhiteSpace(option.Key["COLOR:".Length..])
+                         && !string.IsNullOrWhiteSpace(option.Value)))
+            styleOptions.Add($"COLOR:{assignment.Key["COLOR:".Length..]} = '{EscapeStr(assignment.Value)}'");
         if (visual.Formatting?.Palette is { Count: > 0 } palette)
             styleOptions.Add($"PALETTE = ({string.Join(", ", palette.Select(color => $"'{EscapeStr(color)}'"))})");
         if (styleOptions.Count > 0)
@@ -327,6 +334,9 @@ public sealed class DesignerScriptGenerationService
             if (formattedRules.Count > 0)
                 AppendLine(sb, $"    FORMATTING ({string.Join(", ", formattedRules)}),", nl);
         }
+
+        if (visual.Options.TryGetValue("overlays", out var overlays) && !string.IsNullOrWhiteSpace(overlays))
+            AppendLine(sb, $"    {overlays.Trim().TrimEnd(',')},", nl);
 
         TrimTrailingComma(sb, nl);
         sb.Append(");");
@@ -466,7 +476,7 @@ public sealed class DesignerScriptGenerationService
         DesignerAuthoringTextFormatting? formatting,
         string? fallbackText)
     {
-        var text = formatting?.Text ?? fallbackText;
+        var text = fallbackText ?? formatting?.Text;
         var hasStyle = formatting is not null &&
             (!string.IsNullOrWhiteSpace(formatting.Color)
              || !string.IsNullOrWhiteSpace(formatting.Font)
@@ -539,6 +549,18 @@ public sealed class DesignerScriptGenerationService
         return $"'{EscapeStr(value)}'";
     }
 
+    private static string? FormatDataLabelsOption(IReadOnlyDictionary<string, string> options)
+    {
+        if (!options.TryGetValue("DATA_LABELS", out var enabled)) return null;
+        var details = options
+            .Where(option => option.Key.StartsWith("DATA_LABELS:", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(option.Value))
+            .Select(option => $"{option.Key["DATA_LABELS:".Length..].ToUpperInvariant()} = {FormatOptionValue(option.Value)}")
+            .ToList();
+        var value = FormatOptionValue(enabled);
+        return details.Count == 0 ? $"DATA_LABELS = {value}" : $"DATA_LABELS = {value} WITH ({string.Join(", ", details)})";
+    }
+
     private static bool IsReservedOption(string key) =>
         string.Equals(key, "WIDTH", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "HEIGHT", StringComparison.OrdinalIgnoreCase)
@@ -551,6 +573,10 @@ public sealed class DesignerScriptGenerationService
         || string.Equals(key, "FONT_SIZE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "FONT_WEIGHT", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "OPACITY", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "DATA_LABELS", StringComparison.OrdinalIgnoreCase)
+        || key.StartsWith("DATA_LABELS:", StringComparison.OrdinalIgnoreCase)
+        || key.StartsWith("COLOR:", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "overlays", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "CONTAINER_TYPE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "BUTTON_TYPE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "inline_source", StringComparison.OrdinalIgnoreCase)

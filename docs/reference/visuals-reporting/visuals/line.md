@@ -8,6 +8,12 @@ CREATE VISUAL VisualName AS LINE (
   SOURCE = #tableName,
   MAPPINGS (
     ...
+  ),
+  OPTIONS (
+    [SYMBOLS = ON|OFF],
+    [GRID_LINES = ON|OFF],
+    [ZOOM_SLIDER = ON|OFF],
+    [DATA_LABELS = ON|OFF WITH (POSITION = OUTSIDE_TOP|OUTSIDE_BOTTOM)]
   )
 );
 ```
@@ -21,7 +27,10 @@ CREATE VISUAL VisualName AS LINE (
 ## Options
 
 - **SMOOTH = ON|OFF** - Bezier-smoothed curves instead of straight segments (default OFF)
-- **SYMBOLS = ON|OFF** - show data-point markers on the line (default OFF)
+- **SYMBOLS = ON|OFF** - show data-point markers on the line (default ON)
+- **GRID_LINES = ON|OFF** - show background value-axis grid lines (default ON)
+- **ZOOM_SLIDER = ON|OFF** - show a browser range selector below the chart (default OFF)
+- **DATA_LABELS = ON|OFF WITH (...)** - show and format point values (default OFF)
 - **AREA = ON|OFF** - fill the region below the line (default OFF)
 - **STACKED = ON|OFF** - stack multiple series vertically (default OFF)
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - category-axis order; SOURCE preserves query order

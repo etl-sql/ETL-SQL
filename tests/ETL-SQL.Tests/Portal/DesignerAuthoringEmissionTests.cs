@@ -119,6 +119,42 @@ public class DesignerAuthoringEmissionTests
     }
 
     [Fact]
+    public void ChartProperties_RoundTripThroughDesignerCodeGeneration()
+    {
+        const string script = """
+            CREATE VISUAL Sales AS BAR (
+                SOURCE = #data,
+                MAPPINGS (X = Region, Y = Revenue),
+                OPTIONS (
+                    GRID_LINES = OFF,
+                    ZOOM_SLIDER = ON,
+                    BAND_SIZE = 0.5,
+                    LEGEND_POSITION = RIGHT,
+                    DATA_LABELS = ON WITH (POSITION = INSIDE_MIDDLE)
+                ),
+                STYLE (COLOR:West = '#2563eb'),
+                OVERLAYS (GOAL(100) AS DASHED WITH (COLOR = '#dc2626', LABEL = 'Target'))
+            );
+
+            CREATE PAGE [Main] AS DASHBOARD (
+                LAYOUT (STRUCTURE = 'A', MAP ('A' = Sales))
+            );
+            """;
+
+        Assert.True(Parses(script), script);
+        var generated = new DesignerScriptGenerationService().Generate(Parsing.Parse(script));
+
+        Assert.True(Parses(generated), generated);
+        Assert.True(generated.Contains("GRID_LINES = OFF", System.StringComparison.Ordinal), generated);
+        Assert.Contains("ZOOM_SLIDER = ON", generated, System.StringComparison.Ordinal);
+        Assert.Contains("BAND_SIZE = 0.5", generated, System.StringComparison.Ordinal);
+        Assert.Contains("LEGEND_POSITION = 'RIGHT'", generated, System.StringComparison.Ordinal);
+        Assert.Contains("DATA_LABELS = ON WITH (POSITION = 'INSIDE_MIDDLE')", generated, System.StringComparison.Ordinal);
+        Assert.Contains("COLOR:West = '#2563eb'", generated, System.StringComparison.Ordinal);
+        Assert.Contains("OVERLAYS (GOAL(100) AS DASHED WITH (COLOR = '#dc2626', LABEL = 'Target'))", generated, System.StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ATextBandCarriesItsContent_SoTheFurnitureStepPrintsSomething()
     {
         var state = Parsing.Parse(Host);

@@ -3118,6 +3118,7 @@
         wrapper.appendChild(document.importNode(svg, true));
         if (visual.layout?.tier) wrapper.dataset.layoutTier = String(visual.layout.tier).toUpperCase();
         container.appendChild(wrapper);
+        attachNativeZoomSlider(container, wrapper, visual);
         observeNativeLayout(wrapper, visual);
 
         const clickActions = actionsFor(visual, 'ON_CLICK');
@@ -3160,6 +3161,53 @@
             event.preventDefault();
             showCtxMenu(event.clientX, event.clientY, visual, activeRow);
         });
+    }
+
+    function attachNativeZoomSlider(container, wrapper, visual) {
+        const enabled = String(visual.options?.ZOOM_SLIDER || '').toUpperCase();
+        if (enabled !== 'ON' && enabled !== 'TRUE' && enabled !== '1') return;
+        const svg = wrapper.querySelector('svg');
+        const raw = String(svg?.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number);
+        if (!svg || raw.length !== 4 || raw.some(value => !Number.isFinite(value)) || raw[2] <= 0) return;
+
+        const [originX, originY, fullWidth, fullHeight] = raw;
+        const controls = document.createElement('div');
+        controls.className = 'native-chart-zoom-slider';
+        controls.setAttribute('role', 'group');
+        controls.setAttribute('aria-label', 'Chart zoom range');
+        const start = document.createElement('input');
+        const end = document.createElement('input');
+        for (const input of [start, end]) {
+            input.type = 'range';
+            input.min = '0';
+            input.max = '100';
+            input.step = '1';
+        }
+        start.value = '0';
+        end.value = '100';
+        start.setAttribute('aria-label', 'Visible range start');
+        end.setAttribute('aria-label', 'Visible range end');
+        const value = document.createElement('output');
+        value.textContent = '0–100%';
+
+        const update = changed => {
+            let first = Number(start.value);
+            let last = Number(end.value);
+            if (last - first < 5) {
+                if (changed === start) first = Math.max(0, last - 5);
+                else last = Math.min(100, first + 5);
+                start.value = String(first);
+                end.value = String(last);
+            }
+            const x = originX + fullWidth * first / 100;
+            const width = fullWidth * (last - first) / 100;
+            svg.setAttribute('viewBox', `${x} ${originY} ${width} ${fullHeight}`);
+            value.textContent = `${first}–${last}%`;
+        };
+        start.addEventListener('input', () => update(start));
+        end.addEventListener('input', () => update(end));
+        controls.append(start, end, value);
+        container.appendChild(controls);
     }
 
     function nativeLayoutTier(layout, containerWidth) {

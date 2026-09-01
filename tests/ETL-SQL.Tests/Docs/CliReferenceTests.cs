@@ -23,9 +23,21 @@ public sealed class CliReferenceTests
         var expected = CliReferenceGenerator.Generate();
         var regenerate = Environment.GetEnvironmentVariable("ETLSQL_REGEN_CLI_DOCS") == "1";
 
+        var cliDir = Path.Combine(RepoRoot, CliReferenceGenerator.CliDir);
         if (regenerate)
         {
-            Directory.CreateDirectory(Path.Combine(RepoRoot, CliReferenceGenerator.CliDir));
+            Directory.CreateDirectory(cliDir);
+            var expectedFull = expected.Keys
+                .Select(k => Path.GetFullPath(Path.Combine(RepoRoot, k.Replace('/', Path.DirectorySeparatorChar))))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (Directory.Exists(cliDir))
+            {
+                foreach (var f in Directory.EnumerateFiles(cliDir, "*.md"))
+                {
+                    if (!expectedFull.Contains(Path.GetFullPath(f)))
+                        File.Delete(f);
+                }
+            }
             foreach (var (rel, content) in expected)
             {
                 var full = Path.Combine(RepoRoot, rel.Replace('/', Path.DirectorySeparatorChar));
@@ -47,7 +59,6 @@ public sealed class CliReferenceTests
         }
 
         // Stale pages: committed cli pages the generator no longer produces.
-        var cliDir = Path.Combine(RepoRoot, CliReferenceGenerator.CliDir);
         if (Directory.Exists(cliDir))
         {
             var expectedFull = expected.Keys

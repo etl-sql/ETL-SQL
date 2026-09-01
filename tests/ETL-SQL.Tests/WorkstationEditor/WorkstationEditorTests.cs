@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using ETL_SQL.Data;
+using ETL_SQL.TestSupport;
 using ETL_SQL.WorkstationEditor;
 using Microsoft.Extensions.Hosting;
 using Xunit;
@@ -172,11 +173,16 @@ public sealed class WorkstationEditorTests
             TimeSpan.FromMilliseconds(30));
         await service.StartAsync(CancellationToken.None);
         service.Heartbeat(new StudioHeartbeatRequest("browser-1", Dirty: false));
-        await Task.Delay(60);
+        await Task.Delay(60); // flaky-delay-ok: verifying lifetime has not expired during active heartbeat window
         Assert.False(lifetime.StopRequested);
 
         service.Disconnect("browser-1");
-        await Task.Delay(100);
+        await LoadAwareWait.UntilAsync(
+            "studio idle shutdown requested",
+            _ => Task.FromResult(lifetime.StopRequested),
+            observed => observed,
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(20));
 
         Assert.True(lifetime.StopRequested);
         await service.StopAsync(CancellationToken.None);

@@ -68,6 +68,18 @@ Titles and subtitles support simple string assignment, inline markdown, or struc
 - **`GANTT`**: Project timeline (`Y`, `START`, `END`, `COLOR` mappings).
 - **`MAP`**: Choropleth (`REGION` mapping) or point overlay (`LON`/`LAT` + `MODE=POINTS`).
 
+## Common Chart Properties
+
+- **GRID_LINES = ON|OFF** — Shows or hides Cartesian background grid lines. Default `ON`.
+- **ZOOM_SLIDER = ON|OFF** — Adds an accessible range selector below browser-rendered native charts. Default `OFF`; static and print renderers keep the full range.
+- **LEGEND = ON|OFF** — Shows or hides the legend.
+- **LEGEND_POSITION = TOP|RIGHT|BOTTOM|LEFT** — Places the legend outside the plot. Default `BOTTOM`.
+- **DATA_LABELS = ON|OFF WITH (...)** — Shows mark labels and accepts `POSITION`, `COLOR`, `FONT_SIZE`, `FONT_WEIGHT`, `FONT_FAMILY`, and `FORMAT`.
+- **DATA_LABELS POSITION** — Accepts `OUTSIDE_TOP`, `OUTSIDE_MIDDLE`, `OUTSIDE_BOTTOM`, `INSIDE_TOP`, `INSIDE_MIDDLE`, or `INSIDE_BOTTOM`.
+- **STYLE (COLOR:name = '#RRGGBB')** — Assigns a stable color to a named series or category. Use `PALETTE = (...)` for order-based colors.
+- **FORMATTING (WHEN predicate THEN color ...)** — Applies the first matching rule color to each mark in a named chart. `CUSTOM` charts use layer `CONDITIONS` instead.
+- **OVERLAYS (...)** — Adds goals, averages, moving averages, or fitted trend lines to named charts.
+
 ## Display Types
 
 - **`CARD`**: Large KPI tile with optional trend and goal.
@@ -127,6 +139,23 @@ CREATE VISUAL CustomersTable AS TABLE (
 );
 ```
 
+```sql
+CREATE VISUAL SalesByRegion AS BAR (
+  SOURCE = #regional_sales,
+  MAPPINGS (X = Region, Y = Revenue),
+  OPTIONS (
+    GRID_LINES = ON,
+    ZOOM_SLIDER = ON,
+    LEGEND_POSITION = RIGHT,
+    BAND_SIZE = 0.65,
+    DATA_LABELS = ON WITH (POSITION = INSIDE_MIDDLE, FORMAT = 'C0')
+  ),
+  STYLE (COLOR:West = '#2563eb', COLOR:East = '#dc2626'),
+  FORMATTING (WHEN Revenue < 0 THEN '#b91c1c'),
+  OVERLAYS (AVERAGE AS DASHED WITH (COLOR = '#64748b', LABEL = 'Average'))
+);
+```
+
 ## Lifecycle
 
 ```sql
@@ -137,7 +166,8 @@ DROP VISUAL IF EXISTS RevenueChart;
 
 `ALTER VISUAL` patches `SOURCE`, `MAPPINGS`, `OPTIONS`, `ACTIONS`, `STYLE`, `TITLE`, `SUBTITLE`, and `TOOLTIP`. The visual type itself is part of the definition — changing `BAR` to `LINE` needs `CREATE OR REPLACE VISUAL`.
 
-References:
+## References
+
 - [CASCADE Reference](cascade.md)
 - [PRINT_LAYOUT Reference](print-layout.md)
 - [PAGE Reference](page.md)

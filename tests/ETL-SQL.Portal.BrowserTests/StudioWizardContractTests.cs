@@ -298,6 +298,48 @@ public sealed class StudioWizardContractTests(PortalBrowserFixture fixture) : IA
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task SelectingAVisual_OpensThePropertiesInspector()
+    {
+        // Reported as a regression: clicking a chart stopped opening the properties panel.
+        await using var session = await fixture.NewSessionAsync();
+        var page = await OpenStudioAsync(session);
+
+        var result = await page.EvaluateAsync<JsonElement>(
+            """
+            async () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const shell = document.querySelector('.etlsql-studio-shell');
+                const visual = studio.state.designerInstance.getState().pages[0].visuals[0];
+
+                studio.state.designerInstance.selectVisual(visual.id);
+                await new Promise(resolve => setTimeout(resolve, 800));
+
+                const sidebar = shell.querySelector('[data-studio-sidebar]');
+                const inspector = shell.querySelector('[data-studio-inspector]');
+                const host = shell.querySelector('[data-properties-host]');
+                return {
+                    selectedId: studio.state.selectedVisualId || '',
+                    sidebarCollapsed: sidebar.classList.contains('collapsed'),
+                    inspectorDisplay: getComputedStyle(inspector).display,
+                    inspectorVisible: inspector.offsetParent !== null,
+                    propertyControls: host.querySelectorAll('input, select, button').length,
+                };
+            }
+            """);
+
+        session.Page.SetDefaultTimeout(5000);
+        Assert.NotEqual("", result.GetProperty("selectedId").GetString());
+        Assert.False(result.GetProperty("sidebarCollapsed").GetBoolean(),
+            "Selecting a visual left the sidebar collapsed, so the properties panel was invisible.");
+        Assert.NotEqual("none", result.GetProperty("inspectorDisplay").GetString());
+        Assert.True(result.GetProperty("inspectorVisible").GetBoolean(),
+            "The properties inspector did not become visible when a visual was selected.");
+        Assert.True(result.GetProperty("propertyControls").GetInt32() > 0,
+            "The properties inspector opened but rendered no controls.");
+        Assert.Empty(session.PageErrors);
+    }
+
     /// <summary>Creates a blank paginated report, which is where the numbered report steps live.</summary>
     private static async Task NewPaginatedReportAsync(IPage page)
     {

@@ -42,6 +42,34 @@ body.vscode-light, body.vscode-dark, body.vscode-high-contrast {
     --portal-mono: var(--vscode-editor-font-family, monospace);
 }
 
+.form-control {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    background: var(--portal-surface-subtle, #161b22);
+    color: var(--portal-text, #f0f6fc);
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: var(--portal-radius-sm, 4px);
+    padding: 5px 8px;
+    font-size: 0.75rem;
+    font-family: inherit;
+    line-height: 1.4;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.form-control:focus {
+    outline: none !important;
+    border-color: var(--portal-accent, #58a6ff) !important;
+    box-shadow: 0 0 0 2px var(--portal-accent-soft, rgba(88, 166, 255, 0.15)) !important;
+}
+.form-control::placeholder {
+    color: var(--portal-muted, #7a8798);
+    opacity: 0.8;
+}
+.form-control.is-required-missing {
+    border-color: var(--portal-danger, #f85149);
+    background: color-mix(in srgb, var(--portal-surface-subtle, #161b22) 90%, var(--portal-danger, #f85149) 10%);
+}
+
 body.vscode-light .form-control,
 body.vscode-dark .form-control,
 body.vscode-high-contrast .form-control {
@@ -57,6 +85,7 @@ body.vscode-dark .form-control:focus,
 body.vscode-high-contrast .form-control:focus {
     outline: 1px solid var(--vscode-focusBorder) !important;
     border-color: var(--vscode-focusBorder) !important;
+    box-shadow: none !important;
 }
 
 body.vscode-light .btn,
@@ -2176,29 +2205,71 @@ body.vscode-dark .cm-diagnostic-source {
     font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
-    color: var(--portal-muted, #7a8798);
+    color: var(--portal-text-soft, #8b949e);
     letter-spacing: 0.04em;
     margin-bottom: 8px;
     padding-bottom: 4px;
-    border-bottom: 1px solid var(--portal-border, #d9e0ea);
+    border-bottom: 1px solid var(--portal-border, #30363d);
 }
 
 .etlsql-dsgn-label {
     display: block;
-    font-size: 0.8125rem;
-    color: var(--portal-text-muted, #5a6a7e);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--portal-text-soft, #8b949e);
     margin-bottom: 6px;
 }
 .etlsql-dsgn-label .form-control { margin-top: 3px; }
 
 .etlsql-dsgn-map-row {
     display: grid;
-    grid-template-columns: 80px 1fr;
+    grid-template-columns: minmax(105px, 1fr) 1.5fr;
     align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.etlsql-dsgn-map-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 6px;
-    margin-bottom: 4px;
-    font-size: 0.8rem;
-    color: var(--portal-muted, #7a8798);
+    min-width: 0;
+}
+.etlsql-dsgn-role-name {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--portal-text, #f0f6fc);
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.etlsql-dsgn-role-badge {
+    font-size: 0.5625rem;
+    padding: 1px 5px;
+    border-radius: 999px;
+    font-weight: 500;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.etlsql-dsgn-role-badge.optional {
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text-soft, #8b949e);
+    border: 1px solid var(--portal-border, #30363d);
+}
+.etlsql-dsgn-role-badge.req-ok {
+    background: rgba(35, 134, 54, 0.15);
+    color: var(--portal-success, #3fb950);
+    border: 1px solid rgba(35, 134, 54, 0.3);
+}
+.etlsql-dsgn-role-badge.req-missing {
+    background: rgba(248, 81, 73, 0.15);
+    color: var(--portal-danger, #f85149);
+    border: 1px solid rgba(248, 81, 73, 0.3);
 }
 
 .etlsql-dsgn-grid4 {
@@ -2207,16 +2278,26 @@ body.vscode-dark .cm-diagnostic-source {
     gap: 6px;
     margin-bottom: 10px;
 }
-.etlsql-dsgn-grid4 label { font-size: 0.75rem; color: var(--portal-muted, #7a8798); }
-.etlsql-dsgn-grid4 .form-control { margin-top: 2px; padding: 2px 4px; }
+.etlsql-dsgn-grid4 label { font-size: 0.6875rem; font-weight: 500; color: var(--portal-text-soft, #8b949e); }
+.etlsql-dsgn-grid4 .form-control { margin-top: 2px; padding: 3px 5px; font-size: 0.75rem; text-align: center; }
 
 .etlsql-dsgn-del-btn {
     width: 100%;
-    background: none;
-    border: 1px solid #e11d48;
-    color: #e11d48;
+    margin-top: 8px;
+    padding: 6px 12px;
+    background: rgba(248, 81, 73, 0.1);
+    border: 1px solid rgba(248, 81, 73, 0.3);
+    border-radius: var(--portal-radius-sm, 4px);
+    color: var(--portal-danger, #f85149);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
 }
-.etlsql-dsgn-del-btn:hover { background: #fef2f5; }
+.etlsql-dsgn-del-btn:hover {
+    background: rgba(248, 81, 73, 0.2);
+    border-color: var(--portal-danger, #f85149);
+}
 
 /* ── Visual Formatting Pickers (Color Swatches, Radius Slider, Typography) ─ */
 .etlsql-dsgn-color-picker-row {
@@ -2230,9 +2311,9 @@ body.vscode-dark .cm-diagnostic-source {
     width: 32px;
     height: 28px;
     padding: 1px 2px;
-    border: 1px solid var(--portal-border, #d9e0ea);
+    border: 1px solid var(--portal-border, #30363d);
     border-radius: var(--portal-radius-sm, 4px);
-    background: var(--portal-surface, #ffffff);
+    background: var(--portal-surface-subtle, #161b22);
     cursor: pointer;
     flex-shrink: 0;
 }
@@ -2252,14 +2333,14 @@ body.vscode-dark .cm-diagnostic-source {
     width: 18px;
     height: 18px;
     border-radius: 3px;
-    border: 1px solid rgba(0,0,0,0.15);
+    border: 1px solid var(--portal-border, rgba(255,255,255,0.15));
     cursor: pointer;
     padding: 0;
     transition: transform 0.1s ease, border-color 0.1s ease;
 }
 .etlsql-dsgn-swatch-chip:hover {
     transform: scale(1.15);
-    border-color: var(--portal-accent, #2563eb);
+    border-color: var(--portal-accent, #58a6ff);
     z-index: 1;
 }
 
@@ -2273,7 +2354,7 @@ body.vscode-dark .cm-diagnostic-source {
 .etlsql-dsgn-slider-row input[type="range"] {
     flex: 1;
     min-width: 0;
-    accent-color: var(--portal-accent, #2563eb);
+    accent-color: var(--portal-accent, #58a6ff);
     cursor: pointer;
 }
 .etlsql-dsgn-slider-row input[type="text"] {
@@ -2290,20 +2371,20 @@ body.vscode-dark .cm-diagnostic-source {
     margin-bottom: 8px;
 }
 .etlsql-dsgn-preset-chip {
-    font-size: 0.7rem;
+    font-size: 0.6875rem;
     padding: 2px 6px;
     border-radius: var(--portal-radius-sm, 4px);
-    border: 1px solid var(--portal-border, #d9e0ea);
-    background: var(--portal-surface-subtle, #f8fafc);
-    color: var(--portal-text-soft, #46556c);
+    border: 1px solid var(--portal-border, #30363d);
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text-soft, #8b949e);
     cursor: pointer;
     line-height: 1.2;
     transition: background 0.1s ease, border-color 0.1s ease, color 0.1s ease;
 }
 .etlsql-dsgn-preset-chip:hover {
-    background: var(--portal-accent-soft, #e8f0ff);
-    border-color: var(--portal-accent, #2563eb);
-    color: var(--portal-accent, #2563eb);
+    background: var(--portal-accent-soft, rgba(88,166,255,0.12));
+    border-color: var(--portal-accent, #58a6ff);
+    color: var(--portal-accent, #58a6ff);
 }
 
 .etlsql-dsgn-typography-grid {
@@ -2339,6 +2420,40 @@ body.vscode-dark .cm-diagnostic-source {
 .etlsql-format-profile-palette i { width: 14px; height: 24px; margin-left: -4px; border: 1px solid var(--portal-surface, #161b22); border-radius: 3px; background: var(--format-color); transform: skewX(-8deg); }
 .etlsql-format-profile-palette i:first-child { margin-left: 0; }
 
+.etlsql-format-search-wrap {
+    position: relative;
+    padding: 6px 10px;
+    background: color-mix(in srgb, var(--portal-surface, #161b22) 95%, var(--portal-accent, #58a6ff) 5%);
+    border-bottom: 1px solid var(--portal-border, #30363d);
+}
+.etlsql-format-search {
+    width: 100%;
+    padding: 4px 24px 4px 26px !important;
+    font-size: 0.75rem;
+    border-radius: var(--portal-radius-sm, 4px);
+    background-color: var(--portal-surface-subtle, #0d1117) !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'%3E%3C/circle%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'%3E%3C/line%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: 8px center !important;
+    background-size: 12px !important;
+}
+.etlsql-format-search-clear {
+    position: absolute;
+    right: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+.etlsql-format-search-clear:hover {
+    color: var(--portal-text, #f0f6fc);
+}
+
 .etlsql-format-group { border-bottom: 1px solid var(--portal-border, #30363d); }
 .etlsql-format-group:last-child { border-bottom: 0; }
 .etlsql-format-group > summary {
@@ -2368,6 +2483,7 @@ body.vscode-dark .cm-diagnostic-source {
 
 .etlsql-format-palette-list { display: flex; flex-direction: column; gap: 5px; }
 .etlsql-format-palette-list > div { display: grid; grid-template-columns: 28px minmax(0, 1fr) 24px; gap: 5px; align-items: center; }
+.etlsql-format-palette-list > [data-named-color-row] { grid-template-columns: minmax(0, 1fr) 28px 24px; }
 .etlsql-format-palette-list input[type="color"] { width: 28px; height: 26px; padding: 1px; border: 1px solid var(--portal-border, #30363d); border-radius: 4px; background: transparent; }
 .etlsql-format-palette-list button,
 .etlsql-format-rule-result button { border: 0; background: transparent; color: var(--portal-text-soft, #8b949e); cursor: pointer; }

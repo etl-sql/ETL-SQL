@@ -1278,6 +1278,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Equal("Revenue", await page.Locator("[data-axis='y'][data-axis-key='LABEL']").InputValueAsync());
         Assert.Equal("$#,##0", await page.Locator("[data-axis='y'][data-axis-key='FORMAT']").InputValueAsync());
         Assert.Equal(3, await page.Locator("[data-palette-text]").CountAsync());
+        Assert.DoesNotContain("Optional", await inspector.InnerTextAsync(), StringComparison.Ordinal);
 
         await page.Locator("#pp-format-subtitle").FillAsync("FY26 booked revenue");
         await page.Locator("#pp-format-subtitle").DispatchEventAsync("change");
@@ -1285,6 +1286,9 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await page.WaitForTimeoutAsync(300);
         await inspector.Locator("summary", new() { HasText = "Axes & legend" }).ClickAsync();
         await page.Locator("#pp-format-legend").CheckAsync();
+        await page.Locator("#pp-format-legend-position").SelectOptionAsync("RIGHT");
+        await page.Locator("#pp-format-grid-lines").UncheckAsync();
+        await page.Locator("#pp-format-zoom-slider").CheckAsync();
         await page.Locator("[data-axis='y'][data-axis-key='MAX']").FillAsync("500000");
         await page.Locator("[data-axis='y'][data-axis-key='MAX']").DispatchEventAsync("change");
         await page.WaitForFunctionAsync("() => document.querySelector('.cm-content')?.textContent.includes('LEGEND = ON')");
@@ -1292,18 +1296,19 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await page.WaitForTimeoutAsync(300);
         await inspector.Locator("summary", new() { HasText = "Series palette" }).ClickAsync();
         await page.Locator("[data-palette-add]").ClickAsync();
+        await inspector.Locator("summary", new() { HasText = "Series palette" }).ClickAsync();
+        await page.Locator("[data-named-color-add]").ClickAsync();
+        await inspector.Locator("summary", new() { HasText = "Marks & labels" }).ClickAsync();
+        await page.Locator("#pp-format-data-labels").CheckAsync();
+        await page.Locator("#pp-format-data-label-position").SelectOptionAsync("INSIDE MIDDLE");
+        await page.Locator("#pp-format-band-size").FillAsync("0.5");
+        await page.Locator("#pp-format-band-size").DispatchEventAsync("input");
+        await page.Locator("#pp-format-overlays").FillAsync("OVERLAYS (GOAL(100000) AS DASHED LABEL 'Target')");
+        await page.Locator("#pp-format-overlays").DispatchEventAsync("change");
+        await inspector.Locator("summary", new() { HasText = "Conditional formatting" }).ClickAsync();
+        await page.Locator("[data-rule-add]").ClickAsync();
 
-        await page.WaitForFunctionAsync(
-            """
-            () => {
-                const doc = window.__STUDIO_INSTANCE__?.state.documents.find(
-                    item => item.id === window.__STUDIO_INSTANCE__.state.activeDocId);
-                return doc?.content.includes("SUBTITLE = 'FY26 booked revenue'")
-                    && doc.content.includes('LEGEND = ON')
-                    && doc.content.includes('MAX = 500000')
-                    && doc.content.includes("'#dc2626'");
-            }
-            """);
+        await page.WaitForTimeoutAsync(1500);
 
         var activeScript = await page.EvaluateAsync<string>(
             """
@@ -1311,8 +1316,17 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
                 item => item.id === window.__STUDIO_INSTANCE__.state.activeDocId).content
             """);
         Assert.Contains("TITLE (TEXT = 'Sales by Region'", activeScript, StringComparison.Ordinal);
+        Assert.Contains("SUBTITLE = 'FY26 booked revenue'", activeScript, StringComparison.Ordinal);
+        Assert.Contains("LEGEND = ON", activeScript, StringComparison.Ordinal);
+        Assert.Contains("LEGEND_POSITION = 'RIGHT'", activeScript, StringComparison.Ordinal);
+        Assert.Contains("GRID_LINES = OFF", activeScript, StringComparison.Ordinal);
+        Assert.Contains("ZOOM_SLIDER = ON", activeScript, StringComparison.Ordinal);
+        Assert.Contains("DATA_LABELS = ON WITH (POSITION = 'INSIDE_MIDDLE')", activeScript, StringComparison.Ordinal);
+        Assert.Contains("BAND_SIZE = 0.5", activeScript, StringComparison.Ordinal);
         Assert.Contains("Y_AXIS (LABEL = 'Revenue', MIN = 0, FORMAT = '$#,##0', MAX = 500000)", activeScript, StringComparison.Ordinal);
-        Assert.Contains("STYLE (PALETTE = ('#58a6ff', '#2ea043', '#d29922', '#dc2626'))", activeScript, StringComparison.Ordinal);
+        Assert.True(activeScript.Contains("STYLE (COLOR:Series1 = '#2563eb', PALETTE = ('#58a6ff', '#2ea043', '#d29922', '#dc2626'))", StringComparison.Ordinal), activeScript);
+        Assert.Contains("OVERLAYS (GOAL(100000) AS DASHED LABEL 'Target')", activeScript, StringComparison.Ordinal);
+        Assert.Contains("FORMATTING (WHEN", activeScript, StringComparison.Ordinal);
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }

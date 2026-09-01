@@ -1435,6 +1435,8 @@ public static class AstSerializer
             sb.AppendLine($"    STYLE ( {FormatStyleAssignments(s.Styles, s.Palette)} ),");
         if (s.FormattingRules.Count > 0)
             sb.AppendLine($"    FORMATTING ( {string.Join(", ", s.FormattingRules.Select(FormatFormattingRule))} ),");
+        if (s.Overlays.Count > 0)
+            sb.AppendLine($"    OVERLAYS ( {string.Join(", ", s.Overlays.Select(FormatOverlay))} ),");
         if (s.Actions.Count > 0)
             sb.AppendLine($"    ACTIONS ( {FormatActions(s.Actions)} ),");
         if (s.Cascade != null)
@@ -1965,6 +1967,22 @@ public static class AstSerializer
         + (string.IsNullOrWhiteSpace(rule.FontColor)
             ? string.Empty
             : $" FONT_COLOR '{rule.FontColor.Replace("'", "''")}'");
+
+    private static string FormatOverlay(VisualOverlay overlay)
+    {
+        var type = overlay.OverlayType switch
+        {
+            OverlayType.Goal => $"GOAL({overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? "0"})",
+            OverlayType.MovingAvg => $"MOVING_AVG({overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? "1"})",
+            OverlayType.Polynomial => $"POLYNOMIAL({overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? "2"})",
+            _ => overlay.OverlayType.ToString().ToUpperInvariant()
+        };
+        var options = new List<string>();
+        if (!string.IsNullOrWhiteSpace(overlay.Color)) options.Add($"COLOR = {Quote(overlay.Color)}");
+        if (!string.IsNullOrWhiteSpace(overlay.Label)) options.Add($"LABEL = {Quote(overlay.Label)}");
+        return $"{type} AS {overlay.LineStyle.ToString().ToUpperInvariant()}"
+            + (options.Count == 0 ? string.Empty : $" WITH ({string.Join(", ", options)})");
+    }
 
     private static string FormatSecurityOverride(SetSecurityOverrideStatement s)
     {

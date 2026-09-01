@@ -3849,7 +3849,7 @@ public class ReportParser : ParserComponent
                         Consume(TokenType.EQUALS, "Expected = after COLOR");
                         color = Consume(TokenType.STRING_LITERAL, "Expected color string").Value;
                     }
-                    else if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("LABEL", StringComparison.OrdinalIgnoreCase))
+                    else if (IsCurrentValue("LABEL"))
                     {
                         Advance();
                         Consume(TokenType.EQUALS, "Expected = after LABEL");
