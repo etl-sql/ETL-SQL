@@ -47,6 +47,7 @@ const _TYPE_COLOR = {
     conditional: '#f59e0b',
     loop:        '#f97316',
     parallel:    '#06b6d4',
+    transaction: '#2dd4bf',
     validation:  '#eab308',
     io:          '#14b8a6',
     outbound:    '#0f766e',

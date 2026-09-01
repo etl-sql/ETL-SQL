@@ -741,10 +741,17 @@ export async function createStudioWorkbench(container, opts = {}) {
                     if (!intent) return;
                     const result = await canonicalPipelineMutation('Update task', {
                         op: 'update', id: task.id, newId: intent.id, connection: intent.connection, body: intent.body,
+                        variable: intent.variable, collection: intent.collection,
                     });
                     if (result?.applied) state.selectedTaskId = intent.id;
                 },
                 onMove: ({ id, after }) => canonicalPipelineMutation('Move task', { op: 'move', id, after }),
+                // `after` names the container, so "move into" and "move out" are the same request
+                // with and without one. A refusal — a PARALLEL branch that waits for a sibling, a
+                // container dropped into itself — comes back with its reason like any other.
+                onNest: ({ id, container }) => canonicalPipelineMutation(
+                    container ? 'Move into container' : 'Move out of container',
+                    { op: 'nest', id, after: container }),
                 // `id` is the dependent and `after` the dependency, so the request reads the same way
                 // the tag reads in the script: this task runs after that one.
                 onConnect: ({ from, to }) => canonicalPipelineMutation('Connect tasks', { op: 'connect', id: to, after: from }),

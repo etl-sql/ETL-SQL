@@ -134,7 +134,9 @@ describe('Pipeline task editing layer', () => {
         attach(host, canvas, { tasks, selectedId: 'load_orders', onAdd: (add: any) => { adds.push(add); } });
 
         const kinds = [...host.querySelectorAll('[data-task-kind]')].map(chip => (chip as HTMLElement).dataset.taskKind);
-        expect(kinds).toEqual(['execution', 'fileoperation', 'validation', 'notification']);
+        expect(kinds).toEqual([
+            'execution', 'fileoperation', 'validation', 'notification', 'parallel', 'foreach', 'transaction',
+        ]);
 
         // Nothing in the palette is a dead control: each kind has passed its emission gate, so none
         // of them is rendered disabled.
@@ -201,8 +203,11 @@ describe('Pipeline task editing layer', () => {
         expect(chips).toEqual(['load_orders', 'fetch_rates']);
 
         // Several incoming edges read as a join — waits for all of them — never as concurrency.
-        expect(host.textContent).toContain('Waits for all 2');
-        expect(host.textContent).not.toMatch(/parallel|at the same time|concurrent/i);
+        // Scoped to the dependency list rather than the whole host, because the palette legitimately
+        // offers a PARALLEL container: the claim is about what a join means, not about the word.
+        const deps = host.querySelector('.etlsql-studio-pipeline-deps') as HTMLElement;
+        expect(deps.textContent).toContain('Waits for all 2');
+        expect(deps.textContent).not.toMatch(/parallel|at the same time|concurrent/i);
 
         (host.querySelector('[data-task-disconnect="fetch_rates"]') as HTMLElement).click();
         expect(disconnects).toEqual([{ from: 'fetch_rates', to: 'archive_orders' }]);
@@ -326,6 +331,101 @@ describe('Pipeline task editing layer', () => {
         expect(host.querySelector('img')).toBeNull();
         const field = host.querySelector('[data-task-expression="load_orders"]') as HTMLInputElement;
         expect(field.value).toBe('"><img src=x onerror=alert(1)>');
+    });
+
+    test('the palette offers the control-flow containers alongside the task kinds', () => {
+        attach(host, canvas, { tasks });
+
+        const kinds = [...host.querySelectorAll('[data-task-kind]')].map(chip => (chip as HTMLElement).dataset.taskKind);
+        expect(kinds).toEqual([
+            'execution', 'fileoperation', 'validation', 'notification', 'parallel', 'foreach', 'transaction',
+        ]);
+    });
+
+    test('dropping a task onto a container puts it inside, not after it', () => {
+        const container = card('load_all');
+        const source = card('load_orders');
+        const moves: any[] = [];
+        const nests: any[] = [];
+
+        attach(host, canvas, {
+            tasks: [...tasks, { id: 'load_all', kind: 'parallel', connection: '', body: '', line: 1 }],
+            onMove: (move: any) => { moves.push(move); },
+            onNest: (nest: any) => { nests.push(nest); },
+        });
+
+        expect(container.classList.contains('is-container-task')).toBe(true);
+
+        source.dispatchEvent(dragEvent('dragstart'));
+        container.dispatchEvent(dragEvent('drop', { 'text/plain': 'load_orders' }));
+
+        // The gesture matches the picture: a box is something things go inside. "Run after the
+        // container" is the connector drag, which is what a container can actually be waited on for.
+        expect(nests).toEqual([{ id: 'load_orders', container: 'load_all' }]);
+        expect(moves).toEqual([]);
+    });
+
+    test('dropping a task onto a plain task still reorders', () => {
+        const source = card('load_orders');
+        const target = card('archive_orders');
+        const moves: any[] = [];
+        const nests: any[] = [];
+
+        attach(host, canvas, {
+            tasks,
+            onMove: (move: any) => { moves.push(move); },
+            onNest: (nest: any) => { nests.push(nest); },
+        });
+
+        source.dispatchEvent(dragEvent('dragstart'));
+        target.dispatchEvent(dragEvent('drop', { 'text/plain': 'load_orders' }));
+
+        expect(moves).toEqual([{ id: 'load_orders', after: 'archive_orders' }]);
+        expect(nests).toEqual([]);
+    });
+
+    test('a nested task says where it is and offers a way out', () => {
+        card('load_orders');
+        const nests: any[] = [];
+
+        attach(host, canvas, {
+            tasks: [{ ...tasks[0], container: 'load_all' }, tasks[1]],
+            selectedId: 'load_orders',
+            onNest: (nest: any) => { nests.push(nest); },
+        });
+
+        expect(host.textContent).toContain('inside');
+        (host.querySelector('[data-task-unnest]') as HTMLElement).click();
+        expect(nests).toEqual([{ id: 'load_orders', container: null }]);
+    });
+
+    test('a parallel container says out loud that its branches cannot be ordered', () => {
+        card('load_all');
+
+        attach(host, canvas, {
+            tasks: [{ id: 'load_all', kind: 'parallel', connection: '', body: '', line: 1 }],
+            selectedId: 'load_all',
+        });
+
+        // The one place where an edge the author might want to draw is something the container
+        // cannot express, so the inspector says so before they try.
+        expect(host.textContent).toContain('starts at the same time');
+        expect(host.textContent).toMatch(/cannot wait for each other/i);
+    });
+
+    test('a loop container names the variable its children are given', () => {
+        card('per_region');
+
+        attach(host, canvas, {
+            tasks: [{
+                id: 'per_region', kind: 'foreach', connection: '', body: '', line: 1,
+                variable: '@region', collection: '#regions',
+            }],
+            selectedId: 'per_region',
+        });
+
+        expect(host.textContent).toContain('@region');
+        expect(host.textContent).toContain('#regions');
     });
 
     test('dispose removes the handlers it added', () => {

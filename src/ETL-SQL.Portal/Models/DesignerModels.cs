@@ -130,7 +130,7 @@ public record BuildDesignerOptionSourceRequest(string Source, string Column);
 /// <summary>
 /// One edit to the pipeline canvas, addressed by task label.
 /// </summary>
-/// <param name="Op">read | add | update | move | remove.</param>
+/// <param name="Op">read | add | update | move | nest | connect | disconnect | remove.</param>
 /// <param name="Id">The task being edited, or the label of the task being added.</param>
 /// <param name="NewId">update only: the new label.</param>
 /// <param name="After">add and move: the task this one follows; null means end (add) or start (move).</param>
@@ -157,7 +157,9 @@ public record PipelineTaskRequest(
     string? Subject = null,
     string? After = null,
     string? Edge = null,
-    string? Expression = null);
+    string? Expression = null,
+    string? Variable = null,
+    string? Collection = null);
 
 /// <summary>
 /// The result of a pipeline edit. <c>Applied</c> false with an <c>Error</c> is an ordinary answer —
@@ -170,9 +172,13 @@ public record PipelineTaskResponse(bool Applied, string Script, string? Error, L
 /// True when the script wraps this task in the <c>BEGIN TRY</c> that records its outcome, because
 /// another task's edge asks how it finished.
 /// </param>
+/// <param name="Container">The container this task sits inside, or null when it is top level.</param>
+/// <param name="Variable">Foreach only: the loop variable.</param>
+/// <param name="Collection">Foreach only: what it iterates over.</param>
 public record PipelineTaskDto(
     string Id, string Kind, string Connection, string Body, int Line,
-    List<PipelineDependencyDto> DependsOn, bool Guarded = false);
+    List<PipelineDependencyDto> DependsOn, bool Guarded = false,
+    string? Container = null, string? Variable = null, string? Collection = null);
 
 /// <param name="Condition">always | onsuccess | onfailure | oncompletion | expression.</param>
 public record PipelineDependencyDto(string Id, string Condition, string? Expression = null);

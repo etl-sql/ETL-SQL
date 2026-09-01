@@ -12,6 +12,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added control-flow containers to the Studio pipeline canvas. `PARALLEL`, `FOREACH`, and
+  transaction scopes are palette kinds that hold other tasks: drop a task onto one to put it inside,
+  and its statement is relocated rather than regenerated. Concurrency is written only as a
+  `PARALLEL` block the author asked for, and the canvas refuses to give two of its branches an
+  order rather than silently dropping the dependency.
+
 - Added conditional precedence edges to the Studio pipeline canvas. An edge can hand over on
   success, on failure, on completion, or on an expression the author writes, and the choice is
   lowered into the script as a `BEGIN TRY` / `BEGIN CATCH` guard on the task being watched and an

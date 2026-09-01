@@ -6759,3 +6759,18 @@ body.vscode-dark .etlsql-cw-missing-hint {
 .etlsql-studio-dep-chip.is-onfailure { border-left: 3px dashed var(--portal-danger, #f85149); }
 .etlsql-studio-dep-chip.is-oncompletion { border-left: 3px dotted var(--portal-accent, #58a6ff); }
 .etlsql-studio-dep-chip.is-expression { border-left: 3px double var(--portal-warning, #d29922); }
+
+/* ── Control-flow containers ───────────────────────────────────────────────
+   A container reads as something tasks go inside, so its card is drawn as an open box rather than a
+   solid one, and it lights up as a drop target while a task is being dragged. */
+
+.etlsql-dag-card.is-container-task {
+    border-style: dashed;
+    background-image: linear-gradient(180deg, rgba(88, 166, 255, 0.08), transparent 60%);
+}
+
+.etlsql-dag-card.is-container-task.is-drop-target {
+    border-style: solid;
+    outline: 2px solid var(--portal-accent, #58a6ff);
+    outline-offset: 2px;
+}

@@ -1455,23 +1455,39 @@ function mockParseTasks(script) {
   const tasks = [];
   // A task is a label followed by one statement. The kind is read from the statement's first word,
   // the same way the host reads it from the parsed node type.
-  const head = /^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*:[ \t]*\r?\n[ \t]*(EXEC(?:UTE)?|COPY|ASSERT|SEND)\b/gim;
+  const head = /^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*:[ \t]*\r?\n[ \t]*(EXEC(?:UTE)?|COPY|ASSERT|SEND|PARALLEL|FOREACH|BEGIN[ \t]+TRY)\b/gim;
   let match;
   while ((match = head.exec(script)) !== null) {
-    const keyword = match[2].toUpperCase();
+    const keyword = match[2].toUpperCase().replace(/\s+/g, ' ');
     const kind = keyword.startsWith('EXEC') ? 'execution'
       : keyword === 'COPY' ? 'fileoperation'
         : keyword === 'ASSERT' ? 'validation'
-          : 'notification';
+          : keyword === 'PARALLEL' ? 'parallel'
+            : keyword === 'FOREACH' ? 'foreach'
+              : keyword === 'BEGIN TRY' ? 'transaction'
+                : 'notification';
 
     // An execution task ends at its matching END; the others end at their terminating semicolon.
     let end;
     let connection = '';
     let body = '';
-    if (kind === 'execution') {
+    let variable = null;
+    let collection = null;
+    if (kind === 'parallel' || kind === 'foreach' || kind === 'transaction') {
+      end = mockContainerEnd(script, match.index, kind);
+      if (kind === 'foreach') {
+        const header = /FOREACH[ \t]+(@[A-Za-z_][A-Za-z0-9_]*)[ \t]+IN[ \t]+([\s\S]*?)\r?\n[ \t]*BEGIN\b/i
+          .exec(script.slice(match.index, end));
+        variable = header?.[1] ?? null;
+        collection = header?.[2]?.trim() ?? null;
+      }
+    } else if (kind === 'execution') {
       connection = /\bEXEC(?:UTE)?[ \t]+([A-Za-z_][A-Za-z0-9_]*)/i.exec(script.slice(match.index))?.[1] ?? '';
       const beginAt = script.toUpperCase().indexOf('BEGIN', match.index);
-      const endAt = beginAt === -1 ? -1 : script.toUpperCase().indexOf('\nEND', beginAt);
+      // The closing END may be indented, because the task may be inside a container. Anchoring on an
+      // unindented "\nEND" made a nested task run past its own close and swallow the container's.
+      const closer = beginAt === -1 ? null : /\r?\n[ \t]*END\b/i.exec(script.slice(beginAt));
+      const endAt = closer ? beginAt + closer.index : -1;
       const stop = endAt === -1 ? script.length : endAt;
       body = script.slice(script.indexOf('\n', beginAt) + 1, stop).replace(/^\r?\n/, '').trimEnd();
       end = endAt === -1 ? script.length : Math.min(script.length, (script.indexOf(';', stop) + 1) || stop + 4);
@@ -1498,19 +1514,59 @@ function mockParseTasks(script) {
     }
     const dependsOn = tagLines.flatMap(mockParseDependencyLine);
 
+    // A task sits inside the innermost container whose span already covers it. Containers are
+    // always found first because their label comes earlier in the script than their children's.
+    const container = tasks
+      .filter(other => other.kind === 'parallel' || other.kind === 'foreach' || other.kind === 'transaction')
+      .filter(other => other.start < match.index && other.end > end)
+      .sort((left, right) => right.start - left.start)[0]?.id ?? null;
+
     tasks.push({
       id: match[1],
       kind,
       connection,
       body,
+      variable,
+      collection,
+      container,
       dependsOn,
       line: script.slice(0, match.index).split('\n').length,
       start: tagLines.length ? lineStart : match.index,
       end,
     });
-    head.lastIndex = end;
+    // Containers are re-entered rather than skipped, so the tasks they hold are found too.
+    head.lastIndex = kind === 'parallel' || kind === 'foreach' || kind === 'transaction'
+      ? script.indexOf('\n', match.index) + 1
+      : end;
   }
   return tasks;
+}
+
+/**
+ * Where a container's statement ends: its matching END, or the END CATCH of a transaction scope.
+ *
+ * Counts block depth rather than searching for the next END, so a child whose pushed-down SQL has
+ * its own BEGIN/END pair cannot be mistaken for the container's close.
+ */
+function mockContainerEnd(script, from, kind) {
+  const tokens = /\b(BEGIN[ \t]+TRY|BEGIN[ \t]+CATCH|BEGIN[ \t]+TRAN(?:SACTION)?|END[ \t]+TRY|END[ \t]+CATCH|BEGIN|END)\b/gi;
+  tokens.lastIndex = script.indexOf('\n', from) + 1;
+
+  let depth = 0;
+  let match;
+  while ((match = tokens.exec(script)) !== null) {
+    const word = match[1].toUpperCase().replace(/\s+/g, ' ');
+    if (kind === 'transaction') {
+      if (word === 'END CATCH') return Math.min(script.length, (script.indexOf(';', match.index) + 1) || script.length);
+      continue;
+    }
+    if (word === 'BEGIN') depth += 1;
+    else if (word === 'END') {
+      depth -= 1;
+      if (depth === 0) return Math.min(script.length, (script.indexOf(';', match.index) + 1) || script.length);
+    }
+  }
+  return script.length;
 }
 
 /** The statement a kind writes. Mirrors the host's renderer closely enough to drive the UI. */
@@ -1526,6 +1582,16 @@ function mockRenderTask(body) {
   if (kind === 'notification') {
     return `${body.id}:\nSEND EMAIL\n    TO ${literal(body.recipient)}\n    FROM ${literal(body.sender)}\n`
       + `    SUBJECT ${literal(body.subject)}\n    BODY ${literal(body.body)}\n    AT ${body.connection};\n`;
+  }
+  if (kind === 'parallel') {
+    return `${body.id}:\nPARALLEL BEGIN\nEND;\n`;
+  }
+  if (kind === 'foreach') {
+    return `${body.id}:\nFOREACH @${String(body.variable || 'item').replace(/^@/, '')} IN ${String(body.collection || '').trim()}\nBEGIN\nEND;\n`;
+  }
+  if (kind === 'transaction') {
+    return `${body.id}:\nBEGIN TRY\n    BEGIN TRANSACTION;\n    COMMIT;\nEND TRY\nBEGIN CATCH\n`
+      + `    IF @@TRANCOUNT > 0 ROLLBACK;\n    THROW;\nEND CATCH;\n`;
   }
   const indented = String(body.body || 'SELECT 1;').split('\n').map(line => `    ${line}`).join('\n');
   return `${body.id}:\nEXECUTE ${body.connection} BEGIN\n${indented}\nEND;\n`;
@@ -1601,7 +1667,8 @@ function mockPipelineTask(body) {
   const tasks = mockParseTasks(script);
   const find = id => tasks.find(task => task.id.toLowerCase() === String(id || '').toLowerCase());
   const refuse = error => ({ applied: false, script, error, tasks: strip(tasks) });
-  const strip = list => list.map(({ id, kind, connection, body: text, line, dependsOn }) => ({ id, kind, connection, body: text, line, dependsOn }));
+  const strip = list => list.map(({ id, kind, connection, body: text, line, dependsOn, container, variable, collection }) =>
+    ({ id, kind, connection, body: text, line, dependsOn, container, variable, collection }));
   const lineEnd = offset => {
     const next = script.indexOf('\n', offset);
     return next === -1 ? script.length : next + 1;
@@ -1630,6 +1697,42 @@ function mockPipelineTask(body) {
     if (body.after && !anchor) return refuse(`No task called '${body.after}' to move after.`);
     const at = anchor ? lineEnd(anchor.end) : (mockParseTasks(without)[0]?.start ?? without.length);
     next = `${without.slice(0, at)}${moved}\n\n${without.slice(at)}`;
+  } else if (op === 'nest') {
+    const moved = script.slice(target.start, lineEnd(target.end)).replace(/\r?\n$/, '');
+    const without = script.slice(0, target.start) + script.slice(lineEnd(target.end));
+    const after = mockParseTasks(without);
+
+    let at;
+    let indent;
+    if (body.after) {
+      const container = after.find(t => t.id.toLowerCase() === String(body.after).toLowerCase());
+      if (!container) return refuse(`No task called '${body.after}'.`);
+      if (!['parallel', 'foreach', 'transaction'].includes(container.kind)) {
+        return refuse(`'${container.id}' does not hold other tasks.`);
+      }
+      if (container.id.toLowerCase() === target.id.toLowerCase()) return refuse('A container cannot hold itself.');
+      // Before the container's closing line — its COMMIT for a scope, otherwise the line its own
+      // final END sits on. The *last* line, not the first match: a child's END comes first.
+      if (container.kind === 'transaction') {
+        const commit = /\n[ \t]*COMMIT\b/i.exec(without.slice(container.start, container.end));
+        if (!commit) return refuse(`Could not find where inside '${container.id}' to put '${target.id}'.`);
+        at = container.start + commit.index + 1;
+      } else {
+        at = without.lastIndexOf('\n', container.end - 1) + 1;
+      }
+      indent = (/^[ \t]*/.exec(without.slice(container.start).split('\n')[0]) ?? [''])[0] + '    ';
+    } else {
+      if (!target.container) return { applied: true, script, error: null, tasks: strip(tasks) };
+      const container = after.find(t => t.id.toLowerCase() === String(target.container).toLowerCase());
+      if (!container) return refuse(`Could not find what '${target.id}' is inside.`);
+      const nextLine = without.indexOf('\n', container.end);
+      at = nextLine === -1 ? without.length : nextLine + 1;
+      indent = '';
+    }
+
+    const common = Math.min(...moved.split('\n').filter(line => line.trim()).map(line => line.length - line.trimStart().length));
+    const shifted = moved.split('\n').map(line => (line.trim() ? indent + line.slice(common) : '')).join('\n');
+    next = `${without.slice(0, at)}${shifted}\n${without.slice(at)}`;
   } else if (op === 'connect' || op === 'disconnect') {
     // `id` is the dependent and `after` the dependency, matching the host's contract.
     const dependency = String(body.after || '');

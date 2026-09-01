@@ -1659,6 +1659,14 @@ export function createStudioAuthoringSurfaces({
             { name: 'subject', label: 'Subject', placeholder: 'Nightly load finished' },
             { name: 'body', label: 'Body', placeholder: 'All records processed.' },
         ],
+        // A parallel block and a transaction scope have nothing to fill in: they are named, and then
+        // filled by dragging tasks into them.
+        parallel: [],
+        transaction: [],
+        foreach: [
+            { name: 'variable', label: 'Item variable', placeholder: '@row', mono: true },
+            { name: 'collection', label: 'Iterates over', placeholder: '#orders', mono: true },
+        ],
     };
 
     /** Kinds that run against a connection the script declares, and so need one to exist first. */
@@ -1717,7 +1725,9 @@ export function createStudioAuthoringSurfaces({
             body: task?.body || '',
             error: null,
         };
-        for (const field of fields) draft[field.name] = '';
+        // Prefilled from the task when there is one, so Apply on an existing loop repoints it rather
+        // than clearing the header it was opened to show.
+        for (const field of fields) draft[field.name] = String(task?.[field.name] ?? '');
 
         let workbench = null;
         return studioDialog(

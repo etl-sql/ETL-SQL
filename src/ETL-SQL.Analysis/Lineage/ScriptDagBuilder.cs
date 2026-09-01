@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Analysis.Lineage;
 
 /// <summary>A single node in a script flow DAG.</summary>
-/// <param name="Type">dataset | visual | page | container | table | statement | conditional | loop | parallel | validation | io | outbound | destructive | procedure | connection</param>
+/// <param name="Type">dataset | visual | page | container | table | statement | conditional | loop | parallel | transaction | validation | io | outbound | destructive | procedure | connection</param>
 /// <param name="Key">
 /// The section label introducing this statement, when it has one, or null.
 ///
@@ -269,6 +270,19 @@ public static class ScriptDagBuilder
         FlowGraph graph,
         IReadOnlyList<FlowExit> incoming)
     {
+        // A transaction scope the pipeline canvas wrote is one container, not an error handler: its
+        // CATCH is the rollback boilerplate the canvas emitted, and drawing that as a branch of the
+        // pipeline would put three stages nobody authored next to the work that was.
+        if (tryCatch.TryBody is BlockStatement { Statements: [BeginTransactionStatement, ..] } scope)
+        {
+            var scopeId = AddNode("TRANSACTION", "transaction", tryCatch.Line, graph, incoming, graph.KeyFor(tryCatch));
+            var body = scope.Statements
+                .Where(statement => statement is not (BeginTransactionStatement or CommitTransactionStatement))
+                .ToList();
+            var scopeExits = AppendSequence(body, graph, [new FlowExit(scopeId, "SCOPE")]);
+            return scopeExits.Count > 0 ? scopeExits : [new FlowExit(scopeId)];
+        }
+
         var tryId = AddNode("TRY / CATCH", "conditional", tryCatch.Line, graph, incoming);
         var exits = new List<FlowExit>();
         exits.AddRange(AppendBody(tryCatch.TryBody, graph, [new FlowExit(tryId, "TRY")]));

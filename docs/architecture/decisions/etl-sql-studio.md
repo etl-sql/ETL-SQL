@@ -385,6 +385,43 @@ exactly as written; the task simply stays outside the editable set.
 `on completion` writes no gate at all. What it asks for is the guard on the task above it, without
 which an error there would end the run before the dependent was reached.
 
+### Control-flow containers
+
+Three kinds hold other tasks: `PARALLEL BEGIN … END`, `FOREACH @item IN … BEGIN … END`, and a
+transaction scope. Each is one labelled statement, so a container is addressable, movable, and
+deletable exactly like a leaf task — and a container is created **empty**, then filled by dragging
+tasks into it. All three shapes parse with an empty body, so there is no placeholder statement in the
+author's file to explain away later.
+
+A transaction scope is written as `BEGIN TRY BEGIN TRANSACTION; … COMMIT; END TRY BEGIN CATCH IF
+@@TRANCOUNT > 0 ROLLBACK; THROW; END CATCH`. ETL-SQL has no single transaction statement, so a bare
+`BEGIN TRANSACTION` / `COMMIT` pair would be two statements under one label with no identity to edit
+against — and a scope that committed on the way out but left a transaction open on the way in would
+be worse than no scope at all.
+
+- **Dropping a task onto a container puts it inside.** The gesture matches the picture. To make a
+  task run *after* a container, drag its connector onto it, which is the thing a container can
+  actually be waited on for.
+- **Nesting relocates bytes, never regenerates them**, exactly as a reorder does. The block is
+  re-indented to its new depth and nothing else about it changes.
+- **A reorder never changes what a task is inside.** Sliding a task into a container as a side effect
+  of "run after this one" would silently give it a scope — a transaction, or a `PARALLEL` branch —
+  that nobody asked for, so a cross-scope reorder is refused.
+- **An edge cannot cross a container boundary** either: order between blocks is the nesting, and a
+  task inside a container cannot be moved past one outside it, so the declaration could never be
+  made true.
+- **`PARALLEL` is the only construct in ETL-SQL that means concurrency, and it is only ever written
+  because an author asked for one.** Nothing about layout, and no number of incoming edges, implies
+  it. Its branches all start together, so one branch cannot wait for another: connecting two
+  siblings is refused, and so is nesting a task into a block that already contains something it
+  waits for — refused, not silently stripped of the edge, because a quietly deleted dependency is
+  the same silent failure as a quietly ignored one.
+- **Deleting a container deletes what is inside it.** The children were in the block that gave them
+  their meaning; leaving them behind would drop them out of a transaction or a loop unannounced.
+- The projection draws a container as one stage with its children hanging off it. A transaction
+  scope is drawn as a `transaction` node without the rollback handler the canvas emitted, because
+  that boilerplate is not a stage anyone authored.
+
 Every conditional edge is drawn with its own colour **and** its own stroke pattern, and keeps the
 words on its badge — colour alone would make on-success and on-failure indistinguishable to a
 red/green colour-blind reader or on a printed map. The style is derived from the edge label in the

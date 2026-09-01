@@ -1035,7 +1035,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         // The palette offers every kind that passed its emission gate, and none of them is a dead
         // control — a chip that cannot write its statement would be worse than no chip.
-        Assert.Equal(4, await page.Locator("[data-task-kind]").CountAsync());
+        Assert.Equal(7, await page.Locator("[data-task-kind]").CountAsync());
         Assert.Equal(0, await page.Locator("[data-task-kind][disabled]").CountAsync());
 
         // Renaming goes through the task editor, and writes only the label.
@@ -1192,6 +1192,81 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         var conditional = Script();
         Assert.Equal(1, conditional.Split("-- @after:", StringSplitOptions.None).Length - 1);
         Assert.DoesNotContain("PARALLEL", conditional, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    /// <summary>
+    /// Control-flow containers: a task dropped into one goes inside it, and the block the canvas
+    /// writes is the only thing in the script that means concurrency.
+    /// </summary>
+    [Fact]
+    public async Task Studio_PipelineContainers_HoldTasksAndOnlyParallelMeansConcurrency()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
+        await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Engine projection')");
+
+        string Script() => page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content").Result;
+
+        var before = Script();
+        Assert.DoesNotContain("PARALLEL", before, StringComparison.OrdinalIgnoreCase);
+
+        // A container is added empty and named, then filled by dragging into it.
+        await page.ClickAsync("[data-task-kind='parallel']");
+        await page.Locator("[data-task-id]").WaitForAsync();
+        await page.Locator("[data-task-id]").FillAsync("load_all");
+        await page.ClickAsync("[data-dialog-action='save']");
+        await page.WaitForFunctionAsync("""() => !!document.querySelector("[data-task-key='load_all']")""");
+
+        Assert.Contains("PARALLEL BEGIN", Script(), StringComparison.Ordinal);
+        Assert.True(await page.Locator("[data-task-key='load_all']")
+            .EvaluateAsync<bool>("element => element.classList.contains('is-container-task')"));
+
+        // Dropping a task onto the container puts it inside — the gesture matches the picture.
+        await page.EvaluateAsync("""
+            () => {
+              const source = document.querySelector("[data-task-key='load_orders']");
+              const target = document.querySelector("[data-task-key='load_all']");
+              const dt = new DataTransfer();
+              source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+              target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+            }
+            """);
+        await page.WaitForFunctionAsync(
+            """() => /PARALLEL BEGIN[\s\S]*load_orders:/.test(window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content)""");
+
+        var nested = Script();
+
+        // The canvas wrote exactly one PARALLEL block, and only because the author asked for one.
+        Assert.Equal(1, nested.Split("PARALLEL", StringSplitOptions.None).Length - 1);
+
+        // Selected through the DOM: a nested card can sit under the map's own toolbar, and this test
+        // is about what the canvas writes, not about where the layout happens to put a box.
+        await page.EvaluateAsync(
+            """() => document.querySelector("[data-task-key='load_all']").dispatchEvent(new MouseEvent('click', { bubbles: true }))""");
+        await page.Locator("[data-task-inspector]").WaitForAsync();
+        var inspector = await page.Locator("[data-task-inspector]").InnerTextAsync();
+        Assert.Contains("starts at the same time", inspector, StringComparison.Ordinal);
+
+        // And a nested task offers its way back out.
+        await page.EvaluateAsync(
+            """() => document.querySelector("[data-task-key='load_orders']").dispatchEvent(new MouseEvent('click', { bubbles: true }))""");
+        await page.Locator("[data-task-unnest]").WaitForAsync();
+        await page.ClickAsync("[data-task-unnest]");
+        await page.WaitForFunctionAsync("""() => !document.querySelector('[data-task-unnest]')""");
+
+        // Out of the block, and still in the script: moving a task out is a relocation, never a delete.
+        var freed = Script();
+        Assert.Contains("load_orders:", freed, StringComparison.Ordinal);
+        Assert.Matches(@"PARALLEL BEGIN\s*END;", freed);
 
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);

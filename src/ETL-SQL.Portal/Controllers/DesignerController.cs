@@ -173,9 +173,14 @@ public class DesignerController : ControllerBase
                     req.Recipient,
                     req.Sender,
                     req.Subject,
-                    req.After)),
-                "update" => _pipelineTasks.Update(script, req.Id ?? string.Empty, req.NewId, req.Connection, req.Body),
+                    req.After,
+                    req.Variable,
+                    req.Collection)),
+                "update" => _pipelineTasks.Update(script, req.Id ?? string.Empty, req.NewId, req.Connection, req.Body, req.Variable, req.Collection),
                 "move" => _pipelineTasks.Move(script, req.Id ?? string.Empty, req.After),
+                // `after` names the container to move into; null moves the task back out of the one
+                // it is in, which is why this is a separate operation from a reorder.
+                "nest" => _pipelineTasks.Nest(script, req.Id ?? string.Empty, req.After),
                 // Read as "this task runs after that one": `id` is the dependent, `after` the
                 // dependency, the same way the tag reads in the script.
                 "connect" => ParseEdgeCondition(req.Edge) is { } edge
@@ -200,7 +205,10 @@ public class DesignerController : ControllerBase
                                 dependency.Condition.ToString().ToLowerInvariant(),
                                 dependency.Expression))
                             .ToList(),
-                        task.Guarded))
+                        task.Guarded,
+                        task.Container,
+                        task.Variable,
+                        task.Collection))
                     .ToList()));
         }
         finally

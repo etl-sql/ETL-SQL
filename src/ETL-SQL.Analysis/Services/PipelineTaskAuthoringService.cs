@@ -29,7 +29,10 @@ public sealed record PipelineTask(
     string? Gate = null,
     int StatementStart = -1,
     int InnerStart = -1,
-    int InnerEnd = -1);
+    int InnerEnd = -1,
+    string? Container = null,
+    string? Variable = null,
+    string? Collection = null);
 
 /// <summary>
 /// When a task runs relative to the one it waits for.
@@ -89,6 +92,37 @@ public enum PipelineTaskKind
 
     /// <summary><c>SEND EMAIL TO … SUBJECT … BODY … AT &lt;connection&gt;</c>.</summary>
     Notification,
+
+    /// <summary>
+    /// <c>PARALLEL BEGIN … END</c> — a container whose children run at the same time.
+    ///
+    /// <para>This is the only construct in ETL-SQL that means concurrency, and the only way the
+    /// canvas can express it. Nothing about layout, and no number of incoming edges, ever implies
+    /// it: concurrency is something the author asks for and the script says.</para>
+    /// </summary>
+    Parallel,
+
+    /// <summary><c>FOREACH @item IN &lt;collection&gt; BEGIN … END</c> — a container run per item.</summary>
+    Foreach,
+
+    /// <summary>
+    /// A transaction scope: <c>BEGIN TRY BEGIN TRANSACTION; … COMMIT; END TRY BEGIN CATCH … END
+    /// CATCH</c>.
+    ///
+    /// <para>ETL-SQL has no single transaction statement — <c>BEGIN TRANSACTION</c> and
+    /// <c>COMMIT</c> are separate — so a scope that was only those two would be two statements under
+    /// one label and would have no identity to edit against. Wrapping them in the documented
+    /// rollback handler makes the scope one statement and gives it the behaviour an author expects
+    /// from the word: a failure inside rolls the whole thing back.</para>
+    /// </summary>
+    Transaction,
+}
+
+/// <summary>Kinds that hold other tasks.</summary>
+public static class PipelineTaskKinds
+{
+    public static bool IsContainer(this PipelineTaskKind kind) =>
+        kind is PipelineTaskKind.Parallel or PipelineTaskKind.Foreach or PipelineTaskKind.Transaction;
 }
 
 /// <summary>
@@ -96,6 +130,8 @@ public enum PipelineTaskKind
 /// validated, so a caller can carry one draft across a kind change without losing what it typed.
 /// </summary>
 /// <param name="After">Id of the task it follows, or null to append at the end of the script.</param>
+/// <param name="Variable">Foreach only: the loop variable, with or without its leading <c>@</c>.</param>
+/// <param name="Collection">Foreach only: what it iterates — a list variable, a <c>#temp</c>, or a subquery.</param>
 public sealed record PipelineTaskDraft(
     string Id,
     PipelineTaskKind Kind = PipelineTaskKind.Execution,
@@ -108,7 +144,9 @@ public sealed record PipelineTaskDraft(
     string? Recipient = null,
     string? Sender = null,
     string? Subject = null,
-    string? After = null);
+    string? After = null,
+    string? Variable = null,
+    string? Collection = null);
 
 /// <summary>
 /// The outcome of an edit. A refusal carries the reason rather than handing back the original script
@@ -191,6 +229,10 @@ public sealed partial class PipelineTaskAuthoringService
             if (anchor is null)
                 return PipelineEditResult.Refused(source, $"No task called '{draft.After}' to add after.");
             insertAt = EndOfLine(source, anchor.EndOffset);
+
+            // Adding after a task that lives in a container puts the new one in that container, so
+            // it is indented to match rather than left at column zero inside an indented block.
+            text = Reindent(text, LabelIndent(source, anchor.StartOffset), lineEnding);
         }
 
         var prefix = NeedsBlankLineBefore(source, insertAt) ? lineEnding : string.Empty;
@@ -231,6 +273,13 @@ public sealed partial class PipelineTaskAuthoringService
             "A notification task needs a subject.",
         PipelineTaskKind.Notification when string.IsNullOrWhiteSpace(draft.Body) =>
             "A notification task needs a body.",
+
+        PipelineTaskKind.Foreach when !IsValidTaskId((draft.Variable ?? string.Empty).TrimStart('@')) =>
+            $"'{draft.Variable}' is not a usable loop variable.",
+        PipelineTaskKind.Foreach when string.IsNullOrWhiteSpace(draft.Collection) =>
+            "A loop needs something to iterate over.",
+        PipelineTaskKind.Foreach when UnusableExpression(draft.Collection!) is { } badCollection =>
+            badCollection,
 
         _ => null,
     };
@@ -282,6 +331,17 @@ public sealed partial class PipelineTaskAuthoringService
         {
             anchor = Find(tasks, afterId);
             if (anchor is null) return PipelineEditResult.Refused(source, $"No task called '{afterId}' to move after.");
+
+            // A reorder puts a task next to another; it never changes which block it is in. Sliding
+            // a task into a container as a side effect of "run after this one" would silently give
+            // it a scope — a transaction, or worse a PARALLEL branch — that nobody asked for.
+            if (!SameScope(task, anchor))
+                return PipelineEditResult.Refused(source, CrossScope(task, anchor, "reordered"));
+        }
+        else if (task.Container is not null)
+        {
+            return PipelineEditResult.Refused(source,
+                $"'{task.Id}' is inside '{task.Container}'. Move it out of the block before running it first.");
         }
 
         var lineEnding = DetectLineEnding(source);
@@ -321,7 +381,9 @@ public sealed partial class PipelineTaskAuthoringService
         string id,
         string? newId = null,
         string? connection = null,
-        string? body = null)
+        string? body = null,
+        string? variable = null,
+        string? collection = null)
     {
         var source = script ?? string.Empty;
         if (!TryParse(source, out var ast, out var parseError))
@@ -359,17 +421,28 @@ public sealed partial class PipelineTaskAuthoringService
                 source,
                 task.StatementStart,
                 task.EndOffset,
-                ComposeStatement(source[task.InnerStart..task.InnerEnd], null, null, lineEnding));
+                ComposeStatement(source[task.InnerStart..task.InnerEnd], null, null, lineEnding, LabelIndent(source, task.StartOffset)));
 
             // The status DECLARE names the old label too, and it sits above the statement, so its
             // span survives the splice above and is removed second.
             var bare = Commit(source, WriteStatusDeclaration(unwrapped, task, guarded: false, lineEnding));
             if (!bare.Applied) return PipelineEditResult.Refused(source, bare.Error!);
 
-            var renamed = Update(bare.Script, id, newId, connection, body);
+            var renamed = Update(bare.Script, id, newId, connection, body, variable, collection);
             return renamed.Applied
                 ? renamed
                 : PipelineEditResult.Refused(source, renamed.Error ?? "The rename could not be applied.");
+        }
+
+        // A loop's header is its own thing: the variable and the collection sit between FOREACH and
+        // the BEGIN that opens the body, and neither is one of the three runs a leaf task has.
+        if (task.Kind == PipelineTaskKind.Foreach)
+        {
+            if (variable is not null && !IsValidTaskId(variable.TrimStart('@')))
+                return PipelineEditResult.Refused(source, $"'{variable}' is not a usable loop variable.");
+            if (collection is { } text && (string.IsNullOrWhiteSpace(text) || UnusableExpression(text) is not null))
+                return PipelineEditResult.Refused(source, UnusableExpression(text) ?? "A loop needs something to iterate over.");
+            return UpdateLoop(source, task, newId, variable, collection);
         }
 
         var slice = source[task.StartOffset..task.EndOffset];
@@ -400,6 +473,258 @@ public sealed partial class PipelineTaskAuthoringService
         // work the author did on the canvas, and leaving them would strand a gate on a name the
         // script no longer has.
         return Normalize(source, Repoint(committed.Script, task.Id, newId));
+    }
+
+    /// <summary>Relabels a loop, renames its variable, or repoints what it iterates over.</summary>
+    private PipelineEditResult UpdateLoop(
+        string source,
+        PipelineTask task,
+        string? newId,
+        string? variable,
+        string? collection)
+    {
+        if (LoopHeaderSpans(source, task.InnerStart, task.InnerEnd) is not { } header)
+            return PipelineEditResult.Refused(source, $"Could not locate the header of '{task.Id}' in the script.");
+
+        // Applied back to front so an earlier replacement cannot shift a later offset.
+        var edits = new List<(int Start, int End, string Text)>();
+        if (newId is not null) edits.Add((task.StartOffset, task.StartOffset + task.Id.Length, newId));
+        if (variable is not null)
+            edits.Add((header.VariableStart, header.VariableEnd, "@" + variable.TrimStart('@')));
+        if (collection is not null)
+            edits.Add((header.CollectionStart, header.CollectionEnd, collection.Trim() + " "));
+        if (edits.Count == 0) return PipelineEditResult.Ok(source);
+
+        var patched = source;
+        foreach (var edit in edits.OrderByDescending(edit => edit.Start))
+            patched = Splice(patched, edit.Start, edit.End, edit.Text);
+
+        var committed = Commit(source, patched);
+        if (!committed.Applied || newId is null || string.Equals(newId, task.Id, StringComparison.OrdinalIgnoreCase))
+            return committed;
+
+        return Normalize(source, Repoint(committed.Script, task.Id, newId));
+    }
+
+    // ── Containers ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Moves a task into a container, or out to the level the container sits on.
+    ///
+    /// <para>The task's own bytes are relocated and re-indented, never regenerated, so a
+    /// hand-formatted body comes out of a nesting exactly as it went in — the same guarantee a
+    /// reorder gives.</para>
+    ///
+    /// <para>A <c>PARALLEL</c> container is the one place where a declared dependency and the
+    /// container disagree: its children start at the same time, so one of them cannot wait for
+    /// another. Nesting is refused rather than silently dropping the declaration, because a canvas
+    /// that quietly deleted an edge the author drew is worse than one that says why it cannot.</para>
+    /// </summary>
+    /// <param name="containerId">The container to move into, or null to move out to the top level.</param>
+    public PipelineEditResult Nest(string? script, string id, string? containerId)
+    {
+        var source = script ?? string.Empty;
+        if (!TryParse(source, out var ast, out var parseError))
+            return PipelineEditResult.Refused(source, parseError);
+
+        var tasks = ReadTasks(source, ast);
+        var task = Find(tasks, id);
+        if (task is null) return PipelineEditResult.Refused(source, $"No task called '{id}'.");
+        if (GotoTargets(ast).Contains(task.Id))
+            return PipelineEditResult.Refused(source, $"'{task.Id}' is a GOTO target; moving it would change where the jump lands.");
+
+        var lineEnding = DetectLineEnding(source);
+        int insertAt;
+        string indent;
+
+        if (containerId is null)
+        {
+            if (task.Container is null) return PipelineEditResult.Ok(source);
+            var parent = Find(tasks, task.Container);
+            if (parent is null) return PipelineEditResult.Refused(source, $"Could not find what '{task.Id}' is inside.");
+            insertAt = EndOfLine(source, parent.EndOffset);
+            indent = LabelIndent(source, parent.StartOffset);
+        }
+        else
+        {
+            var container = Find(tasks, containerId);
+            if (container is null) return PipelineEditResult.Refused(source, $"No task called '{containerId}'.");
+            if (!container.Kind.IsContainer())
+                return PipelineEditResult.Refused(source, $"'{container.Id}' does not hold other tasks.");
+            if (string.Equals(container.Id, task.Id, StringComparison.OrdinalIgnoreCase))
+                return PipelineEditResult.Refused(source, "A container cannot hold itself.");
+            if (Encloses(tasks, task.Id, container.Id))
+                return PipelineEditResult.Refused(source, $"'{container.Id}' is already inside '{task.Id}'.");
+            if (string.Equals(task.Container, container.Id, StringComparison.OrdinalIgnoreCase))
+                return PipelineEditResult.Ok(source);
+            if (container.Kind == PipelineTaskKind.Parallel && ConcurrentWithADeclaredEdge(tasks, task, container.Id) is { } clash)
+                return PipelineEditResult.Refused(source, clash);
+
+            if (ChildInsertionPoint(source, container) is not { } point)
+                return PipelineEditResult.Refused(source, $"Could not find where inside '{container.Id}' to put '{task.Id}'.");
+
+            insertAt = point;
+            indent = LabelIndent(source, container.StartOffset) + "    ";
+        }
+
+        var (start, end) = RemovableSpan(source, task);
+        if (insertAt >= start && insertAt <= end) return PipelineEditResult.Ok(source);
+
+        var moved = Reindent(source[start..end].Trim('\r', '\n'), indent, lineEnding);
+
+        // The span a task travels with takes the line break above it too, so the cut leaves one
+        // behind — without it the statements either side of the hole run together on one line. Both
+        // anchors are the start of a line, the container's closing token or the line after the
+        // container itself, so the payload carries its own trailing break.
+        var cut = Splice(source, start, end, lineEnding);
+        var shift = end - start - lineEnding.Length;
+        var at = Math.Clamp(insertAt > end ? insertAt - shift : insertAt, 0, cut.Length);
+
+        // At the end of a file that does not end in a newline there is no line to land on, so the
+        // payload opens one rather than running into the statement above it.
+        var payload = (at > 0 && cut[at - 1] != '\n' ? lineEnding : string.Empty) + moved + lineEnding;
+
+        var committed = Commit(source, Tidy(Splice(cut, at, at, payload), lineEnding));
+        return committed.Applied ? Normalize(source, committed.Script) : committed;
+    }
+
+    /// <summary>True when both tasks sit directly in the same block, the top level included.</summary>
+    private static bool SameScope(PipelineTask left, PipelineTask right) =>
+        string.Equals(left.Container, right.Container, StringComparison.OrdinalIgnoreCase);
+
+    private static string CrossScope(PipelineTask left, PipelineTask right, string what) =>
+        $"'{left.Id}' is {Where(left)} and '{right.Id}' is {Where(right)}, "
+        + $"so they cannot be {what} against each other. Move one so they sit in the same block.";
+
+    private static string Where(PipelineTask task) =>
+        task.Container is null ? "at the top level" : $"inside '{task.Container}'";
+
+    /// <summary>True when <paramref name="outerId"/> holds <paramref name="innerId"/>, at any depth.</summary>
+    private static bool Encloses(IReadOnlyList<PipelineTask> tasks, string outerId, string innerId)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var current = Find(tasks, innerId)?.Container;
+        while (current is not null && seen.Add(current))
+        {
+            if (string.Equals(current, outerId, StringComparison.OrdinalIgnoreCase)) return true;
+            current = Find(tasks, current)?.Container;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The reason a task cannot join this <c>PARALLEL</c>, or null.
+    ///
+    /// <para>Branches of a <c>PARALLEL</c> all start together, so one branch waiting for another is
+    /// not something the block can express. The declaration and the container would contradict each
+    /// other, and the canvas would be drawing an order the engine does not keep.</para>
+    /// </summary>
+    private static string? ConcurrentWithADeclaredEdge(IReadOnlyList<PipelineTask> tasks, PipelineTask task, string containerId)
+    {
+        var siblings = tasks
+            .Where(other => string.Equals(other.Container, containerId, StringComparison.OrdinalIgnoreCase))
+            .Select(other => other.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var waitsOn = task.DependsOn.FirstOrDefault(dependency => siblings.Contains(dependency.Id));
+        if (waitsOn is not null)
+            return $"'{task.Id}' waits for '{waitsOn.Id}', which is already in '{containerId}'. "
+                + "Branches of a PARALLEL block all start together, so remove the dependency first.";
+
+        var waitedOnBy = tasks.FirstOrDefault(other =>
+            siblings.Contains(other.Id)
+            && other.DependsOn.Any(dependency => string.Equals(dependency.Id, task.Id, StringComparison.OrdinalIgnoreCase)));
+        if (waitedOnBy is not null)
+            return $"'{waitedOnBy.Id}' in '{containerId}' waits for '{task.Id}'. "
+                + "Branches of a PARALLEL block all start together, so remove the dependency first.";
+
+        return null;
+    }
+
+    /// <summary>
+    /// Where a new child goes inside a container: at the end of its body.
+    ///
+    /// <para>Found by re-lexing the container's own slice and counting block depth, so a child whose
+    /// pushed-down SQL contains <c>BEGIN</c>, <c>END</c>, or the word <c>COMMIT</c> cannot be
+    /// mistaken for the container's own closing token.</para>
+    /// </summary>
+    private static int? ChildInsertionPoint(string script, PipelineTask container)
+    {
+        var start = container.InnerStart;
+        var end = container.InnerEnd;
+        if (start < 0 || end <= start || end > script.Length) return null;
+
+        List<Token> tokens;
+        try
+        {
+            tokens = new Lexer(script[start..end]).Tokenize();
+        }
+        catch
+        {
+            return null;
+        }
+
+        // A transaction scope ends its child region at the COMMIT, not at the block's END: anything
+        // written after the commit is outside the atomic unit the author asked for.
+        if (container.Kind == PipelineTaskKind.Transaction)
+        {
+            var commit = IndexAtTopOfBlock(tokens, TokenType.COMMIT);
+            return commit < 0 ? null : StartOfLine(script, start + tokens[commit].Offset);
+        }
+
+        var depth = 0;
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            if (IsBlockOpener(tokens, i)) depth++;
+            else if (IsBlockCloser(tokens, i) && --depth == 0) return StartOfLine(script, start + tokens[i].Offset);
+        }
+
+        return null;
+    }
+
+    /// <summary>The first token of this type sitting directly in the outermost block, or -1.</summary>
+    private static int IndexAtTopOfBlock(List<Token> tokens, TokenType type)
+    {
+        var depth = 0;
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            if (depth == 0 && tokens[i].Type == type) return i;
+            if (IsBlockOpener(tokens, i)) depth++;
+            else if (IsBlockCloser(tokens, i)) depth--;
+        }
+
+        return -1;
+    }
+
+    /// <summary><c>BEGIN</c> that opens a statement block — not <c>BEGIN TRY</c> or <c>BEGIN TRANSACTION</c>.</summary>
+    private static bool IsBlockOpener(List<Token> tokens, int index) =>
+        tokens[index].Type == TokenType.BEGIN
+        && (index + 1 >= tokens.Count
+            || tokens[index + 1].Type is not (TokenType.TRY or TokenType.CATCH or TokenType.TRANSACTION or TokenType.TRAN));
+
+    /// <summary><c>END</c> that closes a statement block — not <c>END TRY</c> or <c>END CATCH</c>.</summary>
+    private static bool IsBlockCloser(List<Token> tokens, int index) =>
+        tokens[index].Type == TokenType.END
+        && (index + 1 >= tokens.Count || tokens[index + 1].Type is not (TokenType.TRY or TokenType.CATCH));
+
+    /// <summary>Re-indents a relocated block to sit at <paramref name="indent"/>, keeping its shape.</summary>
+    private static string Reindent(string text, string indent, string lineEnding)
+    {
+        var lines = text
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
+
+        var common = lines
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Select(line => line.Length - line.TrimStart().Length)
+            .DefaultIfEmpty(0)
+            .Min();
+
+        return string.Join(
+            lineEnding,
+            lines.Select(line => string.IsNullOrWhiteSpace(line) ? string.Empty : indent + line[common..].TrimEnd()));
     }
 
     // ── Dependencies ─────────────────────────────────────────────────────────
@@ -452,6 +777,22 @@ public sealed partial class PipelineTaskAuthoringService
             string.Equals(dependency.Id, from.Id, StringComparison.OrdinalIgnoreCase));
         var declaration = new PipelineDependency(from.Id, condition, expression?.Trim());
         if (existing == declaration) return PipelineEditResult.Ok(source);
+
+        // Order between blocks is the nesting, not a declaration: a task inside a container cannot be
+        // moved past one outside it, so an edge across that boundary could never be made true.
+        if (!SameScope(from, to))
+            return PipelineEditResult.Refused(source, CrossScope(from, to, "ordered"));
+
+        // Two branches of the same PARALLEL start together, so one cannot wait for the other. The
+        // container says concurrency; the edge would say order. Only the script can be right.
+        if (from.Container is not null
+            && string.Equals(from.Container, to.Container, StringComparison.OrdinalIgnoreCase)
+            && Find(tasks, from.Container)?.Kind == PipelineTaskKind.Parallel)
+        {
+            return PipelineEditResult.Refused(source,
+                $"'{from.Id}' and '{to.Id}' are branches of '{from.Container}', so they start together. "
+                + "Move one out of the PARALLEL block first.");
+        }
 
         // A cycle cannot be executed by a linear script, and drawing one would make the canvas claim
         // something the engine can never do.
@@ -590,7 +931,12 @@ public sealed partial class PipelineTaskAuthoringService
             script,
             task.StatementStart,
             task.EndOffset,
-            ComposeStatement(script[task.InnerStart..task.InnerEnd], gate, task.Guarded ? task.Id : null, DetectLineEnding(script)));
+            ComposeStatement(
+                script[task.InnerStart..task.InnerEnd],
+                gate,
+                task.Guarded ? task.Id : null,
+                DetectLineEnding(script),
+                LabelIndent(script, task.StartOffset)));
 
         return WriteDependencies(patched, task, declared);
     }
@@ -825,7 +1171,12 @@ public sealed partial class PipelineTaskAuthoringService
                 script,
                 task.StatementStart,
                 task.EndOffset,
-                ComposeStatement(script[task.InnerStart..task.InnerEnd], gate, guard ? task.Id : null, lineEnding));
+                ComposeStatement(
+                    script[task.InnerStart..task.InnerEnd],
+                    gate,
+                    guard ? task.Id : null,
+                    lineEnding,
+                    LabelIndent(script, task.StartOffset)));
 
             return WriteStatusDeclaration(rewritten, task, guard, lineEnding);
         }
@@ -840,9 +1191,14 @@ public sealed partial class PipelineTaskAuthoringService
     /// status stays at the 0 it was declared with — neither success nor failure — and a downstream
     /// <c>on failure</c> edge does not fire for a task that was skipped.</para>
     /// </summary>
-    private static string ComposeStatement(string inner, string? gate, string? guardId, string lineEnding)
+    /// <param name="indent">
+    /// The whitespace the task's label sits behind, for a task inside a container. The composed
+    /// statement's first line is spliced in after that indentation and so carries none of its own;
+    /// every line under it is shifted to match, which is what keeps a nested guard readable.
+    /// </param>
+    private static string ComposeStatement(string inner, string? gate, string? guardId, string lineEnding, string indent = "")
     {
-        var text = Dedent(inner);
+        var text = Dedent(inner, lineEnding);
 
         if (gate is not null)
             text = $"IF {gate}{lineEnding}BEGIN{lineEnding}{Indent(text, lineEnding)}{lineEnding}END;";
@@ -857,7 +1213,13 @@ public sealed partial class PipelineTaskAuthoringService
                 + "END CATCH;";
         }
 
-        return text;
+        // Applied once, at the end: the wrappers are composed at column zero so a gate inside a
+        // guard is not indented twice.
+        if (indent.Length == 0) return text;
+        return string.Join(
+            lineEnding,
+            text.Split(lineEnding).Select((line, index) =>
+                index == 0 || string.IsNullOrWhiteSpace(line) ? line : indent + line));
     }
 
     /// <summary>
@@ -867,7 +1229,7 @@ public sealed partial class PipelineTaskAuthoringService
     /// so the block it belongs to is measured from the lines under it. Without this, every gate an
     /// author adds and removes walks the body four more spaces to the right.</para>
     /// </summary>
-    private static string Dedent(string text)
+    private static string Dedent(string text, string lineEnding)
     {
         var lines = text
             .Replace("\r\n", "\n", StringComparison.Ordinal)
@@ -883,7 +1245,7 @@ public sealed partial class PipelineTaskAuthoringService
             .Min();
 
         return string.Join(
-            "\n",
+            lineEnding,
             lines.Select((line, index) => index == 0 || string.IsNullOrWhiteSpace(line) ? line.Trim() : line[common..].TrimEnd()));
     }
 
@@ -940,8 +1302,19 @@ public sealed partial class PipelineTaskAuthoringService
     private static IReadOnlyList<PipelineTask> ReadTasks(string script, Script ast)
     {
         var tasks = new List<PipelineTask>();
-        var statements = ast.Statements;
+        ReadInto(script, ast.Statements, container: null, tasks);
+        return tasks;
+    }
 
+    /// <summary>
+    /// Reads the tasks in one list of statements, then the tasks inside any container among them.
+    ///
+    /// <para>Only a <em>labelled</em> container opens a scope. An unlabelled block has no identity
+    /// to name as a parent, and reporting its children as top-level tasks would have the canvas
+    /// offering to reorder them against statements they cannot legally move past.</para>
+    /// </summary>
+    private static void ReadInto(string script, IReadOnlyList<Statement> statements, string? container, List<PipelineTask> tasks)
+    {
         for (var i = 0; i < statements.Count - 1; i++)
         {
             if (statements[i] is not SectionLabelStatement label) continue;
@@ -984,15 +1357,18 @@ public sealed partial class PipelineTaskAuthoringService
                     gate,
                     outer.StartOffset,
                     inner.StartOffset,
-                    inner.EndOffset));
+                    inner.EndOffset,
+                    container));
                 continue;
             }
+
+            var loop = kind == PipelineTaskKind.Foreach ? LoopHeader(script, inner) : (null, null);
 
             tasks.Add(new PipelineTask(
                 label.LabelName,
                 kind,
                 string.Empty,
-                script[inner.StartOffset..inner.EndOffset].Trim(),
+                kind.IsContainer() ? string.Empty : script[inner.StartOffset..inner.EndOffset].Trim(),
                 label.Line,
                 start,
                 end,
@@ -1001,10 +1377,66 @@ public sealed partial class PipelineTaskAuthoringService
                 gate,
                 outer.StartOffset,
                 inner.StartOffset,
-                inner.EndOffset));
+                inner.EndOffset,
+                container,
+                loop.Item1,
+                loop.Item2));
+
+            if (kind.IsContainer() && ChildStatements(inner) is { } children)
+                ReadInto(script, children, label.LabelName, tasks);
+        }
+    }
+
+    /// <summary>The statements a container holds, in the order the engine runs them.</summary>
+    private static IReadOnlyList<Statement>? ChildStatements(Statement container) => container switch
+    {
+        ParallelStatement parallel => parallel.Body.Statements,
+        ForeachStatement loop when loop.Body is BlockStatement block => block.Statements,
+        TryCatchStatement scope when scope.TryBody is BlockStatement block => block.Statements,
+        _ => null,
+    };
+
+    /// <summary>
+    /// A loop's variable and the collection it walks, read back from the source between
+    /// <c>FOREACH</c> and the <c>BEGIN</c> that opens its body.
+    ///
+    /// <para>Read from the tokens rather than the AST because the parser records no offsets for the
+    /// collection expression, and the serializer rewrites it — a <c>#temp</c> and a subquery both
+    /// have to come back exactly as the author typed them.</para>
+    /// </summary>
+    private static (string? Variable, string? Collection) LoopHeader(string script, Statement loop)
+    {
+        if (LoopHeaderSpans(script, loop.StartOffset, loop.EndOffset) is not { } spans) return (null, null);
+        return (
+            script[spans.VariableStart..spans.VariableEnd].Trim(),
+            script[spans.CollectionStart..spans.CollectionEnd].Trim());
+    }
+
+    private readonly record struct LoopSpans(
+        int VariableStart, int VariableEnd,
+        int CollectionStart, int CollectionEnd);
+
+    private static LoopSpans? LoopHeaderSpans(string script, int start, int end)
+    {
+        if (start < 0 || end <= start || end > script.Length) return null;
+
+        List<Token> tokens;
+        try
+        {
+            tokens = new Lexer(script[start..end]).Tokenize();
+        }
+        catch
+        {
+            return null;
         }
 
-        return tasks;
+        var inIndex = tokens.FindIndex(token => token.Type == TokenType.IN);
+        var beginIndex = tokens.FindIndex(token => token.Type == TokenType.BEGIN);
+        if (inIndex < 2 || beginIndex <= inIndex + 1) return null;
+
+        return new LoopSpans(
+            start + tokens[1].Offset, start + tokens[inIndex - 1].EndOffset,
+            start + tokens[inIndex + 1].Offset, start + tokens[beginIndex].Offset);
     }
 
     /// <summary>
@@ -1143,8 +1575,16 @@ public sealed partial class PipelineTaskAuthoringService
         FileOperationStatement => PipelineTaskKind.FileOperation,
         AssertStatement => PipelineTaskKind.Validation,
         EmailStatement => PipelineTaskKind.Notification,
+        ParallelStatement => PipelineTaskKind.Parallel,
+        ForeachStatement => PipelineTaskKind.Foreach,
+        // A TRY/CATCH that opens a transaction is a scope; one that does not is the author's own
+        // error handling, and the canvas has nothing to say about it.
+        TryCatchStatement scope when OpensATransaction(scope) => PipelineTaskKind.Transaction,
         _ => null,
     };
+
+    private static bool OpensATransaction(TryCatchStatement scope) =>
+        scope.TryBody is BlockStatement { Statements: [BeginTransactionStatement, ..] };
 
     private static PipelineTask? Find(IReadOnlyList<PipelineTask> tasks, string? id) =>
         id is null ? null : tasks.FirstOrDefault(task => string.Equals(task.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -1277,6 +1717,29 @@ public sealed partial class PipelineTaskAuthoringService
             + $"    SUBJECT {Literal(draft.Subject)}{lineEnding}"
             + $"    BODY {Literal(draft.Body)}{lineEnding}"
             + $"    AT {draft.Connection};",
+
+        // A container is created empty and filled by dragging tasks into it. Every one of these
+        // shapes parses with an empty body, so there is no placeholder statement to write and then
+        // explain away — and no moment where the canvas has put something in the file the author did
+        // not ask for.
+        PipelineTaskKind.Parallel =>
+            $"{draft.Id}:{lineEnding}PARALLEL BEGIN{lineEnding}END;",
+
+        PipelineTaskKind.Foreach =>
+            $"{draft.Id}:{lineEnding}FOREACH @{(draft.Variable ?? string.Empty).TrimStart('@')} IN {draft.Collection?.Trim()}"
+            + $"{lineEnding}BEGIN{lineEnding}END;",
+
+        // The documented rollback handler, not a bare BEGIN TRANSACTION: a scope that committed on
+        // the way out but left a half-written transaction open on the way in would be worse than no
+        // scope at all.
+        PipelineTaskKind.Transaction =>
+            $"{draft.Id}:{lineEnding}BEGIN TRY{lineEnding}"
+            + $"    BEGIN TRANSACTION;{lineEnding}"
+            + $"    COMMIT;{lineEnding}"
+            + $"END TRY{lineEnding}BEGIN CATCH{lineEnding}"
+            + $"    IF @@TRANCOUNT > 0 ROLLBACK;{lineEnding}"
+            + $"    THROW;{lineEnding}"
+            + "END CATCH;",
 
         _ => throw new ArgumentOutOfRangeException(nameof(draft), draft.Kind, "Unknown pipeline task kind."),
     };

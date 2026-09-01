@@ -80,9 +80,17 @@ selected point.
   Each condition has its own colour, its own stroke pattern, and its words on the badge, because
   colour alone would hide the success/failure difference from a red/green colour-blind reader. The
   four runtime tests execute the emitted script and assert which branch actually ran.
-- [ ] **Add draggable control-flow containers**: Support explicit `PARALLEL`, `FOREACH`, and
-  transaction scopes with child tasks inside the container. Concurrency must always appear as a
-  `PARALLEL` block in the script; never infer it from layout or multiple edges.
+- [x] **Add draggable control-flow containers**: `PARALLEL`, `FOREACH`, and transaction scopes are
+  palette kinds that hold other tasks. Each is one labelled statement, created empty and filled by
+  dragging tasks in — every shape parses empty, so no placeholder statement lands in the author's
+  file. A transaction scope is the documented `BEGIN TRY BEGIN TRANSACTION; … COMMIT; END TRY BEGIN
+  CATCH … ROLLBACK; THROW; END CATCH` handler, because ETL-SQL has no single transaction statement
+  and a scope that left one open on the way in would be worse than none. Nesting relocates bytes and
+  re-indents them, never regenerates them; deleting a container deletes what is inside it; a reorder
+  and an edge both refuse to cross a container boundary, so nothing slides into a scope nobody asked
+  for. Concurrency is only ever a `PARALLEL` block the author added: two of its branches cannot be
+  given an order, and a task that already waits for one of them is refused entry rather than quietly
+  losing the edge.
 - [ ] **Add the positional scope inspector**: At the selected node, show in-scope variables,
   variable sets, and `#temp` tables. Include row counts and memory/spill information when runtime
   state is available.

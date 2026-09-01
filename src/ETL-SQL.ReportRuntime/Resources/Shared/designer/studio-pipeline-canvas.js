@@ -50,7 +50,33 @@ export const PIPELINE_TASK_KINDS = Object.freeze([
         glyph: '✉',
         hint: 'Send an email through an SMTP connection this script declares.',
     }),
+    Object.freeze({
+        id: 'parallel',
+        label: 'Parallel',
+        glyph: '⇉',
+        container: true,
+        hint: 'A block whose tasks all start at the same time. This is the only thing in ETL-SQL that means concurrency.',
+    }),
+    Object.freeze({
+        id: 'foreach',
+        label: 'For each',
+        glyph: '↻',
+        container: true,
+        hint: 'A block run once per item of a list, a #temp table, or a query.',
+    }),
+    Object.freeze({
+        id: 'transaction',
+        label: 'Transaction',
+        glyph: '⛨',
+        container: true,
+        hint: 'A block that commits as one unit and rolls back if anything inside it fails.',
+    }),
 ]);
+
+/** True when this kind holds other tasks. */
+export function isContainerKind(kind) {
+    return Boolean(PIPELINE_TASK_KINDS.find(entry => entry.id === String(kind || '').toLowerCase())?.container);
+}
 
 /**
  * When an edge hands over.
@@ -118,6 +144,7 @@ export function taskKindLabel(kind) {
  * @param onSetEdge  `({ from, to, edge, expression }) => Promise<void>`, changes one edge's condition.
  * @param onDisconnect `({ from, to }) => Promise<void>`, removes one declared edge.
  * @param onMove     `({ id, after }) => Promise<void>` — after null means "run first".
+ * @param onNest     `({ id, container }) => Promise<void>` — container null means "move out".
  * @param onRemove   `({ id }) => Promise<void>`
  * @param onOpenLine `(line) => void`, to reveal the task in the script.
  * @returns `{ dispose }`
@@ -132,6 +159,7 @@ export function attachPipelineTaskEditing(host, canvas, {
     onSetEdge = async () => {},
     onDisconnect = async () => {},
     onMove = async () => {},
+    onNest = async () => {},
     onUpdate = async () => {},
     onRemove = async () => {},
     onOpenLine = () => {},
@@ -175,6 +203,9 @@ export function attachPipelineTaskEditing(host, canvas, {
 
     const first = inspector.querySelector('[data-task-first]');
     if (first) on(first, 'click', () => onMove({ id: selected.id, after: null }));
+
+    const unnest = inspector.querySelector('[data-task-unnest]');
+    if (unnest) on(unnest, 'click', () => onNest({ id: selected.id, container: null }));
 
     for (const chip of inspector.querySelectorAll('[data-task-disconnect]')) {
         on(chip, 'click', () => onDisconnect({ from: chip.dataset.taskDisconnect, to: selected.id }));
@@ -226,12 +257,17 @@ export function attachPipelineTaskEditing(host, canvas, {
     let dragging = null;
     let draggingKind = null;
 
+    const containers = new Set(tasks
+        .filter(task => isContainerKind(task.kind))
+        .map(task => String(task.id).toLowerCase()));
+
     const cards = [...canvas.querySelectorAll('[data-task-key]')];
     for (const card of cards) {
         const id = card.dataset.taskKey;
         card.classList.add('is-editable-task');
         card.draggable = true;
         card.classList.toggle('is-selected-task', sameId(id, selectedId));
+        card.classList.toggle('is-container-task', containers.has(String(id).toLowerCase()));
 
         // Dragging the card body reorders; dragging this handle declares a dependency. Two gestures
         // because they mean different things: one moves a statement, the other writes a declaration
@@ -294,6 +330,11 @@ export function attachPipelineTaskEditing(host, canvas, {
                 // Dropping a connector onto a task declares that the task waits for the one the drag
                 // started from. Several of those on one task is a join, never concurrency.
                 onConnect({ from: moved, to: id });
+            } else if (containers.has(String(id).toLowerCase())) {
+                // Dropping a task into a container puts it inside — the gesture matches the picture.
+                // To make a task run *after* a container instead, drag its connector onto it: that
+                // says "wait for this", which is the thing a container can actually be waited on for.
+                onNest({ id: moved, container: id });
             } else {
                 // Dropping a task onto another means "run after this one". Order in the script is the
                 // dependency; nothing here implies concurrency either.
@@ -333,7 +374,13 @@ function inspectorMarkup(task) {
 
     const detail = task.kind === 'execution' && task.connection
         ? [{ strong: taskKindLabel(task.kind) }, ' on ', { code: task.connection }]
-        : [{ strong: taskKindLabel(task.kind) }];
+        : task.kind === 'foreach' && task.collection
+            ? [{ strong: taskKindLabel(task.kind) }, ' over ', { code: task.collection }]
+            : [{ strong: taskKindLabel(task.kind) }];
+
+    if (task.container) {
+        detail.push(' · inside ', { code: task.container });
+    }
 
     return `
         <div class="etlsql-studio-pipeline-selected">
@@ -341,9 +388,12 @@ function inspectorMarkup(task) {
             ${noteMarkup(detail, 'info')}
         </div>
         ${dependencyMarkup(task)}
+        ${containerNote(task)}
         <div class="etlsql-studio-pipeline-actions">
             <button type="button" class="etlsql-studio-btn is-primary" data-task-edit>Edit</button>
             <button type="button" class="etlsql-studio-btn" data-task-first>Run first</button>
+            ${task.container ? `<button type="button" class="etlsql-studio-btn"
+                data-task-unnest>Move out of ${escapeHtml(task.container)}</button>` : ''}
             <button type="button" class="etlsql-studio-btn" data-task-reveal>Show in script</button>
             <button type="button" class="etlsql-studio-btn is-danger" data-task-remove>Delete</button>
         </div>`;
@@ -409,6 +459,37 @@ function dependencyRow(dependency) {
         <button type="button" data-task-disconnect="${escapeHtml(dependency.id)}"
             aria-label="Stop waiting for ${escapeHtml(dependency.id)}" title="Remove this dependency">&times;</button>
     </span>`;
+}
+
+/**
+ * What a container is, said where the author is looking at one.
+ *
+ * A `PARALLEL` block earns the most explanation: it is the only construct in ETL-SQL that means
+ * concurrency, and the one place where a dependency the author might want to draw is something the
+ * container cannot express.
+ */
+function containerNote(task) {
+    if (!isContainerKind(task.kind)) return '';
+
+    if (task.kind === 'parallel') {
+        return noteMarkup([
+            'Everything dropped in here starts at the same time. That means branches cannot wait for '
+            + 'each other — to order two of them, move one out of the block.',
+        ], 'warning');
+    }
+
+    if (task.kind === 'foreach') {
+        return noteMarkup([
+            'Everything dropped in here runs once per item, in order, with ',
+            { code: task.variable || '@item' },
+            ' bound to the current one.',
+        ], 'info');
+    }
+
+    return noteMarkup([
+        'Everything dropped in here commits as one unit. If any of it fails, the whole scope is '
+        + 'rolled back and the error is re-thrown.',
+    ], 'info');
 }
 
 /** `CSS.escape` where the host has it, and a conservative fallback where it does not. */
