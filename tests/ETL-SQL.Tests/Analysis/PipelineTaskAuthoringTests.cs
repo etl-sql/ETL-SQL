@@ -107,7 +107,7 @@ public class PipelineTaskAuthoringTests
     public void Add_EmitsParserValidScriptAndLeavesEverythingElseByteIdentical()
     {
         var result = _tasks.Add(Script, new PipelineTaskDraft(
-            "refresh_totals", "staging_db", "UPDATE dbo.Totals SET Amount = 0;", After: "load_orders"));
+            "refresh_totals", Connection: "staging_db", Body: "UPDATE dbo.Totals SET Amount = 0;", After: "load_orders"));
 
         Assert.True(result.Applied, result.Error);
         AssertParses(result.Script);
@@ -126,7 +126,7 @@ public class PipelineTaskAuthoringTests
     [Fact]
     public void Add_AppendsWhenNoAnchorIsNamed()
     {
-        var result = _tasks.Add(Script, new PipelineTaskDraft("cleanup", "staging_db", "DELETE FROM dbo.Scratch;"));
+        var result = _tasks.Add(Script, new PipelineTaskDraft("cleanup", Connection: "staging_db", Body: "DELETE FROM dbo.Scratch;"));
 
         Assert.True(result.Applied, result.Error);
         AssertParses(result.Script);
@@ -137,7 +137,7 @@ public class PipelineTaskAuthoringTests
     [Fact]
     public void Add_RefusesADuplicateLabelRatherThanWritingAnAmbiguousScript()
     {
-        var result = _tasks.Add(Script, new PipelineTaskDraft("load_orders", "staging_db", "SELECT 1;"));
+        var result = _tasks.Add(Script, new PipelineTaskDraft("load_orders", Connection: "staging_db", Body: "SELECT 1;"));
 
         Assert.False(result.Applied);
         Assert.Contains("already has a task", result.Error!, StringComparison.Ordinal);
@@ -151,7 +151,7 @@ public class PipelineTaskAuthoringTests
     [InlineData("")]
     public void Add_RefusesALabelThatWouldNotLexAsOneIdentifier(string id)
     {
-        var result = _tasks.Add(Script, new PipelineTaskDraft(id, "staging_db", "SELECT 1;"));
+        var result = _tasks.Add(Script, new PipelineTaskDraft(id, Connection: "staging_db", Body: "SELECT 1;"));
 
         Assert.False(result.Applied);
         Assert.Equal(Script, result.Script);
@@ -180,9 +180,15 @@ public class PipelineTaskAuthoringTests
         Assert.True(repointed.Applied, repointed.Error);
         AssertParses(repointed.Script);
         Assert.Equal("warehouse_db", _tasks.Read(repointed.Script).Single(t => t.Id == "load_orders").Connection);
-        Assert.Equal(
-            Script.Replace("EXECUTE staging_db BEGIN\n        SELECT OrderId,", "EXECUTE warehouse_db BEGIN\n        SELECT OrderId,", StringComparison.Ordinal),
-            repointed.Script.Replace("\r\n", "\n", StringComparison.Ordinal));
+        // Compared with both sides normalised, because the fixture's own line endings depend on how
+        // the file was checked out and this assertion is about the alias, not about CRLF.
+        static string Lf(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal);
+        // The first EXECUTE only: the script declares two tasks on the same alias, and repointing one
+        // must leave the other exactly as it was.
+        var expected = Lf(Script);
+        var first = expected.IndexOf("EXECUTE staging_db", StringComparison.Ordinal);
+        expected = expected[..first] + "EXECUTE warehouse_db" + expected[(first + "EXECUTE staging_db".Length)..];
+        Assert.Equal(expected, Lf(repointed.Script));
 
         var rebodied = _tasks.Update(Script, "archive_orders", body: "TRUNCATE TABLE dbo.OrdersArchive;");
         Assert.True(rebodied.Applied, rebodied.Error);
@@ -264,7 +270,7 @@ public class PipelineTaskAuthoringTests
 
         foreach (var result in new[]
                  {
-                     _tasks.Add(broken, new PipelineTaskDraft("t", "staging_db", "SELECT 1;")),
+                     _tasks.Add(broken, new PipelineTaskDraft("t", Connection: "staging_db", Body: "SELECT 1;")),
                      _tasks.Update(broken, "t", newId: "u"),
                      _tasks.Move(broken, "t", null),
                      _tasks.Remove(broken, "t"),
@@ -282,7 +288,7 @@ public class PipelineTaskAuthoringTests
         // The emitted form has to be one the formatter accepts, or the first author who hits Format
         // loses the task the canvas wrote. Formatting must keep it parseable and keep it a task.
         var added = _tasks.Add(Script, new PipelineTaskDraft(
-            "refresh_totals", "staging_db", "UPDATE dbo.Totals SET Amount = 0;", After: "archive_orders"));
+            "refresh_totals", Connection: "staging_db", Body: "UPDATE dbo.Totals SET Amount = 0;", After: "archive_orders"));
         Assert.True(added.Applied, added.Error);
 
         var formatted = SqlFormatter.Format(added.Script, new FormatterOptions());
@@ -296,7 +302,7 @@ public class PipelineTaskAuthoringTests
     [Fact]
     public void EmittedTasksSurviveTheAstSerializer()
     {
-        var added = _tasks.Add("", new PipelineTaskDraft("first_task", "staging_db", "SELECT 1;"));
+        var added = _tasks.Add("", new PipelineTaskDraft("first_task", Connection: "staging_db", Body: "SELECT 1;"));
         Assert.True(added.Applied, added.Error);
 
         var ast = new CoreParser(new Lexer(added.Script).Tokenize(), added.Script).Parse();

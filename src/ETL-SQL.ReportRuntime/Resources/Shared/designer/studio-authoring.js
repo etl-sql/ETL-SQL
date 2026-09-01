@@ -43,6 +43,7 @@
 import { columnName, columnType, snapshotColumns, updateSnapshotPackage as writeSnapshotPackage } from './studio-data.js';
 import { escapeHtml, noteMarkup as guidedNoteMarkup, sampleGridMarkup as sampleRowsMarkup, sqlPreviewMarkup } from './studio-authoring-ui.js';
 import { createQueryWorkbench } from './studio-query-workbench.js';
+import { taskKindLabel } from './studio-pipeline-canvas.js';
 import {
     CHART_AGGREGATES, STUDIO_VISUAL_GROUPS, aggregateRows, buildAggregatedSource, defaultAggregateAlias,
     missingRequiredRoles, renderVisualSample, rolesForVisualType,
@@ -1631,8 +1632,202 @@ export function createStudioAuthoringSurfaces({
             actions: [{ id: 'close', label: 'Got it', primary: true, run: () => api.close(null) }],
         }));
     }
+    /**
+     * The fields a task kind is authored with, beyond its label.
+     *
+     * Only the execution kind gets the query workbench — its content is SQL the author runs, and the
+     * workbench is why it was extracted as a standalone component. For the others a handful of
+     * values is the whole task, and a workbench for a file path would be theatre.
+     */
+    const PIPELINE_TASK_FIELDS = {
+        fileoperation: [
+            { name: 'source', label: 'Copy from', placeholder: 'C:\\data\\orders.csv' },
+            { name: 'target', label: 'Copy to', placeholder: 'C:\\data\\archive\\orders.csv' },
+        ],
+        validation: [
+            { name: 'condition', label: 'Assert that', placeholder: '(SELECT COUNT(*) FROM #orders) > 0', mono: true },
+            { name: 'message', label: 'Fail with', placeholder: 'No orders were staged.' },
+        ],
+        notification: [
+            { name: 'recipient', label: 'To', placeholder: 'ops@example.com' },
+            { name: 'sender', label: 'From', placeholder: 'etl@example.com' },
+            { name: 'subject', label: 'Subject', placeholder: 'Nightly load finished' },
+            { name: 'body', label: 'Body', placeholder: 'All records processed.' },
+        ],
+    };
+
+    /** Kinds that run against a connection the script declares, and so need one to exist first. */
+    const PIPELINE_KINDS_NEEDING_CONNECTION = new Set(['execution', 'notification']);
+
+    /**
+     * The task editor behind a pipeline canvas node.
+     *
+     * An execution task is authored in the shared query workbench, so writing the SQL a task runs
+     * gets the same completions, hover, diagnostics, run, and results as the script pane. The other
+     * kinds are field forms, because that is all their statement is.
+     *
+     * It returns the author's intent and never writes to the script. The caller applies it through
+     * the canonical pipeline mutation, which owns the bytes.
+     *
+     * @param kind        Palette kind being authored.
+     * @param task        The task being edited, or null for a new one.
+     * @param connections `[{ name }]` the script declares, from the canonical parse.
+     * @param suggestedId Label to start a new task with.
+     */
+    async function openPipelineTaskEditor({
+        kind = 'execution',
+        task = null,
+        connections = [],
+        suggestedId = 'task_1',
+    } = {}) {
+        const editing = Boolean(task);
+        const taskKind = String(task?.kind || kind || 'execution').toLowerCase();
+        const aliases = (connections || []).map(connection => connection?.name).filter(Boolean);
+        const needsConnection = PIPELINE_KINDS_NEEDING_CONNECTION.has(taskKind);
+
+        // A task that runs against a connection cannot be written before one is declared, and a
+        // free-text alias would let the author name one the script does not declare — which previews
+        // fine here and fails for every other reader. Resume in the editor rather than dropping them
+        // back on the canvas: making them re-open it is exactly the dead end the dataset wizard fixed.
+        if (needsConnection && !aliases.length) {
+            let created = null;
+            const took = await guidedBlocker({
+                kicker: 'Pipeline task',
+                title: 'This script declares no connections yet',
+                lede: 'This task runs against a connection the script declares. Add one and this editor '
+                    + 'picks up where it left off.',
+                remedyLabel: 'Create a connection',
+                remedy: () => new Promise(resolve => shell.openConnectionWizard({
+                    onDone: alias => { created = alias || null; resolve(); },
+                })),
+            });
+            if (!took || !created) return null;
+            return openPipelineTaskEditor({ kind, task, connections: [{ name: created }], suggestedId });
+        }
+
+        const fields = PIPELINE_TASK_FIELDS[taskKind] ?? [];
+        const draft = {
+            id: task?.id || suggestedId,
+            connection: aliases.includes(task?.connection) ? task.connection : aliases[0] || '',
+            body: task?.body || '',
+            error: null,
+        };
+        for (const field of fields) draft[field.name] = '';
+
+        let workbench = null;
+        return studioDialog(
+            {
+                kicker: 'Pipeline task',
+                title: editing ? `Edit ${task.id}` : `New ${taskKindLabel(taskKind).toLowerCase()} task`,
+                wide: taskKind === 'execution',
+            },
+            api => {
+                const readFields = host => {
+                    for (const field of fields) {
+                        draft[field.name] = host.querySelector(`[data-task-field="${field.name}"]`)?.value ?? draft[field.name];
+                    }
+                };
+
+                const save = () => {
+                    const host = dialog.box;
+                    readFields(host);
+                    draft.body = taskKind === 'execution' ? (workbench?.getValue?.() ?? draft.body) : draft.body;
+
+                    const id = host.querySelector('[data-task-id]').value.trim();
+                    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(id)) {
+                        draft.id = id;
+                        draft.error = `"${id}" is not a usable label. Use letters, digits, and underscores, starting with a letter.`;
+                        return repaint();
+                    }
+                    if (taskKind === 'execution' && !draft.body.trim()) {
+                        draft.error = 'Write the SQL this task runs before adding it.';
+                        return repaint();
+                    }
+                    const blank = fields.find(field => !String(draft[field.name] || '').trim());
+                    if (blank) {
+                        draft.error = `${blank.label} is needed before this task can be written.`;
+                        return repaint();
+                    }
+
+                    const intent = { id, kind: taskKind };
+                    if (needsConnection) intent.connection = draft.connection;
+                    if (taskKind === 'execution') intent.body = draft.body;
+                    for (const field of fields) intent[field.name] = draft[field.name];
+                    return api.close(intent);
+                };
+
+                const paint = () => api.render({
+                    lede: `This task becomes a labelled statement in the script. The label is what the canvas `
+                        + `tracks it by, so it survives a hand edit.`,
+                    body: (draft.error ? guidedNoteMarkup(draft.error, 'error') : '')
+                        + `<div class="etlsql-studio-pipeline-fields">
+                            <label>Label
+                                <input type="text" data-task-id value="${escapeHtml(draft.id)}" spellcheck="false">
+                            </label>
+                            ${needsConnection ? `<label>Connection
+                                <select data-task-connection>${aliases.map(alias =>
+                                    `<option${alias === draft.connection ? ' selected' : ''}>${escapeHtml(alias)}</option>`).join('')}</select>
+                            </label>` : ''}
+                            ${fields.map(field => `<label>${escapeHtml(field.label)}
+                                <input type="text" data-task-field="${escapeHtml(field.name)}"
+                                    value="${escapeHtml(draft[field.name] || '')}"
+                                    placeholder="${escapeHtml(field.placeholder || '')}"
+                                    ${field.mono ? 'spellcheck="false"' : ''}>
+                            </label>`).join('')}
+                        </div>`
+                        + (taskKind === 'execution'
+                            ? `<div class="etlsql-studio-workbench" data-task-workbench></div>`
+                                + guidedNoteMarkup([
+                                    'Run executes this block against ',
+                                    { code: draft.connection },
+                                    ' behind the connection declarations the script already makes, so an alias '
+                                    + 'resolves exactly as it will at run time.',
+                                ], 'info')
+                            : ''),
+                    actions: [
+                        { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
+                        { id: 'save', label: editing ? 'Apply' : 'Add task', primary: true, run: save },
+                    ],
+                    wire: async host => {
+                        host.querySelector('[data-task-id]').addEventListener('input', event => { draft.id = event.target.value; });
+                        host.querySelector('[data-task-connection]')?.addEventListener('change', event => {
+                            // The workbench binds its run and its preamble to one alias, so repointing
+                            // rebuilds it rather than leaving it running against the previous one.
+                            readFields(host);
+                            draft.body = workbench?.getValue?.() ?? draft.body;
+                            draft.connection = event.target.value;
+                            repaint();
+                        });
+                        if (taskKind !== 'execution') return;
+
+                        workbench = await createQueryWorkbench(host.querySelector('[data-task-workbench]'), {
+                            connection: draft.connection,
+                            routes,
+                            request,
+                            editorTransport,
+                            documentUri: () => getActiveDocument()?.path || 'untitled.etlsql',
+                            scriptText: () => shell.getScriptText(),
+                            value: draft.body,
+                            label: `Runs on ${draft.connection}`,
+                            runLabel: 'Run this task',
+                            onChange: value => { draft.body = value; },
+                        });
+                    },
+                });
+
+                const repaint = () => {
+                    workbench?.dispose?.();
+                    workbench = null;
+                    paint();
+                };
+
+                paint();
+            });
+    }
+
     return {
         openDataWizard,
+        openPipelineTaskEditor,
         openChartBuilder,
         runChooseDataStep,
         runParameterStep,

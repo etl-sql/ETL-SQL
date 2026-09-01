@@ -573,7 +573,20 @@ public static class WorkstationEditorApp
             var result = (request.Op ?? string.Empty).ToLowerInvariant() switch
             {
                 "add" => pipelineTasks.Add(script, new ETL_SQL.Analysis.Services.PipelineTaskDraft(
-                    request.Id ?? string.Empty, request.Connection ?? string.Empty, request.Body ?? string.Empty, request.After)),
+                    request.Id ?? string.Empty,
+                    Enum.TryParse<ETL_SQL.Analysis.Services.PipelineTaskKind>(request.Kind, ignoreCase: true, out var kind)
+                        ? kind
+                        : ETL_SQL.Analysis.Services.PipelineTaskKind.Execution,
+                    request.Connection,
+                    request.Body,
+                    request.Source,
+                    request.Target,
+                    request.Condition,
+                    request.Message,
+                    request.Recipient,
+                    request.Sender,
+                    request.Subject,
+                    request.After)),
                 "update" => pipelineTasks.Update(script, request.Id ?? string.Empty, request.NewId, request.Connection, request.Body),
                 "move" => pipelineTasks.Move(script, request.Id ?? string.Empty, request.After),
                 "remove" => pipelineTasks.Remove(script, request.Id ?? string.Empty),
@@ -587,7 +600,14 @@ public static class WorkstationEditorApp
                 script = result.Script,
                 error = result.Error,
                 tasks = pipelineTasks.Read(result.Script)
-                    .Select(task => new { id = task.Id, connection = task.Connection, body = task.Body, line = task.Line })
+                    .Select(task => new
+                    {
+                        id = task.Id,
+                        kind = task.Kind.ToString().ToLowerInvariant(),
+                        connection = task.Connection,
+                        body = task.Body,
+                        line = task.Line,
+                    })
                     .ToList(),
             }, JsonOptions);
         });
@@ -945,8 +965,16 @@ public sealed record PipelineTaskAuthoringRequest(
     string? Op,
     string? Id = null,
     string? NewId = null,
+    string? Kind = null,
     string? Connection = null,
     string? Body = null,
+    string? Source = null,
+    string? Target = null,
+    string? Condition = null,
+    string? Message = null,
+    string? Recipient = null,
+    string? Sender = null,
+    string? Subject = null,
     string? After = null);
 public sealed record ApplyDesignerQueryFiltersAuthoringRequest(
     string Source,

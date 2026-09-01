@@ -37,15 +37,21 @@ and `.etlsql` without losing hand edits.
     script's top-level connections as authored source text (shared parsing service, Portal DTO, and
     the LSP projection the VS Code host uses), so a multiline body, a comment, or a semicolon inside
     a quoted option survives — the regex ended the statement at the first `;`.
-- [ ] **Prove the editable node/edge model with a lossless round-trip spike**: Extend the existing
-  read-only engine DAG projection with one draggable task. Adding, moving, labeling, and connecting
-  it must emit parser-valid script; hand-editing that script must update the same canvas node without
-  changing untouched bytes. Use section labels and `EXECUTE <connection> BEGIN ... END` only in
-  forms accepted by the canonical parser and formatter.
-- [ ] **Add the task palette and execution-task editor**: Provide auto-generated, editable labels,
-  connection selection, and the shared query workbench with completions, hover, diagnostics, run,
-  messages, and results. Add file-operation, validation, and notification tasks only after each
-  emitted statement passes its focused parser, lint, formatter, and reference checks.
+- [x] **Prove the editable node/edge model with a lossless round-trip spike**: `PipelineTaskAuthoringService`
+  edits a task — a top-level section label plus the `EXECUTE <connection> BEGIN ... END` block it
+  introduces — as span edits computed from the parse, so untouched bytes survive and every edit is
+  reparsed before it is returned. Identity is the section label, carried into the projection as
+  `ScriptDagNode.Key`, because node ids are positional and shift under a hand edit. The canvas makes
+  labelled cards draggable and drops mean "run after this one". Byte preservation is mutation-tested,
+  and emitted tasks survive the canonical formatter and the AST serializer.
+- [x] **Add the task palette and execution-task editor**: The palette offers four kinds and the
+  editor authors them. An execution task carries the shared query workbench — completions, hover,
+  diagnostics, run, messages, and results — against a connection picked from the ones the parse
+  reports, with an auto-generated label the author can edit. File-operation, validation, and
+  notification tasks are field forms, and each is gated behind `PipelineTaskEmissionTests`: its
+  emitted statement must parse, introduce no lint finding, survive the canonical formatter, and
+  reference only connections the script declares. A half-filled task is refused before anything is
+  written, so the author never sees a parse error about syntax they did not type.
 - [ ] **Add explicit sequential dependencies**: Authors can connect tasks, remove edges, and reorder
   a simple flow. Multiple incoming edges represent a dependency join and never imply concurrency.
   The script remains the source of truth.

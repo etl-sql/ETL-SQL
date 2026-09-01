@@ -18,8 +18,8 @@ describe('Pipeline task editing layer', () => {
     let canvas: HTMLElement;
 
     const tasks = [
-        { id: 'load_orders', connection: 'staging_db', body: 'SELECT 1;', line: 7 },
-        { id: 'archive_orders', connection: 'staging_db', body: 'SELECT 2;', line: 15 },
+        { id: 'load_orders', kind: 'execution', connection: 'staging_db', body: 'SELECT 1;', line: 7 },
+        { id: 'archive_orders', kind: 'execution', connection: 'staging_db', body: 'SELECT 2;', line: 15 },
     ];
 
     /** A card the projection drew: labelled cards carry the section label, others do not. */
@@ -105,45 +105,54 @@ describe('Pipeline task editing layer', () => {
         expect(selections).toEqual(['archive_orders']);
     });
 
-    test('the inspector edits the selected task by label', () => {
+    test('the inspector opens the editor and deletes, both by label', () => {
         card('load_orders');
-        const updates: any[] = [];
+        const edits: any[] = [];
         const removals: any[] = [];
 
         attach(host, canvas, {
             tasks,
             selectedId: 'load_orders',
-            onUpdate: (update: any) => { updates.push(update); },
+            onEdit: (edit: any) => { edits.push(edit); },
             onRemove: (removal: any) => { removals.push(removal); },
         });
 
-        (host.querySelector('[data-task-field="label"]') as HTMLInputElement).value = 'load_orders_v2';
-        (host.querySelector('[data-task-save]') as HTMLElement).click();
-        expect(updates).toEqual([{ id: 'load_orders', newId: 'load_orders_v2', connection: 'staging_db' }]);
+        // Editing happens in the task editor, not in fields on the canvas: the editor is where the
+        // query workbench lives, and two places to change a body is how they drift apart.
+        expect(host.querySelector('[data-task-field="label"]')).toBeNull();
+
+        (host.querySelector('[data-task-edit]') as HTMLElement).click();
+        expect(edits).toEqual([{ id: 'load_orders' }]);
 
         (host.querySelector('[data-task-remove]') as HTMLElement).click();
         expect(removals).toEqual([{ id: 'load_orders' }]);
     });
 
-    test('adding a task places it after the selected one', () => {
+    test('the palette offers every proven kind, and adding places it after the selected task', () => {
         const adds: any[] = [];
 
         attach(host, canvas, { tasks, selectedId: 'load_orders', onAdd: (add: any) => { adds.push(add); } });
-        (host.querySelector('[data-task-add]') as HTMLElement).click();
 
-        expect(adds).toEqual([{ after: 'load_orders' }]);
+        const kinds = [...host.querySelectorAll('[data-task-kind]')].map(chip => (chip as HTMLElement).dataset.taskKind);
+        expect(kinds).toEqual(['execution', 'fileoperation', 'validation', 'notification']);
+
+        // Nothing in the palette is a dead control: each kind has passed its emission gate, so none
+        // of them is rendered disabled.
+        expect(host.querySelectorAll('[data-task-kind][disabled]').length).toBe(0);
+
+        (host.querySelector('[data-task-kind="validation"]') as HTMLElement).click();
+        expect(adds).toEqual([{ kind: 'validation', after: 'load_orders' }]);
     });
 
     test('a task label is escaped, never rendered as markup', () => {
         card('x');
         attach(host, canvas, {
-            tasks: [{ id: '<img src=x onerror=alert(1)>', connection: 'db', body: '', line: 1 }],
+            tasks: [{ id: '<img src=x onerror=alert(1)>', kind: 'execution', connection: 'db', body: '', line: 1 }],
             selectedId: '<img src=x onerror=alert(1)>',
         });
 
         expect(host.querySelector('img')).toBeNull();
-        expect((host.querySelector('[data-task-field="label"]') as HTMLInputElement).value)
-            .toBe('<img src=x onerror=alert(1)>');
+        expect(host.innerHTML).toContain('&lt;img src=x onerror=alert(1)&gt;');
     });
 
     test('dispose removes the handlers it added', () => {

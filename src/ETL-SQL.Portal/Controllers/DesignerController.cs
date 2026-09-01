@@ -162,7 +162,18 @@ public class DesignerController : ControllerBase
             var result = (req.Op ?? string.Empty).ToLowerInvariant() switch
             {
                 "add" => _pipelineTasks.Add(script, new PipelineTaskDraft(
-                    req.Id ?? string.Empty, req.Connection ?? string.Empty, req.Body ?? string.Empty, req.After)),
+                    req.Id ?? string.Empty,
+                    ParseTaskKind(req.Kind),
+                    req.Connection,
+                    req.Body,
+                    req.Source,
+                    req.Target,
+                    req.Condition,
+                    req.Message,
+                    req.Recipient,
+                    req.Sender,
+                    req.Subject,
+                    req.After)),
                 "update" => _pipelineTasks.Update(script, req.Id ?? string.Empty, req.NewId, req.Connection, req.Body),
                 "move" => _pipelineTasks.Move(script, req.Id ?? string.Empty, req.After),
                 "remove" => _pipelineTasks.Remove(script, req.Id ?? string.Empty),
@@ -175,7 +186,8 @@ public class DesignerController : ControllerBase
                 result.Script,
                 result.Error,
                 _pipelineTasks.Read(result.Script)
-                    .Select(task => new PipelineTaskDto(task.Id, task.Connection, task.Body, task.Line))
+                    .Select(task => new PipelineTaskDto(
+                        task.Id, task.Kind.ToString().ToLowerInvariant(), task.Connection, task.Body, task.Line))
                     .ToList()));
         }
         finally
@@ -183,6 +195,16 @@ public class DesignerController : ControllerBase
             gate?.Release();
         }
     }
+
+    /// <summary>
+    /// The task kind a request names. An unknown kind falls back to an execution task rather than
+    /// throwing: the palette is the only caller, and a 500 for a typo in a client string would be a
+    /// worse answer than the refusal the service already gives for a draft it cannot complete.
+    /// </summary>
+    private static PipelineTaskKind ParseTaskKind(string? kind) =>
+        Enum.TryParse<PipelineTaskKind>(kind, ignoreCase: true, out var parsed)
+            ? parsed
+            : PipelineTaskKind.Execution;
 
     // ── POST /api/designer/parse ──────────────────────────────────────────────
 

@@ -25,6 +25,44 @@
 import { escapeHtml, noteMarkup } from './studio-authoring-ui.js';
 
 /**
+ * The palette. Every kind here writes exactly one labelled statement, and every one of them is
+ * covered by a focused parse, lint, formatter, and reference test before it appears — a chip that
+ * emits a statement failing any of those is worse than no chip, because the author finds out when
+ * the pipeline runs rather than when they click.
+ */
+export const PIPELINE_TASK_KINDS = Object.freeze([
+    Object.freeze({
+        id: 'execution',
+        label: 'Execution',
+        glyph: '▶',
+        hint: 'Run a block of SQL on a connection this script declares.',
+    }),
+    Object.freeze({
+        id: 'fileoperation',
+        label: 'File',
+        glyph: '🗎',
+        hint: 'Copy a file from one path to another.',
+    }),
+    Object.freeze({
+        id: 'validation',
+        label: 'Validation',
+        glyph: '✓',
+        hint: 'Assert a condition and stop the run with a message when it fails.',
+    }),
+    Object.freeze({
+        id: 'notification',
+        label: 'Notification',
+        glyph: '✉',
+        hint: 'Send an email through an SMTP connection this script declares.',
+    }),
+]);
+
+/** The palette entry for a kind the host reported, so a card can say what it is. */
+export function taskKindLabel(kind) {
+    return PIPELINE_TASK_KINDS.find(entry => entry.id === String(kind || '').toLowerCase())?.label ?? 'Task';
+}
+
+/**
  * Renders the task toolbar and inspector into `host`, and makes labelled cards inside `canvas`
  * draggable.
  *
@@ -33,9 +71,9 @@ import { escapeHtml, noteMarkup } from './studio-authoring-ui.js';
  * @param tasks      `[{ id, connection, body, line }]` as the host reported them.
  * @param selectedId Task to show as selected, or null.
  * @param onSelect   `(id | null) => void`
- * @param onAdd      `({ after }) => Promise<void>`
+ * @param onAdd      `({ kind, after }) => Promise<void>`
+ * @param onEdit     `({ id }) => Promise<void>`, opens the task editor.
  * @param onMove     `({ id, after }) => Promise<void>` — after null means "run first".
- * @param onUpdate   `({ id, newId, connection }) => Promise<void>`
  * @param onRemove   `({ id }) => Promise<void>`
  * @param onOpenLine `(line) => void`, to reveal the task in the script.
  * @returns `{ dispose }`
@@ -45,6 +83,7 @@ export function attachPipelineTaskEditing(host, canvas, {
     selectedId = null,
     onSelect = () => {},
     onAdd = async () => {},
+    onEdit = async () => {},
     onMove = async () => {},
     onUpdate = async () => {},
     onRemove = async () => {},
@@ -59,24 +98,27 @@ export function attachPipelineTaskEditing(host, canvas, {
 
     host.innerHTML = `
         <div class="etlsql-studio-pipeline-tools">
-            <button type="button" class="etlsql-studio-btn is-primary" data-task-add>Add task</button>
+            <div class="etlsql-studio-pipeline-palette" role="group" aria-label="Add a task">
+                ${PIPELINE_TASK_KINDS.map(kind => `<button type="button"
+                    class="etlsql-studio-task-chip"
+                    data-task-kind="${escapeHtml(kind.id)}"
+                    title="${escapeHtml(kind.hint)}">
+                    <span class="etlsql-studio-task-chip-glyph" aria-hidden="true">${escapeHtml(kind.glyph)}</span>
+                    <span>${escapeHtml(kind.label)}</span>
+                </button>`).join('')}
+            </div>
             <span class="etlsql-studio-pipeline-hint">${escapeHtml(hint(tasks, selected))}</span>
         </div>
         <div class="etlsql-studio-pipeline-inspector" data-task-inspector>${inspectorMarkup(selected)}</div>`;
 
-    on(host.querySelector('[data-task-add]'), 'click', () => onAdd({ after: selected?.id ?? null }));
+    for (const chip of host.querySelectorAll('[data-task-kind]')) {
+        on(chip, 'click', () => onAdd({ kind: chip.dataset.taskKind, after: selected?.id ?? null }));
+    }
 
     const inspector = host.querySelector('[data-task-inspector]');
-    const field = name => inspector.querySelector(`[data-task-field="${name}"]`);
 
-    const save = inspector.querySelector('[data-task-save]');
-    if (save) {
-        on(save, 'click', () => onUpdate({
-            id: selected.id,
-            newId: field('label').value.trim(),
-            connection: field('connection').value.trim(),
-        }));
-    }
+    const edit = inspector.querySelector('[data-task-edit]');
+    if (edit) on(edit, 'click', () => onEdit({ id: selected.id }));
 
     const remove = inspector.querySelector('[data-task-remove]');
     if (remove) on(remove, 'click', () => onRemove({ id: selected.id }));
@@ -145,38 +187,35 @@ function sameId(left, right) {
 }
 
 function hint(tasks, selected) {
-    if (!tasks.length) return 'No editable tasks yet. Add one, or keep writing the script — the map follows either way.';
-    if (!selected) return `${tasks.length} editable task${tasks.length === 1 ? '' : 's'}. Select one to rename it, or drag it onto another to run it after that one.`;
-    return `Editing ${selected.id}. Drag it onto another task to run it after that one.`;
+    if (!tasks.length) return 'No editable tasks yet. Add one from the palette, or keep writing the script — the map follows either way.';
+    if (!selected) return `${tasks.length} editable task${tasks.length === 1 ? '' : 's'}. Select one to edit it, or drag it onto another to run it after that one.`;
+    return `${selected.id} selected. Drag it onto another task to run it after that one.`;
 }
 
 function inspectorMarkup(task) {
     if (!task) {
         return noteMarkup([
-            'A task is a labelled ',
-            { code: 'EXECUTE <connection> BEGIN … END' },
-            ' block. Other stages on this map come from statements the canvas does not edit yet, so they are shown but not draggable.',
+            'Pick a task to edit it, or add one from the palette. Every task is one labelled statement, '
+            + 'so the label — like ',
+            { code: 'load_orders:' },
+            ' — is what the canvas tracks it by. Other stages on this map come from statements the '
+            + 'canvas does not edit yet, so they are shown but not draggable.',
         ], 'info');
     }
 
+    const detail = task.kind === 'execution' && task.connection
+        ? [{ strong: taskKindLabel(task.kind) }, ' on ', { code: task.connection }]
+        : [{ strong: taskKindLabel(task.kind) }];
+
     return `
-        <div class="etlsql-studio-pipeline-fields">
-            <label>Label
-                <input type="text" data-task-field="label" value="${escapeHtml(task.id)}" spellcheck="false">
-            </label>
-            <label>Connection
-                <input type="text" data-task-field="connection" value="${escapeHtml(task.connection)}" spellcheck="false">
-            </label>
+        <div class="etlsql-studio-pipeline-selected">
+            <span class="etlsql-studio-pipeline-selected-name">${escapeHtml(task.id)}</span>
+            ${noteMarkup(detail, 'info')}
         </div>
         <div class="etlsql-studio-pipeline-actions">
-            <button type="button" class="etlsql-studio-btn is-primary" data-task-save>Apply</button>
+            <button type="button" class="etlsql-studio-btn is-primary" data-task-edit>Edit</button>
             <button type="button" class="etlsql-studio-btn" data-task-first>Run first</button>
             <button type="button" class="etlsql-studio-btn" data-task-reveal>Show in script</button>
             <button type="button" class="etlsql-studio-btn is-danger" data-task-remove>Delete</button>
-        </div>
-        ${noteMarkup([
-            'The block body is edited in the script for now. ',
-            { code: `${task.id}:` },
-            ' is what keeps this box the same box after a hand edit.',
-        ], 'info')}`;
+        </div>`;
 }

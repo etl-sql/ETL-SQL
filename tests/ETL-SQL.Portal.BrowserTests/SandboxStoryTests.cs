@@ -1033,26 +1033,53 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.True(await task.EvaluateAsync<bool>("element => element.draggable"));
         Assert.False(await page.Locator("[data-dag-node='quality_gate']").EvaluateAsync<bool>("element => element.draggable"));
 
-        // Selecting shows the inspector, and renaming writes only the label.
+        // The palette offers every kind that passed its emission gate, and none of them is a dead
+        // control — a chip that cannot write its statement would be worse than no chip.
+        Assert.Equal(4, await page.Locator("[data-task-kind]").CountAsync());
+        Assert.Equal(0, await page.Locator("[data-task-kind][disabled]").CountAsync());
+
+        // Renaming goes through the task editor, and writes only the label.
         await task.ClickAsync();
-        var labelField = page.Locator("[data-task-field='label']");
+        await page.ClickAsync("[data-task-edit]");
+        var labelField = page.Locator("[data-task-id]");
         await labelField.WaitForAsync();
+
+        // The execution editor carries the shared query workbench, not a bare textarea: that is what
+        // gives the SQL a task runs the same completions, diagnostics, run, and results as the script.
+        await page.Locator("[data-workbench-run]").WaitForAsync();
+
         await labelField.FillAsync("load_orders_v2");
-        await page.ClickAsync("[data-task-save]");
+        await page.ClickAsync("[data-dialog-action='save']");
         await page.WaitForFunctionAsync(
             """() => !!document.querySelector("[data-task-key='load_orders_v2']")""");
 
         var renamed = Script();
         Assert.Equal(before.Replace("load_orders:", "load_orders_v2:", StringComparison.Ordinal), renamed);
 
-        // Adding a task appends one labelled block and touches nothing else.
-        await page.ClickAsync("[data-task-add]");
+        // A validation task is authored as fields, and writes one ASSERT under its label.
+        await page.ClickAsync("[data-task-kind='validation']");
+        await page.Locator("[data-task-field='condition']").WaitForAsync();
+        await page.Locator("[data-task-id]").FillAsync("orders_arrived");
+        await page.Locator("[data-task-field='condition']").FillAsync("(SELECT COUNT(*) FROM #ready_sales) > 0");
+        await page.Locator("[data-task-field='message']").FillAsync("No clean sales rows were staged.");
+        await page.ClickAsync("[data-dialog-action='save']");
         await page.WaitForFunctionAsync("() => document.querySelectorAll('[data-task-key]').length === 2");
 
         var added = Script();
-        Assert.Contains("EXECUTE", added, StringComparison.Ordinal);
+        Assert.Contains("orders_arrived:", added, StringComparison.Ordinal);
+        Assert.Contains("ASSERT (SELECT COUNT(*) FROM #ready_sales) > 0", added, StringComparison.Ordinal);
         Assert.StartsWith(renamed.TrimEnd(), added.TrimEnd()[..renamed.TrimEnd().Length], StringComparison.Ordinal);
-        Assert.Equal(2, await page.Locator("[data-task-key]").CountAsync());
+
+        // A half-filled task is refused before anything is written, with a sentence about the field
+        // that is missing rather than a parse error about syntax the author never typed.
+        await page.ClickAsync("[data-task-kind='fileoperation']");
+        await page.Locator("[data-task-field='source']").WaitForAsync();
+        await page.Locator("[data-task-id]").FillAsync("half_filled");
+        await page.ClickAsync("[data-dialog-action='save']");
+        Assert.Contains("needed before this task can be written",
+            await page.Locator("[data-dialog-body]").InnerTextAsync(), StringComparison.Ordinal);
+        Assert.Equal(added, Script());
+        await page.ClickAsync("[data-dialog-action='cancel']");
 
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);

@@ -1446,25 +1446,74 @@ function mockParseConnections(script) {
  * this only has to be good enough to drive the UI. The real contract — that an edit never disturbs a
  * byte it did not claim — is the host's, and is proved against the parser in its own test lane.
  */
+/** The first line of a statement, for a card label. */
+function firstLine(text) {
+  return String(text || '').split(/\r?\n/)[0].slice(0, 40);
+}
+
 function mockParseTasks(script) {
   const tasks = [];
-  const head = /^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*:[ \t]*\r?\n[ \t]*EXEC(?:UTE)?[ \t]+([A-Za-z_][A-Za-z0-9_]*)[^\n]*\bBEGIN\b/gim;
+  // A task is a label followed by one statement. The kind is read from the statement's first word,
+  // the same way the host reads it from the parsed node type.
+  const head = /^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*:[ \t]*\r?\n[ \t]*(EXEC(?:UTE)?|COPY|ASSERT|SEND)\b/gim;
   let match;
   while ((match = head.exec(script)) !== null) {
-    const bodyStart = head.lastIndex;
-    const end = script.toUpperCase().indexOf('\nEND', bodyStart);
-    const stop = end === -1 ? script.length : end;
+    const keyword = match[2].toUpperCase();
+    const kind = keyword.startsWith('EXEC') ? 'execution'
+      : keyword === 'COPY' ? 'fileoperation'
+        : keyword === 'ASSERT' ? 'validation'
+          : 'notification';
+
+    // An execution task ends at its matching END; the others end at their terminating semicolon.
+    let end;
+    let connection = '';
+    let body = '';
+    if (kind === 'execution') {
+      connection = /\bEXEC(?:UTE)?[ \t]+([A-Za-z_][A-Za-z0-9_]*)/i.exec(script.slice(match.index))?.[1] ?? '';
+      const beginAt = script.toUpperCase().indexOf('BEGIN', match.index);
+      const endAt = beginAt === -1 ? -1 : script.toUpperCase().indexOf('\nEND', beginAt);
+      const stop = endAt === -1 ? script.length : endAt;
+      body = script.slice(script.indexOf('\n', beginAt) + 1, stop).replace(/^\r?\n/, '').trimEnd();
+      end = endAt === -1 ? script.length : Math.min(script.length, (script.indexOf(';', stop) + 1) || stop + 4);
+    } else {
+      const semicolon = script.indexOf(';', match.index);
+      end = semicolon === -1 ? script.length : semicolon + 1;
+      body = script.slice(script.indexOf('\n', match.index) + 1, end).trim();
+      if (kind === 'notification') {
+        connection = /\bAT[ \t]+([A-Za-z_][A-Za-z0-9_]*)/i.exec(script.slice(match.index, end))?.[1] ?? '';
+      }
+    }
+
     tasks.push({
       id: match[1],
-      connection: match[2],
-      body: script.slice(bodyStart, stop).replace(/^\r?\n/, '').trimEnd(),
+      kind,
+      connection,
+      body,
       line: script.slice(0, match.index).split('\n').length,
       start: match.index,
-      end: end === -1 ? script.length : Math.min(script.length, script.indexOf(';', stop) + 1 || stop + 4),
+      end,
     });
-    head.lastIndex = stop;
+    head.lastIndex = end;
   }
   return tasks;
+}
+
+/** The statement a kind writes. Mirrors the host's renderer closely enough to drive the UI. */
+function mockRenderTask(body) {
+  const literal = value => `'${String(value ?? '').replace(/'/g, "''")}'`;
+  const kind = String(body.kind || 'execution').toLowerCase();
+  if (kind === 'fileoperation') {
+    return `${body.id}:\nCOPY FILE ${literal(body.source)} TO ${literal(body.target)};\n`;
+  }
+  if (kind === 'validation') {
+    return `${body.id}:\nASSERT ${body.condition},\n    ${literal(body.message)};\n`;
+  }
+  if (kind === 'notification') {
+    return `${body.id}:\nSEND EMAIL\n    TO ${literal(body.recipient)}\n    FROM ${literal(body.sender)}\n`
+      + `    SUBJECT ${literal(body.subject)}\n    BODY ${literal(body.body)}\n    AT ${body.connection};\n`;
+  }
+  const indented = String(body.body || 'SELECT 1;').split('\n').map(line => `    ${line}`).join('\n');
+  return `${body.id}:\nEXECUTE ${body.connection} BEGIN\n${indented}\nEND;\n`;
 }
 
 /**
@@ -1479,7 +1528,7 @@ function mockWithScriptTasks(script, base) {
 
   const nodes = tasks.map((task, index) => ({
     id: `s${index}`,
-    label: `EXECUTE ${task.connection}`,
+    label: task.kind === 'execution' ? `EXECUTE ${task.connection}` : firstLine(task.body),
     type: 'procedure',
     meta: { line: task.line, key: task.id },
   }));
@@ -1496,7 +1545,7 @@ function mockPipelineTask(body) {
   const tasks = mockParseTasks(script);
   const find = id => tasks.find(task => task.id.toLowerCase() === String(id || '').toLowerCase());
   const refuse = error => ({ applied: false, script, error, tasks: strip(tasks) });
-  const strip = list => list.map(({ id, connection, body: text, line }) => ({ id, connection, body: text, line }));
+  const strip = list => list.map(({ id, kind, connection, body: text, line }) => ({ id, kind, connection, body: text, line }));
   const lineEnd = offset => {
     const next = script.indexOf('\n', offset);
     return next === -1 ? script.length : next + 1;
@@ -1512,7 +1561,7 @@ function mockPipelineTask(body) {
   if (op === 'add') {
     if (find(body.id)) return refuse(`This script already has a task called '${body.id}'.`);
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(String(body.id || ''))) return refuse(`'${body.id}' is not a usable task label.`);
-    const text = `${body.id}:\nEXECUTE ${body.connection} BEGIN\n${String(body.body || 'SELECT 1;').split('\n').map(line => `    ${line}`).join('\n')}\nEND;\n`;
+    const text = mockRenderTask(body);
     const anchor = body.after ? find(body.after) : null;
     const at = anchor ? lineEnd(anchor.end) : script.length;
     next = `${script.slice(0, at)}${at >= script.length ? '\n' : ''}${text}${at >= script.length ? '' : '\n'}${script.slice(at)}`;

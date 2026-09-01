@@ -17,15 +17,53 @@ namespace ETL_SQL.Analysis.Services;
 /// </summary>
 public sealed record PipelineTask(
     string Id,
+    PipelineTaskKind Kind,
     string Connection,
     string Body,
     int Line,
     int StartOffset,
     int EndOffset);
 
-/// <summary>A task to add: its label, the connection it runs against, and the SQL in the block.</summary>
+/// <summary>
+/// What a task does, and therefore which statement the canvas writes for it.
+///
+/// <para>Every kind is one top-level statement under one label. That is the constraint that keeps a
+/// task addressable and a delete exact; a kind that needed several statements would need a different
+/// identity model, so it does not belong here.</para>
+/// </summary>
+public enum PipelineTaskKind
+{
+    /// <summary><c>EXECUTE &lt;connection&gt; BEGIN … END</c> — SQL pushed to a connection.</summary>
+    Execution,
+
+    /// <summary><c>COPY FILE &lt;source&gt; TO &lt;target&gt;</c>.</summary>
+    FileOperation,
+
+    /// <summary><c>ASSERT &lt;condition&gt;, &lt;message&gt;</c> — a quality gate that halts the run.</summary>
+    Validation,
+
+    /// <summary><c>SEND EMAIL TO … SUBJECT … BODY … AT &lt;connection&gt;</c>.</summary>
+    Notification,
+}
+
+/// <summary>
+/// A task to add. Which fields matter depends on <c>Kind</c>; the rest are ignored rather than
+/// validated, so a caller can carry one draft across a kind change without losing what it typed.
+/// </summary>
 /// <param name="After">Id of the task it follows, or null to append at the end of the script.</param>
-public sealed record PipelineTaskDraft(string Id, string Connection, string Body, string? After = null);
+public sealed record PipelineTaskDraft(
+    string Id,
+    PipelineTaskKind Kind = PipelineTaskKind.Execution,
+    string? Connection = null,
+    string? Body = null,
+    string? Source = null,
+    string? Target = null,
+    string? Condition = null,
+    string? Message = null,
+    string? Recipient = null,
+    string? Sender = null,
+    string? Subject = null,
+    string? After = null);
 
 /// <summary>
 /// The outcome of an edit. A refusal carries the reason rather than handing back the original script
@@ -76,8 +114,8 @@ public sealed class PipelineTaskAuthoringService
 
         if (!IsValidTaskId(draft.Id))
             return PipelineEditResult.Refused(source, $"'{draft.Id}' is not a usable task label.");
-        if (!IsValidTaskId(draft.Connection))
-            return PipelineEditResult.Refused(source, $"'{draft.Connection}' is not a usable connection alias.");
+        if (Incomplete(draft) is { } missing)
+            return PipelineEditResult.Refused(source, missing);
 
         if (!TryParse(source, out var ast, out var parseError))
             return PipelineEditResult.Refused(source, parseError);
@@ -87,7 +125,7 @@ public sealed class PipelineTaskAuthoringService
             return PipelineEditResult.Refused(source, $"This script already has a task called '{draft.Id}'.");
 
         var lineEnding = DetectLineEnding(source);
-        var text = RenderTask(draft.Id, draft.Connection, draft.Body, lineEnding);
+        var text = RenderTask(draft, lineEnding);
 
         int insertAt;
         if (draft.After is null)
@@ -106,6 +144,43 @@ public sealed class PipelineTaskAuthoringService
         var suffix = insertAt >= source.Length ? string.Empty : lineEnding;
         return Commit(source, Splice(source, insertAt, insertAt, prefix + text + suffix));
     }
+
+    /// <summary>
+    /// The reason this draft cannot be written yet, or null.
+    ///
+    /// <para>Checked before anything is rendered, so a half-filled task never reaches the script and
+    /// is never refused later by the parser with a message about syntax the author never typed.</para>
+    /// </summary>
+    private static string? Incomplete(PipelineTaskDraft draft) => draft.Kind switch
+    {
+        PipelineTaskKind.Execution when !IsValidTaskId(draft.Connection) =>
+            $"'{draft.Connection}' is not a usable connection alias.",
+        PipelineTaskKind.Execution when string.IsNullOrWhiteSpace(draft.Body) =>
+            "An execution task needs the SQL it runs.",
+
+        PipelineTaskKind.FileOperation when string.IsNullOrWhiteSpace(draft.Source) =>
+            "A file task needs a source path.",
+        PipelineTaskKind.FileOperation when string.IsNullOrWhiteSpace(draft.Target) =>
+            "A file task needs a target path.",
+
+        PipelineTaskKind.Validation when string.IsNullOrWhiteSpace(draft.Condition) =>
+            "A validation task needs a condition to assert.",
+        PipelineTaskKind.Validation when string.IsNullOrWhiteSpace(draft.Message) =>
+            "A validation task needs the message it fails with.",
+
+        PipelineTaskKind.Notification when !IsValidTaskId(draft.Connection) =>
+            $"'{draft.Connection}' is not a usable connection alias.",
+        PipelineTaskKind.Notification when string.IsNullOrWhiteSpace(draft.Recipient) =>
+            "A notification task needs a recipient.",
+        PipelineTaskKind.Notification when string.IsNullOrWhiteSpace(draft.Sender) =>
+            "A notification task needs a sender address.",
+        PipelineTaskKind.Notification when string.IsNullOrWhiteSpace(draft.Subject) =>
+            "A notification task needs a subject.",
+        PipelineTaskKind.Notification when string.IsNullOrWhiteSpace(draft.Body) =>
+            "A notification task needs a body.",
+
+        _ => null,
+    };
 
     /// <summary>Removes a task and the label that names it.</summary>
     public PipelineEditResult Remove(string? script, string id)
@@ -242,25 +317,61 @@ public sealed class PipelineTaskAuthoringService
         for (var i = 0; i < statements.Count - 1; i++)
         {
             if (statements[i] is not SectionLabelStatement label) continue;
-            if (statements[i + 1] is not ExecutePushdownStatement execute) continue;
+            if (KindOf(statements[i + 1]) is not { } kind) continue;
 
             var start = label.StartOffset;
-            var end = execute.EndOffset;
+            var end = statements[i + 1].EndOffset;
             if (start < 0 || end <= start || end > script.Length) continue;
 
-            var spans = TokenSpans(script[start..end], start);
-            if (spans is null) continue;
+            // Only an execution task has a connection and a block body to read back. The others are
+            // reported as a task — addressable, movable, deletable — with their statement text as the
+            // body, because the canvas has no field editor for their parts yet, and inventing empty
+            // fields would read as "this task has no recipient" rather than "not shown here".
+            var slice = script[start..end];
+            if (kind == PipelineTaskKind.Execution)
+            {
+                var spans = TokenSpans(slice, start);
+                if (spans is null) continue;
+
+                tasks.Add(new PipelineTask(
+                    label.LabelName,
+                    kind,
+                    script[spans.Value.ConnectionStart..spans.Value.ConnectionEnd],
+                    script[spans.Value.BodyStart..spans.Value.BodyEnd].Trim('\r', '\n'),
+                    label.Line,
+                    start,
+                    end));
+                continue;
+            }
 
             tasks.Add(new PipelineTask(
                 label.LabelName,
-                script[spans.Value.ConnectionStart..spans.Value.ConnectionEnd],
-                script[spans.Value.BodyStart..spans.Value.BodyEnd].Trim('\r', '\n'),
+                kind,
+                string.Empty,
+                StatementText(slice),
                 label.Line,
                 start,
                 end));
         }
 
         return tasks;
+    }
+
+    /// <summary>The kind a labelled statement represents, or null when the canvas does not model it.</summary>
+    private static PipelineTaskKind? KindOf(Statement statement) => statement switch
+    {
+        ExecutePushdownStatement => PipelineTaskKind.Execution,
+        FileOperationStatement => PipelineTaskKind.FileOperation,
+        AssertStatement => PipelineTaskKind.Validation,
+        EmailStatement => PipelineTaskKind.Notification,
+        _ => null,
+    };
+
+    /// <summary>The statement under the label, without the label line.</summary>
+    private static string StatementText(string slice)
+    {
+        var newline = slice.IndexOf('\n', StringComparison.Ordinal);
+        return newline < 0 ? slice.Trim() : slice[(newline + 1)..].Trim();
     }
 
     private static PipelineTask? Find(IReadOnlyList<PipelineTask> tasks, string? id) =>
@@ -366,8 +477,41 @@ public sealed class PipelineTaskAuthoringService
 
     // ── Writing ──────────────────────────────────────────────────────────────
 
-    private static string RenderTask(string id, string connection, string? body, string lineEnding) =>
-        $"{id}:{lineEnding}EXECUTE {connection} BEGIN{RenderBody(body, lineEnding)}END;";
+    /// <summary>
+    /// The statement a task of this kind becomes.
+    ///
+    /// <para>Every literal goes through <see cref="Literal"/>, so a path or a message containing a
+    /// quote is escaped rather than closing the string early and rewriting the rest of the script as
+    /// something else entirely. The emitted forms are covered one per kind by focused parse, lint,
+    /// formatter, and reference tests — that gate is why the palette offers them at all.</para>
+    /// </summary>
+    private static string RenderTask(PipelineTaskDraft draft, string lineEnding) => draft.Kind switch
+    {
+        PipelineTaskKind.Execution =>
+            $"{draft.Id}:{lineEnding}EXECUTE {draft.Connection} BEGIN{RenderBody(draft.Body, lineEnding)}END;",
+
+        PipelineTaskKind.FileOperation =>
+            $"{draft.Id}:{lineEnding}COPY FILE {Literal(draft.Source)} TO {Literal(draft.Target)};",
+
+        PipelineTaskKind.Validation =>
+            $"{draft.Id}:{lineEnding}ASSERT {draft.Condition},{lineEnding}    {Literal(draft.Message)};",
+
+        // FROM is not optional to the parser, whatever the connector's DEFAULT_FROM says, so the
+        // sender is a field the author fills in rather than something this quietly omits.
+        PipelineTaskKind.Notification =>
+            $"{draft.Id}:{lineEnding}SEND EMAIL{lineEnding}"
+            + $"    TO {Literal(draft.Recipient)}{lineEnding}"
+            + $"    FROM {Literal(draft.Sender)}{lineEnding}"
+            + $"    SUBJECT {Literal(draft.Subject)}{lineEnding}"
+            + $"    BODY {Literal(draft.Body)}{lineEnding}"
+            + $"    AT {draft.Connection};",
+
+        _ => throw new ArgumentOutOfRangeException(nameof(draft), draft.Kind, "Unknown pipeline task kind."),
+    };
+
+    /// <summary>A single-quoted ETL-SQL string literal with embedded quotes doubled.</summary>
+    private static string Literal(string? value) =>
+        "'" + (value ?? string.Empty).Replace("'", "''", StringComparison.Ordinal) + "'";
 
     private static string RenderBody(string? body, string lineEnding)
     {

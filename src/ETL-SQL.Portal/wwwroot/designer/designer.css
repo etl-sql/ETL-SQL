@@ -6591,3 +6591,57 @@ body.vscode-dark .etlsql-cw-missing-hint {
     outline: 2px dashed var(--portal-accent, #58a6ff);
     outline-offset: 3px;
 }
+
+/* The task palette. Every chip writes one labelled statement that has passed its emission gate. */
+
+.etlsql-studio-pipeline-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.etlsql-studio-task-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 999px;
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text, #f0f6fc);
+    font-size: 0.6875rem;
+    cursor: pointer;
+}
+
+.etlsql-studio-task-chip:hover {
+    border-color: rgba(88, 166, 255, 0.55);
+    background: rgba(56, 139, 253, 0.09);
+}
+
+.etlsql-studio-task-chip-glyph {
+    color: var(--portal-accent, #58a6ff);
+}
+
+.etlsql-studio-pipeline-selected {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.etlsql-studio-pipeline-selected-name {
+    color: var(--portal-text, #f0f6fc);
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    font-size: 0.8125rem;
+}
+
+/* The task editor's embedded workbench needs a usable height inside the dialog. */
+.etlsql-studio-workbench {
+    display: flex;
+    flex-direction: column;
+    min-height: 260px;
+    margin-top: 10px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 6px;
+    overflow: hidden;
+}

@@ -139,8 +139,16 @@ public record PipelineTaskRequest(
     string? Op,
     string? Id = null,
     string? NewId = null,
+    string? Kind = null,
     string? Connection = null,
     string? Body = null,
+    string? Source = null,
+    string? Target = null,
+    string? Condition = null,
+    string? Message = null,
+    string? Recipient = null,
+    string? Sender = null,
+    string? Subject = null,
     string? After = null);
 
 /// <summary>
@@ -149,7 +157,7 @@ public record PipelineTaskRequest(
 /// </summary>
 public record PipelineTaskResponse(bool Applied, string Script, string? Error, List<PipelineTaskDto> Tasks);
 
-public record PipelineTaskDto(string Id, string Connection, string Body, int Line);
+public record PipelineTaskDto(string Id, string Kind, string Connection, string Body, int Line);
 
 public record DesignerStateDto(
     List<DesignerPageDto> Pages,

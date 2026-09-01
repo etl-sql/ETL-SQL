@@ -721,19 +721,30 @@ export async function createStudioWorkbench(container, opts = {}) {
                     state.selectedTaskId = id;
                     renderVisualStage();
                 },
-                onAdd: async ({ after }) => {
-                    const id = uniqueTaskId(tasks);
-                    const connection = tasks[0]?.connection || connections[0]?.name || 'connection';
-                    state.selectedTaskId = id;
-                    await canonicalPipelineMutation('Add task', {
-                        op: 'add', id, connection, body: '-- Write the statements this task runs.\nSELECT 1;', after,
+                onAdd: async ({ kind, after }) => {
+                    // The editor collects the whole task before anything is written, so a half-filled
+                    // statement never reaches the script and the author never sees a parse error
+                    // about syntax they did not type.
+                    const intent = await openPipelineTaskEditor({
+                        kind,
+                        connections,
+                        suggestedId: uniqueTaskId(tasks),
                     });
+                    if (!intent) return;
+                    state.selectedTaskId = intent.id;
+                    await canonicalPipelineMutation('Add task', { op: 'add', after, ...intent });
+                },
+                onEdit: async ({ id }) => {
+                    const task = tasks.find(entry => String(entry.id).toLowerCase() === String(id).toLowerCase());
+                    if (!task) return;
+                    const intent = await openPipelineTaskEditor({ task, connections });
+                    if (!intent) return;
+                    const result = await canonicalPipelineMutation('Update task', {
+                        op: 'update', id: task.id, newId: intent.id, connection: intent.connection, body: intent.body,
+                    });
+                    if (result?.applied) state.selectedTaskId = intent.id;
                 },
                 onMove: ({ id, after }) => canonicalPipelineMutation('Move task', { op: 'move', id, after }),
-                onUpdate: async ({ id, newId, connection }) => {
-                    const result = await canonicalPipelineMutation('Update task', { op: 'update', id, newId, connection });
-                    if (result?.applied && newId) state.selectedTaskId = newId;
-                },
                 onRemove: async ({ id }) => {
                     const result = await canonicalPipelineMutation('Delete task', { op: 'remove', id });
                     if (result?.applied) state.selectedTaskId = null;
@@ -987,6 +998,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     // nothing else, which is what the authoring contract test enforces.
     const {
         openDataWizard,
+        openPipelineTaskEditor,
         openChartBuilder,
         runChooseDataStep,
         runParameterStep,
