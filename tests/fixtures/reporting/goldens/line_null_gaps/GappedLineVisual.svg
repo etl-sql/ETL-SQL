@@ -3,20 +3,20 @@
 <desc id='GappedLineVisual-desc'>Discontinuous Telemetry with Missing Values: 6 rows, 1 ordered layers, 1 series, 1 facet panels, 2 gaps, 0 skipped rows.</desc>
 <rect width='600' height='350' fill='white'/>
 <text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Discontinuous Telemetry with Missing Values</text>
-<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
-<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
-<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
-<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
-<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb' stroke-width='1'/>
 <defs><clipPath id='GappedLineVisual-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#GappedLineVisual-plot-clip)'>
-<circle cx='103.333' cy='176.878' r='3' fill='#5470c6' data-row-index='0'><title>10.5</title></circle>
-<circle cx='190' cy='137.016' r='3' fill='#5470c6' data-row-index='1'><title>14.2</title></circle>
+<circle class='plot-line-symbol' fill='#5470c6' data-row-index='0' cx='103.333' cy='176.878' r='3'><title>10.5</title></circle>
+<circle class='plot-line-symbol' fill='#5470c6' data-row-index='1' cx='190' cy='137.016' r='3'><title>14.2</title></circle>
 <path d='M 103.333 176.878 L 190 137.016' fill='none' stroke='#5470c6' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
-<circle cx='363.333' cy='86.38' r='3' fill='#5470c6' data-row-index='3'><title>18.9</title></circle>
-<circle cx='536.667' cy='51.905' r='3' fill='#5470c6' data-row-index='5'><title>22.1</title></circle>
+<circle class='plot-line-symbol' fill='#5470c6' data-row-index='3' cx='363.333' cy='86.38' r='3'><title>18.9</title></circle>
+<circle class='plot-line-symbol' fill='#5470c6' data-row-index='5' cx='536.667' cy='51.905' r='3'><title>22.1</title></circle>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='103.333' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 1</text>
 <text class='plot-axis-label' data-axis-index='1' x='190' y='306' text-anchor='middle' font-size='9' fill='#666'>Day 2</text>

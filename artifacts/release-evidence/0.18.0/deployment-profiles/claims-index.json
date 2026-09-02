@@ -1,0 +1,128 @@
+{
+  "schemaVersion": "etl-sql.deployment-profile-release-claims/v1",
+  "releaseVersion": "0.18.0",
+  "generatedUtc": "2026-08-20T22:48:03.7118395+00:00",
+  "claims": [
+    {
+      "lane": "Enterprise",
+      "kind": "Profile",
+      "topology": "Governed Enterprise contract; HA topology requires its separate certification lane",
+      "claim": "Enterprise",
+      "sharedSaaS": "N/A",
+      "commit": "1201c2a7fdfe10caef98f0c6f8334d455526501b",
+      "result": "Passed",
+      "releaseEligible": true,
+      "evidence": "20260820-172259/certification.json"
+    },
+    {
+      "lane": "SaaS",
+      "kind": "Profile",
+      "topology": "Managed Dedicated (one host-fixed tenant runtime boundary per tenant)",
+      "claim": "Managed Dedicated",
+      "sharedSaaS": "NotCertified",
+      "commit": "1201c2a7fdfe10caef98f0c6f8334d455526501b",
+      "result": "Passed",
+      "releaseEligible": true,
+      "evidence": "20260820-172259/certification.json"
+    },
+    {
+      "lane": "SharedSaaS",
+      "kind": "Profile",
+      "topology": "Shared tenant-aware control planes with hardened per-run execution",
+      "claim": "Shared SaaS hostile isolation",
+      "sharedSaaS": "Certified",
+      "commit": "1201c2a7fdfe10caef98f0c6f8334d455526501b",
+      "result": "Passed",
+      "releaseEligible": true,
+      "evidence": "20260820-172259/certification.json"
+    },
+    {
+      "lane": "Solo",
+      "kind": "Profile",
+      "topology": "Local process, local artifacts, optional local SQLite",
+      "claim": "Solo",
+      "sharedSaaS": "N/A",
+      "commit": "1201c2a7fdfe10caef98f0c6f8334d455526501b",
+      "result": "Passed",
+      "releaseEligible": true,
+      "evidence": "20260820-172259/certification.json"
+    },
+    {
+      "lane": "Team",
+      "kind": "Profile",
+      "topology": "Single-node Orchestrator with SQLite and local artifacts",
+      "claim": "Team single-node",
+      "sharedSaaS": "N/A",
+      "commit": "1201c2a7fdfe10caef98f0c6f8334d455526501b",
+      "result": "Passed",
+      "releaseEligible": true,
+      "evidence": "20260820-172259/certification.json"
+    },
+    {
+      "lane": "EnterpriseToSaaS",
+      "kind": "Transition",
+      "topology": "Enterprise to Managed Dedicated SaaS",
+      "claim": "Enterprise to Managed Dedicated",
+      "sharedSaaS": "NotCertified",
+      "commit": "1201c2a7fdfe10caef98f0c6f8334d455526501b",
+      "result": "Passed",
+      "releaseEligible": true,
+      "evidence": "20260820-174547/certification.json"
+    },
+    {
+      "lane": "SaaSToEnterpriseExit",
+      "kind": "Transition",
+      "topology": "Managed Dedicated SaaS to customer-operated self-hosted Enterprise, via the portable tenant bundle",
+      "claim": "Customer exit from Managed Dedicated",
+      "sharedSaaS": "NotCertified",
+      "commit": "1201c2a7fdfe10caef98f0c6f8334d455526501b",
+      "result": "Passed",
+      "releaseEligible": true,
+      "evidence": "20260820-174547/certification.json"
+    },
+    {
+      "lane": "SoloToSaaS",
+      "kind": "Transition",
+      "topology": "Solo to Managed Dedicated SaaS",
+      "claim": "Solo to Managed Dedicated",
+      "sharedSaaS": "NotCertified",
+      "commit": "1201c2a7fdfe10caef98f0c6f8334d455526501b",
+      "result": "Passed",
+      "releaseEligible": true,
+      "evidence": "20260820-174547/certification.json"
+    },
+    {
+      "lane": "SoloToTeam",
+      "kind": "Transition",
+      "topology": "Solo local state to Team single-node providers",
+      "claim": "Solo to Team",
+      "sharedSaaS": "N/A",
+      "commit": "1201c2a7fdfe10caef98f0c6f8334d455526501b",
+      "result": "Passed",
+      "releaseEligible": true,
+      "evidence": "20260820-174547/certification.json"
+    },
+    {
+      "lane": "TeamToEnterprise",
+      "kind": "Transition",
+      "topology": "Team single-node providers to governed Enterprise providers",
+      "claim": "Team to Enterprise",
+      "sharedSaaS": "N/A",
+      "commit": "1201c2a7fdfe10caef98f0c6f8334d455526501b",
+      "result": "Passed",
+      "releaseEligible": true,
+      "evidence": "20260820-174547/certification.json"
+    },
+    {
+      "lane": "Upgrade",
+      "kind": "Transition",
+      "topology": "In-place profile-preserving N to N+1 upgrade",
+      "claim": "Solo, Team, Enterprise, and Managed Dedicated",
+      "sharedSaaS": "NotCertified",
+      "commit": "1201c2a7fdfe10caef98f0c6f8334d455526501b",
+      "result": "Passed",
+      "releaseEligible": true,
+      "evidence": "20260820-174547/certification.json"
+    }
+  ]
+}

@@ -3,13 +3,13 @@
 <desc id='DistributionComposition-desc'>Box plot plus mean tick: 2 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
 <rect width='600' height='350' fill='white'/>
 <text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Box plot plus mean tick</text>
-<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
-<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
-<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
-<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
-<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb' stroke-width='1'/>
 <defs><clipPath id='DistributionComposition-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#DistributionComposition-plot-clip)'>
 <g class='plot-boxplot' data-layer='boxes'>

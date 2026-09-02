@@ -9,20 +9,30 @@
 <rect width='200' height='175' fill='white'/>
 <text x='100' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>North</text>
 <g class='plot-aspect-viewport' transform='translate(49.286,0)'>
-<line x1='60' y1='40' x2='60' y2='115' stroke='#bbb'/>
-<line x1='60' y1='115' x2='81.429' y2='115' stroke='#bbb'/>
-<line x1='60' y1='115' x2='81.429' y2='115' stroke='#e5e7eb'/>
-<line x1='60' y1='96.25' x2='81.429' y2='96.25' stroke='#e5e7eb'/>
-<line x1='60' y1='77.5' x2='81.429' y2='77.5' stroke='#e5e7eb'/>
-<line x1='60' y1='58.75' x2='81.429' y2='58.75' stroke='#e5e7eb'/>
-<line x1='60' y1='40' x2='81.429' y2='40' stroke='#e5e7eb'/>
-<defs><clipPath id='RegionSmallMultiples-plot-clip'><rect x='60' y='40' width='21.429' height='75'/></clipPath></defs>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='115' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='115' x2='121.429' y2='115' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='115' x2='121.429' y2='115' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='96.25' x2='121.429' y2='96.25' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='77.5' x2='121.429' y2='77.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='58.75' x2='121.429' y2='58.75' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='121.429' y2='40' stroke='#e5e7eb' stroke-width='1'/>
+<defs><clipPath id='RegionSmallMultiples-plot-clip'><rect x='60' y='40' width='61.429' height='75'/></clipPath></defs>
 <g clip-path='url(#RegionSmallMultiples-plot-clip)'>
-<g class='plot-point-layer' stroke='white' stroke-width='1.5'>
-<circle class='plot-point' cx='71.797' cy='67.381' r='4' fill='#5470c6' data-row-index='0'></circle>
-<circle class='plot-point' cx='76.126' cy='50.065' r='4' fill='#5470c6' data-row-index='1'></circle>
+<g class='plot-points' data-layer='observations'>
+<circle class='plot-point' fill='#5470c6' data-row-index='0' cx='93.817' cy='67.381' r='4'></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='1' cx='106.227' cy='50.065' r='4'></circle>
 </g>
 </g>
+<line x1='60' y1='115' x2='60' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='0' x='60' y='131' text-anchor='middle' font-size='9' fill='#666'>-0.9</text>
+<line x1='75.357' y1='115' x2='75.357' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='1' x='75.357' y='131' text-anchor='middle' font-size='9' fill='#666'>4.05</text>
+<line x1='90.714' y1='115' x2='90.714' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='2' x='90.714' y='131' text-anchor='middle' font-size='9' fill='#666'>9</text>
+<line x1='106.071' y1='115' x2='106.071' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='3' x='106.071' y='131' text-anchor='middle' font-size='9' fill='#666'>13.95</text>
+<line x1='121.429' y1='115' x2='121.429' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='4' x='121.429' y='131' text-anchor='middle' font-size='9' fill='#666'>18.9</text>
 <line x1='56' y1='115' x2='60' y2='115' stroke='#bbb'/>
 <text x='54' y='119' text-anchor='end' font-size='9' fill='#666'>0</text>
 <line x1='56' y1='96.25' x2='60' y2='96.25' stroke='#bbb'/>
@@ -42,20 +52,30 @@
 <rect width='200' height='175' fill='white'/>
 <text x='100' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>South</text>
 <g class='plot-aspect-viewport' transform='translate(49.286,0)'>
-<line x1='60' y1='40' x2='60' y2='115' stroke='#bbb'/>
-<line x1='60' y1='115' x2='81.429' y2='115' stroke='#bbb'/>
-<line x1='60' y1='115' x2='81.429' y2='115' stroke='#e5e7eb'/>
-<line x1='60' y1='96.25' x2='81.429' y2='96.25' stroke='#e5e7eb'/>
-<line x1='60' y1='77.5' x2='81.429' y2='77.5' stroke='#e5e7eb'/>
-<line x1='60' y1='58.75' x2='81.429' y2='58.75' stroke='#e5e7eb'/>
-<line x1='60' y1='40' x2='81.429' y2='40' stroke='#e5e7eb'/>
-<defs><clipPath id='RegionSmallMultiples-plot-clip'><rect x='60' y='40' width='21.429' height='75'/></clipPath></defs>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='115' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='115' x2='121.429' y2='115' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='115' x2='121.429' y2='115' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='96.25' x2='121.429' y2='96.25' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='77.5' x2='121.429' y2='77.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='58.75' x2='121.429' y2='58.75' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='121.429' y2='40' stroke='#e5e7eb' stroke-width='1'/>
+<defs><clipPath id='RegionSmallMultiples-plot-clip'><rect x='60' y='40' width='61.429' height='75'/></clipPath></defs>
 <g clip-path='url(#RegionSmallMultiples-plot-clip)'>
-<g class='plot-point-layer' stroke='white' stroke-width='1.5'>
-<circle class='plot-point' cx='72.879' cy='76.039' r='4' fill='#5470c6' data-row-index='2'></circle>
-<circle class='plot-point' cx='78.29' cy='58.723' r='4' fill='#5470c6' data-row-index='3'></circle>
+<g class='plot-points' data-layer='observations'>
+<circle class='plot-point' fill='#5470c6' data-row-index='2' cx='96.919' cy='76.039' r='4'></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='3' cx='112.431' cy='58.723' r='4'></circle>
 </g>
 </g>
+<line x1='60' y1='115' x2='60' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='0' x='60' y='131' text-anchor='middle' font-size='9' fill='#666'>-0.9</text>
+<line x1='75.357' y1='115' x2='75.357' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='1' x='75.357' y='131' text-anchor='middle' font-size='9' fill='#666'>4.05</text>
+<line x1='90.714' y1='115' x2='90.714' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='2' x='90.714' y='131' text-anchor='middle' font-size='9' fill='#666'>9</text>
+<line x1='106.071' y1='115' x2='106.071' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='3' x='106.071' y='131' text-anchor='middle' font-size='9' fill='#666'>13.95</text>
+<line x1='121.429' y1='115' x2='121.429' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='4' x='121.429' y='131' text-anchor='middle' font-size='9' fill='#666'>18.9</text>
 <line x1='56' y1='115' x2='60' y2='115' stroke='#bbb'/>
 <text x='54' y='119' text-anchor='end' font-size='9' fill='#666'>0</text>
 <line x1='56' y1='96.25' x2='60' y2='96.25' stroke='#bbb'/>
@@ -75,19 +95,29 @@
 <rect width='200' height='175' fill='white'/>
 <text x='100' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>East</text>
 <g class='plot-aspect-viewport' transform='translate(49.286,0)'>
-<line x1='60' y1='40' x2='60' y2='115' stroke='#bbb'/>
-<line x1='60' y1='115' x2='81.429' y2='115' stroke='#bbb'/>
-<line x1='60' y1='115' x2='81.429' y2='115' stroke='#e5e7eb'/>
-<line x1='60' y1='96.25' x2='81.429' y2='96.25' stroke='#e5e7eb'/>
-<line x1='60' y1='77.5' x2='81.429' y2='77.5' stroke='#e5e7eb'/>
-<line x1='60' y1='58.75' x2='81.429' y2='58.75' stroke='#e5e7eb'/>
-<line x1='60' y1='40' x2='81.429' y2='40' stroke='#e5e7eb'/>
-<defs><clipPath id='RegionSmallMultiples-plot-clip'><rect x='60' y='40' width='21.429' height='75'/></clipPath></defs>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='115' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='115' x2='121.429' y2='115' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='115' x2='121.429' y2='115' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='96.25' x2='121.429' y2='96.25' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='77.5' x2='121.429' y2='77.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='58.75' x2='121.429' y2='58.75' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='121.429' y2='40' stroke='#e5e7eb' stroke-width='1'/>
+<defs><clipPath id='RegionSmallMultiples-plot-clip'><rect x='60' y='40' width='61.429' height='75'/></clipPath></defs>
 <g clip-path='url(#RegionSmallMultiples-plot-clip)'>
-<g class='plot-point-layer' stroke='white' stroke-width='1.5'>
-<circle class='plot-point' cx='73.961' cy='63.052' r='4' fill='#5470c6' data-row-index='4'></circle>
+<g class='plot-points' data-layer='observations'>
+<circle class='plot-point' fill='#5470c6' data-row-index='4' cx='100.022' cy='63.052' r='4'></circle>
 </g>
 </g>
+<line x1='60' y1='115' x2='60' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='0' x='60' y='131' text-anchor='middle' font-size='9' fill='#666'>-0.9</text>
+<line x1='75.357' y1='115' x2='75.357' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='1' x='75.357' y='131' text-anchor='middle' font-size='9' fill='#666'>4.05</text>
+<line x1='90.714' y1='115' x2='90.714' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='2' x='90.714' y='131' text-anchor='middle' font-size='9' fill='#666'>9</text>
+<line x1='106.071' y1='115' x2='106.071' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='3' x='106.071' y='131' text-anchor='middle' font-size='9' fill='#666'>13.95</text>
+<line x1='121.429' y1='115' x2='121.429' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='4' x='121.429' y='131' text-anchor='middle' font-size='9' fill='#666'>18.9</text>
 <line x1='56' y1='115' x2='60' y2='115' stroke='#bbb'/>
 <text x='54' y='119' text-anchor='end' font-size='9' fill='#666'>0</text>
 <line x1='56' y1='96.25' x2='60' y2='96.25' stroke='#bbb'/>
@@ -107,19 +137,29 @@
 <rect width='200' height='175' fill='white'/>
 <text x='100' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>West</text>
 <g class='plot-aspect-viewport' transform='translate(49.286,0)'>
-<line x1='60' y1='40' x2='60' y2='115' stroke='#bbb'/>
-<line x1='60' y1='115' x2='81.429' y2='115' stroke='#bbb'/>
-<line x1='60' y1='115' x2='81.429' y2='115' stroke='#e5e7eb'/>
-<line x1='60' y1='96.25' x2='81.429' y2='96.25' stroke='#e5e7eb'/>
-<line x1='60' y1='77.5' x2='81.429' y2='77.5' stroke='#e5e7eb'/>
-<line x1='60' y1='58.75' x2='81.429' y2='58.75' stroke='#e5e7eb'/>
-<line x1='60' y1='40' x2='81.429' y2='40' stroke='#e5e7eb'/>
-<defs><clipPath id='RegionSmallMultiples-plot-clip'><rect x='60' y='40' width='21.429' height='75'/></clipPath></defs>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='115' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='115' x2='121.429' y2='115' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='115' x2='121.429' y2='115' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='96.25' x2='121.429' y2='96.25' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='77.5' x2='121.429' y2='77.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='58.75' x2='121.429' y2='58.75' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='121.429' y2='40' stroke='#e5e7eb' stroke-width='1'/>
+<defs><clipPath id='RegionSmallMultiples-plot-clip'><rect x='60' y='40' width='61.429' height='75'/></clipPath></defs>
 <g clip-path='url(#RegionSmallMultiples-plot-clip)'>
-<g class='plot-point-layer' stroke='white' stroke-width='1.5'>
-<circle class='plot-point' cx='80.455' cy='43.571' r='4' fill='#5470c6' data-row-index='5'></circle>
+<g class='plot-points' data-layer='observations'>
+<circle class='plot-point' fill='#5470c6' data-row-index='5' cx='118.636' cy='43.571' r='4'></circle>
 </g>
 </g>
+<line x1='60' y1='115' x2='60' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='0' x='60' y='131' text-anchor='middle' font-size='9' fill='#666'>-0.9</text>
+<line x1='75.357' y1='115' x2='75.357' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='1' x='75.357' y='131' text-anchor='middle' font-size='9' fill='#666'>4.05</text>
+<line x1='90.714' y1='115' x2='90.714' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='2' x='90.714' y='131' text-anchor='middle' font-size='9' fill='#666'>9</text>
+<line x1='106.071' y1='115' x2='106.071' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='3' x='106.071' y='131' text-anchor='middle' font-size='9' fill='#666'>13.95</text>
+<line x1='121.429' y1='115' x2='121.429' y2='119' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='4' x='121.429' y='131' text-anchor='middle' font-size='9' fill='#666'>18.9</text>
 <line x1='56' y1='115' x2='60' y2='115' stroke='#bbb'/>
 <text x='54' y='119' text-anchor='end' font-size='9' fill='#666'>0</text>
 <line x1='56' y1='96.25' x2='60' y2='96.25' stroke='#bbb'/>

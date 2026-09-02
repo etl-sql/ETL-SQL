@@ -296,13 +296,12 @@
 </g>
 <path class='plot-geographic-route' data-row-index='0' d='M 143.344 98.889 L 205.311 104.306' fill='none' stroke='#2563eb' stroke-width='1.5'><title>west-route</title></path>
 <path class='plot-geographic-route' data-row-index='2' d='M 323.394 97.139 L 213.111 108.458' fill='none' stroke='#2563eb' stroke-width='1.5'><title>atlantic-route</title></path>
-<circle class='plot-geographic-point' data-row-index='0' cx='143.344' cy='98.889' r='4' fill='#dc2626'><title>Seattle</title></circle>
-<circle class='plot-geographic-point' data-row-index='1' cx='205.311' cy='104.306' r='4' fill='#dc2626'><title>Toronto</title></circle>
-<circle class='plot-geographic-point' data-row-index='2' cx='323.394' cy='97.139' r='4' fill='#dc2626'><title>Paris</title></circle>
-<circle class='plot-geographic-point' data-row-index='3' cx='213.111' cy='108.458' r='4' fill='#dc2626'><title>New York</title></circle>
+<circle class='plot-geographic-point' fill='#dc2626' data-row-index='0' cx='143.344' cy='98.889' r='4'><title>Seattle</title></circle>
+<circle class='plot-geographic-point' fill='#dc2626' data-row-index='1' cx='205.311' cy='104.306' r='4'><title>Toronto</title></circle>
+<circle class='plot-geographic-point' fill='#dc2626' data-row-index='2' cx='323.394' cy='97.139' r='4'><title>Paris</title></circle>
+<circle class='plot-geographic-point' fill='#dc2626' data-row-index='3' cx='213.111' cy='108.458' r='4'><title>New York</title></circle>
 <text class='plot-smart-label' data-row-index='0' data-priority='203' x='143.344' y='91.889' text-anchor='middle' font-size='9' fill='#1f2937'>Seattle</text>
 <text class='plot-smart-label' data-row-index='1' data-priority='203' x='205.311' y='97.306' text-anchor='middle' font-size='9' fill='#1f2937'>Toronto</text>
 <text class='plot-smart-label' data-row-index='2' data-priority='203' x='323.394' y='90.139' text-anchor='middle' font-size='9' fill='#1f2937'>Paris</text>
-<path class='plot-smart-label-leader' data-row-index='3' d='M 213.111 108.458 L 222.111 111.958' fill='none' stroke='#1f2937' stroke-width='.75' stroke-opacity='.65'/>
 <text class='plot-smart-label' data-row-index='3' data-priority='203' x='222.111' y='116.458' text-anchor='middle' font-size='9' fill='#1f2937'>New York</text>
 </svg>

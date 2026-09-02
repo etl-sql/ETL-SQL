@@ -3,19 +3,19 @@
 <desc id='StationLoad-desc'>Sequential quantitative colour with a per-category target tick: 4 rows, 2 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows. Color ranges from 0 (#e0f2fe) to 100 (#0c4a6e).</desc>
 <rect width='600' height='350' fill='white'/>
 <text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Sequential quantitative colour with a per-category target tick</text>
-<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
-<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
-<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
-<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
-<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb' stroke-width='1'/>
 <defs><clipPath id='StationLoad-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#StationLoad-plot-clip)'>
-<rect x='76.25' y='135' width='96.5' height='155' fill='#BAD4E4' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>62</title></rect>
-<rect x='206.25' y='87.5' width='96.5' height='202.5' fill='#5886A2' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>81</title></rect>
-<rect x='336.25' y='105' width='96.5' height='185' fill='#81A6BD' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>74</title></rect>
-<rect x='466.25' y='152.5' width='96.5' height='137.5' fill='#1D577A' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>55</title></rect>
+<rect x='76.25' y='135' width='96.5' height='155' rx='1' fill='#BAD4E4' data-extent-axis='y' data-extent-anchor='end' data-row-index='0'><title>62</title></rect>
+<rect x='206.25' y='87.5' width='96.5' height='202.5' rx='1' fill='#5886A2' data-extent-axis='y' data-extent-anchor='end' data-row-index='1'><title>81</title></rect>
+<rect x='336.25' y='105' width='96.5' height='185' rx='1' fill='#81A6BD' data-extent-axis='y' data-extent-anchor='end' data-row-index='2'><title>74</title></rect>
+<rect x='466.25' y='152.5' width='96.5' height='137.5' rx='1' fill='#1D577A' data-extent-axis='y' data-extent-anchor='end' data-row-index='3'><title>55</title></rect>
 <line class='plot-tick' x1='66.5' y1='115' x2='183.5' y2='115' stroke='#9ca3af' stroke-width='2' data-row-index='0'><title>Target</title></line>
 <line class='plot-tick' x1='196.5' y1='115' x2='313.5' y2='115' stroke='#9ca3af' stroke-width='2' data-row-index='1'><title>Target</title></line>
 <line class='plot-tick' x1='326.5' y1='115' x2='443.5' y2='115' stroke='#9ca3af' stroke-width='2' data-row-index='2'><title>Target</title></line>

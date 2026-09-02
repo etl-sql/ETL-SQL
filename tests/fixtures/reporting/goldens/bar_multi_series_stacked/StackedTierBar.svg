@@ -3,24 +3,24 @@
 <desc id='StackedTierBar-desc'>Quarterly Tier Revenue Stack: 6 rows, 3 ordered layers, 3 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
 <rect width='600' height='350' fill='white'/>
 <text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Quarterly Tier Revenue Stack</text>
-<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='470' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='470' y2='290' stroke='#e5e7eb'/>
-<line x1='60' y1='227.5' x2='470' y2='227.5' stroke='#e5e7eb'/>
-<line x1='60' y1='165' x2='470' y2='165' stroke='#e5e7eb'/>
-<line x1='60' y1='102.5' x2='470' y2='102.5' stroke='#e5e7eb'/>
-<line x1='60' y1='40' x2='470' y2='40' stroke='#e5e7eb'/>
-<defs><clipPath id='StackedTierBar-plot-clip'><rect x='60' y='40' width='410' height='250'/></clipPath></defs>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='290' x2='460' y2='290' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='290' x2='460' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='227.5' x2='460' y2='227.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='165' x2='460' y2='165' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='102.5' x2='460' y2='102.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='460' y2='40' stroke='#e5e7eb' stroke-width='1'/>
+<defs><clipPath id='StackedTierBar-plot-clip'><rect x='60' y='40' width='400' height='250'/></clipPath></defs>
 <g clip-path='url(#StackedTierBar-plot-clip)'>
-<rect x='85.625' y='165' width='152.75' height='125' fill='#1E3A8A' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>85000</title></rect>
-<rect x='290.625' y='154.706' width='152.75' height='135.294' fill='#1E3A8A' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>92000</title></rect>
-<rect x='85.625' y='103.235' width='152.75' height='61.765' fill='#3B82F6' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>42000</title></rect>
-<rect x='290.625' y='85.588' width='152.75' height='69.118' fill='#3B82F6' data-row-index='4' data-extent-axis='y' data-extent-anchor='end'><title>47000</title></rect>
-<rect x='85.625' y='62.059' width='152.75' height='41.176' fill='#93C5FD' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>28000</title></rect>
-<rect x='290.625' y='40' width='152.75' height='45.588' fill='#93C5FD' data-row-index='5' data-extent-axis='y' data-extent-anchor='end'><title>31000</title></rect>
+<rect x='85' y='165' width='149' height='125' rx='1' fill='#1E3A8A' data-extent-axis='y' data-extent-anchor='end' data-row-index='0'><title>85000</title></rect>
+<rect x='285' y='154.706' width='149' height='135.294' rx='1' fill='#1E3A8A' data-extent-axis='y' data-extent-anchor='end' data-row-index='3'><title>92000</title></rect>
+<rect x='85' y='103.235' width='149' height='61.765' rx='1' fill='#3B82F6' data-extent-axis='y' data-extent-anchor='end' data-row-index='1'><title>42000</title></rect>
+<rect x='285' y='85.588' width='149' height='69.118' rx='1' fill='#3B82F6' data-extent-axis='y' data-extent-anchor='end' data-row-index='4'><title>47000</title></rect>
+<rect x='85' y='62.059' width='149' height='41.176' rx='1' fill='#93C5FD' data-extent-axis='y' data-extent-anchor='end' data-row-index='2'><title>28000</title></rect>
+<rect x='285' y='40' width='149' height='45.588' rx='1' fill='#93C5FD' data-extent-axis='y' data-extent-anchor='end' data-row-index='5'><title>31000</title></rect>
 </g>
-<text class='plot-axis-label' data-axis-index='0' x='162.5' y='306' text-anchor='middle' font-size='9' fill='#666'>2026-Q1</text>
-<text class='plot-axis-label' data-axis-index='1' x='367.5' y='306' text-anchor='middle' font-size='9' fill='#666'>2026-Q2</text>
+<text class='plot-axis-label' data-axis-index='0' x='160' y='306' text-anchor='middle' font-size='9' fill='#666'>2026-Q1</text>
+<text class='plot-axis-label' data-axis-index='1' x='360' y='306' text-anchor='middle' font-size='9' fill='#666'>2026-Q2</text>
 <line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
 <text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
 <line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>

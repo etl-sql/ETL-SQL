@@ -85,7 +85,7 @@
     },
     {
       "label": "target_rule",
-      "value": "Revenue",
+      "value": "83",
       "order": 500000,
       "detail": "labeled reference rule",
       "group": "Reference"

@@ -43,7 +43,7 @@
     },
     {
       "label": "target_rule",
-      "value": "Alpha",
+      "value": "150",
       "order": 300000,
       "detail": "labeled reference rule",
       "group": "Reference"

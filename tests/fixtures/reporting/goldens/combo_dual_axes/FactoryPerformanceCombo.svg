@@ -3,23 +3,23 @@
 <desc id='FactoryPerformanceCombo-desc'>Production Volume vs Quality Pass Rate: 4 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
 <rect width='600' height='350' fill='white'/>
 <text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Production Volume vs Quality Pass Rate</text>
-<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
-<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
-<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
-<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
-<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb' stroke-width='1'/>
 <defs><clipPath id='FactoryPerformanceCombo-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#FactoryPerformanceCombo-plot-clip)'>
-<rect x='76.25' y='114.356' width='96.5' height='175.644' fill='#2563EB' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>450</title></rect>
-<rect x='206.25' y='87.034' width='96.5' height='202.966' fill='#2563EB' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>520</title></rect>
-<rect x='336.25' y='102.646' width='96.5' height='187.354' fill='#2563EB' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>480</title></rect>
-<rect x='466.25' y='51.905' width='96.5' height='238.095' fill='#2563EB' data-row-index='3' data-extent-axis='y' data-extent-anchor='end'><title>610</title></rect>
-<circle cx='125' cy='57.228' r='3' fill='#E11D48' data-row-index='0'><title>96.2</title></circle>
-<circle cx='255' cy='60.616' r='3' fill='#E11D48' data-row-index='1'><title>94.8</title></circle>
-<circle cx='385' cy='55.05' r='3' fill='#E11D48' data-row-index='2'><title>97.1</title></circle>
-<circle cx='515' cy='51.905' r='3' fill='#E11D48' data-row-index='3'><title>98.4</title></circle>
+<rect x='76.25' y='114.356' width='96.5' height='175.644' rx='1' fill='#2563EB' data-extent-axis='y' data-extent-anchor='end' data-row-index='0'><title>450</title></rect>
+<rect x='206.25' y='87.034' width='96.5' height='202.966' rx='1' fill='#2563EB' data-extent-axis='y' data-extent-anchor='end' data-row-index='1'><title>520</title></rect>
+<rect x='336.25' y='102.646' width='96.5' height='187.354' rx='1' fill='#2563EB' data-extent-axis='y' data-extent-anchor='end' data-row-index='2'><title>480</title></rect>
+<rect x='466.25' y='51.905' width='96.5' height='238.095' rx='1' fill='#2563EB' data-extent-axis='y' data-extent-anchor='end' data-row-index='3'><title>610</title></rect>
+<circle class='plot-line-symbol' fill='#E11D48' data-row-index='0' cx='125' cy='57.228' r='3'><title>96.2</title></circle>
+<circle class='plot-line-symbol' fill='#E11D48' data-row-index='1' cx='255' cy='60.616' r='3'><title>94.8</title></circle>
+<circle class='plot-line-symbol' fill='#E11D48' data-row-index='2' cx='385' cy='55.05' r='3'><title>97.1</title></circle>
+<circle class='plot-line-symbol' fill='#E11D48' data-row-index='3' cx='515' cy='51.905' r='3'><title>98.4</title></circle>
 <path d='M 125 57.228 L 255 60.616 L 385 55.05 L 515 51.905' fill='none' stroke='#E11D48' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='125' y='306' text-anchor='middle' font-size='9' fill='#666'>Week 1</text>

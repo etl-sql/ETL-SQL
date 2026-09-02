@@ -3,8 +3,13 @@
 <desc id='RegionalRevenue-desc'>Revenue by Region: 3 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
 <rect width='600' height='350' fill='white'/>
 <text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Revenue by Region</text>
-<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='60' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='190' y1='40' x2='190' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='320' y1='40' x2='320' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='450' y1='40' x2='450' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='580' y1='40' x2='580' y2='290' stroke='#e5e7eb' stroke-width='1'/>
 <rect x='60' y='50.417' width='416' height='61.5' fill='#5470c6' fill-opacity='1' data-row-index='0' data-extent-axis='x' data-extent-anchor='start'><title>120</title></rect>
 <text x='480' y='84.667' text-anchor='start' font-size='9' fill='#333'>120</text>
 <rect x='60' y='133.75' width='312' height='61.5' fill='#5470c6' fill-opacity='1' data-row-index='1' data-extent-axis='x' data-extent-anchor='start'><title>90</title></rect>

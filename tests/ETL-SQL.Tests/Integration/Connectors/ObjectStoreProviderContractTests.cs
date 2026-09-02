@@ -150,6 +150,7 @@ internal static class ObjectStoreProviderContract
     }
 }
 
+[Trait("Category", "Integration")]
 [Collection("S3 collection")]
 public sealed class S3ObjectStoreProviderContractTests(S3Fixture fixture)
 {
@@ -163,6 +164,7 @@ public sealed class S3ObjectStoreProviderContractTests(S3Fixture fixture)
     [Fact] public Task ResumablePortabilityChunks() => ObjectStoreProviderContract.ResumablePortabilityChunks(Create());
 }
 
+[Trait("Category", "Integration")]
 [Collection("AZURE_BLOB collection")]
 public sealed class AzureBlobObjectStoreProviderContractTests(AzureBlobFixture fixture)
 {

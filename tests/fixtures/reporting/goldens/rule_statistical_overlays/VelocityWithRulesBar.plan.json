@@ -918,14 +918,14 @@
       },
       {
         "label": "Target Velocity (50 pts)",
-        "value": "Sprint 1",
+        "value": "50",
         "order": 300000,
         "detail": "labeled reference rule",
         "group": "Reference"
       },
       {
         "label": "Average (Historical)",
-        "value": "Sprint 1",
+        "value": "49.5",
         "order": 300001,
         "detail": "labeled reference rule",
         "group": "Reference"

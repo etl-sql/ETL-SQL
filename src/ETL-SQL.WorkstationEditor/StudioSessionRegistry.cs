@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.WorkstationEditor;
 
@@ -28,7 +29,7 @@ public sealed class StudioSessionRegistry(string? storageRoot = null, HttpClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly string _storageRoot = Path.GetFullPath(storageRoot ?? DefaultStorageRoot());
-    private readonly HttpClient _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+    private readonly HttpClient _httpClient = httpClient ?? PolicyBoundHttp.CreateClient(timeout: TimeSpan.FromSeconds(2));
 
     public string StorageRoot => _storageRoot;
 

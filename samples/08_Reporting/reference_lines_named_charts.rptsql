@@ -58,7 +58,7 @@ CREATE VISUAL RegionalSalesQuota AS HBAR (
 );
 
 CREATE PAGE ReferenceLineDemo AS DASHBOARD (
-  STRUCTURE = 'A | B',
+  STRUCTURE = 'A B',
   MAP (
     'A' = SalesTrendReferenceLines,
     'B' = RegionalSalesQuota

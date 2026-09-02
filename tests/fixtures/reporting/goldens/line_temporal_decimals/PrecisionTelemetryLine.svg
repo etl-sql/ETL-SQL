@@ -3,20 +3,20 @@
 <desc id='PrecisionTelemetryLine-desc'>High-Precision Daily Sensor Telemetry: 5 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
 <rect width='600' height='350' fill='white'/>
 <text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>High-Precision Daily Sensor Telemetry</text>
-<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
-<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
-<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
-<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
-<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb' stroke-width='1'/>
 <defs><clipPath id='PrecisionTelemetryLine-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#PrecisionTelemetryLine-plot-clip)'>
-<circle cx='112' cy='81.134' r='3' fill='#5470c6' data-row-index='0'><title>98.745</title></circle>
-<circle cx='216' cy='69.212' r='3' fill='#5470c6' data-row-index='1'><title>104.382</title></circle>
-<circle cx='320' cy='74.418' r='3' fill='#5470c6' data-row-index='2'><title>101.921</title></circle>
-<circle cx='424' cy='51.905' r='3' fill='#5470c6' data-row-index='3'><title>112.564</title></circle>
-<circle cx='528' cy='61.308' r='3' fill='#5470c6' data-row-index='4'><title>108.119</title></circle>
+<circle class='plot-line-symbol' fill='#5470c6' data-row-index='0' cx='112' cy='81.134' r='3'><title>98.745</title></circle>
+<circle class='plot-line-symbol' fill='#5470c6' data-row-index='1' cx='216' cy='69.212' r='3'><title>104.382</title></circle>
+<circle class='plot-line-symbol' fill='#5470c6' data-row-index='2' cx='320' cy='74.418' r='3'><title>101.921</title></circle>
+<circle class='plot-line-symbol' fill='#5470c6' data-row-index='3' cx='424' cy='51.905' r='3'><title>112.564</title></circle>
+<circle class='plot-line-symbol' fill='#5470c6' data-row-index='4' cx='528' cy='61.308' r='3'><title>108.119</title></circle>
 <path d='M 112 81.134 C 129.333 79.147 181.333 70.331 216 69.212 C 250.667 68.092 285.333 77.303 320 74.418 C 354.667 71.534 389.333 54.09 424 51.905 C 458.667 49.72 510.667 59.741 528 61.308' fill='none' stroke='#5470c6' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='112' y='306' text-anchor='middle' font-size='9' fill='#666'>2026-01-01</text>

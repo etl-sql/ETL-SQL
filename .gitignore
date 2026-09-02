@@ -20,7 +20,14 @@ src/ETL-SQL.Installer/linux/build/
 packages/
 project.lock.json
 project.fragment.lock.json
-artifacts/
+artifacts/*
+!artifacts/release-evidence/
+artifacts/release-evidence/*
+!artifacts/release-evidence/0.18.0/
+artifacts/release-evidence/0.18.0/*
+!artifacts/release-evidence/0.18.0/deployment-profiles/
+artifacts/release-evidence/0.18.0/deployment-profiles/*
+!artifacts/release-evidence/0.18.0/deployment-profiles/claims-index.*
 video/
 
 ## Visual Studio

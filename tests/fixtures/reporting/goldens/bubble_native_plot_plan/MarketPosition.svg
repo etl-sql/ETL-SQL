@@ -3,21 +3,31 @@
 <desc id='MarketPosition-desc'>Market Position: 3 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
 <rect width='600' height='350' fill='white'/>
 <text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Market Position</text>
-<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
-<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
-<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
-<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
-<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb' stroke-width='1'/>
 <defs><clipPath id='MarketPosition-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#MarketPosition-plot-clip)'>
-<g class='plot-point-layer' stroke='white' stroke-width='1.5'>
-<circle class='plot-point' cx='320' cy='278.636' r='10' fill='#5470c6' data-row-index='0'><title>Market A</title></circle>
-<circle class='plot-point' cx='556.364' cy='165' r='4' fill='#5470c6' data-row-index='1'><title>Market B</title></circle>
-<circle class='plot-point' cx='83.636' cy='51.364' r='22' fill='#5470c6' data-row-index='2'><title>Market C</title></circle>
+<g class='plot-points' data-layer='primary'>
+<circle class='plot-point' fill='#5470c6' data-row-index='0' cx='320' cy='278.636' r='10'><title>Market A</title></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='1' cx='556.364' cy='165' r='4'><title>Market B</title></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='2' cx='83.636' cy='51.364' r='22'><title>Market C</title></circle>
 </g>
 </g>
+<line x1='60' y1='290' x2='60' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='0' x='60' y='306' text-anchor='middle' font-size='9' fill='#666'>4.5</text>
+<line x1='190' y1='290' x2='190' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='1' x='190' y='306' text-anchor='middle' font-size='9' fill='#666'>7.25</text>
+<line x1='320' y1='290' x2='320' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='2' x='320' y='306' text-anchor='middle' font-size='9' fill='#666'>10</text>
+<line x1='450' y1='290' x2='450' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='3' x='450' y='306' text-anchor='middle' font-size='9' fill='#666'>12.75</text>
+<line x1='580' y1='290' x2='580' y2='294' stroke='#bbb'/>
+<text class='plot-axis-label' data-axis-index='4' x='580' y='306' text-anchor='middle' font-size='9' fill='#666'>15.5</text>
 <line x1='56' y1='290' x2='60' y2='290' stroke='#bbb'/>
 <text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>19.5</text>
 <line x1='56' y1='227.5' x2='60' y2='227.5' stroke='#bbb'/>

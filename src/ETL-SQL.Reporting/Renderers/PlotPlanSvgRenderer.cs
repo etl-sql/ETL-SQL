@@ -962,7 +962,12 @@ internal sealed class PlotPlanSvgRenderer
                 }
                 builder.AppendLine("</g>");
             }
-            builder.AppendLine($"<rect x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}' rx='1' fill='{Esc(datumColor)}'{extentAttributes} data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value ?? (end - start), dataFormat))}</title></rect>");
+            var rangedClass = rangedY || rangedX ? " class='plot-range-rect'" : string.Empty;
+            var rxAttr = rangedY || rangedX ? string.Empty : " rx='1'";
+            var title = rangedY
+                ? $"{FormatDataLabel(start, dataFormat)} to {FormatDataLabel(end, dataFormat)}"
+                : FormatDataLabel(value ?? (end - start), dataFormat);
+            builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}'{rxAttr} fill='{Esc(datumColor)}'{extentAttributes} data-row-index='{datum.RowIndex}'><title>{Esc(title)}</title></rect>");
             if (showLabels)
             {
                 var label = FormatDataLabel(value ?? (end - start), dataFormat);

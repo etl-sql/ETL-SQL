@@ -3,21 +3,21 @@
 <desc id='RegionalSalesBar-desc'>Annual Sales by Geographic Region: 3 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
 <rect width='600' height='350' fill='white'/>
 <text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Annual Sales by Geographic Region</text>
-<line x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
-<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/>
-<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/>
-<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/>
-<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/>
-<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/>
+<line class='plot-axis-line' x1='60' y1='40' x2='60' y2='290' stroke='#bbb'/>
+<line class='plot-axis-line' x1='60' y1='290' x2='580' y2='290' stroke='#bbb'/>
+<line class='plot-grid-line' x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb' stroke-width='1'/>
+<line class='plot-grid-line' x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb' stroke-width='1'/>
 <defs><clipPath id='RegionalSalesBar-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#RegionalSalesBar-plot-clip)'>
-<rect x='81.667' y='40' width='129' height='250' fill='#5470c6' data-row-index='0' data-extent-axis='y' data-extent-anchor='end'><title>$145,000</title></rect>
-<text x='146.167' y='37' text-anchor='middle' font-size='9' fill='#444'>$145,000</text>
-<rect x='255' y='96.897' width='129' height='193.103' fill='#5470c6' data-row-index='1' data-extent-axis='y' data-extent-anchor='end'><title>$112,000</title></rect>
-<text x='319.5' y='93.897' text-anchor='middle' font-size='9' fill='#444'>$112,000</text>
-<rect x='428.333' y='121.034' width='129' height='168.966' fill='#5470c6' data-row-index='2' data-extent-axis='y' data-extent-anchor='end'><title>$98,000</title></rect>
-<text x='492.833' y='118.034' text-anchor='middle' font-size='9' fill='#444'>$98,000</text>
+<rect x='81.667' y='40' width='129' height='250' rx='1' fill='#5470c6' data-extent-axis='y' data-extent-anchor='end' data-row-index='0'><title>$145,000</title></rect>
+<text x='146.167' y='36' text-anchor='middle' font-size='9' fill='#444' font-weight='normal'>$145,000</text>
+<rect x='255' y='96.897' width='129' height='193.103' rx='1' fill='#5470c6' data-extent-axis='y' data-extent-anchor='end' data-row-index='1'><title>$112,000</title></rect>
+<text x='319.5' y='92.897' text-anchor='middle' font-size='9' fill='#444' font-weight='normal'>$112,000</text>
+<rect x='428.333' y='121.034' width='129' height='168.966' rx='1' fill='#5470c6' data-extent-axis='y' data-extent-anchor='end' data-row-index='2'><title>$98,000</title></rect>
+<text x='492.833' y='117.034' text-anchor='middle' font-size='9' fill='#444' font-weight='normal'>$98,000</text>
 </g>
 <text class='plot-axis-label' data-axis-index='0' x='146.667' y='306' text-anchor='middle' font-size='9' fill='#666'>Americas</text>
 <text class='plot-axis-label' data-axis-index='1' x='320' y='306' text-anchor='middle' font-size='9' fill='#666'>EMEA</text>
