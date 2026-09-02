@@ -152,29 +152,25 @@ update_file "scripts/build-linux-packages.sh" \
     "\1${VERSION}\2"
 
 # User-facing docs (post-IA-restructure locations under docs/)
-update_file "docs/guides/faq.md" \
-    "(current release baseline is \*\*v)[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
-    "\1${VERSION}\2"
-
 # Release checklist target-version pointer. Single copy: the checklist is a maintainer procedure
 # and lives with the release notes it produces, not among the user-facing guides.
 update_file "docs/releases/release-checklist.md" \
     "(current target: \*\*)[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
     "\1${VERSION}\2"
 
-update_file "docs/guides/migration-guide.md" \
+update_file "docs/guides/onboarding/migration-guide.md" \
     "(ETL-SQL Migration Guide \(v)[0-9]+\.[0-9]+\.[0-9]+(\))" \
     "\1${VERSION}\2"
 
-update_file "docs/guides/migration-guide.md" \
+update_file "docs/guides/onboarding/migration-guide.md" \
     "(ETL-SQL v)[0-9]+\.[0-9]+\.[0-9]+( is the current release baseline)" \
     "\1${VERSION}\2"
 
-update_file "docs/guides/QUICKSTART.txt" \
-    "(ETL-SQL v)[0-9]+\.[0-9]+\.[0-9]+( Quickstart)" \
+update_file "docs/reference/performance/performance.md" \
+    "(\*\*Applies to ETL-SQL )[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
     "\1${VERSION}\2"
 
-update_file "docs/reference/performance/performance.md" \
+update_file "docs/syntax-index.md" \
     "(\*\*Applies to ETL-SQL )[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
     "\1${VERSION}\2"
 
@@ -195,34 +191,25 @@ update_file "SECURITY.md" \
 # README mirrors those baselines in a table, so it is bumped in one pass too.
 # NOTE: standards/*.md deliberately pin the version a standard was *established*
 # ("Applies to ETL-SQL 0.7.0 — Established with ...") and must NOT be bumped.
-update_file "docs/architecture/Connectors.md" \
+update_file "docs/architecture/connectors.md" \
     "(\*\*Applies to ETL-SQL )[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
     "\1${VERSION}\2"
 
-update_file "docs/architecture/Orchestrator.md" \
+update_file "docs/architecture/orchestrator.md" \
     "(\*\*Applies to ETL-SQL )[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
     "\1${VERSION}\2"
 
-update_file "docs/architecture/Lineage.md" \
+update_file "docs/architecture/lineage.md" \
     "(\*\*Applies to ETL-SQL )[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
     "\1${VERSION}\2"
 
-update_file "docs/architecture/Presentation.md" \
+update_file "docs/architecture/presentation.md" \
     "(\*\*Applies to ETL-SQL )[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
     "\1${VERSION}\2"
 
 # Architecture index table rows: "**Applies to ETL-SQL X.Y.Z**" (4 rows)
 update_file "docs/architecture/README.md" \
     "(\*\*Applies to ETL-SQL )[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
-    "\1${VERSION}\2"
-
-# Guides index table: migration-guide row mirrors its title + baseline sentence
-update_file "docs/guides/README.md" \
-    "(ETL-SQL Migration Guide \(v)[0-9]+\.[0-9]+\.[0-9]+(\))" \
-    "\1${VERSION}\2"
-
-update_file "docs/guides/README.md" \
-    "(ETL-SQL v)[0-9]+\.[0-9]+\.[0-9]+( is the current release baseline)" \
     "\1${VERSION}\2"
 
 echo ""

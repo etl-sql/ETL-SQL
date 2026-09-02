@@ -123,29 +123,25 @@ Update-File "scripts/build-linux-packages.sh" `
     "`${1}$Version`${2}"
 
 # User-facing docs (post-IA-restructure locations under docs/)
-Update-File "docs/guides/faq.md" `
-    '(current release baseline is \*\*v)\d+\.\d+\.\d+(\*\*)' `
-    "`${1}$Version`${2}"
-
 # Release checklist target-version pointer. Single copy: the checklist is a maintainer procedure
 # and lives with the release notes it produces, not among the user-facing guides.
 Update-File "docs/releases/release-checklist.md" `
     '(current target: \*\*)\d+\.\d+\.\d+(\*\*)' `
     "`${1}$Version`${2}"
 
-Update-File "docs/guides/migration-guide.md" `
+Update-File "docs/guides/onboarding/migration-guide.md" `
     '(ETL-SQL Migration Guide \(v)\d+\.\d+\.\d+(\))' `
     "`${1}$Version`${2}"
 
-Update-File "docs/guides/migration-guide.md" `
+Update-File "docs/guides/onboarding/migration-guide.md" `
     '(ETL-SQL v)\d+\.\d+\.\d+( is the current release baseline)' `
     "`${1}$Version`${2}"
 
-Update-File "docs/guides/QUICKSTART.txt" `
-    '(ETL-SQL v)\d+\.\d+\.\d+( Quickstart)' `
+Update-File "docs/reference/performance/performance.md" `
+    '(\*\*Applies to ETL-SQL )\d+\.\d+\.\d+(\*\*)' `
     "`${1}$Version`${2}"
 
-Update-File "docs/reference/performance/performance.md" `
+Update-File "docs/syntax-index.md" `
     '(\*\*Applies to ETL-SQL )\d+\.\d+\.\d+(\*\*)' `
     "`${1}$Version`${2}"
 
@@ -166,34 +162,25 @@ Update-File "SECURITY.md" `
 # README mirrors those baselines in a table, so it is bumped in one pass too.
 # NOTE: standards/*.md deliberately pin the version a standard was *established*
 # ("Applies to ETL-SQL 0.7.0 — Established with ...") and must NOT be bumped.
-Update-File "docs/architecture/Connectors.md" `
+Update-File "docs/architecture/connectors.md" `
     '(\*\*Applies to ETL-SQL )\d+\.\d+\.\d+(\*\*)' `
     "`${1}$Version`${2}"
 
-Update-File "docs/architecture/Orchestrator.md" `
+Update-File "docs/architecture/orchestrator.md" `
     '(\*\*Applies to ETL-SQL )\d+\.\d+\.\d+(\*\*)' `
     "`${1}$Version`${2}"
 
-Update-File "docs/architecture/Lineage.md" `
+Update-File "docs/architecture/lineage.md" `
     '(\*\*Applies to ETL-SQL )\d+\.\d+\.\d+(\*\*)' `
     "`${1}$Version`${2}"
 
-Update-File "docs/architecture/Presentation.md" `
+Update-File "docs/architecture/presentation.md" `
     '(\*\*Applies to ETL-SQL )\d+\.\d+\.\d+(\*\*)' `
     "`${1}$Version`${2}"
 
 # Architecture index table rows: "**Applies to ETL-SQL X.Y.Z**" (4 rows, replace-all)
 Update-File "docs/architecture/README.md" `
     '(\*\*Applies to ETL-SQL )\d+\.\d+\.\d+(\*\*)' `
-    "`${1}$Version`${2}"
-
-# Guides index table: migration-guide row mirrors its title + baseline sentence
-Update-File "docs/guides/README.md" `
-    '(ETL-SQL Migration Guide \(v)\d+\.\d+\.\d+(\))' `
-    "`${1}$Version`${2}"
-
-Update-File "docs/guides/README.md" `
-    '(ETL-SQL v)\d+\.\d+\.\d+( is the current release baseline)' `
     "`${1}$Version`${2}"
 
 Write-Host ""

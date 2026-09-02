@@ -1,4 +1,4 @@
-﻿# ETL-SQL Release Checklist
+# ETL-SQL Release Checklist
 
 A physical, copy-pasteable checklist for cutting a release. It wraps the real scripts under
 `scripts/` so a release is reproducible and auditable. Strategy and rationale live in
@@ -19,7 +19,7 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 > external CI/operator evidence. Complete every applicable checkbox in this document before tagging;
 > a green local gate alone is necessary but not sufficient.
 
-Replace `x.y.z` with the target version (current target: **0.18.0**) throughout.
+Replace `x.y.z` with the target version (current target: **0.19.0**) throughout.
 
 ---
 
@@ -421,7 +421,7 @@ passed.
 
 ## Phase 6 — Post-release
 
-- [ ] `docs/guides/faq.md` / `docs/guides/migration-guide.md` baseline lines reflect x.y.z (Set-Version updates these — confirm).
+- [ ] `docs/guides/onboarding/migration-guide.md` baseline lines reflect x.y.z (Set-Version updates these — confirm).
 - [ ] Open a fresh `## [Unreleased]` section in `CHANGELOG.md`.
 - [ ] **Re-enable Dependabot.** Restore any commented-out or paused Dependabot schedules in `.github/dependabot.yml`.
 - [ ] Move any deferred work back to `ROADMAP.md` / `TODO.md`.
