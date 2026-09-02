@@ -6774,3 +6774,86 @@ body.vscode-dark .etlsql-cw-missing-hint {
     outline: 2px solid var(--portal-accent, #58a6ff);
     outline-offset: 2px;
 }
+
+/* ── The positional scope inspector ────────────────────────────────────────
+   What the selected task can see from where it sits. Names are buttons because each one goes back
+   to the line that produced it — the panel is a way into the script, not a read-only list. */
+
+.etlsql-studio-pipeline-scope {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--portal-border, #30363d);
+}
+
+.etlsql-studio-pipeline-scope-head {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.etlsql-studio-pipeline-scope-empty,
+.etlsql-studio-pipeline-scope-runtime {
+    margin: 6px 0 0;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+    line-height: 1.4;
+}
+
+.etlsql-studio-pipeline-scope-runtime span {
+    color: var(--portal-text, #f0f6fc);
+    font-weight: 600;
+}
+
+.etlsql-studio-scope-list {
+    margin: 0 0 6px;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.etlsql-studio-scope-item {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.6875rem;
+}
+
+.etlsql-studio-scope-item.is-temp .etlsql-studio-scope-name code {
+    color: var(--portal-success, #3fb950);
+}
+
+.etlsql-studio-scope-name {
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+}
+
+.etlsql-studio-scope-name code {
+    color: var(--portal-accent, #58a6ff);
+    font-size: 0.6875rem;
+}
+
+.etlsql-studio-scope-name:hover code,
+.etlsql-studio-scope-name:focus-visible code {
+    text-decoration: underline;
+}
+
+.etlsql-studio-scope-type,
+.etlsql-studio-scope-value {
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.625rem;
+}
+
+.etlsql-studio-scope-origin {
+    margin-left: auto;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.625rem;
+    opacity: 0.8;
+}

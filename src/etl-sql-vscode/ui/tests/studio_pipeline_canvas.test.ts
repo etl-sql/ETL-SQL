@@ -428,6 +428,98 @@ describe('Pipeline task editing layer', () => {
         expect(host.textContent).toContain('#regions');
     });
 
+    test('the scope panel lists what is in scope, and each name goes back to its line', () => {
+        card('load_orders');
+        const lines: number[] = [];
+
+        attach(host, canvas, {
+            tasks,
+            selectedId: 'load_orders',
+            onOpenLine: (line: number) => { lines.push(line); },
+            scope: {
+                resolved: true,
+                variables: [{ name: '@batch', type: 'VARCHAR', value: "'B-001'", line: 3, origin: 'declared' }],
+                tempTables: [{ name: '#orders', columns: [{ name: 'OrderId' }], line: 5, origin: 'SELECT INTO' }],
+            },
+        });
+
+        const panel = host.querySelector('[data-task-scope]') as HTMLElement;
+        expect(panel.textContent).toContain('@batch');
+        expect(panel.textContent).toContain('VARCHAR');
+        expect(panel.textContent).toContain('#orders');
+        expect(panel.textContent).toContain('OrderId');
+
+        (panel.querySelector('[data-scope-line="5"]') as HTMLElement).click();
+        expect(lines).toEqual([5]);
+    });
+
+    test('an empty scope and an unknown scope are different answers', () => {
+        card('load_orders');
+
+        // Nothing above the task: a real, empty scope.
+        attach(host, canvas, {
+            tasks,
+            selectedId: 'load_orders',
+            scope: { resolved: true, variables: [], tempTables: [] },
+        });
+        expect(host.querySelector('[data-task-scope]')!.textContent).toContain('Nothing yet');
+
+        // The host could not tell. Rendering that as "nothing is in scope" is how a panel quietly lies.
+        attach(host, canvas, {
+            tasks,
+            selectedId: 'load_orders',
+            scope: { resolved: false, error: "'load_orders' is not a task in this script." },
+        });
+        const unresolved = host.querySelector('[data-task-scope]')!.textContent!;
+        expect(unresolved).toContain('is not a task in this script');
+        expect(unresolved).not.toContain('Nothing yet');
+
+        // No answer at all yet.
+        attach(host, canvas, { tasks, selectedId: 'load_orders' });
+        expect(host.querySelector('[data-task-scope]')!.textContent).toContain('Reading the script');
+    });
+
+    test('row counts appear only when a run reported them for this task', () => {
+        card('load_orders');
+
+        attach(host, canvas, {
+            tasks,
+            selectedId: 'load_orders',
+            scope: { resolved: true, variables: [], tempTables: [] },
+        });
+        // A zero here would read as "this task produced no rows", which is a result, not a silence.
+        expect(host.querySelector('[data-task-scope]')!.textContent).toContain('after a run');
+        expect(host.querySelector('[data-task-scope]')!.textContent).not.toContain('Last run');
+
+        attach(host, canvas, {
+            tasks,
+            selectedId: 'load_orders',
+            scope: { resolved: true, variables: [], tempTables: [] },
+            runtime: { rows: 1200, durationMs: 42.4, status: 'Completed', note: 'Spilled to disk.' },
+        });
+        const measured = host.querySelector('[data-task-scope]')!.textContent!;
+        expect(measured).toContain('Last run');
+        expect(measured).toMatch(/1,?200 rows/);
+        expect(measured).toContain('Spilled to disk.');
+    });
+
+    test('a scope value is escaped, never rendered as markup', () => {
+        card('load_orders');
+
+        attach(host, canvas, {
+            tasks,
+            selectedId: 'load_orders',
+            scope: {
+                resolved: true,
+                variables: [{ name: '@x', type: null, value: '<img src=x onerror=alert(1)>', line: 1, origin: 'declared' }],
+                tempTables: [],
+            },
+        });
+
+        expect(host.querySelector('img')).toBeNull();
+        expect(host.querySelector('[data-task-scope]')!.textContent).toContain('<img src=x onerror=alert(1)>');
+    });
+
     test('dispose removes the handlers it added', () => {
         const target = card('archive_orders');
         const moves: any[] = [];

@@ -91,9 +91,13 @@ selected point.
   for. Concurrency is only ever a `PARALLEL` block the author added: two of its branches cannot be
   given an order, and a task that already waits for one of them is refused entry rather than quietly
   losing the edge.
-- [ ] **Add the positional scope inspector**: At the selected node, show in-scope variables,
-  variable sets, and `#temp` tables. Include row counts and memory/spill information when runtime
-  state is available.
+- [x] **Add the positional scope inspector**: Selecting a task shows the variables it can read —
+  declared, assigned, or bound by an enclosing loop — and the `#temp` tables that exist by then, each
+  linked back to the line that produced it. Positional, not script-wide: a name declared below the
+  task is not in scope, enclosing blocks are, and what a sibling `PARALLEL` branch staged is not.
+  "No answer yet", "resolved and empty", and "could not tell" are three distinct renderings, because
+  collapsing them is how a panel quietly lies. Row counts and spill appear only when a run reported
+  them for that task, matched by name against the engine's execution tree.
 - [ ] **Add Run to Selected Node**: Execute through a selected node and populate intermediate
   variables and `#temp` tables in Results. Define safe behavior for remote side effects before
   enabling the action on mutating tasks.

@@ -147,6 +147,8 @@ export function taskKindLabel(kind) {
  * @param onNest     `({ id, container }) => Promise<void>` — container null means "move out".
  * @param onRemove   `({ id }) => Promise<void>`
  * @param onOpenLine `(line) => void`, to reveal the task in the script.
+ * @param scope      `{ resolved, error, variables, tempTables }` in scope where the task sits, or null.
+ * @param runtime    `{ rows, durationMs, note }` the last run reported for it, or null.
  * @returns `{ dispose }`
  */
 export function attachPipelineTaskEditing(host, canvas, {
@@ -163,6 +165,8 @@ export function attachPipelineTaskEditing(host, canvas, {
     onUpdate = async () => {},
     onRemove = async () => {},
     onOpenLine = () => {},
+    scope = null,
+    runtime = null,
 } = {}) {
     const selected = tasks.find(task => sameId(task.id, selectedId)) || null;
     const listeners = [];
@@ -191,6 +195,12 @@ export function attachPipelineTaskEditing(host, canvas, {
     }
 
     const inspector = host.querySelector('[data-task-inspector]');
+    if (selected) {
+        inspector.insertAdjacentHTML('beforeend', scopeMarkup(scope, runtime));
+        for (const link of inspector.querySelectorAll('[data-scope-line]')) {
+            on(link, 'click', () => onOpenLine(Number(link.dataset.scopeLine) || 0));
+        }
+    }
 
     const edit = inspector.querySelector('[data-task-edit]');
     if (edit) on(edit, 'click', () => onEdit({ id: selected.id }));
@@ -459,6 +469,100 @@ function dependencyRow(dependency) {
         <button type="button" data-task-disconnect="${escapeHtml(dependency.id)}"
             aria-label="Stop waiting for ${escapeHtml(dependency.id)}" title="Remove this dependency">&times;</button>
     </span>`;
+}
+
+/**
+ * What the selected task can see from where it sits, and what the last run said about it.
+ *
+ * Positional on purpose. A panel listing every name in the file would tell the author they can read
+ * a variable declared below this task or a `#temp` created after it — true of the file, false of the
+ * moment the task runs, and only discoverable at run time.
+ *
+ * `null` scope means the host has not answered yet; an unresolved scope means it answered that it
+ * could not tell. Neither is rendered as "nothing is in scope", because that is a different claim.
+ */
+function scopeMarkup(scope, runtime) {
+    if (!scope) {
+        return `<div class="etlsql-studio-pipeline-scope" data-task-scope>
+            <span class="etlsql-studio-pipeline-scope-head">In scope here</span>
+            <p class="etlsql-studio-pipeline-scope-empty">Reading the script…</p>
+        </div>`;
+    }
+
+    if (scope.resolved === false) {
+        return `<div class="etlsql-studio-pipeline-scope" data-task-scope>
+            <span class="etlsql-studio-pipeline-scope-head">In scope here</span>
+            ${noteMarkup([scope.error || 'The script could not be read.'], 'warning')}
+        </div>`;
+    }
+
+    const variables = scope.variables ?? [];
+    const tempTables = scope.tempTables ?? [];
+
+    const body = !variables.length && !tempTables.length
+        ? `<p class="etlsql-studio-pipeline-scope-empty">Nothing yet. Everything this task reads has to be
+            declared or staged above it — the engine runs the script top to bottom.</p>`
+        : `${variables.length ? `<ul class="etlsql-studio-scope-list">
+                ${variables.map(scopeVariableRow).join('')}
+            </ul>` : ''}
+           ${tempTables.length ? `<ul class="etlsql-studio-scope-list">
+                ${tempTables.map(scopeTempRow).join('')}
+            </ul>` : ''}`;
+
+    return `<div class="etlsql-studio-pipeline-scope" data-task-scope>
+        <span class="etlsql-studio-pipeline-scope-head">In scope here</span>
+        ${body}
+        ${runtimeMarkup(runtime)}
+    </div>`;
+}
+
+function scopeVariableRow(variable) {
+    const origin = variable.origin === 'loop' ? 'per item'
+        : variable.origin === 'assigned' ? 'set' : 'declared';
+
+    return `<li class="etlsql-studio-scope-item is-variable">
+        <button type="button" class="etlsql-studio-scope-name" data-scope-line="${escapeHtml(String(variable.line ?? 0))}"
+            title="Show line ${escapeHtml(String(variable.line ?? 0))} in the script"><code>${escapeHtml(variable.name)}</code></button>
+        ${variable.type ? `<span class="etlsql-studio-scope-type">${escapeHtml(variable.type)}</span>` : ''}
+        ${variable.value ? `<code class="etlsql-studio-scope-value">${escapeHtml(variable.value)}</code>` : ''}
+        <span class="etlsql-studio-scope-origin">${escapeHtml(origin)}</span>
+    </li>`;
+}
+
+function scopeTempRow(table) {
+    const columns = table.columns ?? [];
+
+    return `<li class="etlsql-studio-scope-item is-temp">
+        <button type="button" class="etlsql-studio-scope-name" data-scope-line="${escapeHtml(String(table.line ?? 0))}"
+            title="Show line ${escapeHtml(String(table.line ?? 0))} in the script"><code>${escapeHtml(table.name)}</code></button>
+        ${columns.length
+            ? `<span class="etlsql-studio-scope-type">${escapeHtml(columns.map(column => column.name).join(', '))}</span>`
+            : ''}
+        <span class="etlsql-studio-scope-origin">${escapeHtml(table.origin || '')}</span>
+    </li>`;
+}
+
+/**
+ * What the last run measured here.
+ *
+ * Row counts and spill are run-time facts, so they are shown only when a run actually reported them
+ * for this task. Rendering a zero when nothing has run yet would read as "this produced no rows".
+ */
+function runtimeMarkup(runtime) {
+    if (!runtime) {
+        return `<p class="etlsql-studio-pipeline-scope-empty">Row counts and spill appear here after a run
+            reports them for this task.</p>`;
+    }
+
+    const parts = [];
+    if (Number.isFinite(runtime.rows)) parts.push(`${runtime.rows.toLocaleString()} row${runtime.rows === 1 ? '' : 's'}`);
+    if (Number.isFinite(runtime.durationMs)) parts.push(`${Math.round(runtime.durationMs)} ms`);
+    if (runtime.status) parts.push(String(runtime.status));
+
+    return `<p class="etlsql-studio-pipeline-scope-runtime">
+        <span>Last run</span> ${escapeHtml(parts.join(' · '))}
+        ${runtime.note ? `<em>${escapeHtml(runtime.note)}</em>` : ''}
+    </p>`;
 }
 
 /**

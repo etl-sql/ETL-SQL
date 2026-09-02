@@ -44,6 +44,7 @@ public class DesignerController : ControllerBase
     private readonly DesignerSnapshotService? _snapshots;
     private readonly ScriptDagProjectionService _scriptDag;
     private readonly PipelineTaskAuthoringService _pipelineTasks = new();
+    private readonly ScriptScopeService _pipelineScope = new();
     private readonly DesignerQueryFilterService _queryFilters = new();
     private readonly LanguageHoverService? _hoverService;
 
@@ -238,6 +239,40 @@ public class DesignerController : ControllerBase
         string.IsNullOrWhiteSpace(edge) ? PipelineEdgeCondition.Always
         : Enum.TryParse<PipelineEdgeCondition>(edge, ignoreCase: true, out var parsed) ? parsed
         : null;
+
+    // ── POST /api/designer/pipeline-scope ────────────────────────────────────
+    // What a selected task can see from where it sits. Positional, not script-wide: a variable
+    // declared below a task is not one it can read, and a `#temp` created below it does not exist
+    // yet, so a flat list of every name in the file would tell the author they can use things that
+    // are not there — wrong only at run time, which is the most expensive place to find out.
+
+    [HttpPost("pipeline-scope")]
+    [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public IActionResult PipelineScope([FromBody] PipelineScopeRequest req)
+    {
+        if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
+            return limitResult;
+
+        if (!TryEnterDesignerGate(out var gate))
+            return DesignerBusy();
+
+        try
+        {
+            var scope = _pipelineScope.At(req.Script, req.Id);
+            return Ok(new
+            {
+                resolved = scope.Resolved,
+                error = scope.Error,
+                variables = scope.Variables,
+                tempTables = scope.TempTables,
+            });
+        }
+        finally
+        {
+            gate?.Release();
+        }
+    }
 
     // ── POST /api/designer/parse ──────────────────────────────────────────────
 

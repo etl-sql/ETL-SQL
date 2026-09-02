@@ -183,6 +183,9 @@ public record PipelineTaskDto(
 /// <param name="Condition">always | onsuccess | onfailure | oncompletion | expression.</param>
 public record PipelineDependencyDto(string Id, string Condition, string? Expression = null);
 
+/// <summary>Which task's scope to report. The script is read as the author currently has it.</summary>
+public record PipelineScopeRequest(string? Script, string? Id);
+
 public record DesignerStateDto(
     List<DesignerPageDto> Pages,
     List<DesignerDatasetDto> Datasets,

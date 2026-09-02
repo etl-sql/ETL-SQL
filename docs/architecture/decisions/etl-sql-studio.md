@@ -422,6 +422,29 @@ be worse than no scope at all.
   scope is drawn as a `transaction` node without the rollback handler the canvas emitted, because
   that boilerplate is not a stage anyone authored.
 
+### The positional scope inspector
+
+Selecting a task shows what it can read **from where it sits**: variables (declared, assigned, or
+bound by an enclosing loop) and `#temp` tables, each linked back to the line that produced it.
+
+Positional is the whole claim. ETL-SQL runs a script top to bottom, so a variable declared below a
+task is not one that task can read, and a `#temp` created below it does not exist yet. A panel
+listing every name in the file would be telling the author they can use things that are not there —
+true of the file, false of the moment the task runs, and only discoverable at run time. Enclosing
+blocks count and bring their loop variables with them; what a sibling branch staged does not.
+
+Three answers are kept distinct, because collapsing them is how a panel quietly lies:
+
+| The host said | The panel says |
+| :--- | :--- |
+| nothing yet (no answer) | "Reading the script…" |
+| resolved, with nothing above the task | "Nothing yet" and why |
+| unresolved, with a reason | the reason |
+
+Row counts and spill are run-time facts, so they appear only when a run actually reported them for
+that task — matched by name against the engine's execution tree. A zero row count for a task that
+has never run would read as a result rather than a silence.
+
 Every conditional edge is drawn with its own colour **and** its own stroke pattern, and keeps the
 words on its badge — colour alone would make on-success and on-failure indistinguishable to a
 red/green colour-blind reader or on a printed map. The style is derived from the edge label in the

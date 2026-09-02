@@ -12,6 +12,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added a positional scope inspector to the Studio pipeline canvas. Selecting a task shows the
+  variables and `#temp` tables it can actually read from where it sits — including an enclosing
+  loop's item variable, and excluding anything declared below it — with each name linking back to
+  the line that produced it. Row counts and spill appear once a run reports them for that task.
+
 - Added control-flow containers to the Studio pipeline canvas. `PARALLEL`, `FOREACH`, and
   transaction scopes are palette kinds that hold other tasks: drop a task onto one to put it inside,
   and its statement is relocated rather than regenerated. Concurrency is written only as a

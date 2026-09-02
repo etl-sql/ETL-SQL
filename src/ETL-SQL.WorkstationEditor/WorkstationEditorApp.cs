@@ -541,6 +541,7 @@ public static class WorkstationEditorApp
 
         var designerParsing = new ETL_SQL.Reporting.Authoring.DesignerScriptParsingService();
         var pipelineTasks = new ETL_SQL.Analysis.Services.PipelineTaskAuthoringService();
+        var pipelineScope = new ETL_SQL.Analysis.Services.ScriptScopeService();
         var designerGen = new ETL_SQL.Reporting.Authoring.DesignerScriptGenerationService();
         var designerPatcher = new ETL_SQL.Reporting.Authoring.DesignerScriptPatcher(designerGen);
         var designerQueryFilters = new ETL_SQL.Reporting.Authoring.DesignerQueryFilterService();
@@ -586,10 +587,22 @@ public static class WorkstationEditorApp
                     request.Recipient,
                     request.Sender,
                     request.Subject,
-                    request.After)),
-                "update" => pipelineTasks.Update(script, request.Id ?? string.Empty, request.NewId, request.Connection, request.Body),
+                    request.After,
+                    request.Variable,
+                    request.Collection)),
+                "update" => pipelineTasks.Update(
+                    script, request.Id ?? string.Empty, request.NewId, request.Connection, request.Body,
+                    request.Variable, request.Collection),
                 "move" => pipelineTasks.Move(script, request.Id ?? string.Empty, request.After),
-                "connect" => pipelineTasks.Connect(script, request.After ?? string.Empty, request.Id ?? string.Empty),
+                "nest" => pipelineTasks.Nest(script, request.Id ?? string.Empty, request.After),
+                // An edge condition that the host does not recognise is refused rather than quietly
+                // written as plain precedence: it decides which control flow goes into the file.
+                "connect" => Enum.TryParse<ETL_SQL.Analysis.Services.PipelineEdgeCondition>(
+                        string.IsNullOrWhiteSpace(request.Edge) ? "Always" : request.Edge,
+                        ignoreCase: true,
+                        out var edge)
+                    ? pipelineTasks.Connect(script, request.After ?? string.Empty, request.Id ?? string.Empty, edge, request.Expression)
+                    : ETL_SQL.Analysis.Services.PipelineEditResult.Refused(script, $"Unknown edge condition '{request.Edge}'."),
                 "disconnect" => pipelineTasks.Disconnect(script, request.After ?? string.Empty, request.Id ?? string.Empty),
                 "remove" => pipelineTasks.Remove(script, request.Id ?? string.Empty),
                 "read" => ETL_SQL.Analysis.Services.PipelineEditResult.Ok(script),
@@ -609,9 +622,34 @@ public static class WorkstationEditorApp
                         connection = task.Connection,
                         body = task.Body,
                         line = task.Line,
-                        dependsOn = task.DependsOn,
+                        dependsOn = task.DependsOn.Select(dependency => new
+                        {
+                            id = dependency.Id,
+                            condition = dependency.Condition.ToString().ToLowerInvariant(),
+                            expression = dependency.Expression,
+                        }).ToList(),
+                        guarded = task.Guarded,
+                        container = task.Container,
+                        variable = task.Variable,
+                        collection = task.Collection,
                     })
                     .ToList(),
+            }, JsonOptions);
+        });
+
+        // What a selected task can see from where it sits. Positional, not script-wide: a variable
+        // declared below a task is not one it can read, and a #temp created below it does not exist
+        // yet, so a flat list of every name in the file would be telling the author they can use
+        // things that are not there.
+        app.MapPost("/api/designer/pipeline-scope", (PipelineScopeAuthoringRequest request) =>
+        {
+            var scope = pipelineScope.At(request.Script, request.Id);
+            return Results.Json(new
+            {
+                resolved = scope.Resolved,
+                error = scope.Error,
+                variables = scope.Variables,
+                tempTables = scope.TempTables,
             }, JsonOptions);
         });
 
@@ -978,7 +1016,12 @@ public sealed record PipelineTaskAuthoringRequest(
     string? Recipient = null,
     string? Sender = null,
     string? Subject = null,
-    string? After = null);
+    string? After = null,
+    string? Edge = null,
+    string? Expression = null,
+    string? Variable = null,
+    string? Collection = null);
+public sealed record PipelineScopeAuthoringRequest(string? Script, string? Id);
 public sealed record ApplyDesignerQueryFiltersAuthoringRequest(
     string Source,
     List<ETL_SQL.Reporting.Authoring.DesignerQueryFilter> Filters,

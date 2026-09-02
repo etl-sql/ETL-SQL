@@ -118,6 +118,8 @@ export function makeMockApi(seedState) {
       };
     } else if (path.endsWith('/api/designer/pipeline-task')) {
       data = mockPipelineTask(body);
+    } else if (path.endsWith('/api/designer/pipeline-scope')) {
+      data = mockPipelineScope(body);
     } else if (path.endsWith('/api/designer/analyze')) {
       data = { diagnostics: analyzeMockScript(body.script ?? '') };
     } else if (path.endsWith('/api/designer/complete')) {
@@ -1659,6 +1661,49 @@ function waitsOn(tasks, taskId, candidate) {
     for (const dependency of task?.dependsOn ?? []) pending.push(dependency.id);
   }
   return false;
+}
+
+/**
+ * What a task can see from where it sits.
+ *
+ * Positional, like the host's: only what is written above the task's label counts. A flat scan of the
+ * whole script would make the sandbox teach the UI a claim the host does not make.
+ */
+function mockPipelineScope(body) {
+  const script = body.script || '';
+  const id = String(body.id || '');
+  if (!id) return { resolved: false, error: 'No task is selected.', variables: [], tempTables: [] };
+
+  const label = new RegExp(`^[ \\t]*${id.replace(/[^\\w]/g, '')}[ \\t]*:`, 'm').exec(script);
+  if (!label) return { resolved: false, error: `'${id}' is not a task in this script.`, variables: [], tempTables: [] };
+
+  const above = script.slice(0, label.index);
+  const lineOf = index => above.slice(0, index).split('\n').length;
+
+  const variables = [];
+  const seenVariables = new Set();
+  for (const match of above.matchAll(/^[ \t]*DECLARE[ \t]+(@[A-Za-z_]\w*)[ \t]+([A-Za-z]\w*(?:\([^)]*\))?)[ \t]*(?:=[ \t]*([^;]+))?;/gim)) {
+    if (seenVariables.has(match[1].toLowerCase())) continue;
+    seenVariables.add(match[1].toLowerCase());
+    variables.push({
+      name: match[1], type: match[2], value: match[3]?.trim() ?? null,
+      line: lineOf(match.index), origin: 'declared',
+    });
+  }
+
+  const tempTables = [];
+  const seenTables = new Set();
+  for (const match of above.matchAll(/\bINTO[ \t]+(#\w+)|CREATE[ \t]+TABLE[ \t]+(#\w+)/gi)) {
+    const name = match[1] || match[2];
+    if (seenTables.has(name.toLowerCase())) continue;
+    seenTables.add(name.toLowerCase());
+    tempTables.push({
+      name, columns: [], line: lineOf(match.index),
+      origin: match[1] ? 'SELECT INTO' : 'CREATE TABLE',
+    });
+  }
+
+  return { resolved: true, error: null, variables, tempTables };
 }
 
 /** The sandbox's pipeline editor. Refusals are real, so the UI's error path gets exercised. */

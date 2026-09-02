@@ -770,7 +770,87 @@ export async function createStudioWorkbench(container, opts = {}) {
                     if (doc.projection === 'canvas') setProjection('split');
                     state.editorInstance?.gotoLine?.(line);
                 },
+                // What the selected task can see, and what the last run measured there. The scope is
+                // read for the script exactly as it stands, so it follows a hand edit like the map does.
+                scope: scopeFor(doc, state.selectedTaskId),
+                runtime: runtimeFor(doc, state.selectedTaskId),
             });
+
+        void refreshPipelineScope(doc, state.selectedTaskId);
+    }
+
+    /** The cached scope for this task, when it was read from the script the document now holds. */
+    function scopeFor(doc, taskId) {
+        if (!taskId) return null;
+        const cached = documentContext(doc).taskScope;
+        return cached
+            && cached.script === doc.content
+            && String(cached.taskId).toLowerCase() === String(taskId).toLowerCase()
+            ? cached.data
+            : null;
+    }
+
+    /**
+     * Reads the scope for the selected task and repaints when the answer is new.
+     *
+     * Fired after the canvas is drawn rather than before it, so selecting a task never waits on a
+     * round trip to show the task itself.
+     */
+    async function refreshPipelineScope(doc, taskId) {
+        if (!taskId || scopeFor(doc, taskId)) return;
+        const context = documentContext(doc);
+        const content = doc.content;
+
+        try {
+            const response = await authFetch(apiBase + STUDIO_ROUTES.pipelineScope, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script: content, id: taskId, documentUri: doc.path || doc.name }),
+            });
+            // A host that does not serve the route leaves the panel saying it is still reading rather
+            // than claiming the task has nothing in scope.
+            if (!response.ok) return;
+            context.taskScope = { script: content, taskId, data: await response.json() };
+        } catch {
+            return;
+        }
+
+        if (getActiveDoc() === doc && doc.content === content
+            && String(state.selectedTaskId ?? '').toLowerCase() === String(taskId).toLowerCase()) {
+            renderVisualStage();
+        }
+    }
+
+    /**
+     * What the last run reported for this task, or null.
+     *
+     * Matched by name against the engine's execution tree. Only a stage the engine actually named
+     * counts: inventing a zero row count for a task that has never run would read as a result.
+     */
+    function runtimeFor(doc, taskId) {
+        if (!taskId) return null;
+        const progress = (documentContext(doc).resultsTrace ?? [])
+            .filter(entry => entry?.type === 'progress')
+            .at(-1)?.data;
+        if (!Array.isArray(progress)) return null;
+
+        const wanted = String(taskId).toLowerCase();
+        const stack = [...progress];
+        while (stack.length) {
+            const stage = stack.pop();
+            if (!stage) continue;
+            if (Array.isArray(stage.children)) stack.push(...stage.children);
+            if (!String(stage.name ?? '').toLowerCase().includes(wanted)) continue;
+
+            return {
+                rows: Number.isFinite(stage.rowsProcessed) ? stage.rowsProcessed : null,
+                durationMs: Number.isFinite(stage.durationMs) ? stage.durationMs : null,
+                status: stage.status || null,
+                note: stage.spilled ? 'Spilled to disk.' : null,
+            };
+        }
+
+        return null;
     }
 
     /** A label that is not already taken, so Add never fails on a name the author did not choose. */
