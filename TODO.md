@@ -188,9 +188,28 @@ then expose advanced inspection views that do not block basic authoring.
   vocabulary is decided server-side in `DesignerQueryFilterService`, so the pane sends a word and
   never composes SQL; an unknown operator is refused rather than falling back to a range, and a
   condition chosen before its value filters nothing rather than failing.
-- [ ] **Complete paginated report authoring and export**: Provide group/detail sections, totals,
-  headers and footers, page size, orientation, margins, explicit breaks, repeating table headers,
-  parameter prompting, pagination preview, and verified multi-page PDF export from Studio.
+- [x] **Complete paginated report authoring and export**: Group/detail bands, totals, header and
+  footer bands, page size, orientation, margins, and explicit breaks were already authored by the
+  guided steps. What was missing was the end of the job. **Export** is now an action rather than a
+  page of instructions telling the author to find the PDF export elsewhere: Studio posts the buffer
+  to `/api/designer/preview/pdf` — served by both hosts, so the step is not a button that 404s on
+  the desktop — and hands back a file. **Parameter prompting** asks the report's `INPUT` questions
+  before a preview or an export and seeds the answers the way `--var` does, with cancel meaning the
+  run does not happen rather than the defaults being used. Three defects were in the way, each of
+  which made the exported file wrong rather than absent: a paginated page's visuals are deliberately
+  deferred until a reader presses Run, so an export produced pages with no data (an export now runs
+  every page); the exporter opened a section per declared page *after* a heading section laid out
+  with A4 defaults, so a Letter landscape report exported a stray portrait sheet and every page
+  count was one too high; and `CliContext.Variables` — the mechanism the CLI uses for `--var` — was
+  read by the CLI alone, so a value supplied by any other host was silently dropped. **Pagination
+  preview** is now the engine's own compiled breakdown rather than the canvas's page-width sheet: the
+  step asks for the manifest with every page run and lists each physical page with what lands on it,
+  including the row ranges a split detail table continues from, so what it shows is what the PDF
+  contains. Verified rather
+  than asserted: the exporter tests read the page count back out of the produced PDF, check that an
+  explicit break adds a page and an excluded visual does not, and decode the page content streams to
+  prove a split table repeats its column headings; a Portal integration test exports the sample
+  connector's order table across several pages and proves a prompt's answer changes the document.
 - [ ] **Add the document outline and layer tree**: Show pages, containers/rows, and visuals with
   reorder, z-index, lock, and visibility controls.
 - [ ] **Add the data-model / ER view**: Show connections, `#temp` tables, CTEs, joins, foreign keys,

@@ -629,7 +629,8 @@ public class DesignerController : ControllerBase
 
         try
         {
-            var manifest = await _previewService.BuildPreviewAsync(req.Script, req.Page, User, cancellationToken);
+            var manifest = await _previewService.BuildPreviewAsync(
+                req.Script, req.Page, req.RunEveryPage, User, cancellationToken, req.Parameters);
             return this.BrowserManifest(manifest);
         }
         catch (ArgumentException ex)
@@ -725,7 +726,10 @@ public class DesignerController : ControllerBase
 
         try
         {
-            var manifest = await _previewService.BuildPreviewAsync(req.Script, req.Page, User, cancellationToken);
+            // An export is the finished document, so every page is run rather than left waiting
+            // for the reader to press Run — a deferred page exports as an empty sheet.
+            var manifest = await _previewService.BuildPreviewAsync(
+                req.Script, req.Page, runEveryPage: true, User, cancellationToken, req.Parameters);
             var exporter = new ETL_SQL.Reporting.ReportPdfExporter();
             var pdfBytes = await exporter.ExportAsync(manifest, new ETL_SQL.Reporting.PdfExportOptions
             {

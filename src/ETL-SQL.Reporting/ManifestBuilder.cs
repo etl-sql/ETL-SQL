@@ -43,11 +43,17 @@ namespace ETL_SQL.Reporting
         /// Builds the manifest by querying each visual's data source.
         /// Must be called after the script has been fully evaluated.
         /// </summary>
+        /// <param name="deferPaginatedPages">
+        /// Screen default: a paginated page waits for the reader to fill in its prompts and click
+        /// Run, so its visuals are built without data. An export has no such moment — the file is
+        /// the finished document — so an exporter passes false and every page is fetched.
+        /// </param>
         public async Task<ReportManifest> BuildAsync(
             string scriptSource,
             Dictionary<string, string>? interactionValues = null,
             bool skipDeferredVisuals = false,
-            IReadOnlySet<string>? runPages = null)
+            IReadOnlySet<string>? runPages = null,
+            bool deferPaginatedPages = true)
         {
             var manifest = new ReportManifest
             {
@@ -91,7 +97,9 @@ namespace ETL_SQL.Reporting
                     _ctx.VarContext.DeclareVariable(v, null);
             }
 
-            var deferredVisuals = DetermineDeferredVisuals(runPages);
+            var deferredVisuals = deferPaginatedPages
+                ? DetermineDeferredVisuals(runPages)
+                : [];
 
             // ── Visuals ──────────────────────────────────────────────────────
             await BuildVisualsAsync(manifest, interactionValues, deferredVisuals, reportPalette);

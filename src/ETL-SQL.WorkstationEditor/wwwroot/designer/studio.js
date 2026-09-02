@@ -354,7 +354,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     // One run path for "Run all" and "Run selected". Results, messages, the execution pipeline, and
     // performance all flow into the shared results panel as a trace, so a failure lands on the
     // Messages tab with the real reason instead of being painted as a success.
-    async function executeRun(doc, { script, selection = null, label }) {
+    async function executeRun(doc, { script, selection = null, label, parameters = null }) {
         const context = documentContext(doc);
         context.runAbort?.abort();
         const controller = new AbortController();
@@ -367,9 +367,15 @@ export async function createStudioWorkbench(container, opts = {}) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: controller.signal,
-                body: JSON.stringify(selection === null
-                    ? { script, connectionRef: context.selectedSource?.connection || null, documentUri: doc.path || null }
-                    : { script, selection, connectionRef: context.selectedSource?.connection || null, documentUri: doc.path || null }),
+                body: JSON.stringify({
+                    script,
+                    ...(selection === null ? {} : { selection }),
+                    connectionRef: context.selectedSource?.connection || null,
+                    documentUri: doc.path || null,
+                    // Answers to the report's INPUT prompts, when the caller collected them. Absent
+                    // means "run it as written", which is what every other run has always meant.
+                    ...(parameters ? { parameters } : {}),
+                }),
             });
 
             if (!response.ok) {
@@ -1349,7 +1355,11 @@ export async function createStudioWorkbench(container, opts = {}) {
                 state.designerInstance?.selectVisual?.(visual?.id || name);
             },
             renderTabs,
-            runReport: () => shell.querySelector('[data-action="run"]')?.click(),
+            // A guided step that has collected prompt answers runs with them; everything else keeps
+            // clicking the toolbar button, which runs the script exactly as written.
+            runReport: parameters => (parameters
+                ? executeRun(getActiveDoc(), { script: activeScriptText(), label: 'report', parameters })
+                : shell.querySelector('[data-action="run"]')?.click()),
             openConnectionWizard: handleOpenConnectionWizard
         }
     });
@@ -1358,19 +1368,22 @@ export async function createStudioWorkbench(container, opts = {}) {
      * The authoring module's only network path. Route strings come from the tables, never literals,
      * and a failure surfaces the server's own message rather than a status code.
      */
-    async function authoringRequest(route, { method = 'POST', body = null, query = null, fallbackError = null } = {}) {
+    async function authoringRequest(route, { method = 'POST', body = null, query = null, fallbackError = null, accept = null } = {}) {
         const search = query
             ? '?' + Object.entries(query)
                 .filter(([, value]) => value != null)
                 .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
                 .join('&')
             : '';
+        const headers = { ...(body === null ? {} : { 'Content-Type': 'application/json' }), ...(accept ? { Accept: accept } : {}) };
         const response = await authFetch(apiBase + route + search, body === null
-            ? { method }
-            : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            ? { method, headers }
+            : { method, headers, body: JSON.stringify(body) });
         if (!response) throw new Error('The Studio session ended during the request.');
+        // A failure is JSON even when the caller asked for bytes, so the server's own reason is read
+        // the same way either way rather than surfacing as an unreadable blob.
         if (!response.ok) throw new Error(await _readErrorText(response) || fallbackError || `The request failed (${response.status}).`);
-        return response.json();
+        return accept && accept !== 'application/json' ? response.blob() : response.json();
     }
 
     async function addVisualToCanvas(type) {

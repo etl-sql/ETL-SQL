@@ -58,11 +58,13 @@ public record DesignerCompletionItem(
     int? StartColumn = null,
     int? EndColumn = null);
 
+/// <param name="Parameters">Answers to the script's INPUT prompts, keyed by name with or without '@'.</param>
 public record RunDesignerRequest(
     string Script,
     string? Selection = null,
     string? ConnectionRef = null,
-    string? DocumentUri = null);
+    string? DocumentUri = null,
+    Dictionary<string, string>? Parameters = null);
 
 public record RunDesignerResponse(
     IReadOnlyList<string> Columns,
@@ -102,9 +104,16 @@ public record SaveDesignerRequest(
     string ScriptText,
     string? BaseRevision = null);
 
+/// <param name="Parameters">Answers to the report's INPUT prompts, keyed by name with or without '@'.</param>
+/// <param name="RunEveryPage">
+/// True when the caller wants the finished document rather than a screen: a paginated page's
+/// visuals are otherwise built without data until a reader presses Run.
+/// </param>
 public record PreviewDesignerRequest(
     string Script,
-    string? Page = null);
+    string? Page = null,
+    Dictionary<string, string>? Parameters = null,
+    bool RunEveryPage = false);
 
 public record SaveDesignerResponse(
     long Version,

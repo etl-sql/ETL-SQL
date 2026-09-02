@@ -2650,6 +2650,172 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task Studio_PaginatedExportStep_ExportsThePdfItselfRatherThanExplainingWhereToFindOne()
+    {
+        // Step 8 used to be a page of instructions pointing at an export elsewhere — which, for a
+        // report that only exists in an unsaved buffer, was nowhere.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
+
+        // A paginated report, so the export step is the one under test.
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
+        await page.Locator("[data-create-from-home='paginated']").ClickAsync();
+        await page.Locator("[data-workflow-step='export']").WaitForAsync();
+
+        // Downloads are inert in this context, so the click is observed as the request Studio makes
+        // and the anchor it creates rather than as a file on disk.
+        await page.EvaluateAsync(
+            """
+            () => {
+                window.__STUDIO_DOWNLOADS__ = [];
+                const create = document.createElement.bind(document);
+                document.createElement = tag => {
+                    const element = create(tag);
+                    if (String(tag).toLowerCase() === 'a') {
+                        const click = element.click.bind(element);
+                        element.click = () => {
+                            if (element.download) window.__STUDIO_DOWNLOADS__.push(element.download);
+                            else click();
+                        };
+                    }
+                    return element;
+                };
+            }
+            """);
+
+        await page.ClickAsync("[data-workflow-step='export']");
+        await page.Locator("[data-dialog-action='export']").WaitForAsync();
+        await page.ClickAsync("[data-dialog-action='export']");
+
+        await page.WaitForFunctionAsync(
+            """
+            () => window.__STUDIO_API_REQUESTS__.some(request =>
+                request.url.endsWith('/api/designer/preview/pdf')
+                && typeof request.body?.script === 'string'
+                && request.body.script.includes('AS PAGINATED'))
+            """);
+        await page.WaitForFunctionAsync(
+            "() => (window.__STUDIO_DOWNLOADS__ || []).some(name => name.endsWith('.pdf'))");
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_AReportThatPrompts_AsksBeforeExportingAndSendsTheAnswers()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
+
+        const string script = """
+            DECLARE @region VARCHAR INPUT = 'North';
+
+            SELECT region, total_amount INTO #rows FROM &orders;
+
+            CREATE VISUAL detail AS TABLE ( TITLE = 'Detail', SOURCE = #rows );
+
+            CREATE PAGE [Detail] AS PAGINATED (
+              LAYOUT (STRUCTURE = 'A', MAP ('A' = detail)),
+              PRINT_LAYOUT (PAGE_SIZE = 'Letter', ORIENTATION = 'PORTRAIT')
+            );
+            """;
+        await page.EvaluateAsync(
+            """
+            script => {
+                const studio = window.__STUDIO_INSTANCE__;
+                studio.state.documents.push({ id: 'prompted-report', path: 'prompted.rptsql', name: 'prompted.rptsql', content: script, isDirty: false, projection: 'split', reportWorkflow: 'paginated' });
+                void studio.switchDoc('prompted-report');
+            }
+            """, script);
+        await page.Locator("[data-workflow-step='export']").WaitForAsync();
+
+        await page.EvaluateAsync("() => { window.__STUDIO_DOWNLOADS__ = []; }");
+        await page.ClickAsync("[data-workflow-step='export']");
+        await page.Locator("[data-dialog-action='export']").WaitForAsync();
+        await page.ClickAsync("[data-dialog-action='export']");
+
+        // The prompt comes before the export, not after it: an INPUT parameter is a question, and
+        // exporting the declared default would answer it on the reader's behalf.
+        await page.Locator("[data-parameter-answer='@region']").WaitForAsync();
+        Assert.Equal("North", await page.Locator("[data-parameter-answer='@region']").InputValueAsync());
+        await page.FillAsync("[data-parameter-answer='@region']", "South");
+        await page.ClickAsync("[data-dialog-action='accept']");
+
+        await page.WaitForFunctionAsync(
+            """
+            () => window.__STUDIO_API_REQUESTS__.some(request =>
+                request.url.endsWith('/api/designer/preview/pdf')
+                && request.body?.parameters?.['@region'] === 'South')
+            """);
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_PaginationPreview_ListsThePagesTheExportWillProduce()
+    {
+        // The canvas draws a page-width sheet, which says "paper" and not "how many pages, and what
+        // lands on each" — the question a paginated report exists to answer. The step now reads the
+        // engine's own compiled breakdown rather than leaving the sheet to imply one.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
+
+        const string script = """
+            SELECT region, total_amount INTO #rows FROM &orders;
+
+            CREATE VISUAL detail_rows AS TABLE ( TITLE = 'Detail', SOURCE = #rows );
+
+            CREATE PAGE [Detail] AS PAGINATED (
+              LAYOUT (STRUCTURE = 'A', MAP ('A' = detail_rows)),
+              PRINT_LAYOUT (PAGE_SIZE = 'Letter', ORIENTATION = 'PORTRAIT')
+            );
+            """;
+        await page.EvaluateAsync(
+            """
+            script => {
+                const studio = window.__STUDIO_INSTANCE__;
+                studio.state.documents.push({ id: 'paginated-report', path: 'paginated.rptsql', name: 'paginated.rptsql', content: script, isDirty: false, projection: 'split', reportWorkflow: 'paginated' });
+                void studio.switchDoc('paginated-report');
+            }
+            """, script);
+        await page.Locator("[data-workflow-step='preview']").WaitForAsync();
+
+        await DismissToastsAsync(page);
+        await page.ClickAsync("[data-workflow-step='preview']");
+
+        // Every page is run for the breakdown: a deferred page would report itself as empty.
+        await page.WaitForFunctionAsync(
+            """
+            () => window.__STUDIO_API_REQUESTS__.some(request =>
+                request.url.endsWith('/api/designer/preview') && request.body?.runEveryPage === true)
+            """);
+
+        var breakdown = page.Locator(".etlsql-studio-guided-body");
+        await breakdown.Locator("text=physical page").First.WaitForAsync();
+        var text = await breakdown.InnerTextAsync();
+        Assert.Contains("Page 1", text, StringComparison.Ordinal);
+        Assert.Contains("Page 2", text, StringComparison.Ordinal);
+        // The row ranges are what make the breakdown actionable rather than a page count.
+        Assert.Contains("rows 1", text, StringComparison.Ordinal);
+
+        Assert.Empty(session.PageErrors);
+    }
+
     /// <summary>Clears any toast covering the corner a panel under test lives in.</summary>
     private static async Task DismissToastsAsync(IPage page) =>
         await page.EvaluateAsync("() => document.querySelectorAll('.etlsql-feedback-toast').forEach(toast => toast.remove())");

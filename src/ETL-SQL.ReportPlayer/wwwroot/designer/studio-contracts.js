@@ -20,6 +20,8 @@ export const STUDIO_ROUTES = Object.freeze({
     pipelineTask: '/api/designer/pipeline-task',
     pipelineScope: '/api/designer/pipeline-scope',
     pipelineRunPlan: '/api/designer/pipeline-run-plan',
+    preview: '/api/designer/preview',
+    previewPdf: '/api/designer/preview/pdf',
     parse: '/api/designer/parse',
     patch: '/api/designer/patch',
     queryFilter: '/api/designer/query-filter',

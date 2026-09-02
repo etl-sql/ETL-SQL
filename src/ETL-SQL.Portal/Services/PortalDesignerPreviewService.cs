@@ -28,11 +28,19 @@ public sealed class PortalDesignerPreviewService(
     private const int TimeoutSeconds = 30;
     private const int OperatorGrantMb = 128;
 
+    /// <param name="parameters">
+    /// Answers to the report's <c>INPUT</c> prompts, applied the way <c>--var</c> applies them: the
+    /// value is seeded before the script runs, and <c>DECLARE</c> prefers an injected value to its
+    /// own initial one. Prompting a reader and then previewing the defaults anyway would be a
+    /// preview of a report nobody asked for.
+    /// </param>
     public async Task<ReportManifest> BuildPreviewAsync(
         string scriptText,
         string? page,
+        bool runEveryPage,
         ClaimsPrincipal user,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyDictionary<string, string>? parameters = null)
     {
         if (string.IsNullOrWhiteSpace(scriptText))
             throw new ArgumentException("Nothing to preview — the script is empty.");
@@ -53,6 +61,7 @@ public sealed class PortalDesignerPreviewService(
             IsSilentMode = true,
             SessionId = Guid.NewGuid().ToString("N")
         };
+        ApplyParameters(sessionContext, parameters);
 
         var session = new ExecutionSession(services, sessionContext, logger);
         var result = await session.ExecuteAsync(script, timeout.Token, "portal-designer-preview", executionIdentity: identity);
@@ -72,7 +81,8 @@ public sealed class PortalDesignerPreviewService(
             ? null
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase) { page! };
 
-        var manifest = await new ManifestBuilder(evaluator).BuildAsync(scriptText, runPages: runPages);
+        var manifest = await new ManifestBuilder(evaluator).BuildAsync(
+            scriptText, runPages: runPages, deferPaginatedPages: !runEveryPage);
 
         await audit.LogAsync(
             identity.EffectiveUserId,
@@ -114,5 +124,21 @@ public sealed class PortalDesignerPreviewService(
             Roles = roles,
             Groups = groups
         };
+    }
+
+    /// <summary>
+    /// Seeds answered prompts onto the session, exactly as <c>--var</c> does: the same parser, the
+    /// same <c>@</c>-prefixed keys, and the same precedence — <c>DECLARE</c> prefers an injected
+    /// value to its own initial one.
+    /// </summary>
+    private static void ApplyParameters(CliContext context, IReadOnlyDictionary<string, string>? parameters)
+    {
+        if (parameters is null) return;
+        foreach (var (name, value) in parameters)
+        {
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var key = name.StartsWith('@') ? name : "@" + name;
+            context.Variables[key] = ETL_SQL.Core.Common.VariableOverrideValueParser.Parse(value);
+        }
     }
 }

@@ -57,6 +57,7 @@ public sealed class PortalDesignerRunService(
             IsSilentMode = true,
             SessionId = Guid.NewGuid().ToString("N")
         };
+        ApplyParameters(sessionContext, request.Parameters);
 
         var start = DateTime.UtcNow;
         var session = new ExecutionSession(services, sessionContext, logger);
@@ -234,5 +235,21 @@ public sealed class PortalDesignerRunService(
     {
         var bytes = Encoding.UTF8.GetBytes(query.Trim());
         return "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Seeds answered prompts onto the session, exactly as <c>--var</c> does: the same parser, the
+    /// same <c>@</c>-prefixed keys, and the same precedence — <c>DECLARE</c> prefers an injected
+    /// value to its own initial one.
+    /// </summary>
+    private static void ApplyParameters(CliContext context, IReadOnlyDictionary<string, string>? parameters)
+    {
+        if (parameters is null) return;
+        foreach (var (name, value) in parameters)
+        {
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var key = name.StartsWith('@') ? name : "@" + name;
+            context.Variables[key] = ETL_SQL.Core.Common.VariableOverrideValueParser.Parse(value);
+        }
     }
 }

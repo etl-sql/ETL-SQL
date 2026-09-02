@@ -151,7 +151,11 @@ namespace ETL_SQL.Reporting
             style.Font.Size = Unit.FromPoint(10);
 
             var section = document.AddSection();
-            ApplyPageSetup(section, null, manifest);
+            // The heading block shares the first declared page's paper. It used to be laid out with
+            // the A4 defaults and then followed by a *new* section per page — so a Letter landscape
+            // report exported an A4 portrait sheet carrying nothing but its title, and every page
+            // count was one higher than the report described.
+            ApplyPageSetup(section, manifest.Pages.FirstOrDefault()?.PrintLayout, manifest);
 
             // ── Report header ─────────────────────────────────────────────────
             var titlePara = section.AddParagraph(
@@ -192,10 +196,21 @@ namespace ETL_SQL.Reporting
             if (manifest.Pages.Count > 0)
             {
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var first = true;
                 foreach (var page in manifest.Pages)
                 {
-                    var pageSection = document.AddSection();
-                    ApplyPageSetup(pageSection, page.PrintLayout, manifest);
+                    // The first declared page continues the section the heading is already on; each
+                    // later one opens its own, which is what a second declared page means.
+                    var pageSection = section;
+                    if (first)
+                    {
+                        first = false;
+                    }
+                    else
+                    {
+                        pageSection = document.AddSection();
+                        ApplyPageSetup(pageSection, page.PrintLayout, manifest);
+                    }
 
                     foreach (var (_, vName) in page.SlotMap.OrderBy(kv => kv.Key))
                     {

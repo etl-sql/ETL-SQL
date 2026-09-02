@@ -773,9 +773,39 @@ public static class WorkstationEditorApp
         {
             try
             {
-                var manifest = await previewer.BuildPreviewAsync(request.Script ?? string.Empty, cancellationToken);
+                var manifest = await previewer.BuildPreviewAsync(
+                    request.Script ?? string.Empty, cancellationToken, request.RunEveryPage, request.Parameters);
                 return Results.Content(
                     ETL_SQL.Reporting.BrowserDeliveryProjection.Serialize(manifest), "application/json");
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { error = SecretRedactor.Redact(ex.Message) });
+            }
+        });
+
+        // The same route the Portal serves, so Studio's Export step is one action on both hosts
+        // rather than a button that works in one place and 404s in the other.
+        app.MapPost("/api/designer/preview/pdf", async (
+            PreviewRequest request,
+            WorkstationPreviewService previewer,
+            CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                // Every page is run: an exported page that was still waiting for its prompts would
+                // be a blank sheet in the file.
+                var manifest = await previewer.BuildPreviewAsync(
+                    request.Script ?? string.Empty, cancellationToken, runEveryPage: true, request.Parameters);
+                var pdf = await new ETL_SQL.Reporting.ReportPdfExporter().ExportAsync(
+                    manifest,
+                    new ETL_SQL.Reporting.PdfExportOptions
+                    {
+                        Mode = ETL_SQL.Reporting.PdfExportMode.Static,
+                        Host = null,
+                    },
+                    cancellationToken);
+                return Results.File(pdf, "application/pdf", "preview.pdf");
             }
             catch (Exception ex)
             {

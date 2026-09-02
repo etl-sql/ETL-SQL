@@ -59,6 +59,7 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
             IsSilentMode = true,
             SessionId = Guid.NewGuid().ToString("N")
         };
+        ApplyParameters(context, request.Parameters);
 
         await using var session = new ExecutionSession(services, context, logger);
         var result = await session.ExecuteAsync(governedScript, timeout.Token, "workstation-editor-run");
@@ -253,6 +254,22 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
         DateTimeOffset dateTimeOffset => dateTimeOffset.ToString("O"),
         _ => value
     };
+
+    /// <summary>
+    /// Seeds answered prompts onto the session, exactly as <c>--var</c> does: the same parser, the
+    /// same <c>@</c>-prefixed keys, and the same precedence — <c>DECLARE</c> prefers an injected
+    /// value to its own initial one.
+    /// </summary>
+    private static void ApplyParameters(CliContext context, IReadOnlyDictionary<string, string>? parameters)
+    {
+        if (parameters is null) return;
+        foreach (var (name, value) in parameters)
+        {
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var key = name.StartsWith('@') ? name : "@" + name;
+            context.Variables[key] = ETL_SQL.Core.Common.VariableOverrideValueParser.Parse(value);
+        }
+    }
 }
 
 public sealed record RunRequest(
@@ -261,8 +278,15 @@ public sealed record RunRequest(
     string? DocumentUri = null,
     int? RowLimit = null,
     /// <summary>Set once the user has acknowledged a destructive-statement warning.</summary>
-    bool ConfirmDestructive = false);
-public sealed record PreviewRequest(string? Script);
+    bool ConfirmDestructive = false,
+    /// <summary>Answers to the script's INPUT prompts, keyed by name with or without '@'.</summary>
+    Dictionary<string, string>? Parameters = null);
+/// <param name="Parameters">Answers to the report's INPUT prompts, keyed by name with or without '@'.</param>
+/// <param name="RunEveryPage">True to build the finished document rather than a deferred screen.</param>
+public sealed record PreviewRequest(
+    string? Script,
+    Dictionary<string, string>? Parameters = null,
+    bool RunEveryPage = false);
 
 public sealed record LineageEntryDto(
     string TargetTable,

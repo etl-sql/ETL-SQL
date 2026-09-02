@@ -12,6 +12,28 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Studio exports a paginated report to PDF. Step 8 used to name the export and tell the author to go
+  and find it, which for a report living in an unsaved buffer meant nowhere; it now produces the file
+  from the report as it stands, with the page setup, breaks, and repeating table headings the author
+  configured. Both hosts serve the route, so the action is not a button that works in the Portal and
+  fails on the desktop.
+
+- Studio's pagination preview lists the pages the export will produce — each physical page and what
+  lands on it, including the row ranges a split detail table continues from — read from the engine's
+  own compilation instead of being implied by the page-width sheet the canvas draws.
+
+- A report's `INPUT` parameters are asked before Studio previews or exports it, and the answers are
+  applied the way `--var` applies them — `DECLARE` prefers a supplied value to its own initial one.
+  Cancelling the prompt cancels the run instead of quietly using the defaults.
+
+- Fixed three defects that made a paginated export wrong rather than missing. A paginated page's
+  visuals are deferred until a reader presses Run, so an export rendered pages with no data on them;
+  an export now runs every page, because the file is the finished document. The exporter laid its
+  heading block out with A4 defaults and then started a new section for every declared page, so a
+  Letter landscape report exported a stray portrait sheet first and every page count was one too
+  high. And `CliContext.Variables`, the mechanism behind `--var`, was read by the CLI alone: a
+  variable supplied by any other host was accepted and silently ignored.
+
 - The Studio filter pane reaches every value in a column. A categorical card searches its values,
   selects all, clears, and inverts within what the search narrowed to, and pages through the rest
   with a count of how much of the column is showing. It used to stop at twelve values with no search

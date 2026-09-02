@@ -24,6 +24,22 @@ export function makeMockApi(seedState) {
     let body = {};
     try { body = init?.body ? JSON.parse(init.body) : {}; } catch { /* ignore */ }
 
+    // The export step asks for a PDF. The bytes are a stub — what the sandbox can prove is that
+    // Studio posted the script it is showing and handed a file to the reader; whether the exporter
+    // paginates correctly is settled where the exporter lives, not here.
+    if (path.endsWith('/api/designer/preview/pdf')) {
+      const pdf = new TextEncoder().encode('%PDF-1.4\n% ui-sandbox stub\n');
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: name => (String(name).toLowerCase() === 'content-type' ? 'application/pdf' : null) },
+        blob: async () => new Blob([pdf], { type: 'application/pdf' }),
+        arrayBuffer: async () => pdf.buffer,
+        json: async () => ({ error: 'The export returned a PDF, not JSON.' }),
+        text: async () => '%PDF-1.4',
+      };
+    }
+
     let data = UNMATCHED;
     if (path.endsWith('/api/designer/generate')) {
       // Matches the hosts: with a script in hand this patches it, and generates from scratch only
@@ -133,11 +149,15 @@ export function makeMockApi(seedState) {
         ? { sourceRevision: 'sandboxc0ffee1', committed: true }
         : { sourceRevision: 'sandboxc0ffee1', committed: false };
     } else if (path.endsWith('/api/designer/preview')) {
-      // Return a real, chart-rich manifest (built from tools/ui-sandbox/fixtures/sandbox-report.rptsql
-      // via the report CLI) so the preview iframe renders KPI cards + bar/pie/line charts + a table.
-      data = await fetch('/tools/ui-sandbox/fixtures/sandbox-report.manifest.json')
-        .then(r => r.json())
-        .catch(() => ({ title: 'Preview', pages: [], visuals: [] }));
+      // A paginated script gets a paginated manifest: the physical-page breakdown is what Studio's
+      // pagination preview reads, and the canned dashboard manifest has none. The real compilation
+      // lives in PhysicalPageCompiler and is proven against exported PDFs; this only has to be the
+      // right shape for the surface that reads it.
+      data = /\bAS\s+PAGINATED\b/i.test(String(body.script || ''))
+        ? mockPaginatedManifest()
+        : await fetch('/tools/ui-sandbox/fixtures/sandbox-report.manifest.json')
+          .then(r => r.json())
+          .catch(() => ({ title: 'Preview', pages: [], visuals: [] }));
     } else if (path.endsWith('/api/designer/data-preview') || path.endsWith('/api/designer/data-sample')) {
       const source = body.sourceKind === 'temp' ? body.tempTable
         : body.sourceKind === 'dataset' ? body.dataset
@@ -1221,6 +1241,32 @@ function mockRewriteVisualClauses(statement, visual) {
 
 // `action:ON_CLICK` and `interaction:ON_SELECT` are carried on the visual's options with a prefix,
 // exactly as the real parsing service reports them, and written back as one clause each.
+// A paginated manifest whose detail table is split across two sheets, as the compiler splits one.
+function mockPaginatedManifest() {
+  const detail = {
+    name: 'detail_rows',
+    visualType: 'TABLE',
+    columns: ['Territory', 'Reference', 'Amount'],
+    rows: Array.from({ length: 60 }, (_, index) => [`Zone ${index % 4}`, `SO-${index}`, String(index * 37)]),
+  };
+  const layout = { pageSize: 'Letter', orientation: 'PORTRAIT', marginTop: 0.75, marginBottom: 0.75 };
+  return {
+    title: 'Preview',
+    visuals: [detail],
+    pages: [{
+      name: 'Detail',
+      mode: 'PAGINATED',
+      structure: 'A',
+      slotMap: { A: 'detail_rows' },
+      printLayout: layout,
+      physicalPages: [
+        { pageNumber: 1, layout, visuals: [{ visual: detail, topOffset: 0, height: 9, startRowIndex: 0, endRowIndex: 33 }] },
+        { pageNumber: 2, layout, visuals: [{ visual: detail, topOffset: 0, height: 7, startRowIndex: 34, endRowIndex: 59 }] },
+      ],
+    }],
+  };
+}
+
 function mockPrefixedClause(options, prefix, keyword) {
   const entries = Object.entries(options ?? {})
     .filter(([key, value]) => key.startsWith(prefix) && String(value || '').trim())

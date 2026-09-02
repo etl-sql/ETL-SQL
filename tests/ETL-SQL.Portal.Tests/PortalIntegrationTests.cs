@@ -138,6 +138,105 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task DesignerPreviewPdf_ExportsAPaginatedReportAcrossSeveralPages()
+    {
+        // Studio's Export step posts the buffer here. The route existed with no test behind it, so
+        // "export a paginated report" was an untested claim about the one output that has pages.
+        var token = await GetAdminTokenAsync();
+
+        const string script = """
+            CREATE CONNECTION demo AS MOCKDB();
+
+            SELECT SaleID, OrderDate, Region, Total
+            INTO #orders
+            FROM demo.Orders;
+
+            CREATE VISUAL order_detail AS TABLE (
+                TITLE = 'Order detail',
+                SOURCE = #orders
+            );
+
+            CREATE PAGE [Detail] AS PAGINATED (
+                LAYOUT (STRUCTURE = 'A', MAP ('A' = order_detail)),
+                PRINT_LAYOUT (PAGE_SIZE = 'Letter', ORIENTATION = 'PORTRAIT', MARGINS = (0.75, 0.75, 0.75, 0.75), UNITS = 'in', OVERFLOW = 'SPLIT')
+            );
+            """;
+
+        var res = await AuthPost(token, "/api/designer/preview/pdf", new { script });
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        Assert.Equal("application/pdf", res.Content.Headers.ContentType?.MediaType);
+
+        var pdf = await res.Content.ReadAsByteArrayAsync();
+        Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, pdf[..4]);
+
+        var pages = PdfPageCount(pdf);
+        Assert.True(pages > 1,
+            $"The sample connector's order table exported onto {pages} page(s), so pagination did not happen.");
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task DesignerPreviewPdf_UsesTheAnswersToTheReportsPrompts()
+    {
+        // A prompt that is asked and then ignored is worse than no prompt: the reader believes they
+        // chose. The answer is seeded the way --var seeds one, so DECLARE prefers it to its own
+        // initial value — which is observable here as the number of pages the export produces.
+        var token = await GetAdminTokenAsync();
+
+        const string script = """
+            CREATE CONNECTION demo AS MOCKDB();
+            DECLARE @max_sale INT INPUT = 1;
+
+            SELECT SaleID, OrderDate, Region, Total
+            INTO #raw_orders
+            FROM demo.Orders;
+
+            -- The sample connector serves whole tables, so the prompt narrows the staged rows.
+            SELECT SaleID, OrderDate, Region, Total
+            INTO #orders
+            FROM #raw_orders
+            WHERE SaleID <= 10000 + @max_sale;
+
+            CREATE VISUAL order_detail AS TABLE (
+                TITLE = 'Order detail',
+                SOURCE = #orders
+            );
+
+            CREATE PAGE [Detail] AS PAGINATED (
+                LAYOUT (STRUCTURE = 'A', MAP ('A' = order_detail)),
+                PRINT_LAYOUT (PAGE_SIZE = 'Letter', ORIENTATION = 'PORTRAIT', MARGINS = (0.75, 0.75, 0.75, 0.75), UNITS = 'in', OVERFLOW = 'SPLIT')
+            );
+            """;
+
+        var declared = await AuthPost(token, "/api/designer/preview/pdf", new { script });
+        Assert.Equal(HttpStatusCode.OK, declared.StatusCode);
+        var declaredPages = PdfPageCount(await declared.Content.ReadAsByteArrayAsync());
+
+        var answered = await AuthPost(token, "/api/designer/preview/pdf", new
+        {
+            script,
+            parameters = new Dictionary<string, string> { ["@max_sale"] = "250" },
+        });
+        Assert.Equal(HttpStatusCode.OK, answered.StatusCode);
+        var answeredPages = PdfPageCount(await answered.Content.ReadAsByteArrayAsync());
+
+        // The claim is the comparison, not an exact page count: one staged row against 250 must
+        // produce a visibly longer document, whatever the heading block occupies.
+        Assert.True(answeredPages > declaredPages,
+            $"The answered export produced {answeredPages} page(s) against {declaredPages} for the declared default, "
+            + "so the prompt's answer never reached the run.");
+    }
+
+    private static int PdfPageCount(byte[] pdf)
+    {
+        using var stream = new MemoryStream(pdf);
+        using var document = PdfSharp.Pdf.IO.PdfReader.Open(stream, PdfSharp.Pdf.IO.PdfDocumentOpenMode.Import);
+        return document.PageCount;
+    }
+
+    [Fact]
     public async Task DesignerComplete_ReturnsLanguageSuggestions()
     {
         var token = await GetAdminTokenAsync();

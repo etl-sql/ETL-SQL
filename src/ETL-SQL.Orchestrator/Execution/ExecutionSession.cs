@@ -110,6 +110,19 @@ namespace ETL_SQL.Orchestrator.Execution
                     new ExecutionTree()
                 );
 
+                // Variables the caller supplied — the CLI's --var, a host's answered INPUT prompts —
+                // are injected undeclared, so a DECLARE for the same name prefers this value to its
+                // own initial one. The CLI did this for itself; every other host that set
+                // CliContext.Variables was silently ignored, so a prompt could be answered and the
+                // report still ran on its defaults.
+                foreach (var supplied in _ctx.Variables)
+                {
+                    evaluator.DeclareVariable(
+                        supplied.Key,
+                        supplied.Value,
+                        new ETL_SQL.Data.VariableMetadata { IsInput = true, IsDeclared = false });
+                }
+
                 evaluator.BatchSize = _ctx.BatchSize;
                 evaluator.IsVerbose = _ctx.IsVerbose;
                 evaluator.SessionId = _ctx.SessionId;
