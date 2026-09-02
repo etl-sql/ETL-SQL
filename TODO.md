@@ -178,9 +178,16 @@ then expose advanced inspection views that do not block basic authoring.
   clause keyword at any parenthesis depth, so `CASCADE`'s own `MODE` was read as the visual's `MODE`
   clause and inserted a second time, the result did not parse, and the patcher's parse guard turned
   the whole edit into silence. Clause matching is now pinned to the statement's own level.
-- [ ] **Remove the filter-pane value dead end**: Add categorical search, Select All, Invert, and
-  paging or virtualization beyond 12 values. Add numeric/date operators for ranges, comparisons,
-  and null checks.
+- [x] **Remove the filter-pane value dead end**: A categorical card now searches its values,
+  selects all, clears, and inverts what the search narrowed to, and pages through the rest 25 at a
+  time with a count saying how much of the column is on screen — the old card cut the list at twelve
+  with no search and no thirteenth value, so values that existed in the data could not be filtered
+  on at all. Selection actions add to the selection rather than replacing it, because the search
+  narrowed the view and not the filter. Numeric and date cards gained a condition: at least, at
+  most, greater, less, equals, does not equal, is blank, is not blank, alongside the range. The
+  vocabulary is decided server-side in `DesignerQueryFilterService`, so the pane sends a word and
+  never composes SQL; an unknown operator is refused rather than falling back to a range, and a
+  condition chosen before its value filters nothing rather than failing.
 - [ ] **Complete paginated report authoring and export**: Provide group/detail sections, totals,
   headers and footers, page size, orientation, margins, explicit breaks, repeating table headers,
   parameter prompting, pagination preview, and verified multi-page PDF export from Studio.

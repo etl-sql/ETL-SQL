@@ -455,7 +455,33 @@ function splitTopLevel(list) {
 }
 
 // Synthesize three representative rows, typing values by the mock schema when known.
+/**
+ * `count` rows whose text columns are distinct per row, so a story can drive a surface whose
+ * behaviour only begins past its first page of values — the filter pane's search, paging and bulk
+ * selection. Set `window.__STUDIO_SAMPLE_ROWS__`; every sample the mock serves widens with it, so a
+ * refresh mid-journey does not quietly hand back the narrow default.
+ */
+function mockWideSampleRows(columns, table, count) {
+  const typeOf = (name) => {
+    const column = table?.columns?.find((item) => item.name.toLowerCase() === name.toLowerCase());
+    return (column?.type || '').toUpperCase();
+  };
+  return Array.from({ length: count }, (_, index) => {
+    const row = {};
+    for (const name of columns) {
+      const type = typeOf(name);
+      if (/INT|DEC|NUM|FLOAT|MONEY|REAL/.test(type)) row[name] = (index + 1) * 100;
+      else if (/DATE|TIME/.test(type)) row[name] = `2026-08-${String((index % 28) + 1).padStart(2, '0')}`;
+      else if (/BOOL|BIT/.test(type)) row[name] = index % 2 === 0;
+      else row[name] = `${name}_${String(index).padStart(2, '0')}`;
+    }
+    return row;
+  });
+}
+
 function mockRowsForColumns(columns, table) {
+  const wide = Number(globalThis.__STUDIO_SAMPLE_ROWS__) || 0;
+  if (wide > 0) return mockWideSampleRows(columns, table, wide);
   const typeOf = (name) => {
     const col = table?.columns?.find((c) => c.name.toLowerCase() === name.toLowerCase());
     return (col?.type || '').toUpperCase();

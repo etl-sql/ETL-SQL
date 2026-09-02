@@ -39,8 +39,13 @@
         doc?.dispatchEvent(new CustomEvent('etlsql:feedback', { detail: { kind, ...detail } }));
     }
 
+    /**
+     * Shows a toast. Returns a function that dismisses it, so a caller whose action repeats — one
+     * undo offer per click in a filter list — can replace its own previous toast instead of stacking
+     * a column of them over the panel the reader is working in.
+     */
     function notify(message, options = {}) {
-        if (!doc) return;
+        if (!doc) return () => {};
         ensureStyles();
         if (!toastRegion) {
             toastRegion = doc.createElement('div');
@@ -78,6 +83,7 @@
         const duration = Number.isFinite(options.duration) ? options.duration : (action ? 12000 : tone === 'error' ? 8000 : 4500);
         if (duration > 0) global.setTimeout(remove, duration);
         emit('notification', { tone, action: options.auditAction || null });
+        return remove;
     }
 
     function openDialog(message, options = {}, promptOptions = null) {

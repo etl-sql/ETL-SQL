@@ -2,6 +2,36 @@
 import { importFresh, STUDIO_JS } from '../util.js';
 import { makeMockApi } from '../mockApi.js';
 
+/**
+ * The sample the workbench opens with.
+ *
+ * Set `window.__STUDIO_SAMPLE_ROWS__` before mounting for a wide one — a distinct region per row —
+ * so a surface whose behaviour only begins past its first page of values (search, paging, bulk
+ * selection in the filter pane) can be driven at all. Five rows is the readable default.
+ */
+function sampleSnapshot() {
+  const columns = [
+    { name: 'order_date', type: 'DATE' },
+    { name: 'total_amount', type: 'DECIMAL' },
+    { name: 'region', type: 'VARCHAR' },
+  ];
+  const wide = Number(globalThis.__STUDIO_SAMPLE_ROWS__) || 0;
+  const rows = wide > 0
+    ? Array.from({ length: wide }, (_, index) => ({
+      order_date: `2026-08-${String((index % 28) + 1).padStart(2, '0')}`,
+      total_amount: (index + 1) * 100,
+      region: `region_${String(index).padStart(2, '0')}`,
+    }))
+    : [
+      { order_date: '2026-08-03', total_amount: 1840, region: 'North' },
+      { order_date: '2026-08-09', total_amount: 920, region: 'South' },
+      { order_date: '2026-08-14', total_amount: 2310, region: 'North' },
+      { order_date: '2026-08-21', total_amount: 1280, region: 'West' },
+      { order_date: '2026-08-27', total_amount: 2760, region: 'East' },
+    ];
+  return { source: '&orders', columns, rowCount: rows.length, rows };
+}
+
 const SAMPLE_DOCS = [
   {
     id: 'doc-report',
@@ -145,22 +175,7 @@ export default {
       workspaceFolders: JSON.parse(JSON.stringify(sandboxWorkspace.folders)),
       authFetch,
       apiBase: '',
-      initialSnapshot: {
-        source: '&orders',
-        columns: [
-          { name: 'order_date', type: 'DATE' },
-          { name: 'total_amount', type: 'DECIMAL' },
-          { name: 'region', type: 'VARCHAR' },
-        ],
-        rowCount: 5,
-        rows: [
-          { order_date: '2026-08-03', total_amount: 1840, region: 'North' },
-          { order_date: '2026-08-09', total_amount: 920, region: 'South' },
-          { order_date: '2026-08-14', total_amount: 2310, region: 'North' },
-          { order_date: '2026-08-21', total_amount: 1280, region: 'West' },
-          { order_date: '2026-08-27', total_amount: 2760, region: 'East' },
-        ],
-      },
+      initialSnapshot: sampleSnapshot(),
       onSave: async (content, path) => {
         console.log(`[Studio Save] Saved ${path} (${content.length} chars)`);
       },

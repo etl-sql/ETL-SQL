@@ -12,6 +12,20 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- The Studio filter pane reaches every value in a column. A categorical card searches its values,
+  selects all, clears, and inverts within what the search narrowed to, and pages through the rest
+  with a count of how much of the column is showing. It used to stop at twelve values with no search
+  and no way to reach the thirteenth, so the rest of a column could not be filtered on at all.
+
+- Numeric and date filters can ask more than "between": at least, at most, greater than, less than,
+  equals, does not equal, is blank, and is not blank. The vocabulary lives in the filter service, so
+  the pane sends a word and never composes SQL — an operator the service does not know is refused
+  rather than quietly treated as a range, and a condition chosen before its value simply filters
+  nothing.
+
+- An action Studio offers to undo replaces its own previous offer instead of stacking one toast per
+  click.
+
 - Cross-visual filtering and cascading slicers can be authored in Studio. Choosing what a visual
   does when another one is selected — highlight, filter, or ignore — and the column selections are
   matched on are controls now, not a free-text box whose placeholder was the documentation, and a

@@ -12,7 +12,15 @@ using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.Reporting.Authoring;
 
-/// <summary>A typed Studio filter applied to a dataset query or visual source.</summary>
+/// <summary>
+/// A typed Studio filter applied to a dataset query or visual source.
+/// </summary>
+/// <param name="Operator">
+/// How a <c>number</c> or <c>date</c> filter compares. Omitted means <c>between</c>, which is what
+/// every filter written before operators existed means, so an older client keeps working unchanged.
+/// Single-value operators read <see cref="Minimum"/> as the value they compare against;
+/// <c>isnull</c> and <c>notnull</c> read no value at all.
+/// </param>
 public sealed record DesignerQueryFilter(
     string Id,
     string Column,
@@ -22,7 +30,8 @@ public sealed record DesignerQueryFilter(
     string? Maximum = null,
     string? ParameterName = null,
     string? ParameterOperator = null,
-    string? AllValue = null);
+    string? AllValue = null,
+    string? Operator = null);
 
 /// <summary>
 /// Builds parser-valid filtered SELECT sources. Studio-owned predicates carry a small marker so a
@@ -97,8 +106,8 @@ public sealed partial class DesignerQueryFilterService
         return filter.Kind.Trim().ToLowerInvariant() switch
         {
             "categorical" => BuildCategorical(column, filter.Values),
-            "number" => BuildRange(column, filter.Minimum, filter.Maximum, isDate: false),
-            "date" => BuildRange(column, filter.Minimum, filter.Maximum, isDate: true),
+            "number" => BuildComparison(column, filter, isDate: false),
+            "date" => BuildComparison(column, filter, isDate: true),
             "parameter" => BuildParameter(column, filter),
             _ => throw new ArgumentException($"Unsupported Studio filter kind '{filter.Kind}'.")
         };
@@ -112,6 +121,40 @@ public sealed partial class DesignerQueryFilterService
         return literals.Count == 1
             ? $"{column} = {literals[0]}"
             : $"{column} IN ({string.Join(", ", literals)})";
+    }
+
+    /// <summary>
+    /// A number or date predicate, in the shape the author chose.
+    ///
+    /// <para>A range is only one of the questions an author asks of a column. "Delivered after the
+    /// 3rd", "not zero", and "never filled in" are the others, and without them the pane's answer to
+    /// each was a range that cannot express it. An unknown operator is refused rather than quietly
+    /// falling back to a range, because a filter that silently means something else than it says is
+    /// the worst of the three outcomes.</para>
+    /// </summary>
+    private static string? BuildComparison(string column, DesignerQueryFilter filter, bool isDate)
+    {
+        var op = (filter.Operator ?? "between").Trim().ToLowerInvariant();
+        if (op is "isnull") return $"{column} IS NULL";
+        if (op is "notnull") return $"{column} IS NOT NULL";
+        if (op is "between" or "") return BuildRange(column, filter.Minimum, filter.Maximum, isDate);
+
+        var comparison = op switch
+        {
+            "minimum" => ">=",
+            "maximum" => "<=",
+            "greater" => ">",
+            "less" => "<",
+            "equals" => "=",
+            "notequals" => "<>",
+            _ => throw new ArgumentException($"Unsupported Studio filter operator '{filter.Operator}'.")
+        };
+
+        // The single value lives in Minimum: one field, one meaning, whichever comparison is chosen.
+        var value = NormalizeBound(filter.Minimum, isDate);
+        // No value yet is not an error — an author picks the operator before typing the number — it
+        // simply means there is nothing to filter on, exactly as an empty range means.
+        return value is null ? null : $"{column} {comparison} {value}";
     }
 
     private static string? BuildRange(string column, string? minimum, string? maximum, bool isDate)

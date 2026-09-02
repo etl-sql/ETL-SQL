@@ -2505,6 +2505,155 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Empty(session.PageErrors);
     }
 
+    // -- The filter pane past its first twelve values ----------------------------------------------
+
+    [Fact]
+    public async Task Studio_FilterPane_SearchesSelectsAndPagesThroughEveryValue()
+    {
+        // The pane used to cut a categorical list at twelve, with no search, no count and no way to
+        // reach the thirteenth: values that existed in the data could not be filtered on at all.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        // A column with more values than one card can show. The behaviour under test only begins
+        // past the first page, and the sandbox's default sample has four regions.
+        await page.AddInitScriptAsync("window.__STUDIO_SAMPLE_ROWS__ = 60;");
+        await page.ReloadAsync();
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.ClickAsync("button.etlsql-studio-rail-btn[data-activity='catalog']");
+        await page.ClickAsync("button.etlsql-studio-rail-btn[data-activity='filters']");
+
+        var filterSidebar = page.Locator("[data-filter-sidebar]");
+        await filterSidebar.Locator("[data-new-filter]").ClickAsync();
+        var setup = page.Locator(".etlsql-studio-filter-dialog");
+        await setup.WaitForAsync();
+        await setup.Locator("[data-filter-dialog-field]").SelectOptionAsync("region");
+        await setup.Locator("[data-filter-dialog-apply]").ClickAsync();
+        await filterSidebar.Locator("[data-filter-value='region']").First.WaitForAsync();
+
+        Assert.Equal(25, await filterSidebar.Locator("[data-filter-value='region']").CountAsync());
+        Assert.Contains("25 of 60", await filterSidebar.Locator(".etlsql-filter-value-footer").InnerTextAsync());
+
+        // The undo offer from the write sits over the bottom-right corner, which is where this pane
+        // is; dismissing it is what a reader would do before carrying on.
+        await DismissToastsAsync(page);
+        await filterSidebar.Locator("[data-filter-show-more='region']").ClickAsync();
+        Assert.Equal(50, await filterSidebar.Locator("[data-filter-value='region']").CountAsync());
+
+        await filterSidebar.Locator("[data-filter-search='region']").FillAsync("region_4");
+        await page.WaitForFunctionAsync(
+            """
+            () => document.querySelectorAll("[data-filter-value='region']").length === 10
+            """);
+
+        // Select all acts on what the search narrowed to, and adds to the selection rather than
+        // replacing it: the search changed the view, not the filter.
+        var selectedBefore = await page.EvaluateAsync<int>(
+            """
+            () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const doc = studio.state.documents.find(item => item.id === studio.state.activeDocId);
+                return (doc.studioContext.activeFilters.region?.values || []).length;
+            }
+            """);
+
+        await DismissToastsAsync(page);
+        await filterSidebar.Locator("[data-filter-select-all='region']").ClickAsync();
+        await page.WaitForFunctionAsync(
+            """
+            expected => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const doc = studio.state.documents.find(item => item.id === studio.state.activeDocId);
+                return (doc.studioContext.activeFilters.region?.values || []).length === expected;
+            }
+            """, selectedBefore + 10);
+
+        // Inverting what is shown takes exactly those ten back off again, and leaves the values the
+        // search is hiding alone.
+        await DismissToastsAsync(page);
+        await filterSidebar.Locator("[data-filter-invert='region']").ClickAsync();
+        await page.WaitForFunctionAsync(
+            """
+            expected => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const doc = studio.state.documents.find(item => item.id === studio.state.activeDocId);
+                return (doc.studioContext.activeFilters.region?.values || []).length === expected;
+            }
+            """, selectedBefore);
+
+        // Clear empties the whole selection, not only what is on screen.
+        await DismissToastsAsync(page);
+        await filterSidebar.Locator("[data-filter-select-none='region']").ClickAsync();
+        await page.WaitForFunctionAsync(
+            """
+            () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const doc = studio.state.documents.find(item => item.id === studio.state.activeDocId);
+                return (doc.studioContext.activeFilters.region?.values || []).length === 0;
+            }
+            """);
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_NumericFilter_OffersComparisonsAndNullChecksAndSendsThem()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.ClickAsync("button.etlsql-studio-rail-btn[data-activity='catalog']");
+        await page.ClickAsync("button.etlsql-studio-rail-btn[data-activity='filters']");
+
+        var filterSidebar = page.Locator("[data-filter-sidebar]");
+        await filterSidebar.Locator("[data-new-filter]").ClickAsync();
+        var setup = page.Locator(".etlsql-studio-filter-dialog");
+        await setup.WaitForAsync();
+        await setup.Locator("[data-filter-dialog-field]").SelectOptionAsync("total_amount");
+        await setup.Locator("[data-filter-dialog-apply]").ClickAsync();
+
+        // A range is the default, and both bounds are shown.
+        await filterSidebar.Locator("[data-filter-operator='total_amount']").WaitForAsync();
+        Assert.True(await filterSidebar.Locator("[data-filter-max='total_amount']").IsVisibleAsync());
+
+        await filterSidebar.Locator("[data-filter-operator='total_amount']").SelectOptionAsync("greater");
+        await filterSidebar.Locator("[data-filter-min='total_amount']").WaitForAsync();
+        // One comparison, one value: the second bound would describe nothing.
+        Assert.Equal(0, await filterSidebar.Locator("[data-filter-max='total_amount']").CountAsync());
+        await filterSidebar.Locator("[data-filter-min='total_amount']").FillAsync("500");
+        await filterSidebar.Locator("[data-filter-min='total_amount']").BlurAsync();
+
+        await page.WaitForFunctionAsync(
+            """
+            () => window.__STUDIO_API_REQUESTS__.some(request =>
+                request.url.endsWith('/api/designer/query-filter') &&
+                (request.body?.filters || []).some(filter =>
+                    filter.column === 'total_amount' && filter.operator === 'greater' && filter.minimum === '500'))
+            """);
+
+        // A null check needs no value at all, and must not keep the one the comparison had.
+        await filterSidebar.Locator("[data-filter-operator='total_amount']").SelectOptionAsync("isnull");
+        await page.WaitForFunctionAsync(
+            """
+            () => window.__STUDIO_API_REQUESTS__.some(request =>
+                request.url.endsWith('/api/designer/query-filter') &&
+                (request.body?.filters || []).some(filter =>
+                    filter.column === 'total_amount' && filter.operator === 'isnull' && !filter.minimum))
+            """);
+        Assert.Equal(0, await filterSidebar.Locator("[data-filter-min='total_amount']").CountAsync());
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    /// <summary>Clears any toast covering the corner a panel under test lives in.</summary>
+    private static async Task DismissToastsAsync(IPage page) =>
+        await page.EvaluateAsync("() => document.querySelectorAll('.etlsql-feedback-toast').forEach(toast => toast.remove())");
+
     private static async Task DismissOpenOverlaysAsync(IPage page)
     {
         const string selector = ".modal-overlay, [class$=modal-backdrop]";

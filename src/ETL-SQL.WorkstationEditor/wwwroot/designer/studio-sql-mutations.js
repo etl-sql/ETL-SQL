@@ -30,6 +30,8 @@ export function createStudioSqlMutationService({
             values: filter.values || null,
             minimum: filter.minimum == null ? null : String(filter.minimum),
             maximum: filter.maximum == null ? null : String(filter.maximum),
+            // Absent means "between", which is what every filter meant before conditions existed.
+            operator: filter.operator || null,
             parameterName: filter.parameterName || null,
             parameterOperator: filter.parameterOperator || null,
             allValue: filter.allValue || null

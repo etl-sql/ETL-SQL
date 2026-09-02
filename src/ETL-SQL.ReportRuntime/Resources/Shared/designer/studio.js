@@ -1209,12 +1209,18 @@ export async function createStudioWorkbench(container, opts = {}) {
      * quietly rewriting the buffer to a remembered string — which would then destroy whatever came
      * after — the offer refuses and says why.
      */
+    let dismissUndoOffer = null;
+
     function offerUndo(label, { document: target, before, after }) {
         if (!target || typeof before !== 'string' || typeof after !== 'string' || before === after) return;
         if (typeof state.editorInstance?.undo !== 'function') return;
         if (getActiveDoc() !== target) return;
 
-        _feedback.notify(`Studio wrote this into ${target.name}.`, {
+        // One offer at a time. Ticking through a filter's values writes once per click, and a column
+        // of stacked offers would bury the panel being worked in — while only the newest of them
+        // could be taken anyway, since each write invalidates the one before it.
+        dismissUndoOffer?.();
+        dismissUndoOffer = _feedback.notify(`Studio wrote this into ${target.name}.`, {
             title: label,
             tone: 'success',
             action: {
@@ -2380,6 +2386,45 @@ export async function createStudioWorkbench(container, opts = {}) {
         }).join('');
     }
 
+    /**
+     * How many categorical values a card shows before the reader asks for more.
+     *
+     * The pane used to cut the list at twelve with no search, no count, and no way to reach the
+     * thirteenth — so a column with fifty regions had thirty-eight values that existed in the data,
+     * were never shown, and could not be filtered on.
+     */
+    const FILTER_VALUE_PAGE = 25;
+
+    /** Per-card view state: what the reader searched for and how much of the list they opened. */
+    function filterViewState(context, field) {
+        context.filterView ||= {};
+        context.filterView[field] ||= { search: '', visible: FILTER_VALUE_PAGE };
+        return context.filterView[field];
+    }
+
+    /**
+     * The comparisons a number or date filter can make. `between` is first because it is what a
+     * filter with no operator has always meant, and what most authors want; the rest exist because a
+     * range cannot say "after the 3rd", "not zero", or "never filled in".
+     */
+    const FILTER_OPERATORS = Object.freeze([
+        { value: 'between', label: 'Is between', fields: 'range' },
+        { value: 'minimum', label: 'Is at least', fields: 'single' },
+        { value: 'maximum', label: 'Is at most', fields: 'single' },
+        { value: 'greater', label: 'Is greater than', fields: 'single' },
+        { value: 'less', label: 'Is less than', fields: 'single' },
+        { value: 'equals', label: 'Equals', fields: 'single' },
+        { value: 'notequals', label: 'Does not equal', fields: 'single' },
+        { value: 'isnull', label: 'Is blank', fields: 'none' },
+        { value: 'notnull', label: 'Is not blank', fields: 'none' },
+    ]);
+
+    function filterOperatorMarkup(field, current) {
+        return `<label class="etlsql-filter-control-label">Condition<select data-filter-operator="${_escapeHtml(field)}">${
+            FILTER_OPERATORS.map(option => `<option value="${option.value}"${option.value === current ? ' selected' : ''}>${option.label}</option>`).join('')
+        }</select></label>`;
+    }
+
     function filterCardMarkup(field) {
         const context = activeDocumentContext();
         const rows = context.snapshot?.rows || [];
@@ -2388,20 +2433,60 @@ export async function createStudioWorkbench(container, opts = {}) {
         const values = rows.map(row => row?.[field]).filter(value => value != null);
         const filter = context.activeFilters[field] || {};
         const scope = filter.scope || (state.selectedVisualId ? 'visual' : 'dataset');
+        const operator = filter.operator || 'between';
+        const shape = FILTER_OPERATORS.find(option => option.value === operator)?.fields || 'range';
         let control = '<div class="etlsql-filter-awaiting-data">Values appear after a sample loads.</div>';
+
         if (type === 'number' && values.length) {
             const numbers = values.map(Number).filter(Number.isFinite), min = Math.min(...numbers), max = Math.max(...numbers);
-            const selectedMin = filter.minimum ?? min, selectedMax = filter.maximum ?? max;
-            control = `<div class="etlsql-filter-range-label"><label>Min <input type="number" min="${min}" max="${max}" value="${selectedMin}" data-filter-min="${_escapeHtml(field)}"></label><label>Max <input type="number" min="${min}" max="${max}" value="${selectedMax}" data-filter-max="${_escapeHtml(field)}"></label></div>`;
+            const selectedMin = filter.minimum ?? (shape === 'range' ? min : '');
+            const selectedMax = filter.maximum ?? max;
+            const bounds = shape === 'none'
+                ? '<p class="etlsql-filter-operator-note">This condition needs no value.</p>'
+                : shape === 'single'
+                    ? `<div class="etlsql-filter-range-label"><label>Value <input type="number" value="${_escapeHtml(selectedMin)}" data-filter-min="${_escapeHtml(field)}"></label></div>`
+                    : `<div class="etlsql-filter-range-label"><label>Min <input type="number" min="${min}" max="${max}" value="${_escapeHtml(selectedMin)}" data-filter-min="${_escapeHtml(field)}"></label><label>Max <input type="number" min="${min}" max="${max}" value="${_escapeHtml(selectedMax)}" data-filter-max="${_escapeHtml(field)}"></label></div>`;
+            control = filterOperatorMarkup(field, operator) + bounds;
         } else if (type === 'date' && values.length) {
             const dates = values.map(value => String(value).slice(0, 10)).filter(value => /^\d{4}-\d{2}-\d{2}$/.test(value)).sort();
-            const selectedMin = filter.minimum || dates[0] || '', selectedMax = filter.maximum || dates.at(-1) || '';
-            control = `<label class="etlsql-filter-control-label">Date range<select data-date-preset="${_escapeHtml(field)}"><option value="custom">Custom</option><option value="last7">Last 7 days</option><option value="last30">Last 30 days</option><option value="quarter">This quarter</option><option value="ytd">Year to date</option></select></label><div class="etlsql-filter-range-label etlsql-filter-date-range"><input type="date" aria-label="Start date" value="${selectedMin}" data-filter-date-min="${_escapeHtml(field)}"><input type="date" aria-label="End date" value="${selectedMax}" data-filter-date-max="${_escapeHtml(field)}"></div>`;
+            const selectedMin = filter.minimum || (shape === 'range' ? (dates[0] || '') : '');
+            const selectedMax = filter.maximum || dates.at(-1) || '';
+            const bounds = shape === 'none'
+                ? '<p class="etlsql-filter-operator-note">This condition needs no value.</p>'
+                : shape === 'single'
+                    ? `<div class="etlsql-filter-range-label etlsql-filter-date-range"><input type="date" aria-label="Date" value="${_escapeHtml(selectedMin)}" data-filter-date-min="${_escapeHtml(field)}"></div>`
+                    : `<label class="etlsql-filter-control-label">Date range<select data-date-preset="${_escapeHtml(field)}"><option value="custom">Custom</option><option value="last7">Last 7 days</option><option value="last30">Last 30 days</option><option value="quarter">This quarter</option><option value="ytd">Year to date</option></select></label><div class="etlsql-filter-range-label etlsql-filter-date-range"><input type="date" aria-label="Start date" value="${_escapeHtml(selectedMin)}" data-filter-date-min="${_escapeHtml(field)}"><input type="date" aria-label="End date" value="${_escapeHtml(selectedMax)}" data-filter-date-max="${_escapeHtml(field)}"></div>`;
+            control = filterOperatorMarkup(field, operator) + bounds;
         } else if (values.length) {
-            const counts = new Map(); values.forEach(value => counts.set(String(value), (counts.get(String(value)) || 0) + 1));
+            const counts = new Map();
+            values.forEach(value => counts.set(String(value), (counts.get(String(value)) || 0) + 1));
             const selected = filter.values || [];
-            control = `<div class="etlsql-filter-items-list">${[...counts.entries()].slice(0, 12).map(([value, count]) => `<label class="etlsql-filter-item-label"><input type="checkbox" data-filter-value="${_escapeHtml(field)}" value="${_escapeHtml(value)}" ${selected.includes(value) ? 'checked' : ''}><span>${_escapeHtml(value)}</span><span>${count}</span></label>`).join('')}</div>`;
+            const view = filterViewState(context, field);
+            const search = view.search.trim().toLowerCase();
+            const all = [...counts.entries()];
+            const matching = search ? all.filter(([value]) => value.toLowerCase().includes(search)) : all;
+            const shown = matching.slice(0, view.visible);
+            const hidden = matching.length - shown.length;
+            // Selected values that the search hides are still selected, and the card says so rather
+            // than letting a search look like it cleared them.
+            const selectedHidden = selected.filter(value => !shown.some(([shownValue]) => shownValue === value)).length;
+            control = `<div class="etlsql-filter-value-tools">
+                    <input type="search" class="etlsql-filter-search" placeholder="Search ${all.length} value${all.length === 1 ? '' : 's'}" value="${_escapeHtml(view.search)}" data-filter-search="${_escapeHtml(field)}" aria-label="Search ${_escapeHtml(field)} values">
+                    <div class="etlsql-filter-value-actions">
+                        <button type="button" data-filter-select-all="${_escapeHtml(field)}">Select all</button>
+                        <button type="button" data-filter-select-none="${_escapeHtml(field)}">Clear</button>
+                        <button type="button" data-filter-invert="${_escapeHtml(field)}">Invert</button>
+                    </div>
+                </div>
+                ${matching.length
+                    ? `<div class="etlsql-filter-items-list">${shown.map(([value, count]) => `<label class="etlsql-filter-item-label"><input type="checkbox" data-filter-value="${_escapeHtml(field)}" value="${_escapeHtml(value)}" ${selected.includes(value) ? 'checked' : ''}><span>${_escapeHtml(value)}</span><span>${count}</span></label>`).join('')}</div>`
+                    : '<div class="etlsql-filter-awaiting-data">No value matches that search.</div>'}
+                <div class="etlsql-filter-value-footer">
+                    <span>${shown.length} of ${matching.length}${search ? ` matching · ${all.length} total` : ''}${selected.length ? ` · ${selected.length} selected` : ''}${selectedHidden ? ` (${selectedHidden} not shown)` : ''}</span>
+                    ${hidden > 0 ? `<button type="button" data-filter-show-more="${_escapeHtml(field)}">Show ${Math.min(hidden, FILTER_VALUE_PAGE)} more</button>` : ''}
+                </div>`;
         }
+
         return `<div class="etlsql-filter-card"><div class="etlsql-filter-card-header"><span>${_escapeHtml(field)}</span><button type="button" data-remove-filter="${_escapeHtml(field)}" aria-label="Remove ${_escapeHtml(field)} filter">×</button></div><span class="etlsql-filter-type-badge">${type}</span><label class="etlsql-filter-control-label">Scope<select data-filter-scope="${_escapeHtml(field)}"><option value="dataset" ${scope === 'dataset' ? 'selected' : ''}>Dataset global</option><option value="visual" ${scope === 'visual' ? 'selected' : ''} ${state.selectedVisualId ? '' : 'disabled'}>Selected visual</option></select></label>${control}<button type="button" class="etlsql-studio-btn etlsql-filter-promote-btn" data-promote-slicer="${_escapeHtml(field)}">Promote to viewer control</button></div>`;
     }
 
@@ -2569,6 +2654,8 @@ export async function createStudioWorkbench(container, opts = {}) {
             if (select.value === 'custom') return;
             const field = select.dataset.datePreset;
             const filter = ensureFilter(field, 'date');
+            // A preset is a range, so choosing one says which condition it is as well as its bounds.
+            filter.operator = 'between';
             Object.assign(filter, relativeDateRange(select.value));
             persistFilter(field).then(() => renderFilterPanel());
         }));
@@ -2580,6 +2667,81 @@ export async function createStudioWorkbench(container, opts = {}) {
             updateSnapshotPackage(activeDocumentContext().snapshot); state.designerInstance?.refreshSnapshot?.();
             persistFilter(field);
         }));
+        host.querySelectorAll('[data-filter-operator]').forEach(select => select.addEventListener('change', () => {
+            const context = activeDocumentContext();
+            const field = select.dataset.filterOperator;
+            const column = _snapshotColumns(context.snapshot).find(item => _columnName(item) === field) || { name: field };
+            const filter = ensureFilter(field, _columnType(column, context.snapshot?.rows || []));
+            filter.operator = select.value;
+            // A condition that takes no value must not keep the bounds of the one before it, or the
+            // predicate would say "is blank" while the card still shows a range.
+            if (select.value === 'isnull' || select.value === 'notnull') {
+                delete filter.minimum;
+                delete filter.maximum;
+            } else if (select.value !== 'between') {
+                delete filter.maximum;
+            }
+            renderFilterPanel();
+            persistFilter(field);
+        }));
+
+        // ── Categorical value list ────────────────────────────────────────────
+        // Search, the three selection actions, and paging are view state: they change what the card
+        // shows, and only the checkboxes change what the report filters on.
+        host.querySelectorAll('[data-filter-search]').forEach(input => {
+            input.addEventListener('input', () => {
+                const context = activeDocumentContext();
+                const view = filterViewState(context, input.dataset.filterSearch);
+                view.search = input.value;
+                view.visible = FILTER_VALUE_PAGE;
+                renderFilterPanel();
+                // Repainting moves focus off the box the reader is typing in, so it is put back with
+                // the caret where it was.
+                const refreshed = filterSidebarContent.querySelector(`[data-filter-search="${CSS.escape(input.dataset.filterSearch)}"]`);
+                if (refreshed) { refreshed.focus(); refreshed.setSelectionRange(refreshed.value.length, refreshed.value.length); }
+            });
+        });
+        host.querySelectorAll('[data-filter-show-more]').forEach(button => button.addEventListener('click', () => {
+            const context = activeDocumentContext();
+            filterViewState(context, button.dataset.filterShowMore).visible += FILTER_VALUE_PAGE;
+            renderFilterPanel();
+        }));
+
+        /** The values a card is currently showing, which is what Select all and Invert act on. */
+        const shownValues = field => [...host.querySelectorAll('[data-filter-value]')]
+            .filter(item => item.dataset.filterValue === field)
+            .map(item => item.value);
+
+        const commitValues = (field, values) => {
+            const context = activeDocumentContext();
+            const filter = ensureFilter(field, 'categorical');
+            filter.values = values;
+            updateSnapshotPackage(context.snapshot);
+            state.designerInstance?.refreshSnapshot?.();
+            renderFilterPanel();
+            persistFilter(field);
+        };
+
+        host.querySelectorAll('[data-filter-select-all]').forEach(button => button.addEventListener('click', () => {
+            const field = button.dataset.filterSelectAll;
+            const context = activeDocumentContext();
+            const existing = context.activeFilters[field]?.values || [];
+            // Selecting all while a search is active adds what is on screen and keeps the rest of
+            // the selection, because the search narrowed the view, not the filter.
+            commitValues(field, [...new Set([...existing, ...shownValues(field)])]);
+        }));
+        host.querySelectorAll('[data-filter-select-none]').forEach(button => button.addEventListener('click', () =>
+            commitValues(button.dataset.filterSelectNone, [])));
+        host.querySelectorAll('[data-filter-invert]').forEach(button => button.addEventListener('click', () => {
+            const field = button.dataset.filterInvert;
+            const context = activeDocumentContext();
+            const existing = new Set(context.activeFilters[field]?.values || []);
+            const shown = shownValues(field);
+            const inverted = shown.filter(value => !existing.has(value));
+            const untouched = [...existing].filter(value => !shown.includes(value));
+            commitValues(field, [...new Set([...untouched, ...inverted])]);
+        }));
+
         host.querySelectorAll('[data-promote-slicer]').forEach(button => button.addEventListener('click', () => promoteFilterToSlicer(button.dataset.promoteSlicer)));
     }
 

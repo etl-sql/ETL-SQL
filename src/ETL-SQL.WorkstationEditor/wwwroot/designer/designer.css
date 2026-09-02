@@ -5253,10 +5253,81 @@ body.vscode-dark .etlsql-cw-missing-hint {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    max-height: 120px;
+    /* Taller than the old twelve-value cut, and still bounded: the list scrolls, the card does not
+       grow until the pane does. */
+    max-height: 220px;
     overflow-y: auto;
     font-size: 0.75rem;
     color: var(--portal-text-soft, #8b949e);
+}
+
+.etlsql-filter-value-tools {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.etlsql-filter-search {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 4px;
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text, #f0f6fc);
+    font: inherit;
+    font-size: 0.6875rem;
+}
+
+.etlsql-filter-value-actions { display: flex; gap: 4px; }
+.etlsql-filter-value-actions button {
+    flex: 1 1 auto;
+    padding: 3px 6px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 4px;
+    background: none;
+    color: var(--portal-text-soft, #8b949e);
+    font: inherit;
+    font-size: 0.625rem;
+    cursor: pointer;
+}
+.etlsql-filter-value-actions button:hover {
+    color: var(--portal-text, #f0f6fc);
+    border-color: var(--portal-accent, #388bfd);
+}
+
+/* The count is the antidote to the old silent truncation: it says how much of the column the card
+   is showing, and offers the rest. */
+.etlsql-filter-value-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.625rem;
+}
+.etlsql-filter-value-footer button {
+    flex: 0 0 auto;
+    padding: 2px 6px;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 4px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 0.625rem;
+    cursor: pointer;
+}
+.etlsql-filter-value-footer button:hover {
+    color: var(--portal-text, #f0f6fc);
+    border-color: var(--portal-accent, #388bfd);
+}
+
+.etlsql-filter-operator-note {
+    margin: 4px 0 0;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
 }
 
 .etlsql-filter-item-label {
