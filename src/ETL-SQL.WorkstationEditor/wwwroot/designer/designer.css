@@ -6130,6 +6130,17 @@ body.vscode-dark .etlsql-cw-missing-hint {
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
+/* The sentence that says what the statement below does. It reads as prose, not as code, because a
+   reader who cannot yet read the SQL is exactly who it is for. */
+.etlsql-studio-sql-explains {
+    margin: 0;
+    color: var(--portal-text, #f0f6fc);
+    font-size: 0.6875rem;
+    line-height: 1.5;
+}
+.etlsql-studio-sql-preview.is-summary {
+    border-left: 3px solid var(--portal-accent, #388bfd);
+}
 .etlsql-studio-sql-preview pre {
     margin: 0;
     overflow-x: auto;
@@ -6213,6 +6224,28 @@ body.vscode-dark .etlsql-cw-missing-hint {
     cursor: pointer;
 }
 .etlsql-studio-rail-restore:hover { color: var(--portal-text, #f0f6fc); border-color: var(--portal-accent, #388bfd); }
+
+/* The one-line strip that replaces the rail once it is dismissed, or while the report's authoring
+   surface is unchosen. It stays on the canvas so the way back is visible, and stays quiet so it is
+   not a second rail. */
+.etlsql-studio-workflow-bar.is-collapsed {
+    align-items: center;
+    gap: 12px;
+    padding: 6px 12px;
+}
+.etlsql-studio-workflow-bar.is-collapsed > span {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+    line-height: 1.4;
+}
+.etlsql-studio-workflow-bar.is-collapsed .etlsql-studio-rail-restore {
+    width: auto;
+    margin-top: 0;
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
 
 /* ── Wizard groupings ──────────────────────────────────────────────────────── */
 

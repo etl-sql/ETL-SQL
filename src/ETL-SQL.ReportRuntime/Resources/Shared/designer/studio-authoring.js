@@ -41,7 +41,10 @@
  */
 
 import { columnName, columnType, snapshotColumns, updateSnapshotPackage as writeSnapshotPackage } from './studio-data.js';
-import { escapeHtml, noteMarkup as guidedNoteMarkup, sampleGridMarkup as sampleRowsMarkup, sqlPreviewMarkup } from './studio-authoring-ui.js';
+import {
+    escapeHtml, mutationExplanationMarkup, noteMarkup as guidedNoteMarkup,
+    sampleGridMarkup as sampleRowsMarkup, sqlPreviewMarkup,
+} from './studio-authoring-ui.js';
 import { createQueryWorkbench } from './studio-query-workbench.js';
 import { taskKindLabel } from './studio-pipeline-canvas.js';
 import {
@@ -63,6 +66,23 @@ const STUDIO_PARAMETER_TYPES = ['VARCHAR', 'INT', 'DECIMAL', 'DATE', 'DATETIME',
 
 /** Aggregates a TABLE's GRAND_TOTAL accepts. */
 const STUDIO_TOTAL_AGGREGATES = ['SUM', 'AVG', 'COUNT'];
+
+/**
+ * Suggested format patterns. These are suggestions in a free-text field, not a closed list: the
+ * renderer takes any .NET numeric or date pattern, and offering only these would make the common
+ * ones reachable at the cost of making everything else look unsupported.
+ */
+const STUDIO_FORMAT_PATTERNS = Object.freeze([
+    { pattern: 'N0', label: 'Whole number — 1,235' },
+    { pattern: 'N2', label: 'Number, 2 decimals — 1,234.50' },
+    { pattern: 'C0', label: 'Currency — $1,235' },
+    { pattern: 'C2', label: 'Currency, 2 decimals — $1,234.50' },
+    { pattern: 'P1', label: 'Percentage — 12.3%' },
+    { pattern: '$#,##0.00', label: 'Custom currency — $1,234.50' },
+    { pattern: 'd', label: 'Short date — 8/23/2026' },
+    { pattern: 'MMM yyyy', label: 'Month and year — Aug 2026' },
+    { pattern: 'yyyy-MM-dd', label: 'ISO date — 2026-08-23' },
+]);
 
 /**
  * Builds the guided authoring surfaces against one Studio workbench.
@@ -412,8 +432,10 @@ export function createStudioAuthoringSurfaces({
                             + 'The connection wizard writes a <code>CREATE CONNECTION</code> statement into the script, '
                             + 'which is what makes the report runnable anywhere — not just in this session.',
                         body: errorMarkup() + guidedNoteMarkup(
-                            'Host-registered aliases are deliberately not offered here. A dataset built on an alias this script '
-                            + 'does not declare would preview correctly and then fail for every other reader.', 'info'),
+                            'A report that borrows a connection from this session works for you and fails for everyone else '
+                            + 'who opens it — and for its scheduled runs — after previewing perfectly here. That is why the '
+                            + 'connections your host already knows about are not offered: only a CREATE CONNECTION statement '
+                            + 'inside the script travels with the report.', 'info'),
                         actions: [
                             { id: 'back', label: 'Back', run: () => { wizard.pane = 'start'; wizard.error = null; paint(); } },
                             { id: 'connect', label: 'Create a connection', primary: true, run: openConnectionThenReturn },
@@ -506,7 +528,9 @@ export function createStudioAuthoringSurfaces({
                         + `<label class="etlsql-studio-guided-field"><span>Keep cached rows for (TTL)</span>
                             <input type="text" data-dataset-ttl value="${escapeHtml(wizard.ttl)}" placeholder="2h" spellcheck="false"></label>
                           <p class="etlsql-studio-guided-hint">Durations like <code>30m</code>, <code>2h</code>, <code>1d</code>. Leave it blank to use the host’s default — an omitted TTL is not the same as a zero one. To refresh on a schedule, create a schedule and a job for the report; a dataset cannot carry its own refresh interval.</p>`
-                        + sqlPreviewMarkup(sql)
+                        + sqlPreviewMarkup(sql,
+                            `Adds a named dataset to the top of the script. Its query runs once per report run, `
+                            + `and every visual that reads &${base} shares that one result.`)
                         + (wizard.preview ? sampleRowsMarkup(wizard.preview) : ''),
                     actions: [
                         { id: 'back', label: 'Back', run: () => { wizard.pane = 'source'; wizard.error = null; paint(); } },
@@ -529,7 +553,10 @@ export function createStudioAuthoringSurfaces({
                         + sqlPreviewMarkup(`CREATE VISUAL … (
     SOURCE = ${source},
     …
-);`, 'Visuals will be written with this source')
+);`,
+                            'Changes nothing on its own. Each visual you add next is written with this SOURCE, so each one '
+                            + 'queries the connection again when the report runs.',
+                            'Visuals will be written with this source')
                         + guidedNoteMarkup('Nothing is written to the script yet — the source lands on each visual as you add it. '
                             + 'Switch to a dataset later if the same query starts feeding several visuals.', 'info')
                         + (wizard.preview ? sampleRowsMarkup(wizard.preview) : ''),
@@ -738,7 +765,7 @@ export function createStudioAuthoringSurfaces({
         const next = script.slice(0, at) + statement + '\n\n' + script.slice(at);
         doc.content = next;
         doc.isDirty = true;
-        shell.setScriptText(next);
+        shell.setScriptText(next, 'Use dataset');
         shell.renderTabs();
     }
 
@@ -814,6 +841,11 @@ export function createStudioAuthoringSurfaces({
             // stored column — "users per day" is a COUNT grouped by day — so the aggregate belongs to
             // the visual, letting two charts over one dataset summarise it differently.
             aggregates: {},
+            // How the numbers and dates read. Two patterns, not a formatting panel: the value the
+            // chart is about, and the axis it is plotted against. Everything past that — colours,
+            // grid lines, data labels, axis bounds — belongs to the Format inspector on the selected
+            // tile, which already does the job and is opened once this visual is added.
+            format: { value: '', axis: '' },
         };
         if (!Object.keys(draft.mappings).length) autoAssignRoles(draft, columns);
 
@@ -874,12 +906,26 @@ export function createStudioAuthoringSurfaces({
                 options: {},
             });
 
+            /** The category axis a format can apply to; only a cartesian chart has one. */
+            const axisRole = () => rolesForVisualType(draft.type).find(role => role.key === 'X') || null;
+
+            /** Format patterns written the way the generator writes them, so preview and write agree. */
+            const formatOptions = () => {
+                const options = [];
+                const value = draft.format.value.trim();
+                const axis = draft.format.axis.trim();
+                if (value) options.push(`FORMAT = '${value.replace(/'/g, "''")}'`);
+                if (axis && axisRole()) options.push(`X_AXIS (FORMAT = '${axis.replace(/'/g, "''")}')`);
+                return options;
+            };
+
             const sql = () => {
                 const source = sourceExpression();
                 const entries = Object.entries(resolvedMappings()).filter(([, value]) => value);
                 return `CREATE VISUAL ${datasetBaseName(draft.title || `${draft.type.toLowerCase()}_visual`)} AS ${draft.type} (\n`
                     + `    SOURCE = ${source}`
                     + (entries.length ? `,\n    MAPPINGS (${entries.map(([role, value]) => `${role} = ${value}`).join(', ')})` : '')
+                    + (formatOptions().length ? `,\n    OPTIONS (${formatOptions().join(', ')})` : '')
                     + (draft.title ? `,\n    TITLE = '${String(draft.title).replace(/'/g, "''")}'` : '')
                     + '\n);';
             };
@@ -915,8 +961,27 @@ export function createStudioAuthoringSurfaces({
                     </div>
                     <label class="etlsql-studio-guided-field"><span>Title</span>
                         <input type="text" data-builder-title value="${escapeHtml(draft.title)}"
-                            placeholder="${escapeHtml(`${draft.type} visual`)}"></label>`
-                    + sqlPreviewMarkup(sql()),
+                            placeholder="${escapeHtml(`${draft.type} visual`)}"></label>
+                    <div class="etlsql-studio-guided-row">
+                        <label class="etlsql-studio-guided-field"><span>Value format</span>
+                            <input type="text" data-builder-format list="etlsql-builder-formats"
+                                value="${escapeHtml(draft.format.value)}" placeholder="1234.5 unformatted" spellcheck="false">
+                        </label>
+                        ${axisRole() ? `<label class="etlsql-studio-guided-field"><span>Axis label format</span>
+                            <input type="text" data-builder-axis-format list="etlsql-builder-formats"
+                                value="${escapeHtml(draft.format.axis)}" placeholder="Auto" spellcheck="false">
+                        </label>` : ''}
+                    </div>
+                    <datalist id="etlsql-builder-formats">${STUDIO_FORMAT_PATTERNS.map(pattern =>
+                        `<option value="${escapeHtml(pattern.pattern)}">${escapeHtml(pattern.label)}</option>`).join('')}</datalist>
+                    <p class="etlsql-studio-guided-hint">Number and date patterns, as .NET writes them —
+                        <code>N0</code>, <code>C2</code>, <code>P1</code>, <code>$#,##0.00</code>,
+                        <code>MMM yyyy</code>. Everything else about how this looks — colours, grid lines,
+                        data labels, axis bounds — is in <strong>Format</strong> on the selected tile, which
+                        opens on the visual as soon as it is added.</p>`
+                    + sqlPreviewMarkup(sql(),
+                        `Adds one ${draft.type} visual to the page, bound to the fields in the roles above. `
+                        + 'It is appended after the statements already in the script; nothing existing is changed.'),
                 actions: [
                     { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
                     {
@@ -990,6 +1055,17 @@ export function createStudioAuthoringSurfaces({
                     }));
 
                     host.querySelector('[data-builder-title]')?.addEventListener('input', event => { draft.title = event.target.value; });
+                    // Repainting on change, not on input: the preview under these fields is the SQL
+                    // about to be written, and redrawing it on every keystroke makes a half-typed
+                    // pattern look like the decision.
+                    host.querySelector('[data-builder-format]')?.addEventListener('change', event => {
+                        draft.format.value = event.target.value;
+                        paint();
+                    });
+                    host.querySelector('[data-builder-axis-format]')?.addEventListener('change', event => {
+                        draft.format.axis = event.target.value;
+                        paint();
+                    });
                 },
             });
 
@@ -1004,6 +1080,8 @@ export function createStudioAuthoringSurfaces({
                 api.busy(true);
                 const binding = visualSourceBinding();
                 const measure = activeMeasure();
+                const valueFormat = draft.format.value.trim();
+                const axisFormat = axisRole() ? draft.format.axis.trim() : '';
                 // An aggregated visual reads from a grouped SELECT, so it carries an inline source
                 // rather than a bare dataset reference.
                 const source = measure
@@ -1028,12 +1106,27 @@ export function createStudioAuthoringSurfaces({
                         title: draft.title || null,
                         dataset: source.dataset,
                         mappings: { ...mappings },
-                        options: { ...source.options },
+                        options: {
+                            ...source.options,
+                            ...(valueFormat ? { FORMAT: valueFormat } : {}),
+                        },
+                        // The axis pattern rides on the visual's formatting, which is where the
+                        // Format inspector reads and writes it — the builder starts that record
+                        // rather than keeping a second one of its own.
+                        ...(axisFormat ? { formatting: { xAxis: { FORMAT: axisFormat } } } : {}),
                     });
                     return name;
                 });
                 api.busy(false);
-                if (added) feedback.notify(`Added ${type} visual ${added}.`, { title: 'Visual added', tone: 'success' });
+                if (added) {
+                    feedback.notify(`Added ${type} visual ${added}. Format on the selected tile carries on from here.`,
+                        { title: 'Visual added', tone: 'success' });
+                    // The hand-off: the builder decides the shape of a visual once, and every later
+                    // change belongs to the inspector that already edits every property. Selecting
+                    // the new visual is what opens it, so the author lands on the controls that
+                    // continue the job instead of reopening a wizard that would start a new one.
+                    shell.selectVisual?.(added);
+                }
                 api.close(added);
             };
 
@@ -1253,7 +1346,12 @@ export function createStudioAuthoringSurfaces({
                             Hide the value as a secret (PASSWORD)</label>
                         <p class="etlsql-studio-guided-hint">Text defaults need quotes, exactly as they appear in the script.</p>`
                         + (collides ? guidedNoteMarkup('Another parameter already uses that name.', 'warning') : '')
-                        + sqlPreviewMarkup(declarationSql(draft)),
+                        + sqlPreviewMarkup(declarationSql(draft),
+                            isEdit
+                                ? `Rewrites the declaration of ${draft.name} in place. Queries and visuals that already `
+                                  + 'reference it keep working; a changed type or default takes effect on the next run.'
+                                : `Declares ${draft.name} near the top of the script. Nothing uses it until you reference `
+                                  + 'it in a dataset query, a filter, or a slicer.'),
                     actions: [
                         { id: 'back', label: 'Back', run: paintList },
                         {
@@ -1315,6 +1413,8 @@ export function createStudioAuthoringSurfaces({
                     + 'query, a slicer action — keeps that reference and will not resolve, so check those first.',
                 body: sqlPreviewMarkup(
                     `DECLARE ${parameter.name} ${parameter.dataType}${parameter.initialValue ? ` = ${parameter.initialValue}` : ''};`,
+                    `Deletes this line from the script. Nothing else is rewritten, so any query still naming `
+                    + `${parameter.name} keeps that reference and stops resolving.`,
                     'Removes this declaration'),
                 actions: [
                     { id: 'back', label: 'Keep it', run: paintList },
@@ -1368,6 +1468,10 @@ export function createStudioAuthoringSurfaces({
                         <div class="etlsql-studio-check-grid">${columns.map(column => `
                             <label><input type="checkbox" data-detail-column="${escapeHtml(column)}"
                                 ${draft.detail.includes(column) ? 'checked' : ''}>${escapeHtml(column)}</label>`).join('')}</div></div>`
+                    + mutationExplanationMarkup(
+                        `Appends ${draft.includeMatrix ? 'a matrix summarising ' + draft.measure + ' by ' + draft.group + ' and ' : ''}`
+                        + `a detail table printing ${draft.detail.length} column${draft.detail.length === 1 ? '' : 's'} `
+                        + 'below whatever the page already holds. Existing visuals are not moved or rewritten.')
                     + (draft.detail.length ? '' : guidedNoteMarkup('Pick at least one detail column, or the table has nothing to print.', 'warning')),
                 actions: [
                     { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
@@ -1455,7 +1559,10 @@ export function createStudioAuthoringSurfaces({
                     <label class="etlsql-studio-guided-field"><span>Aggregate</span>
                         <select data-total-aggregate>${STUDIO_TOTAL_AGGREGATES.map(aggregate =>
                             `<option ${draft.aggregate === aggregate ? 'selected' : ''}>${aggregate}</option>`).join('')}</select></label>`
-                    + sqlPreviewMarkup(`OPTIONS (GRAND_TOTAL = ${draft.aggregate})`, 'Adds this option to the table'),
+                    + sqlPreviewMarkup(`OPTIONS (GRAND_TOTAL = ${draft.aggregate})`,
+                        `Adds one footer row to ${draft.target} showing the ${draft.aggregate} of each numeric column it prints. `
+                        + 'The detail rows above it are unchanged.',
+                        'Adds this option to the table'),
                 actions: [
                     { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
                     {
@@ -1509,6 +1616,11 @@ export function createStudioAuthoringSurfaces({
                     <label class="etlsql-studio-guided-check">
                         <input type="checkbox" data-furniture-break ${draft.breakAfterDetails ? 'checked' : ''}>
                         Start a new page after the detail table</label>`
+                    + mutationExplanationMarkup(
+                        `Adds ${[draft.addHeader ? 'a header band' : null, draft.addFooter ? 'a footer band' : null]
+                            .filter(Boolean).join(' and ') || 'nothing yet'} to the page as TEXT visuals`
+                        + `${draft.breakAfterDetails ? ', and sets the detail table to start a new page after it' : ''}. `
+                        + 'The bands print on every physical page; the data visuals are untouched.')
                     + (draft.addHeader || draft.addFooter ? '' : guidedNoteMarkup('Nothing selected — pick a header, a footer, or both.', 'warning')),
                 actions: [
                     { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
@@ -1793,7 +1905,13 @@ export function createStudioAuthoringSurfaces({
                                     ' behind the connection declarations the script already makes, so an alias '
                                     + 'resolves exactly as it will at run time.',
                                 ], 'info')
-                            : ''),
+                            : '')
+                        + mutationExplanationMarkup(editing
+                            ? `Rewrites ${task.id} in place. Only that statement changes: hand edits elsewhere, and `
+                              + 'the tasks that wait for this one, are left as they are.'
+                            : `Adds one ${taskKindLabel(taskKind).toLowerCase()} task to the end of the pipeline, under the `
+                              + 'label above. Nothing already in the script is moved or rewritten, and nothing runs until '
+                              + 'you run it.'),
                     actions: [
                         { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
                         { id: 'save', label: editing ? 'Apply' : 'Add task', primary: true, run: save },

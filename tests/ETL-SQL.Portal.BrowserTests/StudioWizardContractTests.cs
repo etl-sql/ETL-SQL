@@ -341,6 +341,80 @@ public sealed class StudioWizardContractTests(PortalBrowserFixture fixture) : IA
     }
 
     /// <summary>Creates a blank paginated report, which is where the numbered report steps live.</summary>
+    // ── Rule 4, in words: every preview also says what it changes ─────────────────────────────────
+
+    [Fact]
+    public async Task EveryWizardPreview_SaysWhatItChangesInASentence()
+    {
+        // The exact SQL is the contract; the sentence is what makes it checkable by an author who
+        // does not read the dialect yet. A preview with no sentence is a wall to click past.
+        await using var session = await fixture.NewSessionAsync();
+        var page = await OpenStudioAsync(session);
+
+        await page.ClickAsync("[data-workflow-step='palette']");
+        await page.ClickAsync("[data-dialog-action='build']");
+        await page.Locator(".etlsql-studio-sql-preview pre").WaitForAsync();
+        await AssertPreviewIsExplainedAsync(page, "the chart builder");
+        await page.ClickAsync("[data-dialog-action='cancel']");
+
+        await page.ClickAsync("[data-workflow-step='catalog']");
+        await page.ClickAsync("[data-start-path='create']");
+        await page.ClickAsync("[data-pick-connection='corp_db']");
+        await page.Locator("[data-pick-table]").First.WaitForAsync();
+        await page.Locator("[data-pick-table]").First.ClickAsync();
+        await page.ClickAsync("[data-dialog-action='next']");
+        await page.Locator(".etlsql-studio-sql-preview pre").WaitForAsync();
+        await AssertPreviewIsExplainedAsync(page, "the dataset wizard");
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static async Task AssertPreviewIsExplainedAsync(IPage page, string surface)
+    {
+        var previews = await page.Locator(".etlsql-studio-sql-preview").AllAsync();
+        Assert.NotEmpty(previews);
+        foreach (var preview in previews)
+        {
+            var explanation = (await preview.Locator(".etlsql-studio-sql-explains").TextContentAsync() ?? "").Trim();
+            Assert.True(explanation.Length > 20,
+                $"A SQL preview in {surface} shows the statement without saying what it changes.");
+        }
+    }
+
+    [Fact]
+    public async Task ChartBuilder_WritesTheNumberAndDateFormatsItPreviewed()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = await OpenStudioAsync(session);
+
+        await page.ClickAsync("[data-workflow-step='palette']");
+        await page.ClickAsync("[data-dialog-action='build']");
+        await page.Locator(".etlsql-studio-sql-preview pre").WaitForAsync();
+
+        await page.FillAsync("[data-builder-format]", "C2");
+        await page.Locator("[data-builder-format]").BlurAsync();
+        await page.Locator(".etlsql-studio-sql-preview pre:has-text(\"FORMAT = 'C2'\")").WaitForAsync();
+        await page.FillAsync("[data-builder-axis-format]", "MMM yyyy");
+        await page.Locator("[data-builder-axis-format]").BlurAsync();
+        await page.Locator(".etlsql-studio-sql-preview pre:has-text(\"X_AXIS\")").WaitForAsync();
+
+        var previewed = await PreviewedSqlAsync(page);
+        Assert.Contains("FORMAT = 'C2'", previewed, StringComparison.Ordinal);
+        Assert.Contains("X_AXIS (FORMAT = 'MMM yyyy')", previewed, StringComparison.Ordinal);
+
+        await page.ClickAsync("[data-dialog-action='add']");
+        await page.Locator("[data-dialog-action='add']").WaitForAsync(
+            new LocatorWaitForOptions { State = WaitForSelectorState.Detached });
+
+        var script = await page.EvaluateAsync<string>(ScriptTextScript);
+        Assert.Contains(Normalize(previewed), Normalize(script), StringComparison.Ordinal);
+
+        // The hand-off: the builder finishes by selecting what it made, which is what opens the
+        // Format inspector where every further presentation change belongs.
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__.state.selectedVisualId)");
+        Assert.Empty(session.PageErrors);
+    }
+
     private static async Task NewPaginatedReportAsync(IPage page)
     {
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");

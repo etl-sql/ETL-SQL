@@ -76,20 +76,33 @@ public static class RepresentativeVisualConformanceHarness
             throw new FileNotFoundException($"Conformance fixture not found: {fixturePath}");
 
         var script = await File.ReadAllTextAsync(fixturePath);
+        return await CompileScriptAsync(script, fixturePath, $"Fixture '{fixtureFileName}'");
+    }
+
+    /// <summary>
+    /// Compiles Report-SQL that is not a fixture on disk — script text that lives somewhere else and
+    /// still has to prove it produces a real report, such as the sample Studio seeds for a first run.
+    /// </summary>
+    /// <param name="script">The Report-SQL to run.</param>
+    /// <param name="sourcePath">Path recorded on the manifest; it need not exist.</param>
+    /// <param name="description">What to name in a parse failure.</param>
+    public static async Task<(Script Ast, ReportManifest Manifest, Evaluator Evaluator)> CompileScriptAsync(
+        string script, string sourcePath, string description)
+    {
         var tokens = new Lexer(script).Tokenize();
         var ast = new CoreParser(tokens, script).Parse();
 
         if (ast.Diagnostics.Any(d => d.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error))
         {
             var errors = string.Join("; ", ast.Diagnostics.Select(d => d.Message));
-            throw new InvalidOperationException($"Fixture '{fixtureFileName}' failed to parse: {errors}");
+            throw new InvalidOperationException($"{description} failed to parse: {errors}");
         }
 
         var evaluator = CreateConformanceEvaluator();
         await evaluator.Evaluate(ast);
 
         var manifestBuilder = new ManifestBuilder(evaluator);
-        var manifest = await manifestBuilder.BuildAsync(fixturePath);
+        var manifest = await manifestBuilder.BuildAsync(sourcePath);
 
         return (ast, manifest, evaluator);
     }

@@ -112,33 +112,56 @@ selected point.
   grouped by the task performing it, with `#temp` staging deliberately absent so the confirmation
   keeps meaning something. Skipped siblings are named rather than dropped silently.
 
-### Phase 3 — Guided Authoring and Beginner Recovery
+### Phase 3 — Guided Authoring and Beginner Recovery (Complete)
 
 **Outcome:** The common dashboard and report path is understandable and recoverable without editing
 SQL, while the script remains visible as the advanced escape hatch.
 
-- [ ] **Add undo for wizard writes**: After dataset, visual, parameter, and future DAG mutations,
-  offer a dismissible Undo action backed by the originating CodeMirror transaction.
-- [ ] **Make Start with Sample Data produce a working dashboard**: Seed a MOCKDB dashboard with a
-  KPI, chart, and table instead of opening a blank canvas.
-- [ ] **Finish report-workflow entry behavior**:
-  - Add Cancel/dismiss to the ambiguous Dashboard-versus-Paginated prompt and explain that the choice
-    changes Studio tools, not the script.
-  - Default new sample dashboards and new dashboards to Canvas view while preserving each document's
-    later projection preference.
-  - Put a visible guided-rail restore action in the main canvas.
-- [ ] **Explain every wizard mutation**: Alongside the exact SQL preview, show one sentence explaining
-  what will be added or changed.
-- [ ] **Replace beginner-facing implementation labels**: Show Dashboard / Report and Pipeline /
-  Script instead of `REPORTSQL` and `ETLSQL`; rewrite the host-alias warning around the consequence
-  for other readers before explaining the implementation reason.
-- [ ] **Surface bookmarks, themes, and styles in Studio**: Move the existing authoring UI from
-  `designer.js` into the Studio rail/inspector without creating a second implementation.
-- [ ] **Finish chart-creator controls**: Add aggregation selection per measure role and number/date
-  formatting, then hand off further edits to the existing formatting inspector. Add explicit
-  top/right/bottom/left legend placement there.
+- [x] **Add undo for wizard writes**: Every canonical mutation — dataset, visual, parameter, page
+  setup, filter, and the pipeline task edits — offers a dismissible Undo on the toast that reports
+  it. It is backed by the CodeMirror transaction that made the write, not by a remembered copy of
+  the old text: the ranged `replaceAll` means the editor's history already holds the exact inverse.
+  That is also why the offer expires. History undo pops the last event, so once anything else has
+  changed the buffer the offer refuses and says so, rather than rewriting the buffer to a remembered
+  string and destroying whatever came after.
+- [x] **Make Start with Sample Data produce a working dashboard**: The seeded MOCKDB script stages
+  one shared `#temp` query, then builds a KPI card, a bar chart, and a table onto a dashboard page
+  whose `STRUCTURE` places all three. Parsing was not the bar — a script that parses can still
+  evaluate to a page with no visuals or to visuals with no rows, which is the blank canvas the seed
+  exists to remove — so the test executes it against the sample connector and asserts each tile has
+  rows and a slot in the page's `MAP`.
+- [x] **Finish report-workflow entry behavior**:
+  - The Dashboard-versus-Paginated question takes Not now, Escape, or a click outside, and is not
+    asked again for that document; the canvas then carries the choice so declining once costs
+    nothing. Its wording leads with what the choice does and does not do.
+  - New dashboards, seeded or blank, open on the canvas; a paginated report still opens split
+    because its page setup is script-shaped. `setProjection` records the choice on the document, so
+    an author who switches keeps that per document.
+  - Dismissing the guided rail leaves a restore strip where the rail was, on the canvas — the
+    sidebar's copy of the restore is not reachable enough to be the only one.
+- [x] **Explain every wizard mutation**: `sqlPreviewMarkup` now takes the sentence as a required
+  argument and throws without it, and the steps whose write is design-state shaped — group and
+  detail bands, page furniture, a pipeline task — carry the same sentence without quoting bytes the
+  patcher, not the wizard, decides. A browser test reads the sentence out of every preview a wizard
+  paints.
+- [x] **Replace beginner-facing implementation labels**: A file is a Dashboard, Report, Pipeline, or
+  Query, refined by what Studio actually knows when the document is open and falling back to the
+  extension when it is not. The host-alias refusal now leads with the consequence — a report that
+  borrows a session connection works for you and fails for every other reader and every scheduled
+  run — before the implementation reason.
+- [x] **Surface bookmarks, themes, and styles in Studio**: The bookmark editor moved out of the
+  designer's markup into its own element with a `mountBookmarks` entry point, so Studio's rail hosts
+  the same DOM with the same listeners. Report theme and style needed no move at all: the designer
+  already renders it into Studio's inspector when nothing is selected, and Studio hid the inspector
+  on an empty selection — so the panel was written, wired, and unreachable. Both are covered by a
+  browser test that drives the rail and changes the theme.
+- [x] **Finish chart-creator controls**: Per-measure aggregation already existed; the builder now
+  adds number and date formatting for the value and the category axis, written as the `FORMAT` and
+  `X_AXIS (FORMAT = …)` its preview shows. Adding a visual selects it, which opens the formatting
+  inspector — already the owner of colours, grid lines, data labels, axis bounds, and explicit
+  top/right/bottom/left legend placement — so the builder shapes a visual once and hands over.
 
-### Phase 4 — Report Interaction, Paginated Output, and Model Views
+### Phase 4 — Report Interaction, Paginated Output, and Model Views (Next)
 
 **Outcome:** Studio can complete the representative interactive-dashboard and paginated-report jobs,
 then expose advanced inspection views that do not block basic authoring.

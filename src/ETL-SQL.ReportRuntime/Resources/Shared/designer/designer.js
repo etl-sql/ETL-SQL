@@ -4228,17 +4228,24 @@ export function createDesigner(container, opts = {}) {
             <div id="dsgn-ds-list"></div>
         </div>
         <div class="etlsql-dsgn-section">
-            <div class="etlsql-dsgn-section-hdr">
-                Bookmarks <button class="etlsql-dsgn-section-action" id="dsgn-add-bookmark" type="button">+ Add</button>
-            </div>
-            <div id="dsgn-bookmark-list"></div>
-        </div>
-        <div class="etlsql-dsgn-section">
             <div class="etlsql-dsgn-section-hdr">On This Page</div>
             <div id="dsgn-tree"></div>
         </div>
     `;
     sidebar.innerHTML = sidebarHtml;
+
+    // Bookmarks live in their own element rather than in the sidebar's markup, because Studio hides
+    // this sidebar and hosts its own rail. `mountBookmarks` moves this exact node — same DOM, same
+    // listeners, same render path — so the two hosts cannot drift into two bookmark editors.
+    const bookmarksSection = document.createElement('div');
+    bookmarksSection.className = 'etlsql-dsgn-section';
+    bookmarksSection.innerHTML = `
+        <div class="etlsql-dsgn-section-hdr">
+            Bookmarks <button class="etlsql-dsgn-section-action" id="dsgn-add-bookmark" type="button">+ Add</button>
+        </div>
+        <div id="dsgn-bookmark-list"></div>
+    `;
+    sidebar.appendChild(bookmarksSection);
     root.appendChild(sidebar);
     if (opts.hideSidebar) {
         sidebar.hidden = true;
@@ -6812,7 +6819,7 @@ export function createDesigner(container, opts = {}) {
     }
 
     function renderBookmarks() {
-        const list = sidebar.querySelector('#dsgn-bookmark-list');
+        const list = bookmarksSection.querySelector('#dsgn-bookmark-list');
         if (!list) return;
         list.innerHTML = '';
         const bookmarks = bookmarkList();
@@ -7955,9 +7962,9 @@ export function createDesigner(container, opts = {}) {
         if (del) { state.datasets = state.datasets.filter(d => d.id !== del.dataset.dsid); renderDatasets(); renderProps(); }
     });
 
-    sidebar.querySelector('#dsgn-add-bookmark').addEventListener('click', () =>
+    bookmarksSection.querySelector('#dsgn-add-bookmark').addEventListener('click', () =>
         addBookmark().catch(e => _feedback.notify(e.message, { title: 'Bookmark not added', tone: 'error' })));
-    sidebar.querySelector('#dsgn-bookmark-list').addEventListener('click', e => {
+    bookmarksSection.querySelector('#dsgn-bookmark-list').addEventListener('click', e => {
         const edit = e.target.closest('[data-bmedit]');
         if (edit) {
             editBookmarkTitle(edit.dataset.bmedit)
@@ -8006,6 +8013,17 @@ export function createDesigner(container, opts = {}) {
         invalidateScriptApply,
         addVisual,
         selectVisual,
+        /**
+         * Moves the bookmark editor into `host`, or back into this designer's own sidebar when
+         * given nothing. It is a move, not a copy: a host that re-renders its rail can call this
+         * again on every paint and get the same element back, still wired, still showing whatever
+         * the current script declares.
+         */
+        mountBookmarks: host => {
+            (host || sidebar).appendChild(bookmarksSection);
+            renderBookmarks();
+            return bookmarksSection;
+        },
         refreshSnapshot: renderCanvas,
         getState: () => state,
         dispose: () => {

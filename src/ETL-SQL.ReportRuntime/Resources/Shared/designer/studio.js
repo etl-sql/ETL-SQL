@@ -87,6 +87,23 @@ function _fileIcon(path) {
     return _studioIcon('explorer', 14);
 }
 
+/**
+ * What a file is, said the way an author would say it.
+ *
+ * `REPORTSQL` and `ETLSQL` are the names of two dialects the engine tells apart; they are not names
+ * of anything the author set out to build, and a beginner reading them on a card has to learn an
+ * implementation detail before they can find their own work. The kind is refined when a document is
+ * open — Studio then knows whether a report is a dashboard, and whether an `.etlsql` file is being
+ * worked on as a pipeline or read as a plain script. With nothing open, the extension is all there
+ * is, so the label is the commoner of the two rather than a guess dressed up as knowledge.
+ */
+function _documentKindLabel(path, doc = null) {
+    const ext = String(path || '').split('.').pop()?.toLowerCase();
+    if (ext === 'rptsql') return doc?.reportWorkflow === 'dashboard' ? 'Dashboard' : 'Report';
+    if (ext === 'etlsql') return doc?.projection === 'code' ? 'Script' : 'Pipeline';
+    return 'Query';
+}
+
 const CHART_PALETTE = ['#388bfd', '#2ea043', '#f0883e', '#a371f7', '#58a6ff', '#7ee787', '#d29922', '#bc8cff'];
 
 function _isUntitledPath(path) {
@@ -435,16 +452,33 @@ export async function createStudioWorkbench(container, opts = {}) {
                     <div><span class="etlsql-studio-kicker">Choose an authoring surface</span><h2>${_escapeHtml(doc.name)}</h2></div>
                 </div>
                 <div class="etlsql-studio-modal-body etlsql-workflow-choice" role="group" aria-label="Report workflow">
-                    <p>This Report-SQL file does not declare one clear page mode. Choosing a surface changes only Studio's tools; the script stays byte-for-byte unchanged.</p>
+                    <p>This file does not say which kind of report it is, so Studio does not know which tools to offer. The choice changes Studio's tools only — the script is not edited either way, and you can change your mind from the canvas at any time.</p>
                     <button type="button" data-choose-workflow="dashboard"><strong>Dashboard</strong><span>Responsive canvas for charts, KPIs, tables, slicers, and cross-filtering.</span></button>
                     <button type="button" data-choose-workflow="paginated"><strong>Paginated Report</strong><span>Physical pages for parameters, detail rows, totals, headers, footers, and export.</span></button>
+                    <div class="etlsql-studio-modal-actions">
+                        <button type="button" class="etlsql-studio-btn" data-choose-workflow-cancel>Not now</button>
+                    </div>
                 </div>`;
             modalBackdrop.hidden = false;
             const finish = workflow => {
                 modalBackdrop.hidden = true;
                 modalBox.innerHTML = '';
+                modalBackdrop.removeEventListener('click', onBackdrop);
+                document.removeEventListener('keydown', onKey, true);
                 resolve(workflow);
             };
+            // Escape and a click outside mean the same thing as Not now: the author is not refusing
+            // Studio, they are refusing to answer a question they cannot yet judge. Leaving them
+            // trapped in a modal over their own script is the worse answer.
+            const onBackdrop = event => { if (event.target === modalBackdrop) finish(null); };
+            const onKey = event => {
+                if (event.key !== 'Escape') return;
+                event.preventDefault();
+                finish(null);
+            };
+            modalBackdrop.addEventListener('click', onBackdrop);
+            document.addEventListener('keydown', onKey, true);
+            modalBox.querySelector('[data-choose-workflow-cancel]').addEventListener('click', () => finish(null));
             modalBox.querySelectorAll('[data-choose-workflow]').forEach(button => {
                 button.addEventListener('click', () => finish(button.dataset.chooseWorkflow));
             });
@@ -455,10 +489,19 @@ export async function createStudioWorkbench(container, opts = {}) {
     async function ensureReportWorkflow(doc, { askWhenAmbiguous = true } = {}) {
         if (!doc || !(doc.path || '').toLowerCase().endsWith('.rptsql')) return null;
         if (doc.reportWorkflow) return doc.reportWorkflow;
+        // Asked once. An author who dismissed the question gets the canvas restore strip instead of
+        // the same modal on every tab switch, which is how a dismissible prompt becomes a nag.
+        if (doc.reportWorkflowDeclined) return null;
         const parsed = await designerApiJson(STUDIO_ROUTES.parse, { script: doc.content || '' });
         if (parsed.error) return null;
         const inferred = explicitReportWorkflow(doc.content, parsed.designState);
-        doc.reportWorkflow = inferred || (askWhenAmbiguous ? await promptForReportWorkflow(doc) : null);
+        if (!inferred && !askWhenAmbiguous) return null;
+        const chosen = inferred || await promptForReportWorkflow(doc);
+        if (!chosen) {
+            doc.reportWorkflowDeclined = true;
+            return null;
+        }
+        doc.reportWorkflow = chosen;
         return doc.reportWorkflow;
     }
 
@@ -536,13 +579,38 @@ export async function createStudioWorkbench(container, opts = {}) {
         const workflow = doc?.reportWorkflow;
         const isReport = Boolean(doc && (doc.path || '').toLowerCase().endsWith('.rptsql'));
         const hidden = state.guidedRailHidden ?? guidedRailHidden();
-        workflowBar.hidden = !isReport || !workflow || hidden;
+        workflowBar.hidden = !isReport;
         visualStage.classList.toggle('is-dashboard-workflow', isReport && workflow === 'dashboard');
         visualStage.classList.toggle('is-paginated-workflow', isReport && workflow === 'paginated');
-        if (!isReport || !workflow || hidden) {
+        if (!isReport) {
             workflowBar.innerHTML = '';
             return;
         }
+
+        // Dismissing the rail hides the teaching, not the way back to it. The restore sits on the
+        // canvas where the rail was, because a control that only exists in a collapsed sidebar panel
+        // is the same as no control for the author who most needs it. The same strip carries the
+        // surface choice for a report whose mode nobody has picked yet: declining that question once
+        // must not cost the author the tools for the rest of the session.
+        if (!workflow || hidden) {
+            workflowBar.classList.add('is-collapsed');
+            workflowBar.innerHTML = workflow
+                ? `<span>Guided steps are hidden. Every action they run is also in the sidebar's Build section.</span>
+                   <button type="button" class="etlsql-studio-rail-restore" data-show-rail>${_studioIcon('commands', 13)} Show guided steps</button>`
+                : `<span>No authoring surface chosen, so the guided steps are off. This changes Studio's tools only; the script is untouched either way.</span>
+                   <button type="button" class="etlsql-studio-rail-restore" data-choose-surface>${_studioIcon('commands', 13)} Choose Dashboard or Report</button>`;
+            wireGuidedRailToggle(workflowBar);
+            workflowBar.querySelector('[data-choose-surface]')?.addEventListener('click', async () => {
+                const chosen = await promptForReportWorkflow(doc);
+                if (!chosen) return;
+                doc.reportWorkflow = chosen;
+                if (chosen === 'dashboard' && doc.projection !== 'canvas') setProjection('canvas');
+                renderReportWorkflowChrome(doc);
+                renderSidebarContent(state.activeActivity);
+            });
+            return;
+        }
+        workflowBar.classList.remove('is-collapsed');
 
         // Every step reports whether it is already satisfied, so the rail doubles as a checklist of
         // what this report still needs rather than eight identical buttons.
@@ -1085,6 +1153,21 @@ export async function createStudioWorkbench(container, opts = {}) {
         });
     }
 
+    /**
+     * Shows the report-level inspector: theme, palette colours, and the report title.
+     *
+     * It is the same panel the designer renders when nothing is selected — deselecting is what
+     * produces it. Studio hides the inspector on an empty selection, so the panel was written,
+     * wired, and unreachable; this is the door to it rather than a second copy of it.
+     */
+    function showReportProperties() {
+        state.designerInstance?.selectVisual?.(null);
+        sidebarTitle.textContent = 'Report style';
+        propertyFields.innerHTML = '';
+        sidebarContent.style.display = 'none';
+        inspector.style.display = 'flex';
+    }
+
     function assignFieldToProperty(field, explicitTarget = null) {
         if (!field) return;
         const inputs = [...propertiesHost.querySelectorAll('input[data-role]')];
@@ -1113,6 +1196,57 @@ export async function createStudioWorkbench(container, opts = {}) {
         return response.json();
     }
 
+    /**
+     * Offers a one-click Undo for a write a wizard, step, or canvas action just made.
+     *
+     * The offer is backed by the CodeMirror transaction that made the write, not by a saved copy of
+     * the old text: every GUI mutation lands as one ranged transaction (see `replaceAll`), so the
+     * editor's own history already holds the exact inverse, and taking it leaves the undo stack in
+     * the state the author would expect if they had pressed Ctrl+Z themselves.
+     *
+     * That is also why the offer can expire. History undo pops the *last* event, so once anything
+     * else has changed the buffer, pressing Undo here would take back the wrong edit. Rather than
+     * quietly rewriting the buffer to a remembered string — which would then destroy whatever came
+     * after — the offer refuses and says why.
+     */
+    function offerUndo(label, { document: target, before, after }) {
+        if (!target || typeof before !== 'string' || typeof after !== 'string' || before === after) return;
+        if (typeof state.editorInstance?.undo !== 'function') return;
+        if (getActiveDoc() !== target) return;
+
+        _feedback.notify(`Studio wrote this into ${target.name}.`, {
+            title: label,
+            tone: 'success',
+            action: {
+                label: 'Undo',
+                onSelect: () => {
+                    if (getActiveDoc() !== target) {
+                        _feedback.notify(
+                            `Undo applies to ${target.name}. Open that document again and use its own undo.`,
+                            { title: 'Nothing undone', tone: 'warning' });
+                        return;
+                    }
+                    if (state.editorInstance.getValue() !== after) {
+                        _feedback.notify(
+                            'The script changed again after this edit, so undoing it here would take back the wrong change. '
+                            + 'The editor\'s own undo still steps back through every change in order.',
+                            { title: 'Nothing undone', tone: 'warning' });
+                        return;
+                    }
+                    state.editorInstance.undo();
+                    if (state.editorInstance.getValue() !== before) {
+                        _feedback.notify(
+                            'The editor undid a different change than expected, so the script is not back where it started. '
+                            + 'Check the script before saving.',
+                            { title: 'Undo Incomplete', tone: 'error' });
+                        return;
+                    }
+                    _feedback.notify(`${label} was undone.`, { title: 'Script restored', tone: 'info' });
+                },
+            },
+        });
+    }
+
     const {
         canonicalDesignerMutation,
         canonicalPipelineMutation,
@@ -1132,6 +1266,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         renderVisualStage,
         renderWorkflow: renderReportWorkflowChrome,
         renderTabs,
+        offerUndo,
         feedback: _feedback
     });
 
@@ -1173,12 +1308,35 @@ export async function createStudioWorkbench(container, opts = {}) {
         feedback: _feedback,
         shell: {
             getScriptText: activeScriptText,
-            setScriptText: text => state.editorInstance?.setValue?.(text),
+            // Ranged rather than whole-document, for the same reason the canonical mutations are:
+            // the author sees which lines the wizard added, keeps their caret, and gets the Undo
+            // offer that only a single reversible transaction can honestly make.
+            setScriptText: (text, label = 'That edit') => {
+                const doc = getActiveDoc();
+                const before = state.editorInstance?.getValue?.();
+                const changed = state.editorInstance?.replaceAll?.(text) ?? state.editorInstance?.setValue?.(text);
+                if (changed?.from != null) state.editorInstance?.revealRange?.(changed.from, changed.to);
+                if (typeof before === 'string') offerUndo(label, { document: doc, before, after: text });
+            },
             designerState: () => state.designerInstance?.getState?.(),
             refreshSnapshot: () => state.designerInstance?.refreshSnapshot?.(),
             setActivity,
             setProjection,
             renderSidebar: () => renderSidebarContent(state.activeActivity),
+            // Selecting is what opens the Format inspector, so a surface that has finished creating
+            // an object hands the author to the one that edits it.
+            selectVisual: name => {
+                if (!name) return;
+                if (getActiveDoc()?.projection === 'code') setProjection('split');
+                // The canvas selects by id, and a wizard knows the visual it wrote by name. Passing
+                // the name straight through opened the inspector while leaving no card selected,
+                // which reads as the canvas ignoring the new visual.
+                const design = state.designerInstance?.getState?.();
+                const visual = (design?.pages || [])
+                    .flatMap(page => page.visuals || [])
+                    .find(item => item.name === name || item.id === name);
+                state.designerInstance?.selectVisual?.(visual?.id || name);
+            },
             renderTabs,
             runReport: () => shell.querySelector('[data-action="run"]')?.click(),
             openConnectionWizard: handleOpenConnectionWizard
@@ -1722,7 +1880,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                 const created = await opts.onCreateDocument({ ...request, type: 'report', workflow: reportWorkflow, scriptText });
                 created.reportWorkflow = reportWorkflow;
                 state.catalogReports.push(created);
-                await openCatalogReport(created, 'split');
+                await openCatalogReport(created, reportWorkflow === 'dashboard' ? 'canvas' : 'split');
             } catch (error) {
                 _feedback.notify(error?.message || 'The report could not be created.', { title: 'Create Report Failed', tone: 'error' });
             }
@@ -1740,7 +1898,13 @@ export async function createStudioWorkbench(container, opts = {}) {
         if (isReportType) {
             path = reportWorkflow === 'paginated' ? `untitled_paginated_${rptCount}.rptsql` : `untitled_dashboard_${rptCount}.rptsql`;
             content = seed ? STUDIO_STARTER_SCRIPTS.report : REPORT_WORKFLOW_TEMPLATES[reportWorkflow];
-            proj = 'split';
+            // A new dashboard opens on the canvas it is about to be built on. Splitting the window
+            // with a script the author has not written yet teaches the wrong first lesson — the
+            // script is the escape hatch, and the projection buttons keep it one click away. The
+            // choice is per document from then on, because `setProjection` records it on the
+            // document, so switching to Split here is remembered for this report alone. A paginated
+            // report still opens split: its page setup is largely script-shaped.
+            proj = reportWorkflow === 'dashboard' ? 'canvas' : 'split';
         } else if (type === 'etl') {
             path = `untitled_pipeline_${etlCount}.etlsql`;
             content = seed ? STUDIO_STARTER_SCRIPTS.etl : '';
@@ -1909,13 +2073,14 @@ export async function createStudioWorkbench(container, opts = {}) {
                                 const ext = (f.path || '').split('.').pop()?.toLowerCase();
                                 const isRpt = ext === 'rptsql';
                                 const isEtl = ext === 'etlsql';
-                                const typePill = isRpt ? 'REPORTSQL' : isEtl ? 'ETLSQL' : 'SQL';
+                                const openDoc = state.documents.find(document => document.path === f.path) || null;
+                                const typePill = _documentKindLabel(f.path, openDoc);
                                 const name = f.path.split('/').pop().split('\\').pop();
                                 const sizeKb = f.size ? `${(f.size / 1024).toFixed(1)} KB` : '';
                                 return `
                                     <div class="etlsql-studio-recent-card">
                                         <div class="etlsql-recent-card-top">
-                                            <span class="etlsql-card-type-pill" style="font-size:9px;">${typePill}</span>
+                                            <span class="etlsql-card-type-pill" style="font-size:9px;" title="${_escapeHtml(isRpt ? 'Report-SQL (.rptsql)' : isEtl ? 'ETL-SQL (.etlsql)' : 'SQL')}">${typePill}</span>
                                             <div class="etlsql-recent-card-meta">
                                                 ${sizeKb ? `<span style="font-size:10px; color:var(--portal-muted,#8b949e);">${sizeKb}</span>` : ''}
                                                 ${catalogMode ? '' : `<button type="button" class="etlsql-recent-card-dismiss" data-dismiss-file="${_escapeHtml(f.path)}" title="Remove from Studio Home" aria-label="Remove ${_escapeHtml(name)} from Studio Home">${_studioIcon('close', 10)}</button>`}
@@ -2586,10 +2751,15 @@ export async function createStudioWorkbench(container, opts = {}) {
 
     function renderVisualLibrary() {
         sidebarTitle.textContent = 'Visual Components';
-        sidebarContent.innerHTML = `<section class="etlsql-studio-library-section"><div class="etlsql-studio-subhead"><div><strong>On this page</strong><span>Report tree</span></div></div><div class="etlsql-studio-report-tree">${reportTreeMarkup()}</div></section><section class="etlsql-studio-library-section"><label class="etlsql-studio-library-search"><span>Add a visual</span><input type="search" data-visual-search placeholder="Search visual types" ${hasDataSample() ? '' : 'disabled'}></label>${hasDataSample() ? '' : '<div class="etlsql-studio-empty-guidance"><strong>Data comes first</strong><span>Create a dataset so every visual can read from one named query.</span><button type="button" class="etlsql-studio-btn is-primary" data-choose-data>Create a dataset</button></div>'}<div data-visual-groups>${STUDIO_VISUAL_GROUPS.map(group => `<div class="etlsql-studio-visual-group" data-visual-group><strong>${group.name}</strong><div>${group.types.map(type => `<button type="button" class="etlsql-palette-sidebar-btn" data-add-visual="${type}" data-visual-name="${type}" ${hasDataSample() ? '' : 'disabled'}>${type}</button>`).join('')}</div></div>`).join('')}</div></section>`;
+        sidebarContent.innerHTML = `<section class="etlsql-studio-library-section"><div class="etlsql-studio-subhead"><div><strong>On this page</strong><span>Report tree</span></div></div><div class="etlsql-studio-report-tree">${reportTreeMarkup()}</div></section><section class="etlsql-studio-library-section"><label class="etlsql-studio-library-search"><span>Add a visual</span><input type="search" data-visual-search placeholder="Search visual types" ${hasDataSample() ? '' : 'disabled'}></label>${hasDataSample() ? '' : '<div class="etlsql-studio-empty-guidance"><strong>Data comes first</strong><span>Create a dataset so every visual can read from one named query.</span><button type="button" class="etlsql-studio-btn is-primary" data-choose-data>Create a dataset</button></div>'}<div data-visual-groups>${STUDIO_VISUAL_GROUPS.map(group => `<div class="etlsql-studio-visual-group" data-visual-group><strong>${group.name}</strong><div>${group.types.map(type => `<button type="button" class="etlsql-palette-sidebar-btn" data-add-visual="${type}" data-visual-name="${type}" ${hasDataSample() ? '' : 'disabled'}>${type}</button>`).join('')}</div></div>`).join('')}</div></section><section class="etlsql-studio-library-section"><div class="etlsql-studio-subhead"><div><strong>Presentation</strong><span>Theme, colours, and saved views</span></div></div><button type="button" class="etlsql-studio-btn" data-report-style>${_studioIcon('canvas', 13)} Report theme and style</button><div data-bookmark-host></div></section>`;
         sidebarContent.querySelector('[data-choose-data]')?.addEventListener('click', () => runChooseDataStep());
         sidebarContent.querySelectorAll('[data-add-visual]').forEach(button => { button.draggable = !button.disabled; button.addEventListener('dragstart', event => { event.dataTransfer.setData('application/x-etlsql-visual', button.dataset.addVisual); event.dataTransfer.setData('text/plain', button.dataset.addVisual); }); button.addEventListener('click', () => openChartBuilder({ type: button.dataset.addVisual })); });
         sidebarContent.querySelectorAll('[data-tree-visual]').forEach(button => button.addEventListener('click', () => state.designerInstance?.selectVisual?.(button.dataset.treeVisual)));
+        sidebarContent.querySelector('[data-report-style]')?.addEventListener('click', showReportProperties);
+        // The designer's own bookmark editor, moved into this rail rather than reimplemented beside
+        // it. Studio hides the designer sidebar, which is where this section otherwise lives — so
+        // without the move it exists, works, and is unreachable from the workbench.
+        state.designerInstance?.mountBookmarks?.(sidebarContent.querySelector('[data-bookmark-host]'));
         const search = sidebarContent.querySelector('[data-visual-search]'); search?.addEventListener('input', () => { const query = search.value.trim().toUpperCase(); sidebarContent.querySelectorAll('[data-visual-name]').forEach(button => button.hidden = Boolean(query) && !button.dataset.visualName.includes(query)); });
     }
 

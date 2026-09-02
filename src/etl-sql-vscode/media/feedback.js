@@ -25,6 +25,7 @@
 .etlsql-feedback-toast{pointer-events:auto;display:grid;grid-template-columns:4px 1fr auto;gap:12px;align-items:start;padding:14px 14px 14px 0;border:1px solid var(--portal-border,#d7dee8);border-radius:10px;background:var(--portal-surface,#fff);color:var(--portal-text,#172033);box-shadow:0 14px 36px rgba(15,23,42,.18)}
 .etlsql-feedback-toast::before{content:'';align-self:stretch;border-radius:999px;background:#2563eb}.etlsql-feedback-toast[data-tone=success]::before{background:#16815d}.etlsql-feedback-toast[data-tone=warning]::before{background:#b76b00}.etlsql-feedback-toast[data-tone=error]::before{background:#c43232}
 .etlsql-feedback-toast strong{display:block;margin-bottom:3px}.etlsql-feedback-toast p{margin:0;line-height:1.4;overflow-wrap:anywhere}.etlsql-feedback-close{border:0;background:transparent;color:inherit;font:inherit;font-size:20px;line-height:1;cursor:pointer}
+.etlsql-feedback-action{margin-top:9px;min-height:30px;padding:5px 12px;border:1px solid var(--portal-border,#b8c3d1);border-radius:7px;background:var(--portal-surface,#fff);color:inherit;font:inherit;font-weight:650;cursor:pointer}.etlsql-feedback-action:hover{border-color:#2563eb;color:#2563eb}.etlsql-feedback-action:focus-visible{outline:3px solid rgba(37,99,235,.34);outline-offset:2px}
 .etlsql-feedback-backdrop{position:fixed;inset:0;z-index:100001;display:grid;place-items:center;padding:20px;background:rgba(15,23,42,.56);backdrop-filter:blur(2px)}
 .etlsql-feedback-dialog{width:min(520px,100%);max-height:min(720px,calc(100vh - 40px));overflow:auto;border:1px solid var(--portal-border,#d7dee8);border-radius:12px;background:var(--portal-surface,#fff);color:var(--portal-text,#172033);box-shadow:0 24px 64px rgba(15,23,42,.28)}
 .etlsql-feedback-header,.etlsql-feedback-body,.etlsql-feedback-actions{padding:18px 20px}.etlsql-feedback-header{border-bottom:1px solid var(--portal-border-soft,#e8edf4)}.etlsql-feedback-header h2{margin:0;font-size:1.08rem}.etlsql-feedback-body p{margin:0;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere}.etlsql-feedback-impact{margin-top:14px!important;padding:11px 12px;border-left:3px solid #b76b00;background:rgba(183,107,0,.09);font-size:.9rem}.etlsql-feedback-field{display:grid;gap:7px;margin-top:16px;font-weight:650}.etlsql-feedback-field input,.etlsql-feedback-field textarea{box-sizing:border-box;width:100%;padding:10px 11px;border:1px solid var(--portal-border,#b8c3d1);border-radius:7px;background:var(--portal-bg,#fff);color:inherit;font:inherit;font-weight:400}.etlsql-feedback-field textarea{min-height:96px;resize:vertical}.etlsql-feedback-error{min-height:1.2em;margin-top:6px;color:#c43232;font-size:.84rem}
@@ -59,8 +60,22 @@
         const text = doc.createElement('p'); text.textContent = String(message ?? ''); content.appendChild(text);
         const close = doc.createElement('button'); close.type = 'button'; close.className = 'etlsql-feedback-close'; close.setAttribute('aria-label', 'Dismiss notification'); close.textContent = '×';
         const remove = () => toast.remove(); close.addEventListener('click', remove);
+        // An offer the reader can act on — Undo, most of all — has to be a real focusable button in
+        // the toast, not a sentence telling them where to look for one. It is dismissible either
+        // way: taking the action and ignoring it both end with the toast gone.
+        const action = options.action && typeof options.action.onSelect === 'function' ? options.action : null;
+        if (action) {
+            const button = doc.createElement('button');
+            button.type = 'button';
+            button.className = 'etlsql-feedback-action';
+            button.textContent = action.label || 'Undo';
+            button.addEventListener('click', () => { remove(); action.onSelect(); });
+            content.appendChild(button);
+        }
         toast.append(doc.createElement('span'), content, close); toastRegion.appendChild(toast);
-        const duration = Number.isFinite(options.duration) ? options.duration : (tone === 'error' ? 8000 : 4500);
+        // An actionable toast that vanishes on the usual timer is an offer nobody can accept, so it
+        // stays until it is used or dismissed unless the caller names its own duration.
+        const duration = Number.isFinite(options.duration) ? options.duration : (action ? 12000 : tone === 'error' ? 8000 : 4500);
         if (duration > 0) global.setTimeout(remove, duration);
         emit('notification', { tone, action: options.auditAction || null });
     }

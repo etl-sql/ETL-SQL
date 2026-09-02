@@ -22,11 +22,45 @@ export function escapeHtml(value) {
 }
 
 /**
- * The exact Report-SQL a surface is about to write. Contract rule 4 hangs off this: whatever appears
- * here must be what lands in the buffer, so the label is the only part a caller may vary.
+ * The exact Report-SQL a surface is about to write, and one sentence saying what it does.
+ *
+ * Contract rule 4 hangs off this: whatever appears here must be what lands in the buffer, so the
+ * label is the only presentational part a caller may vary.
+ *
+ * The sentence is not optional. Showing only the SQL asks the reader to already know the dialect —
+ * which is exactly what the author who most needs a wizard does not have — and turns the preview
+ * into a wall to click past rather than a description they can check the intent against. A missing
+ * explanation throws, for the same reason `inlineMarkup` throws on an unknown segment: every caller
+ * lives in this repo, and a preview that silently explains nothing is the failure this exists to
+ * prevent.
+ *
+ * @param {string} sql the exact statement or clause about to be written.
+ * @param {string} explanation one plain sentence: what will be added or changed, and where.
+ * @param {string} [label] the preview's heading.
  */
-export function sqlPreviewMarkup(sql, label = 'Writes this Report-SQL') {
-    return `<div class="etlsql-studio-sql-preview"><span>${escapeHtml(label)}</span><pre>${escapeHtml(sql)}</pre></div>`;
+export function sqlPreviewMarkup(sql, explanation, label = 'Writes this Report-SQL') {
+    if (typeof explanation !== 'string' || !explanation.trim()) {
+        throw new TypeError('sqlPreviewMarkup: every SQL preview needs one sentence explaining what it changes.');
+    }
+    return `<div class="etlsql-studio-sql-preview"><span>${escapeHtml(label)}</span>`
+        + `<p class="etlsql-studio-sql-explains">${escapeHtml(explanation)}</p>`
+        + `<pre>${escapeHtml(sql)}</pre></div>`;
+}
+
+/**
+ * The same sentence, for a write whose exact text cannot honestly be previewed.
+ *
+ * A step that adds several visuals writes through design state, and the canonical patcher decides
+ * the final bytes — so quoting a statement here would be a guess, and rule 4 says a preview must be
+ * what actually lands. The explanation is still owed to the reader, so it is rendered on its own in
+ * the same frame as a SQL preview rather than being dropped.
+ */
+export function mutationExplanationMarkup(explanation, label = 'Changes this') {
+    if (typeof explanation !== 'string' || !explanation.trim()) {
+        throw new TypeError('mutationExplanationMarkup: a mutation needs one sentence explaining what it changes.');
+    }
+    return `<div class="etlsql-studio-sql-preview is-summary"><span>${escapeHtml(label)}</span>`
+        + `<p class="etlsql-studio-sql-explains">${escapeHtml(explanation)}</p></div>`;
 }
 
 /**

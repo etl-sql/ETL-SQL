@@ -12,6 +12,42 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Guided authoring in Studio now explains itself and can be undone. Every wizard, step, and canvas
+  action that writes Report-SQL offers a one-click **Undo** afterwards, backed by the editor's own
+  transaction rather than a remembered copy of the old text — so taking it is exactly Ctrl+Z, and
+  once anything else has changed the buffer the offer refuses and says why instead of taking back
+  the wrong edit. Alongside the exact SQL, each surface now shows one sentence saying what it will
+  add or change and what it leaves alone; a preview without that sentence is now a programming
+  error rather than a silent omission.
+
+- **Start with sample data** now opens a working dashboard. The seeded MOCKDB script stages one
+  shared `#temp` query and builds a KPI card, a bar chart, and a table onto a laid-out dashboard
+  page, and the document opens on the canvas rather than beside a script the author has not written
+  yet. A new test executes the seed against the sample connector and asserts all three tiles arrive
+  with rows and a place on the page, because a starter that only parses can still open blank.
+
+- Report entry is recoverable. The Dashboard-versus-Paginated question can be declined — with Not
+  now, Escape, or a click outside — and is not asked again for that document; the canvas then
+  carries a strip offering the choice whenever the author is ready. That strip is also where the
+  guided steps come back after they are dismissed, so hiding the teaching no longer hides the way
+  back to it. New dashboards open on the canvas, and each document keeps whichever projection its
+  author chooses from then on.
+
+- Studio's rail reaches the bookmark editor and the report theme and style panel. Both already
+  existed in the designer, inside a sidebar Studio hides — the rail now mounts the same elements
+  rather than growing a second implementation of either.
+
+- The chart creator finishes the visual and hands over. Per-measure aggregation is joined by number
+  and date formatting for the value and the category axis, written as the `FORMAT` and
+  `X_AXIS (FORMAT = …)` the preview shows, and adding a visual now selects it so the formatting
+  inspector — which already owns colours, grid lines, data labels, axis bounds, and legend
+  placement — continues the job.
+
+- Studio names things the way an author does: a file is a Dashboard, Report, Pipeline, or Query
+  rather than `REPORTSQL` or `ETLSQL`, and the dataset wizard's refusal to borrow a host connection
+  now leads with the consequence — a report that borrows one works for you and fails for everyone
+  else who opens it — before the implementation reason.
+
 - Added Run to Selected Node to the Studio pipeline canvas. Selecting a task and choosing **Run to
   here** executes the pipeline through it, so its variables and `#temp` tables land in Results. The
   run covers the selection's dependency closure rather than the whole file above it: the tasks its

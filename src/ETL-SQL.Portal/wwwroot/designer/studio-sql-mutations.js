@@ -19,6 +19,7 @@ export function createStudioSqlMutationService({
     renderVisualStage,
     renderWorkflow,
     renderTabs,
+    offerUndo,
     feedback
 }) {
     function filterContract(field, filter) {
@@ -100,6 +101,7 @@ export function createStudioSqlMutationService({
                 const applied = await state.designerInstance?.applyScriptText?.(patched.script);
                 renderVisualStage();
                 renderWorkflow(document, applied?.designState);
+                offerUndo?.(label, { document, before: script, after: patched.script });
             }
             renderTabs();
             return mutationResult;
@@ -140,6 +142,7 @@ export function createStudioSqlMutationService({
                 const changed = state.editorInstance?.replaceAll?.(result.script);
                 if (changed) state.editorInstance?.revealRange?.(changed.from, changed.to);
                 renderVisualStage();
+                offerUndo?.(label, { document, before: script, after: result.script });
             }
             renderTabs();
             return result;

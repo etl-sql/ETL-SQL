@@ -1782,7 +1782,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
             }
             """, ambiguous);
         await page.Locator("[data-choose-workflow='dashboard']").WaitForAsync();
-        Assert.Contains("byte-for-byte unchanged", await page.Locator(".etlsql-workflow-choice").InnerTextAsync());
+        Assert.Contains("the script is not edited either way", await page.Locator(".etlsql-workflow-choice").InnerTextAsync());
         await page.Locator("[data-choose-workflow='paginated']").ClickAsync();
         await page.Locator(".etlsql-studio-visual-stage.is-paginated-workflow").WaitForAsync();
 
@@ -2213,6 +2213,165 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
     /// person would press and it exercises the shared dialog behaviour; hiding directly is the
     /// fallback for overlays that predate it.</para>
     /// </summary>
+    // -- Guided authoring and beginner recovery ---------------------------------------------------
+
+    [Fact]
+    public async Task Studio_AWizardWrite_OffersAnUndoThatPutsTheScriptBack()
+    {
+        // A GUI write the author cannot take back is a write they have to read the script to check.
+        // The offer is backed by the editor's own history, so taking it is exactly Ctrl+Z.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
+
+        var before = await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()");
+
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.addVisualToCanvas('BAR')");
+        var undo = page.Locator(".etlsql-feedback-action").First;
+        await undo.WaitForAsync();
+        Assert.Equal("Undo", (await undo.TextContentAsync() ?? "").Trim());
+
+        var written = await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()");
+        Assert.NotEqual(before, written);
+
+        await undo.ClickAsync();
+        await page.WaitForFunctionAsync(
+            "expected => window.__STUDIO_INSTANCE__.state.editorInstance.getValue() === expected", before);
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_DismissingTheGuidedRail_LeavesARestoreActionOnTheCanvas()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.Locator("[data-workflow-step='palette']").WaitForAsync();
+
+        await page.ClickAsync("[data-dismiss-rail]");
+        await page.Locator("[data-workflow-step='palette']").WaitForAsync(
+            new LocatorWaitForOptions { State = WaitForSelectorState.Detached });
+
+        // Hidden steps, visible way back - on the canvas, not only in a collapsed sidebar panel.
+        var restore = page.Locator("[data-workflow-bar] [data-show-rail]");
+        await restore.WaitForAsync();
+        await restore.ClickAsync();
+        await page.Locator("[data-workflow-step='palette']").WaitForAsync();
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_TheSurfaceQuestion_CanBeDeclinedAndAnsweredLaterFromTheCanvas()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        const string ambiguous = "-- hand-authored report\nCREATE VISUAL note AS TEXT (TITLE = 'Keep me', SOURCE = #rows);";
+        await page.EvaluateAsync(
+            """
+            script => {
+                const studio = window.__STUDIO_INSTANCE__;
+                studio.state.documents.push({ id: 'undecided-report', path: 'undecided.rptsql', name: 'undecided.rptsql', content: script, isDirty: false, projection: 'split' });
+                void studio.switchDoc('undecided-report');
+            }
+            """, ambiguous);
+
+        await page.Locator("[data-choose-workflow-cancel]").WaitForAsync();
+        await page.ClickAsync("[data-choose-workflow-cancel]");
+        await page.Locator("[data-choose-workflow='dashboard']").WaitForAsync(
+            new LocatorWaitForOptions { State = WaitForSelectorState.Detached });
+
+        // Declining once must not cost the author the tools for the rest of the session, and must
+        // not re-ask on every switch back.
+        var chooseLater = page.Locator("[data-workflow-bar] [data-choose-surface]");
+        await chooseLater.WaitForAsync();
+        Assert.Null(await page.EvaluateAsync<string?>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(item => item.id === 'undecided-report').reportWorkflow ?? null"));
+
+        await chooseLater.ClickAsync();
+        await page.ClickAsync("[data-choose-workflow='dashboard']");
+        await page.Locator(".etlsql-studio-visual-stage.is-dashboard-workflow").WaitForAsync();
+        Assert.Equal(ambiguous, await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(item => item.id === 'undecided-report').content"));
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_StartWithSampleData_OpensAWorkingDashboardOnTheCanvas()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
+
+        await page.ClickAsync("[data-create-from-home='dashboard'][data-seed-sample]");
+        await page.Locator(".etlsql-studio-visual-stage.is-dashboard-workflow").WaitForAsync();
+
+        var seeded = await page.EvaluateAsync<JsonElement>(
+            """
+            () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const doc = studio.state.documents.find(item => item.id === studio.state.activeDocId);
+                return { projection: doc.projection, content: doc.content };
+            }
+            """);
+
+        // The canvas, not a split with a script the author has not written yet.
+        Assert.Equal("canvas", seeded.GetProperty("projection").GetString());
+        var content = seeded.GetProperty("content").GetString() ?? "";
+        Assert.Contains("AS CARD", content, StringComparison.Ordinal);
+        Assert.Contains("AS BAR", content, StringComparison.Ordinal);
+        Assert.Contains("AS TABLE", content, StringComparison.Ordinal);
+        Assert.Contains("AS DASHBOARD", content, StringComparison.Ordinal);
+
+        // Three tiles on the canvas, not an empty page that happens to parse.
+        await page.WaitForFunctionAsync("() => document.querySelectorAll('.etlsql-dsgn-visual-card').length >= 3");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_Rail_ReachesTheDesignersOwnBookmarkAndReportStyleEditors()
+    {
+        // Both surfaces already existed in designer.js, inside a sidebar Studio hides. The rail
+        // mounts the same elements rather than growing a second implementation of either.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+
+        await page.ClickAsync("[data-activity='palette']");
+        await page.Locator("[data-bookmark-host] #dsgn-add-bookmark").WaitForAsync();
+
+        await page.ClickAsync("[data-report-style]");
+        await page.Locator("#pp-report-theme").WaitForAsync();
+        await page.SelectOptionAsync("#pp-report-theme", "dark");
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO_INSTANCE__.state.designerInstance.getState().reportStyle?.theme === 'dark'");
+
+        Assert.Empty(session.PageErrors);
+    }
+
     private static async Task DismissOpenOverlaysAsync(IPage page)
     {
         const string selector = ".modal-overlay, [class$=modal-backdrop]";

@@ -41,15 +41,47 @@ SET REPORT TITLE = 'Sample Dashboard';
 
 CREATE CONNECTION demo AS MOCKDB();
 
-SELECT Region, SUM(Total) AS Revenue
+-- Stage what the visuals read. A #temp table is computed once per run and shared by
+-- every visual below, so the same numbers cannot disagree between two tiles.
+SELECT Region, COUNT(*) AS Orders, SUM(Total) AS Revenue
 INTO #revenue_by_region
 FROM demo.Orders
 GROUP BY Region;
 
+SELECT SUM(Total) AS Revenue
+INTO #revenue_total
+FROM demo.Orders;
+
+-- A KPI card prints one number, so its source is a query that returns one row.
+CREATE VISUAL total_revenue AS CARD (
+    TITLE = 'Total revenue',
+    SOURCE = #revenue_total,
+    MAPPINGS (VALUE = Revenue)
+);
+
 CREATE VISUAL revenue_by_region AS BAR (
+    TITLE = 'Revenue by region',
     SOURCE = #revenue_by_region,
     MAPPINGS (X = Region, Y = Revenue),
     OPTIONS (LEGEND = OFF)
+);
+
+CREATE VISUAL region_detail AS TABLE (
+    TITLE = 'Regions',
+    SOURCE = #revenue_by_region
+);
+
+-- The page places the visuals. Each letter is a grid cell; a letter repeated across
+-- cells is one visual spanning them, and '/' starts the next row.
+CREATE PAGE [Sample Dashboard] AS DASHBOARD (
+    LAYOUT (
+        STRUCTURE = 'K C C / T T T',
+        MAP (
+            'K' = total_revenue,
+            'C' = revenue_by_region,
+            'T' = region_detail
+        )
+    )
 );
 `,
     etl: `-- Sample pipeline. MOCKDB is a built-in in-memory connector, so this needs no database.
