@@ -193,13 +193,68 @@ public record PipelineTaskDto(
 public record PipelineDependencyDto(string Id, string Condition, string? Expression = null);
 
 /// <summary>Which task's scope to report. The script is read as the author currently has it.</summary>
-public record PipelineScopeRequest(string? Script, string? Id);
+/// <param name="Line">1-based cursor line, used when no task <paramref name="Id"/> is named.</param>
+public record PipelineScopeRequest(string? Script, string? Id, int? Line = null);
 
 /// <summary>
 /// Which task to plan a run up to. Planning never executes anything: it returns the slice and what
 /// running it would cost, so the canvas can put that in front of the author before anything happens.
 /// </summary>
 public record PipelineRunPlanRequest(string? Script, string? Id);
+
+/// <param name="DocumentUri">
+/// Which document's registered connections to ask about keys. Connections are per-document on both
+/// hosts, so a model built without it would silently see none of them.
+/// </param>
+public record DataModelRequest(string? Script, string? DocumentUri = null);
+
+/// <summary>
+/// The browser shape of <see cref="ETL_SQL.Analysis.Services.ScriptDataModel"/>. Flat and
+/// camel-cased on the wire; the vocabulary for <c>kind</c>, <c>cardinality</c>, and <c>evidence</c>
+/// is the projection's, and the view renders it rather than deciding it.
+/// </summary>
+public record DataModelResponse(
+    bool Parsed,
+    string? Error,
+    bool HasSchemaEvidence,
+    IReadOnlyList<DataModelEntityDto> Entities,
+    IReadOnlyList<DataModelRelationshipDto> Relationships)
+{
+    public static DataModelResponse From(ETL_SQL.Analysis.Services.ScriptDataModel model) => new(
+        model.Parsed,
+        model.Error,
+        model.HasSchemaEvidence,
+        model.Entities.Select(entity => new DataModelEntityDto(
+            entity.Id, entity.Name, entity.Kind, entity.Connection, entity.Line, entity.Detail,
+            entity.Columns.Select(column => new DataModelColumnDto(column.Name, column.Type, column.IsKey)).ToList())).ToList(),
+        model.Relationships.Select(relationship => new DataModelRelationshipDto(
+            relationship.Id, relationship.From, relationship.To, relationship.Kind,
+            relationship.Cardinality, relationship.Evidence,
+            relationship.FromColumn, relationship.ToColumn, relationship.JoinType, relationship.Line)).ToList());
+}
+
+public record DataModelColumnDto(string Name, string? Type, bool IsKey);
+
+public record DataModelEntityDto(
+    string Id,
+    string Name,
+    string Kind,
+    string? Connection,
+    int Line,
+    string? Detail,
+    IReadOnlyList<DataModelColumnDto> Columns);
+
+public record DataModelRelationshipDto(
+    string Id,
+    string From,
+    string To,
+    string Kind,
+    string Cardinality,
+    string Evidence,
+    string? FromColumn,
+    string? ToColumn,
+    string? JoinType,
+    int Line);
 
 public record DesignerStateDto(
     List<DesignerPageDto> Pages,

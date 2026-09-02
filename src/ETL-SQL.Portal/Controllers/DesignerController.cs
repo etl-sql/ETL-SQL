@@ -45,6 +45,7 @@ public class DesignerController : ControllerBase
     private readonly ScriptDagProjectionService _scriptDag;
     private readonly PipelineTaskAuthoringService _pipelineTasks = new();
     private readonly ScriptScopeService _pipelineScope = new();
+    private readonly ScriptDataModelService _dataModel = new();
     private readonly PipelineRunPlanService _pipelineRunPlans = new();
     private readonly DesignerQueryFilterService _queryFilters = new();
     private readonly LanguageHoverService? _hoverService;
@@ -260,13 +261,21 @@ public class DesignerController : ControllerBase
 
         try
         {
-            var scope = _pipelineScope.At(req.Script, req.Id);
+            // A canvas points at a task; a script editor points with a caret. Same question, same
+            // positional rule, so the same route answers both rather than growing a second one that
+            // could disagree with this one about what a statement can see.
+            var scope = req.Line is > 0 && string.IsNullOrWhiteSpace(req.Id)
+                ? _pipelineScope.AtLine(req.Script, req.Line.Value)
+                : _pipelineScope.At(req.Script, req.Id);
             return Ok(new
             {
                 resolved = scope.Resolved,
                 error = scope.Error,
                 variables = scope.Variables,
                 tempTables = scope.TempTables,
+                statementText = scope.StatementText,
+                prefixScript = scope.PrefixScript,
+                statementLine = scope.StatementLine,
             });
         }
         finally
@@ -313,6 +322,48 @@ public class DesignerController : ControllerBase
                     line = effect.Line,
                 }),
             });
+        }
+        finally
+        {
+            gate?.Release();
+        }
+    }
+
+    // ── POST /api/designer/data-model ────────────────────────────────────────
+    // The entity/relationship shape of a script: its connections, the tables it reads, the `#temp`
+    // tables and CTEs it builds, and the relationships between them.
+    //
+    // Two passes on purpose. The first is a pure function of the script and names the tables; only
+    // then does the route ask the connectors about *those* tables, and project again with what they
+    // said. The alternative — resolving schema first — would turn opening a diagram into a schema
+    // crawl over every database the workspace can reach.
+    //
+    // The response says whether any schema evidence arrived, because the view has to be able to
+    // distinguish "these tables declare no keys" from "nobody asked a database". Both leave every
+    // cardinality unknown, and only one of them is a fact about the data.
+
+    [HttpPost("data-model")]
+    [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public async Task<IActionResult> DataModel([FromBody] DataModelRequest req, CancellationToken cancellationToken)
+    {
+        if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
+            return limitResult;
+
+        if (!TryEnterDesignerGate(out var gate))
+            return DesignerBusy();
+
+        try
+        {
+            var model = _dataModel.Project(req.Script);
+            if (model.Parsed && _metadata is not null)
+            {
+                var evidence = await DataModelSchemaEvidenceReader.ReadAsync(
+                    _metadata, model, req.DocumentUri, cancellationToken);
+                if (!evidence.IsEmpty) model = _dataModel.Project(req.Script, evidence);
+            }
+
+            return Ok(DataModelResponse.From(model));
         }
         finally
         {

@@ -25,6 +25,7 @@ export function createStudioDocumentContext(snapshot = null) {
         previewAbort: null,
         dagAbort: null,
         dagRevision: 0,
+        modelRevision: 0,
         lastValidDag: null,
         syncRevision: 0,
         previewedDatasetSignature: null,
@@ -56,7 +57,9 @@ export function createStudioState(options = {}) {
         sourceControlEnabled: Boolean(options.sourceControlEnabled),
         documents,
         workspaceFolders: [...(options.workspaceFolders || [])],
-        explorerExpanded: new Set((options.workspaceFolders || []).map(folder => folder.path)),
+        // Folder contents stay out of the way until the author asks for them. New and renamed
+        // folders are expanded by the operation that creates them, so those results remain visible.
+        explorerExpanded: new Set(),
         activeDocId: options.activeDocId || (documents.length ? documents[0].id : '__home__'),
         activeActivity: 'explorer',
         filterSidebarOpen: false,
@@ -68,6 +71,8 @@ export function createStudioState(options = {}) {
         resultsPanel: null,
         dagInstance: null,
         dagDocumentId: null,
+        dataModelInstance: null,
+        enginePlanScope: null,
     };
 }
 

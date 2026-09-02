@@ -222,4 +222,66 @@ public class ScriptScopeTests
         Assert.False(scope.Resolved);
         Assert.NotNull(scope.Error);
     }
+
+    // -- Scope at a cursor, rather than at a task -------------------------------------------------
+
+    private const string CursorScript = """
+        CREATE CONNECTION corp AS MOCKDB();
+
+        DECLARE @cutoff INT = 100;
+
+        SELECT order_id, total INTO #recent FROM corp.orders WHERE total > @cutoff;
+
+        SELECT region, total INTO #by_region FROM #recent;
+
+        DECLARE @after INT = 7;
+        """;
+
+    [Fact]
+    public void AtLine_ReportsOnlyWhatTheStatementUnderTheCursorCanSee()
+    {
+        // Line 7 is the SELECT that reads #recent. #recent exists by then; #by_region is what this
+        // very statement produces, and @after is declared below it.
+        var scope = _scope.AtLine(CursorScript, 7);
+
+        Assert.True(scope.Resolved);
+        Assert.Contains(scope.TempTables, temp => temp.Name == "#recent");
+        Assert.DoesNotContain(scope.TempTables, temp => temp.Name == "#by_region");
+        Assert.Contains(scope.Variables, variable => variable.Name == "@cutoff");
+        Assert.DoesNotContain(scope.Variables, variable => variable.Name == "@after");
+    }
+
+    [Fact]
+    public void AtLine_HandsBackTheStatementAndEverythingAboveIt()
+    {
+        var scope = _scope.AtLine(CursorScript, 7);
+
+        // The statement itself, so a caller can plan or run just that one.
+        Assert.Equal("SELECT region, total INTO #by_region FROM #recent;", scope.StatementText);
+        Assert.Equal(7, scope.StatementLine);
+
+        // And the prefix that builds what it reads. Without it the statement is unplannable: the
+        // #temp tables in scope do not exist until the statements that create them have run.
+        Assert.Contains("INTO #recent", scope.PrefixScript);
+        Assert.DoesNotContain("#by_region", scope.PrefixScript);
+        Assert.DoesNotContain("@after", scope.PrefixScript);
+    }
+
+    [Fact]
+    public void AtLine_ACursorInsideAStatementResolvesToThatStatement()
+    {
+        // A caret anywhere in a multi-line statement is a caret in that statement, not in the next.
+        var scope = _scope.AtLine(CursorScript, 8);
+
+        Assert.Equal("SELECT region, total INTO #by_region FROM #recent;", scope.StatementText);
+    }
+
+    [Fact]
+    public void AtLine_RefusesAScriptItCannotParse()
+    {
+        var scope = _scope.AtLine(">>> INVALID <<<", 1);
+
+        Assert.False(scope.Resolved);
+        Assert.NotNull(scope.Error);
+    }
 }

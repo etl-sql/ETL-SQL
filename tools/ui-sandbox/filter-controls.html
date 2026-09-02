@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Filter controls — UI sandbox</title>
+<link rel="stylesheet" href="/src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.css">
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; background: #f6f8fc; }
+  #root { min-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+window.__OFFLINE__ = true;
+window.__MANIFEST__ = {
+  title: 'Filter control options',
+  parameters: { '@search': 'Quarterly sales', '@note': '' },
+  parameterMetadata: {},
+  pages: [{ name: 'Controls', structure: 'A B', mode: 'DASHBOARD', slotMap: { A: 'CustomerSearch', B: 'AnalystNote' } }],
+  visuals: [
+    {
+      name: 'CustomerSearch', visualType: 'SEARCH', title: 'Customer search',
+      options: { PLACEHOLDER: 'Search customers…', SHOW_CLEAR: 'ON' },
+      actions: [{ trigger: 'ON_CHANGE', type: 'SET_PARAMETER', parameterName: '@search' }],
+      columns: [], rows: []
+    },
+    {
+      name: 'AnalystNote', visualType: 'TEXTBOX', title: 'Analyst note', labelPosition: 'TOP',
+      options: { PLACEHOLDER: 'Up to 12 characters', MAX_LENGTH: '12' },
+      actions: [{ trigger: 'ON_CHANGE', type: 'SET_PARAMETER', parameterName: '@note' }],
+      columns: [], rows: []
+    }
+  ]
+};
+</script>
+<script src="/src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js"></script>
+</body>
+</html>

@@ -16,6 +16,9 @@ CREATE VISUAL VisualName AS SCATTER (
     [LABEL = labelColumn]
   ),
   OPTIONS (
+    [SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR],
+    [SYMBOL_STROKE_COLOR = '#rrggbb'],
+    [SYMBOL_STROKE_WIDTH = n],
     [ERROR_BAR_STYLE = CAPS|NO_CAPS],
     [SHOW_REGRESSION = ON|OFF],
     [GRID_LINES = ON|OFF],
@@ -54,6 +57,9 @@ CREATE VISUAL VisualName AS SCATTER (
 
 ## Options
 
+- **SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR** — sets a single marker geometry for a named `SCATTER` visual (default `CIRCLE`). `BUBBLE` keeps circular area marks.
+- **SYMBOL_STROKE_COLOR = '#rrggbb'** — outlines point markers with a portable hex color; without a color, markers have no stroke.
+- **SYMBOL_STROKE_WIDTH = n** — sets a non-negative marker outline width in pixels; defaults to `1` when a stroke color is present.
 - **ERROR_BAR_STYLE = CAPS|NO_CAPS** — whisker cap style for error bars (default CAPS when error mappings are present)
 - **SHOW_REGRESSION = ON|OFF** — overlay a linear regression line (default OFF)
 - **GRID_LINES = ON|OFF** — show or hide background value-axis grid lines (default ON)
@@ -82,7 +88,7 @@ SELECT unit_price, quantity_sold, product_name
 CREATE VISUAL PriceVsQty AS SCATTER (
   SOURCE   = #scatter_data,
   MAPPINGS (X = unit_price, Y = quantity_sold, LABEL = product_name),
-  OPTIONS  (SHOW_REGRESSION = ON, TITLE = 'Price vs. Quantity'),
+  OPTIONS  (SYMBOL_SHAPE = CROSS, SYMBOL_STROKE_COLOR = '#172554', SYMBOL_STROKE_WIDTH = 1.5, SHOW_REGRESSION = ON, TITLE = 'Price vs. Quantity'),
   OVERLAYS (REFERENCE_BAND (LOW = 10, HIGH = 25, COLOR = '#cbd5e1', LABEL = 'Expected quantity'))
 );
 

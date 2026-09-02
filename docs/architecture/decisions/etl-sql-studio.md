@@ -21,10 +21,30 @@ ETL-SQL serves three core developer and analyst personas through four coordinate
 An initial exploration proposed separate top-level application tabs ("Script Tab vs. Report Tab vs. Pipeline Tab"). With fresh eyes, this model was rejected:
 - In ETL-SQL, **every artifact is fundamentally a script file** (`.rptsql`, `.etlsql`, or `.sql`).
 - Artificially forcing users to switch tabs or tools creates UX friction and breaks context.
-- **The Chosen Design:** ETL-SQL Studio operates on the **active document**, providing **three seamless viewing projections** via header toolbar toggles:
+- **The Chosen Design:** ETL-SQL Studio operates on the **active document**, providing **four seamless viewing projections** via header toolbar toggles:
   - `[ 🎨 Canvas View ]` (WYSIWYG layout stage for `.rptsql`, or Pipeline DAG for `.etlsql`).
   - `[ 🌓 Split View ]` (Visual canvas + live CodeMirror 6 code panel with bi-directional AST sync).
   - `[ ⌨️ Code View ]` (Full-screen script editor with real-time server lint diagnostics & results grid).
+  - `[ 🗃️ Model View ]` (The script's connections, tables, `#temp` tables, CTEs, and the relationships
+    between them, drawn by the same shared graph renderer as the pipeline map).
+
+### 1.1.1 The evidence rule for the Model view
+
+The Model view draws **only what the parser or the database said**. A join edge exists because the
+author wrote a join; a foreign-key edge exists because the database declares one. Two tables that
+happen to carry a column of the same name produce nothing, and an unqualified join column is left
+undrawn rather than assigned to whichever table looks nearer.
+
+Cardinality follows the same rule and is the place it matters most. A join written in a script says
+two columns match and says nothing at all about how many rows sit on either side, so a cardinality is
+reported as **not stated** unless a declared key or a declared foreign key settles it. The view also
+distinguishes "no database keys were available" from "these tables declare no keys" — both leave every
+cardinality unstated, only one is a fact about the data, and a reader who cannot tell them apart will
+treat a blank as a finding.
+
+This is a deliberate refusal of the inference every ER tool is tempted to make. A diagram that shows
+a relationship nobody asserted is worse than one that shows nothing, because the author will believe
+it and design around it, and the cost is paid much later, in data.
 
 ### 1.2 Desktop project-host lifecycle
 

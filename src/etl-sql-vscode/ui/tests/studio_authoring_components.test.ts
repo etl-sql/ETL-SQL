@@ -60,7 +60,7 @@ describe('Query workbench connection preamble', () => {
     });
 
     const routes = { parse: '/api/designer/parse' };
-    const parseReturning = (connections: any[]) => async (_route: string, _init: any) =>
+    const parseReturning = (connections: any[]) => async () =>
         ({ designState: { connections } });
 
     test('uses the declaration the parse route reports, terminated exactly once', async () => {

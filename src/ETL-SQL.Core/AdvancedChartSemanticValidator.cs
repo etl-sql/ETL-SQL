@@ -160,6 +160,42 @@ public static class AdvancedChartSemanticValidator
                 }
             }
 
+            var strokeColor = layer.Styles.FirstOrDefault(style =>
+                style.Name.Equals("SYMBOL_STROKE_COLOR", StringComparison.OrdinalIgnoreCase));
+            var strokeWidth = layer.Styles.FirstOrDefault(style =>
+                style.Name.Equals("SYMBOL_STROKE_WIDTH", StringComparison.OrdinalIgnoreCase));
+            if ((strokeColor is not null || strokeWidth is not null) && layer.Mark != AdvancedChartMarkKind.Point)
+                Add(results, layerNode, $"Layer '{layer.Name}' may use SYMBOL_STROKE_COLOR and SYMBOL_STROKE_WIDTH only on POINT marks.");
+            if (strokeColor is not null && ConstantKind(strokeColor.Value) is { } colorKind)
+            {
+                if (colorKind != LiteralKind.Text)
+                    Add(results, Anchor(strokeColor, layerNode), $"Layer '{layer.Name}' SYMBOL_STROKE_COLOR must be a #RRGGBB text literal or parameter.");
+                else if (LiteralText(strokeColor.Value) is { } color && !PointMarkerStroke.IsPortableColor(color))
+                    Add(results, Anchor(strokeColor, layerNode), $"Layer '{layer.Name}' SYMBOL_STROKE_COLOR accepts portable #RRGGBB colors only; found '{color}'.");
+            }
+            if (strokeWidth is not null && ConstantKind(strokeWidth.Value) is { } widthKind)
+            {
+                if (widthKind != LiteralKind.Numeric)
+                    Add(results, Anchor(strokeWidth, layerNode), $"Layer '{layer.Name}' SYMBOL_STROKE_WIDTH must be a non-negative number or parameter.");
+                else if (!PointMarkerStroke.TryNormalizeWidth(LiteralNumberText(strokeWidth.Value), out _))
+                    Add(results, Anchor(strokeWidth, layerNode), $"Layer '{layer.Name}' SYMBOL_STROKE_WIDTH must be non-negative.");
+            }
+
+            var lineWidth = layer.Styles.FirstOrDefault(style =>
+                style.Name.Equals("LINE_WIDTH", StringComparison.OrdinalIgnoreCase));
+            if (lineWidth is not null)
+            {
+                if (layer.Mark != AdvancedChartMarkKind.Line)
+                    Add(results, layerNode, $"Layer '{layer.Name}' may use LINE_WIDTH only on LINE marks.");
+                if (ConstantKind(lineWidth.Value) is { } lineWidthKind)
+                {
+                    if (lineWidthKind != LiteralKind.Numeric)
+                        Add(results, Anchor(lineWidth, layerNode), $"Layer '{layer.Name}' LINE_WIDTH must be a number from {LineSeriesWidth.Minimum} through {LineSeriesWidth.Maximum}, or a parameter.");
+                    else if (!LineSeriesWidth.TryNormalize(LiteralNumberText(lineWidth.Value), out _))
+                        Add(results, Anchor(lineWidth, layerNode), $"Layer '{layer.Name}' LINE_WIDTH must be from {LineSeriesWidth.Minimum} through {LineSeriesWidth.Maximum} pixels.");
+                }
+            }
+
             if (layer.ZIndex < 0)
                 Add(results, layerNode, $"Layer '{layer.Name}' has a negative Z_INDEX.");
             if (layer.BandSize <= 0m || layer.BandSize > 1m)
@@ -204,6 +240,15 @@ public static class AdvancedChartSemanticValidator
 
         if (encoding.Axis == AdvancedChartAxisRole.Secondary && encoding.Channel != AdvancedChartChannel.Y2)
             Add(results, node, $"Layer '{layer.Name}' may use AXIS=SECONDARY only on the Y2 channel.");
+
+        if (encoding.Channel == AdvancedChartChannel.Shape)
+        {
+            if (layer.Mark != AdvancedChartMarkKind.Point)
+                Add(results, node, $"Layer '{layer.Name}' may use SHAPE only on POINT marks.");
+            if (encoding.Source.Kind != AdvancedChartBindingSourceKind.Field &&
+                LiteralText(encoding.Source.Constant!) is { } shape && !PointShapeVocabulary.IsSupported(shape))
+                Add(results, node, $"Layer '{layer.Name}' SHAPE accepts only {PointShapeVocabulary.DisplayList}; found '{shape}'.");
+        }
 
         if (encoding.Source.Kind == AdvancedChartBindingSourceKind.Value)
         {
@@ -608,6 +653,19 @@ public static class AdvancedChartSemanticValidator
                 Add(results, node, $"Layer '{layer.Name}' condition THEN value must be a literal or parameter.");
             if (condition.WhenFalse is not null && !IsConstant(condition.WhenFalse))
                 Add(results, node, $"Layer '{layer.Name}' condition ELSE value must be a literal or parameter.");
+            if (condition.Channel == AdvancedChartConditionChannel.Shape)
+            {
+                if (layer.Mark != AdvancedChartMarkKind.Point)
+                    Add(results, node, $"Layer '{layer.Name}' may condition SHAPE only on POINT marks.");
+                ValidateConditionShape(condition.WhenTrue, "THEN");
+                if (condition.WhenFalse is not null) ValidateConditionShape(condition.WhenFalse, "ELSE");
+            }
+
+            void ValidateConditionShape(Expression value, string branch)
+            {
+                if (LiteralText(value) is { } shape && !PointShapeVocabulary.IsSupported(shape))
+                    Add(results, node, $"Layer '{layer.Name}' condition {branch} SHAPE accepts only {PointShapeVocabulary.DisplayList}; found '{shape}'.");
+            }
         }
     }
 
@@ -734,6 +792,11 @@ public static class AdvancedChartSemanticValidator
 
     private static string? LiteralText(Expression expression) =>
         expression is LiteralExpression { Value: string text } ? text : null;
+
+    private static string? LiteralNumberText(Expression expression) =>
+        expression is LiteralExpression { Value: not null } literal
+            ? Convert.ToString(literal.Value, System.Globalization.CultureInfo.InvariantCulture)
+            : null;
 
     private static bool IsPortableColor(string value) =>
         value.Length == 7 && value[0] == '#' && value.Skip(1).All(Uri.IsHexDigit);

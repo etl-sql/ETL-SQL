@@ -161,7 +161,7 @@ SQL, while the script remains visible as the advanced escape hatch.
   inspector — already the owner of colours, grid lines, data labels, axis bounds, and explicit
   top/right/bottom/left legend placement — so the builder shapes a visual once and hands over.
 
-### Phase 4 — Report Interaction, Paginated Output, and Model Views (Next)
+### Phase 4 — Report Interaction, Paginated Output, and Model Views (Complete)
 
 **Outcome:** Studio can complete the representative interactive-dashboard and paginated-report jobs,
 then expose advanced inspection views that do not block basic authoring.
@@ -210,14 +210,66 @@ then expose advanced inspection views that do not block basic authoring.
   explicit break adds a page and an excluded visual does not, and decode the page content streams to
   prove a split table repeats its column headings; a Portal integration test exports the sample
   connector's order table across several pages and proves a prompt's answer changes the document.
-- [ ] **Add the document outline and layer tree**: Show pages, containers/rows, and visuals with
-  reorder, z-index, lock, and visibility controls.
-- [ ] **Add the data-model / ER view**: Show connections, `#temp` tables, CTEs, joins, foreign keys,
-  and cardinalities without inventing relationships absent from parser or schema evidence.
-- [ ] **Add live engine state and visual EXPLAIN views**: Show active variables and `#temp` tables,
-  operator trees, remote pushdown, and spill warnings. Reuse the Phase 2 scope model.
+- [x] **Add the document outline and layer tree**: The visual library already listed what was on a
+  page; it could not act on the list and never told the canvas anything. The outline lists pages, the
+  row bands the grid actually draws — visuals whose row ranges overlap, not merely those sharing a
+  `gridRow`, so a tall tile does not split the row it visibly shares — and containers with their
+  children. Selection runs both ways: a row selects the tile, and a canvas click highlights the row,
+  which needed a fix to the designer callback that forced the rail to the visual library on every
+  selection and so closed the panel the author was clicking in. **Move** swaps two tiles' grid
+  placement, spans included, and the canonical patcher regenerates `STRUCTURE` from those
+  coordinates — the swap is the entire edit. **Hide** writes `VISIBLE = OFF`, the property the report
+  runtime already reads. **Lock is deliberately not written to the script** and the panel says so: a
+  dashboard's layout is a grid, so there is no free z-order to author and no `LOCKED` anywhere in the
+  language, and inventing an option so a button could pretend to persist would put a word in the
+  author's file that nothing else reads. It is a canvas guard held in local storage that refuses a
+  drag, a resize, and a delete, and the designer asks for it on each interaction rather than being
+  told. The browser test proving the lock does the unlocked drag first: an earlier version asserted
+  only that a locked card had not moved, which a gesture that never moved anything satisfies just as
+  well — and did.
+- [x] **Add the data-model / ER view**: A new `Model` projection, drawn by the same shared graph
+  renderer as the pipeline map. `ScriptDataModelService` projects connections, remote tables, `#temp`
+  tables, CTEs, and datasets, with join edges from the equalities the script writes, derivation edges
+  for the `#temp` chains that are most of an ETL-SQL model, and foreign-key edges from what the
+  database declares. The rule the whole projection is built on is that **nothing is drawn that the
+  parser or the database did not say**: two tables sharing a column name produce nothing, an
+  unqualified join column is left undrawn rather than assigned to the nearer table, and an
+  `EXECUTE conn INTO #t BEGIN … END` block credits the connection rather than reading table names out
+  of SQL this parser never sees. Cardinality obeys the same rule — `unknown` unless a declared key or
+  foreign key settles it — and the view distinguishes "no keys were available" from "these tables
+  have no keys", because a reader who cannot tell them apart reads every blank as a finding. Keys
+  reach it through a new `IMetadataManager.GetKeyEvidenceAsync`, default-implemented as "nothing
+  known" and backed by the connector catalog providers, so both hosts answer identically. The route
+  projects twice on purpose: from the script first, then again with evidence about only the tables
+  that projection named, so opening a diagram never becomes a schema crawl.
+- [x] **Add live engine state and visual EXPLAIN views**: An `Engine` rail panel answering the two
+  questions an author has about the statement in front of them. **Scope** is the Phase 2 model asked
+  with a caret instead of a task label — `ScriptScopeService.AtLine`, sharing one walk with the task
+  lookup by taking a predicate — so a `#temp` created below the cursor is not offered; it also hands
+  back the statement under the cursor and the prefix above it, which is what makes the statement
+  plannable at all. **The plan** is the engine's own `EXPLAIN`, asked for through the ordinary run
+  route rather than a second door into the engine, so it passes the same policy, limits, and audit;
+  the panel renders it as an operator list badged with blocking versus streaming, remote pushdown,
+  index use, and spill. `PortalInteractiveRunPolicy` now allows `EXPLAIN` of a query it would allow
+  you to run, and refuses `EXPLAIN ANALYZE` by name because that one executes.
+- [x] **Add beginner-friendly diagnostic translation and error guidance**: `DiagnosticGuidanceService`
+  turns the shapes that actually occur — an unterminated string, an unclosed block, a bare word where
+  text belongs, a missing semicolon, an unaccepted option value — into a sentence with no parser
+  vocabulary in it, a next step, the named object the line sits inside, a reference-tree link, and,
+  where exactly one repair is correct, an edit. The unclosed block is the clearest gain: the parser
+  reports the semicolon it tripped over, several lines from the cause and about the wrong character.
+  Two restraints are load-bearing and tested. A diagnostic it cannot act on gets **no** guidance
+  rather than "check your syntax", which is noise wearing the costume of help; and a quick fix is
+  offered only where a guess is impossible — `ON`/`OFF`/`AUTO` are never quoted, and where a bracket
+  belongs is a judgement, so no button offers to place one. The guidance is attached to
+  `AnalysisDiagnostic` itself rather than to one host's response, so it reaches VS Code through the
+  language server and the CLI's lint output as well as Studio; Studio applies a fix through the
+  editor's own ranged transaction, so the undo offer covers it like any other GUI write, and refuses
+  outright if the buffer moved under it. Positions are zero-based throughout, matching the diagnostic
+  contract — `CalculateRange` already returned zero-based lines, and a second convention in the same
+  payload is how an off-by-one gets into an edit a button applies unread.
 
-### Phase 5 — Governance, Dataset Lifecycle, and Delivery
+### Phase 5 — Governance, Dataset Lifecycle, and Delivery (Next)
 
 **Outcome:** Authors can attach governance to first-class tasks and move finished work into supported
 operational flows without an unexplained application switch.
@@ -370,14 +422,14 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 
 ### Marker and Line Geometry
 
-- [ ] **Point shape vocabulary**: `SHAPE` encoding exists in `CUSTOM CHART` POINT but the accepted
+- [x] **Point shape vocabulary**: `SHAPE` encoding exists in `CUSTOM CHART` POINT but the accepted
   values are undocumented. Define and document the shape vocabulary (`CIRCLE`, `SQUARE`, `TRIANGLE`,
   `DIAMOND`, `CROSS`, `STAR`) in the `CUSTOM CHART` reference. Add a `SYMBOL_SHAPE` option to named
   LINE and SCATTER charts.
-- [ ] **Point stroke**: No stroke color or border width for point markers in any surface. Add
+- [x] **Point stroke**: No stroke color or border width for point markers in any surface. Add
   `SYMBOL_STROKE_COLOR` and `SYMBOL_STROKE_WIDTH` to named LINE/SCATTER options and to `CUSTOM CHART`
   POINT layer STYLE tokens.
-- [ ] **Line width**: No `LINE_WIDTH` option on LINE or COMBO. `THICKNESS` in `CUSTOM CHART` applies to
+- [x] **Line width**: No `LINE_WIDTH` option on LINE or COMBO. `THICKNESS` in `CUSTOM CHART` applies to
   TICK marks, not LINE layers. Add `LINE_WIDTH = n` to named LINE and COMBO charts, and clarify or add
   a thickness property for LINE layers in `CUSTOM CHART`.
 - [ ] **Step interpolation**: `SMOOTH = ON|OFF` exists but there is no step-before / step-after
@@ -724,7 +776,7 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 - [ ] **`ZOOM_SLIDER` on SCATTER and COMBO**: `ZOOM_SLIDER = ON|OFF` is documented for LINE and BAR
   but not SCATTER or COMBO. These are the charts most likely to need it on dense data. Confirm
   whether it is implemented but undocumented, or genuinely absent, and add/document accordingly.
-- [ ] **`AXIS_SORT` on COMBO**: `AXIS_SORT` is available on BAR, HBAR, and LINE but not listed in
+- [x] **`AXIS_SORT` on COMBO**: `AXIS_SORT` is available on BAR, HBAR, and LINE but not listed in
   COMBO options. COMBO shares a category axis so the option is meaningful. Add or document.
 - [ ] **`DATA_LABELS` on SCATTER, BUBBLE, RADAR, and HEATMAP**: `DATA_LABELS = ON|OFF` is
   documented on BAR, HBAR, LINE, and COMBO but not on SCATTER, BUBBLE, RADAR, or HEATMAP.
@@ -845,7 +897,7 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 - [ ] **Minimum character trigger**: No `MIN_CHARS = n` to suppress `ON_CHANGE` until at least
   n characters are typed. Prevents single-character wildcard explosions on large tables. Add
   alongside `DEBOUNCE`.
-- [ ] **Clear button**: No `SHOW_CLEAR = ON|OFF` option to display an × button that resets the
+- [x] **Clear button**: No `SHOW_CLEAR = ON|OFF` option to display an × button that resets the
   value. Add to OPTIONS.
 
 ### CHECKBOX
@@ -866,7 +918,7 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 
 - [ ] **Multiline / textarea mode**: TEXTBOX is single-line only. No `MULTILINE = ON|OFF` or
   `ROWS = n` option for memo-style input. Add to OPTIONS.
-- [ ] **Max length**: No `MAX_LENGTH = n` character limit. Add to OPTIONS.
+- [x] **Max length**: No `MAX_LENGTH = n` character limit. Add to OPTIONS.
 - [ ] **Pattern / regex validation**: No `PATTERN = 'regex'` option to constrain input format
   inline. Add with a companion `VALIDATION_MESSAGE = 'text'` for the error hint.
 - [ ] **ON_SUBMIT trigger**: TEXTBOX fires `ON_CHANGE` on every keystroke. No `ON_SUBMIT` trigger

@@ -19,7 +19,7 @@ import { createStudioAuthoringSurfaces, declaredConnectionNames } from './studio
 import { createConnectionWizard } from './connection-wizard.js';
 import { buildSideBySideDiff } from './studio-git-diff.js';
 import { REPORT_WORKFLOW_TEMPLATES, STUDIO_CATALOG_ROUTES, STUDIO_ROUTES, STUDIO_STARTER_SCRIPTS, STUDIO_WORKSPACE_ROUTES } from './studio-contracts.js';
-import { columnName as _columnName, columnType as _columnType, requestSourceSample, snapshotColumns as _snapshotColumns, updateSnapshotPackage as writeSnapshotPackage } from './studio-data.js';
+import { columnName as _columnName, columnType as _columnType, requestSourceSample, snapshotColumns as _snapshotColumns, updateSnapshotPackage as writeSnapshotPackage, updateSnapshotPackageFromManifest } from './studio-data.js';
 import { createStudioHostAdapter } from './studio-host.js';
 import { createStudioLeaseLifecycle } from './studio-lifecycle.js';
 import { detectPlaintextSecrets as _detectPlaintextSecrets, secureStudioScriptForSave } from './studio-security.js';
@@ -77,7 +77,15 @@ const _STUDIO_ICONS = {
     slicer: '<rect x="2" y="4" width="12" height="8" rx="4"/><circle cx="6" cy="8" r="2"/>',
     chevronLeft: '<path d="m10 3-5 5 5 5"/>',
     chevronRight: '<path d="m6 3 5 5-5 5"/>',
-    chevronDown: '<path d="m3 6 5 5 5-5"/>'
+    chevronDown: '<path d="m3 6 5 5 5-5"/>',
+    outline: '<path d="M2 3.5h4M2 8h4M2 12.5h4"/><path d="M8 3.5h6M8 8h6M8 12.5h6"/>',
+    visible: '<path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8"/><circle cx="8" cy="8" r="2"/>',
+    hidden: '<path d="M2.5 5.5A11 11 0 0 0 1.5 8S4 12.5 8 12.5a6.6 6.6 0 0 0 2.6-.5"/><path d="M6.2 4A6.9 6.9 0 0 1 8 3.5C12 3.5 14.5 8 14.5 8a12 12 0 0 1-2 2.6"/><path d="m2 2 12 12"/>',
+    locked: '<rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>',
+    unlocked: '<rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 4.8-1"/>',
+    moveUp: '<path d="M8 13V3"/><path d="m4 7 4-4 4 4"/>',
+    moveDown: '<path d="M8 3v10"/><path d="m4 9 4 4 4-4"/>',
+    engine: '<circle cx="8" cy="8" r="2"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/><path d="m3.1 3.1 2.1 2.1M10.8 10.8l2.1 2.1M12.9 3.1l-2.1 2.1M5.2 10.8l-2.1 2.1"/>'
 };
 
 function _studioIcon(name, size = 16) {
@@ -192,6 +200,9 @@ export async function createStudioWorkbench(container, opts = {}) {
                     <button type="button" class="etlsql-studio-btn-toggle" data-projection="code" title="Code View (CodeMirror 6)">
                         <span class="etlsql-icon">${_studioIcon('code', 14)}</span> Code
                     </button>
+                    <button type="button" class="etlsql-studio-btn-toggle" data-projection="model" title="Data Model View (Connections, Tables, Relationships)">
+                        <span class="etlsql-icon">${_studioIcon('catalog', 14)}</span> Model
+                    </button>
                 </div>
 
                 <div class="etlsql-studio-header-divider"></div>
@@ -225,6 +236,12 @@ export async function createStudioWorkbench(container, opts = {}) {
                     </button>
                     <button type="button" class="etlsql-studio-rail-btn" data-activity="palette" title="Visual Palette (Add Components)">
                         ${_studioIcon('palette', 18)}
+                    </button>
+                    <button type="button" class="etlsql-studio-rail-btn" data-activity="outline" title="Outline (Pages, Containers, Visuals)">
+                        ${_studioIcon('outline', 18)}
+                    </button>
+                    <button type="button" class="etlsql-studio-rail-btn" data-activity="engine" title="Engine State (Scope and Query Plan)">
+                        ${_studioIcon('engine', 18)}
                     </button>
                     <button type="button" class="etlsql-studio-rail-btn" data-activity="filters" title="Filter Pane (Slicers & Ranges)">
                         ${_studioIcon('filters', 18)}
@@ -710,13 +727,19 @@ export async function createStudioWorkbench(container, opts = {}) {
         if (state.activeDocId === '__home__') return;
         homeStage.style.display = 'none';
         const doc = getActiveDoc();
+        // Model is the only projection that replaces what the stage holds rather than resizing it,
+        // so crossing that boundary in either direction has to repaint. Repainting on every toggle
+        // instead would re-run the pipeline projection's fetches for a change that only moved a
+        // splitter.
+        const wasModel = doc?.projection === 'model';
         if (doc) doc.projection = mode;
+        const crossesModelBoundary = wasModel !== (mode === 'model');
 
         shell.querySelectorAll('[data-projection]').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.projection === mode);
         });
 
-        if (mode === 'canvas') {
+        if (mode === 'canvas' || mode === 'model') {
             visualStage.style.display = 'flex';
             visualStage.style.flex = '1';
             codeStage.style.display = 'none';
@@ -733,6 +756,8 @@ export async function createStudioWorkbench(container, opts = {}) {
             codeStage.style.flex = '1';
             resizer.style.display = 'block';
         }
+
+        if (crossesModelBoundary) renderVisualStage();
 
         if (state.editorInstance?.focus) {
             state.editorInstance.focus();
@@ -1066,10 +1091,179 @@ export async function createStudioWorkbench(container, opts = {}) {
         }
     }
 
+    // ── Data-model (ER) view ──────────────────────────────────────────────────
+    // A projection, not a panel: the model is the whole script seen a different way, so it takes the
+    // stage the same way the canvas and the pipeline map do, and it is drawn by the same shared
+    // graph renderer they use rather than by a second layout engine that would drift from them.
+    //
+    // The one thing this view has to be careful about is what it claims. Every edge it draws was
+    // either written in the script or declared by the database, and the panel labels which. A
+    // cardinality it could not establish reads "not stated" and never a plausible guess: an author
+    // reading "many-to-one" off a diagram will design around it, and the cost of being wrong there
+    // is paid much later, in data.
+
+    /** Colours and shapes come from the shared renderer; these map our vocabulary onto its types. */
+    const DATA_MODEL_NODE_TYPE = {
+        connection: 'connection',
+        table: 'table',
+        temp: 'io',
+        cte: 'container',
+        dataset: 'dataset',
+    };
+
+    const DATA_MODEL_CARDINALITY_LABEL = {
+        'one-to-one': '1 : 1',
+        'many-to-one': 'n : 1',
+        'one-to-many': '1 : n',
+        'many-to-many': 'n : n',
+        unknown: 'not stated',
+    };
+
+    function disposeDataModel() {
+        state.dataModelInstance?.dispose?.();
+        state.dataModelInstance = null;
+    }
+
+    function paintDataModelMessage(title, detail, tone = 'neutral') {
+        disposeDataModel();
+        canvasContainer.innerHTML = `
+            <section class="etlsql-studio-dag-view" data-model-view>
+                <header class="etlsql-studio-dag-head">
+                    <div><strong>Data model</strong><span>${_escapeHtml(detail)}</span></div>
+                    <span class="etlsql-studio-dag-status is-${_escapeHtml(tone)}" data-model-status>${_escapeHtml(title)}</span>
+                </header>
+                <div class="etlsql-studio-empty-guidance"><strong>${_escapeHtml(title)}</strong><span>${_escapeHtml(detail)}</span></div>
+            </section>`;
+    }
+
+    /** The edge label carries the evidence, because the reader has no other way to weigh the edge. */
+    function dataModelEdgeLabel(relationship) {
+        if (relationship.kind === 'derivation') return 'builds';
+        if (relationship.kind === 'membership') return '';
+        const cardinality = DATA_MODEL_CARDINALITY_LABEL[relationship.cardinality] || relationship.cardinality;
+        if (relationship.kind === 'foreign-key') return `FK · ${cardinality}`;
+        return `${relationship.fromColumn || ''} = ${relationship.toColumn || ''} · ${cardinality}`.trim();
+    }
+
+    function dataModelSummaryMarkup(model) {
+        const counts = model.entities.reduce((totals, entity) => {
+            totals[entity.kind] = (totals[entity.kind] || 0) + 1;
+            return totals;
+        }, {});
+        const joins = model.relationships.filter(item => item.kind === 'join').length;
+        const declared = model.relationships.filter(item => item.kind === 'foreign-key').length;
+        const stated = model.relationships.filter(item => item.kind === 'join' && item.cardinality !== 'unknown').length;
+        const parts = [
+            `${counts.table || 0} table${counts.table === 1 ? '' : 's'}`,
+            `${counts.temp || 0} #temp`,
+            `${counts.cte || 0} CTE${counts.cte === 1 ? '' : 's'}`,
+            `${joins} join${joins === 1 ? '' : 's'}`,
+            `${declared} declared foreign key${declared === 1 ? '' : 's'}`,
+        ];
+        const evidence = model.hasSchemaEvidence
+            ? `${stated} of ${joins} join${joins === 1 ? '' : 's'} have a cardinality the database states; the rest are not stated by it.`
+            : 'No database keys were available, so no cardinality is stated. That is an absence of evidence, not a finding about the data.';
+        return `<div class="etlsql-studio-model-summary"><span>${_escapeHtml(parts.join(' · '))}</span><small>${_escapeHtml(evidence)}</small></div>`;
+    }
+
+    async function renderDataModelView(doc, content) {
+        const context = documentContext(doc);
+        const revision = ++context.modelRevision;
+        paintDataModelMessage('Reading the script…', 'Connections, tables, and the relationships between them.');
+
+        let model;
+        try {
+            model = await designerApiJson(STUDIO_ROUTES.dataModel, {
+                script: content,
+                documentUri: doc.path || doc.id,
+            });
+        } catch (error) {
+            if (revision !== context.modelRevision || getActiveDoc() !== doc) return;
+            paintDataModelMessage('The data model could not be read', error?.message || String(error), 'error');
+            return;
+        }
+        if (revision !== context.modelRevision || getActiveDoc() !== doc) return;
+
+        if (!model?.parsed) {
+            paintDataModelMessage(
+                'The script does not parse yet',
+                model?.error || 'Fix the script and the model will redraw.',
+                'warning');
+            return;
+        }
+        if (!model.entities?.length) {
+            paintDataModelMessage(
+                'Nothing to model yet',
+                'Add a connection and a query, and this view will show what they read and build.');
+            return;
+        }
+
+        disposeDataModel();
+        canvasContainer.innerHTML = `
+            <section class="etlsql-studio-dag-view" data-model-view>
+                <header class="etlsql-studio-dag-head">
+                    <div>
+                        <strong>Data model</strong>
+                        <span>${model.entities.length} entit${model.entities.length === 1 ? 'y' : 'ies'} · ${model.relationships.length} relationship${model.relationships.length === 1 ? '' : 's'}</span>
+                    </div>
+                    <span class="etlsql-studio-dag-status is-${model.hasSchemaEvidence ? 'success' : 'neutral'}" data-model-status>${
+                        model.hasSchemaEvidence ? 'Script and database evidence' : 'Script evidence only'}</span>
+                </header>
+                ${dataModelSummaryMarkup(model)}
+                <div class="etlsql-studio-dag-canvas" data-model-canvas></div>
+            </section>`;
+
+        state.dataModelInstance = renderDag(
+            canvasContainer.querySelector('[data-model-canvas]'),
+            {
+                nodes: model.entities.map(entity => ({
+                    id: entity.id,
+                    label: entity.name,
+                    type: DATA_MODEL_NODE_TYPE[entity.kind] || 'table',
+                    meta: {
+                        line: entity.line,
+                        kind: entity.kind,
+                        connection: entity.connection,
+                        detail: entity.detail,
+                        keys: entity.columns.filter(column => column.isKey).map(column => column.name).join(', '),
+                    },
+                })),
+                edges: model.relationships.map(relationship => ({
+                    source: relationship.from,
+                    target: relationship.to,
+                    label: dataModelEdgeLabel(relationship),
+                })),
+            },
+            {
+                theme: document.body.classList.contains('theme-dark') ? 'vscode' : 'portal',
+                orientation: 'horizontal',
+                onNodeClick: (_id, meta) => {
+                    const line = meta?.line ?? meta?.Line;
+                    if (!line) return;
+                    setProjection('split');
+                    state.editorInstance?.gotoLine?.(line);
+                },
+            });
+    }
+
     function renderVisualStage() {
         const doc = getActiveDoc();
         if (!doc) return;
         const content = state.editorInstance ? state.editorInstance.getValue() : doc.content;
+
+        // The model is a projection of the same script, so it is chosen before the file kind: an
+        // author asking for the model of a report wants the model of a report, not its canvas.
+        if (doc.projection === 'model') {
+            renderReportWorkflowChrome(null);
+            disposePipelineDag();
+            if (state.designerInstance) {
+                state.designerInstance.dispose?.();
+                state.designerInstance = null;
+            }
+            void renderDataModelView(doc, content);
+            return;
+        }
+        disposeDataModel();
 
         const isEtl = (doc.path || '').endsWith('.etlsql') || content.includes('TRANSFORM ') || content.includes('MERGE INTO');
 
@@ -1107,14 +1301,28 @@ export async function createStudioWorkbench(container, opts = {}) {
                     authFetch: authFetch,
                     previewUrl: opts.previewUrl || '/designer-preview.html',
                     getDatasetColumns: () => _snapshotColumns(activeDocumentContext().snapshot).map(_columnName),
+                    // The outline's lock. The designer asks rather than being told, so a lock
+                    // toggled while a card is on screen takes effect on the next interaction
+                    // without the panel having to push anything into the canvas.
+                    isVisualLocked: visual => isVisualLocked(visual),
                     onVisualSelect: visualId => {
+                        state.selectedVisualId = visualId || null;
+                        // The outline is itself a selection surface. Switching the rail to the
+                        // visual library on every selection would close the panel the author just
+                        // clicked in, so while the outline is open it keeps the rail and repaints
+                        // its own highlight instead — which is also what makes a canvas click show
+                        // up in the tree.
+                        if (state.activeActivity === 'outline') {
+                            inspector.style.display = 'none';
+                            sidebarContent.style.display = '';
+                            renderOutlineTree();
+                            return;
+                        }
                         if (!visualId) {
-                            state.selectedVisualId = null;
                             inspector.style.display = 'none';
                             sidebarContent.style.display = '';
                             return;
                         }
-                        state.selectedVisualId = visualId;
                         if (state.activeActivity !== 'palette') setActivity('palette');
                         showVisualProperties();
                     },
@@ -1127,7 +1335,9 @@ export async function createStudioWorkbench(container, opts = {}) {
                         doc.content = newScript;
                         doc.isDirty = true;
                         renderTabs();
-                        if (state.selectedVisualId) {
+                        if (state.activeActivity === 'outline') {
+                            renderOutlineTree();
+                        } else if (state.selectedVisualId) {
                             showVisualProperties();
                         } else if (state.activeActivity === 'palette' || state.activeActivity === 'catalog') {
                             renderSidebarContent(state.activeActivity);
@@ -1904,7 +2114,8 @@ export async function createStudioWorkbench(container, opts = {}) {
                 const created = await opts.onCreateDocument({ ...request, type: 'report', workflow: reportWorkflow, scriptText });
                 created.reportWorkflow = reportWorkflow;
                 state.catalogReports.push(created);
-                await openCatalogReport(created, reportWorkflow === 'dashboard' ? 'canvas' : 'split');
+                const document = await openCatalogReport(created, reportWorkflow === 'dashboard' ? 'canvas' : 'split');
+                if (seed) await hydrateSeededReport(document);
             } catch (error) {
                 _feedback.notify(error?.message || 'The report could not be created.', { title: 'Create Report Failed', tone: 'error' });
             }
@@ -1950,7 +2161,31 @@ export async function createStudioWorkbench(container, opts = {}) {
         };
 
         state.documents.push(newDoc);
-        switchDoc(newDoc.id);
+        await switchDoc(newDoc.id);
+        if (seed && isReportType) await hydrateSeededReport(newDoc);
+    }
+
+    async function hydrateSeededReport(document) {
+        if (!document || getActiveDoc() !== document) return;
+        const context = documentContext(document);
+        try {
+            const manifest = await authoringRequest(STUDIO_ROUTES.preview, {
+                body: { script: document.content, runEveryPage: true },
+                fallbackError: 'The sample dashboard could not be previewed.',
+            });
+            if (getActiveDoc() !== document) return;
+            updateSnapshotPackageFromManifest(context, manifest);
+            state.designerInstance?.refreshSnapshot?.();
+            renderReportWorkflowChrome(document, state.designerInstance?.getState?.());
+            if (state.activeActivity === 'catalog' || state.activeActivity === 'palette') {
+                renderSidebarContent(state.activeActivity);
+            }
+        } catch (error) {
+            _feedback.notify(error?.message || 'The sample dashboard could not be previewed.', {
+                title: 'Sample data unavailable',
+                tone: 'warning',
+            });
+        }
     }
 
     async function openCatalogReport(report, proj = 'split') {
@@ -2391,6 +2626,260 @@ export async function createStudioWorkbench(container, opts = {}) {
         const pages = state.designerInstance?.getState?.().pages || [];
         if (!pages.length) return '<div class="etlsql-studio-empty-compact">No report page yet.</div>';
         return pages.map(page => `<div class="etlsql-studio-tree-page"><strong>${_escapeHtml(page.name || 'Page')}</strong><span>${page.visuals?.length || 0} visuals</span></div>${(page.visuals || []).map(visual => `<button type="button" class="etlsql-studio-tree-visual" data-tree-visual="${_escapeHtml(visual.id)}"><span>${_escapeHtml(visual.type)}</span>${_escapeHtml(visual.name || visual.id)}</button>`).join('')}`).join('');
+    }
+
+    // ── Document outline and layer tree ───────────────────────────────────────
+    // The report tree in the visual library answers "what is on this page"; it does not let an
+    // author act on the answer. The outline is the acting surface: it lists every page, the row
+    // bands and containers those pages lay out, and the visuals inside them, and it is the way to
+    // reach a tile the canvas makes hard to click — a small visual behind a container, or one whose
+    // neighbours crowd it.
+    //
+    // Three of its four controls write to the script, because the script is the report. Reorder
+    // swaps two tiles' grid placement, which is what "move up" means in a grid layout: the canonical
+    // patcher regenerates STRUCTURE from grid coordinates, so the swap is the whole edit. Hide
+    // writes VISIBLE = OFF, the property the runtime already honours. Selecting a row selects the
+    // same visual on the canvas, and a canvas selection highlights the same row.
+    //
+    // Lock is the one that does not write, and says so. There is no LOCKED anywhere in the report
+    // language, and inventing an option so the button could pretend to persist would put a word in
+    // the author's file that nothing but this panel reads. It is a guard on this machine's canvas —
+    // it stops a drag, a resize, and a delete — held in local storage per document, and the panel
+    // says so rather than letting the author assume a colleague will inherit it.
+
+    const OUTLINE_LOCK_STORAGE = 'etlsql-studio-outline-locks';
+
+    /** Locks are keyed by document path and by visual *name*: parse ids carry a position and move. */
+    function outlineLockKey(doc = getActiveDoc()) {
+        return `${OUTLINE_LOCK_STORAGE}:${doc?.path || doc?.id || 'untitled'}`;
+    }
+
+    function lockedVisualNames(doc = getActiveDoc()) {
+        try {
+            const raw = localStorage.getItem(outlineLockKey(doc));
+            const parsed = raw ? JSON.parse(raw) : [];
+            return new Set(Array.isArray(parsed) ? parsed.map(name => String(name).toLowerCase()) : []);
+        } catch {
+            return new Set();
+        }
+    }
+
+    function isVisualLocked(visual, doc = getActiveDoc()) {
+        const name = String(visual?.name ?? visual ?? '').toLowerCase();
+        return Boolean(name) && lockedVisualNames(doc).has(name);
+    }
+
+    function setVisualLocked(name, locked) {
+        const locks = lockedVisualNames();
+        const key = String(name || '').toLowerCase();
+        if (!key) return;
+        if (locked) locks.add(key); else locks.delete(key);
+        try {
+            localStorage.setItem(outlineLockKey(), JSON.stringify([...locks]));
+        } catch {
+            // A host with storage disabled keeps nothing past the reload. The panel and the canvas
+            // both read this same set, so the guard still holds for the session; what is lost is
+            // only its persistence, and the panel already tells the author it is machine-local.
+        }
+    }
+
+    /** Reading order for a grid: top band first, then left to right inside the band. */
+    function compareVisualPlacement(a, b) {
+        return (a.gridRow || 1) - (b.gridRow || 1) || (a.gridCol || 1) - (b.gridCol || 1);
+    }
+
+    function isContainerVisual(visual) {
+        return String(visual?.type || '').toUpperCase() === 'CONTAINER';
+    }
+
+    function isVisualHidden(visual) {
+        return String(visual?.options?.VISIBLE ?? visual?.options?.visible ?? 'ON').toUpperCase() === 'OFF';
+    }
+
+    /**
+     * Splits a page's top-level visuals into the row bands the grid actually draws.
+     *
+     * A band is a set of visuals whose row ranges overlap, which is what a reader sees as "one row"
+     * even when the tiles in it have different heights. Grouping by `gridRow` alone would put a tall
+     * tile in a band of its own and split the row it visibly shares.
+     */
+    function outlineRowBands(visuals) {
+        const bands = [];
+        for (const visual of [...visuals].sort(compareVisualPlacement)) {
+            const start = visual.gridRow || 1;
+            const end = start + (visual.gridRowSpan || 1) - 1;
+            const band = bands.find(candidate => start <= candidate.end && end >= candidate.start);
+            if (band) {
+                band.start = Math.min(band.start, start);
+                band.end = Math.max(band.end, end);
+                band.visuals.push(visual);
+            } else {
+                bands.push({ start, end, visuals: [visual] });
+            }
+        }
+        return bands;
+    }
+
+    /** The siblings a visual is reordered among: its container's children, or the page's roots. */
+    function outlineSiblings(page, visual) {
+        const visuals = page.visuals || [];
+        const containerIds = new Set(visuals.filter(isContainerVisual).map(item => item.id));
+        const nested = Boolean(visual.containerId) && containerIds.has(visual.containerId);
+        return visuals
+            .filter(item => (nested
+                ? item.containerId === visual.containerId
+                : !item.containerId || !containerIds.has(item.containerId)))
+            .sort(compareVisualPlacement);
+    }
+
+    function outlineVisualMarkup(page, visual, depth, children = []) {
+        const hidden = isVisualHidden(visual);
+        const locked = isVisualLocked(visual);
+        const selected = state.selectedVisualId === visual.id;
+        const siblings = outlineSiblings(page, visual);
+        const index = siblings.findIndex(item => item.id === visual.id);
+        const name = visual.name || visual.id;
+        const classes = ['etlsql-studio-outline-item'];
+        if (selected) classes.push('is-selected');
+        if (hidden) classes.push('is-hidden');
+        if (locked) classes.push('is-locked');
+        const action = (attr, icon, title, { disabled = false, pressed = null } = {}) =>
+            `<button type="button" class="etlsql-studio-outline-action" ${attr}="${_escapeHtml(visual.id)}"`
+            + ` data-outline-name="${_escapeHtml(visual.name || '')}" title="${_escapeHtml(title)}"`
+            + ` aria-label="${_escapeHtml(title)}"${disabled ? ' disabled' : ''}`
+            + `${pressed === null ? '' : ` aria-pressed="${pressed}"`}>${icon}</button>`;
+        return `<div class="${classes.join(' ')}" data-outline-item="${_escapeHtml(visual.id)}" role="treeitem" aria-selected="${selected}" style="--outline-depth:${depth}">
+                <button type="button" class="etlsql-studio-outline-select" data-outline-select="${_escapeHtml(visual.id)}">
+                    <span class="etlsql-studio-outline-kind">${_escapeHtml(isContainerVisual(visual) ? 'GROUP' : visual.type)}</span>
+                    <span class="etlsql-studio-outline-name">${_escapeHtml(name)}</span>
+                </button>
+                <span class="etlsql-studio-outline-actions">
+                    ${action('data-outline-up', _studioIcon('moveUp', 12), locked ? `${name} is locked` : index > 0 ? `Move ${name} earlier` : `${name} is already first here`, { disabled: locked || index <= 0 })}
+                    ${action('data-outline-down', _studioIcon('moveDown', 12), locked ? `${name} is locked` : index >= 0 && index < siblings.length - 1 ? `Move ${name} later` : `${name} is already last here`, { disabled: locked || index < 0 || index >= siblings.length - 1 })}
+                    ${action('data-outline-visible', _studioIcon(hidden ? 'hidden' : 'visible', 12), hidden ? `Show ${name}` : `Hide ${name}`, { pressed: hidden ? 'true' : 'false' })}
+                    ${action('data-outline-lock', _studioIcon(locked ? 'locked' : 'unlocked', 12), locked ? `Unlock ${name} on this canvas` : `Lock ${name} on this canvas`, { pressed: locked ? 'true' : 'false' })}
+                </span>
+            </div>${children.join('')}`;
+    }
+
+    function outlineMarkup() {
+        const design = state.designerInstance?.getState?.();
+        const pages = design?.pages || [];
+        if (!pages.length) {
+            return '<div class="etlsql-studio-empty-guidance"><strong>No report page yet</strong><span>Add a page or a visual and the outline will list what it holds.</span></div>';
+        }
+        const activePage = state.designerInstance?.activePageIndex?.() ?? 0;
+        return pages.map((page, pageIndex) => {
+            const visuals = page.visuals || [];
+            const containerIds = new Set(visuals.filter(isContainerVisual).map(container => container.id));
+            const roots = visuals.filter(visual => !visual.containerId || !containerIds.has(visual.containerId));
+            const bands = outlineRowBands(roots);
+            const body = bands.length
+                ? bands.map((band, bandIndex) => `<div class="etlsql-studio-outline-band"><span>Row ${bandIndex + 1}</span><small>${band.visuals.length} item${band.visuals.length === 1 ? '' : 's'}</small></div>${
+                    band.visuals.map(visual => outlineVisualMarkup(page, visual, 1, isContainerVisual(visual)
+                        ? visuals.filter(child => child.containerId === visual.id)
+                            .sort(compareVisualPlacement)
+                            .map(child => outlineVisualMarkup(page, child, 2))
+                        : [])).join('')
+                }`).join('')
+                : '<div class="etlsql-studio-empty-compact">This page has no visuals yet.</div>';
+            return `<div class="etlsql-studio-outline-page${pageIndex === activePage ? ' is-active' : ''}">
+                    <button type="button" class="etlsql-studio-outline-page-btn" data-outline-page="${pageIndex}">
+                        <strong>${_escapeHtml(page.name || `Page ${pageIndex + 1}`)}</strong>
+                        <span>${_escapeHtml(page.mode || 'Dashboard')} · ${visuals.length} visual${visuals.length === 1 ? '' : 's'}</span>
+                    </button>
+                </div>${body}`;
+        }).join('');
+    }
+
+    function renderOutlineTree() {
+        sidebarTitle.textContent = 'Outline';
+        sidebarContent.innerHTML = `<section class="etlsql-studio-library-section">
+                <div class="etlsql-studio-outline-tree" role="tree" aria-label="Document outline">${outlineMarkup()}</div>
+                <p class="etlsql-studio-outline-note">Move and hide write to the script. Lock is a canvas guard held on this machine — it stops a drag, a resize, and a delete, and it is not saved into the report.</p>
+            </section>`;
+        sidebarContent.querySelectorAll('[data-outline-page]').forEach(button => button.addEventListener('click', () => {
+            state.designerInstance?.selectPage?.(Number(button.dataset.outlinePage));
+            renderOutlineTree();
+        }));
+        sidebarContent.querySelectorAll('[data-outline-select]').forEach(button => button.addEventListener('click', () => {
+            state.designerInstance?.selectVisual?.(button.dataset.outlineSelect);
+        }));
+        sidebarContent.querySelectorAll('[data-outline-up]').forEach(button => button.addEventListener('click', () => {
+            void reorderVisualInOutline(button.dataset.outlineName, -1);
+        }));
+        sidebarContent.querySelectorAll('[data-outline-down]').forEach(button => button.addEventListener('click', () => {
+            void reorderVisualInOutline(button.dataset.outlineName, 1);
+        }));
+        sidebarContent.querySelectorAll('[data-outline-visible]').forEach(button => button.addEventListener('click', () => {
+            void toggleVisualVisibility(button.dataset.outlineName);
+        }));
+        sidebarContent.querySelectorAll('[data-outline-lock]').forEach(button => button.addEventListener('click', () => {
+            const visual = findVisualByName(button.dataset.outlineName);
+            if (!visual) return;
+            const locking = !isVisualLocked(visual);
+            setVisualLocked(visual.name, locking);
+            state.designerInstance?.refreshSnapshot?.();
+            renderOutlineTree();
+            _feedback.notify(
+                locking
+                    ? `${visual.name} will not move, resize, or delete from the canvas until it is unlocked. The lock lives on this machine and is not written into the script.`
+                    : `${visual.name} can be moved from the canvas again.`,
+                { title: locking ? 'Locked on this canvas' : 'Unlocked', tone: 'info' });
+        }));
+    }
+
+    function findVisualByName(visualName) {
+        const wanted = String(visualName || '').toLowerCase();
+        if (!wanted) return null;
+        return (state.designerInstance?.getState?.().pages || [])
+            .flatMap(page => page.visuals || [])
+            .find(item => String(item.name || '').toLowerCase() === wanted) || null;
+    }
+
+    /**
+     * Moves a visual one place earlier or later in reading order by swapping its grid placement with
+     * its neighbour's — spans included, so the two tiles trade cells and the grid stays exactly as
+     * full as it was. The patcher regenerates STRUCTURE from those coordinates, so this one swap is
+     * the entire edit; there is no separate ordering to keep in step with it.
+     */
+    function reorderVisualInOutline(visualName, direction) {
+        return canonicalDesignerMutation('Reorder visual', designState => {
+            const visual = findDesignerVisual(designState, visualName);
+            if (!visual) throw new Error(`Visual ${visualName} was not found in the parsed document.`);
+            if (isVisualLocked(visual)) throw new Error(`${visual.name} is locked on this canvas. Unlock it to move it.`);
+            const page = (designState.pages || []).find(item => (item.visuals || []).includes(visual));
+            if (!page) throw new Error(`Visual ${visual.name} is not placed on a page.`);
+            const siblings = outlineSiblings(page, visual);
+            const neighbour = siblings[siblings.findIndex(item => item.id === visual.id) + direction];
+            if (!neighbour) throw new Error(`${visual.name} is already ${direction < 0 ? 'first' : 'last'} here.`);
+            const placement = item => ({
+                gridCol: item.gridCol, gridRow: item.gridRow,
+                gridColSpan: item.gridColSpan, gridRowSpan: item.gridRowSpan,
+            });
+            const moved = placement(visual);
+            Object.assign(visual, placement(neighbour));
+            Object.assign(neighbour, moved);
+            return visual.name;
+        }).then(result => {
+            if (result && state.activeActivity === 'outline') renderOutlineTree();
+            return result;
+        });
+    }
+
+    /**
+     * Hides or shows a visual through VISIBLE, the property the report runtime already reads. A
+     * hidden visual stays in the outline — it is the only place a tile the reader cannot see is
+     * still reachable, which is most of why the panel lists it.
+     */
+    function toggleVisualVisibility(visualName) {
+        const visual = findVisualByName(visualName);
+        if (!visual) return Promise.resolve(null);
+        return surgicalPatchVisualOption(visual.id, 'VISIBLE', isVisualHidden(visual) ? 'ON' : 'OFF')
+            .then(result => {
+                if (result && state.activeActivity === 'outline') renderOutlineTree();
+                return result;
+            });
     }
 
     function fieldListMarkup() {
@@ -3128,6 +3617,225 @@ export async function createStudioWorkbench(container, opts = {}) {
         sidebarContent.querySelectorAll('[data-explorer-delete]').forEach(button => button.addEventListener('click', event => { event.stopPropagation(); void deleteWorkspaceEntry({ path: button.dataset.explorerDelete, isDirectory: button.dataset.entryDirectory === 'true' }); }));
     }
 
+    // ── Engine state and visual EXPLAIN ───────────────────────────────────────
+    // Two questions an author asks of a statement they are looking at, answered in one place: what
+    // can this see from here, and what would the engine do with it.
+    //
+    // "What can it see" is the Phase 2 scope model asked with a caret instead of a task label — the
+    // same positional rule, because it is the same question. What it must never do is list every
+    // name in the file: a `#temp` created below the cursor does not exist yet, and offering it is
+    // wrong only at run time, which is the most expensive place to find out.
+    //
+    // "What would the engine do" is the engine's own EXPLAIN, not a second planner written here. The
+    // plan is asked for through the ordinary run route, so it passes the same policy, the same
+    // limits, and the same audit as any other execution — a design surface must not become a second
+    // door into the engine. That also means the statements above the cursor really do run: they are
+    // what builds the `#temp` tables the plan reads, and the panel says so before the author asks
+    // rather than after.
+
+    /** Reads the row shape EXPLAIN returns, whatever case the host serialised the columns in. */
+    function planCell(row, columns, name) {
+        const index = columns.findIndex(column => String(column).toLowerCase() === name.toLowerCase());
+        return index < 0 ? '' : String(row?.[index] ?? '');
+    }
+
+    function planOperatorMarkup(row, columns) {
+        const operation = planCell(row, columns, 'Operation');
+        const details = planCell(row, columns, 'Details');
+        const mode = planCell(row, columns, 'Mode').toUpperCase();
+        const cost = planCell(row, columns, 'Cost');
+        const estimated = planCell(row, columns, 'Est. Rows');
+        const spillBytes = Number(planCell(row, columns, 'Spill Bytes') || 0);
+        const notes = planCell(row, columns, 'Plan Notes');
+
+        const badges = [];
+        // BLOCKING is the one an author acts on: it is where the query stops streaming and starts
+        // holding rows, which is where memory and spill come from.
+        if (mode) badges.push(`<span class="etlsql-studio-plan-badge is-${mode === 'BLOCKING' ? 'blocking' : 'streaming'}">${_escapeHtml(mode.toLowerCase())}</span>`);
+        if (/pushdown/i.test(details)) badges.push('<span class="etlsql-studio-plan-badge is-pushdown">pushed to source</span>');
+        if (/index/i.test(operation)) badges.push('<span class="etlsql-studio-plan-badge is-index">index</span>');
+        if (spillBytes > 0) badges.push(`<span class="etlsql-studio-plan-badge is-spill">spilled ${_escapeHtml(String(spillBytes))} bytes</span>`);
+
+        const facts = [
+            cost ? `cost ${cost}` : '',
+            estimated && estimated !== '--' ? `~${estimated} rows` : '',
+        ].filter(Boolean).join(' · ');
+
+        return `<li class="etlsql-studio-plan-step">
+                <div class="etlsql-studio-plan-op"><strong>${_escapeHtml(operation)}</strong>${badges.join('')}</div>
+                ${details ? `<code>${_escapeHtml(details)}</code>` : ''}
+                <span class="etlsql-studio-plan-facts">${_escapeHtml(facts)}${notes ? ` · ${_escapeHtml(notes)}` : ''}</span>
+            </li>`;
+    }
+
+    function scopeListMarkup(scope) {
+        const variables = scope?.variables || [];
+        const temps = scope?.tempTables || [];
+        if (!variables.length && !temps.length) {
+            return '<div class="etlsql-studio-empty-compact">Nothing is in scope above the cursor yet.</div>';
+        }
+        const variableRows = variables.map(variable => `<li><code>${_escapeHtml(variable.name)}</code><span>${
+            _escapeHtml([variable.type, variable.value].filter(Boolean).join(' = ') || variable.origin)}</span></li>`).join('');
+        const tempRows = temps.map(temp => `<li><code>${_escapeHtml(temp.name)}</code><span>${
+            _escapeHtml(temp.columns?.length ? temp.columns.map(column => column.name).join(', ') : temp.origin)}</span></li>`).join('');
+        return `${variables.length ? `<div class="etlsql-sidebar-section-header"><span>Variables</span></div><ul class="etlsql-studio-scope-list">${variableRows}</ul>` : ''}
+            ${temps.length ? `<div class="etlsql-sidebar-section-header"><span>#temp tables</span></div><ul class="etlsql-studio-scope-list">${tempRows}</ul>` : ''}`;
+    }
+
+    /** 1-based caret line, or 1 when the editor cannot say. */
+    function cursorLine() {
+        const editor = state.editorInstance;
+        const reported = editor?.getCursorLine?.() ?? editor?.getCursor?.()?.line ?? null;
+        const line = Number(reported);
+        return Number.isFinite(line) && line > 0 ? Math.floor(line) : 1;
+    }
+
+    async function renderEnginePanel() {
+        sidebarTitle.textContent = 'Engine';
+        const doc = getActiveDoc();
+        if (!doc) {
+            sidebarContent.innerHTML = '<div class="etlsql-studio-empty-guidance"><strong>Open a script</strong><span>Engine state is read from the script you are editing.</span></div>';
+            return;
+        }
+
+        const line = cursorLine();
+        sidebarContent.innerHTML = '<div class="etlsql-studio-git-loading" role="status">Reading the script…</div>';
+
+        let scope = null;
+        try {
+            scope = await designerApiJson(STUDIO_ROUTES.pipelineScope, { script: activeScriptText(), line });
+        } catch (error) {
+            sidebarContent.innerHTML = `<div class="etlsql-studio-capability-state" role="alert"><strong>Engine state could not be read</strong><p>${_escapeHtml(error?.message || String(error))}</p></div>`;
+            return;
+        }
+        if (state.activeActivity !== 'engine' || getActiveDoc() !== doc) return;
+
+        state.enginePlanScope = scope?.resolved ? scope : null;
+        const statement = scope?.resolved ? String(scope.statementText || '').trim() : '';
+        const hasPrefix = Boolean(String(scope?.prefixScript || '').trim());
+
+        sidebarContent.innerHTML = `
+            <section class="etlsql-studio-library-section">
+                <div class="etlsql-studio-subhead"><div><strong>In scope here</strong><span>Line ${line} · what this statement can read</span></div></div>
+                ${scope?.resolved
+                    ? scopeListMarkup(scope)
+                    : `<div class="etlsql-studio-empty-compact">${_escapeHtml(scope?.error || 'The script does not parse yet.')}</div>`}
+            </section>
+            <section class="etlsql-studio-library-section">
+                <div class="etlsql-studio-subhead"><div><strong>Query plan</strong><span>The engine's own EXPLAIN</span></div></div>
+                ${statement
+                    ? `<code class="etlsql-studio-plan-target">${_escapeHtml(statement.length > 220 ? statement.slice(0, 220) + '…' : statement)}</code>
+                       <button type="button" class="etlsql-studio-btn is-primary" data-explain-statement>Explain this statement</button>
+                       <p class="etlsql-studio-outline-note">${hasPrefix
+                            ? 'The statements above the cursor run first, because they build the #temp tables the plan reads. EXPLAIN itself does not run the statement it explains.'
+                            : 'EXPLAIN builds the plan without running the statement.'}</p>`
+                    : '<div class="etlsql-studio-empty-compact">Put the cursor in a query to plan it.</div>'}
+                <div data-plan-host></div>
+            </section>
+            <button type="button" class="etlsql-studio-btn" data-engine-refresh>${_studioIcon('run', 13)} Refresh from cursor</button>`;
+
+        sidebarContent.querySelector('[data-engine-refresh]')?.addEventListener('click', () => void renderEnginePanel());
+        sidebarContent.querySelector('[data-explain-statement]')?.addEventListener('click', () => void explainStatementAtCursor());
+    }
+
+    async function explainStatementAtCursor() {
+        const doc = getActiveDoc();
+        const scope = state.enginePlanScope;
+        const host = sidebarContent.querySelector('[data-plan-host]');
+        if (!doc || !scope || !host) return;
+
+        const statement = String(scope.statementText || '').trim().replace(/;\s*$/, '');
+        if (!statement) return;
+        const slice = [String(scope.prefixScript || '').trim(), `EXPLAIN ${statement};`]
+            .filter(Boolean)
+            .join('\n\n');
+
+        host.innerHTML = '<div class="etlsql-studio-git-loading" role="status">Asking the engine for a plan…</div>';
+        let response;
+        try {
+            response = await authFetch(apiBase + STUDIO_ROUTES.run, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script: activeScriptText(), selection: slice }),
+            });
+        } catch (error) {
+            host.innerHTML = `<div class="etlsql-studio-capability-state" role="alert"><strong>No plan</strong><p>${_escapeHtml(error?.message || String(error))}</p></div>`;
+            return;
+        }
+
+        if (!response.ok) {
+            // The host refused, and the reason is the product: an interactive run has limits, and an
+            // author who cannot see why one applied will conclude the button is broken.
+            const reason = await _readErrorText(response);
+            host.innerHTML = `<div class="etlsql-studio-capability-state" role="alert"><strong>The engine did not plan this</strong><p>${_escapeHtml(reason)}</p></div>`;
+            return;
+        }
+
+        const data = await response.json();
+        const columns = (data.columns || []).map(column => (typeof column === 'string' ? column : column?.name || ''));
+        const rows = data.rows || [];
+        if (!rows.length) {
+            host.innerHTML = '<div class="etlsql-studio-empty-compact">The engine returned no plan for this statement.</div>';
+            return;
+        }
+
+        const blocking = rows.filter(row => planCell(row, columns, 'Mode').toUpperCase() === 'BLOCKING').length;
+        const spilled = rows.some(row => Number(planCell(row, columns, 'Spill Bytes') || 0) > 0);
+        host.innerHTML = `
+            <div class="etlsql-studio-plan-summary">
+                <span>${rows.length} operator${rows.length === 1 ? '' : 's'} · ${blocking} blocking</span>
+                <small>${spilled
+                    ? 'An operator spilled to disk. That is where the time is going.'
+                    : 'A blocking operator holds rows in memory before it can produce any; a streaming one does not.'}</small>
+            </div>
+            <ol class="etlsql-studio-plan">${rows.map(row => planOperatorMarkup(row, columns)).join('')}</ol>`;
+    }
+
+    /**
+     * Applies a diagnostic's one-click repair to the buffer.
+     *
+     * Applied as a ranged edit through the editor's own transaction, like every other GUI write in
+     * Studio, which is what makes the undo offer work: the editor's history already holds the exact
+     * inverse. A repair that rewrote the whole document would undo as a whole-document restore and
+     * take back whatever the author typed after it.
+     *
+     * The positions are the diagnostic contract's — zero-based line and column — and are clamped to
+     * the buffer as it is now rather than as it was when the diagnostic was produced. An author who
+     * has kept typing gets a refusal, not an edit at a stale offset.
+     */
+    function applyDiagnosticQuickFix(fix) {
+        const editor = state.editorInstance;
+        const doc = getActiveDoc();
+        if (!editor || !doc || !fix) return;
+
+        const text = editor.getValue();
+        const lines = text.split('\n');
+        const lineIndex = Number(fix.startLine);
+        if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= lines.length
+            || Number(fix.endLine) !== lineIndex) {
+            _feedback.notify(
+                'The script changed after this suggestion was made, so applying it here would edit the wrong place. Analyze again for a fresh one.',
+                { title: 'Nothing changed', tone: 'warning' });
+            return;
+        }
+
+        const line = lines[lineIndex];
+        const start = Math.max(0, Math.min(line.length, Number(fix.startColumn) || 0));
+        const end = Math.max(start, Math.min(line.length, Number(fix.endColumn) || start));
+        const before = text;
+        lines[lineIndex] = line.slice(0, start) + String(fix.replacement ?? '') + line.slice(end);
+        const after = lines.join('\n');
+        if (after === before) return;
+
+        const changed = editor.replaceAll?.(after) ?? editor.setValue?.(after);
+        if (changed) editor.revealRange?.(changed.from, changed.to);
+        doc.content = after;
+        doc.isDirty = true;
+        renderTabs();
+        offerUndo(fix.title || 'Quick fix', { document: doc, before, after });
+        editor.analyze?.();
+    }
+
     function renderSidebarContent(activity) {
         if (state.filterSidebarOpen && activity !== 'filters') renderFilterPanel();
         sidebarContent.style.display = '';
@@ -3135,6 +3843,8 @@ export async function createStudioWorkbench(container, opts = {}) {
         if (activity === 'catalog') { renderDataWorkflow(); return; }
         if (activity === 'filters') { setFilterSidebar(true); return; }
         if (activity === 'palette') { renderVisualLibrary(); return; }
+        if (activity === 'outline') { renderOutlineTree(); return; }
+        if (activity === 'engine') { void renderEnginePanel(); return; }
         if (activity === 'explorer') {
             sidebarTitle.textContent = 'Explorer';
             const workspaceMarkup = hasWorkspaceHost ? `
@@ -3593,6 +4303,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             state.editorInstance?.gotoLine?.(line, column);
         },
     });
+    state.resultsPanel.setApplyFix?.(fix => applyDiagnosticQuickFix(fix));
 
     try {
         const activeDoc = getActiveDoc();

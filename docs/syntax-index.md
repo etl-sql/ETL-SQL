@@ -928,6 +928,9 @@ Common `OPTIONS` keys for report visuals:
 | `DATA_LABELS` | Charts | `ON` / `OFF` with `POSITION`, `FONT_SIZE`, `COLOR`, `LABEL_BACKGROUND`, `LABEL_BORDER`, and `LEADER_LINE` | Shows values on marks with optional background, border, and leader line styling. |
 | `SERIES_LABELS` | `LINE`, `COMBO` | `ON` / `OFF` with `POSITION = START\|END` | Renders a series title label at the first or last renderable point of each series (default `OFF`). |
 | `SYMBOLS` | `LINE`, line layers in `COMBO` | `ON` / `OFF` | Shows or hides data-point markers. |
+| `SYMBOL_SHAPE` | `LINE`, `SCATTER` | `CIRCLE`, `SQUARE`, `TRIANGLE`, `DIAMOND`, `CROSS`, `STAR` | Sets named-chart point-marker geometry; `CUSTOM` `POINT` layers use the same vocabulary through `SHAPE`. |
+| `SYMBOL_STROKE_COLOR`, `SYMBOL_STROKE_WIDTH` | `LINE`, `SCATTER`; `CUSTOM` `POINT` layer styles | `'#RRGGBB'`, non-negative decimal pixels | Sets point-marker outline color and width. A color alone uses a one-pixel stroke; a width without a color draws no stroke. |
+| `LINE_WIDTH` | `LINE`, line series in `COMBO`; `CUSTOM` `LINE` layer styles | Decimal from `0.1` through `10` pixels | Sets the rendered series stroke width without changing point-marker or overlay widths. |
 | `BAND_SIZE` | `BAR`, `HBAR`, bar layers in `COMBO` | Decimal greater than `0` and at most `1` | Controls bar width and therefore spacing. |
 | `AXIS_SORT` | `BAR`, `HBAR`, `LINE`, `AREA`, `COMBO` | `ASC`, `DESC`, `SOURCE`, `VALUE`, `VALUE_DESC` | Controls category-axis order. `ASC` type-sorts datetime, numeric, then text values; `SOURCE` preserves query order; `VALUE` and `VALUE_DESC` sort by the metric value. |
 | `ABBREVIATE` | `CARD` | `ON` / `OFF` | Shortens large numbers, such as `1250000` to `1.25M` |
@@ -1057,7 +1060,7 @@ see the [Lifecycle Capability Matrix](reference/statements/lifecycle-matrix.md).
 - [Report Runtime Contract](reference/visuals-reporting/report-runtime-contract.md) — The report canvas is shared infrastructure. ReportPlayer, Portal, and the VS Code previ...
 - [Report-SQL](reference/visuals-reporting/report/index.md) — Report-SQL extends ETL-SQL with components for building interactive dashboards: dataset...
 - [CREATE THEME](reference/visuals-reporting/report/theme.md) — Defines a renderer-neutral color theme applied to visuals or pages with `STYLE (THEME = name)`.
-- [ETL-SQL Performance Reference](reference/performance/performance.md) — **Applies to ETL-SQL 0.16.0**
+- [ETL-SQL Performance Reference](reference/performance/performance.md) — **Applies to ETL-SQL 0.19.0**
 - [Large Data Certification](reference/performance/large-data-certification.md) — This document describes which large-data scenarios are certified, at which scale tiers,...
 
 ## 9. Portal & Orchestrator Admin

@@ -53,6 +53,52 @@ export function updateSnapshotPackage(context, snapshot) {
     context.snapshotPackage.metadata = { isSampled: true, source: snapshot?.source || null, rowCount: rows.length };
 }
 
+/**
+ * Hydrates the design canvas from a compiled report preview. Unlike a one-source sample, a report
+ * manifest carries the right rows and native SVG for each visual, which is required for scripts
+ * that stage several #temp tables before drawing their dashboard.
+ */
+export function updateSnapshotPackageFromManifest(context, manifest) {
+    const visuals = Array.isArray(manifest?.visuals) ? manifest.visuals : [];
+    const sampleRows = {};
+    const columnsByVisual = {};
+    const visualSvgs = {};
+
+    visuals.forEach((visual, index) => {
+        const key = visual?.name || `visual${index}`;
+        const rows = Array.isArray(visual?.rows) ? visual.rows : [];
+        const columns = Array.isArray(visual?.columns) ? visual.columns : [];
+        if (rows.length) sampleRows[key] = rows;
+        if (columns.length) columnsByVisual[key] = columns;
+        if (visual?.nativeSvg) visualSvgs[key] = visual.nativeSvg;
+    });
+
+    const representative = [...visuals]
+        .filter(visual => Array.isArray(visual?.rows) && visual.rows.length)
+        .sort((left, right) => (right.columns?.length || 0) - (left.columns?.length || 0))[0];
+    const columns = representative?.columns || [];
+    const objectRows = (representative?.rows || []).map(row => Object.fromEntries(
+        columns.map((column, index) => [column, row?.[index]])));
+
+    context.snapshot = {
+        source: representative?.name || manifest?.title || 'report preview',
+        columns,
+        rowCount: objectRows.length,
+        rows: objectRows,
+    };
+    Object.assign(context.snapshotPackage, {
+        columns,
+        columnsByVisual,
+        sampleRows,
+        visualSvgs,
+        metadata: {
+            isSampled: true,
+            source: manifest?.title || null,
+            rowCount: Object.values(sampleRows).reduce((total, rows) => total + rows.length, 0),
+        },
+    });
+}
+
 export async function requestSourceSample({ authFetch, url, connection, table, documentUri, script }) {
     const response = await authFetch(url, {
         method: 'POST',

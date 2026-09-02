@@ -2815,6 +2815,383 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Empty(session.PageErrors);
     }
 
+    // -- Document outline and layer tree -----------------------------------------------------------
+
+    [Fact]
+    public async Task Studio_Outline_ListsPagesAndRowsAndSelectsBothWaysWithTheCanvas()
+    {
+        // The visual library already listed what was on the page. It could not act on the list, and
+        // it never told the canvas anything: the tree was one-way. This is the panel that closes
+        // both halves — a row selects the tile, and a tile selects the row.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await WaitForStudioAsync(page);
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.designerInstance)");
+
+        await page.ClickAsync("[data-activity='outline']");
+        await page.Locator(".etlsql-studio-outline-tree").WaitForAsync();
+
+        var tree = await page.Locator(".etlsql-studio-outline-tree").InnerTextAsync();
+        Assert.Contains("Executive Overview", tree, StringComparison.Ordinal);
+        Assert.Contains("RevenueCard", tree, StringComparison.Ordinal);
+        Assert.Contains("SalesByRegion", tree, StringComparison.Ordinal);
+
+        // The page places both tiles side by side, so they belong to one row band. Splitting them
+        // into two would mean the panel is reading its own stacking rather than the page's layout.
+        Assert.Equal(1, await page.Locator(".etlsql-studio-outline-band").CountAsync());
+
+        // Outline → canvas.
+        await page.ClickAsync("[data-outline-select$='SalesByRegion_1'], .etlsql-studio-outline-select:has-text('SalesByRegion')");
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO_INSTANCE__.state.selectedVisualId?.includes('SalesByRegion')");
+        await page.Locator(".etlsql-studio-outline-item.is-selected:has-text('SalesByRegion')").WaitForAsync();
+
+        // Canvas → outline. The rail stays on the outline: switching it to the visual library on
+        // every selection is what used to close the panel the author was working in.
+        await page.EvaluateAsync(
+            """
+            () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const card = studio.state.designerInstance.getState().pages
+                    .flatMap(item => item.visuals || [])
+                    .find(visual => visual.name === 'RevenueCard');
+                studio.state.designerInstance.selectVisual(card.id);
+            }
+            """);
+        await page.Locator(".etlsql-studio-outline-item.is-selected:has-text('RevenueCard')").WaitForAsync();
+        Assert.Equal("outline", await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.activeActivity"));
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_Outline_MoveAndHideWriteToTheScript()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await WaitForStudioAsync(page);
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
+
+        await page.ClickAsync("[data-activity='outline']");
+        await page.Locator(".etlsql-studio-outline-tree").WaitForAsync();
+        await DismissToastsAsync(page);
+
+        // Move: the panel swaps grid placement, and the patcher regenerates STRUCTURE from it. The
+        // assertion is on the layout the reader gets, not on the coordinates the panel wrote.
+        Assert.Contains("STRUCTURE = 'A B'", await ScriptTextAsync(page), StringComparison.Ordinal);
+        await page.ClickAsync(".etlsql-studio-outline-item:has-text('RevenueCard') [data-outline-down]");
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue().includes(\"STRUCTURE = 'B A'\")");
+
+        // Hide: VISIBLE = OFF is the property the report runtime already reads, and the row stays in
+        // the outline — a tile the reader cannot see is exactly the one the author needs listed.
+        await DismissToastsAsync(page);
+        await page.ClickAsync(".etlsql-studio-outline-item:has-text('SalesByRegion') [data-outline-visible]");
+        await page.WaitForFunctionAsync(
+            "() => /VISIBLE\\s*=\\s*OFF/i.test(window.__STUDIO_INSTANCE__.state.editorInstance.getValue())");
+        await page.Locator(".etlsql-studio-outline-item.is-hidden:has-text('SalesByRegion')").WaitForAsync();
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_OutlineLock_StopsTheCanvasFromMovingAVisualWithoutWritingToTheScript()
+    {
+        // Lock is the one outline control that writes nothing: the report language has no LOCKED,
+        // and inventing an option so the button could pretend to persist would put a word in the
+        // author's file that nothing else reads. So the claim to prove is the other half — that the
+        // canvas honours a lock that lives only in the browser.
+        //
+        // Both drags start from the same cell and use the same gesture, and the unlocked one has to
+        // actually move the card. Asserting only that a locked card stayed put would be satisfied
+        // just as well by a gesture that never moved anything — which is what an earlier version of
+        // this test was in fact asserting.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await WaitForStudioAsync(page);
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.designerInstance)");
+
+        await page.ClickAsync("[data-activity='outline']");
+        await page.Locator(".etlsql-studio-outline-tree").WaitForAsync();
+        await DismissToastsAsync(page);
+
+        var scriptBeforeLock = await ScriptTextAsync(page);
+        await page.ClickAsync(".etlsql-studio-outline-item:has-text('RevenueCard') [data-outline-lock]");
+        await page.Locator(".etlsql-studio-outline-item.is-locked:has-text('RevenueCard')").WaitForAsync();
+        Assert.Equal(scriptBeforeLock, await ScriptTextAsync(page));
+
+        var lockedCard = page.Locator(".etlsql-dsgn-visual-card.is-locked");
+        await lockedCard.WaitForAsync();
+        var placement = await CardPlacementAsync(page, "RevenueCard");
+        await DragCardAsync(page, lockedCard);
+        Assert.Equal(placement, await CardPlacementAsync(page, "RevenueCard"));
+
+        // Unlocking hands the canvas back, and the same drag from the same cell now lands.
+        await DismissToastsAsync(page);
+        await page.ClickAsync(".etlsql-studio-outline-item:has-text('RevenueCard') [data-outline-lock]");
+        await page.Locator(".etlsql-dsgn-visual-card.is-locked").WaitForAsync(
+            new LocatorWaitForOptions { State = WaitForSelectorState.Detached });
+        await DragCardAsync(page, page.Locator(".etlsql-dsgn-visual-card[data-vid*='RevenueCard']"));
+        await page.WaitForFunctionAsync(
+            """
+            before => {
+                const visual = window.__STUDIO_INSTANCE__.state.designerInstance.getState().pages
+                    .flatMap(page => page.visuals || [])
+                    .find(item => item.name === 'RevenueCard');
+                return visual && `${visual.gridCol}/${visual.gridRow}/${visual.gridColSpan}/${visual.gridRowSpan}` !== before;
+            }
+            """, placement);
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    // -- Data-model (ER) view ----------------------------------------------------------------------
+
+    [Fact]
+    public async Task Studio_ModelProjection_DrawsWhatTheScriptSaysAndAdmitsWhatItCannotState()
+    {
+        // The claim under test is not "a diagram appeared". It is that the diagram says where its
+        // relationships came from — a view that renders a plausible cardinality it cannot support is
+        // worse than no view, because the author will design around it.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await WaitForStudioAsync(page);
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
+
+        const string script = """
+            CREATE CONNECTION corp AS MOCKDB();
+
+            SELECT o.order_id, c.name
+            INTO #enriched
+            FROM corp.orders o
+            JOIN corp.customers c ON o.customer_id = c.customer_id;
+            """;
+        await page.EvaluateAsync(
+            """
+            script => {
+                const studio = window.__STUDIO_INSTANCE__;
+                studio.state.documents.push({ id: 'model-doc', path: 'model.rptsql', name: 'model.rptsql', content: script, isDirty: false, projection: 'split', reportWorkflow: 'dashboard' });
+                void studio.switchDoc('model-doc');
+            }
+            """, script);
+        await DismissToastsAsync(page);
+
+        await page.ClickAsync("[data-projection='model']");
+        await page.Locator("[data-model-view] .etlsql-studio-model-summary").WaitForAsync();
+
+        var summary = await page.Locator(".etlsql-studio-model-summary").InnerTextAsync();
+        Assert.Contains("2 tables", summary, StringComparison.Ordinal);
+        Assert.Contains("1 join", summary, StringComparison.Ordinal);
+        // No database was asked, and the banner has to say that rather than leave the reader to
+        // assume the blank cardinality is a finding.
+        Assert.Contains("No database keys were available", summary, StringComparison.Ordinal);
+        Assert.Equal("Script evidence only", await page.Locator("[data-model-status]").InnerTextAsync());
+
+        // Every entity the script names is on the diagram.
+        foreach (var entity in new[] { "orders", "customers", "#enriched" })
+            await page.Locator($"[data-model-canvas] >> text={entity}").First.WaitForAsync();
+
+        // And the join edge carries the columns it was written on plus an explicitly unstated
+        // cardinality. The label lives on the edge as data, which is where the shared renderer keeps
+        // it — asserting on rendered text here would be asserting on the renderer, not on the claim.
+        var edgeLabel = await page.Locator("[data-model-canvas] [data-dag-label]").First
+            .GetAttributeAsync("data-dag-label");
+        Assert.Equal("customer_id = customer_id · not stated", edgeLabel);
+
+        // Switching away and back repaints: the stage is shared with the canvas and the pipeline map.
+        await page.ClickAsync("[data-projection='split']");
+        await page.Locator("[data-model-view]").WaitForAsync(
+            new LocatorWaitForOptions { State = WaitForSelectorState.Detached });
+        await page.ClickAsync("[data-projection='model']");
+        await page.Locator("[data-model-view] .etlsql-studio-model-summary").WaitForAsync();
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    // -- Engine state and visual EXPLAIN -----------------------------------------------------------
+
+    [Fact]
+    public async Task Studio_EnginePanel_ScopesToTheCursorAndPlansTheStatementUnderIt()
+    {
+        // Two claims, and the first is the one that is easy to get wrong: scope is positional. A
+        // panel listing every name in the file would offer the author a #temp that does not exist
+        // yet, which is wrong only at run time — the most expensive place to find out.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await WaitForStudioAsync(page);
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
+
+        const string script = """
+            CREATE CONNECTION corp AS MOCKDB();
+
+            DECLARE @cutoff INT = 100;
+
+            SELECT order_id, total INTO #recent FROM corp.orders WHERE total > @cutoff;
+
+            SELECT region, SUM(total) AS revenue INTO #by_region FROM #recent GROUP BY region;
+
+            DECLARE @after INT = 7;
+            """;
+        await page.EvaluateAsync(
+            """
+            script => {
+                const studio = window.__STUDIO_INSTANCE__;
+                studio.state.documents.push({ id: 'engine-doc', path: 'engine.etlsql', name: 'engine.etlsql', content: script, isDirty: false, projection: 'split' });
+                void studio.switchDoc('engine-doc');
+            }
+            """, script);
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue().includes('#by_region')");
+
+        // Put the caret in the statement that reads #recent and builds #by_region.
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.gotoLine(7)");
+        await DismissToastsAsync(page);
+        await page.ClickAsync("[data-activity='engine']");
+        await page.Locator(".etlsql-studio-scope-list").First.WaitForAsync();
+
+        var scope = await page.Locator("[data-sidebar-content]").InnerTextAsync();
+        Assert.Contains("@cutoff", scope, StringComparison.Ordinal);
+        Assert.Contains("#recent", scope, StringComparison.Ordinal);
+        // Declared below the cursor, so not in scope; produced by this very statement, so not yet.
+        Assert.DoesNotContain("@after", scope, StringComparison.Ordinal);
+
+        // The plan is the engine's own EXPLAIN, asked for through the ordinary run route so it
+        // passes the same policy and limits as any other execution.
+        await page.ClickAsync("[data-explain-statement]");
+        await page.Locator(".etlsql-studio-plan").WaitForAsync();
+
+        var submitted = await page.EvaluateAsync<string[]>(
+            """
+            () => window.__STUDIO_API_REQUESTS__
+                .filter(request => request.url.endsWith('/api/designer/run'))
+                .map(request => request.body?.selection ?? '')
+            """);
+        // The plan is asked for through the ordinary run route, and the slice carries the statements
+        // above the cursor: they are what builds the #temp the plan reads.
+        var explained = Assert.Single(submitted, entry => entry.Contains("EXPLAIN", StringComparison.Ordinal));
+        Assert.Contains("INTO #recent", explained, StringComparison.Ordinal);
+        Assert.DoesNotContain("@after", explained, StringComparison.Ordinal);
+
+        var plan = await page.Locator(".etlsql-studio-plan").InnerTextAsync();
+        Assert.Contains("Scan", plan, StringComparison.Ordinal);
+        Assert.Contains("Aggregate", plan, StringComparison.Ordinal);
+        // The badge an author acts on: where the query stops streaming and starts holding rows.
+        // Compared case-insensitively because the badge is uppercased by CSS, and asserting on the
+        // rendered casing would be asserting on the stylesheet.
+        Assert.Contains("blocking", plan, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    // -- Beginner-facing diagnostics -----------------------------------------------------------------
+
+    [Fact]
+    public async Task Studio_ADiagnostic_ExplainsItselfNamesTheCardAndOffersAFixThatWorks()
+    {
+        // The parser's own message is the precise statement of the failure and stays where it was.
+        // What is new is the sentence under it, the card it names, and a button that makes the edit
+        // — the difference between "Unexpected token 'Revenue'" and knowing what to type.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await WaitForStudioAsync(page);
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
+
+        const string script = """
+            CREATE CONNECTION corp AS MOCKDB();
+            SELECT region, total INTO #rows FROM corp.orders;
+
+            CREATE VISUAL RevenueCard AS CARD (
+                SOURCE = #rows,
+                TITLE = Total Revenue,
+                MAPPINGS (VALUE = total)
+            );
+            """;
+        await page.EvaluateAsync(
+            """
+            script => {
+                const studio = window.__STUDIO_INSTANCE__;
+                studio.state.documents.push({ id: 'guidance-doc', path: 'guidance.rptsql', name: 'guidance.rptsql', content: script, isDirty: false, projection: 'split', reportWorkflow: 'dashboard' });
+                void studio.switchDoc('guidance-doc');
+            }
+            """, script);
+
+        // Diagnostics live on the Messages tab, and the editor analyses on a debounce.
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.analyze()");
+        await page.ClickAsync("[data-tab='messages']");
+        await page.Locator(".etlsql-script-guidance").First.WaitForAsync();
+        var guidance = await page.Locator(".etlsql-script-guidance").First.InnerTextAsync();
+        Assert.Contains("bare word", guidance, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("single quotes", guidance, StringComparison.OrdinalIgnoreCase);
+        // Anchored to the card, because the canvas has no line numbers on it. Compared
+        // case-insensitively: the badge is uppercased by CSS, and rendered text carries that.
+        var anchor = await page.Locator(".etlsql-script-guidance-anchor").First.InnerTextAsync();
+        Assert.Contains("RevenueCard", anchor, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("visual", anchor, StringComparison.OrdinalIgnoreCase);
+
+        // A link into the reference tree, which is also the product's embedded help.
+        Assert.Equal(
+            "docs/reference/data-types.md",
+            await page.Locator(".etlsql-script-guidance-doc").First.GetAttributeAsync("href"));
+
+        // And the repair actually repairs, through the editor's own transaction — so the undo offer
+        // that follows a GUI write covers it like any other.
+        await DismissToastsAsync(page);
+        await page.ClickAsync(".etlsql-script-guidance-fix");
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue().includes(\"TITLE = 'Total Revenue'\")");
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static async Task<string> ScriptTextAsync(IPage page) =>
+        await page.EvaluateAsync<string>("() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()");
+
+    private static async Task<string> CardPlacementAsync(IPage page, string visualName) =>
+        await page.EvaluateAsync<string>(
+            """
+            name => {
+                const visual = window.__STUDIO_INSTANCE__.state.designerInstance.getState().pages
+                    .flatMap(page => page.visuals || [])
+                    .find(item => item.name === name);
+                return visual ? `${visual.gridCol}/${visual.gridRow}/${visual.gridColSpan}/${visual.gridRowSpan}` : '';
+            }
+            """, visualName);
+
+    /// <summary>
+    /// Drags a card down a row with real mouse events, grabbing its body rather than its header —
+    /// the canvas hands header clicks to the rename and action handlers and starts no drag from them.
+    /// </summary>
+    private static async Task DragCardAsync(IPage page, ILocator card)
+    {
+        var box = await card.BoundingBoxAsync();
+        Assert.NotNull(box);
+        var x = box!.X + box.Width / 2;
+        var y = box.Y + box.Height * 0.7f;
+        await page.Mouse.MoveAsync(x, y);
+        await page.Mouse.DownAsync();
+        await page.Mouse.MoveAsync(x, y + box.Height, new MouseMoveOptions { Steps = 10 });
+        await page.Mouse.UpAsync();
+    }
+
     private static async Task WaitForStudioAsync(IPage page)
     {
         await page.Locator(".etlsql-studio-shell").WaitForAsync();

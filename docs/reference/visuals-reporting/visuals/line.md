@@ -11,6 +11,10 @@ CREATE VISUAL VisualName AS LINE (
   ),
   OPTIONS (
     [SYMBOLS = ON|OFF],
+    [SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR],
+    [SYMBOL_STROKE_COLOR = '#rrggbb'],
+    [SYMBOL_STROKE_WIDTH = n],
+    [LINE_WIDTH = n],
     [STACKED = ON|OFF|100PCT],
     [GRID_LINES = ON|OFF],
     [GRID_LINE_COLOR = '#rrggbb'],
@@ -62,6 +66,10 @@ CREATE VISUAL VisualName AS LINE (
 
 - **SMOOTH = ON|OFF** - Bezier-smoothed curves instead of straight segments (default OFF)
 - **SYMBOLS = ON|OFF** - show data-point markers on the line (default ON)
+- **SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR** - sets the marker geometry when `SYMBOLS = ON` (default `CIRCLE`)
+- **SYMBOL_STROKE_COLOR = '#rrggbb'** - outlines point markers with a portable hex color; without a color, markers have no stroke
+- **SYMBOL_STROKE_WIDTH = n** - sets a non-negative marker outline width in pixels; defaults to `1` when a stroke color is present
+- **LINE_WIDTH = n** - sets the series stroke width from `0.1` through `10` pixels (default `2`; stacked lines retain their `2.5` default)
 - **GRID_LINES = ON|OFF** - show background value-axis grid lines (default ON)
 - **GRID_LINE_COLOR = '#rrggbb'** - set the major and minor gridline color
 - **GRID_LINE_DASH = SOLID|DASHED|DOTTED** - set the gridline stroke pattern (default SOLID)
@@ -99,7 +107,7 @@ SELECT order_date AS date, SUM(amount) AS revenue
 CREATE VISUAL RevenueTrend AS LINE (
   SOURCE   = #daily,
   MAPPINGS (X = date, Y = revenue),
-  OPTIONS  (SMOOTH = ON, SYMBOLS = ON, AXIS_SORT = SOURCE, TITLE = 'Daily Revenue')
+  OPTIONS  (SMOOTH = ON, SYMBOLS = ON, SYMBOL_SHAPE = DIAMOND, SYMBOL_STROKE_COLOR = '#1e3a8a', SYMBOL_STROKE_WIDTH = 1.5, LINE_WIDTH = 3, AXIS_SORT = SOURCE, TITLE = 'Daily Revenue')
 );
 
 -- Time-series forecast with confidence band and anomaly markers

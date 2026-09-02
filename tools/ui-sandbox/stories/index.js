@@ -29,6 +29,7 @@ import orchestratorAcl from './orchestrator-acl.story.js';
 import orchestratorAdmin from './orchestrator-admin.story.js';
 import controlPlaneDashboard from './control-plane-dashboard.story.js';
 import nativeChartLayout from './native-chart-layout.story.js';
+import filterControls from './filter-controls.story.js';
 import connectionWizard from './connection-wizard.story.js';
 import studio from './studio.story.js';
 
@@ -80,6 +81,7 @@ const categoryDefaults = {
   'design-tokens': 'Designers & Visuals',
   'snapshot-designer': 'Designers & Visuals',
   'native-chart-layout': 'Designers & Visuals',
+  'filter-controls': 'Designers & Visuals',
 
   // Script Editors & IDE
   'studio': 'Script Editors & IDE',
@@ -130,6 +132,7 @@ export const rawStories = [
   designTokens,
   snapshotDesigner,
   nativeChartLayout,
+  filterControls,
 
   // Script Editors & IDE
   studio,

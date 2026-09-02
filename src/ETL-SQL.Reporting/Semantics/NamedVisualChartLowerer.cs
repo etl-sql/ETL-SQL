@@ -29,6 +29,18 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
     {
         if (!Supports(statement.VisualType))
             throw new NotSupportedException($"Visual type {statement.VisualType} is not in the representative GoG slice.");
+
+        var symbolShapeOption = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("SYMBOL_SHAPE", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (symbolShapeOption is not null)
+        {
+            if (statement.VisualType is not (VisualType.Line or VisualType.Scatter))
+                throw new InvalidOperationException($"SYMBOL_SHAPE is supported only on LINE and SCATTER visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            if (!PointShapeVocabulary.IsSupported(symbolShapeOption))
+                throw new InvalidOperationException($"Invalid SYMBOL_SHAPE '{symbolShapeOption}'. Valid values are {PointShapeVocabulary.DisplayList}.");
+        }
+        ValidatePointStrokeOptions(statement);
+        ValidateLineWidthOption(statement);
         if (statement.VisualType == VisualType.Scatter)
         {
             var hasErrorLow = statement.Mappings.Any(m => m.Role.Equals("ERROR_LOW", StringComparison.OrdinalIgnoreCase));
@@ -252,6 +264,14 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         ImmutableArray<FieldBinding> bindings)
     {
         var bandSize = ResolveBandSize(statement);
+        var symbolShapeOption = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("SYMBOL_SHAPE", StringComparison.OrdinalIgnoreCase))?.Value;
+        var symbolStrokeColor = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("SYMBOL_STROKE_COLOR", StringComparison.OrdinalIgnoreCase))?.Value;
+        var symbolStrokeWidth = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("SYMBOL_STROKE_WIDTH", StringComparison.OrdinalIgnoreCase))?.Value;
+        var lineWidth = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("LINE_WIDTH", StringComparison.OrdinalIgnoreCase))?.Value;
         if (statement.VisualType == VisualType.Combo && statement.TypedSeries.Count > 0)
         {
             var x = bindings.Where(binding => binding.Channel == FieldChannel.X).ToImmutableArray();
@@ -265,12 +285,15 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 var mark = series.SeriesType.Equals("bar", StringComparison.OrdinalIgnoreCase)
                     ? MarkKind.Rect
                     : MarkKind.Line;
+                var style = ImmutableArray.Create(new StyleToken("series", series.Column));
+                if (mark == MarkKind.Line && lineWidth is not null && LineSeriesWidth.TryNormalize(lineWidth, out var normalizedLineWidth))
+                    style = style.Add(new StyleToken("LINE_WIDTH", normalizedLineWidth));
                 yield return new MarkLayerSpec(
                     $"series-{index:D2}-{Sanitize(series.Column)}",
                     mark,
                     index,
                     x.Add(y with { Channel = channel, Axis = secondary ? AxisRole.Secondary : AxisRole.Primary }),
-                    [new StyleToken("series", series.Column)],
+                    style,
                     series.Column)
                 {
                     BandSize = mark == MarkKind.Rect ? bandSize : .75m
@@ -298,6 +321,14 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                         : ImmutableArray<StyleToken>.Empty,
                 _ => ImmutableArray<StyleToken>.Empty
             };
+            if (symbolShapeOption is not null)
+                style = style.Add(new StyleToken("symbolShape", PointShapeVocabulary.NormalizeOrDefault(symbolShapeOption)));
+            if (symbolStrokeColor is not null)
+                style = style.Add(new StyleToken("SYMBOL_STROKE_COLOR", symbolStrokeColor));
+            if (symbolStrokeWidth is not null && PointMarkerStroke.TryNormalizeWidth(symbolStrokeWidth, out var normalizedWidth))
+                style = style.Add(new StyleToken("SYMBOL_STROKE_WIDTH", normalizedWidth));
+            if (lineWidth is not null && LineSeriesWidth.TryNormalize(lineWidth, out var normalizedLineWidth))
+                style = style.Add(new StyleToken("LINE_WIDTH", normalizedLineWidth));
             var mark = statement.VisualType switch
             {
                 VisualType.Bar or VisualType.HorizontalBar => MarkKind.Rect,
@@ -547,6 +578,34 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             "ON" or "TRUE" => StackMode.Zero,
             _ => StackMode.None
         };
+    }
+
+    private static void ValidatePointStrokeOptions(CreateVisualStatement statement)
+    {
+        var color = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("SYMBOL_STROKE_COLOR", StringComparison.OrdinalIgnoreCase))?.Value;
+        var width = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("SYMBOL_STROKE_WIDTH", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (color is null && width is null) return;
+
+        if (statement.VisualType is not (VisualType.Line or VisualType.Scatter))
+            throw new InvalidOperationException($"SYMBOL_STROKE_COLOR and SYMBOL_STROKE_WIDTH are supported only on LINE and SCATTER visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+        if (color is not null && !PointMarkerStroke.IsPortableColor(color))
+            throw new InvalidOperationException($"Invalid SYMBOL_STROKE_COLOR '{color}'. Use a portable #RRGGBB color.");
+        if (width is not null && !PointMarkerStroke.TryNormalizeWidth(width, out _))
+            throw new InvalidOperationException($"Invalid SYMBOL_STROKE_WIDTH '{width}'. Use a non-negative number.");
+    }
+
+    private static void ValidateLineWidthOption(CreateVisualStatement statement)
+    {
+        var width = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("LINE_WIDTH", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (width is null) return;
+
+        if (statement.VisualType is not (VisualType.Line or VisualType.Combo))
+            throw new InvalidOperationException($"LINE_WIDTH is supported only on LINE and COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+        if (!LineSeriesWidth.TryNormalize(width, out _))
+            throw new InvalidOperationException($"Invalid LINE_WIDTH '{width}'. Use a pixel width from {LineSeriesWidth.Minimum} through {LineSeriesWidth.Maximum}.");
     }
 
     private static bool HasPrimaryValueMapping(CreateVisualStatement statement) =>

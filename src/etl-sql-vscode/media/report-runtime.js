@@ -5348,9 +5348,13 @@
         const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
         const param         = changeActions.length > 0 ? changeActions[0].parameterName : null;
         const placeholder   = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || 'Search…';
+        const showClear     = isOn(opts['SHOW_CLEAR'] ?? opts['show_clear']);
 
         const wrapper = document.createElement('div');
         wrapper.className = 'filter-wrapper';
+
+        const inputShell = document.createElement('div');
+        inputShell.className = 'search-input-shell';
 
         const input       = document.createElement('input');
         input.type        = 'search';
@@ -5364,7 +5368,30 @@
             if (current) input.value = current;
         }
 
-        wrapper.appendChild(input);
+        inputShell.appendChild(input);
+
+        let clearButton = null;
+        if (showClear) {
+            clearButton = document.createElement('button');
+            clearButton.type = 'button';
+            clearButton.className = 'search-clear-button';
+            clearButton.textContent = '×';
+            clearButton.setAttribute('aria-label', `Clear ${visual.title || visual.name || 'search'}`);
+            clearButton.hidden = input.value.length === 0;
+            clearButton.addEventListener('click', () => {
+                input.value = '';
+                clearButton.hidden = true;
+                input.focus();
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+            inputShell.appendChild(clearButton);
+        }
+
+        wrapper.appendChild(inputShell);
+
+        input.addEventListener('input', () => {
+            if (clearButton) clearButton.hidden = input.value.length === 0;
+        });
 
         if (isWebMode && changeActions.length > 0) {
             let debounceTimer = null;
@@ -5429,6 +5456,10 @@
         const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
         const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
         const placeholder = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || '';
+        const maxLengthValue = opts['MAX_LENGTH'] ?? opts['max_length'];
+        const maxLength = typeof maxLengthValue === 'number'
+            ? maxLengthValue
+            : Number(String(maxLengthValue ?? '').trim());
 
         let def = visual.defaultValue || '';
         if (param && manifest && manifest.parameters) {
@@ -5444,6 +5475,7 @@
         setParameterAccessibleName(input, visual, param);
         input.value = def;
         input.placeholder = placeholder;
+        if (Number.isSafeInteger(maxLength) && maxLength > 0) input.maxLength = maxLength;
         if (param) input.setAttribute('data-parameter', param);
 
         const label = document.createElement('label');

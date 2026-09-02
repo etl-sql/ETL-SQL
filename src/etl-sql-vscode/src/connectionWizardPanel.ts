@@ -92,11 +92,15 @@ export class ConnectionWizardPanel {
                     const text = editor.document.getText();
                     const connMatches = text.matchAll(/\bCREATE\s+CONNECTION\s+([a-zA-Z0-9_#]+)/gi);
                     for (const m of connMatches) {
-                        if (m[1]) names.push(m[1]);
+                        if (m[1]) {
+                            names.push(m[1]);
+                        }
                     }
                     const dsMatches = text.matchAll(/\bCREATE\s+DATASET\s+([a-zA-Z0-9_#]+)/gi);
                     for (const m of dsMatches) {
-                        if (m[1]) names.push(m[1]);
+                        if (m[1]) {
+                            names.push(m[1]);
+                        }
                     }
                 }
                 this._reply(id, { success: true, names });
@@ -194,7 +198,9 @@ export class ConnectionWizardPanel {
     }
 
     private _reply(id: string | undefined, payload: Record<string, unknown>): void {
-        if (!id) return;
+        if (!id) {
+            return;
+        }
         this._panel.webview.postMessage({ id, ...payload });
     }
 
@@ -318,7 +324,9 @@ export class ConnectionWizardPanel {
         this._panel.dispose();
         while (this._disposables.length) {
             const d = this._disposables.pop();
-            if (d) d.dispose();
+            if (d) {
+                d.dispose();
+            }
         }
     }
 }

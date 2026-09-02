@@ -31,11 +31,23 @@ public sealed record ScopeColumn(string Name, string? Type);
 /// False when the script does not parse, or when it holds no task by that name. The caller says so
 /// rather than rendering an empty scope, which would read as "nothing is in scope here".
 /// </param>
+/// <param name="StatementText">
+/// The statement the cursor sits in, when the scope was asked for by position rather than by task.
+/// Null for a task lookup, which is about a labelled block and not about one statement.
+/// </param>
+/// <param name="PrefixScript">
+/// Everything above that statement. It is what a caller has to execute before the statement can be
+/// planned or run in isolation — the <c>#temp</c> tables in scope do not exist until the statements
+/// that build them have run, and a plan for a query whose sources are missing is not a plan.
+/// </param>
 public sealed record ScriptScope(
     bool Resolved,
     string? Error,
     IReadOnlyList<ScopeVariable> Variables,
-    IReadOnlyList<ScopeTempTable> TempTables)
+    IReadOnlyList<ScopeTempTable> TempTables,
+    string? StatementText = null,
+    string? PrefixScript = null,
+    int StatementLine = 0)
 {
     public static ScriptScope Failed(string error) => new(false, error, [], []);
 }
@@ -43,6 +55,8 @@ public sealed record ScriptScope(
 public interface IScriptScopeProjection
 {
     ScriptScope At(string? scriptText, string? taskId);
+
+    ScriptScope AtLine(string? scriptText, int line);
 }
 
 /// <summary>
@@ -79,16 +93,79 @@ public sealed class ScriptScopeService : IScriptScopeProjection
         if (ast.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error) is { } diagnostic)
             return ScriptScope.Failed($"Could not read the script: {diagnostic.Message}");
 
-        var collector = new Collector(scriptText, taskId);
+        var collector = new Collector(
+            scriptText,
+            statement => statement is SectionLabelStatement label
+                && string.Equals(label.LabelName, taskId, StringComparison.OrdinalIgnoreCase));
         return collector.Walk(ast.Statements)
             ? new ScriptScope(true, null, collector.Variables, collector.TempTables)
             : ScriptScope.Failed($"'{taskId}' is not a task in this script.");
     }
 
     /// <summary>
-    /// Walks the script in execution order and stops at the task, keeping what came before it.
+    /// What is in scope where the cursor is, plus the statement it sits in and everything above it.
+    ///
+    /// <para>The same positional rule as the task lookup, asked a different way. A pipeline canvas
+    /// selects a labelled task; a script editor has a caret, and an author looking at a query wants
+    /// to know what that query can see from where it is — not what the file declares somewhere
+    /// below.</para>
+    ///
+    /// <para>The split is by line rather than by byte offset because the AST records positions, not
+    /// spans, and because a line is the unit the author is looking at. A statement that shares a line
+    /// with the one before it resolves to whichever starts on or before the cursor's line, which is
+    /// the reading a caret in that line invites.</para>
     /// </summary>
-    private sealed class Collector(string script, string taskId)
+    public ScriptScope AtLine(string? scriptText, int line)
+    {
+        if (string.IsNullOrWhiteSpace(scriptText)) return ScriptScope.Failed("There is no script to read.");
+
+        Script ast;
+        try
+        {
+            ast = new CoreParser(new Lexer(scriptText).Tokenize(), scriptText).Parse();
+        }
+        catch (Exception ex)
+        {
+            return ScriptScope.Failed($"Could not read the script: {ex.Message}");
+        }
+
+        if (ast.Diagnostics.FirstOrDefault(d => d.Severity == DiagnosticSeverity.Error) is { } diagnostic)
+            return ScriptScope.Failed($"Could not read the script: {diagnostic.Message}");
+
+        var statements = ast.Statements.Where(statement => statement.Line > 0).ToList();
+        if (statements.Count == 0) return ScriptScope.Failed("This script holds no statement to read.");
+
+        var wanted = Math.Max(1, line);
+        var index = statements.FindLastIndex(statement => statement.Line <= wanted);
+        if (index < 0) index = 0;
+
+        var collector = new Collector(scriptText, statement => ReferenceEquals(statement, statements[index]));
+        collector.Walk(ast.Statements);
+
+        var lines = scriptText.ReplaceLineEndings("\n").Split('\n');
+        var start = Math.Clamp(statements[index].Line - 1, 0, lines.Length);
+        var end = index + 1 < statements.Count
+            ? Math.Clamp(statements[index + 1].Line - 1, start, lines.Length)
+            : lines.Length;
+
+        return new ScriptScope(
+            true,
+            null,
+            collector.Variables,
+            collector.TempTables,
+            string.Join("\n", lines[start..end]).Trim(),
+            string.Join("\n", lines[..start]).Trim(),
+            statements[index].Line);
+    }
+
+    /// <summary>
+    /// Walks the script in execution order and stops at the target, keeping what came before it.
+    ///
+    /// <para>The target is a predicate rather than a task name so that both lookups — by label, and
+    /// by the statement under a cursor — get the same scoping rules. They are the same question; the
+    /// only difference is how the caller points at the place.</para>
+    /// </summary>
+    private sealed class Collector(string script, Func<Statement, bool> isTarget)
     {
         private readonly Dictionary<string, ScopeVariable> _variables = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, ScopeTempTable> _tempTables = new(StringComparer.OrdinalIgnoreCase);
@@ -105,11 +182,7 @@ public sealed class ScriptScopeService : IScriptScopeProjection
         {
             for (var i = 0; i < statements.Count; i++)
             {
-                if (statements[i] is SectionLabelStatement label
-                    && string.Equals(label.LabelName, taskId, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
+                if (isTarget(statements[i])) return true;
 
                 var bodies = Bodies(statements[i]).ToList();
                 if (bodies.Count > 0 && Holds(statements[i]))
@@ -133,10 +206,7 @@ public sealed class ScriptScopeService : IScriptScopeProjection
 
         /// <summary>True when this statement contains the task, at any depth.</summary>
         private bool Holds(Statement statement) =>
-            Bodies(statement).Any(body => body.Any(nested =>
-                (nested is SectionLabelStatement label
-                    && string.Equals(label.LabelName, taskId, StringComparison.OrdinalIgnoreCase))
-                || Holds(nested)));
+            Bodies(statement).Any(body => body.Any(nested => isTarget(nested) || Holds(nested)));
 
         /// <summary>What a container gives the tasks inside it.</summary>
         private void Bind(Statement container)

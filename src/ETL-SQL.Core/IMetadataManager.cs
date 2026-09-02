@@ -15,6 +15,26 @@ public record ConnectionInfo(
     string? SecretHandle = null);
 public record ColumnMetadata(string Name, string DataType);
 
+/// <summary>
+/// The keys and foreign keys a database <em>declares</em> for one table.
+///
+/// <para>Separate from <see cref="ColumnMetadata"/> because it answers a different question. Columns
+/// are needed for completion, which only wants names and types; this is needed wherever a caller has
+/// to distinguish something the database asserts from something a script merely implies — a data
+/// model diagram being the obvious case, since a cardinality inferred from a join is a guess and one
+/// read from a key is a fact.</para>
+///
+/// <para>Empty is the normal answer, not a failure: most connectors expose no catalog at all.</para>
+/// </summary>
+public record TableKeyEvidence(
+    IReadOnlyList<string> KeyColumns,
+    IReadOnlyList<CatalogRelationship> ForeignKeys)
+{
+    public static TableKeyEvidence None { get; } = new([], []);
+
+    public bool IsEmpty => KeyColumns.Count == 0 && ForeignKeys.Count == 0;
+}
+
 public static class EngineCatalog
 {
     public static readonly List<string> Tables = new()
@@ -124,6 +144,19 @@ public interface IMetadataManager
     void ClearTempTables(string uri);
     Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName, string? uri = null);
     Task<IEnumerable<ColumnMetadata>> GetColumnDetailsAsync(string connectionName, string tableName, string? uri = null);
+
+    /// <summary>
+    /// Key and foreign-key metadata for one table, when the connection's connector exposes a
+    /// catalog.
+    ///
+    /// <para>Default-implemented as "nothing known" so that a metadata manager which does not talk
+    /// to a catalog is not obliged to invent one. Callers must treat the empty answer as an absence
+    /// of evidence rather than as evidence of absence: a table with no keys and a connector with no
+    /// catalog are indistinguishable here, and only the caller knows whether that difference
+    /// matters.</para>
+    /// </summary>
+    Task<TableKeyEvidence> GetKeyEvidenceAsync(string connectionName, string tableName, string? uri = null) =>
+        Task.FromResult(TableKeyEvidence.None);
     IEnumerable<string> GetRegisteredNames();
     IConnector? GetConnector(string name);
     string? GetConnectionType(string connectionName, string? uri = null);

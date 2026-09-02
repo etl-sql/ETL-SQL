@@ -160,6 +160,27 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
                 }
                 return new StyleToken(style.Name, upper);
             }
+            if (style.Name.Equals("SYMBOL_STROKE_COLOR", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!PointMarkerStroke.IsPortableColor(value))
+                    throw AdvancedChartSemanticException.At(style,
+                        $"Layer '{layer.Name}' SYMBOL_STROKE_COLOR accepts portable #RRGGBB colors only; found '{value}'.");
+                return new StyleToken(style.Name, value);
+            }
+            if (style.Name.Equals("SYMBOL_STROKE_WIDTH", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!PointMarkerStroke.TryNormalizeWidth(value, out var width))
+                    throw AdvancedChartSemanticException.At(style,
+                        $"Layer '{layer.Name}' SYMBOL_STROKE_WIDTH must be a non-negative number; found '{value}'.");
+                return new StyleToken(style.Name, width);
+            }
+            if (style.Name.Equals("LINE_WIDTH", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!LineSeriesWidth.TryNormalize(value, out var width))
+                    throw AdvancedChartSemanticException.At(style,
+                        $"Layer '{layer.Name}' LINE_WIDTH must be from {LineSeriesWidth.Minimum} through {LineSeriesWidth.Maximum} pixels; found '{value}'.");
+                return new StyleToken(style.Name, width);
+            }
             return new StyleToken(style.Name, value);
         }).ToImmutableArray(),
         layer.Name)
@@ -182,11 +203,21 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
             position.Seed,
             AdvancedChartEnumBridge.Unit(position.Unit));
 
-    private EncodingConditionSpec Condition(AdvancedChartCondition condition) => new(
-        AdvancedChartEnumBridge.Condition(condition.Channel),
-        Predicate(condition.Predicate, condition),
-        EvaluateLiteral(condition.WhenTrue, condition),
-        condition.WhenFalse is null ? null : EvaluateLiteral(condition.WhenFalse, condition));
+    private EncodingConditionSpec Condition(AdvancedChartCondition condition)
+    {
+        var whenTrue = EvaluateLiteral(condition.WhenTrue, condition);
+        var whenFalse = condition.WhenFalse is null ? null : EvaluateLiteral(condition.WhenFalse, condition);
+        if (condition.Channel == AdvancedChartConditionChannel.Shape)
+        {
+            ValidatePointShape(Display(whenTrue), condition);
+            if (whenFalse is not null) ValidatePointShape(Display(whenFalse), condition);
+        }
+        return new EncodingConditionSpec(
+            AdvancedChartEnumBridge.Condition(condition.Channel),
+            Predicate(condition.Predicate, condition),
+            whenTrue,
+            whenFalse);
+    }
 
     private EncodingPredicate Predicate(Expression expression, AstNode anchor) => expression switch
     {
@@ -266,12 +297,21 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         var expression = binding.Source.Constant
             ?? throw AdvancedChartSemanticException.At(binding, "Constant binding has no value.");
         var value = EvaluateLiteral(expression, binding);
+        if (binding.Channel == AdvancedChartChannel.Shape)
+            ValidatePointShape(Display(value), binding);
         var parameter = expression is VariableExpression variable ? variable.Name : null;
         return binding.Source.Kind == AdvancedChartBindingSourceKind.Datum
             ? FieldBinding.Datum(channel, value, semanticKind, binding.Scale, axis, parameter) with
             { Sort = sort, Format = binding.Format, Stack = AdvancedChartEnumBridge.Stack(binding.Stack) }
             : FieldBinding.Value(channel, value, semanticKind, parameter) with
             { Sort = sort, Format = binding.Format, Stack = AdvancedChartEnumBridge.Stack(binding.Stack) };
+    }
+
+    private static void ValidatePointShape(string value, AstNode anchor)
+    {
+        if (!PointShapeVocabulary.IsSupported(value))
+            throw AdvancedChartSemanticException.At(anchor,
+                $"SHAPE accepts only {PointShapeVocabulary.DisplayList}; found '{value}'.");
     }
 
     private static ComparisonKind? Comparison(TokenType token) => token switch

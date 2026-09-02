@@ -646,6 +646,47 @@ public class MetadataManager : IMetadataManager
         return cols.Select(c => c.Name);
     }
 
+    /// <summary>
+    /// Reads the keys and foreign keys the database declares for one table, straight from the
+    /// connector's catalog.
+    ///
+    /// <para>Deliberately uncached and deliberately quiet. Uncached because the one caller — a
+    /// design-time data model — asks for a handful of tables at a time and would rather be a little
+    /// slow than show a stale key; quiet because a connector with no catalog, an offline database,
+    /// and a table the caller misspelled all mean the same thing to the caller: no evidence. What it
+    /// must never do is throw, since a diagram that cannot be drawn at all is a worse answer than one
+    /// drawn with every cardinality left unknown.</para>
+    /// </summary>
+    public async Task<TableKeyEvidence> GetKeyEvidenceAsync(string connectionName, string tableName, string? uri = null)
+    {
+        try
+        {
+            var conn = GetConnection(connectionName, uri);
+            if (conn == null || conn.IsMetadataOnly) return TableKeyEvidence.None;
+
+            var connector = _connectors.GetConnector(conn.Type);
+            if (connector == null) return TableKeyEvidence.None;
+
+            await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, ResolveConnectionString(conn));
+            var catalogProvider = source.GetCatalogProvider();
+            if (catalogProvider == null) return TableKeyEvidence.None;
+
+            var (schema, name) = SplitQualifiedName(tableName);
+            var columns = await catalogProvider.GetColumnMetadataAsync(schema, name);
+            var relationships = await catalogProvider.GetRelationshipsAsync(schema, name);
+
+            return new TableKeyEvidence(
+                (columns ?? []).Where(column => column.IsPrimaryKey).Select(column => column.ColumnName).ToList(),
+                (relationships ?? []).ToList());
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug("Key evidence lookup failed for {Table} on {Connection}: {Message}",
+                tableName, connectionName, ex.Message);
+            return TableKeyEvidence.None;
+        }
+    }
+
     public async Task<IEnumerable<ColumnMetadata>> GetColumnDetailsAsync(string connectionName, string tableName, string? uri = null)
     {
         if (connectionName.Equals("eng", StringComparison.OrdinalIgnoreCase))

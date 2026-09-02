@@ -77,8 +77,9 @@ CREATE VISUAL name AS CUSTOM (
 - **Scale axis controls** — `MIN`/`MAX` set the domain, `INCLUDE_ZERO` expands a quantitative domain to zero, `REVERSE` flips its display direction, `MAJOR_TICK_COUNT` or `TICK_INTERVAL` controls major ticks, `MINOR_TICKS` adds midpoint ticks, and `LABEL_ROTATION`/`LABEL_SKIP` control crowded tick labels. `OUTER_PADDING = 0..1` adds space before the first and after the last category on `BAND` scales only.
 - **LAYERS** — Declares marks in deterministic `Z_INDEX` order. A layer consumes the visual's single `SOURCE`; stage differently prepared inputs into one visible `#temp` table before authoring the visual.
 - **ENCODINGS** — At `CHART` scope, declares bindings inherited by layers. At layer scope, overrides individual channels. A layer defaults to `INHERIT_ENCODINGS = ON`; `OFF` makes its bindings isolated. Duplicate channels within either scope are errors.
+- **SHAPE** — On `POINT` layers, accepts `CIRCLE`, `SQUARE`, `TRIANGLE`, `DIAMOND`, `CROSS`, or `STAR`. Bind a nominal/ordinal field containing those names, use `DATUM`/`VALUE` for one constant shape, or set the same vocabulary through a `SHAPE` condition. Values are case-insensitive. Unsupported runtime field values fall back to `CIRCLE`; invalid authored constants are rejected.
 - **Binding sources** — A bare field reads a source column; `DATUM(literal-or-parameter)` supplies a typed data-domain constant that may use a scale; `VALUE(literal-or-parameter)` supplies a visual-range value and cannot use a scale or positional channel. Expressions, functions, aggregates, column references inside wrappers, null positional constants, and secret parameters are rejected.
-- **STYLE** — Applies renderer-neutral literal style tokens to one layer.
+- **STYLE** — Applies renderer-neutral literal style tokens to one layer. `POINT` layers accept `SYMBOL_STROKE_COLOR = '#RRGGBB'` and a non-negative `SYMBOL_STROKE_WIDTH = n`; a color without a width uses `1` pixel, while a width without a color draws no stroke. `LINE` layers accept `LINE_WIDTH = n` from `0.1` through `10` pixels. `THICKNESS` remains specific to `TICK` marks and measures a fraction of one em.
 - **CONDITIONS** — Applies presentation-only values per row. Predicates accept fields, report parameters, literals, comparisons, `AND`, `OR`, `NOT`, and `IS [NOT] NULL`. Connected `LINE` and `AREA` marks reject row-level conditions; use separate staged series or layers.
 
 ## Options
@@ -202,9 +203,11 @@ CREATE VISUAL TrialIntervals AS CUSTOM (
         ENCODINGS (
           X = Trial (TYPE = NOMINAL),
           Y = Estimate (TYPE = QUANTITATIVE),
+          SHAPE = VALUE('DIAMOND') (TYPE = NOMINAL),
           ERROR_LOW = LowerBound (TYPE = QUANTITATIVE),
           ERROR_HIGH = UpperBound (TYPE = QUANTITATIVE)
-        )
+        ),
+        STYLE (SYMBOL_STROKE_COLOR = '#1e3a8a', SYMBOL_STROKE_WIDTH = 1.5)
       )
     )
   )

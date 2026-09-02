@@ -62,4 +62,32 @@ public sealed class PortalInteractiveRunPolicyTests
     public void RejectionNamesTheStatement() =>
         // The message reaches the user in the Messages tab, so it should say what was refused.
         Assert.Contains("Drop", Reject("DROP TABLE m.Users;"));
+
+    [Fact]
+    public void ExplainOfAnAllowedQuery_IsAllowed()
+    {
+        // EXPLAIN builds a plan without running the query, which is what lets a design surface offer
+        // it at all. The plan is still only offered for a query this policy would let you run.
+        Assert.Null(Reject("EXPLAIN SELECT region FROM corp.orders;"));
+    }
+
+    [Fact]
+    public void ExplainAnalyze_IsRefusedByName()
+    {
+        // ANALYZE runs the query it explains, and would run it outside the checks the rest of this
+        // policy applies. The refusal says which of the two words is the problem.
+        var reason = Reject("EXPLAIN ANALYZE SELECT region FROM corp.orders;");
+
+        Assert.NotNull(reason);
+        Assert.Contains("EXPLAIN ANALYZE runs the query", reason);
+    }
+
+    [Fact]
+    public void ExplainOfAStatementThePolicyRefuses_IsRefusedForTheSameReason()
+    {
+        var reason = Reject("EXPLAIN SELECT region INTO permanent_table FROM corp.orders;");
+
+        Assert.NotNull(reason);
+        Assert.Contains("temp tables", reason);
+    }
 }

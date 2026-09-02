@@ -4902,6 +4902,81 @@ body.vscode-dark .etlsql-cw-missing-hint {
 .etlsql-studio-visual-group>div { display:grid;grid-template-columns:1fr 1fr;gap:5px; }
 .etlsql-palette-sidebar-btn:disabled { opacity:.42;cursor:not-allowed; }
 
+/* Document outline and layer tree. Rows are dense on purpose: the panel earns its place by making a
+   crowded page scannable, so a row is one line and its four controls only take colour on hover or
+   when they are holding a state (hidden, locked) the author needs to see without hovering. */
+.etlsql-studio-outline-tree { display:flex;flex-direction:column;gap:1px; }
+.etlsql-studio-outline-page { margin:6px 0 2px; }
+.etlsql-studio-outline-page:first-child { margin-top:0; }
+.etlsql-studio-outline-page-btn { display:flex;flex-direction:column;gap:2px;width:100%;padding:6px 8px;border:1px solid transparent;border-radius:5px;background:none;color:var(--portal-text,#f0f6fc);font:inherit;text-align:left;cursor:pointer; }
+.etlsql-studio-outline-page-btn:hover { background:var(--portal-surface-subtle,#161b22); }
+.etlsql-studio-outline-page.is-active .etlsql-studio-outline-page-btn { border-color:var(--portal-accent,#58a6ff);background:rgba(56,139,253,.08); }
+.etlsql-studio-outline-page-btn>strong { font-size:.8125rem; }
+.etlsql-studio-outline-page-btn>span { color:var(--portal-text-soft,#8b949e);font-size:.6875rem; }
+.etlsql-studio-outline-band { display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 8px 2px;color:var(--portal-text-soft,#8b949e);font-size:.625rem;text-transform:uppercase;letter-spacing:.04em; }
+.etlsql-studio-outline-item { display:flex;align-items:center;gap:4px;border-radius:5px;padding-left:calc(var(--outline-depth,1) * 10px); }
+.etlsql-studio-outline-item:hover { background:var(--portal-surface-subtle,#161b22); }
+.etlsql-studio-outline-item.is-selected { background:rgba(56,139,253,.14);box-shadow:inset 2px 0 0 var(--portal-accent,#58a6ff); }
+.etlsql-studio-outline-item.is-hidden .etlsql-studio-outline-name { opacity:.5;text-decoration:line-through; }
+.etlsql-studio-outline-select { display:flex;align-items:center;gap:6px;flex:1;min-width:0;padding:5px 6px;border:0;border-radius:5px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer; }
+.etlsql-studio-outline-kind { flex:0 0 auto;padding:1px 5px;border-radius:3px;background:var(--portal-surface,#161b22);color:var(--portal-text-soft,#8b949e);font-size:.5625rem;letter-spacing:.03em; }
+.etlsql-studio-outline-name { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.75rem; }
+.etlsql-studio-outline-actions { display:flex;align-items:center;gap:1px;flex:0 0 auto;padding-right:4px; }
+.etlsql-studio-outline-action { display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:0;border-radius:4px;background:none;color:var(--portal-text-soft,#8b949e);cursor:pointer;opacity:.55; }
+.etlsql-studio-outline-item:hover .etlsql-studio-outline-action { opacity:1; }
+.etlsql-studio-outline-action:hover:not(:disabled) { background:var(--portal-surface,#161b22);color:var(--portal-text,#f0f6fc); }
+.etlsql-studio-outline-action:disabled { opacity:.22;cursor:not-allowed; }
+.etlsql-studio-outline-action[aria-pressed="true"] { opacity:1;color:var(--portal-accent,#58a6ff); }
+.etlsql-studio-outline-note { margin:4px 0 0;color:var(--portal-text-soft,#8b949e);font-size:.6875rem;line-height:1.45; }
+
+/* The data-model view's evidence banner. It sits above the diagram rather than beside it because it
+   qualifies everything in the diagram: which edges the database vouched for, and which it did not. */
+.etlsql-studio-model-summary { display:flex;flex-direction:column;gap:3px;padding:7px 12px;border-bottom:1px solid var(--portal-border,#30363d);background:var(--portal-surface-subtle,#161b22); }
+.etlsql-studio-model-summary>span { font-size:.75rem; }
+.etlsql-studio-model-summary>small { color:var(--portal-text-soft,#8b949e);font-size:.6875rem;line-height:1.45; }
+
+/* Engine state: what is in scope at the cursor, and the plan the engine would build for it. The plan
+   is a list rather than a drawn tree because ETL-SQL's EXPLAIN is a pipeline — each operator feeds
+   the next — and a vertical list reads that order without a layout pass. */
+.etlsql-studio-scope-list { list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px; }
+.etlsql-studio-scope-list li { display:flex;align-items:baseline;gap:6px;padding:3px 6px;border-radius:4px; }
+.etlsql-studio-scope-list li:hover { background:var(--portal-surface-subtle,#161b22); }
+.etlsql-studio-scope-list code { font-size:.6875rem;color:var(--portal-accent,#58a6ff); }
+.etlsql-studio-scope-list span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--portal-text-soft,#8b949e);font-size:.625rem; }
+.etlsql-studio-plan-target { display:block;padding:6px 8px;border:1px solid var(--portal-border,#30363d);border-radius:5px;background:var(--portal-bg,#0d1117);font-size:.6875rem;white-space:pre-wrap;word-break:break-word; }
+.etlsql-studio-plan-summary { display:flex;flex-direction:column;gap:2px;margin:8px 0 5px; }
+.etlsql-studio-plan-summary>span { font-size:.75rem; }
+.etlsql-studio-plan-summary>small { color:var(--portal-text-soft,#8b949e);font-size:.625rem;line-height:1.45; }
+.etlsql-studio-plan { list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;counter-reset:planstep; }
+.etlsql-studio-plan-step { position:relative;padding:6px 8px 6px 20px;border:1px solid var(--portal-border,#30363d);border-radius:5px;background:var(--portal-surface,#161b22); }
+.etlsql-studio-plan-step::before { counter-increment:planstep;content:counter(planstep);position:absolute;left:6px;top:7px;color:var(--portal-text-soft,#8b949e);font-size:.625rem; }
+.etlsql-studio-plan-op { display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:.75rem; }
+.etlsql-studio-plan-step code { display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--portal-text-soft,#8b949e);font-size:.625rem; }
+.etlsql-studio-plan-facts { display:block;margin-top:3px;color:var(--portal-text-soft,#8b949e);font-size:.625rem; }
+.etlsql-studio-plan-badge { padding:1px 5px;border-radius:3px;font-size:.5625rem;text-transform:uppercase;letter-spacing:.03em; }
+.etlsql-studio-plan-badge.is-streaming { background:rgba(46,160,67,.16);color:#3fb950; }
+.etlsql-studio-plan-badge.is-blocking { background:rgba(210,153,34,.18);color:#d29922; }
+.etlsql-studio-plan-badge.is-pushdown { background:rgba(56,139,253,.18);color:#58a6ff; }
+.etlsql-studio-plan-badge.is-index { background:rgba(163,113,247,.18);color:#a371f7; }
+.etlsql-studio-plan-badge.is-spill { background:rgba(248,81,73,.18);color:#f85149; }
+
+/* Plain-language guidance under a diagnostic. It sits under the parser's own message rather than in
+   place of it: the precise wording is what an experienced author reads first, and paraphrasing it
+   away would make the panel worse for them to make it better for a beginner. */
+.etlsql-script-guidance { display:flex;flex-direction:column;gap:4px;margin:2px 0 6px 12px;padding:7px 9px;border-left:2px solid var(--portal-accent,#58a6ff);border-radius:0 5px 5px 0;background:rgba(56,139,253,.07); }
+.etlsql-script-guidance>strong { font-size:.75rem;font-weight:600; }
+.etlsql-script-guidance>span { color:var(--portal-text-soft,#8b949e);font-size:.6875rem;line-height:1.45; }
+.etlsql-script-guidance-anchor { align-self:flex-start;padding:1px 5px;border-radius:3px;background:var(--portal-surface,#161b22);color:var(--portal-text-soft,#8b949e);font-size:.5625rem;text-transform:uppercase;letter-spacing:.03em; }
+.etlsql-script-guidance-actions { display:flex;align-items:center;gap:8px;margin-top:2px; }
+.etlsql-script-guidance-fix { padding:3px 9px;border:1px solid var(--portal-accent,#58a6ff);border-radius:4px;background:transparent;color:var(--portal-accent,#58a6ff);font:inherit;font-size:.6875rem;cursor:pointer; }
+.etlsql-script-guidance-fix:hover { background:rgba(56,139,253,.14); }
+.etlsql-script-guidance-doc { color:var(--portal-text-soft,#8b949e);font-size:.6875rem;text-decoration:underline; }
+.etlsql-studio-empty-compact { padding:8px;color:var(--portal-text-soft,#8b949e);font-size:.6875rem; }
+
+/* A locked card is still readable and still selectable; only its geometry is held. */
+.etlsql-dsgn-visual-card.is-locked { cursor:default; }
+.etlsql-dsgn-visual-card.is-locked .etlsql-dsgn-vcard-resize { display:none; }
+
 .etlsql-studio-editor-host {
     flex: 1;
     overflow: hidden;

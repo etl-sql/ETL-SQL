@@ -10,6 +10,7 @@ CREATE VISUAL VisualName AS COMBO (
     ...
   ),
   OPTIONS (
+    [LINE_WIDTH = n],
     [GRID_LINES = ON|OFF],
     [GRID_LINE_COLOR = '#rrggbb'],
     [GRID_LINE_DASH = SOLID|DASHED|DOTTED],
@@ -56,6 +57,7 @@ CREATE VISUAL VisualName AS COMBO (
 
 - **STACKED = ON|OFF** - stack the bars (default OFF)
 - **SMOOTH = ON|OFF** - smooth the line (default OFF)
+- **LINE_WIDTH = n** - set each line series width from `0.1` through `10` pixels (default `2`)
 - **SERIES_GAP = 0..1** - set the gap between grouped bar series as a fraction of bar width
 - **OUTER_PADDING = 0..1** - add category-band padding before the first and after the last bar (default 0)
 - **GRID_LINES = ON|OFF** - show or hide background value-axis grid lines (default ON)
@@ -95,6 +97,7 @@ CREATE VISUAL RevenueWithMargin AS COMBO (
   MAPPINGS (X = month, Y = total_revenue, Y2 = avg_margin),
   OPTIONS  (
     SMOOTH  = ON,
+    LINE_WIDTH = 3,
     AXIS_SORT = SOURCE,
     Y_AXIS  (LABEL = 'Revenue ($)'),
     Y2_AXIS (LABEL = 'Margin (%)'),

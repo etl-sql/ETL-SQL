@@ -12,6 +12,66 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Studio has a document outline. The visual library already listed what was on a page but could not
+  act on the list and never told the canvas anything; the outline lists every page, the row bands and
+  containers those pages lay out, and the visuals inside them, and selection runs both ways — a row
+  selects the tile, and a tile highlights the row. Move reorders by swapping two tiles' grid
+  placement, which the canonical patcher turns back into a rearranged `STRUCTURE`, and hide writes
+  `VISIBLE = OFF`, the property the report runtime already honours. Lock is deliberately not written
+  into the script: the report language has no `LOCKED`, so it is a canvas guard held on the author's
+  own machine — it refuses a drag, a resize, and a delete — and the panel says so rather than letting
+  anyone assume a colleague inherits it.
+
+- Studio has a data-model view. A new `Model` projection draws the connections a script opens, the
+  tables it reads, the `#temp` tables and CTEs it builds, and the relationships between them, using
+  the same shared graph renderer as the pipeline map. Nothing is drawn that the parser or the
+  database did not say: a join appears because the author wrote it, a foreign key because the
+  database declares it, and two tables that merely share a column name produce nothing at all.
+  Cardinality follows the same rule — it reads "not stated" unless a declared key or foreign key
+  settles it, and the view distinguishes "these tables declare no keys" from "no database was asked",
+  because only one of those is a finding. Connectors that expose a catalog (SQL Server, PostgreSQL,
+  MySQL) now surface their primary and foreign keys through `IMetadataManager`, so both hosts answer
+  the same way.
+
+- Studio has an engine panel: what a statement can see from where it sits, and what the engine would
+  do with it. Scope is the pipeline scope model asked with a caret instead of a task label — a
+  `#temp` created below the cursor is not offered, because offering it is wrong only at run time.
+  The plan is the engine's own `EXPLAIN`, requested through the ordinary run route so it passes the
+  same policy, limits, and audit as any other execution, and rendered as an operator list with the
+  badges an author acts on: blocking versus streaming, remote pushdown, index use, and spill.
+  `EXPLAIN` is now allowed in a Portal interactive run because it plans without executing;
+  `EXPLAIN ANALYZE` is refused by name, because it does execute.
+
+- Parser and lint diagnostics now carry plain-language guidance wherever ETL-SQL can act on them: a
+  sentence with no parser vocabulary in it, a next step, the card or page the offending line sits in,
+  a link into the reference tree, and — where exactly one repair is correct — a button that makes the
+  edit. An unclosed bracket is the clearest gain: the parser reports the semicolon it tripped over,
+  several lines from the cause and about the wrong character, and the guidance says which block was
+  left open. A diagnostic the translation cannot act on gets no guidance rather than a generic
+  "check your syntax", and a repair is offered only where a guess is impossible — a button that
+  guessed would turn a visible error into an invisible wrong answer. The guidance rides on the
+  diagnostic itself, so it reaches VS Code through the language server and the CLI's lint output, not
+  only Studio.
+
+- `SEARCH` controls can opt into an accessible clear button with `SHOW_CLEAR = ON`, and `TEXTBOX`
+  controls can cap typed input with a positive-integer `MAX_LENGTH` option. `COMBO` category sorting
+  is now covered by a focused lowering-and-resolution test alongside its existing reference docs.
+
+- Named `LINE` and `COMBO` visuals and `CUSTOM CHART` `LINE` layers can set `LINE_WIDTH` from `0.1`
+  through `10` pixels. The width follows each line series through ordinary, stacked, transposed,
+  and geographic native SVG paths without changing marker, overlay, rule, or error-bar
+  widths; `THICKNESS` remains specific to `TICK` marks.
+
+- Named `LINE` and `SCATTER` markers and `CUSTOM CHART` `POINT` layers can set a portable outline
+  with `SYMBOL_STROKE_COLOR` and `SYMBOL_STROKE_WIDTH`. Colors use `#RRGGBB`, widths are
+  non-negative pixel values, and a color without an explicit width renders as a one-pixel stroke.
+
+- Point markers now share one portable shape vocabulary across named `LINE` and `SCATTER` visuals
+  and `CUSTOM CHART` `POINT` layers: circle, square, triangle, diamond, cross, and star. Authored
+  constants are validated, data-driven shapes fall back to circles when a row contains an unknown
+  value, and the native SVG renderer preserves the selected geometry for interactive and static
+  output.
+
 - Studio exports a paginated report to PDF. Step 8 used to name the export and tell the author to go
   and find it, which for a report living in an unsaved buffer meant nowhere; it now produces the file
   from the report as it stands, with the page setup, breaks, and repeating table headings the author

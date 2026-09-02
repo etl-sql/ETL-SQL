@@ -25,6 +25,7 @@ Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour 
 
 - **PLACEHOLDER = 'hint text'** - greyed-out text shown when the input is empty
 - **DEFAULT = 'initial text'** - pre-populated value on load
+- **MAX_LENGTH = n** - positive integer limiting the number of characters the user can enter
 
 ## Actions
 
@@ -38,7 +39,7 @@ DECLARE @user_filter STRING = '';
 CREATE VISUAL UserInput AS TEXTBOX (
   TITLE          = 'Username',
   LABEL_POSITION = 'LEFT',
-  OPTIONS        (PLACEHOLDER = 'Enter username...'),
+  OPTIONS        (PLACEHOLDER = 'Enter username...', MAX_LENGTH = 40),
   ACTIONS        (ON_CHANGE = SET_PARAMETER(@user_filter, value))
 );
 

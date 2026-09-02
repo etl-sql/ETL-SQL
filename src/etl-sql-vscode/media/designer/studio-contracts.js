@@ -22,6 +22,7 @@ export const STUDIO_ROUTES = Object.freeze({
     pipelineRunPlan: '/api/designer/pipeline-run-plan',
     preview: '/api/designer/preview',
     previewPdf: '/api/designer/preview/pdf',
+    dataModel: '/api/designer/data-model',
     parse: '/api/designer/parse',
     patch: '/api/designer/patch',
     queryFilter: '/api/designer/query-filter',

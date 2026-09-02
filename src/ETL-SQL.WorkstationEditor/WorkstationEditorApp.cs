@@ -543,6 +543,7 @@ public static class WorkstationEditorApp
         var pipelineTasks = new ETL_SQL.Analysis.Services.PipelineTaskAuthoringService();
         var pipelineScope = new ETL_SQL.Analysis.Services.ScriptScopeService();
         var pipelineRunPlans = new ETL_SQL.Analysis.Services.PipelineRunPlanService();
+        var dataModel = new ETL_SQL.Analysis.Services.ScriptDataModelService();
         var designerGen = new ETL_SQL.Reporting.Authoring.DesignerScriptGenerationService();
         var designerPatcher = new ETL_SQL.Reporting.Authoring.DesignerScriptPatcher(designerGen);
         var designerQueryFilters = new ETL_SQL.Reporting.Authoring.DesignerQueryFilterService();
@@ -644,13 +645,20 @@ public static class WorkstationEditorApp
         // things that are not there.
         app.MapPost("/api/designer/pipeline-scope", (PipelineScopeAuthoringRequest request) =>
         {
-            var scope = pipelineScope.At(request.Script, request.Id);
+            // A canvas points at a task; a script editor points with a caret. Same question and the
+            // same positional rule, so one route answers both.
+            var scope = request.Line is > 0 && string.IsNullOrWhiteSpace(request.Id)
+                ? pipelineScope.AtLine(request.Script, request.Line.Value)
+                : pipelineScope.At(request.Script, request.Id);
             return Results.Json(new
             {
                 resolved = scope.Resolved,
                 error = scope.Error,
                 variables = scope.Variables,
                 tempTables = scope.TempTables,
+                statementText = scope.StatementText,
+                prefixScript = scope.PrefixScript,
+                statementLine = scope.StatementLine,
             }, JsonOptions);
         });
 
@@ -673,6 +681,60 @@ public static class WorkstationEditorApp
                     action = effect.Action,
                     target = effect.Target,
                     line = effect.Line,
+                }),
+            }, JsonOptions);
+        });
+
+        // The entity/relationship shape of a script. Same two passes as the Portal's: project from
+        // the script alone, ask the connectors about the tables that projection named, then project
+        // again with what they said. Doing it the other way round would turn opening the diagram into
+        // a schema crawl over every database the workspace can reach.
+        app.MapPost("/api/designer/data-model", async (
+            DataModelAuthoringRequest request, IMetadataManager metadata, CancellationToken cancellationToken) =>
+        {
+            var model = dataModel.Project(request.Script);
+            if (model.Parsed)
+            {
+                var evidence = await ETL_SQL.Analysis.Services.DataModelSchemaEvidenceReader.ReadAsync(
+                    metadata, model, request.DocumentUri, cancellationToken);
+                if (!evidence.IsEmpty) model = dataModel.Project(request.Script, evidence);
+            }
+
+            return Results.Json(new
+            {
+                parsed = model.Parsed,
+                error = model.Error,
+                // Said out loud because the view has to distinguish "these tables declare no keys"
+                // from "nobody asked a database". Both leave every cardinality unknown; only one of
+                // them is a fact about the data.
+                hasSchemaEvidence = model.HasSchemaEvidence,
+                entities = model.Entities.Select(entity => new
+                {
+                    id = entity.Id,
+                    name = entity.Name,
+                    kind = entity.Kind,
+                    connection = entity.Connection,
+                    line = entity.Line,
+                    detail = entity.Detail,
+                    columns = entity.Columns.Select(column => new
+                    {
+                        name = column.Name,
+                        type = column.Type,
+                        isKey = column.IsKey,
+                    }),
+                }),
+                relationships = model.Relationships.Select(relationship => new
+                {
+                    id = relationship.Id,
+                    from = relationship.From,
+                    to = relationship.To,
+                    kind = relationship.Kind,
+                    cardinality = relationship.Cardinality,
+                    evidence = relationship.Evidence,
+                    fromColumn = relationship.FromColumn,
+                    toColumn = relationship.ToColumn,
+                    joinType = relationship.JoinType,
+                    line = relationship.Line,
                 }),
             }, JsonOptions);
         });
@@ -1075,7 +1137,9 @@ public sealed record PipelineTaskAuthoringRequest(
     string? Expression = null,
     string? Variable = null,
     string? Collection = null);
-public sealed record PipelineScopeAuthoringRequest(string? Script, string? Id);
+public sealed record PipelineScopeAuthoringRequest(string? Script, string? Id, int? Line = null);
+
+public sealed record DataModelAuthoringRequest(string? Script, string? DocumentUri = null);
 
 /// <summary>Which task to plan a run up to. Planning never executes anything.</summary>
 public sealed record PipelineRunPlanAuthoringRequest(string? Script, string? Id);

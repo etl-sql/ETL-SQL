@@ -13,7 +13,7 @@ namespace ETL_SQL.Analysis.Diagnostics
             return diagnostics.Select(diag =>
             {
                 var (startLine, startColumn, endLine, endColumn) = CalculateRange(diag.Line, diag.Column, fileLines);
-                return new AnalysisDiagnostic(
+                var built = new AnalysisDiagnostic(
                     startLine,
                     startColumn,
                     endLine,
@@ -23,6 +23,7 @@ namespace ETL_SQL.Analysis.Diagnostics
                     diag.Code,
                     "ETL-SQL " + diag.Source,
                     diag.PolicyDecision);
+                return built with { Guidance = Guidance.For(built, fileLines) };
             }).ToList();
         }
 
@@ -33,7 +34,7 @@ namespace ETL_SQL.Analysis.Diagnostics
             return lintResults.Select(result =>
             {
                 var (startLine, startColumn, endLine, endColumn) = CalculateRange(result.LineNumber, result.ColumnNumber, fileLines);
-                return new AnalysisDiagnostic(
+                var built = new AnalysisDiagnostic(
                     startLine,
                     startColumn,
                     endLine,
@@ -43,6 +44,7 @@ namespace ETL_SQL.Analysis.Diagnostics
                     result.Code ?? result.RuleName,
                     "ETL-SQL Linter",
                     result.PolicyDecision);
+                return built with { Guidance = Guidance.For(built, fileLines) };
             }).ToList();
         }
 
@@ -57,7 +59,10 @@ namespace ETL_SQL.Analysis.Diagnostics
             }
 
             var (startLine, startColumn, endLine, endColumn) = CalculateRange(line, column, fileLines);
-            return new AnalysisDiagnostic(
+            // This is the path an unterminated string arrives on — the lexer throws rather than
+            // collecting — so guidance has to be attached here too, or the single most common
+            // first-week mistake is the one diagnostic with no help on it.
+            var built = new AnalysisDiagnostic(
                 startLine,
                 startColumn,
                 endLine,
@@ -66,7 +71,14 @@ namespace ETL_SQL.Analysis.Diagnostics
                 exception.Message,
                 null,
                 "ETL-SQL Parser");
+            return built with { Guidance = Guidance.For(built, fileLines) };
         }
+
+        /// <summary>
+        /// Shared because it holds no state and is a pure function of a diagnostic and the script
+        /// text around it.
+        /// </summary>
+        private static readonly DiagnosticGuidanceService Guidance = new();
 
         private static (int StartLine, int StartColumn, int EndLine, int EndColumn) CalculateRange(
             int oneBasedLine,

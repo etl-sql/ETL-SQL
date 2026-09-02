@@ -17,6 +17,24 @@
 // Distinguishes "no handler matched" from a handler that legitimately returns an empty object.
 const UNMATCHED = Symbol('unmatched-mock-route');
 
+function mockStarterDashboardManifest() {
+  const regionalRows = [
+    ['North', '3', '4120'],
+    ['South', '2', '2380'],
+    ['West', '1', '1260'],
+    ['East', '2', '3310'],
+  ];
+  return {
+    title: 'Sample Dashboard',
+    pages: [{ name: 'Sample Dashboard', mode: 'DASHBOARD' }],
+    visuals: [
+      { name: 'total_revenue', visualType: 'CARD', columns: ['Revenue'], rows: [['11070']] },
+      { name: 'revenue_by_region', visualType: 'BAR', columns: ['Region', 'Orders', 'Revenue'], rows: regionalRows },
+      { name: 'region_detail', visualType: 'TABLE', columns: ['Region', 'Orders', 'Revenue'], rows: regionalRows },
+    ],
+  };
+}
+
 export function makeMockApi(seedState) {
   let commitCount = 0;
   return async (url, init) => {
@@ -102,6 +120,8 @@ export function makeMockApi(seedState) {
         designState.connections = mockParseConnections(scriptText);
         data = { designState };
       }
+    } else if (path.endsWith('/api/designer/data-model')) {
+      data = mockDataModel(body.script || '');
     } else if (path.endsWith('/api/designer/dag')) {
       data = (body.script || '').includes('>>> INVALID <<<') ? {
         parsed: false,
@@ -153,7 +173,9 @@ export function makeMockApi(seedState) {
       // pagination preview reads, and the canned dashboard manifest has none. The real compilation
       // lives in PhysicalPageCompiler and is proven against exported PDFs; this only has to be the
       // right shape for the surface that reads it.
-      data = /\bAS\s+PAGINATED\b/i.test(String(body.script || ''))
+      data = /#revenue_by_region/i.test(String(body.script || ''))
+        ? mockStarterDashboardManifest()
+        : /\bAS\s+PAGINATED\b/i.test(String(body.script || ''))
         ? mockPaginatedManifest()
         : await fetch('/tools/ui-sandbox/fixtures/sandbox-report.manifest.json')
           .then(r => r.json())
@@ -183,7 +205,10 @@ export function makeMockApi(seedState) {
         message: `Previewed ${rows.length} rows from ${source}.`,
       };
     } else if (path.endsWith('/api/designer/run')) {
-      data = runMockScript(body.selection || body.script || '');
+      {
+        const submitted = body.selection || body.script || '';
+        data = /\bEXPLAIN\b/i.test(submitted) ? mockExplainPlan(submitted) : runMockScript(submitted);
+      }
     } else if (path.endsWith('/api/designer/schema')) {
       const connParam = new URL(url, window.location.origin).searchParams.get('connection') || 'demo';
       data = { connection: connParam, tables: mockSchemaTables() };
@@ -321,6 +346,44 @@ export function makeMockApi(seedState) {
 function analyzeMockScript(script) {
   const diagnostics = [];
   const lines = String(script || '').split(/\r\n|\r|\n/);
+
+  // A bare word where text belongs — the shape DiagnosticGuidanceService recognises, mocked here so
+  // the sandbox can drive the guidance panel and its repair button. Positions are zero-based, the
+  // same convention AnalysisDiagnostic uses, because a client that got two conventions from one
+  // payload would apply an edit one character off.
+  lines.forEach((line, i) => {
+    const unquoted = /\b(TITLE|SUBTITLE|LABEL)\s*=\s*([A-Za-z][A-Za-z0-9_ ]*?)\s*(?=[,)]|$)/.exec(line);
+    if (!unquoted || /^(ON|OFF|AUTO)$/i.test(unquoted[2])) return;
+    const start = line.indexOf(unquoted[2], unquoted.index);
+    const anchor = /^\s*CREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?(VISUAL|PAGE|DATASET)\s+(?:\[([^\]]+)\]|([A-Za-z_]\w*))/i
+      .exec([...lines.slice(0, i + 1)].reverse().find(candidate => /^\s*CREATE\s/i.test(candidate)) || '');
+    diagnostics.push({
+      startLine: i,
+      startColumn: start,
+      endLine: i,
+      endColumn: start + unquoted[2].length,
+      severity: 'Error',
+      message: `Unexpected token '${unquoted[2].split(' ').pop()}' inside CREATE VISUAL body.`,
+      code: 'SYNTAX',
+      source: 'Sandbox analyzer',
+      guidance: {
+        summary: `${unquoted[1]} was given the bare word ${unquoted[2]}, and ETL-SQL reads a bare word as a column name.`,
+        action: `Wrap it in single quotes so it is read as text: ${unquoted[1]} = '${unquoted[2]}'.`,
+        docPath: 'docs/reference/data-types.md',
+        anchor: anchor ? (anchor[2] || anchor[3]) : null,
+        anchorKind: anchor ? anchor[1].toUpperCase() : null,
+        quickFix: {
+          title: `Quote '${unquoted[2]}'`,
+          startLine: i,
+          startColumn: start,
+          endLine: i,
+          endColumn: start + unquoted[2].length,
+          replacement: `'${unquoted[2]}'`,
+        },
+      },
+    });
+  });
+
   lines.forEach((line, i) => {
     const selectStar = line.indexOf('SELECT *');
     if (selectStar >= 0) {
@@ -1366,6 +1429,153 @@ function mockRewritePageClauses(statement, page) {
 // parse used to hand back the fixture's visuals whenever the script mentioned CREATE VISUAL at all,
 // which meant anything the canvas wrote was invisible to every reader of the design state — the
 // workflow checklist, the report tree, and the inspector all described the fixture, not the script.
+// Grid coordinates for the visuals a page places, read from that page's own LAYOUT.
+//
+// The visuals used to be stacked one per row with `gridCol: 1`, because the CREATE VISUAL statement
+// carries no coordinates. That was fine while nothing read the layout, and wrong the moment anything
+// did: the real DesignerScriptParsingService resolves each visual's cell from the page's STRUCTURE
+// and MAP, so a two-column dashboard arrived here as two stacked rows and every surface that reads
+// placement — the canvas, the outline's row bands, the patcher's regenerated STRUCTURE — was
+// reasoning about a layout the server never reported. This mirrors FindSlotBounds: twelve columns,
+// four grid rows per structure row, spans rounded from the slot's extent.
+const MOCK_GRID_COLS = 12;
+
+function mockParseStructureGrid(structure) {
+  return String(structure || '')
+    .split(/[/\n\r]/)
+    .map(row => row.trim())
+    .filter(Boolean)
+    .map(row => row.split(/[ \t]+/).filter(Boolean).map(slot => slot.replace(/^['"[]|['"\]]$/g, '')));
+}
+
+function mockSlotBounds(grid, slot) {
+  let minC = Infinity, maxC = -1, minR = Infinity, maxR = -1;
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[r].length; c++) {
+      if (String(grid[r][c]).toLowerCase() !== String(slot).toLowerCase()) continue;
+      if (c < minC) minC = c;
+      if (c > maxC) maxC = c;
+      if (r < minR) minR = r;
+      if (r > maxR) maxR = r;
+    }
+  }
+  if (minC === Infinity || minR === Infinity) return null;
+  const totalSlotsInRow = Math.max(1, grid[minR].length);
+  const gridColStart = 1 + Math.round((minC * MOCK_GRID_COLS) / totalSlotsInRow);
+  const gridColEnd = Math.round(((maxC + 1) * MOCK_GRID_COLS) / totalSlotsInRow);
+  return {
+    gridCol: gridColStart,
+    gridRow: 1 + minR * 4,
+    gridColSpan: Math.max(1, Math.min(MOCK_GRID_COLS - gridColStart + 1, gridColEnd - gridColStart + 1)),
+    gridRowSpan: Math.max(1, (maxR - minR + 1) * 4),
+  };
+}
+
+/** Reads `MAP ('A' = name, …)` into slot → visual name. */
+function mockParsePageMap(pageStatement) {
+  const clause = mockFindClause(pageStatement, 'MAP');
+  if (!clause) return new Map();
+  const entries = new Map();
+  for (const entry of splitTopLevel(clause.text.slice(clause.text.indexOf('(') + 1, -1))) {
+    const parts = entry.split('=');
+    if (parts.length < 2) continue;
+    const slot = parts[0].trim().replace(/^['"[]|['"\]]$/g, '');
+    const name = parts.slice(1).join('=').trim().replace(/^['"[]|['"\]]$/g, '');
+    if (slot && name) entries.set(slot.toLowerCase(), name.toLowerCase());
+  }
+  return entries;
+}
+
+/**
+ * Places `visuals` using the first page statement's LAYOUT, leaving the stacked fallback in place
+ * for any visual the page does not map — a visual that exists but is not laid out is exactly the
+ * thing the canvas must still show rather than drop.
+ */
+function mockApplyPageLayout(script, visuals) {
+  const pageMatch = /CREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?PAGE\s+(?:\[[^\]]+\]|[A-Za-z_][A-Za-z0-9_]*)\s+AS\s+(?:DASHBOARD|PAGINATED)/i.exec(script);
+  if (!pageMatch) return visuals;
+  const statement = script.slice(pageMatch.index, mockStatementEnd(script, pageMatch.index));
+  const structure = /STRUCTURE\s*=\s*'((?:[^']|'')*)'/i.exec(statement)?.[1]?.replace(/''/g, "'");
+  if (!structure) return visuals;
+  const grid = mockParseStructureGrid(structure);
+  if (!grid.length) return visuals;
+  const slotsByName = new Map();
+  for (const [slot, name] of mockParsePageMap(statement)) slotsByName.set(name, slot);
+  for (const visual of visuals) {
+    const slot = slotsByName.get(String(visual.name).toLowerCase()) ?? String(visual.name).toLowerCase();
+    const bounds = mockSlotBounds(grid, slot);
+    if (bounds) Object.assign(visual, bounds);
+  }
+  return visuals;
+}
+
+// A stand-in for ScriptDataModelService. Regex where the real service parses, but it follows the one
+// rule that matters for what the view claims: it reports only connections, tables, `#temp` tables and
+// joins the script actually writes, never a relationship inferred from two columns sharing a name,
+// and `hasSchemaEvidence: false`, because a sandbox has no database to ask.
+function mockDataModel(script) {
+  if (script.includes('>>> INVALID <<<')) {
+    return { parsed: false, error: 'Syntax error: Unexpected token in script', hasSchemaEvidence: false, entities: [], relationships: [] };
+  }
+
+  const entities = new Map();
+  const relationships = new Map();
+  const lineOf = index => script.slice(0, index).split(/\r?\n/).length;
+  const addEntity = (kind, name, line, connection = null, detail = null) => {
+    const id = `${kind}:${name.toLowerCase()}`;
+    if (!entities.has(id)) entities.set(id, { id, name, kind, connection, line, detail, columns: [] });
+    return id;
+  };
+  const addRelationship = relationship => {
+    if (!relationships.has(relationship.id)) relationships.set(relationship.id, relationship);
+  };
+
+  let match;
+  const connectionPattern = /CREATE\s+CONNECTION\s+([A-Za-z_][A-Za-z0-9_]*)\s+AS\s+([A-Za-z_]+)/gi;
+  while ((match = connectionPattern.exec(script)) !== null) {
+    addEntity('connection', match[1], lineOf(match.index), null, match[2].toUpperCase());
+  }
+
+  const tablePattern = /\b(?:FROM|JOIN)\s+([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)/gi;
+  while ((match = tablePattern.exec(script)) !== null) {
+    const line = lineOf(match.index);
+    const connectionId = addEntity('connection', match[1], line);
+    const tableId = addEntity('table', `${match[1]}.${match[2]}`, line, match[1]);
+    entities.get(tableId).name = match[2];
+    addRelationship({
+      id: `member:${connectionId}:${tableId}`, from: connectionId, to: tableId,
+      kind: 'membership', cardinality: 'one-to-many', evidence: 'script',
+      fromColumn: null, toColumn: null, joinType: null, line,
+    });
+  }
+
+  const tempPattern = /\bINTO\s+(#[A-Za-z_][A-Za-z0-9_]*)/gi;
+  while ((match = tempPattern.exec(script)) !== null) addEntity('temp', match[1], lineOf(match.index));
+
+  const joinPattern = /\bJOIN\s+([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)\s+ON\s+([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)/gi;
+  while ((match = joinPattern.exec(script)) !== null) {
+    const line = lineOf(match.index);
+    const joined = addEntity('table', `${match[1]}.${match[2]}`, line, match[1]);
+    const fromMatch = /\bFROM\s+([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)/i.exec(script.slice(0, match.index));
+    if (!fromMatch) continue;
+    const base = addEntity('table', `${fromMatch[1]}.${fromMatch[2]}`, line, fromMatch[1]);
+    addRelationship({
+      id: `join:${base}:${joined}`, from: base, to: joined, kind: 'join',
+      // No database was asked, so nothing states how many rows sit on either side.
+      cardinality: 'unknown', evidence: 'script',
+      fromColumn: match[5], toColumn: match[7], joinType: 'INNER', line,
+    });
+  }
+
+  return {
+    parsed: true,
+    error: null,
+    hasSchemaEvidence: false,
+    entities: [...entities.values()],
+    relationships: [...relationships.values()],
+  };
+}
+
 function mockParseVisuals(script) {
   const visuals = [];
   const pattern = /CREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?VISUAL\s+([A-Za-z_][A-Za-z0-9_]*)\s+AS\s+([A-Za-z_]+)\s*\(/gi;
@@ -1492,7 +1702,7 @@ function mockParseVisuals(script) {
       },
     });
   }
-  return visuals;
+  return mockApplyPageLayout(script, visuals);
 }
 
 function mockParseParameters(script) {
@@ -1778,9 +1988,90 @@ function waitsOn(tasks, taskId, candidate) {
  * Positional, like the host's: only what is written above the task's label counts. A flat scan of the
  * whole script would make the sandbox teach the UI a claim the host does not make.
  */
+// Scope at a cursor line, plus the statement under it and everything above it — the shape
+// ScriptScopeService.AtLine returns. Statements are split on a semicolon at end of line, which is
+// close enough for the sandbox and never claims more than the real service would.
+function mockScopeAtLine(script, line) {
+  const lines = String(script).split(/\r?\n/);
+  if (!lines.length) return { resolved: false, error: 'There is no script to read.', variables: [], tempTables: [] };
+
+  const starts = [];
+  let expectingStart = true;
+  lines.forEach((text, index) => {
+    const trimmed = text.trim();
+    if (!trimmed || trimmed.startsWith('--')) return;
+    if (expectingStart) starts.push(index);
+    expectingStart = /;\s*$/.test(trimmed);
+  });
+  if (!starts.length) return { resolved: false, error: 'This script holds no statement to read.', variables: [], tempTables: [] };
+
+  const wanted = Math.max(1, line) - 1;
+  let index = 0;
+  for (let i = 0; i < starts.length; i++) if (starts[i] <= wanted) index = i;
+
+  const start = starts[index];
+  const end = index + 1 < starts.length ? starts[index + 1] : lines.length;
+  const prefix = lines.slice(0, start).join('\n').trim();
+  const scope = mockScopeFromText(prefix);
+
+  return {
+    resolved: true,
+    error: null,
+    variables: scope.variables,
+    tempTables: scope.tempTables,
+    statementText: lines.slice(start, end).join('\n').trim(),
+    prefixScript: prefix,
+    statementLine: start + 1,
+  };
+}
+
+function mockScopeFromText(above) {
+  const lineOf = index => above.slice(0, index).split('\n').length;
+  const variables = [];
+  const seenVariables = new Set();
+  for (const match of above.matchAll(/^[ \t]*DECLARE[ \t]+(@[A-Za-z_]\w*)[ \t]+([A-Za-z]\w*(?:\([^)]*\))?)[ \t]*(?:=[ \t]*([^;]+))?;/gim)) {
+    if (seenVariables.has(match[1].toLowerCase())) continue;
+    seenVariables.add(match[1].toLowerCase());
+    variables.push({ name: match[1], type: match[2], value: match[3]?.trim() ?? null, line: lineOf(match.index), origin: 'declared' });
+  }
+
+  const tempTables = [];
+  const seenTables = new Set();
+  for (const match of above.matchAll(/\bINTO[ \t]+(#\w+)|CREATE[ \t]+TABLE[ \t]+(#\w+)/gi)) {
+    const name = match[1] || match[2];
+    if (seenTables.has(name.toLowerCase())) continue;
+    seenTables.add(name.toLowerCase());
+    tempTables.push({ name, columns: [], line: lineOf(match.index), origin: match[1] ? 'SELECT INTO' : 'CREATE TABLE' });
+  }
+
+  return { variables, tempTables };
+}
+
+// A stand-in plan, in the column shape ExplainStatementHandler produces. It is canned rather than
+// derived because the sandbox has no planner; what it must get right is the shape the panel reads —
+// the Mode column that decides the blocking badge, and a Details string that carries pushdown.
+function mockExplainPlan(statement) {
+  const columns = ['ID', 'Operation', 'Details', 'Cost', 'Mode', 'Est. Rows', 'Plan Candidates', 'Plan Notes'];
+  const source = /\bFROM\s+([#&\w.]+)/i.exec(statement)?.[1] ?? 'source';
+  const rows = [[1, 'Scan', `Source: ${source}`, 2, 'STREAMING', 1200, '', '']];
+  if (/\bJOIN\b/i.test(statement)) {
+    rows.push([rows.length + 1, 'Hash Join', 'Type: INNER, Hash Keys: id', 5, 'BLOCKING', 1200, '', '']);
+  }
+  if (/\bWHERE\b/i.test(statement)) {
+    rows.push([rows.length + 1, 'Filter', 'Remote pushdown applied', 2, 'STREAMING', '--', '', '']);
+  }
+  if (/\bGROUP\s+BY\b/i.test(statement)) {
+    rows.push([rows.length + 1, 'Aggregate', 'Group By: region', 5, 'BLOCKING', '--', '', '']);
+  }
+  return { columns, rows, rowCount: rows.length, capped: false, elapsedMs: 4, message: `Plan for ${rows.length} operators.` };
+}
+
 function mockPipelineScope(body) {
   const script = body.script || '';
   const id = String(body.id || '');
+  // A script editor points with a caret rather than a task label. Same positional rule: only what
+  // is above the cursor is in scope, because that is the only thing that has run by then.
+  if (!id && Number(body.line) > 0) return mockScopeAtLine(script, Number(body.line));
   if (!id) return { resolved: false, error: 'No task is selected.', variables: [], tempTables: [] };
 
   const label = new RegExp(`^[ \\t]*${id.replace(/[^\\w]/g, '')}[ \\t]*:`, 'm').exec(script);

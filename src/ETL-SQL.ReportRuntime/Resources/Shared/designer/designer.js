@@ -33,6 +33,7 @@ const _feedback = globalThis.ETLSQLFeedback;
 
 const _TYPE_COLOR = {
     dataset:     '#10b981',
+    connection:  '#0ea5e9',
     visual:      '#3b82f6',
     page:        '#8b5cf6',
     container:   '#334155',
@@ -1673,6 +1674,11 @@ export async function createScriptEditor(container, opts = {}) {
             view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
             view.focus();
         },
+        /** The 1-based line the caret sits on; 1 before the view exists. The mirror of gotoLine. */
+        getCursorLine: () => {
+            if (!view) return 1;
+            return view.state.doc.lineAt(view.state.selection.main.head).number;
+        },
         analyze: () => runAnalysis(view.state.doc.toString()),
         /**
          * Script-level undo/redo, reused from the bundle's own history keymap.
@@ -1903,6 +1909,7 @@ function updateDagLines(container) {
 
 export function createScriptResultsPanel(container, { onNavigate = null } = {}) {
     let navigate = onNavigate;
+    let applyFix = null;
     let messages = [];
     let progress = [];
     let resultSets = [];
@@ -1937,6 +1944,21 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
     // A diagnostic that names a line but cannot take you there makes the reader do the lookup by
     // hand. Hosts supply onNavigate; without one the entries stay inert rather than pretending.
     function onDiagnosticActivate(event) {
+        // A repair button sits inside the diagnostic row, so it has to be handled before the jump:
+        // otherwise clicking "Close the quote" would scroll to the line and change nothing.
+        const fixTarget = event.target.closest?.('[data-quick-fix]');
+        if (fixTarget) {
+            if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            event.stopPropagation();
+            try {
+                applyFix?.(JSON.parse(fixTarget.dataset.quickFix));
+            } catch {
+                // A malformed payload is a bug here, not something the author can act on. Leaving
+                // the row alone is the honest outcome; the diagnostic it explains is still on screen.
+            }
+            return;
+        }
         const target = event.target.closest?.('[data-jump-line]');
         if (!target) return;
         if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
@@ -2022,13 +2044,42 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
         return (severity.includes('error') || d?.severity === 0) ? 'error' : 'warn';
     }
 
+    /**
+     * The beginner-facing half of a diagnostic: what went wrong in a sentence, what to do about it,
+     * the card it belongs to, a reference page, and — where exactly one repair is correct — a button
+     * that makes it.
+     *
+     * The parser's own message stays on the row above. It is the precise statement of the failure
+     * and an experienced author reads it first; the translation is an addition to it, never a
+     * replacement, because a message that paraphrases away the detail is worse for the person who
+     * did understand the original.
+     */
+    function renderGuidanceBlock(d) {
+        const guidance = d?.guidance;
+        if (!guidance) return '';
+        const anchor = guidance.anchor
+            ? `<span class="etlsql-script-guidance-anchor">${escape(`${(guidance.anchorKind || 'object').toLowerCase()} ${guidance.anchor}`)}</span>`
+            : '';
+        const fix = guidance.quickFix
+            ? `<button type="button" class="etlsql-script-guidance-fix" data-quick-fix="${escape(JSON.stringify(guidance.quickFix))}">${escape(guidance.quickFix.title)}</button>`
+            : '';
+        const doc = guidance.docPath
+            ? `<a class="etlsql-script-guidance-doc" href="${escape(guidance.docPath)}" target="_blank" rel="noreferrer">Reference</a>`
+            : '';
+        return `<div class="etlsql-script-guidance">
+                <strong>${escape(guidance.summary)}</strong>${anchor}
+                <span>${escape(guidance.action)}</span>
+                <div class="etlsql-script-guidance-actions">${fix}${doc}</div>
+            </div>`;
+    }
+
     function renderDiagnosticsBlock() {
         if (!diagnostics.length) return '';
         const rows = diagnostics.map(d => {
             // Analyzer positions are 0-based; the editor gutter shows them 1-based.
             const line = (Number.isFinite(d.startLine) ? d.startLine : 0) + 1;
             const column = (Number.isFinite(d.startColumn) ? d.startColumn : 0) + 1;
-            return `<div class="etlsql-script-message etlsql-script-message-jump" role="button" tabindex="0" data-level="${diagnosticLevel(d)}" data-jump-line="${line}" data-jump-column="${column}" title="Go to line ${line}"><span>${escape(d.code || d.source || 'lint')}</span>${escape(`${line}:${column}  ${d.message || ''}`)}</div>`;
+            return `<div class="etlsql-script-message etlsql-script-message-jump" role="button" tabindex="0" data-level="${diagnosticLevel(d)}" data-jump-line="${line}" data-jump-column="${column}" title="Go to line ${line}"><span>${escape(d.code || d.source || 'lint')}</span>${escape(`${line}:${column}  ${d.message || ''}`)}</div>${renderGuidanceBlock(d)}`;
         }).join('');
         return `<div class="etlsql-script-message-group"><div class="etlsql-script-message-group-title">Diagnostics</div>${rows}</div>`;
     }
@@ -2269,6 +2320,14 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
         /** Sets the jump-to-line handler used by clickable diagnostics. */
         setNavigate(handler) {
             navigate = typeof handler === 'function' ? handler : null;
+        },
+        /**
+         * Sets the handler a quick fix is applied through. The panel does not own the buffer, so
+         * without one the repair buttons stay inert rather than pretending to work — the same rule
+         * the jump handler already follows.
+         */
+        setApplyFix(handler) {
+            applyFix = typeof handler === 'function' ? handler : null;
         },
         dispose() {
             clearInterval(elapsedTimer);
@@ -4019,6 +4078,18 @@ export function createDesigner(container, opts = {}) {
 
     // ── Utilities ─────────────────────────────────────────────────────────────
     const uid       = () => 'v_' + Math.random().toString(36).slice(2, 8);
+    /**
+     * Whether the host has locked this visual on the canvas.
+     *
+     * The lock is the Studio outline's, not the script's: the report language has no LOCKED, so
+     * nothing is written into the author's file and nothing here reads one. The canvas asks the host
+     * on every interaction rather than caching an answer, so a lock toggled while a card is on
+     * screen holds from the next drag without the panel pushing state in.
+     */
+    const isLocked = v => Boolean(v) && Boolean(opts.isVisualLocked?.(v));
+    const refuseLocked = v => _feedback.notify(
+        `${v.name} is locked. Unlock it in the outline to move, resize, or remove it here.`,
+        { title: 'Visual locked', tone: 'info' });
     const curPage   = () => state.pages[pageIdx];
     const curVis    = () => curPage()?.visuals ?? [];
     const findVis   = id => { for (const p of state.pages) for (const v of p.visuals ?? []) if (v.id === id) return v; return null; };
@@ -4771,7 +4842,7 @@ export function createDesigner(container, opts = {}) {
             const isContainer = v.type === 'CONTAINER';
             const isFolded = isContainer && collapsedContainers.has(v.id);
             const card = document.createElement('div');
-            card.className = 'etlsql-dsgn-visual-card' + (v.id === selVisualId ? ' selected' : '') + (isContainer ? ' is-container' : '') + (isFolded ? ' is-folded' : '');
+            card.className = 'etlsql-dsgn-visual-card' + (v.id === selVisualId ? ' selected' : '') + (isContainer ? ' is-container' : '') + (isFolded ? ' is-folded' : '') + (isLocked(v) ? ' is-locked' : '');
             if (v.containerId) {
                 card.classList.add('has-container');
                 card.dataset.containerId = v.containerId;
@@ -7738,6 +7809,8 @@ export function createDesigner(container, opts = {}) {
         const del = e.target.closest('[data-del]');
         if (del) {
             e.stopPropagation();
+            const locked = findVis(del.dataset.del);
+            if (isLocked(locked)) { refuseLocked(locked); return; }
             deleteVisual(del.dataset.del);
             return;
         }
@@ -7931,6 +8004,10 @@ export function createDesigner(container, opts = {}) {
             if (!v) return;
 
             selectVisual(vid, { skipCanvas: true, toggle: e.shiftKey || e.ctrlKey || e.metaKey });
+
+            // A locked card still selects — the outline's lock guards the geometry, not the
+            // author's ability to look at what they locked.
+            if (isLocked(v)) return;
 
             startX = e.clientX;
             startY = e.clientY;
@@ -8338,6 +8415,20 @@ export function createDesigner(container, opts = {}) {
             return bookmarksSection;
         },
         refreshSnapshot: renderCanvas,
+        /**
+         * Shows a page by index, the same thing clicking its tab does. The outline needs it because
+         * it lists every page, and a row on a page that is not on screen has to be able to bring
+         * that page up before its selection means anything.
+         */
+        selectPage: index => {
+            const wanted = Number(index);
+            if (!Number.isInteger(wanted) || wanted < 0 || wanted >= state.pages.length) return false;
+            pageIdx = wanted;
+            selVisualId = null;
+            renderAll();
+            return true;
+        },
+        activePageIndex: () => pageIdx,
         getState: () => state,
         dispose: () => {
             leaseDisposed = true;

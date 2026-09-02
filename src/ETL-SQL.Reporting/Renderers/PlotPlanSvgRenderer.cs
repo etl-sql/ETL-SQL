@@ -5,6 +5,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using ETL_SQL.Core;
 using ETL_SQL.Reporting.Semantics;
 using ETL_SQL.Reporting.Semantics.Runtime;
 
@@ -631,10 +632,13 @@ internal sealed class PlotPlanSvgRenderer
                         }
                         builder.AppendLine("</g>");
                     }
-                    builder.AppendLine($"<circle cx='{N(x)}' cy='{N(y)}' r='3' fill='{Esc(datumColor)}'/>");
+                    RenderPointSymbol(builder, PointShape(plan, layer, datum), x, y, 3m,
+                        datumColor, "plot-point", datum.RowIndex, null, PointStrokeAttributes(layer));
                 }
                 if (layer.Mark == MarkKind.Line && IsEnabledByDefault(plan.Style, "SYMBOLS"))
-                    builder.AppendLine($"<circle cx='{N(x)}' cy='{N(y)}' r='3' fill='{Esc(datumColor)}' data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></circle>");
+                    RenderPointSymbol(builder, PointShape(plan, layer, datum), x, y, 3m,
+                        datumColor, "plot-line-symbol", datum.RowIndex, FormatDataLabel(value.Value, DataFormat(plan)),
+                        PointStrokeAttributes(layer));
                 if (layer.Mark is MarkKind.Line or MarkKind.Area)
                 {
                     points.Add($"{N(x)} {N(y)}");
@@ -642,7 +646,7 @@ internal sealed class PlotPlanSvgRenderer
                 }
             }
             if (layer.Mark == MarkKind.Line && points.Count > 1)
-                builder.AppendLine($"<path d='M {string.Join(" L ", points)}' fill='none' stroke='{Esc(color)}' stroke-width='2'/>");
+                builder.AppendLine($"<path d='M {string.Join(" L ", points)}' fill='none' stroke='{Esc(color)}' stroke-width='{LineWidth(layer, "2")}'/>");
             else if (layer.Mark == MarkKind.Area)
             {
                 var isConfidence = layer.Data.Any(datum => Channel(datum, FieldChannel.ConfidenceLow) is not null || Channel(datum, FieldChannel.ConfidenceHigh) is not null);
@@ -1029,7 +1033,7 @@ internal sealed class PlotPlanSvgRenderer
         var dashAttributes = LineStyleAttributes(lineStyle);
         var isOverlay = LayerStyle(layer, "overlayType") is not null;
         var smooth = IsEnabled(plan.Style, "SMOOTH") && !isOverlay;
-        var strokeWidth = isOverlay ? "3" : "2";
+        var strokeWidth = isOverlay ? "3" : LineWidth(layer, "2");
         var overlayType = LayerStyle(layer, "overlayType");
         var lineClass = overlayType == "Forecast" ? " class='plot-forecast-line'" : string.Empty;
         (decimal X, decimal Y)? firstPoint = null;
@@ -1079,7 +1083,10 @@ internal sealed class PlotPlanSvgRenderer
             segment.Add((x, y));
             if (((isOverlay && overlayType != "Forecast") || IsEnabledByDefault(plan.Style, "SYMBOLS")) &&
                 (!isOverlay || !plan.Layers.Any(candidate => candidate.Mark == MarkKind.Point && LayerStyle(candidate, "overlayType") is null)))
-                builder.AppendLine($"<circle cx='{N(x)}' cy='{N(y)}' r='{(isOverlay ? "4" : "3")}' fill='{Esc(color)}'{(isOverlay ? " stroke='white' stroke-width='1.5'" : string.Empty)} data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></circle>");
+                RenderPointSymbol(builder, isOverlay ? null : PointShape(plan, layer, datum),
+                    x, y, isOverlay ? 4m : 3m, color, isOverlay ? "plot-overlay-point" : "plot-line-symbol",
+                    datum.RowIndex, FormatDataLabel(value.Value, DataFormat(plan)),
+                    isOverlay ? " stroke='white' stroke-width='1.5'" : PointStrokeAttributes(layer));
             if (showLabels && (!seriesLabelsEnabled || index != seriesLabelTargetIndex))
                 smartLabels.Add(new SmartLabel(datum.RowIndex, x, y,
                     FormatDataLabel(value.Value, DataFormat(plan)),
@@ -1148,7 +1155,7 @@ internal sealed class PlotPlanSvgRenderer
                 var areaPath = $"M {string.Join(" L ", topPoints.Select(point => $"{N(point.X)} {N(point.Y)}"))} " +
                     $"L {string.Join(" L ", basePoints.AsEnumerable().Reverse().Select(point => $"{N(point.X)} {N(point.Y)}"))} Z";
                 builder.AppendLine($"<path class='plot-stacked-area' data-series='{Esc(layer.SeriesKey ?? layer.Id)}' d='{areaPath}' fill='{Esc(color)}' fill-opacity='.28'/>");
-                builder.AppendLine($"<path d='{PathData(topPoints, false)}' fill='none' stroke='{Esc(color)}' stroke-width='2.5' stroke-linejoin='round' stroke-linecap='round'/>");
+                builder.AppendLine($"<path d='{PathData(topPoints, false)}' fill='none' stroke='{Esc(color)}' stroke-width='{LineWidth(layer, "2.5")}' stroke-linejoin='round' stroke-linecap='round'/>");
             }
             topPoints.Clear();
             basePoints.Clear();
@@ -1168,7 +1175,9 @@ internal sealed class PlotPlanSvgRenderer
             topPoints.Add((x, topY));
             basePoints.Add((x, MapY(start, scale, area.Height) + datum.DisplayOffsetY));
             if (IsEnabledByDefault(plan.Style, "SYMBOLS"))
-                builder.AppendLine($"<circle cx='{N(x)}' cy='{N(topY)}' r='3' fill='{Esc(color)}' data-row-index='{datum.RowIndex}'><title>{Esc(FormatDataLabel(value.Value, DataFormat(plan)))}</title></circle>");
+                RenderPointSymbol(builder, PointShape(plan, layer, datum), x, topY, 3m,
+                    color, "plot-line-symbol", datum.RowIndex, FormatDataLabel(value.Value, DataFormat(plan)),
+                    PointStrokeAttributes(layer));
             if (showLabels && (!seriesLabelsEnabled || index != seriesLabelTargetIndex))
             {
                 RenderDataLabelBackground(builder, plan, datum.RowIndex, x, topY - 6m, "middle",
@@ -1314,7 +1323,9 @@ internal sealed class PlotPlanSvgRenderer
                 }
                 builder.AppendLine("</g>");
             }
-            builder.AppendLine($"<circle class='{pointClass}' cx='{N(x)}' cy='{N(y)}' r='{N(Math.Clamp(radius, 1m, 30m))}' fill='{Esc(datumColor)}'{OpacityAttribute(opacity)} data-row-index='{datum.RowIndex}'>{(string.IsNullOrWhiteSpace(label) ? string.Empty : $"<title>{Esc(label)}</title>")}</circle>");
+            RenderPointSymbol(builder, PointShape(plan, layer, datum), x, y, Math.Clamp(radius, 1m, 30m),
+                datumColor, pointClass, datum.RowIndex, label,
+                OpacityAttribute(opacity) + PointStrokeAttributes(layer));
             if (showLabels)
                 smartLabels.Add(new SmartLabel(datum.RowIndex, x, y,
                     label ?? FormatDataLabel(yValue.Value, labelFormat),
@@ -1323,6 +1334,80 @@ internal sealed class PlotPlanSvgRenderer
                     labelFontSize));
         }
         builder.AppendLine("</g>");
+    }
+
+    private static string? PointShape(PlotPlan plan, ResolvedMarkLayer layer, ResolvedDatum datum) =>
+        EncodingText(datum, ConditionalEncodingChannel.Shape)
+        ?? DisplayChannel(datum, FieldChannel.Shape)
+        ?? LayerStyle(layer, "symbolShape")
+        ?? Style(plan, "SYMBOL_SHAPE");
+
+    private static string PointStrokeAttributes(ResolvedMarkLayer layer)
+    {
+        var color = LayerStyle(layer, "SYMBOL_STROKE_COLOR");
+        if (!PointMarkerStroke.IsPortableColor(color)) return string.Empty;
+
+        var width = PointMarkerStroke.TryNormalizeWidth(LayerStyle(layer, "SYMBOL_STROKE_WIDTH"), out var normalized)
+            ? normalized
+            : "1";
+        return $" stroke='{Esc(color!)}' stroke-width='{width}'";
+    }
+
+    private static string LineWidth(ResolvedMarkLayer layer, string fallback) =>
+        LineSeriesWidth.TryNormalize(LayerStyle(layer, "LINE_WIDTH"), out var width) ? width : fallback;
+
+    private static void RenderPointSymbol(
+        StringBuilder builder,
+        string? shape,
+        decimal x,
+        decimal y,
+        decimal radius,
+        string color,
+        string cssClass,
+        int rowIndex,
+        string? title,
+        string extraAttributes = "")
+    {
+        var normalized = PointShapeVocabulary.NormalizeOrDefault(shape);
+        var shapeAttribute = shape is null ? string.Empty : $" data-symbol-shape='{normalized}'";
+        var common = $"class='{cssClass}'{shapeAttribute} fill='{Esc(color)}'{extraAttributes} data-row-index='{rowIndex}'";
+        var content = string.IsNullOrWhiteSpace(title) ? string.Empty : $"<title>{Esc(title)}</title>";
+        switch (normalized)
+        {
+            case "SQUARE":
+                builder.AppendLine($"<rect {common} x='{N(x - radius)}' y='{N(y - radius)}' width='{N(radius * 2m)}' height='{N(radius * 2m)}'>{content}</rect>");
+                break;
+            case "TRIANGLE":
+                builder.AppendLine($"<polygon {common} points='{N(x)},{N(y - radius)} {N(x + radius)},{N(y + radius)} {N(x - radius)},{N(y + radius)}'>{content}</polygon>");
+                break;
+            case "DIAMOND":
+                builder.AppendLine($"<polygon {common} points='{N(x)},{N(y - radius)} {N(x + radius)},{N(y)} {N(x)},{N(y + radius)} {N(x - radius)},{N(y)}'>{content}</polygon>");
+                break;
+            case "CROSS":
+                var arm = radius / 3m;
+                builder.AppendLine($"<polygon {common} points='{N(x - radius)},{N(y - arm)} {N(x - arm)},{N(y - arm)} {N(x - arm)},{N(y - radius)} {N(x + arm)},{N(y - radius)} {N(x + arm)},{N(y - arm)} {N(x + radius)},{N(y - arm)} {N(x + radius)},{N(y + arm)} {N(x + arm)},{N(y + arm)} {N(x + arm)},{N(y + radius)} {N(x - arm)},{N(y + radius)} {N(x - arm)},{N(y + arm)} {N(x - radius)},{N(y + arm)}'>{content}</polygon>");
+                break;
+            case "STAR":
+                builder.AppendLine($"<polygon {common} points='{StarPoints(x, y, radius)}'>{content}</polygon>");
+                break;
+            default:
+                builder.AppendLine($"<circle {common} cx='{N(x)}' cy='{N(y)}' r='{N(radius)}'>{content}</circle>");
+                break;
+        }
+    }
+
+    private static string StarPoints(decimal x, decimal y, decimal radius)
+    {
+        var points = new string[10];
+        for (var index = 0; index < points.Length; index++)
+        {
+            var angle = -Math.PI / 2d + index * Math.PI / 5d;
+            var pointRadius = index % 2 == 0 ? radius : radius * .45m;
+            var pointX = x + pointRadius * (decimal)Math.Cos(angle);
+            var pointY = y + pointRadius * (decimal)Math.Sin(angle);
+            points[index] = $"{N(pointX)},{N(pointY)}";
+        }
+        return string.Join(" ", points);
     }
 
     private static void RenderFunnel(StringBuilder builder, PlotPlan plan)
@@ -1673,7 +1758,7 @@ internal sealed class PlotPlanSvgRenderer
                 return Point(cx, cy, outer * ratio, -Math.PI / 2d + 2d * Math.PI * index / dimensions.Length);
             }).ToArray();
             var color = plan.Palette.FirstOrDefault(item => item.SeriesKey == layer.SeriesKey)?.Color ?? "#5470c6";
-            builder.AppendLine($"<polygon points='{string.Join(" ", points)}' fill='{Esc(color)}' fill-opacity='.18' stroke='{Esc(color)}' stroke-width='2' data-row-index='{layer.Data.FirstOrDefault()?.RowIndex ?? 0}'><title>{Esc(layer.SeriesKey ?? layer.Id)}</title></polygon>");
+            builder.AppendLine($"<polygon points='{string.Join(" ", points)}' fill='{Esc(color)}' fill-opacity='.18' stroke='{Esc(color)}' stroke-width='{LineWidth(layer, "2")}' data-row-index='{layer.Data.FirstOrDefault()?.RowIndex ?? 0}'><title>{Esc(layer.SeriesKey ?? layer.Id)}</title></polygon>");
         }
         RenderLegend(builder, plan);
     }
@@ -2219,7 +2304,7 @@ internal sealed class PlotPlanSvgRenderer
                     .Where(point => point.HasValue).Select(point => point!.Value).ToArray();
                 if (points.Length < 2) continue;
                 var path = string.Join(" ", points.Select((point, index) => $"{(index == 0 ? "M" : "L")} {N(point.X)} {N(point.Y)}"));
-                builder.AppendLine($"<path class='plot-geographic-route' data-row-index='{route.First().RowIndex}' d='{path}' fill='none' stroke='{Esc(SafePaint(LayerStyle(layer, "stroke") ?? LayerStyle(layer, "color"), "#2563eb"))}' stroke-width='1.5'><title>{Esc(route.Key)}</title></path>");
+                builder.AppendLine($"<path class='plot-geographic-route' data-row-index='{route.First().RowIndex}' d='{path}' fill='none' stroke='{Esc(SafePaint(LayerStyle(layer, "stroke") ?? LayerStyle(layer, "color"), "#2563eb"))}' stroke-width='{LineWidth(layer, "1.5")}'><title>{Esc(route.Key)}</title></path>");
             }
         }
 
@@ -2233,7 +2318,9 @@ internal sealed class PlotPlanSvgRenderer
                 if (!point.HasValue) continue;
                 var text = DisplayChannel(datum, FieldChannel.Text) ?? DisplayChannel(datum, FieldChannel.Region) ?? $"Row {datum.RowIndex + 1}";
                 if (layer.Mark == MarkKind.Point)
-                    builder.AppendLine($"<circle class='plot-geographic-point' data-row-index='{datum.RowIndex}' cx='{N(point.Value.X)}' cy='{N(point.Value.Y)}' r='4' fill='{Esc(SafePaint(LayerStyle(layer, "fill") ?? LayerStyle(layer, "color"), "#dc2626"))}'><title>{Esc(text)}</title></circle>");
+                    RenderPointSymbol(builder, PointShape(plan, layer, datum), point.Value.X, point.Value.Y, 4m,
+                        SafePaint(LayerStyle(layer, "fill") ?? LayerStyle(layer, "color"), "#dc2626"),
+                        "plot-geographic-point", datum.RowIndex, text, PointStrokeAttributes(layer));
                 else labels.Add(new SmartLabel(datum.RowIndex, point.Value.X, point.Value.Y, text,
                     SafePaint(LayerStyle(layer, "color"), "#1f2937"), 200 + layer.ZIndex));
             }
