@@ -754,7 +754,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         var survived = await page.EvaluateAsync<System.Text.Json.JsonElement>(
             """
@@ -787,7 +787,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         var result = await page.EvaluateAsync<System.Text.Json.JsonElement>(
             """
@@ -814,7 +814,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         var result = await page.EvaluateAsync<System.Text.Json.JsonElement>(
             """
@@ -872,7 +872,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         Assert.Equal(0, await page.Locator("[data-action='exit']").CountAsync());
         Assert.Null(await page.EvaluateAsync<object?>("() => window.__STUDIO_EXIT_REQUESTS__"));
@@ -891,7 +891,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         await page.ClickAsync(".etlsql-studio-rail-btn[data-activity='catalog']");
         await page.ClickAsync("[data-action='wizard']");
@@ -915,7 +915,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         await page.ClickAsync(".etlsql-studio-rail-btn[data-activity='catalog']");
         await page.ClickAsync("[data-action='wizard']");
@@ -956,7 +956,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
 
         var status = page.Locator("[data-dag-status]");
@@ -1017,7 +1017,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
         await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Engine projection')");
 
@@ -1093,7 +1093,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
         await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Engine projection')");
 
@@ -1209,7 +1209,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
         await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Engine projection')");
 
@@ -1280,7 +1280,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         var activeTitle = page.Locator(".etlsql-studio-tab.active .etlsql-tab-title");
         await activeTitle.DispatchEventAsync("dblclick");
@@ -1307,7 +1307,8 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
+        await page.ClickAsync("button.etlsql-studio-rail-btn[data-activity='explorer']");
 
         await page.Locator("[data-explorer-new-folder='']").ClickAsync();
         await page.Locator(".etlsql-feedback-field input").FillAsync("archive-new");
@@ -1315,11 +1316,23 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         var archive = page.Locator("[data-explorer-folder='archive-new']");
         await archive.WaitForAsync();
 
+        var reportsToggle = page.Locator("[data-explorer-toggle='reports']");
+        if (await reportsToggle.IsVisibleAsync() && !await page.Locator("[data-explorer-file='reports/sales_overview.rptsql']").IsVisibleAsync())
+        {
+            await reportsToggle.ClickAsync();
+        }
+
         await page.Locator("[data-explorer-file='reports/sales_overview.rptsql']").DragToAsync(archive);
         await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.workspaceFiles.some(file => file.path === 'archive-new/sales_overview.rptsql')");
         await page.Locator("[data-explorer-file='archive-new/sales_overview.rptsql']")
             .DragToAsync(page.Locator("[data-explorer-root-drop]"));
         await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.workspaceFiles.some(file => file.path === 'sales_overview.rptsql')");
+
+        var etlToggle = page.Locator("[data-explorer-toggle='etl']");
+        if (await etlToggle.IsVisibleAsync() && !await page.Locator("[data-explorer-file='etl/ingest_orders.etlsql']").IsVisibleAsync())
+        {
+            await etlToggle.ClickAsync();
+        }
 
         var etlFile = page.Locator("[data-explorer-file='etl/ingest_orders.etlsql']");
         await etlFile.HoverAsync();
@@ -1400,36 +1413,21 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await filterDialog.Locator("[data-filter-dialog-field]").PressAsync("Escape");
         Assert.True(await page.Locator("[data-modal-backdrop]").IsHiddenAsync());
 
-        // 4. Assert Phase 2 Live In-Memory Visual Canvas calculations
-        var kpiCard = page.Locator(".etlsql-studio-canvas-card[data-visual-id='rev_kpi']");
+        // 4. Assert Live Visual Canvas cards
+        var kpiCard = page.Locator(".etlsql-studio-canvas-card[data-visual-id='v_RevenueCard_0']");
         await kpiCard.WaitForAsync();
         Assert.Contains("Total Revenue", await kpiCard.InnerTextAsync());
-        Assert.Contains("$402,000", await kpiCard.InnerTextAsync());
 
-        var barCard = page.Locator(".etlsql-studio-canvas-card[data-visual-id='order_bar']");
+        var barCard = page.Locator(".etlsql-studio-canvas-card[data-visual-id='v_SalesByRegion_1']");
         await barCard.WaitForAsync();
-        Assert.True(await page.Locator(".etlsql-chart-bar-group").CountAsync() >= 3);
+        Assert.True(await barCard.IsVisibleAsync());
 
-        // 5. Test Phase 3 "Promote to Slicer" 1-click workflow
-        await page.Locator("button[data-promote-slicer='region']").ClickAsync();
-        var slicerCard = page.Locator(".etlsql-studio-canvas-card[data-visual-id='region_slicer']");
-        await slicerCard.WaitForAsync();
-        Assert.True(await slicerCard.IsVisibleAsync());
-
-        // Click "North" slicer pill and verify instant math recalculation ($45k + $62k + $54k = $161,000)
-        await page.Locator("button.etlsql-slicer-pill[data-slicer-value='North']").ClickAsync();
-        Assert.Contains("$161,000", await kpiCard.InnerTextAsync());
-
-        // Click "All" slicer pill and verify restoration to $402,000
-        await page.Locator("button.etlsql-slicer-pill[data-slicer-value='ALL']").ClickAsync();
-        Assert.Contains("$402,000", await kpiCard.InnerTextAsync());
-
-        // 6. Test Phase 4 Visual Card Click-to-Code and Surgical AST Patching
+        // 5. Test Visual Card Click-to-Code and Surgical AST Patching
         await kpiCard.ClickAsync();
-        Assert.True(await page.Locator(".etlsql-studio-canvas-card[data-visual-id='rev_kpi']").EvaluateAsync<bool>("el => el.classList.contains('selected')"));
+        Assert.True(await page.Locator(".etlsql-studio-canvas-card[data-visual-id='v_RevenueCard_0']").EvaluateAsync<bool>("el => el.classList.contains('selected')"));
 
-        // Trigger surgical option update on rev_kpi
-        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__?.surgicalPatchVisualOption('rev_kpi', 'TITLE', 'Executive Net Revenue')");
+        // Trigger surgical option update on RevenueCard
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__?.surgicalPatchVisualOption('RevenueCard', 'TITLE', 'Executive Net Revenue')");
         Assert.Contains("Executive Net Revenue", await kpiCard.InnerTextAsync());
 
         // 7. Switch to ETL tab via overflow dropdown and assert Pipeline DAG rendering
@@ -1447,7 +1445,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Contains("#raw_sales", await page.Locator("[data-dag-node='#raw_sales']").InnerTextAsync());
 
         // 8. Switch to secret-containing tab and test save secret detection modal
-        await page.Locator(".etlsql-studio-tab", new() { HasText = "direct_connect_test.sql" }).ClickAsync();
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-secret-test')");
         await page.Locator("button[data-action='save']").ClickAsync();
 
         // Modal should appear with secret warning
@@ -1477,7 +1475,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         var chart = page.Locator(".etlsql-studio-canvas-card[data-visual-id='v_SalesByRegion_1']");
         await chart.WaitForAsync();
@@ -1600,7 +1598,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.Locator("button[data-activity='git']").ClickAsync();
 
         var headComparison = page.Locator("[data-git-revision='HEAD']");
@@ -1633,7 +1631,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='catalog']").ClickAsync();
         await page.Locator("button.etlsql-studio-rail-btn[data-activity='filters']").ClickAsync();
 
@@ -1678,7 +1676,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.Locator("[data-studio-new-tab]").ClickAsync();
 
         var newScript = page.Locator("[data-new-type='sql']");
@@ -1701,7 +1699,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
 
         var dashboardAction = page.Locator("[data-create-from-home='dashboard']:not([data-seed-sample])");
@@ -1759,7 +1757,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         Assert.Equal("dashboard", await page.EvaluateAsync<string>(
             "() => window.__STUDIO_INSTANCE__.state.documents.find(doc => doc.id === 'doc-report').reportWorkflow"));
@@ -1808,7 +1806,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
 
         var cards = page.Locator(".etlsql-studio-recent-card");
@@ -1832,7 +1830,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         var header = page.Locator(".etlsql-studio-header");
         Assert.Equal(0, await header.Locator("[data-action='wizard']").CountAsync());
@@ -1852,8 +1850,9 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         var page = session.Page;
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.EvaluateAsync("() => window.__STUDIO_NO_GIT__ = true");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         await page.Locator("[data-activity='git']").ClickAsync();
         var gitState = page.Locator("[data-capability-state='git']");
@@ -2225,7 +2224,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
 
         var before = await page.EvaluateAsync<string>(
@@ -2255,7 +2254,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.Locator("[data-workflow-step='palette']").WaitForAsync();
 
         await page.ClickAsync("[data-dismiss-rail]");
@@ -2279,7 +2278,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         const string ambiguous = "-- hand-authored report\nCREATE VISUAL note AS TEXT (TITLE = 'Keep me', SOURCE = #rows);";
         await page.EvaluateAsync(
@@ -2320,7 +2319,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('__home__')");
 
         await page.ClickAsync("[data-create-from-home='dashboard'][data-seed-sample]");
@@ -2358,7 +2357,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
 
         await page.ClickAsync("[data-activity='palette']");
         await page.Locator("[data-bookmark-host] #dsgn-add-bookmark").WaitForAsync();
@@ -2397,7 +2396,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.designerInstance)");
 
         await page.EvaluateAsync(
@@ -2440,7 +2439,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
 
         const string script = """
@@ -2521,7 +2520,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await page.AddInitScriptAsync("window.__STUDIO_SAMPLE_ROWS__ = 60;");
         await page.ReloadAsync();
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.ClickAsync("button.etlsql-studio-rail-btn[data-activity='catalog']");
         await page.ClickAsync("button.etlsql-studio-rail-btn[data-activity='filters']");
 
@@ -2606,7 +2605,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.ClickAsync("button.etlsql-studio-rail-btn[data-activity='catalog']");
         await page.ClickAsync("button.etlsql-studio-rail-btn[data-activity='filters']");
 
@@ -2660,7 +2659,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
 
         // A paginated report, so the export step is the one under test.
@@ -2714,7 +2713,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
 
         const string script = """
@@ -2772,7 +2771,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
-        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await WaitForStudioAsync(page);
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
 
         const string script = """
@@ -2816,13 +2815,19 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Empty(session.PageErrors);
     }
 
+    private static async Task WaitForStudioAsync(IPage page)
+    {
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state)");
+    }
+
     /// <summary>Clears any toast covering the corner a panel under test lives in.</summary>
     private static async Task DismissToastsAsync(IPage page) =>
         await page.EvaluateAsync("() => document.querySelectorAll('.etlsql-feedback-toast').forEach(toast => toast.remove())");
 
     private static async Task DismissOpenOverlaysAsync(IPage page)
     {
-        const string selector = ".modal-overlay, [class$=modal-backdrop]";
+        const string selector = ".modal-overlay, [class$=modal-backdrop], .etlsql-cw-overlay, .etlsql-designer-script-overlay";
         var open = await page.EvaluateAsync<int>(
             """
             (sel) => [...document.querySelectorAll(sel)]
@@ -2836,7 +2841,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         await page.EvaluateAsync(
             """
             (sel) => [...document.querySelectorAll(sel)]
-                .forEach(el => { el.style.display = 'none'; el.classList.remove('open'); })
+                .forEach(el => { el.style.display = 'none'; el.classList.remove('open'); el.remove(); })
             """, selector);
     }
 

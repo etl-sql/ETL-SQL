@@ -4748,7 +4748,12 @@ export function createDesigner(container, opts = {}) {
         // Dependency-free preview fallback; production manifests use the native SVG surface. It reads
         // the visual's MAPPINGS, so assigning a column to a role changes what the card draws. The
         // previous fallback chose columns by position and ignored the mapping entirely.
-        renderVisualSample(bodyEl, visual, { columns: snapshotPackage.columns || [], rows });
+        const visualColumns = snapshotPackage.columnsByVisual?.[byVisual]
+            || snapshotPackage.columnsByVisual?.[visual.name]
+            || snapshotPackage.columnsByVisual?.[dsName]
+            || snapshotPackage.columns
+            || [];
+        renderVisualSample(bodyEl, visual, { columns: Array.isArray(visualColumns) ? visualColumns : [], rows });
     }
 
     function renderCanvas() {
@@ -6427,57 +6432,61 @@ export function createDesigner(container, opts = {}) {
                             </label>
                         </div>
                         ${isCustomChart ? `
-                        <div class="etlsql-dsgn-chart-quick-controls" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0 6px;">
-                            <label class="etlsql-dsgn-label">Coordinate
-                                <select id="pp-chart-coord" class="form-control">
-                                    <option value="CARTESIAN"${chartCode.includes('CARTESIAN') && !chartCode.includes('TRANSPOSED') ? ' selected' : ''}>CARTESIAN</option>
-                                    <option value="TRANSPOSED_CARTESIAN"${chartCode.includes('TRANSPOSED_CARTESIAN') ? ' selected' : ''}>TRANSPOSED</option>
-                                    <option value="POLAR"${chartCode.includes('POLAR') ? ' selected' : ''}>POLAR</option>
-                                    <option value="GEOGRAPHIC"${chartCode.includes('GEOGRAPHIC') ? ' selected' : ''}>GEOGRAPHIC</option>
+                        <div class="etlsql-dsgn-props-section etlsql-dsgn-chart-editor-section">
+                            <div class="etlsql-dsgn-chart-quick-controls" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0 6px;">
+                                <label class="etlsql-dsgn-label">Coordinate
+                                    <select id="pp-chart-coord" class="form-control">
+                                        <option value="CARTESIAN"${chartCode.includes('CARTESIAN') && !chartCode.includes('TRANSPOSED') ? ' selected' : ''}>CARTESIAN</option>
+                                        <option value="TRANSPOSED_CARTESIAN"${chartCode.includes('TRANSPOSED_CARTESIAN') ? ' selected' : ''}>TRANSPOSED</option>
+                                        <option value="POLAR"${chartCode.includes('POLAR') ? ' selected' : ''}>POLAR</option>
+                                        <option value="GEOGRAPHIC"${chartCode.includes('GEOGRAPHIC') ? ' selected' : ''}>GEOGRAPHIC</option>
+                                    </select>
+                                </label>
+                                <label class="etlsql-dsgn-label">Primary Mark
+                                    <select id="pp-chart-primary-mark" class="form-control">
+                                        <option value="RECT"${chartCode.includes('RECT') ? ' selected' : ''}>RECT (Bar)</option>
+                                        <option value="LINE"${chartCode.includes('LINE') ? ' selected' : ''}>LINE (Line)</option>
+                                        <option value="AREA"${chartCode.includes('AREA') ? ' selected' : ''}>AREA (Area)</option>
+                                        <option value="POINT"${chartCode.includes('POINT') ? ' selected' : ''}>POINT (Scatter)</option>
+                                        <option value="RULE"${chartCode.includes('RULE') ? ' selected' : ''}>RULE (Span)</option>
+                                        <option value="ARC"${chartCode.includes('ARC') ? ' selected' : ''}>ARC (Radial)</option>
+                                        <option value="TEXT"${chartCode.includes('TEXT') ? ' selected' : ''}>TEXT (Label)</option>
+                                        <option value="TICK"${chartCode.includes('TICK') ? ' selected' : ''}>TICK (Target)</option>
+                                    </select>
+                                </label>
+                                <label class="etlsql-dsgn-label" style="grid-column:1 / -1;">Composition recipe
+                                    <select id="pp-chart-recipe" class="form-control">
+                                        <option value="">Keep current chart</option>
+                                        <option value="boxplot-mean"${/\bQ1\s*=/.test(chartCode) ? ' selected' : ''}>Box plot + mean tick</option>
+                                        <option value="candlestick-volume"${/\bOPEN\s*=/.test(chartCode) ? ' selected' : ''}>Candlestick + volume</option>
+                                        <option value="layered-map"${/TYPE\s*=\s*GEOGRAPHIC/.test(chartCode) ? ' selected' : ''}>Layered map</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <label class="etlsql-dsgn-label">CHART Clauses (Layers, Scales, Encodings, Conditions)
+                                <textarea id="pp-chart-code" class="form-control etlsql-code-editor" rows="12" spellcheck="false" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(chartCode)}</textarea>
+                            </label>
+                        </div>` : (isHtmlVisual ? `
+                        <div class="etlsql-dsgn-props-section etlsql-dsgn-html-editor-section">
+                            <label class="etlsql-dsgn-label" style="margin-top:6px;">Mode
+                                <select id="pp-html-mode" class="form-control">
+                                    <option value="SINGLE"${htmlMode === 'SINGLE' ? ' selected' : ''}>SINGLE (First row or static)</option>
+                                    <option value="REPEATER"${htmlMode === 'REPEATER' ? ' selected' : ''}>REPEATER (Repeat per row)</option>
                                 </select>
                             </label>
-                            <label class="etlsql-dsgn-label">Primary Mark
-                                <select id="pp-chart-primary-mark" class="form-control">
-                                    <option value="RECT"${chartCode.includes('RECT') ? ' selected' : ''}>RECT (Bar)</option>
-                                    <option value="LINE"${chartCode.includes('LINE') ? ' selected' : ''}>LINE (Line)</option>
-                                    <option value="AREA"${chartCode.includes('AREA') ? ' selected' : ''}>AREA (Area)</option>
-                                    <option value="POINT"${chartCode.includes('POINT') ? ' selected' : ''}>POINT (Scatter)</option>
-                                    <option value="RULE"${chartCode.includes('RULE') ? ' selected' : ''}>RULE (Span)</option>
-                                    <option value="ARC"${chartCode.includes('ARC') ? ' selected' : ''}>ARC (Radial)</option>
-                                    <option value="TEXT"${chartCode.includes('TEXT') ? ' selected' : ''}>TEXT (Label)</option>
-                                    <option value="TICK"${chartCode.includes('TICK') ? ' selected' : ''}>TICK (Target)</option>
-                                </select>
+                            <label class="etlsql-dsgn-label" style="margin-top:6px;">HTML Template
+                                <span style="font-size:10px;color:var(--portal-muted,#7a8798);display:block;margin-bottom:2px;">
+                                    Substitutions: <code>{{Field}}</code>, <code>{{@Param}}</code>, <code>{{#IF ...}}</code>, <code>{{SPARKLINE(...)}}</code>, <code>{{PROGRESS_BAR(...)}}</code>
+                                </span>
+                                <textarea id="pp-html-template" class="form-control etlsql-code-editor" rows="8" spellcheck="false" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(htmlTemplate)}</textarea>
                             </label>
-                            <label class="etlsql-dsgn-label" style="grid-column:1 / -1;">Composition recipe
-                                <select id="pp-chart-recipe" class="form-control">
-                                    <option value="">Keep current chart</option>
-                                    <option value="boxplot-mean"${/\bQ1\s*=/.test(chartCode) ? ' selected' : ''}>Box plot + mean tick</option>
-                                    <option value="candlestick-volume"${/\bOPEN\s*=/.test(chartCode) ? ' selected' : ''}>Candlestick + volume</option>
-                                    <option value="layered-map"${/TYPE\s*=\s*GEOGRAPHIC/.test(chartCode) ? ' selected' : ''}>Layered map</option>
-                                </select>
+                            <label class="etlsql-dsgn-label" style="margin-top:6px;">Scoped CSS (STYLE)
+                                <textarea id="pp-html-style" class="form-control etlsql-code-editor" rows="4" spellcheck="false" placeholder=".custom-card { padding: 8px; }" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(htmlStyle)}</textarea>
                             </label>
-                        </div>
-                        <label class="etlsql-dsgn-label">CHART Clauses (Layers, Scales, Encodings, Conditions)
-                            <textarea id="pp-chart-code" class="form-control etlsql-code-editor" rows="12" spellcheck="false" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(chartCode)}</textarea>
-                        </label>` : (isHtmlVisual ? `
-                        <label class="etlsql-dsgn-label" style="margin-top:6px;">Mode
-                            <select id="pp-html-mode" class="form-control">
-                                <option value="SINGLE"${htmlMode === 'SINGLE' ? ' selected' : ''}>SINGLE (First row or static)</option>
-                                <option value="REPEATER"${htmlMode === 'REPEATER' ? ' selected' : ''}>REPEATER (Repeat per row)</option>
-                            </select>
-                        </label>
-                        <label class="etlsql-dsgn-label" style="margin-top:6px;">HTML Template
-                            <span style="font-size:10px;color:var(--portal-muted,#7a8798);display:block;margin-bottom:2px;">
-                                Substitutions: <code>{{Field}}</code>, <code>{{@Param}}</code>, <code>{{#IF ...}}</code>, <code>{{SPARKLINE(...)}}</code>, <code>{{PROGRESS_BAR(...)}}</code>
-                            </span>
-                            <textarea id="pp-html-template" class="form-control etlsql-code-editor" rows="8" spellcheck="false" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(htmlTemplate)}</textarea>
-                        </label>
-                        <label class="etlsql-dsgn-label" style="margin-top:6px;">Scoped CSS (STYLE)
-                            <textarea id="pp-html-style" class="form-control etlsql-code-editor" rows="4" spellcheck="false" placeholder=".custom-card { padding: 8px; }" style="font-family:monospace;font-size:11px;line-height:1.4;tab-size:2;white-space:pre;resize:vertical;">${esc(htmlStyle)}</textarea>
-                        </label>
-                        <label class="etlsql-dsgn-label" style="margin-top:6px;">Fallback Summary (Terminal/Print)
-                            <input type="text" id="pp-html-fallback" class="form-control" placeholder="e.g., Status: {{Title}} - {{Description}}" value="${esc(htmlFallback)}">
-                        </label>` : `
+                            <label class="etlsql-dsgn-label" style="margin-top:6px;">Fallback Summary (Terminal/Print)
+                                <input type="text" id="pp-html-fallback" class="form-control" placeholder="e.g., Status: {{Title}} - {{Description}}" value="${esc(htmlFallback)}">
+                            </label>
+                        </div>` : `
                         <div style="margin-top:8px;">
                             ${ROLES.map(r => {
                                 const isReq = reqList.includes(r);
