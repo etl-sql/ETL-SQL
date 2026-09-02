@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.19.0 — Runtime: PIE and DONUT data-label leader lines default to OFF
+- **What changed**: Arc data-label leader lines on `PIE` and `DONUT` visuals now default to `OFF` instead of rendering unconditionally.
+- **Who is affected**: Existing `PIE` and `DONUT` charts that relied on default leader lines to connect outer arc slice labels to slices.
+- **Migration**: To preserve or re-enable leader lines, specify `LEADER_LINE = ON` inside the visual's `DATA_LABELS` options: `OPTIONS (DATA_LABELS = ON WITH (LEADER_LINE = ON))`.
+- **Diagnostic**: N/A — visual rendering option.
+- **Earliest removal**: Immediate.
+
 ### v0.19.0 — Runtime: PlotPlan v3 removes the redundant per-datum tooltip string
 - **What changed**: Serialized `PlotPlan` data no longer repeats a joined `tooltip` string on every datum. Tooltip and text content remain available through the datum's typed `channels` collection, which is the source used by production renderers.
 - **Who is affected**: Diagnostic or server-side integrations that deserialize PlotPlan v2 JSON or read `layers[].data[].tooltip`.

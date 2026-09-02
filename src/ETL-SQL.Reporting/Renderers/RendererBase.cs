@@ -70,6 +70,28 @@ namespace ETL_SQL.Reporting.Renderers
                 if (v.Options.TryGetValue("DATA_LABELS:FONT_FAMILY", out var family)) labelDict["fontFamily"] = family;
                 if (v.Options.TryGetValue("DATA_LABELS:FONT_WEIGHT", out var weight)) labelDict["fontWeight"] = weight;
                 if (v.Options.TryGetValue("DATA_LABELS:FORMAT", out var fmt)) labelDict["formatter"] = "{c}";
+                var hasBg = false;
+                if (v.Options.TryGetValue("DATA_LABELS:LABEL_BACKGROUND", out var background) && IsValidHexColor(background))
+                {
+                    labelDict["backgroundColor"] = background;
+                    hasBg = true;
+                }
+                var hasBorder = false;
+                if (v.Options.TryGetValue("DATA_LABELS:LABEL_BORDER", out var border))
+                {
+                    var parsedBorder = ParsePortableLabelBorder(border);
+                    if (parsedBorder is not null)
+                    {
+                        labelDict["borderWidth"] = parsedBorder.Value.Width;
+                        labelDict["borderColor"] = parsedBorder.Value.Color;
+                        labelDict["borderType"] = parsedBorder.Value.Style;
+                        hasBorder = true;
+                    }
+                }
+                if (hasBg || hasBorder)
+                {
+                    labelDict["padding"] = 3;
+                }
                 labelObj = labelDict;
             }
 
@@ -82,6 +104,34 @@ namespace ETL_SQL.Reporting.Renderers
                 if (labelObj != null) dict["label"] = labelObj;
                 return (object)dict;
             }).ToList();
+        }
+
+        private static bool IsValidHexColor(string? color)
+        {
+            if (string.IsNullOrWhiteSpace(color)) return false;
+            if (color[0] != '#') return false;
+            if (color.Length != 7 && color.Length != 4) return false;
+            for (var i = 1; i < color.Length; i++)
+            {
+                if (!Uri.IsHexDigit(color[i])) return false;
+            }
+            return true;
+        }
+
+        private static (double Width, string Style, string Color)? ParsePortableLabelBorder(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var parts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length != 3 || !parts[0].EndsWith("px", StringComparison.OrdinalIgnoreCase)
+                || !double.TryParse(parts[0][..^2], System.Globalization.NumberStyles.Number,
+                    System.Globalization.CultureInfo.InvariantCulture, out var width)
+                || width is <= 0 or > 12)
+                return null;
+            var style = parts[1].ToLowerInvariant();
+            if (style is not ("solid" or "dashed" or "dotted")) return null;
+            var color = parts[2];
+            if (!IsValidHexColor(color)) return null;
+            return (width, style, color);
         }
 
         protected static string? GetColor(VisualManifest v, string key) =>

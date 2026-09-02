@@ -45,6 +45,53 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             }
         }
 
+        var seriesLabelsOption = statement.Options.FirstOrDefault(o => o.Key.Equals("SERIES_LABELS", StringComparison.OrdinalIgnoreCase))?.Value;
+        var hasSeriesLabelsPrefix = statement.Options.Any(o => o.Key.StartsWith("SERIES_LABELS:", StringComparison.OrdinalIgnoreCase));
+        if (seriesLabelsOption is not null || hasSeriesLabelsPrefix)
+        {
+            if (seriesLabelsOption is null)
+                throw new InvalidOperationException("SERIES_LABELS nested options require the SERIES_LABELS toggle.");
+
+            if (statement.VisualType is not (VisualType.Line or VisualType.Combo))
+                throw new InvalidOperationException($"SERIES_LABELS is supported only on LINE and COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+
+            if (seriesLabelsOption is not null && seriesLabelsOption.ToUpperInvariant() is not ("ON" or "OFF"))
+                throw new InvalidOperationException($"Invalid SERIES_LABELS value '{seriesLabelsOption}'. Valid values are ON or OFF.");
+
+            var positionOption = statement.Options.FirstOrDefault(o => o.Key.Equals("SERIES_LABELS:POSITION", StringComparison.OrdinalIgnoreCase))?.Value;
+            if (positionOption is not null)
+            {
+                var upperPos = positionOption.ToUpperInvariant();
+                if (upperPos is not ("START" or "END"))
+                    throw new InvalidOperationException($"Invalid SERIES_LABELS POSITION '{positionOption}'. Valid values are START or END.");
+            }
+        }
+
+        var leaderLineOption = statement.Options.FirstOrDefault(o => o.Key.Equals("DATA_LABELS:LEADER_LINE", StringComparison.OrdinalIgnoreCase))?.Value;
+        var hasLeaderLinePrefix = statement.Options.Any(o => o.Key.StartsWith("DATA_LABELS:LEADER_LINE:", StringComparison.OrdinalIgnoreCase));
+        if (leaderLineOption is not null || hasLeaderLinePrefix)
+        {
+            if (leaderLineOption is null)
+                throw new InvalidOperationException("LEADER_LINE nested options require the LEADER_LINE toggle.");
+
+            if (!statement.Options.Any(o => o.Key.Equals("DATA_LABELS", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("LEADER_LINE requires the DATA_LABELS toggle.");
+
+            if (statement.VisualType is not (VisualType.Pie or VisualType.Donut or VisualType.Scatter))
+                throw new InvalidOperationException($"LEADER_LINE is supported only on PIE, DONUT, and SCATTER visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+
+            if (leaderLineOption is not null && leaderLineOption.ToUpperInvariant() is not ("ON" or "OFF"))
+                throw new InvalidOperationException($"Invalid LEADER_LINE value '{leaderLineOption}'. Valid values are ON or OFF.");
+
+            var styleOption = statement.Options.FirstOrDefault(o => o.Key.Equals("DATA_LABELS:LEADER_LINE:STYLE", StringComparison.OrdinalIgnoreCase))?.Value;
+            if (styleOption is not null)
+            {
+                var upperStyle = styleOption.ToUpperInvariant();
+                if (upperStyle is not ("SOLID" or "DASHED"))
+                    throw new InvalidOperationException($"Invalid LEADER_LINE STYLE '{styleOption}'. Valid values are SOLID or DASHED.");
+            }
+        }
+
         foreach (var overlay in statement.Overlays)
         {
             if (overlay.OverlayType == OverlayType.Forecast)

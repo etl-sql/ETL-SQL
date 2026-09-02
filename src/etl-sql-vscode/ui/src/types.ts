@@ -217,6 +217,11 @@ export interface DataLabelsManifest {
     fontWeight?: string;
     fontFamily?: string;
     format?: string;
+    labelBackground?: string;
+    labelBorder?: string;
+    leaderLine?: boolean;
+    leaderLineColor?: string;
+    leaderLineStyle?: string;
 }
 
 export interface SummaryItemData {

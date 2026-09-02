@@ -925,7 +925,8 @@ Common `OPTIONS` keys for report visuals:
 | `GRID_LINES` | Cartesian charts | `ON` / `OFF` | Shows or hides background grid lines. |
 | `ZOOM_SLIDER` | Browser-rendered native charts | `ON` / `OFF` | Adds a visible range selector. |
 | `LEGEND_POSITION` | Charts with legends | `TOP`, `RIGHT`, `BOTTOM`, `LEFT` | Places the legend outside the plot. |
-| `DATA_LABELS` | Charts | `ON` / `OFF` with optional position/font/format settings | Shows values on marks. |
+| `DATA_LABELS` | Charts | `ON` / `OFF` with `POSITION`, `FONT_SIZE`, `COLOR`, `LABEL_BACKGROUND`, `LABEL_BORDER`, and `LEADER_LINE` | Shows values on marks with optional background, border, and leader line styling. |
+| `SERIES_LABELS` | `LINE`, `COMBO` | `ON` / `OFF` with `POSITION = START\|END` | Renders a series title label at the first or last renderable point of each series (default `OFF`). |
 | `SYMBOLS` | `LINE`, line layers in `COMBO` | `ON` / `OFF` | Shows or hides data-point markers. |
 | `BAND_SIZE` | `BAR`, `HBAR`, bar layers in `COMBO` | Decimal greater than `0` and at most `1` | Controls bar width and therefore spacing. |
 | `AXIS_SORT` | `BAR`, `HBAR`, `LINE`, `AREA`, `COMBO` | `ASC`, `DESC`, `SOURCE`, `VALUE`, `VALUE_DESC` | Controls category-axis order. `ASC` type-sorts datetime, numeric, then text values; `SOURCE` preserves query order; `VALUE` and `VALUE_DESC` sort by the metric value. |

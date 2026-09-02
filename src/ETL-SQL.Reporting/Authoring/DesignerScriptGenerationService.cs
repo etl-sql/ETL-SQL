@@ -259,6 +259,8 @@ public sealed class DesignerScriptGenerationService
             .ToList();
         var dataLabels = FormatDataLabelsOption(visual.Options);
         if (dataLabels is not null) regularOptions.Add(dataLabels);
+        var seriesLabels = FormatSeriesLabelsOption(visual.Options);
+        if (seriesLabels is not null) regularOptions.Add(seriesLabels);
         var xAxis = FormatAxisOption("X", visual.Formatting?.XAxis);
         if (xAxis is not null) regularOptions.Add(xAxis);
         var yAxis = FormatAxisOption("Y", visual.Formatting?.YAxis);
@@ -549,16 +551,51 @@ public sealed class DesignerScriptGenerationService
         return $"'{EscapeStr(value)}'";
     }
 
+    private static string FormatStructuredOptionValue(string value)
+    {
+        var upper = value.Trim().ToUpperInvariant();
+        return upper is "ON" or "OFF" or "TRUE" or "FALSE" or "START" or "END" or "SOLID" or "DASHED"
+            ? upper
+            : FormatOptionValue(value);
+    }
+
     private static string? FormatDataLabelsOption(IReadOnlyDictionary<string, string> options)
     {
         if (!options.TryGetValue("DATA_LABELS", out var enabled)) return null;
         var details = options
             .Where(option => option.Key.StartsWith("DATA_LABELS:", StringComparison.OrdinalIgnoreCase)
+                && !option.Key.Equals("DATA_LABELS:LEADER_LINE", StringComparison.OrdinalIgnoreCase)
+                && !option.Key.StartsWith("DATA_LABELS:LEADER_LINE:", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(option.Value))
             .Select(option => $"{option.Key["DATA_LABELS:".Length..].ToUpperInvariant()} = {FormatOptionValue(option.Value)}")
             .ToList();
+
+        if (options.TryGetValue("DATA_LABELS:LEADER_LINE", out var leaderEnabled))
+        {
+            var leaderDetails = options
+                .Where(option => option.Key.StartsWith("DATA_LABELS:LEADER_LINE:", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(option.Value))
+                .Select(option => $"{option.Key["DATA_LABELS:LEADER_LINE:".Length..].ToUpperInvariant()} = {FormatStructuredOptionValue(option.Value)}")
+                .ToList();
+            var leaderText = $"LEADER_LINE = {FormatStructuredOptionValue(leaderEnabled)}";
+            if (leaderDetails.Count > 0) leaderText += $" WITH ({string.Join(", ", leaderDetails)})";
+            details.Add(leaderText);
+        }
+
         var value = FormatOptionValue(enabled);
         return details.Count == 0 ? $"DATA_LABELS = {value}" : $"DATA_LABELS = {value} WITH ({string.Join(", ", details)})";
+    }
+
+    private static string? FormatSeriesLabelsOption(IReadOnlyDictionary<string, string> options)
+    {
+        if (!options.TryGetValue("SERIES_LABELS", out var enabled)) return null;
+        var details = options
+            .Where(option => option.Key.StartsWith("SERIES_LABELS:", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(option.Value))
+            .Select(option => $"{option.Key["SERIES_LABELS:".Length..].ToUpperInvariant()} = {FormatStructuredOptionValue(option.Value)}")
+            .ToList();
+        var value = FormatStructuredOptionValue(enabled);
+        return details.Count == 0 ? $"SERIES_LABELS = {value}" : $"SERIES_LABELS = {value} WITH ({string.Join(", ", details)})";
     }
 
     private static bool IsReservedOption(string key) =>
@@ -575,6 +612,8 @@ public sealed class DesignerScriptGenerationService
         || string.Equals(key, "OPACITY", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "DATA_LABELS", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("DATA_LABELS:", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "SERIES_LABELS", StringComparison.OrdinalIgnoreCase)
+        || key.StartsWith("SERIES_LABELS:", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("COLOR:", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "overlays", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "CONTAINER_TYPE", StringComparison.OrdinalIgnoreCase)

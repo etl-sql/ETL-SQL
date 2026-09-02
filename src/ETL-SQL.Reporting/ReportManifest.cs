@@ -726,6 +726,11 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("fontWeight")] public string? FontWeight { get; set; }
         [JsonPropertyName("fontFamily")] public string? FontFamily { get; set; }
         [JsonPropertyName("format")] public string? Format { get; set; }
+        [JsonPropertyName("labelBackground")] public string? LabelBackground { get; set; }
+        [JsonPropertyName("labelBorder")] public string? LabelBorder { get; set; }
+        [JsonPropertyName("leaderLine")] public bool? LeaderLine { get; set; }
+        [JsonPropertyName("leaderLineColor")] public string? LeaderLineColor { get; set; }
+        [JsonPropertyName("leaderLineStyle")] public string? LeaderLineStyle { get; set; }
     }
 
     /// <summary>A serialisable representation of one ACTIONS entry (DRILL_DOWN or SET_PARAMETER).</summary>

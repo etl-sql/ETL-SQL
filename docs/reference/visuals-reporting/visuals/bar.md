@@ -29,7 +29,13 @@ CREATE VISUAL VisualName AS BAR (
         [ZOOM_SLIDER = ON|OFF],
         [LEGEND = ON|OFF],
         [LEGEND_POSITION = TOP|RIGHT|BOTTOM|LEFT],
-        [DATA_LABELS = ON|OFF WITH (POSITION = INSIDE_TOP|INSIDE_MIDDLE|INSIDE_BOTTOM|OUTSIDE_TOP|OUTSIDE_MIDDLE|OUTSIDE_BOTTOM)],
+        [DATA_LABELS = ON|OFF WITH (
+          [POSITION = INSIDE_TOP|INSIDE_MIDDLE|INSIDE_BOTTOM|OUTSIDE_TOP|OUTSIDE_MIDDLE|OUTSIDE_BOTTOM],
+          [FONT_SIZE = n],
+          [COLOR = '#rrggbb'],
+          [LABEL_BACKGROUND = '#rrggbb'],
+          [LABEL_BORDER = 'width style #rrggbb']
+        )],
         [AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC],
         [X_AXIS (LABEL = 'text', MIN = n, MAX = n, INCLUDE_ZERO = ON|OFF, REVERSE = ON|OFF,
           MAJOR_TICK_COUNT = n, TICK_INTERVAL = n, MINOR_TICKS = ON|OFF,
@@ -71,7 +77,12 @@ CREATE VISUAL VisualName AS BAR (
 - **ZOOM_SLIDER = ON\|OFF** - Shows a browser range selector below the chart. Default is `OFF`.
 - **LEGEND = ON\|OFF** - Toggles visual series legend. Default is `ON`.
 - **LEGEND_POSITION = TOP\|RIGHT\|BOTTOM\|LEFT** - Places the legend outside the plot. Default is `BOTTOM`.
-- **DATA_LABELS = ON\|OFF WITH (...)** - Shows value labels and configures their position, color, font, and numeric format. Default is `OFF`.
+- **DATA_LABELS = ON\|OFF WITH (...)** - Shows value labels and configures their position, color, font, numeric format, background, and border. Default is `OFF`. Extended options:
+  - **POSITION = INSIDE_TOP\|...** - Placement relative to bars.
+  - **FONT_SIZE = n** - Label text size in pixels.
+  - **COLOR = '#rrggbb'** - Label text fill color.
+  - **LABEL_BACKGROUND = '#rrggbb'** - Padded background rectangle drawn behind the label text.
+  - **LABEL_BORDER = 'width style #rrggbb'** - Border around the data label background (e.g., `'1px solid #334155'`; style is `solid`, `dashed`, or `dotted`).
 - **AXIS_SORT = ASC\|DESC\|SOURCE\|VALUE\|VALUE_DESC** - Category sorting logic. Use `SOURCE` to preserve the query order, or `VALUE_DESC` for ranked bars. Default is `ASC`.
 - **X_AXIS (...) / Y_AXIS (...)** - Configures the axis title (`LABEL`), explicit domain (`MIN`, `MAX`), zero inclusion, direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`). `MAJOR_TICK_COUNT` is 2–100; `TICK_INTERVAL` must be positive; `LABEL_SKIP = n` hides `n` labels between visible labels.
 - **OVERLAYS (...)** - Adds constant target or threshold reference lines (`REFERENCE_LINE(VALUE = n, ...)`), rendered as horizontal plot-spanning lines across the primary value axis. Participates in automatic value-axis domain resolution.

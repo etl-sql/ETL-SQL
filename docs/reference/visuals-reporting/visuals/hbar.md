@@ -27,6 +27,13 @@ CREATE VISUAL VisualName AS HBAR (
     [ZERO_LINE_WIDTH = n],
     [LEGEND = ON|OFF],
     [LABEL_POSITION = INSIDE|OUTSIDE|NONE],
+    [DATA_LABELS = ON|OFF WITH (
+      [POSITION = INSIDE|OUTSIDE],
+      [FONT_SIZE = n],
+      [COLOR = '#rrggbb'],
+      [LABEL_BACKGROUND = '#rrggbb'],
+      [LABEL_BORDER = 'width style #rrggbb']
+    )],
     [AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC],
     [X_AXIS (LABEL = 'text', MIN = n, MAX = n, INCLUDE_ZERO = ON|OFF, REVERSE = ON|OFF,
       MAJOR_TICK_COUNT = n, TICK_INTERVAL = n, MINOR_TICKS = ON|OFF,
@@ -64,6 +71,12 @@ CREATE VISUAL VisualName AS HBAR (
 - **ZERO_LINE_WIDTH = n** - Sets zero-line width in pixels. The value must be positive; default is `1.5`.
 - **LEGEND = ON|OFF** - Shows or hides the series legend. Default `ON`.
 - **LABEL_POSITION = INSIDE|OUTSIDE|NONE** - Shows and positions value labels. Default `NONE`.
+- **DATA_LABELS = ON|OFF WITH (...)** — shows value labels and configures position, font, background, and border styling (default OFF). Extended options:
+  - **POSITION = INSIDE|OUTSIDE** — placement relative to bars.
+  - **FONT_SIZE = n** — label text size in pixels.
+  - **COLOR = '#rrggbb'** — label text fill color.
+  - **LABEL_BACKGROUND = '#rrggbb'** — padded background rectangle drawn behind the label text.
+  - **LABEL_BORDER = 'width style #rrggbb'** — border around the data label background (e.g., `'1px solid #334155'`; style is `solid`, `dashed`, or `dotted`).
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - Sorts categories by label, source order, or measure value. Default `ASC`.
 - **X_AXIS (...) / Y_AXIS (...)** - Configures axis titles, explicit MIN/MAX domains, zero inclusion, reverse direction, ticks, label rotation, label skipping, and plot-area spines (`AXIS_LINE`). For `HBAR`, X is the category axis and Y is the horizontal value scale in the authoring model.
 - **OVERLAYS (...)** - Adds constant target or threshold reference lines (`REFERENCE_LINE(VALUE = n, ...)`), rendered as vertical plot-spanning lines across the primary value axis. Participates in automatic value-axis domain resolution.

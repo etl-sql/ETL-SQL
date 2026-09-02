@@ -22,7 +22,14 @@ CREATE VISUAL VisualName AS LINE (
     [ZERO_LINE_DASH = SOLID|DASHED|DOTTED],
     [ZERO_LINE_WIDTH = n],
     [ZOOM_SLIDER = ON|OFF],
-    [DATA_LABELS = ON|OFF WITH (POSITION = OUTSIDE_TOP|OUTSIDE_BOTTOM)],
+    [SERIES_LABELS = ON|OFF WITH (POSITION = START|END)],
+    [DATA_LABELS = ON|OFF WITH (
+      [POSITION = OUTSIDE_TOP|OUTSIDE_BOTTOM],
+      [FONT_SIZE = n],
+      [COLOR = '#rrggbb'],
+      [LABEL_BACKGROUND = '#rrggbb'],
+      [LABEL_BORDER = 'width style #rrggbb']
+    )],
     [X_AXIS (LABEL = 'text', MIN = n, MAX = n, INCLUDE_ZERO = ON|OFF, REVERSE = ON|OFF,
       MAJOR_TICK_COUNT = n, TICK_INTERVAL = n, MINOR_TICKS = ON|OFF,
       LABEL_ROTATION = AUTO|0|45|90, LABEL_SKIP = AUTO|n, AXIS_LINE = ON|OFF)],
@@ -62,7 +69,13 @@ CREATE VISUAL VisualName AS LINE (
 - **ZERO_LINE_DASH = SOLID|DASHED|DOTTED** - set the zero-line stroke pattern (default SOLID)
 - **ZERO_LINE_WIDTH = n** - set zero-line width in pixels; the value must be positive (default 1.5)
 - **ZOOM_SLIDER = ON|OFF** - show a browser range selector below the chart (default OFF)
-- **DATA_LABELS = ON|OFF WITH (...)** - show and format point values (default OFF)
+- **SERIES_LABELS = ON|OFF WITH (POSITION = START|END)** — render exactly one series title label per visible series at the first (`START`) or final (`END`) renderable point (default OFF). Gaps and null values are skipped. Deterministically suppresses the data label at that endpoint to prevent collision.
+- **DATA_LABELS = ON|OFF WITH (...)** — show and format point values (default OFF). Extended options include:
+  - **POSITION = OUTSIDE_TOP|OUTSIDE_BOTTOM** — label placement relative to data points.
+  - **FONT_SIZE = n** — label text size in pixels.
+  - **COLOR = '#rrggbb'** — label text fill color.
+  - **LABEL_BACKGROUND = '#rrggbb'** — padded background rectangle drawn behind the label text.
+  - **LABEL_BORDER = 'width style #rrggbb'** — border around the data label background (e.g., `'1px solid #334155'`; style is `solid`, `dashed`, or `dotted`).
 - **AREA = ON|OFF** - fill the region below the line (default OFF)
 - **STACKED = ON|OFF|100PCT** - draw independent series, cumulative stacks, or normalized 100% stacks (default OFF)
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - category-axis order; SOURCE preserves query order
@@ -119,6 +132,20 @@ CREATE VISUAL StackedArea AS LINE (
   SOURCE   = #by_region,
   MAPPINGS (X = date, Y = revenue, COLOR = region),
   OPTIONS  (AREA = ON, STACKED = ON, TITLE = 'Stacked Revenue')
+);
+
+-- Multi-series with series labels at endpoints and styled data label badges
+CREATE VISUAL RegionalTrendWithSeriesLabels AS LINE (
+  SOURCE   = #by_region,
+  MAPPINGS (X = date, Y = revenue, COLOR = region),
+  OPTIONS  (
+    SERIES_LABELS = ON WITH (POSITION = END),
+    DATA_LABELS   = ON WITH (
+      LABEL_BACKGROUND = '#ffffff',
+      LABEL_BORDER     = '1px solid #e2e8f0'
+    ),
+    TITLE = 'Revenue by Region with Direct Series Labels'
+  )
 );
 ```
 

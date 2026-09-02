@@ -3398,6 +3398,10 @@ public class ReportParser : ParserComponent
             else if (Match(TokenType.DATA_LABELS))
             {
                 Match(TokenType.EQUALS);
+                if (ReportCheck(TokenType.WITH))
+                {
+                    throw new SyntaxException("DATA_LABELS requires a toggle value (ON or OFF) before WITH clause", _parser.Current.Line, _parser.Current.Column);
+                }
                 var val = ConsumeReportOptionValue();
                 options.Add(new VisualOption { Key = "DATA_LABELS", Value = NormalizeBoolOptionValue(val) });
                 if (Match(TokenType.WITH))
@@ -3405,14 +3409,79 @@ public class ReportParser : ParserComponent
                     Consume(TokenType.LPAREN, "Expected '(' after WITH in DATA_LABELS");
                     while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
                     {
-                        var subKey = _parser.Advance().Value.ToUpperInvariant();
-                        Match(TokenType.EQUALS);
-                        // Standard numeric/string values for sub-options
+                        var subKeyToken = _parser.Advance();
+                        var subKey = subKeyToken.Value.ToUpperInvariant();
+                        if (subKey == "LEADER_LINE")
+                        {
+                            Consume(TokenType.EQUALS, "Expected '=' after DATA_LABELS LEADER_LINE");
+                        }
+                        else
+                        {
+                            Match(TokenType.EQUALS);
+                        }
                         var subVal = ConsumeReportOptionValue();
-                        options.Add(new VisualOption { Key = "DATA_LABELS:" + subKey, Value = subVal });
+                        options.Add(new VisualOption
+                        {
+                            Key = "DATA_LABELS:" + subKey,
+                            Value = subKey == "LEADER_LINE" ? NormalizeBoolOptionValue(subVal) : subVal
+                        });
+                        if (subKey == "LEADER_LINE" && Match(TokenType.WITH))
+                        {
+                            Consume(TokenType.LPAREN, "Expected '(' after WITH in DATA_LABELS LEADER_LINE");
+                            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                            {
+                                var leaderKeyToken = _parser.Advance();
+                                var leaderKey = leaderKeyToken.Value.ToUpperInvariant();
+                                if (leaderKey is not ("COLOR" or "STYLE"))
+                                {
+                                    throw new SyntaxException($"Unknown LEADER_LINE option '{leaderKey}'. Valid options are COLOR and STYLE.", leaderKeyToken.Line, leaderKeyToken.Column);
+                                }
+                                Consume(TokenType.EQUALS, $"Expected '=' after LEADER_LINE {leaderKey}");
+                                var leaderValue = ConsumeReportOptionValue();
+                                options.Add(new VisualOption
+                                {
+                                    Key = "DATA_LABELS:LEADER_LINE:" + leaderKey,
+                                    Value = leaderValue
+                                });
+                                Match(TokenType.COMMA);
+                            }
+                            Consume(TokenType.RPAREN, "Expected ')' to close DATA_LABELS LEADER_LINE WITH block");
+                        }
                         Match(TokenType.COMMA);
                     }
                     Consume(TokenType.RPAREN, "Expected ')' to close DATA_LABELS WITH block");
+                }
+            }
+            else if (IsCurrentValue("SERIES_LABELS"))
+            {
+                Advance();
+                Consume(TokenType.EQUALS, "Expected '=' after SERIES_LABELS");
+                if (ReportCheck(TokenType.WITH))
+                {
+                    throw new SyntaxException("SERIES_LABELS requires a toggle value (ON or OFF) before WITH clause", _parser.Current.Line, _parser.Current.Column);
+                }
+                var val = ConsumeReportOptionValue();
+                options.Add(new VisualOption { Key = "SERIES_LABELS", Value = NormalizeBoolOptionValue(val) });
+                if (Match(TokenType.WITH))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after WITH in SERIES_LABELS");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        var subKeyToken = _parser.Advance();
+                        var subKey = subKeyToken.Value.ToUpperInvariant();
+                        if (subKey is not ("POSITION"))
+                        {
+                            throw new SyntaxException($"Unknown SERIES_LABELS option '{subKey}'. Valid option is POSITION.", subKeyToken.Line, subKeyToken.Column);
+                        }
+                        Consume(TokenType.EQUALS, $"Expected '=' after SERIES_LABELS {subKey}");
+                        options.Add(new VisualOption
+                        {
+                            Key = "SERIES_LABELS:" + subKey,
+                            Value = ConsumeReportOptionValue()
+                        });
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close SERIES_LABELS WITH block");
                 }
             }
             else if (Match(TokenType.GRID))
@@ -3504,6 +3573,7 @@ public class ReportParser : ParserComponent
             t == TokenType.GRID || t == TokenType.DATA_LABELS ||
             t == TokenType.NONE || t == TokenType.HEADER || t == TokenType.FOOTER ||
             t == TokenType.ALL ||
+            t == TokenType.START || t == TokenType.END ||
             t == TokenType.CENTER || t == TokenType.FONT_SIZE ||
             t == TokenType.INSIDE || t == TokenType.INSIDE_TOP || t == TokenType.INSIDE_BOTTOM ||
             t == TokenType.INSIDE_LEFT || t == TokenType.INSIDE_RIGHT ||

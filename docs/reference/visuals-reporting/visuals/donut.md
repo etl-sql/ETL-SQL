@@ -23,6 +23,10 @@ CREATE VISUAL VisualName AS DONUT (
 - **INNER_RADIUS = number** - hole size as a fraction from `0` to `0.9`, or as a percentage; the default is `0.45`
 - **ROSE_MODE = ON|OFF** - "nightingale" mode: radius also varies with value
 - **LEGEND = ON|OFF** - show legend (default ON)
+- **DATA_LABELS = ON|OFF WITH (...)** — show slice labels and configure styling (default ON). Extended options:
+  - **LEADER_LINE = ON|OFF WITH (COLOR = '#rrggbb', STYLE = SOLID|DASHED)** — connects slice outer arc to outside label (default OFF).
+  - **LABEL_BACKGROUND = '#rrggbb'** — padded background rectangle drawn behind the label text.
+  - **LABEL_BORDER = 'width style #rrggbb'** — border around the data label background (e.g., `'1px solid #334155'`).
 - **CENTER_LABEL = 'text'** - text displayed in the centre hole
 - **CENTER_VALUE = 'text'** - prominent value displayed in the centre hole; `{total}` is replaced with the slice total
 
@@ -40,6 +44,22 @@ CREATE VISUAL RevenueDonut AS DONUT (
     INNER_RADIUS = 0.55,
     CENTER_VALUE = '{total}',
     CENTER_LABEL = 'Revenue',
+    TITLE        = 'Revenue by Channel'
+  )
+);
+
+CREATE VISUAL ChannelDonutWithLeaders AS DONUT (
+  SOURCE   = #by_channel,
+  MAPPINGS (VALUE = total, NAME = channel),
+  OPTIONS  (
+    INNER_RADIUS = 0.55,
+    CENTER_VALUE = '{total}',
+    CENTER_LABEL = 'Revenue',
+    DATA_LABELS  = ON WITH (
+      LEADER_LINE      = ON WITH (COLOR = '#64748b', STYLE = DASHED),
+      LABEL_BACKGROUND = '#ffffff',
+      LABEL_BORDER     = '1px solid #cbd5e1'
+    ),
     TITLE        = 'Revenue by Channel'
   )
 );

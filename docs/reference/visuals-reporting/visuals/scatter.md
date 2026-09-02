@@ -23,6 +23,13 @@ CREATE VISUAL VisualName AS SCATTER (
     [GRID_LINE_DASH = SOLID|DASHED|DOTTED],
     [GRID_LINE_WIDTH = n],
     [MINOR_GRID_LINES = ON|OFF],
+    [DATA_LABELS = ON|OFF WITH (
+      [FONT_SIZE = n],
+      [COLOR = '#rrggbb'],
+      [LABEL_BACKGROUND = '#rrggbb'],
+      [LABEL_BORDER = 'width style #rrggbb'],
+      [LEADER_LINE = ON|OFF WITH (COLOR = '#rrggbb', STYLE = SOLID|DASHED)]
+    )],
     [X_AXIS (LABEL = 'text', MIN = n, MAX = n, INCLUDE_ZERO = ON|OFF, REVERSE = ON|OFF,
       MAJOR_TICK_COUNT = n, TICK_INTERVAL = n, MINOR_TICKS = ON|OFF,
       LABEL_ROTATION = AUTO|0|45|90, LABEL_SKIP = AUTO|n, AXIS_LINE = ON|OFF)],
@@ -53,6 +60,12 @@ CREATE VISUAL VisualName AS SCATTER (
 - **GRID_LINE_DASH = SOLID|DASHED|DOTTED** — set the gridline stroke pattern (default SOLID)
 - **GRID_LINE_WIDTH = n** — set gridline width in pixels; the value must be positive (default 1)
 - **MINOR_GRID_LINES = ON|OFF** — draw one lighter gridline between each pair of major ticks (default OFF)
+- **DATA_LABELS = ON|OFF WITH (...)** — show data point labels with smart collision prevention (default OFF). Extended options:
+  - **FONT_SIZE = n** — label text size in pixels.
+  - **COLOR = '#rrggbb'** — label text fill color.
+  - **LABEL_BACKGROUND = '#rrggbb'** — padded background rectangle drawn behind the label text.
+  - **LABEL_BORDER = 'width style #rrggbb'** — border around the data label background (e.g., `'1px solid #334155'`; style is `solid`, `dashed`, or `dotted`).
+  - **LEADER_LINE = ON|OFF WITH (COLOR = '#rrggbb', STYLE = SOLID|DASHED)** — renders a connecting leader line from mark to label when the label is displaced to avoid collisions (default OFF).
 - **X_AXIS (...) / Y_AXIS (...)** — axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`).
 - **OVERLAYS (...)** — adds constant target or threshold reference lines (`REFERENCE_LINE(VALUE = n, ...)`), rendered as horizontal plot-spanning lines across the primary quantitative Y axis. Participates in automatic domain resolution.
 - **TITLE = 'text'** — visual title
@@ -107,6 +120,20 @@ CREATE VISUAL MarketBubble AS SCATTER (
     LABEL = region
   ),
   OPTIONS  (TITLE = 'Regional Market Overview')
+);
+
+-- Scatter with displaced-label leaders and styled label backgrounds
+CREATE VISUAL ClusteredScatter AS SCATTER (
+  SOURCE   = #scatter_data,
+  MAPPINGS (X = unit_price, Y = quantity_sold, LABEL = product_name),
+  OPTIONS  (
+    DATA_LABELS = ON WITH (
+      LEADER_LINE      = ON WITH (COLOR = '#2563eb', STYLE = SOLID),
+      LABEL_BACKGROUND = '#ffffff',
+      LABEL_BORDER     = '1px solid #94a3b8'
+    ),
+    TITLE = 'Product Price vs Quantity'
+  )
 );
 ```
 

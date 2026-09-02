@@ -74,8 +74,12 @@ Titles and subtitles support simple string assignment, inline markdown, or struc
 - **ZOOM_SLIDER = ON|OFF** — Adds an accessible range selector below browser-rendered native charts. Default `OFF`; static and print renderers keep the full range.
 - **LEGEND = ON|OFF** — Shows or hides the legend.
 - **LEGEND_POSITION = TOP|RIGHT|BOTTOM|LEFT** — Places the legend outside the plot. Default `BOTTOM`.
-- **DATA_LABELS = ON|OFF WITH (...)** — Shows mark labels and accepts `POSITION`, `COLOR`, `FONT_SIZE`, `FONT_WEIGHT`, `FONT_FAMILY`, and `FORMAT`.
+- **DATA_LABELS = ON|OFF WITH (...)** — Shows mark labels and accepts `POSITION`, `COLOR`, `FONT_SIZE`, `FONT_WEIGHT`, `FONT_FAMILY`, `FORMAT`, `LABEL_BACKGROUND`, `LABEL_BORDER`, and nested `LEADER_LINE`.
 - **DATA_LABELS POSITION** — Accepts `OUTSIDE_TOP`, `OUTSIDE_MIDDLE`, `OUTSIDE_BOTTOM`, `INSIDE_TOP`, `INSIDE_MIDDLE`, or `INSIDE_BOTTOM`.
+- **DATA_LABELS LABEL_BACKGROUND = '#rrggbb'** — Background fill color for data label badges across all named charts supporting `DATA_LABELS`.
+- **DATA_LABELS LABEL_BORDER = 'width style color'** — Border outline for data label badges (e.g. `'1px solid #e2e8f0'`). Style accepts `SOLID`, `DASHED`, or `DOTTED`.
+- **DATA_LABELS LEADER_LINE = ON|OFF WITH (COLOR = '#rrggbb', STYLE = SOLID|DASHED)** — Controls pointer lines from marks/arcs to displaced labels on `PIE`, `DONUT`, and `SCATTER`. Defaults `OFF`.
+- **SERIES_LABELS = ON|OFF WITH (POSITION = START|END)** — Places direct series name labels at line beginnings (`START`) or endpoints (`END`) on `LINE` and `COMBO` charts, reserving a deterministic label gutter and suppressing colliding data label endpoints.
 - **STYLE (COLOR:name = '#RRGGBB')** — Assigns a stable color to a named series or category. Use `PALETTE = (...)` for order-based colors.
 - **FORMATTING (WHEN predicate THEN color ...)** — Applies the first matching rule color to each mark in a named chart. `CUSTOM` charts use layer `CONDITIONS` instead.
 - **OVERLAYS (...)** — Adds goals, averages, moving averages, fitted trend lines, arbitrary constant reference lines (`REFERENCE_LINE(VALUE = n, ...)`), or forecast overlays with optional confidence bands and anomaly markers to named charts.

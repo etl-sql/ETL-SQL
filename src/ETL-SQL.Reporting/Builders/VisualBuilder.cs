@@ -127,6 +127,11 @@ namespace ETL_SQL.Reporting.Builders
                         case "FONT_WEIGHT": vm.DataLabels.FontWeight = opt.Value; break;
                         case "FONT_FAMILY": vm.DataLabels.FontFamily = opt.Value; break;
                         case "FORMAT": vm.DataLabels.Format = opt.Value; break;
+                        case "LABEL_BACKGROUND": vm.DataLabels.LabelBackground = opt.Value; break;
+                        case "LABEL_BORDER": vm.DataLabels.LabelBorder = opt.Value; break;
+                        case "LEADER_LINE": vm.DataLabels.LeaderLine = opt.Value.Equals("ON", StringComparison.OrdinalIgnoreCase); break;
+                        case "LEADER_LINE:COLOR": vm.DataLabels.LeaderLineColor = opt.Value; break;
+                        case "LEADER_LINE:STYLE": vm.DataLabels.LeaderLineStyle = opt.Value; break;
                     }
                 }
             }

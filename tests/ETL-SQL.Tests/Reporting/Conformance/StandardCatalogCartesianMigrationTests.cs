@@ -392,6 +392,27 @@ public sealed class StandardCatalogCartesianMigrationTests
         Assert.Contains("Search: 43%", svg);
         Assert.Contains("Direct: 27%", svg);
         Assert.Equal(4, CountOccurrences(svg, "class='plot-arc-label'"));
+        Assert.Equal(0, CountOccurrences(svg, "class='plot-arc-label-leader'"));
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.19")]
+    public async Task Pie_ExplicitLeaderLineOptionEmitsLeaders()
+    {
+        var (_, manifest, _) = await RepresentativeVisualConformanceHarness.CompileFixtureAsync("pie_donut_proportions.rptsql");
+        var visual = manifest.Visuals.Single(item => item.Name == "LeadSourcePie");
+        var sourcePlan = Assert.IsType<PlotPlan>(visual.PlotPlan);
+
+        // Prove default OFF emits zero leaders
+        var defaultSvg = new SvgChartRenderer().Render(sourcePlan);
+        Assert.Equal(0, CountOccurrences(defaultSvg, "class='plot-arc-label-leader'"));
+
+        // Prove explicit ON emits expected leaders
+        var planWithLeaders = sourcePlan with
+        {
+            Style = sourcePlan.Style.Add(new StyleToken("DATA_LABELS:LEADER_LINE", "ON"))
+        };
+        var svg = new SvgChartRenderer().Render(planWithLeaders);
         Assert.Equal(4, CountOccurrences(svg, "class='plot-arc-label-leader'"));
     }
 

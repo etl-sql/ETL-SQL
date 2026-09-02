@@ -19,9 +19,12 @@ CREATE VISUAL VisualName AS FUNNEL (
 
 ## Options
 
-- **SHOW_PERCENT = ON|OFF** - show conversion % between stages (default ON)
-  ORIENTATION  = VERTICAL|HORIZONTAL  (default VERTICAL)
-- **COLORS** - explicit colour list, one per stage
+- **COLORS** — Explicit colour list, one per stage.
+- **DATA_LABELS = ON|OFF WITH (...)** — Shows stage value badges with optional background and border styling.
+  - **LABEL_BACKGROUND = '#rrggbb'** — Background color for the stage value badge (e.g. `'#f8fafc'`).
+  - **LABEL_BORDER = 'width style color'** — Border for the stage value badge (e.g. `'1px solid #e2e8f0'`).
+- **ORIENTATION = VERTICAL|HORIZONTAL** — Funnel direction (default `VERTICAL`).
+- **SHOW_PERCENT = ON|OFF** — Show conversion % between stages (default `ON`).
 
 ## Examples
 
@@ -36,7 +39,11 @@ INTO #pipeline;
 CREATE VISUAL SalesFunnel AS FUNNEL (
   SOURCE   = #pipeline,
   MAPPINGS (NAME = stage, VALUE = count),
-  OPTIONS  (SHOW_PERCENT = ON, TITLE = 'Sales Pipeline')
+  OPTIONS  (
+    SHOW_PERCENT = ON,
+    DATA_LABELS  = ON WITH (LABEL_BACKGROUND = '#f8fafc', LABEL_BORDER = '1px solid #e2e8f0'),
+    TITLE        = 'Sales Pipeline'
+  )
 );
 ```
 

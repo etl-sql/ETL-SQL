@@ -23,6 +23,10 @@ CREATE VISUAL VisualName AS PIE (
 - **ROSE_MODE = ON|OFF** - "nightingale" mode: radius also varies with value, not just angle (default OFF)
 - **INNER_RADIUS = number** - DONUT hole as a fraction from `0` to `0.9`, or as a percentage; the default is `0.45`
 - **LEGEND = ON|OFF** - show colour legend (default ON)
+- **DATA_LABELS = ON|OFF WITH (...)** — show slice labels and configure styling (default ON). Extended options:
+  - **LEADER_LINE = ON|OFF WITH (COLOR = '#rrggbb', STYLE = SOLID|DASHED)** — connects slice outer arc to outside label (default OFF).
+  - **LABEL_BACKGROUND = '#rrggbb'** — padded background rectangle drawn behind the label text.
+  - **LABEL_BORDER = 'width style #rrggbb'** — border around the data label background (e.g., `'1px solid #334155'`).
 - **CENTER_LABEL = 'text'** - text shown in the centre hole (DONUT only)
 - **CENTER_VALUE = 'text'** - prominent value shown in the centre hole (DONUT only); `{total}` is replaced with the slice total
 
@@ -52,6 +56,21 @@ CREATE VISUAL SalesRose AS PIE (
   SOURCE   = #by_channel,
   MAPPINGS (VALUE = total, NAME = channel),
   OPTIONS  (ROSE_MODE = ON)
+);
+
+-- Pie chart with leader lines and styled data labels
+CREATE VISUAL LeadSourcePie AS PIE (
+  SOURCE   = #by_channel,
+  MAPPINGS (VALUE = total, NAME = channel),
+  OPTIONS  (
+    LEGEND      = OFF,
+    DATA_LABELS = ON WITH (
+      LEADER_LINE      = ON WITH (COLOR = '#64748b', STYLE = DASHED),
+      LABEL_BACKGROUND = '#ffffff',
+      LABEL_BORDER     = '1px solid #cbd5e1'
+    ),
+    TITLE       = 'Revenue by Channel'
+  )
 );
 ```
 

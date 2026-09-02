@@ -1422,9 +1422,7 @@ public static class AstSerializer
             sb.AppendLine($"    SOURCE = {s.Source.ToSql()},");
         if (s.Mappings.Count > 0)
             sb.AppendLine($"    MAPPINGS ( {string.Join(", ", s.Mappings.Select(m => FormatMapping(m)))} ),");
-        var visualOptions = s.Options
-            .Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'")
-            .ToList();
+        var visualOptions = FormatVisualOptions(s.Options);
         visualOptions.AddRange(s.AxisOptions.Select(axis =>
             $"{axis.Axis}_AXIS ( {string.Join(", ", axis.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} )"));
         if (visualOptions.Count > 0)
@@ -1460,6 +1458,63 @@ public static class AstSerializer
 
         var result = sb.ToString().TrimEnd().TrimEnd(',');
         return result + "\n);";
+    }
+
+    private static List<string> FormatVisualOptions(IReadOnlyCollection<VisualOption> options)
+    {
+        var result = options
+            .Where(option => !option.Key.StartsWith("DATA_LABELS:", StringComparison.OrdinalIgnoreCase)
+                && !option.Key.StartsWith("SERIES_LABELS:", StringComparison.OrdinalIgnoreCase)
+                && !option.Key.Equals("DATA_LABELS", StringComparison.OrdinalIgnoreCase)
+                && !option.Key.Equals("SERIES_LABELS", StringComparison.OrdinalIgnoreCase))
+            .Select(option => $"{option.Key} = '{option.Value.Replace("'", "''")}'")
+            .ToList();
+
+        AddNestedToggle("DATA_LABELS", allowNestedLeaderLine: true);
+        AddNestedToggle("SERIES_LABELS", allowNestedLeaderLine: false);
+        return result;
+
+        void AddNestedToggle(string key, bool allowNestedLeaderLine)
+        {
+            var toggle = options.FirstOrDefault(option => option.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
+            if (toggle is null) return;
+            var prefix = key + ":";
+            var details = options
+                .Where(option => option.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                    && (!allowNestedLeaderLine || (
+                        !option.Key.Equals(prefix + "LEADER_LINE", StringComparison.OrdinalIgnoreCase)
+                        && !option.Key.StartsWith(prefix + "LEADER_LINE:", StringComparison.OrdinalIgnoreCase))))
+                .Select(option => $"{option.Key[prefix.Length..].ToUpperInvariant()} = {FormatNestedVisualOptionValue(option.Value)}")
+                .ToList();
+            if (allowNestedLeaderLine)
+            {
+                var leader = options.FirstOrDefault(option => option.Key.Equals(prefix + "LEADER_LINE", StringComparison.OrdinalIgnoreCase));
+                if (leader is not null)
+                {
+                    var leaderDetails = options
+                        .Where(option => option.Key.StartsWith(prefix + "LEADER_LINE:", StringComparison.OrdinalIgnoreCase))
+                        .Select(option => $"{option.Key[(prefix + "LEADER_LINE:").Length..].ToUpperInvariant()} = {FormatNestedVisualOptionValue(option.Value)}")
+                        .ToList();
+                    var leaderText = $"LEADER_LINE = {FormatNestedVisualOptionValue(leader.Value)}";
+                    if (leaderDetails.Count > 0) leaderText += $" WITH ({string.Join(", ", leaderDetails)})";
+                    details.Add(leaderText);
+                }
+            }
+            var text = $"{key} = {FormatNestedVisualOptionValue(toggle.Value)}";
+            if (details.Count > 0) text += $" WITH ({string.Join(", ", details)})";
+            result.Add(text);
+        }
+    }
+
+    private static string FormatNestedVisualOptionValue(string value)
+    {
+        var upper = value.ToUpperInvariant();
+        if (upper is "ON" or "OFF" or "TRUE" or "FALSE" or "START" or "END" or "SOLID" or "DASHED" or "DOTTED"
+            || upper.StartsWith("INSIDE", StringComparison.OrdinalIgnoreCase)
+            || upper.StartsWith("OUTSIDE", StringComparison.OrdinalIgnoreCase)
+            || int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+            return upper;
+        return Quote(value);
     }
 
     private static string FormatHtmlTemplate(HtmlTemplateDefinition def)
