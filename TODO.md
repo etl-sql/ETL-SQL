@@ -274,7 +274,7 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
   possible but there is no visual encoding for a dashed future segment, confidence band, or anomaly
   marker. Add `FORECAST` as an `OVERLAYS` type on named time-series charts (LINE, COMBO) and define
   `CONFIDENCE_LOW` / `CONFIDENCE_HIGH` channels in `CUSTOM CHART`.
-- [ ] **Arbitrary reference lines on named charts**: `OVERLAYS` supports GOAL, AVERAGE, and
+- [x] **Arbitrary reference lines on named charts**: `OVERLAYS` supports GOAL, AVERAGE, and
   MOVING_AVERAGE. There is no `REFERENCE_LINE (VALUE = n, LABEL = '...', STYLE = DASHED)` for an
   author-specified constant. Add to the `OVERLAYS` clause for named charts.
 - [ ] **Reference bands on named charts**: Shaded horizontal or vertical regions between two values.

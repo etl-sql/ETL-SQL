@@ -72,9 +72,11 @@ internal static class PlotPlanTerminalRenderer
             {
                 var data = layer.Data.Where(datum => rows.Contains(datum.RowIndex)).ToList();
                 var series = plan.Series.FirstOrDefault(item => item.Key == layer.SeriesKey);
-                var label = layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value
-                    ?? series?.Label
-                    ?? layer.Id;
+                var overlayType = layer.Style.FirstOrDefault(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase))?.Value;
+                var rawLabel = layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value;
+                var label = !string.IsNullOrWhiteSpace(rawLabel)
+                    ? rawLabel
+                    : (overlayType == "ReferenceLine" ? "Reference" : series?.Label ?? layer.Id);
                 var color = ResolveLayerColor(layer, plan);
                 return (Layer: layer, Data: data, Series: series, Label: label, Color: color);
             })

@@ -111,7 +111,7 @@ public enum ReportObjectType
 
 public enum OverlayType
 {
-    Goal, Average, MovingAvg, Linear, Exponential, Logarithmic, Polynomial, Power, Forecast
+    Goal, Average, MovingAvg, Linear, Exponential, Logarithmic, Polynomial, Power, Forecast, ReferenceLine
 }
 
 public enum OverlayLineStyle { Solid, Dashed, Dotted }

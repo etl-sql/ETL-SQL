@@ -33,6 +33,9 @@ CREATE VISUAL VisualName AS HBAR (
       LABEL_ROTATION = AUTO|0|45|90, LABEL_SKIP = AUTO|n, AXIS_LINE = ON|OFF)],
     [Y_AXIS (...same axis properties...)]
   ),
+  [OVERLAYS (
+    REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb'])
+  )],
   ACTIONS (
     [ON_CLICK = DRILL_IN(...) | DRILL_DOWN(...) | SET_PARAMETER(...) | RUN_SCRIPT(...)]
   )
@@ -63,6 +66,7 @@ CREATE VISUAL VisualName AS HBAR (
 - **LABEL_POSITION = INSIDE|OUTSIDE|NONE** - Shows and positions value labels. Default `NONE`.
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - Sorts categories by label, source order, or measure value. Default `ASC`.
 - **X_AXIS (...) / Y_AXIS (...)** - Configures axis titles, explicit MIN/MAX domains, zero inclusion, reverse direction, ticks, label rotation, label skipping, and plot-area spines (`AXIS_LINE`). For `HBAR`, X is the category axis and Y is the horizontal value scale in the authoring model.
+- **OVERLAYS (...)** - Adds constant target or threshold reference lines (`REFERENCE_LINE(VALUE = n, ...)`), rendered as vertical plot-spanning lines across the primary value axis. Participates in automatic value-axis domain resolution.
 
 ## Actions
 

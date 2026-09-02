@@ -68,6 +68,22 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 if (!hasY)
                     throw new InvalidOperationException("FORECAST overlay requires a primary quantitative Y mapping.");
             }
+            if (overlay.OverlayType == OverlayType.ReferenceLine)
+            {
+                if (statement.VisualType is not (VisualType.Bar or VisualType.HorizontalBar or VisualType.Line or VisualType.Combo or VisualType.Scatter or VisualType.Bubble))
+                    throw new InvalidOperationException($"REFERENCE_LINE overlay is supported only on Cartesian charts with a primary value axis (BAR, HBAR, LINE, COMBO, SCATTER, BUBBLE); found {statement.VisualType.ToString().ToUpperInvariant()}.");
+
+                if (!overlay.Parameter.HasValue || !double.IsFinite(overlay.Parameter.Value))
+                    throw new InvalidOperationException("REFERENCE_LINE requires a finite numeric VALUE.");
+
+                var hasPrimaryValue = statement.VisualType == VisualType.HorizontalBar
+                    ? statement.Mappings.Any(m => m.Role.Equals("Y", StringComparison.OrdinalIgnoreCase) || m.Role.Equals("VALUE", StringComparison.OrdinalIgnoreCase))
+                    : statement.Mappings.Any(m => m.Role.Equals("Y", StringComparison.OrdinalIgnoreCase) || m.Role.Equals("VALUE", StringComparison.OrdinalIgnoreCase))
+                        || statement.TypedSeries.Count > 0;
+
+                if (!hasPrimaryValue)
+                    throw new InvalidOperationException("REFERENCE_LINE overlay requires a primary quantitative value mapping.");
+            }
         }
 
         var bindings = BuildBindings(statement, manifest).ToImmutableArray();
@@ -308,19 +324,35 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 continue;
             }
 
+            var hasAuthoredLabel = !string.IsNullOrWhiteSpace(overlay.Label);
+            var styleTokens = new List<StyleToken>
+            {
+                new("overlayType", overlay.OverlayType.ToString()),
+                new("parameter", overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? ""),
+                new("lineStyle", overlay.LineStyle.ToString().ToLowerInvariant()),
+                new("color", overlay.Color ?? "#888888")
+            };
+
+            if (hasAuthoredLabel)
+            {
+                styleTokens.Add(new("label", overlay.Label!));
+            }
+            else if (overlay.OverlayType != OverlayType.ReferenceLine)
+            {
+                styleTokens.Add(new("label", overlay.OverlayType.ToString()));
+            }
+
+            var legendTitle = hasAuthoredLabel
+                ? overlay.Label
+                : (overlay.OverlayType == OverlayType.ReferenceLine ? null : overlay.OverlayType.ToString());
+
             yield return new MarkLayerSpec(
                 $"rule-{index:D2}-{overlay.OverlayType.ToString().ToLowerInvariant()}",
-                overlay.OverlayType is OverlayType.Goal or OverlayType.Average ? MarkKind.Rule : MarkKind.Line,
+                overlay.OverlayType is OverlayType.Goal or OverlayType.Average or OverlayType.ReferenceLine ? MarkKind.Rule : MarkKind.Line,
                 100 + index,
                 [],
-                [
-                    new StyleToken("overlayType", overlay.OverlayType.ToString()),
-                    new StyleToken("parameter", overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? ""),
-                    new StyleToken("lineStyle", overlay.LineStyle.ToString().ToLowerInvariant()),
-                    new StyleToken("color", overlay.Color ?? "#888888"),
-                    new StyleToken("label", overlay.Label ?? overlay.OverlayType.ToString())
-                ],
-                overlay.Label ?? overlay.OverlayType.ToString());
+                styleTokens.ToImmutableArray(),
+                legendTitle);
         }
     }
 

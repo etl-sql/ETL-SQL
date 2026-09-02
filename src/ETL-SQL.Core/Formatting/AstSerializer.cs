@@ -1987,6 +1987,18 @@ public static class AstSerializer
 
     private static string FormatOverlay(VisualOverlay overlay)
     {
+        if (overlay.OverlayType == OverlayType.ReferenceLine)
+        {
+            var props = new List<string>
+            {
+                $"VALUE = {overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? "0"}"
+            };
+            if (!string.IsNullOrWhiteSpace(overlay.Label)) props.Add($"LABEL = {Quote(overlay.Label)}");
+            props.Add($"STYLE = {overlay.LineStyle.ToString().ToUpperInvariant()}");
+            if (!string.IsNullOrWhiteSpace(overlay.Color)) props.Add($"COLOR = {Quote(overlay.Color)}");
+            return $"REFERENCE_LINE ({string.Join(", ", props)})";
+        }
+
         var type = overlay.OverlayType switch
         {
             OverlayType.Goal => $"GOAL({overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? "0"})",

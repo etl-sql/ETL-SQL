@@ -533,6 +533,18 @@ public sealed class DesignerScriptParsingService
     private static string FormatOverlay(VisualOverlay overlay)
     {
         var parameter = overlay.Parameter?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (overlay.OverlayType == OverlayType.ReferenceLine)
+        {
+            var props = new List<string>
+            {
+                $"VALUE = {parameter ?? "0"}"
+            };
+            if (!string.IsNullOrWhiteSpace(overlay.Label)) props.Add($"LABEL = '{Escape(overlay.Label)}'");
+            props.Add($"STYLE = {overlay.LineStyle.ToString().ToUpperInvariant()}");
+            if (!string.IsNullOrWhiteSpace(overlay.Color)) props.Add($"COLOR = '{Escape(overlay.Color)}'");
+            return $"REFERENCE_LINE ({string.Join(", ", props)})";
+        }
+
         var type = overlay.OverlayType switch
         {
             OverlayType.Goal => $"GOAL({parameter ?? "0"})",

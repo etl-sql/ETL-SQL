@@ -3889,6 +3889,131 @@ public class ReportParser : ParserComponent
                 forecastField = ConsumeIdentifier("Expected forecast field name").Value;
                 Consume(TokenType.RPAREN, "Expected ')' after forecast field name");
             }
+            else if (IsCurrentValue("REFERENCE_LINE"))
+            {
+                var refLineToken = Advance();
+                Consume(TokenType.LPAREN, "Expected '(' after REFERENCE_LINE");
+
+                // Reject leading comma
+                if (ReportCheck(TokenType.COMMA))
+                {
+                    throw new SyntaxException("Unexpected ',' at start of REFERENCE_LINE", _parser.Current.Line, _parser.Current.Column);
+                }
+
+                bool hasValue = false;
+                bool hasLabel = false;
+                bool hasStyle = false;
+                bool hasColor = false;
+                double? refParameter = null;
+                string? refLabel = null;
+                var refLineStyle = OverlayLineStyle.Dashed;
+                string? refColor = null;
+
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    if (IsCurrentValue("VALUE"))
+                    {
+                        var valueToken = Advance();
+                        if (hasValue)
+                            throw new SyntaxException("Duplicate VALUE property in REFERENCE_LINE", valueToken.Line, valueToken.Column);
+                        Consume(TokenType.EQUALS, "Expected '=' after VALUE");
+
+                        var sign = Match(TokenType.MINUS) ? "-" : Match(TokenType.PLUS) ? "+" : string.Empty;
+                        if (!ReportCheck(TokenType.NUMBER))
+                            throw new SyntaxException($"Expected numeric value for VALUE in REFERENCE_LINE but got '{_parser.Current.Value}'", _parser.Current.Line, _parser.Current.Column);
+
+                        var numToken = Consume(TokenType.NUMBER, "Expected numeric value for VALUE in REFERENCE_LINE");
+                        var numStr = sign + numToken.Value;
+                        if (!double.TryParse(numStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedVal) || !double.IsFinite(parsedVal))
+                            throw new SyntaxException($"Expected finite numeric value for VALUE in REFERENCE_LINE but got '{numStr}'", numToken.Line, numToken.Column);
+
+                        refParameter = parsedVal;
+                        hasValue = true;
+                    }
+                    else if (IsCurrentValue("LABEL"))
+                    {
+                        var labelToken = Advance();
+                        if (hasLabel)
+                            throw new SyntaxException("Duplicate LABEL property in REFERENCE_LINE", labelToken.Line, labelToken.Column);
+                        Consume(TokenType.EQUALS, "Expected '=' after LABEL");
+                        refLabel = Consume(TokenType.STRING_LITERAL, "Expected string literal for LABEL in REFERENCE_LINE").Value;
+                        hasLabel = true;
+                    }
+                    else if (IsCurrentValue("STYLE"))
+                    {
+                        var styleToken = Advance();
+                        if (hasStyle)
+                            throw new SyntaxException("Duplicate STYLE property in REFERENCE_LINE", styleToken.Line, styleToken.Column);
+                        Consume(TokenType.EQUALS, "Expected '=' after STYLE");
+                        if (_parser.Current.Type == TokenType.SOLID || IsCurrentValue("SOLID"))
+                        {
+                            Advance();
+                            refLineStyle = OverlayLineStyle.Solid;
+                        }
+                        else if (_parser.Current.Type == TokenType.DASHED || IsCurrentValue("DASHED"))
+                        {
+                            Advance();
+                            refLineStyle = OverlayLineStyle.Dashed;
+                        }
+                        else if (_parser.Current.Type == TokenType.DOTTED || IsCurrentValue("DOTTED"))
+                        {
+                            Advance();
+                            refLineStyle = OverlayLineStyle.Dotted;
+                        }
+                        else
+                        {
+                            throw new SyntaxException($"Expected SOLID, DASHED, or DOTTED for STYLE in REFERENCE_LINE but got '{_parser.Current.Value}'", _parser.Current.Line, _parser.Current.Column);
+                        }
+                        hasStyle = true;
+                    }
+                    else if (_parser.Current.Type == TokenType.COLOR || IsCurrentValue("COLOR"))
+                    {
+                        var colorToken = Advance();
+                        if (hasColor)
+                            throw new SyntaxException("Duplicate COLOR property in REFERENCE_LINE", colorToken.Line, colorToken.Column);
+                        Consume(TokenType.EQUALS, "Expected '=' after COLOR");
+                        refColor = Consume(TokenType.STRING_LITERAL, "Expected string literal for COLOR in REFERENCE_LINE").Value;
+                        hasColor = true;
+                    }
+                    else
+                    {
+                        throw new SyntaxException($"Unknown property '{_parser.Current.Value}' in REFERENCE_LINE. Expected VALUE, LABEL, STYLE, or COLOR.", _parser.Current.Line, _parser.Current.Column);
+                    }
+
+                    if (ReportCheck(TokenType.COMMA))
+                    {
+                        var commaToken = Advance();
+                        if (ReportCheck(TokenType.RPAREN))
+                        {
+                            throw new SyntaxException("Trailing comma before ')' is not permitted in REFERENCE_LINE", commaToken.Line, commaToken.Column);
+                        }
+                        if (ReportCheck(TokenType.COMMA))
+                        {
+                            throw new SyntaxException("Consecutive commas are not permitted in REFERENCE_LINE", _parser.Current.Line, _parser.Current.Column);
+                        }
+                    }
+                    else if (!ReportCheck(TokenType.RPAREN))
+                    {
+                        throw new SyntaxException($"Expected ',' or ')' after REFERENCE_LINE property but got '{_parser.Current.Value}'", _parser.Current.Line, _parser.Current.Column);
+                    }
+                }
+
+                Consume(TokenType.RPAREN, "Expected ')' to close REFERENCE_LINE");
+                if (!hasValue)
+                    throw new SyntaxException("REFERENCE_LINE requires a VALUE property: REFERENCE_LINE (VALUE = number, ...)", refLineToken.Line, refLineToken.Column);
+
+                result.Add(new VisualOverlay
+                {
+                    OverlayType = OverlayType.ReferenceLine,
+                    Parameter = refParameter,
+                    LineStyle = refLineStyle,
+                    Color = refColor,
+                    Label = refLabel
+                });
+
+                Match(TokenType.COMMA);
+                continue;
+            }
             else throw new SyntaxException(
                 $"Expected overlay type (GOAL, AVERAGE, MOVING_AVG, LINEAR, ...) but got '{_parser.Current.Value}'",
                 _parser.Current.Line, _parser.Current.Column);

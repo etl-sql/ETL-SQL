@@ -331,12 +331,36 @@ internal sealed class PlotPlanSvgRenderer
                 builder.AppendLine($"<line class='plot-zero-line' x1='{N(zeroX)}' y1='{N(Top)}' x2='{N(zeroX)}' y2='{N(Top + plotHeight)}' stroke='{Esc(color)}' stroke-width='{width}'{dash}/>");
             }
         }
+        var overlayLabels = new List<OverlayLabel>();
         foreach (var layer in plan.Layers)
         {
             var scale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null)
                 ? plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y2)
                 : plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y);
             if (scale is null) continue;
+
+            var overlayType = LayerStyle(layer, "overlayType");
+            if (layer.Mark == MarkKind.Rule && overlayType is not null)
+            {
+                builder.AppendLine($"<g class='plot-overlay' data-overlay-type='{Esc(overlayType)}' data-z-index='{layer.ZIndex}'>");
+                var ruleColor = SafePaint(LayerStyle(layer, "color") ?? LayerStyle(layer, "fill") ?? LayerStyle(layer, "stroke"), "#888888");
+                var strokeWidth = LayerStyle(layer, "stroke_width") ?? LayerStyle(layer, "width") ?? "2";
+                var dashAttributes = LineStyleAttributes(LayerStyle(layer, "lineStyle"));
+                var ruleClass = overlayType == "ReferenceLine" ? " class='plot-reference-line'" : string.Empty;
+                var val = layer.Data.Select(datum => Channel(datum, FieldChannel.Y)).FirstOrDefault(item => item is not null && item.Kind != ChartValueKind.Null);
+                var num = val is not null ? PlotPlanResolver.Number(val) : null;
+                if (num.HasValue)
+                {
+                    var x = MapHorizontal(num.Value, scale, plotWidth);
+                    builder.AppendLine($"<line{ruleClass} x1='{N(x)}' y1='{N(Top)}' x2='{N(x)}' y2='{N(Top + plotHeight)}' stroke='{Esc(ruleColor)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}/>");
+                    var label = LayerStyle(layer, "label");
+                    if (!string.IsNullOrWhiteSpace(label))
+                        overlayLabels.Add(new OverlayLabel(x, Top + 15m, label, ruleColor, layer.ZIndex));
+                }
+                builder.AppendLine("</g>");
+                continue;
+            }
+
             var defaultColor = plan.Palette.FirstOrDefault(item => item.SeriesKey == layer.SeriesKey)?.Color ?? "#5470c6";
             var color = SafePaint(LayerStyle(layer, "fill") ?? LayerStyle(layer, "color"), defaultColor);
             var layerOpacity = decimal.TryParse(LayerStyle(layer, "opacity"), NumberStyles.Any, CultureInfo.InvariantCulture, out var o) ? o : 1m;
@@ -549,6 +573,7 @@ internal sealed class PlotPlanSvgRenderer
             builder.AppendLine($"<text x='{N(Left + plotWidth / 2m)}' y='{N(plan.Bounds.Height - 8m)}' text-anchor='middle' font-size='10' fill='#444'>{Esc(yTitle)}</text>");
         if (!string.IsNullOrWhiteSpace(xTitle))
             builder.AppendLine($"<text x='12' y='{N(Top + plotHeight / 2m)}' text-anchor='middle' font-size='10' fill='#444' transform='rotate(-90 12 {N(Top + plotHeight / 2m)})'>{Esc(xTitle)}</text>");
+        RenderOverlayLabels(builder, overlayLabels, plotHeight);
         RenderLegend(builder, plan);
     }
 
@@ -1520,13 +1545,18 @@ internal sealed class PlotPlanSvgRenderer
         }
         if (ranged) return;
 
+        var overlayType = LayerStyle(layer, "overlayType");
+        var ruleClass = overlayType == "ReferenceLine"
+            ? " class='plot-reference-line'"
+            : string.Empty;
+
         if (yVal is not null && yScale is not null)
         {
             var yNum = PlotPlanResolver.Number(yVal);
             if (yNum.HasValue)
             {
                 var y = MapY(yNum.Value, yScale, plotHeight);
-                builder.AppendLine($"<line x1='{N(Left)}' y1='{N(y)}' x2='{N(Left + plotWidth)}' y2='{N(y)}' stroke='{Esc(color)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}/>");
+                builder.AppendLine($"<line{ruleClass} x1='{N(Left)}' y1='{N(y)}' x2='{N(Left + plotWidth)}' y2='{N(y)}' stroke='{Esc(color)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}/>");
                 if (!string.IsNullOrWhiteSpace(label))
                     overlayLabels.Add(new OverlayLabel(Left + plotWidth, y, label, color, layer.ZIndex));
             }
@@ -1537,7 +1567,7 @@ internal sealed class PlotPlanSvgRenderer
             if (xNum.HasValue)
             {
                 var x = MapX(xNum.Value, xScale, plotWidth);
-                builder.AppendLine($"<line x1='{N(x)}' y1='{N(Top)}' x2='{N(x)}' y2='{N(Top + plotHeight)}' stroke='{Esc(color)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}/>");
+                builder.AppendLine($"<line{ruleClass} x1='{N(x)}' y1='{N(Top)}' x2='{N(x)}' y2='{N(Top + plotHeight)}' stroke='{Esc(color)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}/>");
             }
         }
     }

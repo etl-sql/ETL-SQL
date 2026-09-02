@@ -816,7 +816,9 @@ public sealed class PlotPlanResolver
         var parameterText = layer.Style.FirstOrDefault(token => token.Name == "parameter")?.Value;
         decimal.TryParse(parameterText, NumberStyles.Any, CultureInfo.InvariantCulture, out var parameter);
         var xBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X);
-        var yBinding = spec.Bindings.First(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2);
+        var yBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y && binding.Axis != AxisRole.Secondary)
+            ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y)
+            ?? spec.Bindings.First(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2);
         var yValues = columns[yBinding.Field!].Values.Select(Number).Select(value => value ?? 0m).ToList();
         var xColumn = xBinding?.Field is { } xField && columns.TryGetValue(xField, out var resolvedXColumn) ? resolvedXColumn : null;
         var regressionX = Enumerable.Range(0, yValues.Count)
@@ -825,6 +827,7 @@ public sealed class PlotPlanResolver
         var resolvedValues = type switch
         {
             "Goal" => Enumerable.Repeat(parameter, Math.Max(1, yValues.Count)).Select(value => (decimal?)value).ToList(),
+            "ReferenceLine" => Enumerable.Repeat(parameter, Math.Max(1, yValues.Count)).Select(value => (decimal?)value).ToList(),
             "Average" => Enumerable.Repeat(yValues.DefaultIfEmpty(0m).Average(), Math.Max(1, yValues.Count)).Select(value => (decimal?)value).ToList(),
             "MovingAvg" => MovingAverage(yValues, Math.Max(1, (int)(parameter == 0 ? 3 : parameter))),
             "Linear" => PolynomialRegression(regressionX, yValues, 1),
@@ -833,8 +836,8 @@ public sealed class PlotPlanResolver
         };
         var data = resolvedValues.Select((value, index) =>
         {
-            var xValue = xColumn is null ? ChartValue.From(index) : xColumn.Values[index];
-            var xDisplay = xColumn is null || xColumn.DisplayValues.IsDefaultOrEmpty
+            var xValue = xColumn is null || index >= xColumn.Values.Length ? ChartValue.From(index) : xColumn.Values[index];
+            var xDisplay = xColumn is null || index >= xColumn.Values.Length || xColumn.DisplayValues.IsDefaultOrEmpty
                 ? formatter.Format(xValue)
                 : xColumn.DisplayValues[index] ?? formatter.Format(xValue);
             return new ResolvedDatum(index,
@@ -967,11 +970,17 @@ public sealed class PlotPlanResolver
         })).Concat(layers.Where(layer => layer.Mark == MarkKind.Rule).Select((layer, index) =>
         {
             var value = layer.Data.SelectMany(datum => datum.Channels)
-                .FirstOrDefault(channel => channel.Channel is FieldChannel.Y or FieldChannel.X);
-            var label = layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value
-                ?? layer.Style.FirstOrDefault(token => token.Name == "overlayType")?.Value ?? layer.Id;
+                .FirstOrDefault(channel => channel.Channel == FieldChannel.Y && channel.Value.Kind != ChartValueKind.Null)
+                ?? layer.Data.SelectMany(datum => datum.Channels)
+                .FirstOrDefault(channel => channel.Channel == FieldChannel.X && channel.Value.Kind != ChartValueKind.Null);
+            var overlayKind = layer.Style.FirstOrDefault(token => token.Name == "overlayType")?.Value;
+            var rawLabel = layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value;
+            var label = !string.IsNullOrWhiteSpace(rawLabel)
+                ? rawLabel
+                : (overlayKind == "ReferenceLine" ? "Reference" : overlayKind ?? layer.Id);
+            var detail = overlayKind == "ReferenceLine" ? "author reference line" : "labeled reference rule";
             return new SemanticFallbackItem(label, value is null ? "" : value.DisplayValue ?? formatter.Format(value.Value), ((sourceLayers.Count + 1) * 100000) + index)
-            { Detail = "labeled reference rule", Group = "Reference" };
+            { Detail = detail, Group = "Reference" };
         })).ToImmutableArray();
         return new SemanticFallback(
             spec.Coordinate.Kind == CoordinateKind.Geographic && spec.Layers.Any(layer => layer.Bindings.Any(binding => binding.Channel == FieldChannel.Route)) ? SemanticFallbackKind.TransitionTable :

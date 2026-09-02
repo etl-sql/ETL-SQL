@@ -29,6 +29,7 @@ CREATE VISUAL VisualName AS LINE (
     [Y_AXIS (...same axis properties...)]
   ),
   [OVERLAYS (
+    REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb']),
     FORECAST(forecastCol) AS SOLID|DASHED|DOTTED [WITH (
       [CONFIDENCE_LOW = lowCol,]
       [CONFIDENCE_HIGH = highCol,]
@@ -67,7 +68,7 @@ CREATE VISUAL VisualName AS LINE (
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - category-axis order; SOURCE preserves query order
 - **X_AXIS (...) / Y_AXIS (...)** - axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`). `MAJOR_TICK_COUNT` is 2–100 and `TICK_INTERVAL` must be positive.
 - **TITLE = 'text'** - visual title
-- **OVERLAYS (...)** - visual overlays including `FORECAST(field) AS SOLID|DASHED|DOTTED [WITH (...)]`. Supports paired `CONFIDENCE_LOW` / `CONFIDENCE_HIGH` quantitative interval ribbon (`fill-opacity='.2'`) and `ANOMALY` marker glyphs. Forecast values are pre-computed in SQL and participate in primary Y domain resolution.
+- **OVERLAYS (...)** - visual overlays including `REFERENCE_LINE(VALUE = n, ...)` for constant author-specified target/threshold lines, and `FORECAST(field) AS SOLID|DASHED|DOTTED [WITH (...)]`. Supports paired `CONFIDENCE_LOW` / `CONFIDENCE_HIGH` quantitative interval ribbon (`fill-opacity='.2'`) and `ANOMALY` marker glyphs. Reference line values and forecast values participate in primary Y domain resolution.
 
 ## Examples
 

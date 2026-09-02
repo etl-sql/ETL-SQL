@@ -24,6 +24,7 @@ CREATE VISUAL VisualName AS COMBO (
     [X_AXIS (...)], [Y_AXIS (...)], [Y2_AXIS (...)]
   ),
   [OVERLAYS (
+    REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb']),
     FORECAST(forecastCol) AS SOLID|DASHED|DOTTED [WITH (
       [CONFIDENCE_LOW = lowCol,]
       [CONFIDENCE_HIGH = highCol,]
@@ -61,7 +62,7 @@ CREATE VISUAL VisualName AS COMBO (
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - category-axis order; SOURCE preserves query order
 - **X_AXIS (...) / Y_AXIS (...) / Y2_AXIS (...)** - each accepts `LABEL`, `MIN`, `MAX`, `INCLUDE_ZERO`, `REVERSE`, `MAJOR_TICK_COUNT`, `TICK_INTERVAL`, `MINOR_TICKS`, `LABEL_ROTATION`, `LABEL_SKIP`, and `AXIS_LINE`. Rotation accepts `AUTO`, `0`, `45`, or `90`; skip accepts `AUTO` or a non-negative integer.
 - **LEGEND = ON|OFF** - shows or hides the series legend
-- **OVERLAYS (...)** - visual overlays including `FORECAST(field) AS SOLID|DASHED|DOTTED [WITH (...)]` on the primary quantitative axis. Supports paired `CONFIDENCE_LOW` / `CONFIDENCE_HIGH` quantitative interval ribbon and `ANOMALY` marker glyphs. Forecast values are pre-computed in SQL.
+- **OVERLAYS (...)** - visual overlays including `REFERENCE_LINE(VALUE = n, ...)` (targeting the primary Y axis, never Y2) and `FORECAST(field) AS SOLID|DASHED|DOTTED [WITH (...)]` on the primary quantitative axis. Supports paired `CONFIDENCE_LOW` / `CONFIDENCE_HIGH` quantitative interval ribbon and `ANOMALY` marker glyphs. Reference line values and forecast values participate in primary Y domain resolution.
 
 ## Examples
 

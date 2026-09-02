@@ -78,7 +78,14 @@ Titles and subtitles support simple string assignment, inline markdown, or struc
 - **DATA_LABELS POSITION** — Accepts `OUTSIDE_TOP`, `OUTSIDE_MIDDLE`, `OUTSIDE_BOTTOM`, `INSIDE_TOP`, `INSIDE_MIDDLE`, or `INSIDE_BOTTOM`.
 - **STYLE (COLOR:name = '#RRGGBB')** — Assigns a stable color to a named series or category. Use `PALETTE = (...)` for order-based colors.
 - **FORMATTING (WHEN predicate THEN color ...)** — Applies the first matching rule color to each mark in a named chart. `CUSTOM` charts use layer `CONDITIONS` instead.
-- **OVERLAYS (...)** — Adds goals, averages, moving averages, fitted trend lines, or forecast overlays with optional confidence bands and anomaly markers to named charts.
+- **OVERLAYS (...)** — Adds goals, averages, moving averages, fitted trend lines, arbitrary constant reference lines (`REFERENCE_LINE(VALUE = n, ...)`), or forecast overlays with optional confidence bands and anomaly markers to named charts.
+  - **Supported types for `REFERENCE_LINE`** — `BAR`, `HBAR`, `LINE`, `COMBO`, `SCATTER`, and `BUBBLE`. Polar and non-axis visuals (`PIE`, `DONUT`, `RADAR`, `GAUGE`) are rejected.
+  - **`VALUE = n`** — Required finite signed numeric literal (including zero, decimals, and negative values). No SQL calculation is performed; `REFERENCE_LINE` is a general author annotation distinct from `GOAL`.
+  - **`LABEL = 'text'`** — Optional badge label. When omitted or empty, no visual badge, leader line, or background is rendered in SVG (terminal and accessible fallbacks use `Reference`).
+  - **`STYLE = SOLID|DASHED|DOTTED`** — Stroke pattern; defaults to `DASHED`.
+  - **`COLOR = '#rrggbb'`** — Stroke color; defaults to the safe overlay neutral `#888888`.
+  - **Axis targeting and orientation** — Targets the primary quantitative axis only. On `COMBO`, binds to primary `Y` (never `Y2`). Renders as a vertical plot-spanning line on transposed `HBAR` and a horizontal plot-spanning line on other supported Cartesian charts.
+  - **Domain calculation** — Participates in automatic primary-axis domain calculation to keep out-of-range lines visible; explicit axis `MIN`/`MAX` remain authoritative and may clip an out-of-range line.
 
 ## Display Types
 
@@ -153,6 +160,19 @@ CREATE VISUAL SalesByRegion AS BAR (
   STYLE (COLOR:West = '#2563eb', COLOR:East = '#dc2626'),
   FORMATTING (WHEN Revenue < 0 THEN '#b91c1c'),
   OVERLAYS (AVERAGE AS DASHED WITH (COLOR = '#64748b', LABEL = 'Average'))
+);
+
+CREATE VISUAL PerformanceTrend AS LINE (
+  SOURCE = #monthly_sales,
+  MAPPINGS (X = Month, Y = Revenue),
+  OVERLAYS (
+    REFERENCE_LINE (
+      VALUE = 75000,
+      LABEL = 'Target',
+      STYLE = DASHED,
+      COLOR = '#dc2626'
+    )
+  )
 );
 ```
 

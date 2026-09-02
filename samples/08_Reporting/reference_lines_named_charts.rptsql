@@ -1,0 +1,66 @@
+SET REPORT TITLE = 'Analytical Overlays: Arbitrary Reference Lines';
+
+SELECT '2026-01' AS Month, 42000.0 AS ActualRevenue INTO #sales_data
+UNION ALL SELECT '2026-02', 48000.0
+UNION ALL SELECT '2026-03', 53000.0
+UNION ALL SELECT '2026-04', 59000.0
+UNION ALL SELECT '2026-05', 64000.0
+UNION ALL SELECT '2026-06', 71000.0;
+
+SELECT 'North' AS Region, 85000.0 AS RegionalSales INTO #regional_data
+UNION ALL SELECT 'South', 62000.0
+UNION ALL SELECT 'East', 94000.0
+UNION ALL SELECT 'West', 78000.0;
+
+-- 1. A LINE chart with two reference lines using different styles (DASHED and SOLID),
+-- one reference value outside the source-data range (85000 vs max 71000) proving automatic
+-- domain retention, coexisting with an AVERAGE overlay.
+CREATE VISUAL SalesTrendReferenceLines AS LINE (
+  SOURCE = #sales_data,
+  TITLE = 'Monthly Sales Trend with Reference Lines',
+  MAPPINGS (
+    X = Month,
+    Y = ActualRevenue
+  ),
+  OVERLAYS (
+    AVERAGE AS DOTTED WITH (COLOR = '#6b7280', LABEL = 'Historical Mean'),
+    REFERENCE_LINE (
+      VALUE = 50000,
+      LABEL = 'Midpoint Baseline',
+      STYLE = DASHED,
+      COLOR = '#f59e0b'
+    ),
+    REFERENCE_LINE (
+      VALUE = 85000,
+      LABEL = 'Stretch Target (Outside Range)',
+      STYLE = SOLID,
+      COLOR = '#dc2626'
+    )
+  )
+);
+
+-- 2. An HBAR chart proving vertical orientation with a labeled reference line
+CREATE VISUAL RegionalSalesQuota AS HBAR (
+  SOURCE = #regional_data,
+  TITLE = 'Regional Quota Benchmark',
+  MAPPINGS (
+    X = Region,
+    Y = RegionalSales
+  ),
+  OVERLAYS (
+    REFERENCE_LINE (
+      VALUE = 80000,
+      LABEL = 'Regional Quota',
+      STYLE = DASHED,
+      COLOR = '#10b981'
+    )
+  )
+);
+
+CREATE PAGE ReferenceLineDemo AS DASHBOARD (
+  STRUCTURE = 'A | B',
+  MAP (
+    'A' = SalesTrendReferenceLines,
+    'B' = RegionalSalesQuota
+  )
+);

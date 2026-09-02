@@ -36,6 +36,9 @@ CREATE VISUAL VisualName AS BAR (
           LABEL_ROTATION = AUTO|0|45|90, LABEL_SKIP = AUTO|n, AXIS_LINE = ON|OFF)],
         [Y_AXIS (...same axis properties...)]
     ),
+    [OVERLAYS (
+        REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb'])
+    )],
     ACTIONS (
         [ON_CLICK = DRILL_IN(...) | DRILL_DOWN(...) | SET_PARAMETER(...) | RUN_SCRIPT(...)]
     )
@@ -71,6 +74,7 @@ CREATE VISUAL VisualName AS BAR (
 - **DATA_LABELS = ON\|OFF WITH (...)** - Shows value labels and configures their position, color, font, and numeric format. Default is `OFF`.
 - **AXIS_SORT = ASC\|DESC\|SOURCE\|VALUE\|VALUE_DESC** - Category sorting logic. Use `SOURCE` to preserve the query order, or `VALUE_DESC` for ranked bars. Default is `ASC`.
 - **X_AXIS (...) / Y_AXIS (...)** - Configures the axis title (`LABEL`), explicit domain (`MIN`, `MAX`), zero inclusion, direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`). `MAJOR_TICK_COUNT` is 2–100; `TICK_INTERVAL` must be positive; `LABEL_SKIP = n` hides `n` labels between visible labels.
+- **OVERLAYS (...)** - Adds constant target or threshold reference lines (`REFERENCE_LINE(VALUE = n, ...)`), rendered as horizontal plot-spanning lines across the primary value axis. Participates in automatic value-axis domain resolution.
 
 ## Actions
 - **ON_CLICK = DRILL_IN(HIERARCHY = (...))** - Enables hierarchical drilling, such as Year to Quarter to Month, on click with breadcrumb navigation.

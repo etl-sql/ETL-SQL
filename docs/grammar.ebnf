@@ -686,10 +686,17 @@ cascade_option = "MODE" "=" ( "LOCAL" | "LIVE" )
                | "MULTISELECT" "=" ( "ANY" | "ALL" )
                | "ALL_VALUE" "=" string_literal ;
 cascade_parent = ( variable_name | identifier ) [ "=" ] ( identifier | string_literal ) ;
-overlay_item = overlay_type "AS" ( "SOLID" | "DASHED" | "DOTTED" ) [ "WITH" "(" overlay_with_option { "," overlay_with_option } ")" ] ;
+overlay_item = overlay_type "AS" ( "SOLID" | "DASHED" | "DOTTED" ) [ "WITH" "(" overlay_with_option { "," overlay_with_option } ")" ]
+             | "REFERENCE_LINE" "(" reference_line_option { "," reference_line_option } ")" ;
 overlay_type = ( "GOAL" | "MOVING_AVG" | "POLYNOMIAL" ) "(" number ")"
+             | "FORECAST" "(" identifier ")"
              | "AVERAGE" | "LINEAR" | "EXPONENTIAL" | "LOGARITHMIC" | "POWER" ;
-overlay_with_option = ( "COLOR" | "LABEL" ) "=" string_literal ;
+overlay_with_option = ( "COLOR" | "LABEL" ) "=" string_literal
+                    | ( "CONFIDENCE_LOW" | "CONFIDENCE_HIGH" | "ANOMALY" ) "=" identifier ;
+reference_line_option = "VALUE" "=" [ "+" | "-" ] number
+                      | "LABEL" "=" string_literal
+                      | "STYLE" "=" ( "SOLID" | "DASHED" | "DOTTED" )
+                      | "COLOR" "=" string_literal ;
 formatting_item = expression "THEN" string_literal [ "FONT_COLOR" string_literal ] ;
 visual_mapping = [ "COLUMN" ] identifier [ table_column_modifier ] [ "=" ( identifier | string_literal | temp_table_name [ "(" visual_mapping_param { "," visual_mapping_param } ")" ] ) | "AS" ( identifier | string_literal ) ]
                | "SPARKLINE" [ "=" temp_table_name [ "(" visual_mapping_param { "," visual_mapping_param } ")" ]

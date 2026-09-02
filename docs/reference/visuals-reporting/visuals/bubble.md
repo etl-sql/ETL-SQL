@@ -7,28 +7,39 @@ A scatter chart where a third numeric column controls the radius of each circle,
 CREATE VISUAL VisualName AS BUBBLE (
   SOURCE = #tableName,
   MAPPINGS (
+    X = numCol,
+    Y = numCol,
+    [SIZE = numCol,]
+    [LABEL = textCol]
+  ),
+  OPTIONS (
+    [TITLE = 'text']
+  ),
+  [OVERLAYS (
+    REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb']),
     ...
-  )
+  )]
 );
 ```
 
 ## Mappings
 
-- **X** - horizontal numeric axis (required)
-- **Y** - vertical numeric axis (required)
-- **SIZE** - numeric column controlling circle radius (optional; uniform size if omitted)
-- **LABEL** - column shown in the tooltip
+- **X** — horizontal numeric axis (required)
+- **Y** — vertical numeric axis (required)
+- **SIZE** — numeric column controlling circle radius (optional; uniform size if omitted)
+- **LABEL** — column shown in the tooltip
 
 ## Options
 
-  TITLE   = 'text'
+- **TITLE = 'text'** — visual title
+- **OVERLAYS (...)** — visual overlays including `REFERENCE_LINE(VALUE = n, ...)`. Renders an author-specified constant reference line targeting the primary vertical quantitative Y axis as a horizontal plot-spanning rule. `VALUE` is required and accepts finite signed numeric literals (including zero, decimals, and negative values). `LABEL` is optional; an omitted or empty `LABEL` does not paint a visible browser badge label, leader, or background. `STYLE` accepts `SOLID`, `DASHED` (default), or `DOTTED`. `COLOR` defaults to the standard overlay neutral `#888888`. No SQL calculation is performed; `REFERENCE_LINE` acts as a general author annotation distinct from `GOAL`. Reference values participate in automatic Y domain calculation, while explicit axis `MIN`/`MAX` remain authoritative and may clip an out-of-range line.
 
 Note: SIZE values are automatically scaled to a display range of 5 to 65 px. Use SCATTER if you do not need variable point sizes.
 
 ## Examples
 
 ```sql
--- Market analysis: price vs. margin, sized by revenue
+-- Market analysis: price vs. margin, sized by revenue, with a target margin reference line
 SELECT
     segment,
     AVG(unit_price)   AS avg_price,
@@ -46,7 +57,15 @@ CREATE VISUAL MarketBubble AS BUBBLE (
     SIZE  = total_rev,
     LABEL = segment
   ),
-  OPTIONS  (TITLE = 'Segment Market Map')
+  OPTIONS  (TITLE = 'Segment Market Map'),
+  OVERLAYS (
+    REFERENCE_LINE (
+      VALUE = 25.0,
+      LABEL = 'Target Margin',
+      STYLE = DASHED,
+      COLOR = '#10b981'
+    )
+  )
 );
 ```
 

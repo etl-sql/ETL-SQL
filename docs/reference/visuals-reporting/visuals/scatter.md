@@ -27,7 +27,10 @@ CREATE VISUAL VisualName AS SCATTER (
       MAJOR_TICK_COUNT = n, TICK_INTERVAL = n, MINOR_TICKS = ON|OFF,
       LABEL_ROTATION = AUTO|0|45|90, LABEL_SKIP = AUTO|n, AXIS_LINE = ON|OFF)],
     [Y_AXIS (...same axis properties...)]
-  )
+  ),
+  [OVERLAYS (
+    REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb'])
+  )]
 );
 ```
 
@@ -51,6 +54,7 @@ CREATE VISUAL VisualName AS SCATTER (
 - **GRID_LINE_WIDTH = n** — set gridline width in pixels; the value must be positive (default 1)
 - **MINOR_GRID_LINES = ON|OFF** — draw one lighter gridline between each pair of major ticks (default OFF)
 - **X_AXIS (...) / Y_AXIS (...)** — axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`).
+- **OVERLAYS (...)** — adds constant target or threshold reference lines (`REFERENCE_LINE(VALUE = n, ...)`), rendered as horizontal plot-spanning lines across the primary quantitative Y axis. Participates in automatic domain resolution.
 - **TITLE = 'text'** — visual title
 
 ## Examples
