@@ -1070,6 +1070,9 @@ function mockVisualStatement(visual) {
   if (subtitle) clauses.push('    ' + subtitle);
   const options = mockOptionsClause(visual.options, visual.formatting);
   if (options) clauses.push('    ' + options);
+  // ACTIONS, INTERACTIONS and CASCADE are their own clauses, not OPTIONS entries. A mock that
+  // dropped them made the interaction inspector look like a dead panel in the sandbox.
+  for (const clause of mockInteractionClauses(visual.options)) clauses.push('    ' + clause);
   const palette = visual.formatting?.palette ?? [];
   if (palette.length) clauses.push('    STYLE (PALETTE = (' + palette.map(mockQuote).join(', ') + '))');
   const rules = mockFormattingClause(visual.formatting?.conditionalRules);
@@ -1183,8 +1186,28 @@ function mockRewriteVisualClauses(statement, visual) {
   const palette = visual.formatting?.palette ?? [];
   out = mockReplaceClause(out, 'STYLE', palette.length ? 'STYLE (PALETTE = (' + palette.map(mockQuote).join(', ') + '))' : '');
   out = mockReplaceClause(out, 'FORMATTING', mockFormattingClause(visual.formatting?.conditionalRules));
+  out = mockReplaceClause(out, 'ACTIONS', mockPrefixedClause(visual.options, 'action:', 'ACTIONS'));
+  out = mockReplaceClause(out, 'INTERACTIONS', mockPrefixedClause(visual.options, 'interaction:', 'INTERACTIONS'));
+  out = mockReplaceClause(out, 'CASCADE', String(visual.options?.cascade || '').trim());
   out = mockReplaceClause(out, 'PRINT_LAYOUT', visual.options?.print_layout || '');
   return out;
+}
+
+// `action:ON_CLICK` and `interaction:ON_SELECT` are carried on the visual's options with a prefix,
+// exactly as the real parsing service reports them, and written back as one clause each.
+function mockPrefixedClause(options, prefix, keyword) {
+  const entries = Object.entries(options ?? {})
+    .filter(([key, value]) => key.startsWith(prefix) && String(value || '').trim())
+    .map(([key, value]) => key.slice(prefix.length).toUpperCase() + ' = ' + value);
+  return entries.length ? keyword + ' (' + entries.join(', ') + ')' : '';
+}
+
+function mockInteractionClauses(options) {
+  return [
+    mockPrefixedClause(options, 'action:', 'ACTIONS'),
+    mockPrefixedClause(options, 'interaction:', 'INTERACTIONS'),
+    String(options?.cascade || '').trim(),
+  ].filter(Boolean);
 }
 
 function mockReplaceClause(statement, keyword, replacement) {
@@ -1301,6 +1324,18 @@ function mockParseVisuals(script) {
     }
     const printLayout = mockFindClause(body, 'PRINT_LAYOUT');
     if (printLayout) options.print_layout = printLayout.text;
+    const cascadeClause = mockFindClause(body, 'CASCADE');
+    if (cascadeClause) options.cascade = cascadeClause.text;
+    for (const [keyword, prefix] of [['ACTIONS', 'action:'], ['INTERACTIONS', 'interaction:']]) {
+      const clause = mockFindClause(body, keyword);
+      if (!clause) continue;
+      const inner = clause.text.slice(clause.text.indexOf('(') + 1, -1);
+      for (const entry of splitTopLevel(inner)) {
+        const [key, ...rest] = entry.split('=');
+        if (!key || !rest.length) continue;
+        options[prefix + key.trim().toUpperCase()] = rest.join('=').trim();
+      }
+    }
     const textDefault = /\bDEFAULT\s*=\s*('(?:[^']|'')*')/i.exec(body)?.[1];
     if (textDefault) options.text_default = textDefault;
 

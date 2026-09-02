@@ -12,6 +12,28 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Cross-visual filtering and cascading slicers can be authored in Studio. Choosing what a visual
+  does when another one is selected — highlight, filter, or ignore — and the column selections are
+  matched on are controls now, not a free-text box whose placeholder was the documentation, and a
+  `SLICER` or `MULTISELECT` has a cascade editor for its mode, parent bindings, and invalid, null,
+  all-value, and multi-select policies. The clause is written exactly as the formatter writes it, so
+  reopening a report does not rewrite what was just saved, and a cascade Studio cannot read is shown
+  as read-only text and left alone rather than rewritten from a partial reading.
+
+- Fixed three defects that made those surfaces inert. The action and interaction handlers wrote to
+  the visual in memory and never to the script, so a setting survived until save and then vanished.
+  The parameter picker read a state key nothing populates, leaving the only control that binds a
+  slicer to a parameter permanently empty. And the script patcher matched a clause keyword at any
+  parenthesis depth: a nested `MODE` — `CASCADE`'s own — was taken for the visual's `MODE` clause
+  and written a second time at the top level, producing a script that did not parse, which the
+  patcher's own parse guard then turned into an edit that silently did nothing. Clause matching is
+  now pinned to the statement's own level, which also protects every other clause from a keyword
+  inside an inline `SELECT`.
+
+- The formatting inspector remembers which sections are open. Changing one setting rebuilds the
+  panel, and a rebuilt section starts closed, so every edit used to collapse the section being
+  worked in.
+
 - Guided authoring in Studio now explains itself and can be undone. Every wizard, step, and canvas
   action that writes Report-SQL offers a one-click **Undo** afterwards, backed by the editor's own
   transaction rather than a remembered copy of the old text — so taking it is exactly Ctrl+Z, and

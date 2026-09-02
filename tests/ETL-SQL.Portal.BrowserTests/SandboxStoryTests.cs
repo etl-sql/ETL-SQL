@@ -2372,6 +2372,139 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Empty(session.PageErrors);
     }
 
+    // -- Cross-visual interaction and cascading slicers --------------------------------------------
+
+    /// <summary>Opens a collapsed inspector group by its summary text.</summary>
+    private static async Task OpenInspectorGroupAsync(IPage page, string summary)
+    {
+        await page.EvaluateAsync(
+            """
+            text => {
+                const group = [...document.querySelectorAll('.etlsql-format-group')]
+                    .find(item => item.querySelector('summary')?.textContent.trim() === text);
+                if (group) group.open = true;
+            }
+            """, summary);
+    }
+
+    [Fact]
+    public async Task Studio_CrossVisualInteraction_IsChosenFromControlsAndLandsInTheScript()
+    {
+        // On Select used to be a free-text box whose placeholder was the documentation, and whose
+        // handler wrote to the in-memory visual and never to the script.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.designerInstance)");
+
+        await page.EvaluateAsync(
+            """
+            () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const chart = studio.state.designerInstance.getState().pages
+                    .flatMap(page => page.visuals || [])
+                    .find(visual => visual.type === 'BAR');
+                studio.state.designerInstance.selectVisual(chart.id);
+            }
+            """);
+        await page.Locator("#pp-interaction-on-select").WaitForAsync(
+            new LocatorWaitForOptions { State = WaitForSelectorState.Attached });
+        await OpenInspectorGroupAsync(page, "Actions & Interactions");
+        await page.Locator("#pp-interaction-on-select").WaitForAsync();
+
+        await page.SelectOptionAsync("#pp-interaction-on-select", "FILTER");
+        await page.Locator("#pp-interaction-matching").WaitForAsync();
+        await page.FillAsync("#pp-interaction-matching", "region");
+        await page.Locator("#pp-interaction-matching").BlurAsync();
+
+        await page.WaitForFunctionAsync(
+            """
+            () => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()
+                .includes('INTERACTIONS (ON_SELECT = FILTER, MATCHING = region)')
+            """);
+
+        // The sentence under the control describes the reader's experience, not the dialect.
+        var note = await page.Locator(".etlsql-dsgn-interaction-note").First.TextContentAsync() ?? "";
+        Assert.Contains("region", note, StringComparison.Ordinal);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task Studio_CascadingSlicer_IsAuthoredFromTheInspectorAndNamesItsParent()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await page.Locator(".etlsql-studio-shell").WaitForAsync();
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
+
+        const string script = """
+            CREATE CONNECTION corp_db AS MSSQL(CONNECTION_STRING = 'SHARED:corp_sales_gw');
+            DECLARE @Region VARCHAR = 'North';
+            SELECT CityCode, RegionCode INTO #city_options FROM corp_db.cities;
+            CREATE VISUAL CityFilter AS SLICER (
+              TITLE = 'City',
+              SOURCE = #city_options,
+              MAPPINGS (VALUE = CityCode)
+            );
+            CREATE PAGE [Filters] AS DASHBOARD (LAYOUT (STRUCTURE = 'A', MAP ('A' = CityFilter)));
+            """;
+        await page.EvaluateAsync(
+            """
+            script => {
+                const studio = window.__STUDIO_INSTANCE__;
+                studio.state.documents.push({ id: 'cascade-report', path: 'cascade.rptsql', name: 'cascade.rptsql', content: script, isDirty: false, projection: 'split', reportWorkflow: 'dashboard' });
+                void studio.switchDoc('cascade-report');
+            }
+            """, script);
+
+        await page.WaitForFunctionAsync(
+            """
+            () => (window.__STUDIO_INSTANCE__.state.designerInstance?.getState?.()?.pages || [])
+                .flatMap(page => page.visuals || []).some(visual => visual.type === 'SLICER')
+            """);
+        await page.EvaluateAsync(
+            """
+            () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const slicer = studio.state.designerInstance.getState().pages
+                    .flatMap(page => page.visuals || [])
+                    .find(visual => visual.type === 'SLICER');
+                studio.state.designerInstance.selectVisual(slicer.id);
+            }
+            """);
+
+        await page.Locator("#pp-cascade-mode").WaitForAsync(
+            new LocatorWaitForOptions { State = WaitForSelectorState.Attached });
+        await OpenInspectorGroupAsync(page, "Cascading options");
+        await page.Locator("#pp-cascade-mode").WaitForAsync();
+        await page.SelectOptionAsync("#pp-cascade-mode", "LOCAL");
+
+        // A LOCAL cascade with no parent filters nothing, and the panel says so rather than
+        // pretending the control is finished.
+        await page.Locator("#pp-cascade-add-parent").WaitForAsync();
+        await page.ClickAsync("#pp-cascade-add-parent");
+        await page.Locator("[data-cascade-parameter='0']").WaitForAsync();
+        await page.FillAsync("[data-cascade-column='0']", "RegionCode");
+        await page.Locator("[data-cascade-column='0']").BlurAsync();
+
+        await page.WaitForFunctionAsync(
+            """
+            () => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()
+                .includes('CASCADE ( MODE = LOCAL, PARENTS (@Region = RegionCode)')
+            """);
+
+        var written = await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()");
+        Assert.Contains("INVALID = CLEAR, NULL = ALL, ALL_VALUE = '*', MULTISELECT = ANY", written, StringComparison.Ordinal);
+        Assert.Empty(session.PageErrors);
+    }
+
     private static async Task DismissOpenOverlaysAsync(IPage page)
     {
         const string selector = ".modal-overlay, [class$=modal-backdrop]";

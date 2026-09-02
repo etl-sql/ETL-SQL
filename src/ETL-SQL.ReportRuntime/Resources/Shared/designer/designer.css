@@ -2389,6 +2389,44 @@ body.vscode-dark .cm-diagnostic-source {
     margin-bottom: 6px;
 }
 
+/* The sentence under an interaction or cascade control, saying what the setting will do to a
+   reader's screen. It is prose, not a hint about the dialect. */
+.etlsql-dsgn-interaction-note {
+    margin: 4px 0 8px;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+    line-height: 1.45;
+}
+
+/* A clause Studio could not read is shown, not hidden: the author needs to know it is there and
+   that the controls above are not editing it. */
+.etlsql-dsgn-readonly-clause {
+    margin: 0 0 8px;
+    padding: 8px;
+    overflow-x: auto;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 4px;
+    background: var(--portal-surface-subtle, rgba(255, 255, 255, 0.02));
+    color: var(--portal-text, #f0f6fc);
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    font-size: 0.6875rem;
+    white-space: pre-wrap;
+}
+
+.etlsql-dsgn-cascade-parents { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.etlsql-dsgn-cascade-parent { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: center; }
+.etlsql-dsgn-cascade-drop {
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 4px;
+    background: none;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.875rem;
+    line-height: 1;
+    padding: 4px 8px;
+    cursor: pointer;
+}
+.etlsql-dsgn-cascade-drop:hover { color: var(--portal-danger, #f85149); border-color: var(--portal-danger, #f85149); }
+
 /* Studio's visual-format rail. The thin cyan rule is the one deliberate signature: it reads as a
    live connection from controls to source, while the rest stays quiet enough for a dense IDE pane. */
 .etlsql-format-inspector {

@@ -166,9 +166,18 @@ SQL, while the script remains visible as the advanced escape hatch.
 **Outcome:** Studio can complete the representative interactive-dashboard and paginated-report jobs,
 then expose advanced inspection views that do not block basic authoring.
 
-- [ ] **Add cross-visual filtering and cascading slicers**: A chart selection filters dependent
-  visuals and detail tables. Query-driven slicers support parent-child cascades and preserve their
-  bindings in Report-SQL.
+- [x] **Add cross-visual filtering and cascading slicers**: The engine and the browser runtime
+  already carried both; what was missing was any way to author them. `ON_SELECT` is now a choice
+  between highlighting, filtering, and ignoring, with the column a selection is keyed on beside it,
+  and a `SLICER` or `MULTISELECT` gets a cascade editor — LOCAL or LIVE, its parent bindings, and
+  the invalid-selection, null, all-value, and multi-select policies — written in the serializer's
+  own shape so reopening the report does not rewrite the clause. Two defects made the old surface
+  quietly inert: the action and interaction handlers wrote to the in-memory visual and never to the
+  script, and the parameter picker read `state.variables`, a key nothing sets, so the one control
+  that binds a slicer to a parameter was always empty. A third sat under them: the patcher matched a
+  clause keyword at any parenthesis depth, so `CASCADE`'s own `MODE` was read as the visual's `MODE`
+  clause and inserted a second time, the result did not parse, and the patcher's parse guard turned
+  the whole edit into silence. Clause matching is now pinned to the statement's own level.
 - [ ] **Remove the filter-pane value dead end**: Add categorical search, Select All, Invert, and
   paging or virtualization beyond 12 values. Add numeric/date operators for ranges, comparisons,
   and null checks.
@@ -324,12 +333,12 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 
 ### Series and Data Labels
 
-- [ ] **Series end-of-line labels**: No option to place a series name at the last data point of a LINE
+- [x] **Series end-of-line labels**: No option to place a series name at the last data point of a LINE
   chart. Add `SERIES_LABELS = ON|OFF WITH (POSITION = END|START)` to LINE and COMBO.
-- [ ] **Data label background and border**: No label background fill or border stroke on `DATA_LABELS`.
+- [x] **Data label background and border**: No label background fill or border stroke on `DATA_LABELS`.
   Add `LABEL_BACKGROUND = '#RRGGBB'` and `LABEL_BORDER = 'css-border'` to the `DATA_LABELS WITH (...)`
   block on all named charts.
-- [ ] **Leader lines**: No connector line from a detached label to its mark. Add
+- [x] **Leader lines**: No connector line from a detached label to its mark. Add
   `LEADER_LINE = ON|OFF WITH (COLOR = '...', STYLE = SOLID|DASHED)` to `DATA_LABELS` on PIE, DONUT,
   and SCATTER, where floating labels are most common.
 

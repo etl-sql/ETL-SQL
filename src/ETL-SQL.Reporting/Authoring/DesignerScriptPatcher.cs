@@ -346,14 +346,20 @@ public sealed class DesignerScriptPatcher
     private static string PatchElementStatement(string original, string desired)
     {
         var patched = PatchHeader(original, desired, @"\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?(?:VISUAL|CONTAINER|BUTTON)\s+[^\s]+(?:\s+AS\s+[^\s(]+)?");
-        foreach (var clause in new[] { "TITLE", "SUBTITLE", "SOURCE", "MODE", "TEMPLATE", "CHART", "DEFAULT", "MAPPINGS", "OPTIONS", "STYLE", "FORMATTING", "OVERLAYS", "ACTIONS", "INTERACTIONS", "FALLBACK", "LAYOUT", "PRINT_LAYOUT" })
+        // Every clause of a visual sits at the statement's own level, so the search is pinned there.
+        // Without the pin, a keyword nested inside another clause is read as a clause of its own:
+        // CASCADE's `MODE = LOCAL` was found as the HTML visual's MODE clause and inserted a second
+        // time at the top level, and the result did not parse — which the guard at the end of Patch
+        // then turned into "the edit silently did nothing".
+        const int statementLevel = 1;
+        foreach (var clause in new[] { "TITLE", "SUBTITLE", "SOURCE", "MODE", "TEMPLATE", "CHART", "DEFAULT", "MAPPINGS", "OPTIONS", "STYLE", "FORMATTING", "OVERLAYS", "ACTIONS", "INTERACTIONS", "CASCADE", "FALLBACK", "LAYOUT", "PRINT_LAYOUT" })
         {
             // If the desired state does not specify a CHART clause, keep existing CHART trivia intact
-            if (clause == "CHART" && FindClause(original, clause) is not null && FindClause(desired, clause) is null)
+            if (clause == "CHART" && FindClause(original, clause, statementLevel) is not null && FindClause(desired, clause, statementLevel) is null)
                 continue;
             if (clause == "MAPPINGS" && ContainsNativeMicroChartSyntax(original) && !ContainsEquivalentNativeMicroChartSyntax(original, desired))
                 continue;
-            patched = PatchClause(patched, desired, clause);
+            patched = PatchClause(patched, desired, clause, statementLevel);
         }
         return patched;
     }
@@ -424,10 +430,10 @@ public sealed class DesignerScriptPatcher
         return original[..existingMatch.Index] + desiredMatch.Value + original[(existingMatch.Index + existingMatch.Length)..];
     }
 
-    private static string PatchClause(string original, string desiredStatement, string keyword)
+    private static string PatchClause(string original, string desiredStatement, string keyword, int? atDepth = null)
     {
-        var existing = FindClause(original, keyword);
-        var desired = FindClause(desiredStatement, keyword);
+        var existing = FindClause(original, keyword, atDepth);
+        var desired = FindClause(desiredStatement, keyword, atDepth);
         if (existing is null && desired is null) return original;
         if (existing is not null && desired is not null
             && SemanticNormalize(existing.Value.Text) == SemanticNormalize(desired.Value.Text))
@@ -464,7 +470,13 @@ public sealed class DesignerScriptPatcher
         return original[..existing.Value.Start] + replacement + original[existing.Value.End..];
     }
 
-    private static ClauseSpan? FindClause(string text, string keyword)
+    /// <summary>
+    /// Finds a clause by keyword. <paramref name="atDepth"/> pins the parenthesis level it must sit
+    /// at — 1 for a clause of the statement itself — so a keyword appearing inside another clause,
+    /// or inside an inline <c>SELECT</c>, is not mistaken for a clause of its own. Passing null keeps
+    /// the older any-level behaviour, which the page patcher relies on for clauses nested in LAYOUT.
+    /// </summary>
+    private static ClauseSpan? FindClause(string text, string keyword, int? atDepth = null)
     {
         var depth = 0;
         var inString = false;
@@ -495,7 +507,7 @@ public sealed class DesignerScriptPatcher
             if (inString) continue;
             if (current == '(') { depth++; continue; }
             if (current == ')') { depth--; continue; }
-            if (depth < 1 || !IsWordAt(text, index, keyword)) continue;
+            if (depth < 1 || (atDepth.HasValue && depth != atDepth.Value) || !IsWordAt(text, index, keyword)) continue;
 
             var start = index;
             var cursor = index + keyword.Length;

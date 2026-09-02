@@ -5887,7 +5887,152 @@ export function createDesigner(container, opts = {}) {
         }
     }
 
+    // ── Cross-visual interaction and cascade authoring ────────────────────────
+    //
+    // Both clauses already existed in the engine and in the browser runtime; what was missing was a
+    // way to author them that did not require knowing the dialect. `ON_SELECT` was a free-text box
+    // whose placeholder was the documentation, and `CASCADE` had no control at all.
+
+    const INTERACTION_EFFECTS = [
+        { value: 'HIGHLIGHT', label: 'Highlight matching data', note: 'Keeps every row and dims the rest.' },
+        { value: 'FILTER', label: 'Filter to matching rows', note: 'Re-queries this visual and hides the rest.' },
+        { value: 'NONE', label: 'Ignore selections elsewhere', note: 'This visual never reacts to another one.' },
+    ];
+
+    const CASCADE_INVALID = [
+        { value: 'CLEAR', label: 'Clear the selection' },
+        { value: 'FIRST', label: 'Select the first remaining option' },
+        { value: 'ERROR', label: 'Refuse the change' },
+    ];
+
+    /**
+     * Columns this visual can key a selection on: what it maps, what its dataset declares, and what
+     * the host can see in its own data sample.
+     *
+     * The list is a suggestion, never a limit. A visual sourced from a `#temp` table the designer
+     * never sampled has no known columns at all, and a picker that offered nothing would make the
+     * setting unreachable for exactly the scripts most likely to need it.
+     */
+    function interactionKeyCandidates(v, colNames) {
+        let hostColumns = [];
+        try {
+            hostColumns = opts.getDatasetColumns?.() || [];
+        } catch {
+            // A host that cannot answer right now is not a reason to lose the columns we do know.
+        }
+        return [...new Set([
+            ...Object.values(v.mappings || {}).filter(Boolean).map(String),
+            ...(colNames || []),
+            ...hostColumns.map(String),
+        ])].filter(Boolean);
+    }
+
+    /** Suggestions for a free-text column field. */
+    function columnDatalist(id, values) {
+        return `<datalist id="${esc(id)}">${values
+            .map(value => `<option value="${esc(value)}"></option>`).join('')}</datalist>`;
+    }
+
+    /**
+     * Options for a picker that must never silently drop a value the author wrote by hand.
+     *
+     * A `MATCHING` naming a column the designer cannot see is not necessarily wrong — the source may
+     * be an inline query the canvas never sampled — so an unknown current value is offered as its
+     * own option rather than resetting the control to "auto" and writing that back on the next edit.
+     */
+    function preservingOptions(values, current, placeholder) {
+        const known = values.filter(Boolean).map(String);
+        const has = known.some(value => value.toLowerCase() === String(current || '').toLowerCase());
+        const all = current && !has ? [current, ...known] : known;
+        return `<option value=""${current ? '' : ' selected'}>${esc(placeholder)}</option>`
+            + all.map(value => `<option value="${esc(value)}"${String(value).toLowerCase() === String(current || '').toLowerCase() ? ' selected' : ''}>${esc(value)}</option>`).join('');
+    }
+
+    /**
+     * Reads a `CASCADE ( ... )` clause into the fields the inspector edits.
+     *
+     * The clause is carried through design state as the text the parser produced, so this reads the
+     * canonical serialization. `supported: false` is a distinct answer from "no cascade": a clause
+     * this cannot read is shown as read-only text and left in the script untouched, because
+     * rewriting it from a partial reading would lose whatever it could not see.
+     */
+    function readCascade(clause) {
+        if (!clause || !String(clause).trim()) return null;
+        const text = String(clause);
+        const mode = /\bMODE\s*=\s*(LOCAL|LIVE)\b/i.exec(text)?.[1]?.toUpperCase();
+        if (!mode) return { supported: false, text };
+
+        const parents = [];
+        const parentsClause = /\bPARENTS\s*\(([^)]*)\)/i.exec(text)?.[1] || '';
+        for (const entry of parentsClause.split(',')) {
+            const pair = /^\s*(@[A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/.exec(entry);
+            if (pair) parents.push({ parameter: pair[1], column: pair[2] });
+        }
+        // A PARENTS clause that is present but unreadable must not be silently emptied.
+        if (parentsClause.trim() && !parents.length) return { supported: false, text };
+
+        return {
+            supported: true,
+            text,
+            mode,
+            parents,
+            invalid: /\bINVALID\s*=\s*(CLEAR|FIRST|ERROR)\b/i.exec(text)?.[1]?.toUpperCase() || 'CLEAR',
+            nullPolicy: /\bNULL\s*=\s*(ALL|MATCH)\b/i.exec(text)?.[1]?.toUpperCase() || 'ALL',
+            allValue: /\bALL_VALUE\s*=\s*'((?:[^']|'')*)'/i.exec(text)?.[1]?.replace(/''/g, "'") ?? '*',
+            multiSelect: /\bMULTISELECT\s*=\s*(ANY|ALL)\b/i.exec(text)?.[1]?.toUpperCase() || 'ANY',
+        };
+    }
+
+    /** Writes the clause back in the serializer's own shape, so a round-trip changes no bytes. */
+    function writeCascade(cascade) {
+        const parts = [`MODE = ${cascade.mode}`];
+        if (cascade.mode === 'LOCAL' && cascade.parents.length) {
+            parts.push('PARENTS (' + cascade.parents
+                .map(parent => `${parent.parameter} = ${parent.column}`).join(', ') + ')');
+        }
+        parts.push(`INVALID = ${cascade.invalid}`);
+        parts.push(`NULL = ${cascade.nullPolicy}`);
+        parts.push(`ALL_VALUE = '${String(cascade.allValue).replace(/'/g, "''")}'`);
+        parts.push(`MULTISELECT = ${cascade.multiSelect}`);
+        return 'CASCADE ( ' + parts.join(', ') + ' )';
+    }
+
+    /**
+     * Which inspector groups the author has opened, by their heading.
+     *
+     * The panel is rebuilt from scratch on every edit, and a rebuilt `<details>` starts closed — so
+     * changing one setting used to shut every section the author had opened, including the one they
+     * were working in. Remembering the headings keeps the panel where they left it. The `toggle`
+     * event does not bubble, so the listener is registered in the capture phase on the panel that
+     * survives the rebuild.
+     */
+    const openInspectorGroups = new Set();
+
+    propsPanel.addEventListener('toggle', event => {
+        const details = event.target;
+        if (!details.matches?.('.etlsql-format-group')) return;
+        const heading = details.querySelector('summary')?.textContent.trim();
+        if (!heading) return;
+        if (details.open) openInspectorGroups.add(heading);
+        else openInspectorGroups.delete(heading);
+    }, true);
+
+    function restoreInspectorGroups() {
+        for (const details of propsPanel.querySelectorAll('.etlsql-format-group')) {
+            const heading = details.querySelector('summary')?.textContent.trim();
+            if (!heading) continue;
+            // A group the markup opens by default stays open and is recorded, so closing it sticks.
+            if (details.open) openInspectorGroups.add(heading);
+            else if (openInspectorGroups.has(heading)) details.open = true;
+        }
+    }
+
     function renderProps() {
+        renderPropsBody();
+        restoreInspectorGroups();
+    }
+
+    function renderPropsBody() {
         propsPanel.innerHTML = '';
         const v = selVisualId ? findVis(selVisualId) : null;
         const on = (sel, fn) => propsPanel.querySelector(sel)?.addEventListener('change', fn);
@@ -6104,8 +6249,12 @@ export function createDesigner(container, opts = {}) {
             .map(c => `<option value="${esc(c.id)}"${v.containerId === c.id ? ' selected' : ''}>${esc(c.name || 'Container')} (${esc(c.options?.CONTAINER_TYPE || 'BOX')})</option>`)
             .join('');
 
-        const varOpts = (state.variables || [])
-            .map(vr => `<option value="${esc(vr.name)}"${v.options?.['action:TARGET_VAR'] === vr.name ? ' selected' : ''}>@${esc(vr.name)} (${esc(vr.type || 'STRING')})</option>`)
+        // The parse reports declarations as `parameters`, with the `@` already on the name. Reading
+        // `state.variables` — a key nothing ever sets — left this picker permanently empty, so the
+        // one control that binds a slicer to a parameter looked like a report with no parameters.
+        const declaredParameters = state.parameters || [];
+        const varOpts = declaredParameters
+            .map(vr => `<option value="${esc(vr.name)}"${v.options?.['action:TARGET_VAR'] === vr.name ? ' selected' : ''}>${esc(vr.name)} (${esc(vr.dataType || vr.type || 'VARCHAR')})</option>`)
             .join('');
 
         const ds = state.datasets.find(d => d.name === v.dataset);
@@ -6118,6 +6267,26 @@ export function createDesigner(container, opts = {}) {
 
         const datalistId = `dsgn-cols-${v.id}`;
         const datalistHtml = colOptions.length ? `<datalist id="${datalistId}">${colOptions}</datalist>` : '';
+
+        // Cross-visual interaction and cascade state, read from the visual as authored.
+        const onSelect = String(v.options?.['interaction:ON_SELECT'] || '').trim().toUpperCase();
+        const matchingColumn = String(v.options?.['interaction:MATCHING'] || '').trim();
+        const isSlicerLike = v.type === 'SLICER' || v.type === 'MULTISELECT';
+        const cascade = readCascade(v.options?.cascade);
+        const interactionEffect = INTERACTION_EFFECTS.find(effect => effect.value === onSelect);
+        const interactionNote = onSelect === 'NONE'
+            ? 'Selecting data in another visual leaves this one alone.'
+            : `${interactionEffect ? interactionEffect.note : 'Selecting data in another visual dims the rows that do not match.'}`
+                + (matchingColumn
+                    ? ` Rows are matched on ${matchingColumn}.`
+                    : ' Rows are matched on this visual\u2019s category field.');
+        const cascadeNote = !cascade || !cascade.supported
+            ? ''
+            : cascade.mode === 'LIVE'
+                ? 'Its options come from re-running this control\u2019s own query, so its parents are whichever parameters that query names.'
+                : cascade.parents.length
+                    ? `Its options are filtered by ${cascade.parents.map(parent => parent.parameter).join(' and ')} before the reader sees them.`
+                    : 'LOCAL filtering does nothing until a parent binding names the parameter and the column to filter on.';
 
         const isCustomChart = v.type === 'CUSTOM';
         const defaultCustomChart = `CHART (
@@ -6343,11 +6512,78 @@ export function createDesigner(container, opts = {}) {
                         <label class="etlsql-dsgn-label">On Click
                             <input type="text" id="pp-action-on-click" class="form-control" placeholder="e.g., DRILL_DOWN(Target = Tbl, Key = region)" value="${esc(v.options?.['action:ON_CLICK'] || '')}">
                         </label>
-                        <label class="etlsql-dsgn-label">On Select
-                            <input type="text" id="pp-interaction-on-select" class="form-control" placeholder="e.g., HIGHLIGHT" value="${esc(v.options?.['interaction:ON_SELECT'] || '')}">
+                        <label class="etlsql-dsgn-label">When another visual is selected
+                            <select id="pp-interaction-on-select" class="form-control">
+                                <option value=""${onSelect ? '' : ' selected'}>Default — highlight matching data</option>
+                                ${INTERACTION_EFFECTS.map(effect => `<option value="${effect.value}"${onSelect === effect.value ? ' selected' : ''}>${esc(effect.label)}</option>`).join('')}
+                                ${onSelect && !INTERACTION_EFFECTS.some(effect => effect.value === onSelect)
+                                    ? `<option value="${esc(onSelect)}" selected>${esc(onSelect)} (authored)</option>` : ''}
+                            </select>
                         </label>
+                        ${onSelect === 'NONE' ? '' : `<label class="etlsql-dsgn-label">Match selections on
+                            <input type="text" id="pp-interaction-matching" class="form-control" spellcheck="false"
+                                list="dsgn-match-cols-${esc(v.id)}" value="${esc(matchingColumn)}"
+                                placeholder="Auto — this visual\u2019s category field">
+                        </label>`}
+                        <p class="etlsql-dsgn-interaction-note">${esc(interactionNote)}</p>
+                        ${columnDatalist(`dsgn-match-cols-${v.id}`, interactionKeyCandidates(v, colNames))}
                     </div>
                 </details>
+
+                ${isSlicerLike ? `<details class="etlsql-format-group">
+                    <summary>Cascading options</summary>
+                    <div class="etlsql-format-group-body">
+                        ${cascade && !cascade.supported ? `
+                        <p class="etlsql-dsgn-interaction-note">This control has a CASCADE clause Studio cannot read, so it is left exactly as authored. Edit it in the script.</p>
+                        <pre class="etlsql-dsgn-readonly-clause">${esc(cascade.text)}</pre>` : `
+                        <label class="etlsql-dsgn-label">Option set depends on
+                            <select id="pp-cascade-mode" class="form-control">
+                                <option value=""${cascade ? '' : ' selected'}>Nothing — always the same options</option>
+                                <option value="LOCAL"${cascade?.mode === 'LOCAL' ? ' selected' : ''}>Other controls, filtered here (LOCAL)</option>
+                                <option value="LIVE"${cascade?.mode === 'LIVE' ? ' selected' : ''}>Other controls, re-queried (LIVE)</option>
+                            </select>
+                        </label>
+                        ${cascade?.mode === 'LOCAL' ? `
+                        <div class="etlsql-dsgn-cascade-parents" data-cascade-parents>
+                            ${cascade.parents.length ? cascade.parents.map((parent, index) => `
+                                <div class="etlsql-dsgn-cascade-parent">
+                                    <select class="form-control" data-cascade-parameter="${index}">
+                                        ${preservingOptions(declaredParameters.map(item => item.name), parent.parameter, '— parameter —')}
+                                    </select>
+                                    <input type="text" class="form-control" data-cascade-column="${index}" spellcheck="false"
+                                        list="dsgn-match-cols-${esc(v.id)}" value="${esc(parent.column)}" placeholder="column">
+                                    <button type="button" class="etlsql-dsgn-cascade-drop" data-cascade-remove="${index}" aria-label="Remove parent binding">×</button>
+                                </div>`).join('')
+                                : '<p class="etlsql-dsgn-interaction-note">No parents yet. LOCAL filtering needs at least one.</p>'}
+                            <button type="button" class="btn btn-sm" id="pp-cascade-add-parent"${declaredParameters.length ? '' : ' disabled'}>+ Parent control</button>
+                            ${declaredParameters.length ? '' : '<p class="etlsql-dsgn-interaction-note">Declare a parameter first; a parent binding names one.</p>'}
+                        </div>` : ''}
+                        ${cascade ? `
+                        <label class="etlsql-dsgn-label">When a parent change invalidates this selection
+                            <select id="pp-cascade-invalid" class="form-control">
+                                ${CASCADE_INVALID.map(option => `<option value="${option.value}"${cascade.invalid === option.value ? ' selected' : ''}>${esc(option.label)}</option>`).join('')}
+                            </select>
+                        </label>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">A blank parent means
+                                <select id="pp-cascade-null" class="form-control">
+                                    <option value="ALL"${cascade.nullPolicy === 'ALL' ? ' selected' : ''}>No filter</option>
+                                    <option value="MATCH"${cascade.nullPolicy === 'MATCH' ? ' selected' : ''}>Match blanks only</option>
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">All value
+                                <input type="text" id="pp-cascade-all-value" class="form-control" value="${esc(cascade.allValue)}">
+                            </label>
+                        </div>
+                        <label class="etlsql-dsgn-label">With several parent values selected
+                            <select id="pp-cascade-multiselect" class="form-control">
+                                <option value="ANY"${cascade.multiSelect === 'ANY' ? ' selected' : ''}>Keep rows matching any of them</option>
+                                <option value="ALL"${cascade.multiSelect === 'ALL' ? ' selected' : ''}>Keep rows matching all of them</option>
+                            </select>
+                        </label>
+                        <p class="etlsql-dsgn-interaction-note">${esc(cascadeNote)}</p>` : ''}`}
+                    </div>
+                </details>` : ''}
 
                 <details class="etlsql-format-group" open>
                     <summary>Grid Position & Layout</summary>
@@ -6418,9 +6654,77 @@ export function createDesigner(container, opts = {}) {
             if (input) input.value = actionStr;
             syncScriptFromGridDebounced();
         });
-        on('#pp-action-on-change', e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['action:ON_CHANGE'] = val; else delete v.options['action:ON_CHANGE']; });
-        on('#pp-action-on-click',  e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['action:ON_CLICK'] = val; else delete v.options['action:ON_CLICK']; });
-        on('#pp-interaction-on-select', e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['interaction:ON_SELECT'] = val; else delete v.options['interaction:ON_SELECT']; });
+        // These three wrote to the in-memory visual and never to the script: an author could set an
+        // action or an interaction, watch the control keep the value, save, and find nothing there.
+        on('#pp-action-on-change', e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['action:ON_CHANGE'] = val; else delete v.options['action:ON_CHANGE']; syncScriptFromGridDebounced(); });
+        on('#pp-action-on-click',  e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['action:ON_CLICK'] = val; else delete v.options['action:ON_CLICK']; syncScriptFromGridDebounced(); });
+        on('#pp-interaction-on-select', e => {
+            if (!v.options) v.options = {};
+            const val = e.target.value.trim().toUpperCase();
+            if (val) v.options['interaction:ON_SELECT'] = val;
+            else delete v.options['interaction:ON_SELECT'];
+            // NONE means this visual never reacts, so a match column would describe nothing.
+            if (val === 'NONE') delete v.options['interaction:MATCHING'];
+            renderProps();
+            syncScriptFromGridDebounced();
+        });
+        on('#pp-interaction-matching', e => {
+            if (!v.options) v.options = {};
+            const val = e.target.value.trim();
+            if (val) v.options['interaction:MATCHING'] = val;
+            else delete v.options['interaction:MATCHING'];
+            renderProps();
+            syncScriptFromGridDebounced();
+        });
+
+        // ── Cascade ───────────────────────────────────────────────────────────
+        // Every edit rewrites the whole clause from the fields, in the serializer's own shape, so a
+        // parse of what Studio wrote produces the text Studio would write again.
+        const commitCascade = next => {
+            if (!v.options) v.options = {};
+            if (next) v.options.cascade = writeCascade(next);
+            else delete v.options.cascade;
+            renderProps();
+            syncScriptFromGridDebounced();
+        };
+        const editCascade = change => {
+            if (!cascade?.supported) return;
+            const next = { ...cascade, parents: cascade.parents.map(parent => ({ ...parent })) };
+            change(next);
+            commitCascade(next);
+        };
+        on('#pp-cascade-mode', e => {
+            const mode = e.target.value;
+            if (!mode) { commitCascade(null); return; }
+            const base = cascade?.supported ? cascade : null;
+            commitCascade({
+                mode,
+                // LIVE infers its parents from the parameters its own query names, and the parser
+                // rejects PARENTS there, so switching to LIVE drops them rather than writing a
+                // clause that will not parse.
+                parents: mode === 'LOCAL' ? (base?.parents ?? []) : [],
+                invalid: base?.invalid ?? 'CLEAR',
+                nullPolicy: base?.nullPolicy ?? 'ALL',
+                allValue: base?.allValue ?? '*',
+                multiSelect: base?.multiSelect ?? 'ANY',
+            });
+        });
+        on('#pp-cascade-invalid', e => editCascade(next => { next.invalid = e.target.value; }));
+        on('#pp-cascade-null', e => editCascade(next => { next.nullPolicy = e.target.value; }));
+        on('#pp-cascade-all-value', e => editCascade(next => { next.allValue = e.target.value; }));
+        on('#pp-cascade-multiselect', e => editCascade(next => { next.multiSelect = e.target.value; }));
+        propsPanel.querySelector('#pp-cascade-add-parent')?.addEventListener('click', () => editCascade(next => {
+            next.parents.push({
+                parameter: declaredParameters[0]?.name || '@parameter',
+                column: interactionKeyCandidates(v, colNames)[0] || '',
+            });
+        }));
+        propsPanel.querySelectorAll('[data-cascade-parameter]').forEach(select => select.addEventListener('change', () =>
+            editCascade(next => { next.parents[Number(select.dataset.cascadeParameter)].parameter = select.value; })));
+        propsPanel.querySelectorAll('[data-cascade-column]').forEach(select => select.addEventListener('change', () =>
+            editCascade(next => { next.parents[Number(select.dataset.cascadeColumn)].column = select.value; })));
+        propsPanel.querySelectorAll('[data-cascade-remove]').forEach(button => button.addEventListener('click', () =>
+            editCascade(next => { next.parents.splice(Number(button.dataset.cascadeRemove), 1); })));
         on('#pp-col',          e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
         on('#pp-row',          e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
         on('#pp-cspan',        e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
