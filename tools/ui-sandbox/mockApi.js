@@ -120,6 +120,8 @@ export function makeMockApi(seedState) {
       data = mockPipelineTask(body);
     } else if (path.endsWith('/api/designer/pipeline-scope')) {
       data = mockPipelineScope(body);
+    } else if (path.endsWith('/api/designer/pipeline-run-plan')) {
+      data = mockPipelineRunPlan(body);
     } else if (path.endsWith('/api/designer/analyze')) {
       data = { diagnostics: analyzeMockScript(body.script ?? '') };
     } else if (path.endsWith('/api/designer/complete')) {
@@ -1704,6 +1706,68 @@ function mockPipelineScope(body) {
   }
 
   return { resolved: true, error: null, variables, tempTables };
+}
+
+/**
+ * The sandbox's run plan.
+ *
+ * Deliberately reports effects for the shapes that have them, so the confirmation dialog is
+ * reachable here at all. The catch-all `{ok: true}` this mock answers unmatched paths with once hid
+ * a whole class of 404s; a route that existed but always planned an empty, effect-free run would
+ * hide the confirmation the same way — it would simply never open, and look like it worked.
+ */
+function mockPipelineRunPlan(body) {
+  const script = body.script || '';
+  const id = String(body.id || '');
+  const refused = error => ({ resolved: false, error, script: '', included: [], skipped: [], effects: [] });
+  if (!id) return refused('No task is selected.');
+
+  const tasks = mockParseTasks(script);
+  const selected = tasks.find(task => task.id.toLowerCase() === id.toLowerCase());
+  if (!selected) return refused(`'${id}' is not a task in this script.`);
+
+  // A declared dependency narrows the run to what it names; with none, plain script order stands.
+  const above = tasks.filter(task => task.line <= selected.line);
+  const declared = (selected.dependsOn ?? []).map(entry => String(entry?.id ?? entry).toLowerCase());
+  const included = declared.length
+    ? above.filter(task => declared.includes(task.id.toLowerCase()) || task.id === selected.id)
+    : above;
+  const includedIds = new Set(included.map(task => task.id.toLowerCase()));
+
+  const patterns = [
+    [/^\s*MERGE\s+INTO\s+([\w.]+)/i, 'MERGE INTO'],
+    [/^\s*INSERT\s+INTO\s+([\w.]+)/i, 'INSERT INTO'],
+    [/^\s*UPDATE\s+([\w.]+)/i, 'UPDATE'],
+    [/^\s*DELETE\s+FROM\s+([\w.]+)/i, 'DELETE FROM'],
+    [/^\s*TRUNCATE\s+TABLE\s+([\w.]+)/i, 'TRUNCATE TABLE'],
+    [/^\s*EXECUTE\s+(\w+)\s+BEGIN/i, 'EXECUTE on'],
+    [/^\s*COPY\s+FILE\s+'([^']*)'/i, 'COPY FILE'],
+    [/^\s*SEND\s+EMAIL\b/i, 'SEND EMAIL to'],
+  ];
+
+  const effects = [];
+  script.split('\n').forEach((text, index) => {
+    for (const [pattern, action] of patterns) {
+      const match = pattern.exec(text);
+      if (!match) continue;
+      const target = match[1] ?? 'the configured recipient';
+      // A #temp target dies with the session, so it is not something to confirm.
+      if (target.startsWith('#')) return;
+      const owner = included.filter(task => task.line <= index + 1).at(-1);
+      if (!owner || !includedIds.has(owner.id.toLowerCase())) return;
+      effects.push({ taskId: owner.id, action, target, line: index + 1 });
+      return;
+    }
+  });
+
+  return {
+    resolved: true,
+    error: null,
+    script,
+    included: included.map(task => task.id),
+    skipped: above.filter(task => !includedIds.has(task.id.toLowerCase())).map(task => task.id),
+    effects,
+  };
 }
 
 /** The sandbox's pipeline editor. Refusals are real, so the UI's error path gets exercised. */

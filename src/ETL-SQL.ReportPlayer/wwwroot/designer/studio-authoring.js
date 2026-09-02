@@ -1840,9 +1840,77 @@ export function createStudioAuthoringSurfaces({
             });
     }
 
+    /**
+     * Asks whether to run to a selected task, naming everything the run would leave behind.
+     *
+     * <p>The point of this dialog is the list, not the question. "Are you sure?" teaches an author to
+     * click Yes; "this will MERGE into warehouse.Customers and send mail to ops@example.com" is
+     * something they can actually be wrong about, and refuse.</p>
+     *
+     * A plan with no effects never reaches here — the caller runs it — because a confirmation that
+     * appears when there is nothing to confirm is the fastest way to make the real one invisible.
+     *
+     * @param taskId The selected task, which the run stops at.
+     * @param plan   `{ included, skipped, effects }` as the host planned it.
+     * @returns true to run, false or null to leave the script alone.
+     */
+    function openPipelineRunPlanConfirm({ taskId, plan }) {
+        const effects = plan?.effects ?? [];
+        const skipped = plan?.skipped ?? [];
+        const included = plan?.included ?? [];
+
+        // Grouped by the task that performs them, because that is the unit the author selected and
+        // can go look at. An effect the planner could not attribute is ambient script, and says so
+        // rather than being filed under whichever task happens to sit near it.
+        const groups = new Map();
+        for (const effect of effects) {
+            const owner = effect?.taskId || '';
+            if (!groups.has(owner)) groups.set(owner, []);
+            groups.get(owner).push(effect);
+        }
+
+        const groupMarkup = [...groups.entries()].map(([owner, list]) => `
+            <li>
+                <span class="etlsql-studio-runplan-owner">${owner
+                    ? escapeHtml(owner)
+                    : 'Script outside any task'}</span>
+                <ul class="etlsql-studio-runplan-effects">
+                    ${list.map(effect => `<li>
+                        <span class="etlsql-studio-runplan-action">${escapeHtml(effect.action)}</span>
+                        <code>${escapeHtml(effect.target)}</code>
+                        <span class="etlsql-studio-runplan-line">line ${Number(effect.line) || 0}</span>
+                    </li>`).join('')}
+                </ul>
+            </li>`).join('');
+
+        return studioDialog(
+            { kicker: 'Run to here', title: `Run the pipeline through ${taskId}` },
+            api => {
+                api.render({
+                    lede: `This runs ${included.length} task${included.length === 1 ? '' : 's'} for real, `
+                        + `against the connections the script declares. `
+                        + `${effects.length === 1 ? 'One thing' : `${effects.length} things`} below will `
+                        + `outlive the run.`,
+                    body: `<ul class="etlsql-studio-runplan">${groupMarkup}</ul>`
+                        // Named, not hidden. A skipped sibling is the most likely reason a run that
+                        // "should have worked" did not, and the author cannot guess it from the canvas.
+                        + (skipped.length
+                            ? guidedNoteMarkup(`Skipped, because ${escapeHtml(taskId)} does not declare that it `
+                                + `waits for ${skipped.length === 1 ? 'it' : 'them'}: `
+                                + skipped.map(id => `<code>${escapeHtml(id)}</code>`).join(', '), 'info')
+                            : ''),
+                    actions: [
+                        { id: 'cancel', label: 'Cancel', run: () => api.close(false) },
+                        { id: 'run', label: 'Run it', primary: true, run: () => api.close(true) },
+                    ],
+                });
+            });
+    }
+
     return {
         openDataWizard,
         openPipelineTaskEditor,
+        openPipelineRunPlanConfirm,
         openChartBuilder,
         runChooseDataStep,
         runParameterStep,

@@ -6669,6 +6669,58 @@ body.vscode-dark .etlsql-cw-missing-hint {
     outline-offset: 2px;
 }
 
+/* ── The run-to-here confirmation ────────────────────────────────────────────
+   Grouped by the task that performs each effect, because that is the unit the author selected and
+   can go look at. The action is what gets the weight: the author is scanning for the verb that
+   worries them, not for the table name. */
+.etlsql-studio-runplan {
+    margin: 0 0 12px;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.etlsql-studio-runplan-owner {
+    display: block;
+    font-family: var(--portal-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.75rem;
+    color: var(--portal-text, #f0f6fc);
+}
+
+.etlsql-studio-runplan-effects {
+    margin: 4px 0 0;
+    padding: 0 0 0 10px;
+    list-style: none;
+    border-left: 2px solid var(--portal-border, #30363d);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.etlsql-studio-runplan-effects li {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.75rem;
+}
+
+.etlsql-studio-runplan-action {
+    font-weight: 600;
+    color: var(--portal-warning, #d29922);
+}
+
+.etlsql-studio-runplan-effects code {
+    color: var(--portal-text, #f0f6fc);
+}
+
+.etlsql-studio-runplan-line {
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+}
+
 .etlsql-studio-pipeline-deps {
     display: flex;
     align-items: center;

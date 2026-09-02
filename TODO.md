@@ -63,7 +63,7 @@ and `.etlsql` without losing hand edits.
   refused with a reason. The projection replaces the implicit sequential edge into a task that
   declares its own.
 
-### Phase 2 — Pipeline Control Flow and Debugging (Next)
+### Phase 2 — Pipeline Control Flow and Debugging (Complete)
 
 **Outcome:** The DAG expresses ETL-SQL control flow honestly and can inspect execution state at a
 selected point.
@@ -98,9 +98,19 @@ selected point.
   "No answer yet", "resolved and empty", and "could not tell" are three distinct renderings, because
   collapsing them is how a panel quietly lies. Row counts and spill appear only when a run reported
   them for that task, matched by name against the engine's execution tree.
-- [ ] **Add Run to Selected Node**: Execute through a selected node and populate intermediate
-  variables and `#temp` tables in Results. Define safe behavior for remote side effects before
-  enabling the action on mutating tasks.
+- [x] **Add Run to Selected Node**: Execute through a selected node and populate intermediate
+  variables and `#temp` tables in Results. The slice is the selection's dependency closure — the
+  tasks its `-- @after:` tag names, transitively — so declaring a dependency narrows the run to what
+  was declared; a task with no tag falls back to the plain sequential reading the canvas already
+  uses for a reorder, so an untagged script still runs top to bottom the way it reads. Everything
+  the canvas does not model is kept, because a `CREATE CONNECTION` or a `DECLARE` carries no
+  dependency information to prove it unrelated, and only whole statements are ever cut, so a
+  selection inside a container takes its container whole rather than truncating a `PARALLEL` block
+  into something that does not parse. The safe behaviour for remote side effects is a confirmation
+  that names them: planning and running are two routes, the planning one cannot execute, and the
+  dialog lists every write that outlives the run — connection-qualified table, address, or path —
+  grouped by the task performing it, with `#temp` staging deliberately absent so the confirmation
+  keeps meaning something. Skipped siblings are named rather than dropped silently.
 
 ### Phase 3 — Guided Authoring and Beginner Recovery
 

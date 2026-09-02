@@ -146,6 +146,7 @@ export function taskKindLabel(kind) {
  * @param onMove     `({ id, after }) => Promise<void>` — after null means "run first".
  * @param onNest     `({ id, container }) => Promise<void>` — container null means "move out".
  * @param onRemove   `({ id }) => Promise<void>`
+ * @param onRunTo    `({ id }) => Promise<void>`, executes the pipeline through this task.
  * @param onOpenLine `(line) => void`, to reveal the task in the script.
  * @param scope      `{ resolved, error, variables, tempTables }` in scope where the task sits, or null.
  * @param runtime    `{ rows, durationMs, note }` the last run reported for it, or null.
@@ -164,6 +165,7 @@ export function attachPipelineTaskEditing(host, canvas, {
     onNest = async () => {},
     onUpdate = async () => {},
     onRemove = async () => {},
+    onRunTo = null,
     onOpenLine = () => {},
     scope = null,
     runtime = null,
@@ -188,7 +190,7 @@ export function attachPipelineTaskEditing(host, canvas, {
             </div>
             <span class="etlsql-studio-pipeline-hint">${escapeHtml(hint(tasks, selected))}</span>
         </div>
-        <div class="etlsql-studio-pipeline-inspector" data-task-inspector>${inspectorMarkup(selected)}</div>`;
+        <div class="etlsql-studio-pipeline-inspector" data-task-inspector>${inspectorMarkup(selected, Boolean(onRunTo))}</div>`;
 
     for (const chip of host.querySelectorAll('[data-task-kind]')) {
         on(chip, 'click', () => onAdd({ kind: chip.dataset.taskKind, after: selected?.id ?? null }));
@@ -207,6 +209,11 @@ export function attachPipelineTaskEditing(host, canvas, {
 
     const remove = inspector.querySelector('[data-task-remove]');
     if (remove) on(remove, 'click', () => onRemove({ id: selected.id }));
+
+    // Absent rather than disabled on a host that does not offer it: a greyed-out Run is a promise
+    // the canvas cannot keep, and there is nothing the author could do here to earn it.
+    const runTo = inspector.querySelector('[data-task-run-to]');
+    if (runTo) on(runTo, 'click', () => onRunTo({ id: selected.id }));
 
     const reveal = inspector.querySelector('[data-task-reveal]');
     if (reveal) on(reveal, 'click', () => onOpenLine(selected.line));
@@ -371,7 +378,7 @@ function hint(tasks, selected) {
     return `${selected.id} selected. Drag it onto another task to run it after that one, then set when the edge hands over.`;
 }
 
-function inspectorMarkup(task) {
+function inspectorMarkup(task, runnable) {
     if (!task) {
         return noteMarkup([
             'Pick a task to edit it, or add one from the palette. Every task is one labelled statement, '
@@ -405,6 +412,9 @@ function inspectorMarkup(task) {
             ${task.container ? `<button type="button" class="etlsql-studio-btn"
                 data-task-unnest>Move out of ${escapeHtml(task.container)}</button>` : ''}
             <button type="button" class="etlsql-studio-btn" data-task-reveal>Show in script</button>
+            ${runnable ? `<button type="button" class="etlsql-studio-btn" data-task-run-to
+                title="Run this pipeline from the top through ${escapeHtml(task.id)}, so its variables and
+#temp tables land in Results.">Run to here</button>` : ''}
             <button type="button" class="etlsql-studio-btn is-danger" data-task-remove>Delete</button>
         </div>`;
 }

@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using System.Net;
 using System.Text.Json;
 using ETL_SQL.Analysis.Services;
@@ -542,6 +542,7 @@ public static class WorkstationEditorApp
         var designerParsing = new ETL_SQL.Reporting.Authoring.DesignerScriptParsingService();
         var pipelineTasks = new ETL_SQL.Analysis.Services.PipelineTaskAuthoringService();
         var pipelineScope = new ETL_SQL.Analysis.Services.ScriptScopeService();
+        var pipelineRunPlans = new ETL_SQL.Analysis.Services.PipelineRunPlanService();
         var designerGen = new ETL_SQL.Reporting.Authoring.DesignerScriptGenerationService();
         var designerPatcher = new ETL_SQL.Reporting.Authoring.DesignerScriptPatcher(designerGen);
         var designerQueryFilters = new ETL_SQL.Reporting.Authoring.DesignerQueryFilterService();
@@ -650,6 +651,29 @@ public static class WorkstationEditorApp
                 error = scope.Error,
                 variables = scope.Variables,
                 tempTables = scope.TempTables,
+            }, JsonOptions);
+        });
+
+        // What running to a selected task would execute, and what that would cost. Like the Portal's,
+        // this route runs nothing: the canvas shows the effects, gets an answer, and then hands the
+        // slice to /api/designer/run, which still applies this host's destructive-statement guard.
+        app.MapPost("/api/designer/pipeline-run-plan", (PipelineRunPlanAuthoringRequest request) =>
+        {
+            var plan = pipelineRunPlans.To(request.Script, request.Id);
+            return Results.Json(new
+            {
+                resolved = plan.Resolved,
+                error = plan.Error,
+                script = plan.Script,
+                included = plan.Included,
+                skipped = plan.Skipped,
+                effects = plan.Effects.Select(effect => new
+                {
+                    taskId = effect.TaskId,
+                    action = effect.Action,
+                    target = effect.Target,
+                    line = effect.Line,
+                }),
             }, JsonOptions);
         });
 
@@ -1022,6 +1046,9 @@ public sealed record PipelineTaskAuthoringRequest(
     string? Variable = null,
     string? Collection = null);
 public sealed record PipelineScopeAuthoringRequest(string? Script, string? Id);
+
+/// <summary>Which task to plan a run up to. Planning never executes anything.</summary>
+public sealed record PipelineRunPlanAuthoringRequest(string? Script, string? Id);
 public sealed record ApplyDesignerQueryFiltersAuthoringRequest(
     string Source,
     List<ETL_SQL.Reporting.Authoring.DesignerQueryFilter> Filters,

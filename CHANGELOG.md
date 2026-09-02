@@ -12,6 +12,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Added Run to Selected Node to the Studio pipeline canvas. Selecting a task and choosing **Run to
+  here** executes the pipeline through it, so its variables and `#temp` tables land in Results. The
+  run covers the selection's dependency closure rather than the whole file above it: the tasks its
+  `-- @after:` tag names, transitively, with a task that declares nothing still waiting for the one
+  above it. Connections, `DECLARE`s, and unlabelled staging are always kept, and a selection inside
+  a `PARALLEL`, `FOREACH`, or transaction scope runs that scope whole. Before anything runs, a
+  confirmation names every write that would outlive it — the connection-qualified table, the
+  address, the path — grouped by the task performing it, along with any sibling tasks the run
+  skipped. `#temp` staging is not listed, so the confirmation appears only when something real is
+  at stake.
+
 - Added a positional scope inspector to the Studio pipeline canvas. Selecting a task shows the
   variables and `#temp` tables it can actually read from where it sits — including an enclosing
   loop's item variable, and excluding anything declared below it — with each name linking back to

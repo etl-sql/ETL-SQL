@@ -760,6 +760,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                     const result = await canonicalPipelineMutation('Delete task', { op: 'remove', id });
                     if (result?.applied) state.selectedTaskId = null;
                 },
+                onRunTo: ({ id }) => runToPipelineTask(doc, id),
                 onOpenLine: line => {
                     if (!line) return;
                     if (doc.projection === 'canvas') setProjection('split');
@@ -772,6 +773,60 @@ export async function createStudioWorkbench(container, opts = {}) {
             });
 
         void refreshPipelineScope(doc, state.selectedTaskId);
+    }
+
+    /**
+     * Runs the pipeline through a selected task, so its variables and `#temp` tables land in Results.
+     *
+     * Two round trips, deliberately. The first asks the host what running to this task would execute
+     * and what it would leave behind; the second is the ordinary run route, handed the slice as a
+     * selection. Nothing here assembles the script, and the route that could execute is never the
+     * route that asked — so the confirmation cannot be bypassed by a client that forgets to show it.
+     *
+     * The author is asked only when there is something to be asked about. A plan whose effects are
+     * empty writes nothing outside the session, and stopping to confirm that is how a confirmation
+     * stops being read by the time it matters.
+     */
+    async function runToPipelineTask(doc, taskId) {
+        if (!doc || !taskId) return;
+        const script = activeScriptText();
+
+        let plan;
+        try {
+            const response = await authFetch(apiBase + STUDIO_ROUTES.pipelineRunPlan, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script, id: taskId, documentUri: doc.path || doc.name }),
+            });
+            if (!response.ok) {
+                _feedback.notify(await _readErrorText(response),
+                    { title: 'Could not plan the run', tone: 'error' });
+                return;
+            }
+            plan = await response.json();
+        } catch (error) {
+            // A plan that did not arrive is not an empty plan. Running anyway would execute the whole
+            // script with nothing shown to the author first, which is the one outcome to rule out.
+            _feedback.notify(error?.message || 'The run plan did not arrive, so nothing was run.',
+                { title: 'Could not plan the run', tone: 'error' });
+            return;
+        }
+
+        if (!plan?.resolved) {
+            _feedback.notify(plan?.error || 'That task could not be planned.',
+                { title: 'Could not plan the run', tone: 'error' });
+            return;
+        }
+
+        if ((plan.effects ?? []).length
+            && !await openPipelineRunPlanConfirm({ taskId, plan })) {
+            return;
+        }
+
+        // Handed to the ordinary run path as a selection, so the slice meets the same policy, the
+        // same governance preamble, and the same results plumbing as any other run. A second
+        // execution path for debugging is a second place for the rules to be wrong.
+        await executeRun(doc, { script, selection: plan.script, label: `pipeline through ${taskId}` });
     }
 
     /** The cached scope for this task, when it was read from the script the document now holds. */
@@ -1090,6 +1145,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     const {
         openDataWizard,
         openPipelineTaskEditor,
+        openPipelineRunPlanConfirm,
         openChartBuilder,
         runChooseDataStep,
         runParameterStep,

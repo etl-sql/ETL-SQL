@@ -45,6 +45,7 @@ public class DesignerController : ControllerBase
     private readonly ScriptDagProjectionService _scriptDag;
     private readonly PipelineTaskAuthoringService _pipelineTasks = new();
     private readonly ScriptScopeService _pipelineScope = new();
+    private readonly PipelineRunPlanService _pipelineRunPlans = new();
     private readonly DesignerQueryFilterService _queryFilters = new();
     private readonly LanguageHoverService? _hoverService;
 
@@ -266,6 +267,51 @@ public class DesignerController : ControllerBase
                 error = scope.Error,
                 variables = scope.Variables,
                 tempTables = scope.TempTables,
+            });
+        }
+        finally
+        {
+            gate?.Release();
+        }
+    }
+
+    // ── POST /api/designer/pipeline-run-plan ─────────────────────────────────
+    // What running to a selected task would execute, and what that would cost. This route runs
+    // nothing: it returns the slice and the writes that slice would perform, so the canvas can show
+    // them and get an answer before handing the slice to /api/designer/run like any other script.
+    //
+    // Splitting the plan from the run is what makes the confirmation trustworthy. A route that both
+    // asked and executed would have to be trusted to ask; this one cannot execute at all, and the
+    // route that does execute is the ordinary one, still behind the same policy and the same gate.
+
+    [HttpPost("pipeline-run-plan")]
+    [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public IActionResult PipelineRunPlan([FromBody] PipelineRunPlanRequest req)
+    {
+        if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
+            return limitResult;
+
+        if (!TryEnterDesignerGate(out var gate))
+            return DesignerBusy();
+
+        try
+        {
+            var plan = _pipelineRunPlans.To(req.Script, req.Id);
+            return Ok(new
+            {
+                resolved = plan.Resolved,
+                error = plan.Error,
+                script = plan.Script,
+                included = plan.Included,
+                skipped = plan.Skipped,
+                effects = plan.Effects.Select(effect => new
+                {
+                    taskId = effect.TaskId,
+                    action = effect.Action,
+                    target = effect.Target,
+                    line = effect.Line,
+                }),
             });
         }
         finally

@@ -186,6 +186,12 @@ public record PipelineDependencyDto(string Id, string Condition, string? Express
 /// <summary>Which task's scope to report. The script is read as the author currently has it.</summary>
 public record PipelineScopeRequest(string? Script, string? Id);
 
+/// <summary>
+/// Which task to plan a run up to. Planning never executes anything: it returns the slice and what
+/// running it would cost, so the canvas can put that in front of the author before anything happens.
+/// </summary>
+public record PipelineRunPlanRequest(string? Script, string? Id);
+
 public record DesignerStateDto(
     List<DesignerPageDto> Pages,
     List<DesignerDatasetDto> Datasets,

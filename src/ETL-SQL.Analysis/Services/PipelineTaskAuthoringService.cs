@@ -1299,7 +1299,7 @@ public sealed partial class PipelineTaskAuthoringService
 
     // ── Reading ──────────────────────────────────────────────────────────────
 
-    private static IReadOnlyList<PipelineTask> ReadTasks(string script, Script ast)
+    internal static IReadOnlyList<PipelineTask> ReadTasks(string script, Script ast)
     {
         var tasks = new List<PipelineTask>();
         ReadInto(script, ast.Statements, container: null, tasks);
@@ -1586,7 +1586,7 @@ public sealed partial class PipelineTaskAuthoringService
     private static bool OpensATransaction(TryCatchStatement scope) =>
         scope.TryBody is BlockStatement { Statements: [BeginTransactionStatement, ..] };
 
-    private static PipelineTask? Find(IReadOnlyList<PipelineTask> tasks, string? id) =>
+    internal static PipelineTask? Find(IReadOnlyList<PipelineTask> tasks, string? id) =>
         id is null ? null : tasks.FirstOrDefault(task => string.Equals(task.Id, id, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
@@ -1773,7 +1773,7 @@ public sealed partial class PipelineTaskAuthoringService
     /// loses the declaration it was moved to satisfy. The status <c>DECLARE</c> a guarded task
     /// writes to travels for the same reason.</para>
     /// </summary>
-    private static (int Start, int End) RemovableSpan(string script, PipelineTask task)
+    internal static (int Start, int End) RemovableSpan(string script, PipelineTask task)
     {
         var (declarationStart, declarationEnd) = StatusDeclarationSpan(script, task);
         var (tagStart, tagEnd) = DependencyTagSpan(script, task.StartOffset);
@@ -1803,7 +1803,7 @@ public sealed partial class PipelineTaskAuthoringService
         return Math.Max(start, 0);
     }
 
-    private static int EndOfLine(string script, int offset)
+    internal static int EndOfLine(string script, int offset)
     {
         var end = Math.Clamp(offset, 0, script.Length);
         while (end < script.Length && script[end] != '\n' && script[end] != '\r') end++;
@@ -1847,7 +1847,7 @@ public sealed partial class PipelineTaskAuthoringService
     }
 
     /// <summary>Parses, treating a recovered-but-broken parse as a failure with its first error.</summary>
-    private static bool TryParse(string script, out Script ast, out string error)
+    internal static bool TryParse(string script, out Script ast, out string error)
     {
         ast = new Script();
         error = string.Empty;
