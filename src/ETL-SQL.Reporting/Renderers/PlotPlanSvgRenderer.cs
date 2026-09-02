@@ -234,7 +234,7 @@ internal sealed class PlotPlanSvgRenderer
         if (AxisLineEnabled(plan, "x"))
             builder.AppendLine($"<line class='plot-axis-line' x1='{N(area.Left)}' y1='{N(area.Bottom)}' x2='{N(area.Right)}' y2='{N(area.Bottom)}' stroke='#bbb'/>");
 
-        var rectLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Rect).ToList();
+        var rectLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Rect && LayerStyle(layer, "overlayType") is null).ToList();
         var lineLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Line &&
             LayerStyle(layer, "overlayType") is null).ToList();
         var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
@@ -275,7 +275,8 @@ internal sealed class PlotPlanSvgRenderer
 
         var hasPrimaryPoints = plan.Layers.Any(layer => layer.Mark == MarkKind.Point && LayerStyle(layer, "overlayType") is null);
         foreach (var layer in plan.Layers
-            .OrderBy(item => hasPrimaryPoints && item.Mark == MarkKind.Point && LayerStyle(item, "overlayType") is null ? 1 : 0)
+            .OrderBy(item => LayerStyle(item, "overlayType") == "ReferenceBand" ? -1
+                : hasPrimaryPoints && item.Mark == MarkKind.Point && LayerStyle(item, "overlayType") is null ? 1 : 0)
             .ThenBy(item => item.ZIndex))
         {
             var color = SafePaint(LayerStyle(layer, "color"),
@@ -286,7 +287,9 @@ internal sealed class PlotPlanSvgRenderer
             switch (layer.Mark)
             {
                 case MarkKind.Rect:
-                    if (IsBoxPlotLayer(layer))
+                    if (overlayType == "ReferenceBand")
+                        RenderReferenceBand(builder, layer, area, yScale, overlayLabels);
+                    else if (IsBoxPlotLayer(layer))
                         RenderBoxPlotLayer(builder, layer, categories, area, yScale, color);
                     else if (IsCandlestickLayer(layer))
                         RenderCandlestickLayer(builder, layer, categories, area, yScale);
@@ -388,7 +391,7 @@ internal sealed class PlotPlanSvgRenderer
         var plotHeight = plan.Bounds.Height - Top - Bottom;
         var bandScale = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.X);
         var categories = bandScale?.Categories ?? [];
-        var rectLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Rect).ToList();
+        var rectLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Rect && LayerStyle(layer, "overlayType") is null).ToList();
         var stacked = rectLayers.Any(layer => layer.Stack != StackMode.None);
         var (slot, outerOffset) = CategoryLayout(categories.Length, plotHeight, bandScale);
         var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
@@ -431,7 +434,9 @@ internal sealed class PlotPlanSvgRenderer
             }
         }
         var overlayLabels = new List<OverlayLabel>();
-        foreach (var layer in plan.Layers)
+        foreach (var layer in plan.Layers
+            .OrderBy(layer => LayerStyle(layer, "overlayType") == "ReferenceBand" ? -1 : 0)
+            .ThenBy(layer => layer.ZIndex))
         {
             var scale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null)
                 ? plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y2)
@@ -439,6 +444,13 @@ internal sealed class PlotPlanSvgRenderer
             if (scale is null) continue;
 
             var overlayType = LayerStyle(layer, "overlayType");
+            if (layer.Mark == MarkKind.Rect && overlayType == "ReferenceBand")
+            {
+                builder.AppendLine($"<g class='plot-overlay' data-overlay-type='ReferenceBand' data-z-index='{layer.ZIndex}'>");
+                RenderTransposedReferenceBand(builder, layer, scale, plotWidth, plotHeight, overlayLabels);
+                builder.AppendLine("</g>");
+                continue;
+            }
             if (layer.Mark == MarkKind.Rule && overlayType is not null)
             {
                 builder.AppendLine($"<g class='plot-overlay' data-overlay-type='{Esc(overlayType)}' data-z-index='{layer.ZIndex}'>");
@@ -1252,8 +1264,11 @@ internal sealed class PlotPlanSvgRenderer
         var labelFontSize = FontSize(Style(plan, "DATA_LABELS:FONT_SIZE"));
         var labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444");
         var colorScale = ColorScale(plan);
-        var isOverlay = LayerStyle(layer, "overlayType") is not null;
-        var pointClass = isOverlay ? "plot-overlay-point" : "plot-point";
+        var overlayType = LayerStyle(layer, "overlayType");
+        var isOverlay = overlayType is not null;
+        var pointClass = overlayType == "ForecastAnomaly"
+            ? "plot-anomaly-marker"
+            : isOverlay ? "plot-overlay-point" : "plot-point";
         var errorBarStyle = LayerStyle(layer, "errorBarStyle") ?? LayerStyle(layer, "ERROR_BAR_STYLE") ?? LayerStyle(layer, "error_bar_style") ?? "CAPS";
         var hasCaps = !errorBarStyle.Equals("NO_CAPS", StringComparison.OrdinalIgnoreCase);
         builder.AppendLine($"<g class='plot-points' data-layer='{Esc(layer.Id)}'>");
@@ -1763,6 +1778,42 @@ internal sealed class PlotPlanSvgRenderer
                 builder.AppendLine($"<line{ruleClass} x1='{N(x)}' y1='{N(area.Top)}' x2='{N(x)}' y2='{N(area.Bottom)}' stroke='{Esc(color)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}/>");
             }
         }
+    }
+
+    private static void RenderReferenceBand(StringBuilder builder, ResolvedMarkLayer layer,
+        in CartesianPlotArea area, ResolvedScale? scale, ICollection<OverlayLabel> overlayLabels)
+    {
+        if (scale is null || layer.Data.IsDefaultOrEmpty) return;
+        var low = PositionNumber(Channel(layer.Data[0], FieldChannel.YStart));
+        var high = PositionNumber(Channel(layer.Data[0], FieldChannel.YEnd));
+        if (!low.HasValue || !high.HasValue) return;
+        var firstY = MapY(low.Value, scale, area.Height);
+        var secondY = MapY(high.Value, scale, area.Height);
+        var top = Math.Min(firstY, secondY);
+        var height = Math.Max(1m, Math.Abs(secondY - firstY));
+        var color = SafePaint(LayerStyle(layer, "color"), "#94a3b8");
+        builder.AppendLine($"<rect class='plot-reference-band' x='{N(area.Left)}' y='{N(top)}' width='{N(area.Width)}' height='{N(height)}' fill='{Esc(color)}' fill-opacity='.18'><title>{N(low.Value)} to {N(high.Value)}</title></rect>");
+        var label = LayerStyle(layer, "label");
+        if (!string.IsNullOrWhiteSpace(label))
+            overlayLabels.Add(new OverlayLabel(area.Right, top + height / 2m, label, color, layer.ZIndex));
+    }
+
+    private static void RenderTransposedReferenceBand(StringBuilder builder, ResolvedMarkLayer layer,
+        ResolvedScale scale, decimal plotWidth, decimal plotHeight, ICollection<OverlayLabel> overlayLabels)
+    {
+        if (layer.Data.IsDefaultOrEmpty) return;
+        var low = PositionNumber(Channel(layer.Data[0], FieldChannel.YStart));
+        var high = PositionNumber(Channel(layer.Data[0], FieldChannel.YEnd));
+        if (!low.HasValue || !high.HasValue) return;
+        var firstX = MapHorizontal(low.Value, scale, plotWidth);
+        var secondX = MapHorizontal(high.Value, scale, plotWidth);
+        var left = Math.Min(firstX, secondX);
+        var width = Math.Max(1m, Math.Abs(secondX - firstX));
+        var color = SafePaint(LayerStyle(layer, "color"), "#94a3b8");
+        builder.AppendLine($"<rect class='plot-reference-band' x='{N(left)}' y='{N(Top)}' width='{N(width)}' height='{N(plotHeight)}' fill='{Esc(color)}' fill-opacity='.18'><title>{N(low.Value)} to {N(high.Value)}</title></rect>");
+        var label = LayerStyle(layer, "label");
+        if (!string.IsNullOrWhiteSpace(label))
+            overlayLabels.Add(new OverlayLabel(secondX, Top + 15m, label, color, layer.ZIndex));
     }
 
     private sealed record PositionedSideLabel(

@@ -910,7 +910,7 @@ is visual-scoped, `FALLBACK` supplies text-only meaning, and `ACTIONS` remains d
 | `STYLE` | `STYLE = Name / ( ... )` | CSS/theme/viewer overrides, including `ALLOW_MAXIMIZE = ON/OFF` |
 | `SERIES` | `SERIES ( Type Column, ... )` | Multi-series type mapping (BAR/LINE) |
 | `FORMATTING` | `FORMATTING ( expr THEN color, ... )` | Conditional formatting rules |
-| `OVERLAYS` | `OVERLAYS ( Type AS Style, REFERENCE_LINE(VALUE = n, ...), ... )` | Trend lines, goals, averages, forecasts, and constant reference lines |
+| `OVERLAYS` | `OVERLAYS ( Type AS Style, REFERENCE_LINE(...), REFERENCE_BAND(...), ... )` | Trend lines, goals, averages, forecasts, reference bands, running totals, and percent-of-total lines |
 | `SUMMARY` | `SUMMARY ( Agg(Col), ... )` | Table footer/total summaries |
 | `TOOLTIP` | `TOOLTIP = ... / ( ... )` | [Transient tooltip or focusable detail popover](reference/visuals-reporting/report/tooltip.md) |
 | `MIN` / `MAX` | `MIN = n, MAX = n` | Range limits for controls |

@@ -131,6 +131,29 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 if (!hasPrimaryValue)
                     throw new InvalidOperationException("REFERENCE_LINE overlay requires a primary quantitative value mapping.");
             }
+            if (overlay.OverlayType == OverlayType.ReferenceBand)
+            {
+                if (statement.VisualType is not (VisualType.Bar or VisualType.HorizontalBar or VisualType.Line or VisualType.Combo or VisualType.Scatter or VisualType.Bubble))
+                    throw new InvalidOperationException($"REFERENCE_BAND overlay is supported only on Cartesian charts with a primary value axis (BAR, HBAR, LINE, COMBO, SCATTER, BUBBLE); found {statement.VisualType.ToString().ToUpperInvariant()}.");
+                if (!overlay.BandLow.HasValue || !overlay.BandHigh.HasValue ||
+                    !double.IsFinite(overlay.BandLow.Value) || !double.IsFinite(overlay.BandHigh.Value))
+                    throw new InvalidOperationException("REFERENCE_BAND requires finite numeric LOW and HIGH values.");
+                if (overlay.BandLow.Value >= overlay.BandHigh.Value)
+                    throw new InvalidOperationException("REFERENCE_BAND requires LOW to be less than HIGH.");
+                if (!HasPrimaryValueMapping(statement))
+                    throw new InvalidOperationException("REFERENCE_BAND overlay requires a primary quantitative value mapping.");
+            }
+            if (overlay.OverlayType is OverlayType.RunningTotal or OverlayType.PercentOfTotal)
+            {
+                if (statement.VisualType is not (VisualType.Line or VisualType.Bar))
+                    throw new InvalidOperationException($"{OverlayName(overlay.OverlayType)} overlay is supported only on LINE and BAR visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+                if (!HasPrimaryValueMapping(statement))
+                    throw new InvalidOperationException($"{OverlayName(overlay.OverlayType)} overlay requires a primary quantitative Y mapping.");
+                if (string.IsNullOrWhiteSpace(overlay.TableCalculationField))
+                    throw new InvalidOperationException($"{OverlayName(overlay.OverlayType)} overlay requires a pre-computed field name.");
+                if (!manifest.Columns.Any(column => column.Equals(overlay.TableCalculationField, StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidOperationException($"{OverlayName(overlay.OverlayType)} overlay field '{overlay.TableCalculationField}' was not found in the visual source.");
+            }
         }
 
         var bindings = BuildBindings(statement, manifest).ToImmutableArray();
@@ -371,6 +394,50 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 continue;
             }
 
+            if (overlay.OverlayType == OverlayType.ReferenceBand)
+            {
+                var bandTokens = new List<StyleToken>
+                {
+                    new("overlayType", "ReferenceBand"),
+                    new("low", overlay.BandLow!.Value.ToString(CultureInfo.InvariantCulture)),
+                    new("high", overlay.BandHigh!.Value.ToString(CultureInfo.InvariantCulture)),
+                    new("color", overlay.Color ?? "#94a3b8")
+                };
+                if (!string.IsNullOrWhiteSpace(overlay.Label)) bandTokens.Add(new("label", overlay.Label!));
+                yield return new MarkLayerSpec(
+                    $"band-{index:D2}-referenceband",
+                    MarkKind.Rect,
+                    90 + index,
+                    [],
+                    bandTokens.ToImmutableArray(),
+                    string.IsNullOrWhiteSpace(overlay.Label) ? null : overlay.Label);
+                continue;
+            }
+
+            if (overlay.OverlayType is OverlayType.RunningTotal or OverlayType.PercentOfTotal)
+            {
+                var xBinding = bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X);
+                var overlayName = OverlayName(overlay.OverlayType);
+                var overlayLabel = overlay.Label ?? overlayName.Replace('_', ' ');
+                var tableCalculationBindings = new List<FieldBinding>();
+                if (xBinding is not null) tableCalculationBindings.Add(xBinding);
+                tableCalculationBindings.Add(new FieldBinding(FieldChannel.Y, overlay.TableCalculationField,
+                    DataSemanticKind.Quantitative, ScaleId: "y"));
+                yield return new MarkLayerSpec(
+                    $"table-calc-{index:D2}-{overlayName.ToLowerInvariant().Replace('_', '-')}",
+                    MarkKind.Line,
+                    100 + index,
+                    tableCalculationBindings.ToImmutableArray(),
+                    [
+                        new StyleToken("overlayType", overlay.OverlayType.ToString()),
+                        new StyleToken("lineStyle", overlay.LineStyle.ToString().ToLowerInvariant()),
+                        new StyleToken("color", overlay.Color ?? "#888888"),
+                        new StyleToken("label", overlayLabel)
+                    ],
+                    overlayLabel);
+                continue;
+            }
+
             var hasAuthoredLabel = !string.IsNullOrWhiteSpace(overlay.Label);
             var styleTokens = new List<StyleToken>
             {
@@ -481,6 +548,19 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             _ => StackMode.None
         };
     }
+
+    private static bool HasPrimaryValueMapping(CreateVisualStatement statement) =>
+        statement.Mappings.Any(mapping =>
+            mapping.Role.Equals("Y", StringComparison.OrdinalIgnoreCase) ||
+            mapping.Role.Equals("VALUE", StringComparison.OrdinalIgnoreCase)) ||
+        statement.TypedSeries.Count > 0;
+
+    private static string OverlayName(OverlayType type) => type switch
+    {
+        OverlayType.RunningTotal => "RUNNING_TOTAL",
+        OverlayType.PercentOfTotal => "PERCENT_OF_TOTAL",
+        _ => type.ToString().ToUpperInvariant()
+    };
 
     private static FieldChannel? MapChannel(VisualType type, string role) => role.ToUpperInvariant() switch
     {

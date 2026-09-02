@@ -43,7 +43,10 @@ CREATE VISUAL VisualName AS BAR (
         [Y_AXIS (...same axis properties...)]
     ),
     [OVERLAYS (
-        REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb'])
+        REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb']),
+        REFERENCE_BAND (LOW = n, HIGH = n [, COLOR = '#rrggbb'] [, LABEL = 'text']),
+        RUNNING_TOTAL(precomputedCol) AS SOLID|DASHED|DOTTED [WITH (COLOR = '#rrggbb', LABEL = 'text')],
+        PERCENT_OF_TOTAL(precomputedCol) AS SOLID|DASHED|DOTTED [WITH (COLOR = '#rrggbb', LABEL = 'text')]
     )],
     ACTIONS (
         [ON_CLICK = DRILL_IN(...) | DRILL_DOWN(...) | SET_PARAMETER(...) | RUN_SCRIPT(...)]
@@ -85,7 +88,7 @@ CREATE VISUAL VisualName AS BAR (
   - **LABEL_BORDER = 'width style #rrggbb'** - Border around the data label background (e.g., `'1px solid #334155'`; style is `solid`, `dashed`, or `dotted`).
 - **AXIS_SORT = ASC\|DESC\|SOURCE\|VALUE\|VALUE_DESC** - Category sorting logic. Use `SOURCE` to preserve the query order, or `VALUE_DESC` for ranked bars. Default is `ASC`.
 - **X_AXIS (...) / Y_AXIS (...)** - Configures the axis title (`LABEL`), explicit domain (`MIN`, `MAX`), zero inclusion, direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`). `MAJOR_TICK_COUNT` is 2–100; `TICK_INTERVAL` must be positive; `LABEL_SKIP = n` hides `n` labels between visible labels.
-- **OVERLAYS (...)** - Adds constant target or threshold reference lines (`REFERENCE_LINE(VALUE = n, ...)`), rendered as horizontal plot-spanning lines across the primary value axis. Participates in automatic value-axis domain resolution.
+- **OVERLAYS (...)** - Adds plot-spanning `REFERENCE_LINE` and `REFERENCE_BAND` annotations plus line overlays bound to precomputed `RUNNING_TOTAL(field)` and `PERCENT_OF_TOTAL(field)` SQL result columns. All target the primary value axis.
 
 ## Actions
 - **ON_CLICK = DRILL_IN(HIERARCHY = (...))** - Enables hierarchical drilling, such as Year to Quarter to Month, on click with breadcrumb navigation.
@@ -109,6 +112,18 @@ CREATE VISUAL SalesByPeriod AS BAR (
     SOURCE = (SELECT Year, Quarter, Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Year, Quarter, Month),
     MAPPINGS (X = Year, Y = Revenue),
     ACTIONS (ON_CLICK = DRILL_IN(HIERARCHY = (Year, Quarter, Month)))
+);
+```
+
+```sql
+CREATE VISUAL SalesDistribution AS BAR (
+    SOURCE = #data,
+    MAPPINGS (X = Region, Y = Sales),
+    OVERLAYS (
+        REFERENCE_BAND (LOW = 50000, HIGH = 75000, COLOR = '#cbd5e1', LABEL = 'Target range'),
+        RUNNING_TOTAL(CumulativeSales) AS SOLID WITH (LABEL = 'Cumulative sales'),
+        PERCENT_OF_TOTAL(SalesShare) AS DOTTED WITH (LABEL = 'Share of total')
+    )
 );
 ```
 

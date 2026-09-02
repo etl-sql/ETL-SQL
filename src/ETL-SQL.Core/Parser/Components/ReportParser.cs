@@ -3921,6 +3921,7 @@ public class ReportParser : ParserComponent
             string? confidenceLowField = null;
             string? confidenceHighField = null;
             string? anomalyField = null;
+            string? tableCalculationField = null;
 
             if (Match(TokenType.GOAL))
             {
@@ -3958,6 +3959,29 @@ public class ReportParser : ParserComponent
                 Consume(TokenType.LPAREN, "Expected '(' after FORECAST");
                 forecastField = ConsumeIdentifier("Expected forecast field name").Value;
                 Consume(TokenType.RPAREN, "Expected ')' after forecast field name");
+            }
+            else if (IsCurrentValue("RUNNING_TOTAL"))
+            {
+                Advance();
+                overlayType = OverlayType.RunningTotal;
+                Consume(TokenType.LPAREN, "Expected '(' after RUNNING_TOTAL");
+                tableCalculationField = ConsumeIdentifier("Expected pre-computed running-total field name").Value;
+                Consume(TokenType.RPAREN, "Expected ')' after running-total field name");
+            }
+            else if (IsCurrentValue("PERCENT_OF_TOTAL"))
+            {
+                Advance();
+                overlayType = OverlayType.PercentOfTotal;
+                Consume(TokenType.LPAREN, "Expected '(' after PERCENT_OF_TOTAL");
+                tableCalculationField = ConsumeIdentifier("Expected pre-computed percent-of-total field name").Value;
+                Consume(TokenType.RPAREN, "Expected ')' after percent-of-total field name");
+            }
+            else if (IsCurrentValue("REFERENCE_BAND"))
+            {
+                var referenceBandToken = Advance();
+                result.Add(ParseReferenceBand(referenceBandToken));
+                Match(TokenType.COMMA);
+                continue;
             }
             else if (IsCurrentValue("REFERENCE_LINE"))
             {
@@ -4085,7 +4109,7 @@ public class ReportParser : ParserComponent
                 continue;
             }
             else throw new SyntaxException(
-                $"Expected overlay type (GOAL, AVERAGE, MOVING_AVG, LINEAR, ...) but got '{_parser.Current.Value}'",
+                $"Expected overlay type (GOAL, AVERAGE, MOVING_AVG, RUNNING_TOTAL, PERCENT_OF_TOTAL, REFERENCE_LINE, REFERENCE_BAND, FORECAST, LINEAR, ...) but got '{_parser.Current.Value}'",
                 _parser.Current.Line, _parser.Current.Column);
 
             Consume(TokenType.AS, "Expected AS after overlay type");
@@ -4149,11 +4173,91 @@ public class ReportParser : ParserComponent
                 ForecastField = forecastField,
                 ConfidenceLowField = confidenceLowField,
                 ConfidenceHighField = confidenceHighField,
-                AnomalyField = anomalyField
+                AnomalyField = anomalyField,
+                TableCalculationField = tableCalculationField
             });
             Match(TokenType.COMMA);
         }
         return result;
+    }
+
+    private VisualOverlay ParseReferenceBand(Token referenceBandToken)
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after REFERENCE_BAND");
+        if (ReportCheck(TokenType.COMMA))
+            throw new SyntaxException("Unexpected ',' at start of REFERENCE_BAND", _parser.Current.Line, _parser.Current.Column);
+
+        double? low = null;
+        double? high = null;
+        string? color = null;
+        string? label = null;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            var propertyToken = _parser.Current;
+            var property = propertyToken.Value.ToUpperInvariant();
+            if (property is not ("LOW" or "HIGH" or "COLOR" or "LABEL"))
+                throw new SyntaxException($"Unknown property '{propertyToken.Value}' in REFERENCE_BAND. Expected LOW, HIGH, COLOR, or LABEL.", propertyToken.Line, propertyToken.Column);
+            Advance();
+            if (!seen.Add(property))
+                throw new SyntaxException($"Duplicate {property} property in REFERENCE_BAND", propertyToken.Line, propertyToken.Column);
+            Consume(TokenType.EQUALS, $"Expected '=' after {property}");
+
+            switch (property)
+            {
+                case "LOW":
+                    low = ParseFiniteOverlayNumber("LOW", "REFERENCE_BAND");
+                    break;
+                case "HIGH":
+                    high = ParseFiniteOverlayNumber("HIGH", "REFERENCE_BAND");
+                    break;
+                case "COLOR":
+                    color = Consume(TokenType.STRING_LITERAL, "Expected string literal for COLOR in REFERENCE_BAND").Value;
+                    break;
+                case "LABEL":
+                    label = Consume(TokenType.STRING_LITERAL, "Expected string literal for LABEL in REFERENCE_BAND").Value;
+                    break;
+            }
+
+            if (ReportCheck(TokenType.COMMA))
+            {
+                var commaToken = Advance();
+                if (ReportCheck(TokenType.RPAREN))
+                    throw new SyntaxException("Trailing comma before ')' is not permitted in REFERENCE_BAND", commaToken.Line, commaToken.Column);
+                if (ReportCheck(TokenType.COMMA))
+                    throw new SyntaxException("Consecutive commas are not permitted in REFERENCE_BAND", _parser.Current.Line, _parser.Current.Column);
+            }
+            else if (!ReportCheck(TokenType.RPAREN))
+            {
+                throw new SyntaxException($"Expected ',' or ')' after REFERENCE_BAND property but got '{_parser.Current.Value}'", _parser.Current.Line, _parser.Current.Column);
+            }
+        }
+
+        Consume(TokenType.RPAREN, "Expected ')' to close REFERENCE_BAND");
+        if (!low.HasValue || !high.HasValue)
+            throw new SyntaxException("REFERENCE_BAND requires both LOW and HIGH properties: REFERENCE_BAND (LOW = number, HIGH = number, ...)", referenceBandToken.Line, referenceBandToken.Column);
+
+        return new VisualOverlay
+        {
+            OverlayType = OverlayType.ReferenceBand,
+            BandLow = low,
+            BandHigh = high,
+            Color = color,
+            Label = label
+        };
+    }
+
+    private double ParseFiniteOverlayNumber(string property, string overlay)
+    {
+        var sign = Match(TokenType.MINUS) ? "-" : Match(TokenType.PLUS) ? "+" : string.Empty;
+        if (!ReportCheck(TokenType.NUMBER))
+            throw new SyntaxException($"Expected numeric value for {property} in {overlay} but got '{_parser.Current.Value}'", _parser.Current.Line, _parser.Current.Column);
+        var token = Consume(TokenType.NUMBER, $"Expected numeric value for {property} in {overlay}");
+        var text = sign + token.Value;
+        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || !double.IsFinite(value))
+            throw new SyntaxException($"Expected finite numeric value for {property} in {overlay} but got '{text}'", token.Line, token.Column);
+        return value;
     }
 
     private (List<TableSummaryItem>, TableSummaryOptions) ParseSummaryClause()

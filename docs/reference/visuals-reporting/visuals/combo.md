@@ -32,6 +32,7 @@ CREATE VISUAL VisualName AS COMBO (
   ),
   [OVERLAYS (
     REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb']),
+    REFERENCE_BAND (LOW = n, HIGH = n [, COLOR = '#rrggbb'] [, LABEL = 'text']),
     FORECAST(forecastCol) AS SOLID|DASHED|DOTTED [WITH (
       [CONFIDENCE_LOW = lowCol,]
       [CONFIDENCE_HIGH = highCol,]
@@ -75,7 +76,7 @@ CREATE VISUAL VisualName AS COMBO (
   - **LABEL_BORDER = 'width style #rrggbb'** — border around the data label background (e.g., `'1px solid #334155'`; style is `solid`, `dashed`, or `dotted`).
 - **X_AXIS (...) / Y_AXIS (...) / Y2_AXIS (...)** - each accepts `LABEL`, `MIN`, `MAX`, `INCLUDE_ZERO`, `REVERSE`, `MAJOR_TICK_COUNT`, `TICK_INTERVAL`, `MINOR_TICKS`, `LABEL_ROTATION`, `LABEL_SKIP`, and `AXIS_LINE`. Rotation accepts `AUTO`, `0`, `45`, or `90`; skip accepts `AUTO` or a non-negative integer.
 - **LEGEND = ON|OFF** - shows or hides the series legend
-- **OVERLAYS (...)** - visual overlays including `REFERENCE_LINE(VALUE = n, ...)` (targeting the primary Y axis, never Y2) and `FORECAST(field) AS SOLID|DASHED|DOTTED [WITH (...)]` on the primary quantitative axis. Supports paired `CONFIDENCE_LOW` / `CONFIDENCE_HIGH` quantitative interval ribbon and `ANOMALY` marker glyphs. Reference line values and forecast values participate in primary Y domain resolution.
+- **OVERLAYS (...)** - Adds `REFERENCE_LINE`, shaded `REFERENCE_BAND(LOW = n, HIGH = n, ...)`, and forecast overlays on the primary Y axis, never Y2. Reference bounds and forecast values participate in primary Y domain resolution.
 
 ## Examples
 
@@ -98,6 +99,9 @@ CREATE VISUAL RevenueWithMargin AS COMBO (
     Y_AXIS  (LABEL = 'Revenue ($)'),
     Y2_AXIS (LABEL = 'Margin (%)'),
     TITLE   = 'Revenue & Margin Trend'
+  ),
+  OVERLAYS (
+    REFERENCE_BAND (LOW = 50000, HIGH = 80000, COLOR = '#cbd5e1', LABEL = 'Expected revenue')
   )
 );
 

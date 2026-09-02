@@ -17,6 +17,7 @@ CREATE VISUAL VisualName AS BUBBLE (
   ),
   [OVERLAYS (
     REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb']),
+    REFERENCE_BAND (LOW = n, HIGH = n [, COLOR = '#rrggbb'] [, LABEL = 'text']),
     ...
   )]
 );
@@ -36,7 +37,7 @@ CREATE VISUAL VisualName AS BUBBLE (
   - **LABEL_BORDER = 'width style color'** — Border for data label badges (e.g. `'1px solid #cbd5e1'`).
   - **LEADER_LINE = ON|OFF WITH (COLOR = '#rrggbb', STYLE = SOLID|DASHED)** — Shows leader lines connecting bubbles to displaced smart labels.
 - **TITLE = 'text'** — visual title
-- **OVERLAYS (...)** — visual overlays including `REFERENCE_LINE(VALUE = n, ...)`. Renders an author-specified constant reference line targeting the primary vertical quantitative Y axis as a horizontal plot-spanning rule. `VALUE` is required and accepts finite signed numeric literals (including zero, decimals, and negative values). `LABEL` is optional; an omitted or empty `LABEL` does not paint a visible browser badge label, leader, or background. `STYLE` accepts `SOLID`, `DASHED` (default), or `DOTTED`. `COLOR` defaults to the standard overlay neutral `#888888`. No SQL calculation is performed; `REFERENCE_LINE` acts as a general author annotation distinct from `GOAL`. Reference values participate in automatic Y domain calculation, while explicit axis `MIN`/`MAX` remain authoritative and may clip an out-of-range line.
+- **OVERLAYS (...)** — adds horizontal primary-Y `REFERENCE_LINE` rules and shaded `REFERENCE_BAND(LOW = n, HIGH = n, ...)` intervals. Bounds must be finite and `LOW` must be less than `HIGH`. Both participate in automatic Y domain calculation; explicit axis `MIN`/`MAX` remain authoritative.
 
 Note: SIZE values are automatically scaled to a display range of 5 to 65 px. Use SCATTER if you do not need variable point sizes.
 
@@ -63,6 +64,7 @@ CREATE VISUAL MarketBubble AS BUBBLE (
   ),
   OPTIONS  (TITLE = 'Segment Market Map'),
   OVERLAYS (
+    REFERENCE_BAND (LOW = 20, HIGH = 30, COLOR = '#cbd5e1', LABEL = 'Expected margin'),
     REFERENCE_LINE (
       VALUE = 25.0,
       LABEL = 'Target Margin',

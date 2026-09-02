@@ -323,10 +323,10 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 - [x] **Arbitrary reference lines on named charts**: `OVERLAYS` supports GOAL, AVERAGE, and
   MOVING_AVERAGE. There is no `REFERENCE_LINE (VALUE = n, LABEL = '...', STYLE = DASHED)` for an
   author-specified constant. Add to the `OVERLAYS` clause for named charts.
-- [ ] **Reference bands on named charts**: Shaded horizontal or vertical regions between two values.
+- [x] **Reference bands on named charts**: Shaded horizontal or vertical regions between two values.
   `CUSTOM CHART` RECT with `Y_START`/`Y_END` covers this. Add
   `REFERENCE_BAND (LOW = n, HIGH = n, COLOR = '...', LABEL = '...')` to named-chart `OVERLAYS`.
-- [ ] **`OVERLAYS` extensions for common table-calc patterns**: Add `RUNNING_TOTAL` and
+- [x] **`OVERLAYS` extensions for common table-calc patterns**: Add `RUNNING_TOTAL` and
   `PERCENT_OF_TOTAL` as named overlay types on LINE and BAR charts so authors familiar with Tableau
   table calculations have a shortcut. The underlying computation stays in SQL; the overlay annotates
   the rendered series.

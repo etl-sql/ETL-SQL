@@ -132,7 +132,8 @@ Options      — List<VisualOption> flat key-value pairs (STACKED, SMOOTH, FORMA
 AxisOptions  — List<AxisOptions> per-axis X_AXIS / Y_AXIS config blocks
 TypedSeries      — List<TypedSeries> for COMBO charts (BAR col, LINE col)
 FormattingRules  — List<FormattingRule> for TABLE conditional cell colors
-Overlays         — List<VisualOverlay> for GOAL / MOVING_AVG / regression overlays
+Overlays         — List<VisualOverlay> for goals, statistical/trend overlays, forecasts,
+                   reference lines/bands, running totals, and percent-of-total lines
 Summaries        — List<TableSummaryItem> for MATRIX/TABLE aggregate summaries
 SummaryOptions   — TableSummaryOptions for grand totals and summary placement
 Styles           — Dictionary<string, string> (THEME, WIDTH, HEIGHT, BORDER, etc.)

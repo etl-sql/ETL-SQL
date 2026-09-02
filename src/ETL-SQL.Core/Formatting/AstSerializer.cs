@@ -2054,12 +2054,26 @@ public static class AstSerializer
             return $"REFERENCE_LINE ({string.Join(", ", props)})";
         }
 
+        if (overlay.OverlayType == OverlayType.ReferenceBand)
+        {
+            var props = new List<string>
+            {
+                $"LOW = {overlay.BandLow?.ToString(CultureInfo.InvariantCulture) ?? "0"}",
+                $"HIGH = {overlay.BandHigh?.ToString(CultureInfo.InvariantCulture) ?? "0"}"
+            };
+            if (!string.IsNullOrWhiteSpace(overlay.Color)) props.Add($"COLOR = {Quote(overlay.Color)}");
+            if (!string.IsNullOrWhiteSpace(overlay.Label)) props.Add($"LABEL = {Quote(overlay.Label)}");
+            return $"REFERENCE_BAND ({string.Join(", ", props)})";
+        }
+
         var type = overlay.OverlayType switch
         {
             OverlayType.Goal => $"GOAL({overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? "0"})",
             OverlayType.MovingAvg => $"MOVING_AVG({overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? "1"})",
             OverlayType.Polynomial => $"POLYNOMIAL({overlay.Parameter?.ToString(CultureInfo.InvariantCulture) ?? "2"})",
             OverlayType.Forecast => $"FORECAST({overlay.ForecastField ?? string.Empty})",
+            OverlayType.RunningTotal => $"RUNNING_TOTAL({overlay.TableCalculationField ?? string.Empty})",
+            OverlayType.PercentOfTotal => $"PERCENT_OF_TOTAL({overlay.TableCalculationField ?? string.Empty})",
             _ => overlay.OverlayType.ToString().ToUpperInvariant()
         };
         var options = new List<string>();

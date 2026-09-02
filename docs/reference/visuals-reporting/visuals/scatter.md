@@ -36,7 +36,8 @@ CREATE VISUAL VisualName AS SCATTER (
     [Y_AXIS (...same axis properties...)]
   ),
   [OVERLAYS (
-    REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb'])
+    REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb']),
+    REFERENCE_BAND (LOW = n, HIGH = n [, COLOR = '#rrggbb'] [, LABEL = 'text'])
   )]
 );
 ```
@@ -67,7 +68,7 @@ CREATE VISUAL VisualName AS SCATTER (
   - **LABEL_BORDER = 'width style #rrggbb'** — border around the data label background (e.g., `'1px solid #334155'`; style is `solid`, `dashed`, or `dotted`).
   - **LEADER_LINE = ON|OFF WITH (COLOR = '#rrggbb', STYLE = SOLID|DASHED)** — renders a connecting leader line from mark to label when the label is displaced to avoid collisions (default OFF).
 - **X_AXIS (...) / Y_AXIS (...)** — axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`).
-- **OVERLAYS (...)** — adds constant target or threshold reference lines (`REFERENCE_LINE(VALUE = n, ...)`), rendered as horizontal plot-spanning lines across the primary quantitative Y axis. Participates in automatic domain resolution.
+- **OVERLAYS (...)** — adds horizontal plot-spanning `REFERENCE_LINE` rules and shaded `REFERENCE_BAND(LOW = n, HIGH = n, ...)` intervals on the primary quantitative Y axis. Both participate in automatic domain resolution.
 - **TITLE = 'text'** — visual title
 
 ## Examples
@@ -81,7 +82,8 @@ SELECT unit_price, quantity_sold, product_name
 CREATE VISUAL PriceVsQty AS SCATTER (
   SOURCE   = #scatter_data,
   MAPPINGS (X = unit_price, Y = quantity_sold, LABEL = product_name),
-  OPTIONS  (SHOW_REGRESSION = ON, TITLE = 'Price vs. Quantity')
+  OPTIONS  (SHOW_REGRESSION = ON, TITLE = 'Price vs. Quantity'),
+  OVERLAYS (REFERENCE_BAND (LOW = 10, HIGH = 25, COLOR = '#cbd5e1', LABEL = 'Expected quantity'))
 );
 
 -- Scatter with pre-computed error bars

@@ -312,7 +312,14 @@ public sealed class PlotPlanResolver
                 numbers.AddRange(resolvedLayers
                     .Where(layer => layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase)))
                     .SelectMany(layer => layer.Data)
-                    .Select(datum => Number(Channel(datum, scale.Channel) ?? ChartValue.Null()))
+                    .SelectMany(datum => scale.Channel == FieldChannel.Y
+                        ? new[]
+                        {
+                            Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null()),
+                            Number(Channel(datum, FieldChannel.YStart) ?? ChartValue.Null()),
+                            Number(Channel(datum, FieldChannel.YEnd) ?? ChartValue.Null())
+                        }
+                        : new[] { Number(Channel(datum, scale.Channel) ?? ChartValue.Null()) })
                     .Where(number => number.HasValue)
                     .Select(number => number!.Value));
             }
@@ -815,6 +822,20 @@ public sealed class PlotPlanResolver
         var type = layer.Style.First(token => token.Name == "overlayType").Value;
         var parameterText = layer.Style.FirstOrDefault(token => token.Name == "parameter")?.Value;
         decimal.TryParse(parameterText, NumberStyles.Any, CultureInfo.InvariantCulture, out var parameter);
+        if (type == "ReferenceBand")
+        {
+            decimal.TryParse(layer.Style.FirstOrDefault(token => token.Name == "low")?.Value,
+                NumberStyles.Float, CultureInfo.InvariantCulture, out var low);
+            decimal.TryParse(layer.Style.FirstOrDefault(token => token.Name == "high")?.Value,
+                NumberStyles.Float, CultureInfo.InvariantCulture, out var high);
+            return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, null,
+                [new ResolvedDatum(0,
+                [
+                    new ResolvedChannelValue(FieldChannel.YStart, ChartValue.From(low), formatter.Number(low, "G")),
+                    new ResolvedChannelValue(FieldChannel.YEnd, ChartValue.From(high), formatter.Number(high, "G"))
+                ], false)])
+            { Style = layer.Style, Stack = StackMode.None, BandSize = layer.BandSize };
+        }
         var xBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X);
         var yBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y && binding.Axis != AxisRole.Secondary)
             ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y)

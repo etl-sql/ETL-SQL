@@ -82,7 +82,7 @@ Titles and subtitles support simple string assignment, inline markdown, or struc
 - **SERIES_LABELS = ON|OFF WITH (POSITION = START|END)** — Places direct series name labels at line beginnings (`START`) or endpoints (`END`) on `LINE` and `COMBO` charts, reserving a deterministic label gutter and suppressing colliding data label endpoints.
 - **STYLE (COLOR:name = '#RRGGBB')** — Assigns a stable color to a named series or category. Use `PALETTE = (...)` for order-based colors.
 - **FORMATTING (WHEN predicate THEN color ...)** — Applies the first matching rule color to each mark in a named chart. `CUSTOM` charts use layer `CONDITIONS` instead.
-- **OVERLAYS (...)** — Adds goals, averages, moving averages, fitted trend lines, arbitrary constant reference lines (`REFERENCE_LINE(VALUE = n, ...)`), or forecast overlays with optional confidence bands and anomaly markers to named charts.
+- **OVERLAYS (...)** — Adds goals, averages, moving averages, fitted trend lines, constant reference lines, reference bands, running totals, percent-of-total lines, or forecast overlays with optional confidence bands and anomaly markers.
   - **Supported types for `REFERENCE_LINE`** — `BAR`, `HBAR`, `LINE`, `COMBO`, `SCATTER`, and `BUBBLE`. Polar and non-axis visuals (`PIE`, `DONUT`, `RADAR`, `GAUGE`) are rejected.
   - **`VALUE = n`** — Required finite signed numeric literal (including zero, decimals, and negative values). No SQL calculation is performed; `REFERENCE_LINE` is a general author annotation distinct from `GOAL`.
   - **`LABEL = 'text'`** — Optional badge label. When omitted or empty, no visual badge, leader line, or background is rendered in SVG (terminal and accessible fallbacks use `Reference`).
@@ -90,6 +90,9 @@ Titles and subtitles support simple string assignment, inline markdown, or struc
   - **`COLOR = '#rrggbb'`** — Stroke color; defaults to the safe overlay neutral `#888888`.
   - **Axis targeting and orientation** — Targets the primary quantitative axis only. On `COMBO`, binds to primary `Y` (never `Y2`). Renders as a vertical plot-spanning line on transposed `HBAR` and a horizontal plot-spanning line on other supported Cartesian charts.
   - **Domain calculation** — Participates in automatic primary-axis domain calculation to keep out-of-range lines visible; explicit axis `MIN`/`MAX` remain authoritative and may clip an out-of-range line.
+  - **`REFERENCE_BAND (LOW = n, HIGH = n, COLOR = '...', LABEL = '...')`** — Adds a shaded primary-axis interval to `BAR`, `HBAR`, `LINE`, `COMBO`, `SCATTER`, or `BUBBLE`. `LOW` and `HIGH` are required finite numbers and `LOW` must be less than `HIGH`. It is horizontal except on transposed `HBAR`, where it is vertical.
+  - **`RUNNING_TOTAL(field) AS style`** — Adds a line bound to a running-total column precomputed in SQL. Supported on `LINE` and `BAR`.
+  - **`PERCENT_OF_TOTAL(field) AS style`** — Adds a line bound to a percent-of-total column precomputed in SQL. Supported on `LINE` and `BAR`.
 
 ## Display Types
 
@@ -176,6 +179,16 @@ CREATE VISUAL PerformanceTrend AS LINE (
       STYLE = DASHED,
       COLOR = '#dc2626'
     )
+  )
+);
+
+CREATE VISUAL PerformanceAnalysis AS LINE (
+  SOURCE = #monthly_sales,
+  MAPPINGS (X = Month, Y = Revenue),
+  OVERLAYS (
+    REFERENCE_BAND (LOW = 50000, HIGH = 80000, COLOR = '#cbd5e1', LABEL = 'Expected range'),
+    RUNNING_TOTAL(CumulativeRevenue) AS SOLID WITH (COLOR = '#2563eb', LABEL = 'Cumulative'),
+    PERCENT_OF_TOTAL(RevenueShare) AS DOTTED WITH (COLOR = '#dc2626', LABEL = 'Share')
   )
 );
 ```

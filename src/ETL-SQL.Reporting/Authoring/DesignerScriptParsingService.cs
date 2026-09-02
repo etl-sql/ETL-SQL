@@ -545,12 +545,26 @@ public sealed class DesignerScriptParsingService
             return $"REFERENCE_LINE ({string.Join(", ", props)})";
         }
 
+        if (overlay.OverlayType == OverlayType.ReferenceBand)
+        {
+            var props = new List<string>
+            {
+                $"LOW = {overlay.BandLow?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "0"}",
+                $"HIGH = {overlay.BandHigh?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "0"}"
+            };
+            if (!string.IsNullOrWhiteSpace(overlay.Color)) props.Add($"COLOR = '{Escape(overlay.Color)}'");
+            if (!string.IsNullOrWhiteSpace(overlay.Label)) props.Add($"LABEL = '{Escape(overlay.Label)}'");
+            return $"REFERENCE_BAND ({string.Join(", ", props)})";
+        }
+
         var type = overlay.OverlayType switch
         {
             OverlayType.Goal => $"GOAL({parameter ?? "0"})",
             OverlayType.MovingAvg => $"MOVING_AVG({parameter ?? "1"})",
             OverlayType.Polynomial => $"POLYNOMIAL({parameter ?? "2"})",
             OverlayType.Forecast => $"FORECAST({overlay.ForecastField ?? string.Empty})",
+            OverlayType.RunningTotal => $"RUNNING_TOTAL({overlay.TableCalculationField ?? string.Empty})",
+            OverlayType.PercentOfTotal => $"PERCENT_OF_TOTAL({overlay.TableCalculationField ?? string.Empty})",
             _ => overlay.OverlayType.ToString().ToUpperInvariant()
         };
         var details = new List<string>();

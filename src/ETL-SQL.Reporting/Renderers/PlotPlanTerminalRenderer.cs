@@ -76,12 +76,22 @@ internal static class PlotPlanTerminalRenderer
                 var rawLabel = layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value;
                 var label = !string.IsNullOrWhiteSpace(rawLabel)
                     ? rawLabel
-                    : (overlayType == "ReferenceLine" ? "Reference" : series?.Label ?? layer.Id);
+                    : overlayType switch
+                    {
+                        "ReferenceLine" => "Reference",
+                        "ReferenceBand" => "Reference band",
+                        _ => series?.Label ?? layer.Id
+                    };
                 var color = ResolveLayerColor(layer, plan);
                 return (Layer: layer, Data: data, Series: series, Label: label, Color: color);
             })
             .Where(item => item.Data.Count > 0)
             .ToList();
+
+        var bandLayers = activeLayers.Where(item =>
+            item.Layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase) &&
+                token.Value.Equals("ReferenceBand", StringComparison.OrdinalIgnoreCase))).ToList();
+        activeLayers = activeLayers.Except(bandLayers).ToList();
 
         var rectLayers = activeLayers.Where(item => item.Layer.Mark == MarkKind.Rect).ToList();
         var continuousLayers = activeLayers.Where(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area or MarkKind.Point).ToList();
@@ -120,6 +130,9 @@ internal static class PlotPlanTerminalRenderer
                 });
             }
         }
+
+        foreach (var band in bandLayers)
+            content.Add(RenderReferenceBand(band.Data, band.Label, band.Color));
 
         var arcLayers = plan.Layers.Where(layer => layer.Mark == MarkKind.Arc)
             .Select(layer => (Layer: layer, Data: layer.Data.Where(datum => rows.Contains(datum.RowIndex)).ToList()))
@@ -650,6 +663,17 @@ internal static class PlotPlanTerminalRenderer
             return new Markup($"[{ansi}]{glyph}[/] {Markup.Escape(Label(datum))}: {Markup.Escape(DisplayValue(datum))}{(errorInfo != null ? $" [grey]({errorInfo})[/]" : "")}");
         });
         return new Rows(new[] { (IRenderable)new Markup($"[bold]{Markup.Escape(series)}[/] [grey](point glyph {glyph})[/]") }.Concat(rows));
+    }
+
+    private static IRenderable RenderReferenceBand(IReadOnlyList<ResolvedDatum> data, string label, string color)
+    {
+        var datum = data.FirstOrDefault();
+        var low = datum is null ? null : Channel(datum, FieldChannel.YStart);
+        var high = datum is null ? null : Channel(datum, FieldChannel.YEnd);
+        var lowText = low is null ? "?" : PlotPlanResolver.Display(low);
+        var highText = high is null ? "?" : PlotPlanResolver.Display(high);
+        var ansi = SafeAnsiColor(color);
+        return new Markup($"[{ansi}]████████[/] [bold]{Markup.Escape(label)}[/]: [{ansi}]{Markup.Escape(lowText)} to {Markup.Escape(highText)}[/]");
     }
 
     private static IRenderable RenderRule(IReadOnlyList<ResolvedDatum> data, string label, string color)

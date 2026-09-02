@@ -41,7 +41,8 @@ CREATE VISUAL VisualName AS HBAR (
     [Y_AXIS (...same axis properties...)]
   ),
   [OVERLAYS (
-    REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb'])
+    REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb']),
+    REFERENCE_BAND (LOW = n, HIGH = n [, COLOR = '#rrggbb'] [, LABEL = 'text'])
   )],
   ACTIONS (
     [ON_CLICK = DRILL_IN(...) | DRILL_DOWN(...) | SET_PARAMETER(...) | RUN_SCRIPT(...)]
@@ -79,7 +80,7 @@ CREATE VISUAL VisualName AS HBAR (
   - **LABEL_BORDER = 'width style #rrggbb'** — border around the data label background (e.g., `'1px solid #334155'`; style is `solid`, `dashed`, or `dotted`).
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - Sorts categories by label, source order, or measure value. Default `ASC`.
 - **X_AXIS (...) / Y_AXIS (...)** - Configures axis titles, explicit MIN/MAX domains, zero inclusion, reverse direction, ticks, label rotation, label skipping, and plot-area spines (`AXIS_LINE`). For `HBAR`, X is the category axis and Y is the horizontal value scale in the authoring model.
-- **OVERLAYS (...)** - Adds constant target or threshold reference lines (`REFERENCE_LINE(VALUE = n, ...)`), rendered as vertical plot-spanning lines across the primary value axis. Participates in automatic value-axis domain resolution.
+- **OVERLAYS (...)** - Adds vertical plot-spanning `REFERENCE_LINE` rules and shaded `REFERENCE_BAND(LOW = n, HIGH = n, ...)` intervals across the primary value axis. Both participate in automatic value-axis domain resolution.
 
 ## Actions
 
@@ -97,7 +98,8 @@ CREATE VISUAL TopRegions AS HBAR (
     GROUP BY Region
   ),
   MAPPINGS (X = Region, Y = Revenue),
-  OPTIONS (AXIS_SORT = VALUE_DESC, LABEL_POSITION = OUTSIDE)
+  OPTIONS (AXIS_SORT = VALUE_DESC, LABEL_POSITION = OUTSIDE),
+  OVERLAYS (REFERENCE_BAND (LOW = 50000, HIGH = 75000, COLOR = '#cbd5e1', LABEL = 'Target range'))
 );
 ```
 

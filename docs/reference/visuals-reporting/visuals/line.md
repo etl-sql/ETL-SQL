@@ -37,6 +37,9 @@ CREATE VISUAL VisualName AS LINE (
   ),
   [OVERLAYS (
     REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb']),
+    REFERENCE_BAND (LOW = n, HIGH = n [, COLOR = '#rrggbb'] [, LABEL = 'text']),
+    RUNNING_TOTAL(precomputedCol) AS SOLID|DASHED|DOTTED [WITH (COLOR = '#rrggbb', LABEL = 'text')],
+    PERCENT_OF_TOTAL(precomputedCol) AS SOLID|DASHED|DOTTED [WITH (COLOR = '#rrggbb', LABEL = 'text')],
     FORECAST(forecastCol) AS SOLID|DASHED|DOTTED [WITH (
       [CONFIDENCE_LOW = lowCol,]
       [CONFIDENCE_HIGH = highCol,]
@@ -81,7 +84,7 @@ CREATE VISUAL VisualName AS LINE (
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - category-axis order; SOURCE preserves query order
 - **X_AXIS (...) / Y_AXIS (...)** - axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`). `MAJOR_TICK_COUNT` is 2–100 and `TICK_INTERVAL` must be positive.
 - **TITLE = 'text'** - visual title
-- **OVERLAYS (...)** - visual overlays including `REFERENCE_LINE(VALUE = n, ...)` for constant author-specified target/threshold lines, and `FORECAST(field) AS SOLID|DASHED|DOTTED [WITH (...)]`. Supports paired `CONFIDENCE_LOW` / `CONFIDENCE_HIGH` quantitative interval ribbon (`fill-opacity='.2'`) and `ANOMALY` marker glyphs. Reference line values and forecast values participate in primary Y domain resolution.
+- **OVERLAYS (...)** - Adds constant reference lines, `REFERENCE_BAND(LOW = n, HIGH = n, ...)`, `RUNNING_TOTAL(field)`, `PERCENT_OF_TOTAL(field)`, and forecast overlays. Calculate table-calculation fields in SQL; the overlay binds and annotates those visible result columns on the primary Y axis.
 
 ## Examples
 
@@ -145,6 +148,24 @@ CREATE VISUAL RegionalTrendWithSeriesLabels AS LINE (
       LABEL_BORDER     = '1px solid #e2e8f0'
     ),
     TITLE = 'Revenue by Region with Direct Series Labels'
+  )
+);
+
+-- Analytical overlays derived from the primary Y series in source order
+SELECT date,
+       revenue,
+       SUM(revenue) OVER (ORDER BY date) AS cumulative_revenue,
+       revenue * 100.0 / SUM(revenue) OVER () AS daily_share
+  INTO #daily_analysis
+  FROM #daily;
+
+CREATE VISUAL RevenueAnalysis AS LINE (
+  SOURCE = #daily_analysis,
+  MAPPINGS (X = date, Y = revenue),
+  OVERLAYS (
+    REFERENCE_BAND (LOW = 50000, HIGH = 80000, COLOR = '#94a3b8', LABEL = 'Expected range'),
+    RUNNING_TOTAL(cumulative_revenue) AS SOLID WITH (COLOR = '#2563eb', LABEL = 'Cumulative revenue'),
+    PERCENT_OF_TOTAL(daily_share) AS DOTTED WITH (COLOR = '#dc2626', LABEL = 'Daily share')
   )
 );
 ```

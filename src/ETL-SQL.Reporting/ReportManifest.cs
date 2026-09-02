@@ -1020,6 +1020,15 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("anomalyField")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? AnomalyField { get; set; }
+        [JsonPropertyName("bandLow")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? BandLow { get; set; }
+        [JsonPropertyName("bandHigh")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? BandHigh { get; set; }
+        [JsonPropertyName("tableCalculationField")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? TableCalculationField { get; set; }
     }
 
     public class SeriesDefManifest

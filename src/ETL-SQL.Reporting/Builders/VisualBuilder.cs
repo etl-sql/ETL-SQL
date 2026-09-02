@@ -321,7 +321,10 @@ namespace ETL_SQL.Reporting.Builders
                     ForecastField = o.ForecastField,
                     ConfidenceLowField = o.ConfidenceLowField,
                     ConfidenceHighField = o.ConfidenceHighField,
-                    AnomalyField = o.AnomalyField
+                    AnomalyField = o.AnomalyField,
+                    BandLow = o.BandLow,
+                    BandHigh = o.BandHigh,
+                    TableCalculationField = o.TableCalculationField
                 }).ToList();
 
             // Conditional formatting rules (TABLE)
