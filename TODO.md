@@ -594,6 +594,32 @@ Intentional design choices (LOD expressions, table calculations, and groupings h
 excluded. Items marked `CUSTOM only` already work in `CUSTOM CHART` but are absent from the named
 chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 
+### Open reds in this area (tackle after the Power BI-like dashboard journey)
+
+Five tests in `ETL-SQL.Tests` fail on the current tree. They were found while certifying the Studio
+journeys and are recorded here rather than there because they are chart work, not Studio work:
+nothing in the Studio phase touches chart plans or SVG. Reproduce with
+`dotnet test tests/ETL-SQL.Tests --filter "FullyQualifiedName~ETL_SQL.Tests.Reporting"`.
+
+**Read the plan hash before blessing anything.** The golden harness draws the distinction itself: a
+moved *plan* hash is a semantic regression, while a moved *SVG* hash with the plan holding is a
+rendering change. Three of these moved the plan, so `-UpdateGolden` would bury the finding rather
+than record it.
+
+- [ ] **Plan hash moved — semantic, do not bless without understanding why**:
+  `ReportingGoldenTests.Fixture_PlanSvgTerminalAndFallback_MatchApprovedGoldens` for
+  `heatmap_native_plot_plan.rptsql` (`OrderHeatMap.plan`), `bubble_native_plot_plan.rptsql`
+  (`MarketPosition.plan`), and `waterfall_native_plot_plan.rptsql` (`ProfitBridge.plan`). Each also
+  moved its SVG, terminal, and fallback hashes, which is what a changed plan would do downstream.
+- [ ] **SVG hash moved with the plan holding — a rendering change to review, then bless**:
+  `pie_donut_proportions.rptsql` (`LeadSourcePie.svg`, `LeadSourceDonut.svg`). Compare the checked-in
+  artifacts under `tests/fixtures/reporting/goldens/pie_donut_proportions` and confirm the new
+  rendering is the intended one before running
+  `pwsh -File scripts/Test-ReportingGoldens.ps1 -UpdateGolden`.
+- [ ] **A smart-label leader line stopped being emitted**:
+  `AdvancedChartProductionTests.DenseMultiSeriesLabelsAndBandAxis_UseDeterministicBoundedPlacement`
+  no longer finds `class='plot-smart-label-leader'` in the SVG. This is the placement guarantee the
+  test is named for, so it is a behaviour question rather than a golden to re-approve.
 ### Axis Controls
 
 - [x] **Axis titles on named charts**: BAR, LINE, HBAR, and SCATTER have no axis label option. COMBO
