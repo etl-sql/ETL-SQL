@@ -951,7 +951,9 @@ public sealed class PlotPlanResolver
         var xBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.X);
         var yBinding = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y && binding.Axis != AxisRole.Secondary)
             ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y)
-            ?? spec.Bindings.First(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2);
+            ?? spec.Bindings.FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2)
+            ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Close)
+            ?? spec.Bindings.First(binding => binding.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Close);
         var yValues = columns[yBinding.Field!].Values.Select(Number).Select(value => value ?? 0m).ToList();
         var xColumn = xBinding?.Field is { } xField && columns.TryGetValue(xField, out var resolvedXColumn) ? resolvedXColumn : null;
         var regressionX = Enumerable.Range(0, yValues.Count)

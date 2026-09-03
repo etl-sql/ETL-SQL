@@ -117,6 +117,7 @@ public class MappingRoleValidationTests
     [InlineData(VisualType.Candlestick, "HIGH")]
     [InlineData(VisualType.Candlestick, "LOW")]
     [InlineData(VisualType.Candlestick, "CLOSE")]
+    [InlineData(VisualType.Candlestick, "VOLUME")]
     [InlineData(VisualType.Pie, "LABEL")]
     [InlineData(VisualType.Pie, "VALUE")]
     [InlineData(VisualType.Donut, "CATEGORY")]

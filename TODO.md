@@ -1033,14 +1033,14 @@ than record it.
 
 ### CANDLESTICK
 
-- [ ] **Volume bars as a secondary series**: A candlestick chart without volume is common, but the
+- [x] **Volume bars as a secondary series**: A candlestick chart without volume is common, but the
   canonical combination (OHLC candles + volume bars on a secondary Y axis) has no named-chart shortcut.
   `CUSTOM CHART` handles it via a second RECT layer with Y2. Add a `VOLUME` mapping to the named
   CANDLESTICK that renders volume bars on a secondary axis automatically.
-- [ ] **Moving average overlay on CANDLESTICK**: CANDLESTICK has no `OVERLAYS` clause at all.
+- [x] **Moving average overlay on CANDLESTICK**: CANDLESTICK has no `OVERLAYS` clause at all.
   A simple moving average line is the most common candlestick overlay in every charting tool.
   Extend `OVERLAYS` support (MOVING_AVERAGE, GOAL) to CANDLESTICK the same way it works on LINE.
-- [ ] **Wick / shadow styling**: `COLOR_UP` and `COLOR_DOWN` control the candle body color. No option
+- [x] **Wick / shadow styling**: `COLOR_UP` and `COLOR_DOWN` control the candle body color. No option
   to set wick (shadow) color independently. Add `WICK_COLOR_UP` and `WICK_COLOR_DOWN`, or a
   `WICK_COLOR` override that applies to both.
 
@@ -1873,6 +1873,16 @@ means the feature already exists in the engine and the sink just needs a new vis
 | Full legend suite | ✅ shipped |
 | `GRID_LINES`, `ZERO_LINE` | ✅ shipped |
 | `SYMBOL_SIZE = n` | [ ] Named Chart Marks (pending) |
+
+### 15_CANDLESTICK.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `VOLUME` mapping (volume bars on secondary axis) | ✅ CANDLESTICK (shipped) |
+| `VOLUME_COLOR` option | ✅ CANDLESTICK (shipped) |
+| `OVERLAYS (MOVING_AVG, GOAL, AVERAGE, REFERENCE_LINE, REFERENCE_BAND)` | ✅ CANDLESTICK (shipped) |
+| `WICK_COLOR`, `WICK_COLOR_UP`, `WICK_COLOR_DOWN` styling | ✅ CANDLESTICK (shipped) |
+| `COLOR_UP`, `COLOR_DOWN` custom body colors | ✅ CANDLESTICK (shipped) |
 
 ### 36_GANTT.rptsql
 

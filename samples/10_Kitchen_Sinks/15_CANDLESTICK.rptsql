@@ -1,46 +1,162 @@
 -- Kitchen Sink: CANDLESTICK Visual
--- This script demonstrates the CANDLESTICK visual type.
+-- Comprehensive showcase of financial OHLC candlesticks, wick customization,
+-- volume bars secondary series, and analytical overlays (moving average, goals, reference bands).
 
-SET REPORT TITLE = 'Kitchen Sink: CANDLESTICK Visual';
-SET REPORT DESCRIPTION = 'Demonstration of CANDLESTICK financial charts.';
+SET REPORT TITLE = 'Kitchen Sink: CANDLESTICK Financial Visuals';
+SET REPORT DESCRIPTION = 'Comprehensive demonstration of candlestick charts with volume bars, wick styling, and overlays.';
 
--- 1. Mock Data Generation (OHLC Data)
-SELECT '2026-05-01' AS Date, 100 AS Open, 110 AS High, 95 AS Low, 105 AS Close INTO #ohlc
-UNION ALL SELECT '2026-05-02', 105, 115, 102, 112
-UNION ALL SELECT '2026-05-03', 112, 113, 100, 101
-UNION ALL SELECT '2026-05-04', 101, 108, 98, 106
-UNION ALL SELECT '2026-05-05', 106, 112, 105, 110
-UNION ALL SELECT '2026-05-06', 110, 111, 103, 104
-UNION ALL SELECT '2026-05-07', 104, 118, 104, 115;
+-- 1. Financial OHLC Market Dataset with Volume
+SELECT '2026-05-01' AS TradeDate, 150.0 AS OpenPrice, 158.0 AS HighPrice, 148.0 AS LowPrice, 155.0 AS ClosePrice, 12500 AS Volume INTO #market_data
+UNION ALL SELECT '2026-05-02', 155.0, 162.0, 153.0, 159.0, 14200
+UNION ALL SELECT '2026-05-03', 159.0, 160.0, 150.0, 152.0, 18900
+UNION ALL SELECT '2026-05-04', 151.0, 164.0, 149.5, 163.0, 24100
+UNION ALL SELECT '2026-05-05', 163.0, 167.0, 160.0, 165.5, 21500
+UNION ALL SELECT '2026-05-06', 166.0, 168.0, 158.0, 160.0, 17800
+UNION ALL SELECT '2026-05-07', 160.0, 172.0, 159.0, 170.0, 26000
+UNION ALL SELECT '2026-05-08', 169.5, 174.0, 166.0, 168.0, 19400
+UNION ALL SELECT '2026-05-09', 168.0, 176.5, 167.0, 175.0, 28300
+UNION ALL SELECT '2026-05-10', 174.0, 175.0, 165.0, 166.0, 22100;
 
--- 2. Basic Candlestick
+-- 2. Basic OHLC Candlestick
 CREATE VISUAL BasicCandle AS CANDLESTICK (
-    SOURCE = #ohlc,
-    TITLE = 'Stock Price History',
-    MAPPINGS (X = Date, OPEN = Open, HIGH = High, LOW = Low, CLOSE = Close)
-);
-
--- 3. Candlestick with Custom Colors
-CREATE VISUAL StyledCandle AS CANDLESTICK (
-    SOURCE = #ohlc,
-    TITLE = 'Styled Candlestick Chart',
-    MAPPINGS (X = Date, OPEN = Open, HIGH = High, LOW = Low, CLOSE = Close),
-    OPTIONS (
-        COLORS (
-            positive = '#eb4436', -- ECharts default for Up is usually red in some locales, green in others. 
-            negative = '#0f9d58'  -- We can specify what we want.
-        ),
-        Y_AXIS (LABEL = 'Price ($)', MIN = 90)
+    SOURCE = #market_data,
+    TITLE = '1. Basic Candlestick Chart',
+    MAPPINGS (
+        X = TradeDate,
+        OPEN = OpenPrice,
+        HIGH = HighPrice,
+        LOW = LowPrice,
+        CLOSE = ClosePrice
     )
 );
 
--- Page Layout
-CREATE PAGE CandleKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B',
+-- 3. Custom Body Colors (Bullish Green / Bearish Crimson)
+CREATE VISUAL CustomColorsCandle AS CANDLESTICK (
+    SOURCE = #market_data,
+    TITLE = '2. Custom Up/Down Candle Colors',
+    MAPPINGS (
+        X = TradeDate,
+        OPEN = OpenPrice,
+        HIGH = HighPrice,
+        LOW = LowPrice,
+        CLOSE = ClosePrice
+    ),
+    OPTIONS (
+        COLOR_UP = '#16a34a',
+        COLOR_DOWN = '#dc2626'
+    )
+);
+
+-- 4. Unified Wick Styling (Neutral Dark Shadows)
+CREATE VISUAL UnifiedWickCandle AS CANDLESTICK (
+    SOURCE = #market_data,
+    TITLE = '3. Neutral Wick Override (Dark Shadows)',
+    MAPPINGS (
+        X = TradeDate,
+        OPEN = OpenPrice,
+        HIGH = HighPrice,
+        LOW = LowPrice,
+        CLOSE = ClosePrice
+    ),
+    OPTIONS (
+        COLOR_UP = '#0284c7',
+        COLOR_DOWN = '#ea580c',
+        WICK_COLOR = '#334155'
+    )
+);
+
+-- 5. Asymmetric Wick Styling (Distinct Up vs Down Shadow Colors)
+CREATE VISUAL AsymmetricWickCandle AS CANDLESTICK (
+    SOURCE = #market_data,
+    TITLE = '4. Asymmetric Up/Down Wick Colors',
+    MAPPINGS (
+        X = TradeDate,
+        OPEN = OpenPrice,
+        HIGH = HighPrice,
+        LOW = LowPrice,
+        CLOSE = ClosePrice
+    ),
+    OPTIONS (
+        COLOR_UP = '#059669',
+        COLOR_DOWN = '#e11d48',
+        WICK_COLOR_UP = '#047857',
+        WICK_COLOR_DOWN = '#be123c'
+    )
+);
+
+-- 6. Candlestick with Volume Bars
+CREATE VISUAL CandleWithVolume AS CANDLESTICK (
+    SOURCE = #market_data,
+    TITLE = '5. Candlestick with Secondary Volume Bars',
+    MAPPINGS (
+        X = TradeDate,
+        OPEN = OpenPrice,
+        HIGH = HighPrice,
+        LOW = LowPrice,
+        CLOSE = ClosePrice,
+        VOLUME = Volume
+    ),
+    OPTIONS (
+        VOLUME_COLOR = '#64748b',
+        COLOR_UP = '#26a69a',
+        COLOR_DOWN = '#ef5350'
+    )
+);
+
+-- 7. Candlestick with Moving Average Overlay
+CREATE VISUAL CandleWithMovingAvg AS CANDLESTICK (
+    SOURCE = #market_data,
+    TITLE = '6. Price Action with 3-Day Moving Average',
+    MAPPINGS (
+        X = TradeDate,
+        OPEN = OpenPrice,
+        HIGH = HighPrice,
+        LOW = LowPrice,
+        CLOSE = ClosePrice
+    ),
+    OVERLAYS (
+        MOVING_AVG(3) AS SOLID WITH (COLOR = '#f59e0b', LABEL = '3-Day SMA')
+    )
+);
+
+-- 8. Complete Financial Suite: Volume + Moving Average + Support/Resistance
+CREATE VISUAL FullFinancialOverview AS CANDLESTICK (
+    SOURCE = #market_data,
+    TITLE = '7. Complete Financial View (Volume + Overlays + Channel)',
+    MAPPINGS (
+        X = TradeDate,
+        OPEN = OpenPrice,
+        HIGH = HighPrice,
+        LOW = LowPrice,
+        CLOSE = ClosePrice,
+        VOLUME = Volume
+    ),
+    OPTIONS (
+        COLOR_UP = '#10b981',
+        COLOR_DOWN = '#f43f5e',
+        WICK_COLOR = '#475569',
+        VOLUME_COLOR = '#94a3b8'
+    ),
+    OVERLAYS (
+        REFERENCE_BAND (LOW = 150.0, HIGH = 155.0, COLOR = '#94a3b8', LABEL = 'Accumulation Zone'),
+        MOVING_AVG(3) AS SOLID WITH (COLOR = '#f59e0b', LABEL = '3-Period SMA'),
+        GOAL(172.0) AS DASHED WITH (COLOR = '#ef4444', LABEL = 'Key Resistance'),
+        AVERAGE AS DOTTED WITH (COLOR = '#6366f1', LABEL = 'Mean Close')
+    )
+);
+
+-- Dashboard Page
+CREATE PAGE CandlestickKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A B / C D / E F / G G',
     MAP (
         'A' = BasicCandle,
-        'B' = StyledCandle
+        'B' = CustomColorsCandle,
+        'C' = UnifiedWickCandle,
+        'D' = AsymmetricWickCandle,
+        'E' = CandleWithVolume,
+        'F' = CandleWithMovingAvg,
+        'G' = FullFinancialOverview
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = CandleKitchenSink, PAGES (CandleKitchenSink));
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = CandlestickKitchenSink, PAGES (CandlestickKitchenSink));

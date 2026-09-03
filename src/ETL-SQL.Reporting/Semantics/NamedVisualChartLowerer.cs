@@ -47,6 +47,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         ValidateHeatmapOptions(statement);
         ValidateWaterfallOptions(statement);
         ValidateGanttOptions(statement);
+        ValidateCandlestickOptions(statement);
         foreach (var opt in statement.Options) manifest.Options.TryAdd(opt.Key, opt.Value);
         if (statement.VisualType == VisualType.Scatter)
         {
@@ -136,24 +137,19 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             }
             if (overlay.OverlayType == OverlayType.ReferenceLine)
             {
-                if (statement.VisualType is not (VisualType.Bar or VisualType.HorizontalBar or VisualType.Line or VisualType.Combo or VisualType.Scatter or VisualType.Bubble))
-                    throw new InvalidOperationException($"REFERENCE_LINE overlay is supported only on Cartesian charts with a primary value axis (BAR, HBAR, LINE, COMBO, SCATTER, BUBBLE); found {statement.VisualType.ToString().ToUpperInvariant()}.");
+                if (statement.VisualType is not (VisualType.Bar or VisualType.HorizontalBar or VisualType.Line or VisualType.Combo or VisualType.Scatter or VisualType.Bubble or VisualType.Candlestick))
+                    throw new InvalidOperationException($"REFERENCE_LINE overlay is supported only on Cartesian charts with a primary value axis (BAR, HBAR, LINE, COMBO, SCATTER, BUBBLE, CANDLESTICK); found {statement.VisualType.ToString().ToUpperInvariant()}.");
 
                 if (!overlay.Parameter.HasValue || !double.IsFinite(overlay.Parameter.Value))
                     throw new InvalidOperationException("REFERENCE_LINE requires a finite numeric VALUE.");
 
-                var hasPrimaryValue = statement.VisualType == VisualType.HorizontalBar
-                    ? statement.Mappings.Any(m => m.Role.Equals("Y", StringComparison.OrdinalIgnoreCase) || m.Role.Equals("VALUE", StringComparison.OrdinalIgnoreCase))
-                    : statement.Mappings.Any(m => m.Role.Equals("Y", StringComparison.OrdinalIgnoreCase) || m.Role.Equals("VALUE", StringComparison.OrdinalIgnoreCase))
-                        || statement.TypedSeries.Count > 0;
-
-                if (!hasPrimaryValue)
+                if (!HasPrimaryValueMapping(statement))
                     throw new InvalidOperationException("REFERENCE_LINE overlay requires a primary quantitative value mapping.");
             }
             if (overlay.OverlayType == OverlayType.ReferenceBand)
             {
-                if (statement.VisualType is not (VisualType.Bar or VisualType.HorizontalBar or VisualType.Line or VisualType.Combo or VisualType.Scatter or VisualType.Bubble))
-                    throw new InvalidOperationException($"REFERENCE_BAND overlay is supported only on Cartesian charts with a primary value axis (BAR, HBAR, LINE, COMBO, SCATTER, BUBBLE); found {statement.VisualType.ToString().ToUpperInvariant()}.");
+                if (statement.VisualType is not (VisualType.Bar or VisualType.HorizontalBar or VisualType.Line or VisualType.Combo or VisualType.Scatter or VisualType.Bubble or VisualType.Candlestick))
+                    throw new InvalidOperationException($"REFERENCE_BAND overlay is supported only on Cartesian charts with a primary value axis (BAR, HBAR, LINE, COMBO, SCATTER, BUBBLE, CANDLESTICK); found {statement.VisualType.ToString().ToUpperInvariant()}.");
                 if (!overlay.BandLow.HasValue || !overlay.BandHigh.HasValue ||
                     !double.IsFinite(overlay.BandLow.Value) || !double.IsFinite(overlay.BandHigh.Value))
                     throw new InvalidOperationException("REFERENCE_BAND requires finite numeric LOW and HIGH values.");
@@ -319,7 +315,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 VisualType.Gauge => ImmutableArray.Create(new StyleToken("layout", "gauge")),
                 VisualType.BoxPlot => ImmutableArray.Create(new StyleToken("layout", "boxplot"), new StyleToken("preserveRows", "true")),
                 VisualType.Waterfall => ResolveWaterfallLayerStyle(statement, manifest),
-                VisualType.Candlestick => ImmutableArray.Create(new StyleToken("layout", "candlestick"), new StyleToken("preserveRows", "true")),
+                VisualType.Candlestick => ResolveCandlestickLayerStyle(statement, manifest),
                 VisualType.Gantt => ResolveGanttLayerStyle(statement, manifest),
                 VisualType.Radar => ImmutableArray.Create(new StyleToken("layout", "radar"), new StyleToken("preserveRows", "true")),
                 VisualType.Scatter when bindings.Any(b => b.Channel == FieldChannel.ErrorLow) && bindings.Any(b => b.Channel == FieldChannel.ErrorHigh) =>
@@ -360,17 +356,57 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 style = style.Add(new StyleToken("MIN_BUBBLE_SIZE", bMin.ToString(CultureInfo.InvariantCulture)));
                 style = style.Add(new StyleToken("MAX_BUBBLE_SIZE", bMax.ToString(CultureInfo.InvariantCulture)));
             }
-            yield return new MarkLayerSpec(
-                "primary",
-                mark,
-                0,
-                bindings,
-                style,
-                statement.Name)
+
+            if (statement.VisualType == VisualType.Candlestick)
             {
-                BandSize = mark == MarkKind.Rect ? bandSize : .75m,
-                Position = position
-            };
+                var volumeBinding = bindings.FirstOrDefault(b => b.Channel == FieldChannel.Y2);
+                var candleBindings = bindings.Where(b => b.Channel != FieldChannel.Y2).ToImmutableArray();
+                var xBinding = bindings.FirstOrDefault(b => b.Channel == FieldChannel.X);
+
+                if (volumeBinding is not null && xBinding is not null)
+                {
+                    var volColor = statement.Options.FirstOrDefault(o => o.Key.Equals("VOLUME_COLOR", StringComparison.OrdinalIgnoreCase))?.Value
+                        ?? manifest.Options.GetValueOrDefault("VOLUME_COLOR")
+                        ?? "#94a3b8";
+
+                    yield return new MarkLayerSpec(
+                        "volume",
+                        MarkKind.Rect,
+                        0,
+                        [xBinding, volumeBinding],
+                        [new StyleToken("series", "Volume"), new StyleToken("color", volColor), new StyleToken("volumeLayer", "true")],
+                        "Volume")
+                    {
+                        BandSize = bandSize * 0.55m
+                    };
+                }
+
+                yield return new MarkLayerSpec(
+                    "primary",
+                    mark,
+                    1,
+                    candleBindings,
+                    style,
+                    statement.Name)
+                {
+                    BandSize = bandSize,
+                    Position = position
+                };
+            }
+            else
+            {
+                yield return new MarkLayerSpec(
+                    "primary",
+                    mark,
+                    0,
+                    bindings,
+                    style,
+                    statement.Name)
+                {
+                    BandSize = mark == MarkKind.Rect ? bandSize : .75m,
+                    Position = position
+                };
+            }
         }
 
         for (var index = 0; index < statement.Overlays.Count; index++)
@@ -811,7 +847,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
     private static bool HasPrimaryValueMapping(CreateVisualStatement statement) =>
         statement.Mappings.Any(mapping =>
             mapping.Role.Equals("Y", StringComparison.OrdinalIgnoreCase) ||
-            mapping.Role.Equals("VALUE", StringComparison.OrdinalIgnoreCase)) ||
+            mapping.Role.Equals("VALUE", StringComparison.OrdinalIgnoreCase) ||
+            (statement.VisualType == VisualType.Candlestick && mapping.Role.Equals("CLOSE", StringComparison.OrdinalIgnoreCase))) ||
         statement.TypedSeries.Count > 0;
 
     private static string OverlayName(OverlayType type) => type switch
@@ -854,6 +891,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         "HIGH" when type == VisualType.Candlestick => FieldChannel.High,
         "LOW" when type == VisualType.Candlestick => FieldChannel.Low,
         "CLOSE" when type == VisualType.Candlestick => FieldChannel.Close,
+        "VOLUME" when type == VisualType.Candlestick => FieldChannel.Y2,
         "Y" or "VALUE" when type is not VisualType.Pie and not VisualType.Donut => FieldChannel.Y,
         "Y2" => FieldChannel.Y2,
         "LABEL" or "CATEGORY" when type is VisualType.Pie or VisualType.Donut => FieldChannel.Theta,
@@ -886,7 +924,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         VisualType.BoxPlot
             => ["X", "LOW", "Q1", "MEDIAN", "Q3", "HIGH", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.Candlestick
-            => ["X", "OPEN", "HIGH", "LOW", "CLOSE", "SERIES", "COLOR", "TOOLTIP"],
+            => ["X", "OPEN", "HIGH", "LOW", "CLOSE", "VOLUME", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.Gantt
             => ["X", "START", "X2", "END", "Y", "LABEL", "GROUP", "PROGRESS", "MILESTONE", "DEPENDS_ON", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.Trellis
@@ -1462,6 +1500,54 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                     var upper = opt.Value.ToUpperInvariant();
                     if (upper is not ("LEFT" or "INSIDE" or "RIGHT" or "NONE"))
                         throw new InvalidOperationException($"Invalid LABEL_POSITION '{opt.Value}'. Valid values are LEFT, INSIDE, RIGHT, or NONE.");
+                }
+            }
+        }
+    }
+
+    private static ImmutableArray<StyleToken> ResolveCandlestickLayerStyle(
+        CreateVisualStatement statement,
+        VisualManifest manifest)
+    {
+        var tokens = ImmutableArray.CreateBuilder<StyleToken>();
+        tokens.Add(new StyleToken("layout", "candlestick"));
+        tokens.Add(new StyleToken("preserveRows", "true"));
+
+        void Forward(string key)
+        {
+            var val = statement.Options.FirstOrDefault(o => o.Key.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value
+                ?? manifest.Options.GetValueOrDefault(key);
+            if (!string.IsNullOrWhiteSpace(val)) tokens.Add(new StyleToken(key, val));
+        }
+
+        Forward("COLOR_UP");
+        Forward("COLOR_DOWN");
+        Forward("WICK_COLOR");
+        Forward("WICK_COLOR_UP");
+        Forward("WICK_COLOR_DOWN");
+        Forward("VOLUME_COLOR");
+
+        return tokens.ToImmutable();
+    }
+
+    private static void ValidateCandlestickOptions(CreateVisualStatement statement)
+    {
+        var isCandlestick = statement.VisualType == VisualType.Candlestick;
+        foreach (var opt in statement.Options)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            if (key is "WICK_COLOR" or "WICK_COLOR_UP" or "WICK_COLOR_DOWN" or "VOLUME_COLOR")
+            {
+                if (!isCandlestick)
+                    throw new InvalidOperationException($"{key} option is supported only on CANDLESTICK visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            }
+
+            if (isCandlestick)
+            {
+                if (key is "COLOR_UP" or "COLOR_DOWN" or "WICK_COLOR" or "WICK_COLOR_UP" or "WICK_COLOR_DOWN" or "VOLUME_COLOR")
+                {
+                    if (string.IsNullOrWhiteSpace(opt.Value))
+                        throw new InvalidOperationException($"Candlestick option '{key}' cannot be empty.");
                 }
             }
         }

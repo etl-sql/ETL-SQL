@@ -2107,15 +2107,74 @@ internal sealed class PlotPlanSvgRenderer
 
     private static void RenderCandlestick(StringBuilder builder, PlotPlan plan)
     {
-        var layer = plan.Layers.First();
+        var candleLayer = plan.Layers.FirstOrDefault(l => IsCandlestickLayer(l)) ?? plan.Layers.First();
+        var volumeLayer = plan.Layers.FirstOrDefault(l => l.Id == "volume" || l.Style.Any(s => s.Name == "volumeLayer"));
         var scale = plan.Scales.First(item => item.Channel == FieldChannel.Y);
-        var categories = plan.Scales.First(item => item.Channel == FieldChannel.X).Categories;
+        var xScale = plan.Scales.First(item => item.Channel == FieldChannel.X);
+        var categories = xScale.Categories;
         var plotWidth = plan.Bounds.Width - Left - Right;
         var plotHeight = plan.Bounds.Height - Top - Bottom;
-        var slot = plotWidth / Math.Max(1, layer.Data.Length);
-        for (var index = 0; index < layer.Data.Length; index++)
+
+        // Grid lines and Y axis ticks
+        foreach (var tick in scale.Ticks)
         {
-            var datum = layer.Data[index];
+            var y = MapY(PlotPlanResolver.Number(tick.Value) ?? 0m, scale, plotHeight);
+            builder.AppendLine($"<line x1='{N(Left)}' y1='{N(y)}' x2='{N(Left + plotWidth)}' y2='{N(y)}' stroke='#e5e7eb'/><text x='{N(Left - 6m)}' y='{N(y + 4m)}' text-anchor='end' font-size='9' fill='#666'>{Esc(tick.Label)}</text>");
+        }
+
+        // Reference bands (if any)
+        foreach (var bandLayer in plan.Layers.Where(l => LayerStyle(l, "overlayType") == "ReferenceBand"))
+        {
+            var lowStr = LayerStyle(bandLayer, "low");
+            var highStr = LayerStyle(bandLayer, "high");
+            var bandColor = SafePaint(LayerStyle(bandLayer, "color"), "#94a3b8");
+            if (decimal.TryParse(lowStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var bLow) &&
+                decimal.TryParse(highStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var bHigh))
+            {
+                var bLowY = MapY(bLow, scale, plotHeight);
+                var bHighY = MapY(bHigh, scale, plotHeight);
+                var bTop = Math.Min(bLowY, bHighY);
+                var bHeight = Math.Max(1m, Math.Abs(bLowY - bHighY));
+                builder.AppendLine($"<rect x='{N(Left)}' y='{N(bTop)}' width='{N(plotWidth)}' height='{N(bHeight)}' fill='{Esc(bandColor)}' fill-opacity='0.2'/>");
+            }
+        }
+
+        var slot = plotWidth / Math.Max(1, candleLayer.Data.Length);
+
+        // Volume bars (if any)
+        if (volumeLayer is not null && volumeLayer.Data.Length > 0)
+        {
+            var volValues = volumeLayer.Data.Select(d => Numeric(d, FieldChannel.Y2) ?? Numeric(d, FieldChannel.Y) ?? 0m).ToList();
+            var maxVol = volValues.DefaultIfEmpty(1m).Max();
+            if (maxVol <= 0m) maxVol = 1m;
+            var volColor = SafePaint(LayerStyle(volumeLayer, "color") ?? Style(plan, "VOLUME_COLOR"), "#94a3b8");
+            var maxVolHeight = plotHeight * 0.28m;
+
+            builder.AppendLine("<g class='plot-volume-bars'>");
+            for (var i = 0; i < volumeLayer.Data.Length; i++)
+            {
+                var vDatum = volumeLayer.Data[i];
+                var v = Numeric(vDatum, FieldChannel.Y2) ?? Numeric(vDatum, FieldChannel.Y) ?? 0m;
+                var vHeight = (v / maxVol) * maxVolHeight;
+                var vx = Left + slot * (i + .5m);
+                var vWidth = slot * 0.55m;
+                var vy = Top + plotHeight - vHeight;
+                builder.AppendLine($"<rect x='{N(vx - vWidth / 2m)}' y='{N(vy)}' width='{N(vWidth)}' height='{N(Math.Max(1m, vHeight))}' fill='{Esc(volColor)}' fill-opacity='0.45' stroke='{Esc(volColor)}' stroke-opacity='0.6' data-row-index='{vDatum.RowIndex}'><title>Volume: {N(v)}</title></rect>");
+            }
+            builder.AppendLine("</g>");
+        }
+
+        // Candlesticks
+        var colorUp = SafePaint(Style(plan, "COLOR_UP") ?? LayerStyle(candleLayer, "COLOR_UP"), "#26a69a");
+        var colorDown = SafePaint(Style(plan, "COLOR_DOWN") ?? LayerStyle(candleLayer, "COLOR_DOWN"), "#ef5350");
+        var wickOverride = Style(plan, "WICK_COLOR") ?? LayerStyle(candleLayer, "WICK_COLOR");
+        var wickUp = Style(plan, "WICK_COLOR_UP") ?? LayerStyle(candleLayer, "WICK_COLOR_UP") ?? wickOverride;
+        var wickDown = Style(plan, "WICK_COLOR_DOWN") ?? LayerStyle(candleLayer, "WICK_COLOR_DOWN") ?? wickOverride;
+
+        builder.AppendLine("<g class='plot-candlestick'>");
+        for (var index = 0; index < candleLayer.Data.Length; index++)
+        {
+            var datum = candleLayer.Data[index];
             var open = Numeric(datum, FieldChannel.Open); var close = Numeric(datum, FieldChannel.Close);
             var low = Numeric(datum, FieldChannel.Low); var high = Numeric(datum, FieldChannel.High);
             if (open is null || close is null || low is null || high is null) continue;
@@ -2123,9 +2182,64 @@ internal sealed class PlotPlanSvgRenderer
             var openY = MapY(open.Value, scale, plotHeight); var closeY = MapY(close.Value, scale, plotHeight);
             var lowY = MapY(low.Value, scale, plotHeight); var highY = MapY(high.Value, scale, plotHeight);
             var rising = close.Value >= open.Value;
-            var color = rising ? SafePaint(Style(plan, "COLOR_UP"), "#26a69a") : SafePaint(Style(plan, "COLOR_DOWN"), "#ef5350");
-            builder.AppendLine($"<g data-row-index='{datum.RowIndex}'><title>{Esc(categories[index])}: O {N(open.Value)}, H {N(high.Value)}, L {N(low.Value)}, C {N(close.Value)}</title><line x1='{N(x)}' y1='{N(highY)}' x2='{N(x)}' y2='{N(lowY)}' stroke='{Esc(color)}'/><rect x='{N(x - bodyWidth / 2m)}' y='{N(Math.Min(openY, closeY))}' width='{N(bodyWidth)}' height='{N(Math.Max(1m, Math.Abs(openY - closeY)))}' fill='{Esc(color)}' stroke='{Esc(color)}'/></g>");
-            builder.AppendLine($"<text x='{N(x)}' y='{N(Top + plotHeight + 16m)}' text-anchor='middle' font-size='9' fill='#666'>{Esc(Truncate(categories[index], 10))}</text>");
+            var candleColor = rising ? colorUp : colorDown;
+            var wickColor = rising ? SafePaint(wickUp, candleColor) : SafePaint(wickDown, candleColor);
+            var catName = index < categories.Length ? categories[index] : datum.RowIndex.ToString();
+            builder.AppendLine($"<g data-row-index='{datum.RowIndex}'><title>{Esc(catName)}: O {N(open.Value)}, H {N(high.Value)}, L {N(low.Value)}, C {N(close.Value)}</title><line x1='{N(x)}' y1='{N(highY)}' x2='{N(x)}' y2='{N(lowY)}' stroke='{Esc(wickColor)}'/><rect x='{N(x - bodyWidth / 2m)}' y='{N(Math.Min(openY, closeY))}' width='{N(bodyWidth)}' height='{N(Math.Max(1m, Math.Abs(openY - closeY)))}' fill='{Esc(candleColor)}' stroke='{Esc(candleColor)}'/></g>");
+            builder.AppendLine($"<text x='{N(x)}' y='{N(Top + plotHeight + 16m)}' text-anchor='middle' font-size='9' fill='#666'>{Esc(Truncate(catName, 10))}</text>");
+        }
+        builder.AppendLine("</g>");
+
+        // Overlays (Line and Rule overlays)
+        foreach (var overlayLayer in plan.Layers)
+        {
+            if (overlayLayer == candleLayer || overlayLayer == volumeLayer) continue;
+            var overlayType = LayerStyle(overlayLayer, "overlayType");
+            if (string.IsNullOrEmpty(overlayType) || overlayType == "ReferenceBand") continue;
+
+            if (overlayLayer.Mark == MarkKind.Line)
+            {
+                var linePoints = new List<string>();
+                var lineColor = SafePaint(LayerStyle(overlayLayer, "color"), "#f59e0b");
+                var lineDash = DashAttribute(LayerStyle(overlayLayer, "lineStyle"));
+                for (var i = 0; i < overlayLayer.Data.Length; i++)
+                {
+                    var d = overlayLayer.Data[i];
+                    var val = Numeric(d, FieldChannel.Y);
+                    if (val.HasValue)
+                    {
+                        var px = Left + slot * (i + .5m);
+                        var py = MapY(val.Value, scale, plotHeight);
+                        linePoints.Add($"{N(px)},{N(py)}");
+                    }
+                }
+                if (linePoints.Count > 1)
+                {
+                    builder.AppendLine($"<polyline class='plot-overlay-line' data-overlay-type='{Esc(overlayType)}' points='{string.Join(" ", linePoints)}' fill='none' stroke='{Esc(lineColor)}' stroke-width='2'{lineDash}/>");
+                }
+            }
+            else if (overlayLayer.Mark == MarkKind.Rule)
+            {
+                var ruleColor = SafePaint(LayerStyle(overlayLayer, "color"), "#ef4444");
+                var ruleParam = LayerStyle(overlayLayer, "parameter");
+                decimal? ruleVal = null;
+                if (decimal.TryParse(ruleParam, NumberStyles.Number, CultureInfo.InvariantCulture, out var rv))
+                    ruleVal = rv;
+                else if (overlayLayer.Data.Length > 0)
+                    ruleVal = Numeric(overlayLayer.Data[0], FieldChannel.Y);
+
+                if (ruleVal.HasValue)
+                {
+                    var ry = MapY(ruleVal.Value, scale, plotHeight);
+                    var ruleLabel = LayerStyle(overlayLayer, "label") ?? "";
+                    var ruleDash = DashAttribute(LayerStyle(overlayLayer, "lineStyle")) ?? " stroke-dasharray='4 2'";
+                    builder.AppendLine($"<line class='plot-reference-line' x1='{N(Left)}' y1='{N(ry)}' x2='{N(Left + plotWidth)}' y2='{N(ry)}' stroke='{Esc(ruleColor)}' stroke-width='1.5'{ruleDash}/>");
+                    if (!string.IsNullOrWhiteSpace(ruleLabel))
+                    {
+                        builder.AppendLine($"<text x='{N(Left + plotWidth - 4m)}' y='{N(ry - 4m)}' text-anchor='end' font-size='9' fill='{Esc(ruleColor)}' font-weight='bold'>{Esc(ruleLabel)}: {N(ruleVal.Value)}</text>");
+                    }
+                }
+            }
         }
     }
 
@@ -2791,6 +2905,12 @@ internal sealed class PlotPlanSvgRenderer
     {
         if (scale is null) return;
         var slot = area.Width / Math.Max(1, categories.Length);
+        var colorUp = SafePaint(LayerStyle(layer, "COLOR_UP"), "#26a69a");
+        var colorDown = SafePaint(LayerStyle(layer, "COLOR_DOWN"), "#ef5350");
+        var wickOverride = LayerStyle(layer, "WICK_COLOR");
+        var wickUp = LayerStyle(layer, "WICK_COLOR_UP") ?? wickOverride;
+        var wickDown = LayerStyle(layer, "WICK_COLOR_DOWN") ?? wickOverride;
+
         builder.AppendLine($"<g class='plot-candlestick' data-layer='{Esc(layer.Id)}'>");
         foreach (var datum in layer.Data)
         {
@@ -2803,8 +2923,10 @@ internal sealed class PlotPlanSvgRenderer
             var x = area.Left + slot * (index + .5m); var width = slot * layer.BandSize * .55m;
             var openY = MapY(open.Value, scale, area.Height); var closeY = MapY(close.Value, scale, area.Height);
             var lowY = MapY(low.Value, scale, area.Height); var highY = MapY(high.Value, scale, area.Height);
-            var color = close.Value >= open.Value ? "#26a69a" : "#ef5350";
-            builder.AppendLine($"<g data-row-index='{datum.RowIndex}' data-extent-axis='y'><title>{Esc(category!)}: O {N(open.Value)}, H {N(high.Value)}, L {N(low.Value)}, C {N(close.Value)}</title><line x1='{N(x)}' y1='{N(highY)}' x2='{N(x)}' y2='{N(lowY)}' stroke='{color}'/><rect x='{N(x - width / 2m)}' y='{N(Math.Min(openY, closeY))}' width='{N(width)}' height='{N(Math.Max(1m, Math.Abs(openY - closeY)))}' fill='{color}' stroke='{color}'/></g>");
+            var rising = close.Value >= open.Value;
+            var color = rising ? colorUp : colorDown;
+            var wickColor = rising ? SafePaint(wickUp, color) : SafePaint(wickDown, color);
+            builder.AppendLine($"<g data-row-index='{datum.RowIndex}' data-extent-axis='y'><title>{Esc(category!)}: O {N(open.Value)}, H {N(high.Value)}, L {N(low.Value)}, C {N(close.Value)}</title><line x1='{N(x)}' y1='{N(highY)}' x2='{N(x)}' y2='{N(lowY)}' stroke='{Esc(wickColor)}'/><rect x='{N(x - width / 2m)}' y='{N(Math.Min(openY, closeY))}' width='{N(width)}' height='{N(Math.Max(1m, Math.Abs(openY - closeY)))}' fill='{Esc(color)}' stroke='{Esc(color)}'/></g>");
         }
         builder.AppendLine("</g>");
     }

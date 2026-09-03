@@ -5123,6 +5123,7 @@ export function createDesigner(container, opts = {}) {
         const isHeatmap = v.type === 'HEATMAP';
         const isWaterfall = v.type === 'WATERFALL';
         const isGantt = v.type === 'GANTT';
+        const isCandlestick = v.type === 'CANDLESTICK';
         const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
         const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
         const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
@@ -5292,6 +5293,33 @@ export function createDesigner(container, opts = {}) {
                                 <select id="pp-format-gantt-label-position" class="form-control">
                                     ${['LEFT', 'INSIDE', 'RIGHT', 'NONE'].map(val => `<option${(v.options?.LABEL_POSITION || 'LEFT').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
                                 </select>
+                            </label>
+                        </div>` : ''}
+                        ${isCandlestick ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">Candlestick styling</div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Bullish / Up candle color
+                                <input type="color" id="pp-format-candlestick-color-up" value="${toHexColor(v.options?.COLOR_UP, '#26a69a')}">
+                            </label>
+                            <label class="etlsql-dsgn-label">Bearish / Down candle color
+                                <input type="color" id="pp-format-candlestick-color-down" value="${toHexColor(v.options?.COLOR_DOWN, '#ef5350')}">
+                            </label>
+                        </div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Wick color override
+                                <input type="color" id="pp-format-candlestick-wick-color" value="${toHexColor(v.options?.WICK_COLOR, '#666666')}">
+                            </label>
+                            <label class="etlsql-dsgn-label">Volume bars color
+                                <input type="color" id="pp-format-candlestick-volume-color" value="${toHexColor(v.options?.VOLUME_COLOR, '#94a3b8')}">
+                            </label>
+                        </div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Up wick color
+                                <input type="color" id="pp-format-candlestick-wick-color-up" value="${toHexColor(v.options?.WICK_COLOR_UP, '#26a69a')}">
+                            </label>
+                            <label class="etlsql-dsgn-label">Down wick color
+                                <input type="color" id="pp-format-candlestick-wick-color-down" value="${toHexColor(v.options?.WICK_COLOR_DOWN, '#ef5350')}">
                             </label>
                         </div>` : ''}
                     </div>
@@ -5698,6 +5726,12 @@ export function createDesigner(container, opts = {}) {
         bindOption('#pp-format-gantt-today-color', 'TODAY_COLOR', 'input');
         bindOption('#pp-format-gantt-today-date', 'TODAY_DATE');
         bindOption('#pp-format-gantt-label-position', 'LABEL_POSITION');
+        bindOption('#pp-format-candlestick-color-up', 'COLOR_UP', 'input');
+        bindOption('#pp-format-candlestick-color-down', 'COLOR_DOWN', 'input');
+        bindOption('#pp-format-candlestick-wick-color', 'WICK_COLOR', 'input');
+        bindOption('#pp-format-candlestick-wick-color-up', 'WICK_COLOR_UP', 'input');
+        bindOption('#pp-format-candlestick-wick-color-down', 'WICK_COLOR_DOWN', 'input');
+        bindOption('#pp-format-candlestick-volume-color', 'VOLUME_COLOR', 'input');
         bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
         bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
         bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');
