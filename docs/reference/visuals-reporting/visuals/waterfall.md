@@ -8,8 +8,8 @@ Shows how an initial value increases and decreases across a sequence of steps, e
 CREATE VISUAL VisualName AS WATERFALL (
   SOURCE = #tableName,
   MAPPINGS (
-    NAME = col_category,
-    VALUE = col_amount,
+    NAME = col_category,      -- or X = col_category
+    VALUE = col_amount,       -- or Y = col_amount
     TOTAL = col_is_total,
     SUBTOTAL = col_is_subtotal
   ),
@@ -26,8 +26,10 @@ CREATE VISUAL VisualName AS WATERFALL (
 
 ## Mappings
 
-- **NAME** — Label for each bar step (e.g. 'Opening Balance', 'Sales', 'Costs').
-- **VALUE** — The change amount (positive = increase, negative = decrease).
+- **NAME** — Label for each bar step (e.g. 'Opening Balance', 'Sales', 'Costs'). Alias: **X**.
+- **VALUE** — The change amount (positive = increase, negative = decrease). Alias: **Y**.
+- **X** — Categorical step label (alias for **NAME**).
+- **Y** — Step delta value (alias for **VALUE**).
 - **TOTAL** — Optional column indicating total or subtotal rows. Rows where TOTAL is true/1 or 'TOTAL' are drawn as totals (anchored to zero). Values equal to 'SUBTOTAL' are drawn as intermediate subtotals.
 - **SUBTOTAL** — Optional dedicated boolean/flag column marking intermediate subtotal bars (anchored to zero, continuing running base).
 
@@ -44,6 +46,8 @@ CREATE VISUAL VisualName AS WATERFALL (
 - **SHOW_VALUES = ON|OFF** — Display values on bars (default ON).
 
 ## Examples
+
+### Example 1: Vertical Bridge with NAME / VALUE Mappings
 
 ```sql
 SELECT 'Opening' AS item, 50000 AS amount, 1 AS is_total, 0 AS is_subtotal INTO #bridge UNION ALL
@@ -69,6 +73,33 @@ CREATE VISUAL ProfitBridge AS WATERFALL (
     COLOR_UP        = '#27ae60',
     COLOR_DOWN      = '#e74c3c',
     TITLE           = 'Q1 Profit Bridge'
+  )
+);
+```
+
+### Example 2: Horizontal Bridge with X / Y Mappings
+
+```sql
+SELECT 'Q1 Start' AS period, 1000 AS delta, 1 AS is_tot INTO #hbridge UNION ALL
+SELECT 'Inflow',              600,          0           UNION ALL
+SELECT 'Outflow',            -350,          0           UNION ALL
+SELECT 'Q1 Close',           1250,          1;
+
+CREATE VISUAL HorizontalCashFlow AS WATERFALL (
+  SOURCE   = #hbridge,
+  MAPPINGS (
+    X     = period,
+    Y     = delta,
+    TOTAL = is_tot
+  ),
+  OPTIONS  (
+    ORIENTATION          = HORIZONTAL,
+    CONNECTOR_LINES      = ON,
+    CONNECTOR_LINE_COLOR = '#94a3b8',
+    COLOR_TOTAL          = '#1e40af',
+    COLOR_UP             = '#166534',
+    COLOR_DOWN           = '#991b1b',
+    TITLE                = 'Cash Flow (Horizontal)'
   )
 );
 ```

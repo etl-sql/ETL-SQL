@@ -78,12 +78,12 @@ CREATE VISUAL StyledConnectors AS WATERFALL (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- VISUAL 4 — TOTAL Flag Column (boolean 0/1)
+-- VISUAL 4 — TOTAL Flag Column (boolean 0/1, NAME / VALUE mappings)
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE VISUAL TotalFlagWaterfall AS WATERFALL (
     SOURCE   = #pnl,
     TITLE    = '4. TOTAL Flag Column (boolean) — P&L Bridge',
-    MAPPINGS (X = Line, Y = Amt, TOTAL = IsTotal),
+    MAPPINGS (NAME = Line, VALUE = Amt, TOTAL = IsTotal),
     OPTIONS  (
         COLOR_TOTAL = '#1565c0',
         COLOR_UP    = '#2e7d32',
@@ -92,12 +92,12 @@ CREATE VISUAL TotalFlagWaterfall AS WATERFALL (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- VISUAL 5 — Separate SUBTOTAL Role Mapping
+-- VISUAL 5 — Separate SUBTOTAL Role Mapping (NAME / VALUE mappings)
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE VISUAL SubtotalMapping AS WATERFALL (
     SOURCE   = #subtotals,
     TITLE    = '5. Dedicated SUBTOTAL Mapping',
-    MAPPINGS (X = Cat, Y = Val, TOTAL = IsTot, SUBTOTAL = IsSub),
+    MAPPINGS (NAME = Cat, VALUE = Val, TOTAL = IsTot, SUBTOTAL = IsSub),
     OPTIONS  (
         COLOR_TOTAL    = '#0d47a1',
         COLOR_SUBTOTAL = '#546e7a',
@@ -107,7 +107,7 @@ CREATE VISUAL SubtotalMapping AS WATERFALL (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- VISUAL 6 — 'SUBTOTAL' String in TOTAL Column
+-- VISUAL 6 — 'SUBTOTAL' String in TOTAL Column (X / Y mappings)
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE VISUAL StringFlagWaterfall AS WATERFALL (
     SOURCE   = #strflags,
@@ -123,12 +123,12 @@ CREATE VISUAL StringFlagWaterfall AS WATERFALL (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- VISUAL 7 — COLOR_INCREASE / COLOR_DECREASE aliases
+-- VISUAL 7 — COLOR_INCREASE / COLOR_DECREASE aliases (NAME / VALUE mappings)
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE VISUAL ColorAliases AS WATERFALL (
     SOURCE   = #pnl,
     TITLE    = '7. COLOR_INCREASE / COLOR_DECREASE Aliases',
-    MAPPINGS (X = Line, Y = Amt, TOTAL = IsTotal),
+    MAPPINGS (NAME = Line, VALUE = Amt, TOTAL = IsTotal),
     OPTIONS  (
         COLOR_TOTAL    = '#4a235a',
         COLOR_SUBTOTAL = '#6d4c41',
@@ -138,7 +138,7 @@ CREATE VISUAL ColorAliases AS WATERFALL (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- VISUAL 8 — ORIENTATION = HORIZONTAL
+-- VISUAL 8 — ORIENTATION = HORIZONTAL (X / Y mappings)
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE VISUAL HorizontalWaterfall AS WATERFALL (
     SOURCE   = #pnl,
@@ -154,12 +154,12 @@ CREATE VISUAL HorizontalWaterfall AS WATERFALL (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- VISUAL 9 — Horizontal + SUBTOTAL + Custom Connector
+-- VISUAL 9 — Horizontal + SUBTOTAL + Custom Connector (NAME / VALUE mappings)
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE VISUAL HorizontalSubtotal AS WATERFALL (
     SOURCE   = #subtotals,
     TITLE    = '9. Horizontal + SUBTOTAL Mapping + Styled Connectors',
-    MAPPINGS (X = Cat, Y = Val, TOTAL = IsTot, SUBTOTAL = IsSub),
+    MAPPINGS (NAME = Cat, VALUE = Val, TOTAL = IsTot, SUBTOTAL = IsSub),
     OPTIONS  (
         ORIENTATION          = HORIZONTAL,
         CONNECTOR_LINES      = ON,
