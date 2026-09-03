@@ -4960,6 +4960,40 @@ body.vscode-dark .etlsql-cw-missing-hint {
 .etlsql-studio-plan-badge.is-index { background:rgba(163,113,247,.18);color:#a371f7; }
 .etlsql-studio-plan-badge.is-spill { background:rgba(248,81,73,.18);color:#f85149; }
 
+/* Governance: what carries tags, where each tag came from, and what a policy says is missing. The
+   origin badge is not decoration — an inherited tag and an authored one look identical in a list,
+   and only one of them is a promise this file makes. */
+.etlsql-studio-gov-list { display:flex;flex-direction:column;gap:1px;max-height:190px;overflow-y:auto; }
+.etlsql-studio-gov-row { display:flex;align-items:baseline;gap:6px;width:100%;padding:5px 6px;border:0;border-radius:5px;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer; }
+.etlsql-studio-gov-row:hover { background:var(--portal-surface-subtle,#161b22); }
+.etlsql-studio-gov-row.is-selected { background:var(--portal-surface,#161b22);box-shadow:inset 2px 0 0 var(--portal-accent,#58a6ff); }
+.etlsql-studio-gov-kind { flex:0 0 auto;padding:1px 5px;border-radius:3px;background:var(--portal-surface,#161b22);color:var(--portal-text-soft,#8b949e);font-size:.5625rem;letter-spacing:.03em; }
+.etlsql-studio-gov-name { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.75rem; }
+.etlsql-studio-gov-counts { flex:0 0 auto;color:var(--portal-text-soft,#8b949e);font-size:.625rem; }
+.etlsql-studio-gov-tags { display:flex;flex-direction:column;gap:3px;margin-top:6px; }
+.etlsql-studio-gov-tag { display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:5px 7px;border:1px solid var(--portal-border,#30363d);border-radius:5px;background:var(--portal-surface,#161b22); }
+.etlsql-studio-gov-tag.is-derived { border-style:dashed;background:transparent; }
+.etlsql-studio-gov-tag.is-invalid { border-color:#f85149; }
+.etlsql-studio-gov-tag-name { color:var(--portal-accent,#58a6ff);font-size:.6875rem; }
+.etlsql-studio-gov-tag-value { flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.6875rem; }
+.etlsql-studio-gov-origin { padding:1px 5px;border-radius:3px;background:var(--portal-bg,#0d1117);color:var(--portal-text-soft,#8b949e);font-size:.5625rem; }
+.etlsql-studio-gov-problem { flex-basis:100%;color:#f85149;font-size:.625rem;line-height:1.4; }
+.etlsql-studio-gov-missing { display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:8px;color:var(--portal-text-soft,#8b949e);font-size:.6875rem; }
+.etlsql-studio-chip { padding:2px 7px;border:1px dashed var(--portal-border,#30363d);border-radius:11px;background:none;color:var(--portal-text-soft,#8b949e);font:inherit;font-size:.625rem;cursor:pointer; }
+.etlsql-studio-chip:hover { border-color:var(--portal-accent,#58a6ff);color:var(--portal-accent,#58a6ff); }
+.etlsql-studio-gov-add { display:flex;flex-direction:column;gap:5px;margin-top:10px;padding-top:9px;border-top:1px solid var(--portal-border,#30363d); }
+.etlsql-studio-gov-add select,.etlsql-studio-gov-add input { padding:4px 6px;border:1px solid var(--portal-border,#30363d);border-radius:4px;background:var(--portal-bg,#0d1117);color:inherit;font:inherit;font-size:.6875rem; }
+.etlsql-studio-icon-btn { display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;border:0;border-radius:4px;background:none;color:var(--portal-text-soft,#8b949e);cursor:pointer;opacity:.6; }
+.etlsql-studio-icon-btn:hover { background:var(--portal-bg,#0d1117);color:var(--portal-text,#f0f6fc);opacity:1; }
+.etlsql-studio-field-label { color:var(--portal-text-soft,#8b949e);font-size:.625rem;text-transform:uppercase;letter-spacing:.03em; }
+.etlsql-studio-gov-findings { display:flex;flex-direction:column;gap:3px; }
+.etlsql-studio-gov-finding { display:flex;flex-direction:column;gap:2px;width:100%;padding:6px 8px;border:1px solid var(--portal-border,#30363d);border-left-width:2px;border-radius:5px;background:var(--portal-surface,#161b22);color:inherit;font:inherit;text-align:left;cursor:pointer; }
+.etlsql-studio-gov-finding.is-error { border-left-color:#f85149; }
+.etlsql-studio-gov-finding.is-warning { border-left-color:#d29922; }
+.etlsql-studio-gov-finding.is-info { border-left-color:#58a6ff; }
+.etlsql-studio-gov-finding-message { font-size:.6875rem;line-height:1.4; }
+.etlsql-studio-gov-finding-code { color:var(--portal-text-soft,#8b949e);font-size:.5625rem;letter-spacing:.03em; }
+
 /* Plain-language guidance under a diagnostic. It sits under the parser's own message rather than in
    place of it: the precise wording is what an experienced author reads first, and paraphrasing it
    away would make the panel worse for them to make it better for a beginner. */

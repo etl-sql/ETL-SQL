@@ -122,6 +122,8 @@ export function makeMockApi(seedState) {
       }
     } else if (path.endsWith('/api/designer/data-model')) {
       data = mockDataModel(body.script || '');
+    } else if (path.endsWith('/api/designer/governance')) {
+      data = mockGovernance(body);
     } else if (path.endsWith('/api/designer/dag')) {
       data = (body.script || '').includes('>>> INVALID <<<') ? {
         parsed: false,
@@ -1513,6 +1515,62 @@ function mockApplyPageLayout(script, visuals) {
 // rule that matters for what the view claims: it reports only connections, tables, `#temp` tables and
 // joins the script actually writes, never a relationship inferred from two columns sharing a name,
 // and `hasSchemaEvidence: false`, because a sandbox has no database to ask.
+// Governance. The read is projected from the script so the panel is never showing a fixture that
+// contradicts what is on screen; the write is REFUSED, out loud, because the sandbox has no host to
+// edit the script with and a mock that pretended to write a tag would be exactly the kind of lie
+// that makes a broken panel look healthy. The write path is covered against the real desktop host.
+const MOCK_GOVERNANCE_CATALOG = [
+  { name: 'owner', kind: 'string', scopes: ['script', 'table', 'column'], values: [] },
+  { name: 'steward', kind: 'string', scopes: ['script', 'table', 'column'], values: [] },
+  { name: 'contact', kind: 'string', scopes: ['script', 'table', 'column'], values: [] },
+  { name: 'classification', kind: 'enum', scopes: ['table', 'column'], values: ['public', 'internal', 'confidential', 'restricted'] },
+  { name: 'quality', kind: 'enum', scopes: ['table', 'column'], values: ['gold', 'silver', 'bronze'] },
+  { name: 'pii', kind: 'boolean', scopes: ['table', 'column'], values: [] },
+  { name: 'freshness', kind: 'duration', scopes: ['table'], values: [] },
+];
+const MOCK_GOVERNANCE_REQUIRED = ['owner', 'steward', 'contact', 'classification', 'quality'];
+
+function mockGovernance(body) {
+  const script = body.script || '';
+  if (script.includes('>>> INVALID <<<')) {
+    return {
+      parsed: false, error: 'Syntax error: Unexpected token in script', script, applied: false,
+      scopes: [], findings: [], tasks: [], catalog: MOCK_GOVERNANCE_CATALOG, required: MOCK_GOVERNANCE_REQUIRED,
+    };
+  }
+
+  const lineOf = index => script.slice(0, index).split(/\r?\n/).length;
+  const scopes = [{
+    id: 'script', kind: 'script', name: 'This script', table: null, writeTarget: 'header', line: 1,
+    tags: [], missing: MOCK_GOVERNANCE_REQUIRED, producer: null,
+    detail: 'Applied to every table and column this script records that does not carry the tag itself.',
+  }];
+
+  let match;
+  const intoPattern = /\bINTO\s+(#[A-Za-z_][A-Za-z0-9_]*)/gi;
+  while ((match = intoPattern.exec(script)) !== null) {
+    scopes.push({
+      id: `table:${match[1]}`, kind: 'temp', name: match[1], table: match[1],
+      writeTarget: 'statement', line: lineOf(match.index), tags: [],
+      missing: MOCK_GOVERNANCE_REQUIRED, producer: null, detail: null,
+    });
+  }
+
+  return {
+    parsed: true,
+    error: body.op === 'write'
+      ? 'The sandbox has no host to write tags with. Governance edits run against a real Studio host.'
+      : null,
+    script,
+    applied: false,
+    scopes,
+    findings: [],
+    tasks: [],
+    catalog: MOCK_GOVERNANCE_CATALOG,
+    required: MOCK_GOVERNANCE_REQUIRED,
+  };
+}
+
 function mockDataModel(script) {
   if (script.includes('>>> INVALID <<<')) {
     return { parsed: false, error: 'Syntax error: Unexpected token in script', hasSchemaEvidence: false, entities: [], relationships: [] };

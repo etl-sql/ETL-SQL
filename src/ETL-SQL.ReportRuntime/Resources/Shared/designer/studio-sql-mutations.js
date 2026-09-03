@@ -119,6 +119,17 @@ export function createStudioSqlMutationService({
      * that applied it.
      */
     function canonicalPipelineMutation(label, operation) {
+        return canonicalScriptMutation(label, routes.pipelineTask, operation);
+    }
+
+    /**
+     * A script-shaped edit: the host rewrites the exact bytes in the buffer and answers with either
+     * a new script or the reason it refused. Shared by every surface whose model *is* the script —
+     * the pipeline canvas and the governance panel — because both need the same three things the
+     * design-state path cannot give them: an edit applied to the author's own text, a refusal that
+     * is raised rather than absorbed, and an undo offer covering exactly the write that happened.
+     */
+    function canonicalScriptMutation(label, route, operation) {
         const document = getActiveDocument();
         if (!document) return Promise.resolve(null);
         const context = document.studioContext;
@@ -128,9 +139,9 @@ export function createStudioSqlMutationService({
                 ? state.editorInstance.getValue()
                 : document.content;
 
-            const result = await designerApiJson(routes.pipelineTask, { script, ...operation });
+            const result = await designerApiJson(route, { script, ...operation });
             if (!result.applied) throw new Error(result.error || 'The edit was refused.');
-            if (typeof result.script !== 'string') throw new Error('The pipeline editor returned no script.');
+            if (typeof result.script !== 'string') throw new Error('The host returned no script.');
             if (result.script === script) return result;
 
             document.content = result.script;
@@ -171,6 +182,7 @@ export function createStudioSqlMutationService({
     return {
         canonicalDesignerMutation,
         canonicalPipelineMutation,
+        canonicalScriptMutation,
         composeFilteredSource,
         filterContract,
         findDesignerVisual,

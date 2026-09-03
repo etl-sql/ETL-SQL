@@ -85,6 +85,7 @@ const _STUDIO_ICONS = {
     unlocked: '<rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 4.8-1"/>',
     moveUp: '<path d="M8 13V3"/><path d="m4 7 4-4 4 4"/>',
     moveDown: '<path d="M8 3v10"/><path d="m4 9 4 4 4-4"/>',
+    governance: '<path d="M8 1.5 3 3.5v4.2c0 3 2.1 5.6 5 6.8 2.9-1.2 5-3.8 5-6.8V3.5z"/><path d="m5.8 8 1.6 1.6 3-3.4"/>',
     engine: '<circle cx="8" cy="8" r="2"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/><path d="m3.1 3.1 2.1 2.1M10.8 10.8l2.1 2.1M12.9 3.1l-2.1 2.1M5.2 10.8l-2.1 2.1"/>'
 };
 
@@ -242,6 +243,9 @@ export async function createStudioWorkbench(container, opts = {}) {
                     </button>
                     <button type="button" class="etlsql-studio-rail-btn" data-activity="engine" title="Engine State (Scope and Query Plan)">
                         ${_studioIcon('engine', 18)}
+                    </button>
+                    <button type="button" class="etlsql-studio-rail-btn" data-activity="governance" title="Governance (Tags, Inherited Lineage, Policy)">
+                        ${_studioIcon('governance', 18)}
                     </button>
                     <button type="button" class="etlsql-studio-rail-btn" data-activity="filters" title="Filter Pane (Slicers & Ranges)">
                         ${_studioIcon('filters', 18)}
@@ -1477,6 +1481,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     const {
         canonicalDesignerMutation,
         canonicalPipelineMutation,
+        canonicalScriptMutation,
         composeFilteredSource,
         filterContract,
         findDesignerVisual,
@@ -3836,6 +3841,255 @@ export async function createStudioWorkbench(container, opts = {}) {
         editor.analyze?.();
     }
 
+    // ── Governance panel ─────────────────────────────────────────────────────
+    // Tags, what they are inherited from, and what a policy says is missing — in the one place the
+    // author is already looking at the object they apply to. Every write goes through the host's
+    // governance route, which edits the author's own bytes and refuses out loud, so the panel never
+    // assembles ETL-SQL itself and a refused edit never looks like a redraw.
+
+    async function renderGovernancePanel() {
+        sidebarTitle.textContent = 'Governance';
+        const doc = getActiveDoc();
+        if (!doc) {
+            sidebarContent.innerHTML = '<div class="etlsql-studio-empty-guidance"><strong>Open a script</strong><span>Tags are read from the script you are editing.</span></div>';
+            return;
+        }
+
+        sidebarContent.innerHTML = '<div class="etlsql-studio-git-loading" role="status">Reading the script…</div>';
+
+        let governance = null;
+        try {
+            governance = await designerApiJson(STUDIO_ROUTES.governance, { script: activeScriptText(), op: 'read' });
+        } catch (error) {
+            sidebarContent.innerHTML = `<div class="etlsql-studio-capability-state" role="alert"><strong>Governance could not be read</strong><p>${_escapeHtml(error?.message || String(error))}</p></div>`;
+            return;
+        }
+        if (state.activeActivity !== 'governance' || getActiveDoc() !== doc) return;
+
+        state.governance = governance;
+        paintGovernancePanel();
+    }
+
+    function paintGovernancePanel() {
+        const governance = state.governance;
+        if (!governance) return;
+
+        if (!governance.parsed) {
+            sidebarContent.innerHTML = `<div class="etlsql-studio-capability-state" role="alert"><strong>The script does not parse yet</strong><p>${_escapeHtml(governance.error || '')}</p><p>Tags are read from the parsed script, so fix the syntax first.</p></div>`;
+            return;
+        }
+
+        const scopes = governance.scopes || [];
+        const selected = scopes.find(scope => scope.id === state.governanceScopeId) || scopes[0] || null;
+        state.governanceScopeId = selected?.id || null;
+
+        sidebarContent.innerHTML = `
+            <section class="etlsql-studio-library-section">
+                <div class="etlsql-studio-subhead"><div><strong>What can be tagged</strong><span>${scopes.length} object${scopes.length === 1 ? '' : 's'} in this script</span></div></div>
+                <div class="etlsql-studio-gov-list" role="listbox" aria-label="Taggable objects">
+                    ${scopes.map(scope => governanceScopeRowMarkup(scope, scope.id === state.governanceScopeId)).join('')}
+                </div>
+                ${(governance.tasks || []).length
+                    ? `<p class="etlsql-studio-outline-note">Tasks (${(governance.tasks || []).map(_escapeHtml).join(', ')}) are shown as the producer of what they write. A task carries no tags of its own: there is no task tag in the language, so one written here would be a word nothing reads.</p>`
+                    : ''}
+            </section>
+            ${selected ? governanceScopeDetailMarkup(governance, selected) : ''}
+            ${governanceFindingsMarkup(governance, selected)}`;
+
+        bindGovernancePanel();
+    }
+
+    function governanceScopeRowMarkup(scope, isSelected) {
+        const missing = (scope.missing || []).length;
+        const tags = (scope.tags || []).length;
+        const label = scope.kind === 'column' && scope.table ? `${scope.table}.${scope.name}` : scope.name;
+        return `<button type="button" class="etlsql-studio-gov-row ${isSelected ? 'is-selected' : ''}" data-gov-scope="${_escapeHtml(scope.id)}" role="option" aria-selected="${isSelected}">
+            <span class="etlsql-studio-gov-kind">${_escapeHtml(scope.kind)}</span>
+            <span class="etlsql-studio-gov-name">${_escapeHtml(label)}</span>
+            <span class="etlsql-studio-gov-counts">${tags} tag${tags === 1 ? '' : 's'}${missing ? ` · ${missing} missing` : ''}</span>
+        </button>`;
+    }
+
+    function governanceScopeDetailMarkup(governance, scope) {
+        const tags = scope.tags || [];
+        const missing = scope.missing || [];
+        return `
+            <section class="etlsql-studio-library-section" data-gov-detail>
+                <div class="etlsql-studio-subhead"><div><strong>${_escapeHtml(scope.name)}</strong><span>${_escapeHtml(governanceWriteExplanation(scope))}</span></div></div>
+                ${scope.producer ? `<p class="etlsql-studio-outline-note">Written by task <strong>${_escapeHtml(scope.producer)}</strong>.</p>` : ''}
+                ${scope.detail ? `<p class="etlsql-studio-outline-note">${_escapeHtml(scope.detail)}</p>` : ''}
+                <div class="etlsql-studio-gov-tags">
+                    ${tags.length
+                        ? tags.map(tag => governanceTagMarkup(tag)).join('')
+                        : '<div class="etlsql-studio-empty-compact">No tags here yet.</div>'}
+                </div>
+                ${missing.length
+                    ? `<div class="etlsql-studio-gov-missing">
+                          <span>Required and not set:</span>
+                          ${missing.map(name => `<button type="button" class="etlsql-studio-chip" data-gov-fill="${_escapeHtml(name)}">@${_escapeHtml(name)}</button>`).join('')}
+                       </div>`
+                    : ''}
+                ${governanceAddFormMarkup(governance, scope)}
+            </section>`;
+    }
+
+    function governanceTagMarkup(tag) {
+        const derived = tag.origin === 'derived';
+        return `<div class="etlsql-studio-gov-tag ${derived ? 'is-derived' : ''} ${tag.problem ? 'is-invalid' : ''}">
+            <span class="etlsql-studio-gov-tag-name">@${_escapeHtml(tag.name)}</span>
+            <span class="etlsql-studio-gov-tag-value">${_escapeHtml(tag.value)}</span>
+            <span class="etlsql-studio-gov-origin" title="${_escapeHtml(governanceOriginTitle(tag))}">${_escapeHtml(governanceOriginLabel(tag))}</span>
+            ${tag.editable
+                ? `<button type="button" class="etlsql-studio-icon-btn" data-gov-remove="${_escapeHtml(tag.name)}" title="Remove @${_escapeHtml(tag.name)}" aria-label="Remove @${_escapeHtml(tag.name)}">${_studioIcon('trash', 12)}</button>`
+                : `<button type="button" class="etlsql-studio-icon-btn" data-gov-remove="${_escapeHtml(tag.name)}" title="Turn @${_escapeHtml(tag.name)} off here" aria-label="Turn @${_escapeHtml(tag.name)} off here">${_studioIcon('hidden', 12)}</button>`}
+            ${tag.problem ? `<span class="etlsql-studio-gov-problem">${_escapeHtml(tag.problem)}</span>` : ''}
+            ${tag.known ? '' : '<span class="etlsql-studio-gov-problem">Not a standard tag.</span>'}
+        </div>`;
+    }
+
+    function governanceOriginLabel(tag) {
+        if (tag.origin === 'derived') return tag.derivedFrom ? `from ${tag.derivedFrom}` : 'inherited';
+        if (tag.origin === 'statement') return 'tag statement';
+        if (tag.origin === 'script') return 'script header';
+        return 'on the column';
+    }
+
+    function governanceOriginTitle(tag) {
+        if (tag.origin === 'derived') {
+            return 'Inherited at run time. Change it where it is set, or turn it off here — which writes a DELETE TAG, the thing the engine actually reads.';
+        }
+        return 'Written in this script, and editable here.';
+    }
+
+    /**
+     * Said before the write, not after: the two authoring forms behave differently — a comment on a
+     * column travels with the column, a tag statement applies at the point it runs — and an author
+     * who cannot tell which one a button is about to write cannot tell what they have promised.
+     */
+    function governanceWriteExplanation(scope) {
+        if (scope.writeTarget === 'inline') return 'Written as a comment on the column that projects it.';
+        if (scope.writeTarget === 'header') return 'Written in the script header; reaches anything that does not set it itself.';
+        return 'Written as an INSERT TAG statement.';
+    }
+
+    function governanceAddFormMarkup(governance, scope) {
+        const scopeKind = scope.kind === 'column' ? 'column' : scope.kind === 'script' ? 'script' : 'table';
+        const present = new Set((scope.tags || []).filter(tag => tag.editable).map(tag => tag.name));
+        const available = (governance.catalog || [])
+            .filter(definition => (definition.scopes || []).includes(scopeKind))
+            .filter(definition => !present.has(definition.name));
+
+        if (!available.length) {
+            return '<p class="etlsql-studio-outline-note">Every tag the catalog defines for this kind of object is already set here.</p>';
+        }
+
+        return `<div class="etlsql-studio-gov-add">
+            <label class="etlsql-studio-field-label" for="gov-tag-name">Add a tag</label>
+            <select id="gov-tag-name" data-gov-name>
+                ${available.map(definition => `<option value="${_escapeHtml(definition.name)}">@${_escapeHtml(definition.name)}</option>`).join('')}
+            </select>
+            <div data-gov-value-host></div>
+            <button type="button" class="etlsql-studio-btn is-primary" data-gov-apply>Set tag</button>
+        </div>`;
+    }
+
+    function governanceValueControlMarkup(definition) {
+        if (!definition) return '';
+        const values = definition.kind === 'boolean' ? ['true', 'false'] : (definition.values || []);
+        if (values.length) {
+            return `<select data-gov-value aria-label="Value for @${_escapeHtml(definition.name)}">
+                ${values.map(value => `<option value="${_escapeHtml(value)}">${_escapeHtml(value)}</option>`).join('')}
+            </select>`;
+        }
+        const placeholder = definition.kind === 'duration' ? 'e.g. 24h' : '';
+        return `<input type="text" data-gov-value placeholder="${_escapeHtml(placeholder)}" aria-label="Value for @${_escapeHtml(definition.name)}">`;
+    }
+
+    function governanceFindingsMarkup(governance, scope) {
+        const findings = governance.findings || [];
+        if (!findings.length) return '';
+        const here = scope ? findings.filter(finding => finding.scopeId === scope.id) : [];
+        const elsewhere = findings.filter(finding => !here.includes(finding));
+        const row = finding => `<button type="button" class="etlsql-studio-gov-finding is-${_escapeHtml(finding.severity)}" data-gov-goto="${finding.line}">
+            <span class="etlsql-studio-gov-finding-message">${_escapeHtml(finding.message)}</span>
+            <span class="etlsql-studio-gov-finding-code">${_escapeHtml(finding.code)} · line ${finding.line}</span>
+        </button>`;
+
+        return `<section class="etlsql-studio-library-section">
+            <div class="etlsql-studio-subhead"><div><strong>Policy</strong><span>${findings.length} finding${findings.length === 1 ? '' : 's'}</span></div></div>
+            ${here.length ? `<div class="etlsql-studio-gov-findings">${here.map(row).join('')}</div>` : ''}
+            ${elsewhere.length ? `<div class="etlsql-studio-gov-findings">${elsewhere.map(row).join('')}</div>` : ''}
+        </section>`;
+    }
+
+    function bindGovernancePanel() {
+        const governance = state.governance;
+        const scope = (governance?.scopes || []).find(item => item.id === state.governanceScopeId) || null;
+
+        sidebarContent.querySelectorAll('[data-gov-scope]').forEach(button => {
+            button.addEventListener('click', () => {
+                state.governanceScopeId = button.getAttribute('data-gov-scope');
+                paintGovernancePanel();
+            });
+        });
+
+        sidebarContent.querySelectorAll('[data-gov-goto]').forEach(button => {
+            button.addEventListener('click', () => {
+                const line = Number(button.getAttribute('data-gov-goto'));
+                if (Number.isFinite(line) && line > 0) state.editorInstance?.revealLine?.(line);
+            });
+        });
+
+        const nameSelect = sidebarContent.querySelector('[data-gov-name]');
+        const valueHost = sidebarContent.querySelector('[data-gov-value-host]');
+        const paintValueControl = () => {
+            if (!nameSelect || !valueHost) return;
+            const definition = (governance?.catalog || []).find(item => item.name === nameSelect.value);
+            valueHost.innerHTML = governanceValueControlMarkup(definition);
+        };
+        nameSelect?.addEventListener('change', paintValueControl);
+        paintValueControl();
+
+        sidebarContent.querySelectorAll('[data-gov-fill]').forEach(button => {
+            button.addEventListener('click', () => {
+                if (!nameSelect) return;
+                nameSelect.value = button.getAttribute('data-gov-fill');
+                paintValueControl();
+                sidebarContent.querySelector('[data-gov-value]')?.focus();
+            });
+        });
+
+        sidebarContent.querySelector('[data-gov-apply]')?.addEventListener('click', () => {
+            if (!scope || !nameSelect) return;
+            const name = nameSelect.value;
+            const value = sidebarContent.querySelector('[data-gov-value]')?.value ?? '';
+            if (!String(value).trim()) {
+                _feedback.notify(`@${name} needs a value.`, { title: 'Nothing written', tone: 'error' });
+                return;
+            }
+            void writeGovernanceTags(scope, { [name]: value });
+        });
+
+        sidebarContent.querySelectorAll('[data-gov-remove]').forEach(button => {
+            button.addEventListener('click', () => {
+                if (!scope) return;
+                void writeGovernanceTags(scope, { [button.getAttribute('data-gov-remove')]: null });
+            });
+        });
+    }
+
+    async function writeGovernanceTags(scope, tags) {
+        const names = Object.keys(tags).map(name => `@${name}`).join(', ');
+        const result = await canonicalScriptMutation(`Set ${names}`, STUDIO_ROUTES.governance, {
+            op: 'write',
+            scopeId: scope.id,
+            tags,
+        });
+        if (!result) return;
+        state.governance = result;
+        if (state.activeActivity === 'governance') paintGovernancePanel();
+    }
+
     function renderSidebarContent(activity) {
         if (state.filterSidebarOpen && activity !== 'filters') renderFilterPanel();
         sidebarContent.style.display = '';
@@ -3845,6 +4099,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         if (activity === 'palette') { renderVisualLibrary(); return; }
         if (activity === 'outline') { renderOutlineTree(); return; }
         if (activity === 'engine') { void renderEnginePanel(); return; }
+        if (activity === 'governance') { void renderGovernancePanel(); return; }
         if (activity === 'explorer') {
             sidebarTitle.textContent = 'Explorer';
             const workspaceMarkup = hasWorkspaceHost ? `

@@ -73,6 +73,8 @@ export function createStudioState(options = {}) {
         dagDocumentId: null,
         dataModelInstance: null,
         enginePlanScope: null,
+        governance: null,
+        governanceScopeId: null,
     };
 }
 

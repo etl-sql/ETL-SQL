@@ -379,3 +379,21 @@ public record ScriptContentRequest(string ScriptText, string? BaseRevision = nul
 public record ScriptContentResponse(string ScriptText, long Version = 1, string? SourceRevision = null, bool SourceControlEnabled = false);
 
 public record ScriptSourceControlResponse(string? SourceRevision, bool Committed);
+
+/// <summary>
+/// A read or a write of the script's governance metadata.
+/// </summary>
+/// <param name="Op">read | write. A read never touches the script.</param>
+/// <param name="ScopeId">
+/// Which object to tag, as the projection names it (<c>column:#people.email</c>). Names, never
+/// positions, so a statement inserted above does not point the edit at a different column.
+/// </param>
+/// <param name="Tags">
+/// The tags to set. A null value removes the tag, which is a different edit from setting it to an
+/// empty string and has to stay distinguishable in the payload.
+/// </param>
+public record GovernanceRequest(
+    string? Script,
+    string? Op = null,
+    string? ScopeId = null,
+    Dictionary<string, string?>? Tags = null);

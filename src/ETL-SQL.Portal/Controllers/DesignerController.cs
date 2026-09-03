@@ -46,6 +46,7 @@ public class DesignerController : ControllerBase
     private readonly PipelineTaskAuthoringService _pipelineTasks = new();
     private readonly ScriptScopeService _pipelineScope = new();
     private readonly ScriptDataModelService _dataModel = new();
+    private readonly ScriptGovernanceService _governance = new();
     private readonly PipelineRunPlanService _pipelineRunPlans = new();
     private readonly DesignerQueryFilterService _queryFilters = new();
     private readonly LanguageHoverService? _hoverService;
@@ -213,6 +214,44 @@ public class DesignerController : ControllerBase
                         task.Variable,
                         task.Collection))
                     .ToList()));
+        }
+        finally
+        {
+            gate?.Release();
+        }
+    }
+
+    // ── POST /api/designer/governance ────────────────────────────────────────
+    // The governance metadata a script carries, and the one place Studio writes it. A write is a
+    // span edit on the author's own bytes, so a refusal — a value the tag catalog does not accept, a
+    // scope this script does not have — comes back as an ordinary answer with its reason.
+
+    [HttpPost("governance")]
+    [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public IActionResult Governance([FromBody] GovernanceRequest req)
+    {
+        if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
+            return limitResult;
+
+        if (!TryEnterDesignerGate(out var gate))
+            return DesignerBusy();
+
+        try
+        {
+            var script = req.Script ?? string.Empty;
+            var applied = false;
+            string? writeError = null;
+
+            if (string.Equals(req.Op, "write", StringComparison.OrdinalIgnoreCase))
+            {
+                var edit = _governance.Write(script, req.ScopeId ?? string.Empty, req.Tags ?? []);
+                applied = edit.Applied;
+                writeError = edit.Error;
+                script = edit.Script;
+            }
+
+            return Ok(DesignerGovernanceMapper.Response(_governance.Read(script), script, applied, writeError));
         }
         finally
         {

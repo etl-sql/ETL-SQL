@@ -274,8 +274,35 @@ then expose advanced inspection views that do not block basic authoring.
 **Outcome:** Authors can attach governance to first-class tasks and move finished work into supported
 operational flows without an unexplained application switch.
 
-- [ ] **Add tag and metadata authoring**: Surface `CREATE TAG` / `DELETE TAG` for tables, datasets,
-  and pipeline tasks. Make derived lineage and missing-tag feedback reachable from the same context.
+- [x] **Add tag and metadata authoring**: A Governance rail panel listing everything in the script
+  that can carry stewardship metadata — the script itself, the tables and datasets it builds, the
+  remote tables it reads, and the columns it projects — with the tags on each, where each tag came
+  from, and what policy says is missing. `CREATE TAG` was retired from the language before this
+  work: the statements are `INSERT TAG` / `UPDATE TAG` / `DELETE TAG FOR TABLE <t> [COLUMN <c>]`, and
+  that is what the panel writes. **Two authoring forms, one rule for choosing.** A projected column
+  is tagged inline, as a `/* @key: value */` comment on the column, because that is where the lint
+  rules, the catalog, and the PII scanner read column metadata from; everything else is tagged with a
+  tag statement, because those objects have no declaration site a comment could attach to. The panel
+  says which form it is about to write before it writes it, since the two behave differently — a
+  comment travels with the column, a statement applies at the point it runs. **Placement is part of
+  the meaning**: a tag on a table the script builds goes after the statement that builds it, and a
+  tag on a table it only reads goes before the first statement that reads it, or the columns reading
+  it inherit nothing — silently no governance at all rather than an error. **Derived tags are shown
+  and never written.** Inheritance is projected exactly as `LineageTracker.InheritMetadata` computes
+  it (source table tags, then the source column's own, with the script header as the fallback the
+  engine applies to any entry lacking a key), and only where the column is a plain reference to a
+  source the projection can name — an expression, or an unqualified name two joined tables could both
+  supply, yields nothing rather than a guess, the same rule the ER view is built on. Turning an
+  inherited tag off writes the `DELETE TAG` the engine actually reads rather than copying the value
+  into a tag that has stopped tracking what it copied. Values are validated against
+  `StewardshipTagCatalog` before a byte moves, and `@expect`/`@fail` are refused by name: the engine
+  projects those from a column's `EXPECT` clauses, so a hand-written one is inert and would look
+  enforced. **A pipeline task carries no tags, deliberately** — there is no task tag in the language
+  and nothing that would read one, so a task appears only as the producer of what it writes, and the
+  panel says so rather than offering a word nothing reads. The route is `/api/designer/governance` on
+  both hosts through one shared response mapper; the browser cover drives the real desktop host end
+  to end, because the seams that have failed silently in this workbench are the ones between the rail
+  button, the route, and the author's buffer.
 - [ ] **Add data-quality rule authoring**: Attach `EXPECT` rules to queries or tables and link the
   author to quarantine inspection and replay.
 - [ ] **Add row-level-security preview-as**: Preview a report as another authorized user, group, or

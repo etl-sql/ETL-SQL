@@ -544,6 +544,7 @@ public static class WorkstationEditorApp
         var pipelineScope = new ETL_SQL.Analysis.Services.ScriptScopeService();
         var pipelineRunPlans = new ETL_SQL.Analysis.Services.PipelineRunPlanService();
         var dataModel = new ETL_SQL.Analysis.Services.ScriptDataModelService();
+        var governance = new ETL_SQL.Analysis.Services.ScriptGovernanceService();
         var designerGen = new ETL_SQL.Reporting.Authoring.DesignerScriptGenerationService();
         var designerPatcher = new ETL_SQL.Reporting.Authoring.DesignerScriptPatcher(designerGen);
         var designerQueryFilters = new ETL_SQL.Reporting.Authoring.DesignerQueryFilterService();
@@ -737,6 +738,29 @@ public static class WorkstationEditorApp
                     line = relationship.Line,
                 }),
             }, JsonOptions);
+        });
+
+        // The governance metadata a script carries, and the one place Studio writes it. A write is a
+        // span edit on the author's own bytes; a refusal comes back as an ordinary answer with its
+        // reason, because a panel that redraws unchanged looks exactly like one that applied it.
+        app.MapPost("/api/designer/governance", (GovernanceAuthoringRequest request) =>
+        {
+            var script = request.Script ?? string.Empty;
+            var applied = false;
+            string? writeError = null;
+
+            if (string.Equals(request.Op, "write", StringComparison.OrdinalIgnoreCase))
+            {
+                var edit = governance.Write(script, request.ScopeId ?? string.Empty, request.Tags ?? []);
+                applied = edit.Applied;
+                writeError = edit.Error;
+                script = edit.Script;
+            }
+
+            return Results.Json(
+                ETL_SQL.Analysis.Services.DesignerGovernanceMapper.Response(
+                    governance.Read(script), script, applied, writeError),
+                JsonOptions);
         });
 
         app.MapPost("/api/designer/query-filter", (ApplyDesignerQueryFiltersAuthoringRequest request) =>
@@ -1140,6 +1164,14 @@ public sealed record PipelineTaskAuthoringRequest(
 public sealed record PipelineScopeAuthoringRequest(string? Script, string? Id, int? Line = null);
 
 public sealed record DataModelAuthoringRequest(string? Script, string? DocumentUri = null);
+
+/// <param name="Op">read | write. A read never touches the script.</param>
+/// <param name="Tags">A null value removes the tag, which is a different edit from setting it empty.</param>
+public sealed record GovernanceAuthoringRequest(
+    string? Script,
+    string? Op = null,
+    string? ScopeId = null,
+    Dictionary<string, string?>? Tags = null);
 
 /// <summary>Which task to plan a run up to. Planning never executes anything.</summary>
 public sealed record PipelineRunPlanAuthoringRequest(string? Script, string? Id);
