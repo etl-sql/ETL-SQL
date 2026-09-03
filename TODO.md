@@ -574,6 +574,58 @@ performance limits before Studio is treated as the primary workbench.
   are quoting, not identity — made every untouched page look changed and rewrote it. Header
   comparison is now bracket-insensitive, and nothing bracket-stripped is ever written.
 
+### Phase 6a — Stewardship journey and the gaps certification left (In progress)
+
+**Outcome:** The one representative job with no competitor equivalent is certified, and the coverage
+gaps the three competitor journeys did not touch are named rather than assumed.
+
+- [ ] **Certify the data-stewardship journey**: `StudioStewardshipJourneyTests`. Half of it is
+  written and green; half is blocked on a real defect and is skipped rather than left red.
+  **Green — `Certifies_TheStewardshipFinding`**: publish and run an ungoverned report, scan, and
+  find the asset in the steward's workqueue scored down with the rule that took each point and the
+  tags it names. This is the first test in the lane to put a real asset in the estate.
+  Both halves are currently **held (skipped), not failing**, for two different reasons.
+  **Skipped — `Certifies_TheStewardshipFixLoop`**: tag the asset in Studio's governance rail, save,
+  re-run, re-scan, and the finding should close. It does not. The cut body is worth restoring from
+  git history when the defect below is fixed.
+- [ ] **`NeverScannedEstate` cannot survive a neighbour that scans** *(holds the green half above)*.
+  The lane shares one Portal, and that test asserts the estate has never been scanned — a state any
+  other test destroys by scanning. It was already order-dependent, because
+  `LiveData_RendersScoresWithTheRuleThatTookEachPoint` scans too and only passed by running first;
+  adding a second scanning class exposed it. The never-scanned state needs to be asserted somewhere
+  it can be owned rather than raced for, after which the stewardship finding test can be un-skipped.
+- [ ] **Only the last `INSERT TAG FOR TABLE` reaches lineage** *(found by the journey above;
+  blocks it)*. The rail writes one statement per tag, each inserted above the last, and all five
+  save correctly:
+  `quality`, `classification`, `contact`, `steward`, `owner` — top to bottom, so `owner` executes
+  last. After a re-run the steward's estate shows **Owner: analytics** and
+  `missing-metadata −5: Missing required metadata: steward, contact, classification, quality`.
+  One tag in five survives, and it is the last one executed, which points at replace-not-merge
+  semantics somewhere in the chain. Not yet isolated between three candidates: the engine's
+  `INSERT TAG` statement replacing rather than merging the tag set; lineage capture recording only
+  the tags live at the final statement; or the rail being wrong to write five statements instead of
+  merging into one. **Whichever it is, the author sees five tags in their script and the steward
+  sees one, with nothing reported** — so it is silent, which is the shape this phase kept finding.
+- [ ] **Make `GovernanceDashboardUiTests.LiveData_RendersScoresWithTheRuleThatTookEachPoint`
+  unconditional**: it asserts its deductions only `if` the estate has assets, and the estate is
+  always empty, so the test named for scores has never asserted one — measured, not guessed. The
+  stewardship journey above now creates a real asset; this test should either seed its own or assert
+  without the branch.
+
+**Coverage the three competitor journeys do not reach.** Named here so they are decisions rather
+than oversights; none is started.
+
+- [ ] **Three of the five hosts are uncertified**: one `studio.js` serves Portal, desktop, the VS
+  Code webview, ReportPlayer and the shared runtime. Certification covers Portal and desktop; no
+  test drives the VS Code or Player hosts at all. Host-route divergence has produced defects here
+  before, which is why the drift gate and the sync script exist.
+- [ ] **Every certified journey is an author's**: nobody has proven the reader's — open a published
+  report, move a slicer, watch it cross-filter, export. That is what a dashboard is for, and where
+  row-level security actually applies.
+- [ ] **Row-level security under a second identity**: `PreviewAs_ChangesWhatTheAuthorsPredicatesSee`
+  proves the preview. Nothing proves a genuine second user opening the same report and seeing less.
+- [ ] **The schedule handoff stops at the statements**: Phase 5 writes `CREATE JOB` and opens the
+  Orchestrator at it. Nothing proves the job then runs on its cadence.
 ### Phase 7 — Stabilization and Legacy Retirement
 
 **Outcome:** Studio becomes the supported flagship only after the new workbench has evidence that it
