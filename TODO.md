@@ -417,9 +417,23 @@ performance limits before Studio is treated as the primary workbench.
   with details, totals, headers, repeating columns, page breaks, and a correct multi-page PDF.
 - [ ] **Certify the Power BI-like dashboard journey**: From the GUI, create KPI, trend, category, and
   detail visuals with slicers, cross-filtering, and persistent formatting.
-- [ ] **Apply the common certification contract**: Each journey must use production desktop and
-  Portal hosts, emit only `.etlsql` or `.rptsql`, pass parser/lint/formatter checks, survive
-  save/reload, and round-trip between code and canvas without changing untouched text.
+- [x] **Apply the common certification contract**: One harness, `StudioCertification`, holds all five
+  clauses — production host, `.etlsql`/`.rptsql` only, parser/linter/formatter, save-and-reload, and
+  the code ↔ canvas round-trip — because three journeys each asserting their own version of "the
+  script is valid" is three definitions and the weakest one decides what ships. Each clause is
+  checked the literal way: the formatter must both reparse *and be idempotent* (a second pass that
+  differs churns every file it touches); the linter is held to **error** severity only, since a lane
+  that failed on advice would be switched off within a week and take the errors with it; the reload
+  claim is asserted against the bytes the host returned, not what the editor believed it saved; and
+  the round-trip claim is byte-for-byte for a document that has a canvas, falling back for a pipeline
+  script — which has no pages, so patching one scaffolds the page a report would need — to the claim
+  that is actually true: every line the author wrote is still there and no statement was rewritten.
+  The harness is itself covered by ten tests that show each clause failing on an artifact that
+  violates it, because a clause that silently never fires would take all three journeys green with
+  it. Writing it immediately found a real round-trip infidelity: the patcher compared a generated
+  header (`CREATE PAGE [Main]`) against the author's (`CREATE PAGE Main`) as text, so brackets — which
+  are quoting, not identity — made every untouched page look changed and rewrote it. Header
+  comparison is now bracket-insensitive, and nothing bracket-stripped is ever written.
 
 ### Phase 7 — Stabilization and Legacy Retirement
 

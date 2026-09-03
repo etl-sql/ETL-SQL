@@ -417,10 +417,22 @@ public sealed class DesignerScriptPatcher
         var existingMatch = Regex.Match(original, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         var desiredMatch = Regex.Match(desired, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         if (!existingMatch.Success || !desiredMatch.Success
-            || SemanticNormalize(existingMatch.Value) == SemanticNormalize(desiredMatch.Value))
+            || NormalizeHeader(existingMatch.Value) == NormalizeHeader(desiredMatch.Value))
             return original;
         return original[..existingMatch.Index] + desiredMatch.Value + original[(existingMatch.Index + existingMatch.Length)..];
     }
+
+    /// <summary>
+    /// A header for comparison only, with the brackets around a name removed.
+    ///
+    /// <para>The generator always brackets a name and an author usually does not, so
+    /// <c>CREATE PAGE Main</c> and <c>CREATE PAGE [Main]</c> read as different headers and the
+    /// statement was rewritten every time the designer merely looked at it. Brackets are quoting, not
+    /// identity — the two name the same page — so they are stripped before the comparison and never
+    /// from anything that gets written.</para>
+    /// </summary>
+    private static string NormalizeHeader(string header) =>
+        SemanticNormalize(Regex.Replace(header, @"\[([^\]]*)\]", "$1", RegexOptions.CultureInvariant));
 
     private static string PatchClause(string original, string desiredStatement, string keyword, int? atDepth = null)
     {
