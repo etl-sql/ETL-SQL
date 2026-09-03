@@ -136,4 +136,61 @@ public sealed class StudioDataPreviewTests
         Assert.InRange(response.BytesReturned, 1, 1_024);
         Assert.Contains("byte preview limit", response.Message, StringComparison.OrdinalIgnoreCase);
     }
+    /// <summary>
+    /// A report that names a catalog alias previewed and exported as "Unknown source" while the same
+    /// script ran fine from the same editor, because the run path declares the shared connection and
+    /// the preview path did not. These are the aliases the preview now has to declare.
+    /// </summary>
+    [Fact]
+    public void PreviewPreamble_NamesTheSharedAliasesAScriptDoesNotDeclareItself()
+    {
+        const string script = """
+            SELECT Id INTO #staged FROM warehouse.Orders;
+            SELECT Name INTO #people FROM crm.Contacts;
+            SELECT Id INTO #again FROM warehouse.Returns;
+            SELECT Id FROM #staged;
+            """;
+
+        var aliases = PortalDesignerPreviewService.ReferencedSharedAliases(script);
+
+        Assert.Equal(["warehouse", "crm"], aliases);
+    }
+
+    [Fact]
+    public void PreviewPreamble_LeavesAConnectionTheScriptAlreadyDeclares()
+    {
+        const string script = """
+            CREATE CONNECTION warehouse AS MOCKDB();
+            SELECT Id INTO #staged FROM warehouse.Orders;
+            SELECT Name INTO #people FROM crm.Contacts;
+            """;
+
+        var aliases = PortalDesignerPreviewService.ReferencedSharedAliases(script);
+
+        // Declaring it a second time would be a duplicate the engine refuses, so the script wins.
+        Assert.Equal(["crm"], aliases);
+    }
+
+    [Fact]
+    public void PreviewPreamble_OffersNeitherTempTablesNorDatasetsToTheCatalog()
+    {
+        const string script = """
+            CREATE DATASET &sales AS (SELECT Id, Amount FROM warehouse.Orders);
+            SELECT Id INTO #staged FROM warehouse.Orders;
+            SELECT Id FROM #staged;
+            SELECT Amount FROM &sales;
+            """;
+
+        var aliases = PortalDesignerPreviewService.ReferencedSharedAliases(script);
+
+        Assert.Equal(["warehouse"], aliases);
+    }
+
+    [Fact]
+    public void PreviewPreamble_SaysNothingAboutAScriptThatDoesNotParse()
+    {
+        // The execution that follows reports the syntax error properly; guessing here would replace
+        // it with a worse one about a connection.
+        Assert.Empty(PortalDesignerPreviewService.ReferencedSharedAliases("SELECT FROM WHERE )("));
+    }
 }

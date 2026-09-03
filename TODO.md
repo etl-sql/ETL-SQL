@@ -508,8 +508,33 @@ performance limits before Studio is treated as the primary workbench.
   script from `PARALLEL` to the end of the file and asked whether the task appeared anywhere in it —
   which every task *after* the block satisfies. It passed while the block stayed empty and both
   loads sat outside it. A containment claim has to find the block's own closing `END`.
-- [ ] **Certify the SSRS-like paginated journey**: From the GUI, create a parameterized grouped report
-  with details, totals, headers, repeating columns, page breaks, and a correct multi-page PDF.
+- [x] **Certify the SSRS-like paginated journey**: `StudioPaginatedJourneyTests` builds one on the
+  Portal through the paginated workflow's own numbered steps — choose data, declare `@category`,
+  add matrix groups and detail rows, add the grand total, add a header, a footer and a page break,
+  set A4 landscape, then export — and hands the saved script to `StudioCertification`.
+  **The Portal, not the desktop host**, because a paginated report is a catalog artifact and because
+  the SSIS journey already certifies the desktop host: between them the certified journeys cover
+  both hosts rather than one twice.
+  **The PDF is read, not just requested.** A 200 with bytes only proves the route answered, so the
+  download is parsed far enough to count its page objects — it has six — because a one-page PDF of a
+  truncated report would otherwise pass a test named for pagination.
+  **The parameter governs the page.** The guided step declares it, but the bands are written against
+  whatever was sampled in step 1, so the report rendered the raw table while the parameter filtered a
+  `#temp` nothing read. The journey points the bands at the staged table, because a prompt that
+  changes nothing on the page is not a parameterized report.
+  **It found two defects, both silent.**
+  *The first click after editing any field in a guided dialog did nothing.* A form repaints itself
+  when a field changes, to keep its SQL preview and its warnings true — and `change` fires on blur,
+  which is exactly what pressing a footer button does. The repaint replaced the button between its
+  mousedown and its mouseup, and a click needs both on one element, so the press was swallowed and
+  the author had to press again. The footer buttons now survive a repaint that still offers the same
+  actions, and `disabled` is applied to the buttons already there.
+  *Preview and PDF export were broken for every report that names a shared connection* — which is how
+  a Portal report names one. `PortalDesignerRunService` declares the catalog alias before it executes
+  and `PortalDesignerPreviewService` did not, so the same script that ran perfectly in the editor
+  exported as `Unknown source: <alias>`. The preview now declares the aliases a script references but
+  does not declare itself, resolved one at a time through the catalog under the caller's own identity
+  so an alias they may not use is refused rather than quietly borrowed.
 - [ ] **Certify the Power BI-like dashboard journey**: From the GUI, create KPI, trend, category, and
   detail visuals with slicers, cross-filtering, and persistent formatting.
 - [x] **Apply the common certification contract**: One harness, `StudioCertification`, holds all five

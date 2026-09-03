@@ -23,7 +23,8 @@ public sealed class PortalDesignerPreviewService(
     ETL_SQL.Common.ILogger logger,
     PortalDbContext db,
     PortalConfig portalConfig,
-    AuditService audit)
+    AuditService audit,
+    IConnectionCatalogProvider catalog)
 {
     private const int TimeoutSeconds = 30;
     private const int OperatorGrantMb = 128;
@@ -50,7 +51,12 @@ public sealed class PortalDesignerPreviewService(
             throw new UnauthorizedAccessException("The current portal user could not be resolved for execution.");
 
         // Bound the preview: cap operator memory and let the linked timeout stop a runaway build.
-        var script = $"SET OPERATOR_MEMORY_GRANT = {OperatorGrantMb};\n" + scriptText;
+        // The shared connections the script names are declared ahead of it, the same way
+        // PortalDesignerRunService declares the one an ad hoc run uses. Without this, a report
+        // naming a catalog alias - which is how a Portal report names a connection - previewed and
+        // exported as "Unknown source", while the very same script ran fine from the same editor.
+        var preamble = await BuildSharedConnectionPreambleAsync(scriptText, identity, cancellationToken);
+        var script = $"SET OPERATOR_MEMORY_GRANT = {OperatorGrantMb};\n" + preamble + scriptText;
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(TimeoutSeconds));
@@ -92,6 +98,85 @@ public sealed class PortalDesignerPreviewService(
             $"Pages={manifest.Pages.Count}; Visuals={manifest.Visuals.Count}");
 
         return manifest;
+    }
+
+    /// <summary>
+    /// Declares the shared catalog connections a script references but does not declare itself.
+    ///
+    /// <para>Resolved one alias at a time through <see cref="IConnectionCatalogProvider"/> under the
+    /// caller's own identity, so an alias the caller may not use is refused here rather than quietly
+    /// borrowed. An alias the catalog does not know is left alone: it may be declared further down
+    /// the script, and inventing a declaration for it would turn a clear error into a confusing
+    /// one.</para>
+    /// </summary>
+    private async Task<string> BuildSharedConnectionPreambleAsync(
+        string scriptText,
+        ExecutionIdentity identity,
+        CancellationToken cancellationToken)
+    {
+        var referenced = ReferencedSharedAliases(scriptText);
+        if (referenced.Count == 0) return string.Empty;
+
+        var builder = new System.Text.StringBuilder();
+        foreach (var alias in referenced)
+        {
+            var normalized = PortalDesignerSchemaService.NormalizeConnectionRef(alias);
+            SharedConnectionDefinition definition;
+            try
+            {
+                definition = await catalog.ResolveAsync(normalized, identity, cancellationToken);
+            }
+            catch (KeyNotFoundException)
+            {
+                continue;
+            }
+
+            builder.Append("CREATE CONNECTION [")
+                .Append(normalized.Replace("]", "]]", StringComparison.Ordinal))
+                .Append("] AS ")
+                .Append(definition.ConnectorType)
+                .Append("('SHARED:")
+                .Append(normalized.Replace("'", "''", StringComparison.Ordinal))
+                .AppendLine("');");
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// The connection aliases a script reads from but does not declare itself.
+    ///
+    /// <para>Qualified sources only, since an unqualified name is a table on a connection already
+    /// in scope. A <c>#temp</c> table and a <c>&amp;dataset</c> are names the engine owns rather
+    /// than connections, so neither is ever offered to the catalog.</para>
+    /// </summary>
+    internal static IReadOnlyList<string> ReferencedSharedAliases(string scriptText)
+    {
+        Script parsed;
+        try
+        {
+            parsed = new ETL_SQL.Core.Parser.Parser(
+                new ETL_SQL.Core.Parser.Lexer(scriptText).Tokenize(), scriptText).Parse();
+        }
+        catch
+        {
+            // A script the parser cannot read has no resolvable aliases, and the execution that
+            // follows reports the syntax error far better than anything this could add.
+            return [];
+        }
+
+        var declared = parsed.Statements.OfType<CreateConnectionStatement>()
+            .Select(statement => statement.ConnectionName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return parsed.Statements
+            .SelectMany(statement => statement.GetSourceTables())
+            .Where(source => source.Contains('.', StringComparison.Ordinal))
+            .Select(source => source.Split('.', 2)[0].Trim())
+            .Where(alias => alias.Length > 0 && alias[0] != '#' && alias[0] != '&')
+            .Where(alias => !declared.Contains(alias))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     // Mirrors PortalDesignerRunService.BuildIdentityAsync: resolve the portal user's roles/groups so

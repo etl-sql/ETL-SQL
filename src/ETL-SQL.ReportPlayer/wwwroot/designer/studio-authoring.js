@@ -153,6 +153,30 @@ export function createStudioAuthoringSurfaces({
 
             const bodyHost = dialog.box.querySelector('[data-dialog-body]');
             const actionHost = dialog.box.querySelector('[data-dialog-actions]');
+
+            // The footer buttons survive a re-render when the same actions are still on offer.
+            //
+            // A guided form repaints itself when a field changes, to keep its SQL preview and its
+            // warnings true. `change` fires on blur — which is what clicking a footer button does —
+            // so replacing the buttons on every repaint destroyed the very button being pressed
+            // between its mousedown and its mouseup, and a click needs both on one element. The
+            // first press after editing any field did nothing at all, silently, and the author had
+            // to press again. `currentActions` is what the delegated handler reads, so the buttons
+            // can stay put while what they do stays current.
+            let currentActions = [];
+            let actionSignature = null;
+            actionHost.addEventListener('click', async event => {
+                const button = event.target.closest('[data-dialog-action]');
+                if (!button || button.disabled) return;
+                try {
+                    await currentActions.find(action => action.id === button.dataset.dialogAction)?.run?.();
+                } catch (error) {
+                    // A dropped promise here is invisible: the mutation may already have landed
+                    // while the dialog silently stops responding. Say so instead.
+                    feedback.notify(error?.message || 'That action could not be completed.',
+                        { title: 'Action failed', tone: 'error' });
+                }
+            });
             const api = {
                 close,
                 setTitle(next) { dialog.box.querySelector('[data-dialog-title]').textContent = next; },
@@ -161,20 +185,24 @@ export function createStudioAuthoringSurfaces({
                 busy(flag) { actionHost.querySelectorAll('button').forEach(button => { button.disabled = flag; }); },
                 render({ lede = '', body = '', actions = [], wire } = {}) {
                     bodyHost.innerHTML = (lede ? `<p class="etlsql-studio-guided-lede">${lede}</p>` : '') + body;
-                    actionHost.innerHTML = actions.map(action => `<button type="button"
-                        class="etlsql-studio-btn${action.primary ? ' is-primary' : ''}"
-                        data-dialog-action="${escapeHtml(action.id)}"${action.disabled ? ' disabled' : ''}
-                        >${escapeHtml(action.label)}</button>`).join('');
-                    actionHost.querySelectorAll('[data-dialog-action]').forEach(button => button.addEventListener('click', async () => {
-                        try {
-                            await actions.find(action => action.id === button.dataset.dialogAction)?.run?.();
-                        } catch (error) {
-                            // A dropped promise here is invisible: the mutation may already have landed
-                            // while the dialog silently stops responding. Say so instead.
-                            feedback.notify(error?.message || 'That action could not be completed.',
-                                { title: 'Action failed', tone: 'error' });
-                        }
-                    }));
+                    currentActions = actions;
+                    // Rebuilt only when the offer itself changed. `disabled` is not part of the
+                    // signature: it flips while the author types, which is exactly when the buttons
+                    // must not be replaced, so it is applied to the buttons already there.
+                    const signature = actions
+                        .map(action => [action.id, action.label, action.primary ? 1 : 0].join('|'))
+                        .join('||');
+                    if (signature !== actionSignature) {
+                        actionSignature = signature;
+                        actionHost.innerHTML = actions.map(action => `<button type="button"
+                            class="etlsql-studio-btn${action.primary ? ' is-primary' : ''}"
+                            data-dialog-action="${escapeHtml(action.id)}"
+                            >${escapeHtml(action.label)}</button>`).join('');
+                    }
+                    for (const action of actions) {
+                        const button = [...actionHost.children].find(node => node.dataset?.dialogAction === action.id);
+                        if (button) button.disabled = Boolean(action.disabled);
+                    }
                     wire?.(bodyHost);
                     bodyHost.querySelector('input:not([type=hidden]), select, textarea')?.focus();
                 },

@@ -12,6 +12,20 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Previewing or exporting a report that uses a shared connection works. A Portal report names its
+  connection through the catalog rather than declaring it, and the run path declared that alias
+  before executing while the preview path did not - so the same script that ran perfectly in the
+  editor came back from Preview and from Export PDF as `Unknown source: <alias>`. The preview now
+  declares the aliases a script references but does not declare itself, resolved one at a time
+  through the catalog under the caller's own identity, so an alias they may not use is refused
+  rather than quietly borrowed.
+
+- The first click after editing a field in a guided Studio dialog is no longer swallowed. These forms
+  repaint when a field changes, to keep their SQL preview and warnings true, and `change` fires on
+  blur - which is exactly what pressing a footer button does. The repaint replaced the button between
+  its mousedown and its mouseup, and a click needs both on one element, so the first press did
+  nothing and the author had to press again. Footer buttons now survive a repaint that still offers
+  the same actions.
 - Dragging a task card on the pipeline map does something again. Dropping one onto another to run it
   after that one, or into a `PARALLEL` block to put it inside, could never fire — from anywhere on
   any card. The map binds its own node-repositioning gesture to the card header and that handler
