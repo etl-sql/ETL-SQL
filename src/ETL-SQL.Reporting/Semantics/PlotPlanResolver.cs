@@ -179,31 +179,33 @@ public sealed class PlotPlanResolver
         var binding = spec.Bindings.FirstOrDefault(item => item.Channel is FieldChannel.X or FieldChannel.Theta);
         if (binding?.Field is not { } categoryField || !columns.TryGetValue(categoryField, out var column)) return [];
         var categories = column.Values.Select(ValueKey).Where(value => value is not null).Cast<string>().Distinct(StringComparer.Ordinal).ToList();
-        var axisSort = spec.Theme.Tokens.FirstOrDefault(token => token.Name.Equals("AXIS_SORT", StringComparison.OrdinalIgnoreCase) || token.Name.Equals("SORT", StringComparison.OrdinalIgnoreCase))?.Value.ToUpperInvariant();
+        var axisSort = spec.Theme.Tokens.FirstOrDefault(token => token.Name.Equals("X_SORT", StringComparison.OrdinalIgnoreCase) || token.Name.Equals("AXIS_SORT", StringComparison.OrdinalIgnoreCase) || token.Name.Equals("SORT", StringComparison.OrdinalIgnoreCase))?.Value.ToUpperInvariant();
         if (axisSort is "VALUE" or "VALUE_DESC")
         {
-            var measureBinding = spec.Bindings.FirstOrDefault(item => item.Channel is FieldChannel.Y or FieldChannel.Radius);
+            var measureBinding = spec.Bindings.FirstOrDefault(item => item.SemanticKind == DataSemanticKind.Quantitative && item.Channel is FieldChannel.Y or FieldChannel.Radius or FieldChannel.Size)
+                ?? spec.Bindings.FirstOrDefault(item => item.Channel is FieldChannel.Size or FieldChannel.Y or FieldChannel.Radius);
             if (measureBinding?.Field is { } measureField && columns.TryGetValue(measureField, out var measure))
             {
                 var sums = categories.ToDictionary(category => category, _ => 0m, StringComparer.Ordinal);
                 for (var index = 0; index < column.Values.Length; index++)
                 {
                     var category = ValueKey(column.Values[index]);
-                    if (category is not null) sums[category] += Number(measure.Values[index]) ?? 0m;
+                    if (category is not null && sums.ContainsKey(category)) sums[category] += Number(measure.Values[index]) ?? 0m;
                 }
                 categories = categories.OrderByDescending(category => sums[category]).ThenBy(category => category, StringComparer.Ordinal).ToList();
             }
         }
         else if (axisSort is "VALUE_ASC")
         {
-            var measureBinding = spec.Bindings.FirstOrDefault(item => item.Channel is FieldChannel.Y or FieldChannel.Radius);
+            var measureBinding = spec.Bindings.FirstOrDefault(item => item.SemanticKind == DataSemanticKind.Quantitative && item.Channel is FieldChannel.Y or FieldChannel.Radius or FieldChannel.Size)
+                ?? spec.Bindings.FirstOrDefault(item => item.Channel is FieldChannel.Size or FieldChannel.Y or FieldChannel.Radius);
             if (measureBinding?.Field is { } measureField && columns.TryGetValue(measureField, out var measure))
             {
                 var sums = categories.ToDictionary(category => category, _ => 0m, StringComparer.Ordinal);
                 for (var index = 0; index < column.Values.Length; index++)
                 {
                     var category = ValueKey(column.Values[index]);
-                    if (category is not null) sums[category] += Number(measure.Values[index]) ?? 0m;
+                    if (category is not null && sums.ContainsKey(category)) sums[category] += Number(measure.Values[index]) ?? 0m;
                 }
                 categories = categories.OrderBy(category => sums[category]).ThenBy(category => category, StringComparer.Ordinal).ToList();
             }
@@ -211,6 +213,10 @@ public sealed class PlotPlanResolver
         else if (axisSort is "ALPHA" || binding.Sort == SortDirection.Ascending)
         {
             categories.Sort(StringComparer.OrdinalIgnoreCase);
+        }
+        else if (axisSort is "SOURCE")
+        {
+            // Keep distinct values in source encounter order
         }
         else if (binding.Sort == SortDirection.Descending)
         {
@@ -258,6 +264,64 @@ public sealed class PlotPlanResolver
                     : scale.Channel is FieldChannel.X or FieldChannel.Theta && !categories.IsDefaultOrEmpty
                         ? categories
                         : !inferred.IsDefaultOrEmpty ? inferred : categories;
+
+                if (scale.Channel == FieldChannel.Y)
+                {
+                    var ySort = spec.Theme.Tokens.FirstOrDefault(token => token.Name.Equals("Y_SORT", StringComparison.OrdinalIgnoreCase))?.Value.ToUpperInvariant();
+                    if (ySort is not null)
+                    {
+                        var yList = values.ToList();
+                        if (ySort is "VALUE" or "VALUE_DESC")
+                        {
+                            var yBinding = spec.Bindings.FirstOrDefault(item => item.Channel == FieldChannel.Y);
+                            var measureBinding = spec.Bindings.FirstOrDefault(item => item.SemanticKind == DataSemanticKind.Quantitative && item.Channel is FieldChannel.Size or FieldChannel.X or FieldChannel.Radius)
+                                ?? spec.Bindings.FirstOrDefault(item => item.Channel is FieldChannel.Size or FieldChannel.Radius);
+                            if (yBinding?.Field is { } yField && columns.TryGetValue(yField, out var yCol) &&
+                                measureBinding?.Field is { } measureField && columns.TryGetValue(measureField, out var measure))
+                            {
+                                var sums = yList.ToDictionary(c => c, _ => 0m, StringComparer.Ordinal);
+                                for (var index = 0; index < yCol.Values.Length; index++)
+                                {
+                                    var cat = ValueKey(yCol.Values[index]);
+                                    if (cat is not null && sums.ContainsKey(cat))
+                                    {
+                                        sums[cat] += Number(measure.Values[index]) ?? 0m;
+                                    }
+                                }
+                                values = yList.OrderByDescending(c => sums[c]).ThenBy(c => c, StringComparer.Ordinal).ToImmutableArray();
+                            }
+                        }
+                        else if (ySort is "VALUE_ASC")
+                        {
+                            var yBinding = spec.Bindings.FirstOrDefault(item => item.Channel == FieldChannel.Y);
+                            var measureBinding = spec.Bindings.FirstOrDefault(item => item.SemanticKind == DataSemanticKind.Quantitative && item.Channel is FieldChannel.Size or FieldChannel.X or FieldChannel.Radius)
+                                ?? spec.Bindings.FirstOrDefault(item => item.Channel is FieldChannel.Size or FieldChannel.Radius);
+                            if (yBinding?.Field is { } yField && columns.TryGetValue(yField, out var yCol) &&
+                                measureBinding?.Field is { } measureField && columns.TryGetValue(measureField, out var measure))
+                            {
+                                var sums = yList.ToDictionary(c => c, _ => 0m, StringComparer.Ordinal);
+                                for (var index = 0; index < yCol.Values.Length; index++)
+                                {
+                                    var cat = ValueKey(yCol.Values[index]);
+                                    if (cat is not null && sums.ContainsKey(cat))
+                                    {
+                                        sums[cat] += Number(measure.Values[index]) ?? 0m;
+                                    }
+                                }
+                                values = yList.OrderBy(c => sums[c]).ThenBy(c => c, StringComparer.Ordinal).ToImmutableArray();
+                            }
+                        }
+                        else if (ySort is "ALPHA")
+                        {
+                            values = yList.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToImmutableArray();
+                        }
+                        else if (ySort is "SOURCE")
+                        {
+                            values = inferred;
+                        }
+                    }
+                }
+
                 yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                     values.Select(ChartValue.From).ToImmutableArray(), values,
                     values.Select(value => new PlotTick(ChartValue.From(value), value)).ToImmutableArray(), scale.IncludeZero,
@@ -340,6 +404,7 @@ public sealed class PlotPlanResolver
             if (scale.Kind == ScaleKind.Logarithmic && (minimum <= 0m || maximum <= 0m || numbers.Any(number => number <= 0m)))
                 throw new InvalidOperationException($"Logarithmic scale '{scale.Id}' requires positive values and domain bounds.");
             if (scale.IncludeZero) { minimum = Math.Min(0m, minimum); maximum = Math.Max(0m, maximum); }
+            if (scale.ColorRange?.Midpoint is { } colorMidpoint) { minimum = Math.Min(colorMidpoint, minimum); maximum = Math.Max(colorMidpoint, maximum); }
             if (minimum == maximum) maximum = minimum + 1m;
             var needsMarkHeadroom = !spec.Theme.Tokens.Any(token => token.Name.Equals("MICRO_CHART", StringComparison.OrdinalIgnoreCase)) &&
                 resolvedLayers.Any(layer => !layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase)) &&

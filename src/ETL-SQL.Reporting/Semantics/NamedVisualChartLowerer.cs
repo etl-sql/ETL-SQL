@@ -44,6 +44,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         ValidateLegendOptions(statement);
         ValidatePieDonutOptions(statement);
         ValidateScatterBubbleOptions(statement);
+        ValidateHeatmapOptions(statement);
+        foreach (var opt in statement.Options) manifest.Options.TryAdd(opt.Key, opt.Value);
         if (statement.VisualType == VisualType.Scatter)
         {
             var hasErrorLow = statement.Mappings.Any(m => m.Role.Equals("ERROR_LOW", StringComparison.OrdinalIgnoreCase));
@@ -309,7 +311,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         {
             var style = statement.VisualType switch
             {
-                VisualType.HeatMap => ImmutableArray.Create(new StyleToken("layout", "heatmap"), new StyleToken("preserveRows", "true")),
+                VisualType.HeatMap => ResolveHeatMapLayerStyle(statement, manifest),
                 VisualType.Funnel => ImmutableArray.Create(new StyleToken("layout", "funnel")),
                 VisualType.Gauge => ImmutableArray.Create(new StyleToken("layout", "gauge")),
                 VisualType.BoxPlot => ImmutableArray.Create(new StyleToken("layout", "boxplot"), new StyleToken("preserveRows", "true")),
@@ -571,6 +573,9 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             var includeZero = explicitIncludeZero ??
                 (!isLog && (scaleChannel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or FieldChannel.Size)
                     && statement.VisualType is not VisualType.Scatter and not VisualType.Bubble);
+            var colorRange = statement.VisualType == VisualType.HeatMap && scaleChannel == FieldChannel.Size
+                ? ResolveHeatMapColorRange(statement, manifest)
+                : null;
             yield return new ScaleSpec(group.Key, scaleChannel, kind,
                 IncludeZero: includeZero,
                 CategoryOrder: [],
@@ -586,7 +591,10 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 LabelSkip: ParseAxisInt(statement, manifest, axis, "label_skip"),
                 OuterPadding: kind == ScaleKind.Band && scaleChannel == FieldChannel.X
                     ? ResolveUnitInterval(manifest.Options.GetValueOrDefault("OUTER_PADDING"), "OUTER_PADDING")
-                    : 0m);
+                    : 0m)
+            {
+                ColorRange = colorRange
+            };
         }
     }
 
@@ -1200,6 +1208,140 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         if (!decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var value) || value is < 0m or > 1m)
             throw new InvalidDataException($"{option} must be a number between zero and one, but got '{text}'.");
         return value;
+    }
+
+    private static ImmutableArray<StyleToken> ResolveHeatMapLayerStyle(CreateVisualStatement statement, VisualManifest manifest)
+    {
+        var builder = ImmutableArray.CreateBuilder<StyleToken>();
+        builder.Add(new StyleToken("layout", "heatmap"));
+        builder.Add(new StyleToken("preserveRows", "true"));
+
+        void Forward(string key)
+        {
+            var val = statement.Options.FirstOrDefault(o => o.Key.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value
+                ?? manifest.Options.GetValueOrDefault(key);
+            if (!string.IsNullOrWhiteSpace(val)) builder.Add(new StyleToken(key, val));
+        }
+
+        Forward("CELL_BORDER");
+        Forward("CELL_BORDER_COLOR");
+        Forward("CELL_BORDER_WIDTH");
+        Forward("NULL_COLOR");
+        Forward("MIDPOINT");
+        Forward("COLOR_MID");
+        Forward("COLOR_LOW");
+        Forward("COLOR_HIGH");
+        Forward("X_SORT");
+        Forward("Y_SORT");
+
+        return builder.ToImmutable();
+    }
+
+    private static void ValidateHeatmapOptions(CreateVisualStatement statement)
+    {
+        var isHeatmap = statement.VisualType == VisualType.HeatMap;
+        foreach (var opt in statement.Options)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            if (key is "MIDPOINT" or "COLOR_MID" or "COLOR_LOW" or "COLOR_HIGH" or "CELL_BORDER" or "CELL_BORDER_COLOR" or "CELL_BORDER_WIDTH" or "NULL_COLOR")
+            {
+                if (!isHeatmap)
+                    throw new InvalidOperationException($"{key} option is supported only on HEATMAP visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            }
+
+            if (isHeatmap)
+            {
+                if (key == "MIDPOINT")
+                {
+                    if (!decimal.TryParse(opt.Value, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
+                        throw new InvalidOperationException($"Invalid MIDPOINT '{opt.Value}'. Must be a number.");
+                }
+                else if (key == "CELL_BORDER")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE"))
+                        throw new InvalidOperationException($"Invalid CELL_BORDER '{opt.Value}'. Expected ON or OFF.");
+                }
+                else if (key == "CELL_BORDER_WIDTH")
+                {
+                    if (!decimal.TryParse(opt.Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var width) || width < 0m)
+                        throw new InvalidOperationException($"Invalid CELL_BORDER_WIDTH '{opt.Value}'. Must be a non-negative number.");
+                }
+                else if (key is "X_SORT" or "Y_SORT")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("SOURCE" or "ALPHA" or "VALUE_DESC" or "VALUE_ASC" or "VALUE"))
+                        throw new InvalidOperationException($"Invalid {key} '{opt.Value}'. Expected SOURCE, ALPHA, VALUE_DESC, or VALUE_ASC.");
+                }
+            }
+        }
+    }
+
+    private static ColorRangeSpec? ResolveHeatMapColorRange(CreateVisualStatement statement, VisualManifest manifest)
+    {
+        string? lowColor = null;
+        string? midColor = null;
+        string? highColor = null;
+
+        var colorsOpt = statement.Options.FirstOrDefault(o => o.Key.Equals("COLORS", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("COLORS");
+        if (!string.IsNullOrWhiteSpace(colorsOpt))
+        {
+            var parts = colorsOpt.Trim('(', ')', '[', ']').Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 2)
+            {
+                lowColor = parts[0].Trim('\'', '"');
+                highColor = parts[1].Trim('\'', '"');
+            }
+            else if (parts.Length >= 3)
+            {
+                lowColor = parts[0].Trim('\'', '"');
+                midColor = parts[1].Trim('\'', '"');
+                highColor = parts[2].Trim('\'', '"');
+            }
+        }
+
+        var cl = statement.Options.FirstOrDefault(o => o.Key.Equals("COLOR_LOW", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("color:low", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("color:min", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("COLOR_LOW")
+            ?? manifest.Options.GetValueOrDefault("color:low")
+            ?? manifest.Options.GetValueOrDefault("color:min");
+        if (!string.IsNullOrWhiteSpace(cl)) lowColor = cl;
+
+        var cm = statement.Options.FirstOrDefault(o => o.Key.Equals("COLOR_MID", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("color:mid", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("COLOR_MID")
+            ?? manifest.Options.GetValueOrDefault("color:mid");
+        if (!string.IsNullOrWhiteSpace(cm)) midColor = cm;
+
+        var ch = statement.Options.FirstOrDefault(o => o.Key.Equals("COLOR_HIGH", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("color:high", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("color:max", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("COLOR_HIGH")
+            ?? manifest.Options.GetValueOrDefault("color:high")
+            ?? manifest.Options.GetValueOrDefault("color:max");
+        if (!string.IsNullOrWhiteSpace(ch)) highColor = ch;
+
+        lowColor ??= "#dbeafe";
+        highColor ??= "#1d4ed8";
+
+        decimal? midpoint = null;
+        var midpointStr = statement.Options.FirstOrDefault(o => o.Key.Equals("MIDPOINT", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("MIDPOINT");
+        if (!string.IsNullOrWhiteSpace(midpointStr) && decimal.TryParse(midpointStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var mp))
+        {
+            midpoint = mp;
+        }
+
+        var nullColor = statement.Options.FirstOrDefault(o => o.Key.Equals("NULL_COLOR", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("NULL_COLOR")
+            ?? "#f1f5f9";
+
+        var isDiverging = midColor is not null || midpoint is not null;
+        if (isDiverging)
+        {
+            midColor ??= "#ffffff";
+            midpoint ??= 0m;
+            return new ColorRangeSpec(ColorRangeKind.Diverging, lowColor, highColor, midColor, midpoint, nullColor);
+        }
+
+        return new ColorRangeSpec(ColorRangeKind.Gradient, lowColor, highColor, null, null, nullColor);
     }
 
     private static string Sanitize(string value) => new(value.Select(character => char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : '-').ToArray());

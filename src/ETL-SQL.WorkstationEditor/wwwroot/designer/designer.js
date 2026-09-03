@@ -5107,6 +5107,7 @@ export function createDesigner(container, opts = {}) {
         const isPieOrDonut = ['PIE', 'DONUT'].includes(v.type);
         const isScatter = v.type === 'SCATTER';
         const isBubble = v.type === 'BUBBLE';
+        const isHeatmap = v.type === 'HEATMAP';
         const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
         const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
         const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
@@ -5191,6 +5192,44 @@ export function createDesigner(container, opts = {}) {
                             </label>
                             <label class="etlsql-dsgn-label">Max bubble size (px)
                                 <input type="number" id="pp-format-bubble-max-size" class="form-control" min="0" max="200" step="1" value="${esc(v.options?.MAX_BUBBLE_SIZE || '')}" placeholder="65">
+                            </label>
+                        </div>` : ''}
+                        ${isHeatmap ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">Heatmap controls</div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Midpoint value
+                                <input type="number" id="pp-format-heatmap-midpoint" class="form-control" value="${esc(v.options?.MIDPOINT || '')}" placeholder="0">
+                            </label>
+                            <label class="etlsql-dsgn-label">Null cell color
+                                <input type="color" id="pp-format-heatmap-null-color" value="${toHexColor(v.options?.NULL_COLOR, '#f1f5f9')}">
+                            </label>
+                        </div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Low color
+                                <input type="color" id="pp-format-heatmap-color-low" value="${toHexColor(v.options?.COLOR_LOW || v.options?.['color:low'] || v.options?.['color:min'], '#dbeafe')}">
+                            </label>
+                            <label class="etlsql-dsgn-label">Mid color
+                                <input type="color" id="pp-format-heatmap-color-mid" value="${toHexColor(v.options?.COLOR_MID || v.options?.['color:mid'], '#ffffff')}">
+                            </label>
+                            <label class="etlsql-dsgn-label">High color
+                                <input type="color" id="pp-format-heatmap-color-high" value="${toHexColor(v.options?.COLOR_HIGH || v.options?.['color:high'] || v.options?.['color:max'], '#1d4ed8')}">
+                            </label>
+                        </div>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-heatmap-cell-border" ${(v.options?.CELL_BORDER || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show cell borders</span></label>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Border color
+                                <input type="color" id="pp-format-heatmap-border-color" value="${toHexColor(v.options?.CELL_BORDER_COLOR, '#ffffff')}">
+                            </label>
+                            <label class="etlsql-dsgn-label">X axis sort
+                                <select id="pp-format-heatmap-x-sort" class="form-control">
+                                    ${['', 'SOURCE', 'ALPHA', 'VALUE_DESC', 'VALUE_ASC'].map(value => `<option value="${value}"${(v.options?.X_SORT || '').toUpperCase() === value ? ' selected' : ''}>${value || '(Default)'}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Y axis sort
+                                <select id="pp-format-heatmap-y-sort" class="form-control">
+                                    ${['', 'SOURCE', 'ALPHA', 'VALUE_DESC', 'VALUE_ASC'].map(value => `<option value="${value}"${(v.options?.Y_SORT || '').toUpperCase() === value ? ' selected' : ''}>${value || '(Default)'}</option>`).join('')}
+                                </select>
                             </label>
                         </div>` : ''}
                     </div>
@@ -5578,6 +5617,15 @@ export function createDesigner(container, opts = {}) {
         bindOption('#pp-format-scatter-jitter-height', 'JITTER_HEIGHT');
         bindOption('#pp-format-bubble-min-size', 'MIN_BUBBLE_SIZE');
         bindOption('#pp-format-bubble-max-size', 'MAX_BUBBLE_SIZE');
+        bindOption('#pp-format-heatmap-midpoint', 'MIDPOINT');
+        bindOption('#pp-format-heatmap-null-color', 'NULL_COLOR', 'input');
+        bindOption('#pp-format-heatmap-color-low', 'COLOR_LOW', 'input');
+        bindOption('#pp-format-heatmap-color-mid', 'COLOR_MID', 'input');
+        bindOption('#pp-format-heatmap-color-high', 'COLOR_HIGH', 'input');
+        bindOption('#pp-format-heatmap-cell-border', 'CELL_BORDER', 'change', (el) => el.checked ? 'ON' : 'OFF');
+        bindOption('#pp-format-heatmap-border-color', 'CELL_BORDER_COLOR', 'input');
+        bindOption('#pp-format-heatmap-x-sort', 'X_SORT');
+        bindOption('#pp-format-heatmap-y-sort', 'Y_SORT');
         bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
         bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
         bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');

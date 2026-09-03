@@ -3379,21 +3379,68 @@ public class ReportParser : ParserComponent
             }
             else if (Match(TokenType.COLORS))
             {
-                Consume(TokenType.LPAREN, "Expected '(' after COLORS");
-                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                Match(TokenType.EQUALS);
+                if (Match(TokenType.LPAREN))
                 {
-                    var colorKey = _parser.Current.Type == TokenType.STRING_LITERAL
-                        ? Advance().Value
-                        : ConsumeIdentifier("Expected color key in COLORS").Value;
-                    Consume(TokenType.EQUALS, "Expected '=' after color key");
-                    var colorVal = ConsumeReportOptionValue();
-                    var finalKey = colorKey.StartsWith("color:", StringComparison.OrdinalIgnoreCase)
-                        ? colorKey
-                        : "color:" + colorKey;
-                    options.Add(new VisualOption { Key = finalKey, Value = colorVal });
-                    Match(TokenType.COMMA);
+                    var posList = new List<string>();
+                    var isPositional = false;
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        if (!isPositional && posList.Count == 0 && (_parser.Current.Type == TokenType.STRING_LITERAL || _parser.IsIdentifier(_parser.Current)))
+                        {
+                            var lookahead = _parser.Peek;
+                            if (lookahead.Type != TokenType.EQUALS)
+                            {
+                                isPositional = true;
+                            }
+                        }
+
+                        if (isPositional)
+                        {
+                            var colorVal = ConsumeReportOptionValue();
+                            posList.Add(colorVal);
+                        }
+                        else
+                        {
+                            var colorKey = _parser.Current.Type == TokenType.STRING_LITERAL
+                                ? Advance().Value
+                                : ConsumeIdentifier("Expected color key in COLORS").Value;
+                            Consume(TokenType.EQUALS, "Expected '=' after color key");
+                            var colorVal = ConsumeReportOptionValue();
+                            var finalKey = colorKey.StartsWith("color:", StringComparison.OrdinalIgnoreCase)
+                                ? colorKey
+                                : "color:" + colorKey;
+                            options.Add(new VisualOption { Key = finalKey, Value = colorVal });
+                        }
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close COLORS");
+
+                    if (isPositional)
+                    {
+                        if (posList.Count == 2)
+                        {
+                            options.Add(new VisualOption { Key = "color:low", Value = posList[0] });
+                            options.Add(new VisualOption { Key = "color:min", Value = posList[0] });
+                            options.Add(new VisualOption { Key = "color:high", Value = posList[1] });
+                            options.Add(new VisualOption { Key = "color:max", Value = posList[1] });
+                        }
+                        else if (posList.Count >= 3)
+                        {
+                            options.Add(new VisualOption { Key = "color:low", Value = posList[0] });
+                            options.Add(new VisualOption { Key = "color:min", Value = posList[0] });
+                            options.Add(new VisualOption { Key = "color:mid", Value = posList[1] });
+                            options.Add(new VisualOption { Key = "color:high", Value = posList[2] });
+                            options.Add(new VisualOption { Key = "color:max", Value = posList[2] });
+                        }
+                        options.Add(new VisualOption { Key = "COLORS", Value = string.Join(", ", posList) });
+                    }
                 }
-                Consume(TokenType.RPAREN, "Expected ')' to close COLORS");
+                else
+                {
+                    var colorVal = ConsumeReportOptionValue();
+                    options.Add(new VisualOption { Key = "COLORS", Value = colorVal });
+                }
             }
             else if (Match(TokenType.DATA_LABELS))
             {
@@ -3614,6 +3661,7 @@ public class ReportParser : ParserComponent
             t == TokenType.TRUE || t == TokenType.FALSE ||
             t == TokenType.ON || t == TokenType.OFF ||
             t == TokenType.FILTER ||
+            t == TokenType.SOURCE ||
             t == TokenType.TOP || t == TokenType.BOTTOM ||
             t == TokenType.LEFT || t == TokenType.RIGHT ||
             t == TokenType.GRID || t == TokenType.DATA_LABELS ||

@@ -673,17 +673,17 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 
 ### HEATMAP
 
-- [ ] **Diverging color scale**: `HEATMAP` accepts a two-stop or three-stop `COLORS` gradient but
+- [x] **Diverging color scale**: `HEATMAP` accepts a two-stop or three-stop `COLORS` gradient but
   there is no explicit diverging scale with a named midpoint. `CUSTOM CHART` SCALES support
   `DIVERGING(LOW, MID, HIGH, MIDPOINT)`. Add `MIDPOINT = n` and `COLOR_MID = '#RRGGBB'` to HEATMAP
   to expose this for the common "negative/neutral/positive" heatmap pattern.
-- [ ] **Cell border styling**: No option to show or remove the grid lines between heatmap cells.
+- [x] **Cell border styling**: No option to show or remove the grid lines between heatmap cells.
   Tableau and ggplot2 (`theme(panel.grid = ...)`) both expose this. Add `CELL_BORDER = ON|OFF` with
   optional `CELL_BORDER_COLOR`.
-- [ ] **Per-axis sort**: `HEATMAP` has no `X_SORT` or `Y_SORT` option. The category order on both
+- [x] **Per-axis sort**: `HEATMAP` has no `X_SORT` or `Y_SORT` option. The category order on both
   axes is source row order. Add `X_SORT = SOURCE|ALPHA|VALUE_DESC` and `Y_SORT = SOURCE|ALPHA|
   VALUE_DESC` to allow clustering by row/column totals or alphabetical ordering.
-- [ ] **Null / missing cell treatment**: No `NULL_COLOR = '#RRGGBB'` option. When a row/column
+- [x] **Null / missing cell treatment**: No `NULL_COLOR = '#RRGGBB'` option. When a row/column
   intersection has no data, the cell color is renderer-inferred. Add an explicit null-cell color option.
 
 ### WATERFALL

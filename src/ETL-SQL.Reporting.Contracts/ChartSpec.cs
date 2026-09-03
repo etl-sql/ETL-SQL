@@ -432,7 +432,7 @@ public sealed record ChartSpec(
                 throw new InvalidDataException($"Logarithmic scale '{scale.Id}' cannot include zero.");
             if (scale.ColorRange is { } range)
             {
-                if (scale.Channel != FieldChannel.Color || scale.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic))
+                if ((scale.Channel != FieldChannel.Color && scale.Channel != FieldChannel.Size) || scale.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic))
                     throw new InvalidDataException($"Scale '{scale.Id}' color RANGE requires a quantitative COLOR linear/logarithmic scale.");
                 ValidatePortableColor(range.Low, scale.Id);
                 ValidatePortableColor(range.High, scale.Id);
@@ -441,7 +441,7 @@ public sealed record ChartSpec(
                     throw new InvalidDataException($"DIVERGING range on scale '{scale.Id}' requires MID and MIDPOINT.");
                 if (range.Mid is not null) ValidatePortableColor(range.Mid, scale.Id);
                 if (!Bindings.Concat(Layers.SelectMany(layer => layer.Bindings)).Any(binding =>
-                    binding.ScaleId == scale.Id && binding.Channel == FieldChannel.Color && binding.SemanticKind == DataSemanticKind.Quantitative))
+                    binding.ScaleId == scale.Id && (binding.Channel == FieldChannel.Color || binding.Channel == FieldChannel.Size) && binding.SemanticKind == DataSemanticKind.Quantitative))
                     throw new InvalidDataException($"Scale '{scale.Id}' color RANGE requires a quantitative COLOR binding.");
             }
         }

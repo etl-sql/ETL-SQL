@@ -1857,28 +1857,100 @@ internal sealed class PlotPlanSvgRenderer
         var plotHeight = plan.Bounds.Height - Top - Bottom;
         var cellWidth = plotWidth / xCategories.Length;
         var cellHeight = plotHeight / yCategories.Length;
-        var lowColor = SafePaint(Style(plan, "COLOR:min"), "#dbeafe");
-        var highColor = SafePaint(Style(plan, "COLOR:max"), "#1d4ed8");
+
+        // Color resolution
+        var range = valueScale.ColorRange;
+        var lowColor = SafePaint(range?.Low ?? Style(plan, "COLOR_LOW") ?? Style(plan, "COLOR:low") ?? Style(plan, "COLOR:min"), "#dbeafe");
+        var highColor = SafePaint(range?.High ?? Style(plan, "COLOR_HIGH") ?? Style(plan, "COLOR:high") ?? Style(plan, "COLOR:max"), "#1d4ed8");
+        var midColor = range?.Mid ?? Style(plan, "COLOR_MID") ?? Style(plan, "COLOR:mid");
+        var midpointStr = Style(plan, "MIDPOINT");
+        decimal? midpoint = range?.Midpoint;
+        if (midpoint is null && !string.IsNullOrWhiteSpace(midpointStr) && decimal.TryParse(midpointStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var mp))
+        {
+            midpoint = mp;
+        }
+        var nullColor = SafePaint(range?.NullColor ?? Style(plan, "NULL_COLOR"), "#f1f5f9");
+        var isDiverging = (range?.Kind == ColorRangeKind.Diverging) || midColor is not null || midpoint.HasValue;
+        if (isDiverging && midColor is null)
+        {
+            midColor = "#ffffff";
+        }
+
+        // Cell border resolution
+        var cellBorderOpt = Style(plan, "CELL_BORDER") ?? LayerStyle(layer, "CELL_BORDER");
+        var cellBorder = !string.Equals(cellBorderOpt, "OFF", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(cellBorderOpt, "FALSE", StringComparison.OrdinalIgnoreCase);
+        var cellBorderColor = Style(plan, "CELL_BORDER_COLOR") ?? LayerStyle(layer, "CELL_BORDER_COLOR");
+        var cellBorderWidthStr = Style(plan, "CELL_BORDER_WIDTH") ?? LayerStyle(layer, "CELL_BORDER_WIDTH");
+        var borderWidth = decimal.TryParse(cellBorderWidthStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var bw) && bw >= 0m ? bw : 1m;
+
         var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
+
+        string GetColor(decimal v)
+        {
+            var ratio = maximum <= minimum ? 1m : Math.Clamp((v - minimum) / (maximum - minimum), 0m, 1m);
+            if (isDiverging && midColor is not null)
+            {
+                var middle = midpoint.HasValue && maximum > minimum
+                    ? Math.Clamp((midpoint.Value - minimum) / (maximum - minimum), 0m, 1m)
+                    : 0.5m;
+                return ratio <= middle
+                    ? InterpolateColor(lowColor, midColor, middle == 0m ? 0m : ratio / middle)
+                    : InterpolateColor(midColor, highColor, middle == 1m ? 1m : (ratio - middle) / (1m - middle));
+            }
+            return InterpolateColor(lowColor, highColor, ratio);
+        }
+
+        // Index data cells by coordinate
+        var cellMap = new Dictionary<(int X, int Y), (ResolvedDatum Datum, decimal? Value)>();
         foreach (var datum in layer.Data.Where(item => !item.IsGap))
         {
             var x = DisplayChannel(datum, FieldChannel.X);
             var y = DisplayChannel(datum, FieldChannel.Y);
             var xIndex = x is null ? -1 : xCategories.IndexOf(x);
             var yIndex = y is null ? -1 : yCategories.IndexOf(y);
+            if (xIndex < 0 || yIndex < 0) continue;
             var value = PlotPlanResolver.Number(Channel(datum, FieldChannel.Size) ?? ChartValue.Null());
-            if (xIndex < 0 || yIndex < 0 || !value.HasValue) continue;
-            var ratio = maximum <= minimum ? 1m : Math.Clamp((value.Value - minimum) / (maximum - minimum), 0m, 1m);
-            var cellX = Left + xIndex * cellWidth;
-            var cellY = Top + yIndex * cellHeight;
-            builder.AppendLine($"<rect class='plot-heat-cell' x='{N(cellX)}' y='{N(cellY)}' width='{N(cellWidth - 1m)}' height='{N(cellHeight - 1m)}' fill='{Esc(InterpolatePaint(lowColor, highColor, ratio))}' data-row-index='{datum.RowIndex}'><title>{Esc(x!)} / {Esc(y!)}: {N(value.Value)}</title></rect>");
-            if (showLabels)
+            cellMap[(xIndex, yIndex)] = (datum, value);
+        }
+
+        var w = cellBorder ? Math.Max(1m, cellWidth - borderWidth) : cellWidth;
+        var h = cellBorder ? Math.Max(1m, cellHeight - borderWidth) : cellHeight;
+        var strokeAttr = cellBorder && !string.IsNullOrWhiteSpace(cellBorderColor)
+            ? $" stroke='{Esc(cellBorderColor)}' stroke-width='{N(borderWidth)}'"
+            : string.Empty;
+
+        for (var yIndex = 0; yIndex < yCategories.Length; yIndex++)
+        {
+            for (var xIndex = 0; xIndex < xCategories.Length; xIndex++)
             {
-                var valText = N(value.Value);
-                RenderDataLabelBackground(builder, plan, datum.RowIndex, cellX + cellWidth / 2m, cellY + cellHeight / 2m + 4m, "middle", 9m, valText);
-                builder.AppendLine($"<text x='{N(cellX + cellWidth / 2m)}' y='{N(cellY + cellHeight / 2m + 4m)}' text-anchor='middle' font-size='9' fill='{(ratio > .55m ? "white" : "#1f2937")}'>{valText}</text>");
+                var cellX = Left + xIndex * cellWidth;
+                var cellY = Top + yIndex * cellHeight;
+                var xName = xCategories[xIndex];
+                var yName = yCategories[yIndex];
+
+                if (cellMap.TryGetValue((xIndex, yIndex), out var cell) && cell.Value.HasValue)
+                {
+                    var val = cell.Value.Value;
+                    var cellFill = GetColor(val);
+                    var datum = cell.Datum;
+                    builder.AppendLine($"<rect class='plot-heat-cell' x='{N(cellX)}' y='{N(cellY)}' width='{N(w)}' height='{N(h)}' fill='{Esc(cellFill)}'{strokeAttr} data-row-index='{datum.RowIndex}'><title>{Esc(xName)} / {Esc(yName)}: {N(val)}</title></rect>");
+                    if (showLabels)
+                    {
+                        var valText = N(val);
+                        RenderDataLabelBackground(builder, plan, datum.RowIndex, cellX + cellWidth / 2m, cellY + cellHeight / 2m + 4m, "middle", 9m, valText);
+                        var ratio = maximum <= minimum ? 1m : Math.Clamp((val - minimum) / (maximum - minimum), 0m, 1m);
+                        builder.AppendLine($"<text x='{N(cellX + cellWidth / 2m)}' y='{N(cellY + cellHeight / 2m + 4m)}' text-anchor='middle' font-size='9' fill='{(ratio > .55m ? "white" : "#1f2937")}'>{valText}</text>");
+                    }
+                }
+                else
+                {
+                    var rowIndexAttr = cell.Datum is not null ? $" data-row-index='{cell.Datum.RowIndex}'" : string.Empty;
+                    builder.AppendLine($"<rect class='plot-heat-cell plot-heat-cell-null' x='{N(cellX)}' y='{N(cellY)}' width='{N(w)}' height='{N(h)}' fill='{Esc(nullColor)}'{strokeAttr}{rowIndexAttr}><title>{Esc(xName)} / {Esc(yName)}: (null)</title></rect>");
+                }
             }
         }
+
         for (var index = 0; index < xCategories.Length; index++)
             builder.AppendLine($"<text x='{N(Left + (index + .5m) * cellWidth)}' y='{N(Top + plotHeight + 16m)}' text-anchor='middle' font-size='9' fill='#666'>{Esc(Truncate(xCategories[index], 12))}</text>");
         for (var index = 0; index < yCategories.Length; index++)
