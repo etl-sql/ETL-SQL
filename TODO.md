@@ -269,7 +269,7 @@ then expose advanced inspection views that do not block basic authoring.
   contract — `CalculateRange` already returned zero-based lines, and a second convention in the same
   payload is how an off-by-one gets into an edit a button applies unread.
 
-### Phase 5 — Governance, Dataset Lifecycle, and Delivery (Next)
+### Phase 5 — Governance, Dataset Lifecycle, and Delivery (Complete)
 
 **Outcome:** Authors can attach governance to first-class tasks and move finished work into supported
 operational flows without an unexplained application switch.
@@ -398,7 +398,7 @@ operational flows without an unexplained application switch.
   its recipients and their permissions are — and where the row-level-security rule that refuses
   shared delivery of an identity-sensitive report already lives.
 
-### Phase 6 — Cross-Host Certification
+### Phase 6 — Cross-Host Certification (Next)
 
 **Outcome:** Desktop and Portal prove the same representative jobs, round-trip contracts, and
 performance limits before Studio is treated as the primary workbench.

@@ -1,7 +1,7 @@
 {
   "schema": "etlsql.report-payload-budget/1",
   "version": "0.19.0",
-  "blessedUtc": "2026-09-02T20:06:45.1339511Z",
+  "blessedUtc": "2026-09-03T08:44:05.1437996Z",
   "blessedOnBranch": "release/v0.19.0",
   "tolerancePct": 3,
   "toleranceFloorBytes": 2048,
@@ -19,12 +19,12 @@
   ],
   "sharedTotal": {
     "name": "shared-runtime-total",
-    "rawBytes": 2603979,
-    "gzipBytes": 623844
+    "rawBytes": 2717700,
+    "gzipBytes": 649599
   },
   "pageWeight": {
     "name": "page-weight:bar_with_goal_rule",
-    "rawBytes": 2619833,
-    "gzipBytes": 626970
+    "rawBytes": 2733554,
+    "gzipBytes": 652718
   }
 }
