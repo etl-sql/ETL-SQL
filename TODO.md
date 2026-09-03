@@ -433,6 +433,38 @@ performance limits before Studio is treated as the primary workbench.
   **"Run all" is a desktop affordance.** The Portal's interactive-run policy refuses presentation
   statements, because a report is executed by rendering it, so the journey runs the selection on both
   hosts — the step an author actually has mid-edit.
+- [x] **Clear the pre-existing browser-lane reds before certifying anything else**: The continuous
+  journey above passed while the lane it runs in did not, and a certification lane that ships
+  alongside known reds teaches everyone reading it to skim the result. The whole lane — 222 tests —
+  now passes in about four minutes; it previously could not finish at all.
+  **Two of the four did not fail, they hung**, for nine minutes each, which is why a full `Studio`
+  filter run looked wedged rather than failing — and why the last two reds below had never been
+  seen: nothing ever got past the hang to run them. Both hangs were the same cause.
+  `switchDoc` asks which kind of report an ambiguous `.rptsql` is, and awaits the answer; the two
+  tests pushed documents that declare no page mode, so the modal opened and the evaluate that
+  opened it waited for an answer it was never going to give. Both documents now declare their page
+  mode, which is what a real one does.
+  **One was a real product defect, and the assertion that found it was also wrong.**
+  `VisualMutations_...` compared the patched script against a raw string literal whose line endings
+  come from the checkout — `core.autocrlf` makes it CRLF on Windows and LF on CI — against a
+  CodeMirror buffer, which is LF by construction. That comparison asserts a property of the
+  developer's Git settings, so it is now made on normalised endings (the same call
+  `CatalogReport_SaveReloadAndConflict...` needed, for the same reason).
+  But the endings a *file* is written with are a real claim, and testing it found that Studio was
+  breaking it: a CRLF file opened and saved came back **entirely LF**, so the first save rewrote
+  every line of a file the author had changed one line of — a whole-file diff, in Studio's own Git
+  view, which is the thing the author would open next to see what they had changed. The ending
+  belongs to the file rather than to the editor, so it is now recorded when the document is opened
+  and put back when it is written, and `StudioLineEndingTests` asserts it on the bytes on disk for
+  both endings.
+  **Two more were stale tests the hangs had been hiding.** The rail panel starts collapsed on every
+  load, so the desktop journey was clicking an explorer button that was present but not visible;
+  and the home screen no longer offers one generic "report" card, because the dashboard/paginated
+  choice is now made up front — which is the same question `switchDoc` otherwise has to stop and
+  ask later.
+  **A lane note worth keeping**: a killed browser run leaves Chrome processes behind, and the next
+  run then fails every fixture-backed test in about a millisecond with "The server has not been
+  started". That is the leftovers, not a regression — kill stray `chrome.exe` and re-run.
 - [ ] **Close cross-platform Studio performance evidence**: Review the first green Linux and macOS
   artifacts alongside the Windows baseline for startup, post-GC heap, CodeMirror input-to-frame p95,
   250-row aggregation/render p95, and full-canvas redraw/layout p95. Do not publish the old ~1 ms or

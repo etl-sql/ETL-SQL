@@ -2007,6 +2007,7 @@ export async function createStudioWorkbench(container, opts = {}) {
 
         const newDoc = getActiveDoc();
         if (newDoc) {
+            rememberLineEnding(newDoc);
             await ensureReportWorkflow(newDoc);
             const context = documentContext(newDoc);
             homeStage.style.display = 'none';
@@ -4963,11 +4964,48 @@ export async function createStudioWorkbench(container, opts = {}) {
         return performSave(doc.content, doc.path);
     }
 
+    /**
+     * The line ending a document arrived with.
+     *
+     * CodeMirror normalises every document to a bare LF, so a file the author wrote with CRLF
+     * comes back out of the editor with none of its endings intact. Saving that text rewrote
+     * every line of the file on the first save - a whole-file diff, which is exactly what
+     * Studio's own Git view then had to show, and what a reviewer had to read past. The ending
+     * belongs to the file rather than to the editor, so it is recorded when the document is
+     * opened and put back when it is written.
+     *
+     * A mixed file is decided by whichever ending dominates, because it has to be written one
+     * way and the majority is the one that produces the smaller diff.
+     */
+    function documentLineEnding(text) {
+        const source = String(text || '');
+        const crlf = (source.match(/\r\n/g) || []).length;
+        if (crlf === 0) return '\n';
+        const total = (source.match(/\n/g) || []).length;
+        return crlf * 2 >= total ? '\r\n' : '\n';
+    }
+
+    /**
+     * Records a document's endings before the editor is allowed to normalise them away.
+     *
+     * Called from both places a document is first shown - the tab switch and the bootstrap that
+     * opens the file the host was launched on - because the second one does not go through the
+     * first, and it is the file the author is most likely to save.
+     */
+    function rememberLineEnding(doc) {
+        if (doc && !doc.lineEnding) doc.lineEnding = documentLineEnding(doc.content);
+    }
+
+    function withLineEnding(text, ending) {
+        const normalized = String(text || '').replace(/\r\n/g, '\n');
+        return ending === '\r\n' ? normalized.replace(/\n/g, '\r\n') : normalized;
+    }
+
     async function performSave(content, path) {
         const doc = getActiveDoc();
         try {
             const savedState = opts.onSave
-                ? await opts.onSave(content, path, doc)
+                ? await opts.onSave(withLineEnding(content, doc?.lineEnding || '\n'), path, doc)
                 : null;
             if (doc && savedState && typeof savedState === 'object') {
                 Object.assign(doc, savedState);
@@ -5260,6 +5298,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         renderStudioHome();
         setContextualRailVisibility();
     } else {
+        rememberLineEnding(getActiveDoc());
         await ensureReportWorkflow(getActiveDoc());
         setProjection(getActiveDoc()?.projection || 'split');
         renderVisualStage();

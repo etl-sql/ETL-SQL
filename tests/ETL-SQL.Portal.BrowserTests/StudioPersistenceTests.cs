@@ -188,7 +188,11 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
         Assert.False(await HasEditLeaseAsync(reportId));
 
         var createdName = $"Studio Created {Guid.NewGuid():N}";
-        await page.ClickAsync("[data-create-from-home='report']");
+        // The home screen no longer offers one generic "report": the choice of dashboard or
+        // paginated is made up front, which is the same question `switchDoc` otherwise has to stop
+        // and ask later. This picks the plain dashboard card rather than the sample-seeded one, so
+        // the report it creates is empty and the lease assertions below are about the lease.
+        await page.ClickAsync("[data-create-from-home='dashboard']:not([data-seed-sample])");
         await page.FillAsync("[data-catalog-report-name]", createdName);
         await page.SelectOptionAsync("[data-catalog-report-folder]", folderId.ToString());
         await page.ClickAsync("[data-catalog-create-confirm]");
@@ -232,7 +236,11 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
         await page.ReloadAsync();
         await WaitForStudioAsync(page);
         var reloaded = await page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()");
-        Assert.Equal(SavedScript, reloaded);
+        // Endings normalised: `reloaded` is the CodeMirror buffer, which is LF by construction, and
+        // `SavedScript` is a raw string literal whose endings come from the checkout. Comparing the
+        // raw bytes asserted a property of the developer's `core.autocrlf` setting. What the
+        // *file* is written with is asserted in <see cref="StudioLineEndingTests"/>.
+        Assert.Equal(NormalizeEndings(SavedScript), NormalizeEndings(reloaded));
 
         var current = await page.EvaluateAsync<JsonElement>(
             """
@@ -310,7 +318,13 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
                 return studio.switchDoc('secret-test');
             }
             """,
-            $"CREATE CONNECTION c AS MSSQL(PASSWORD = '{secret}');");
+            // The page mode is declared for the same reason as in SwitchingDocuments below: a
+            // `.rptsql` that does not say what kind of report it is makes `switchDoc` stop and ask,
+            // and an evaluate that never answers hangs instead of failing.
+            $"""
+            CREATE CONNECTION c AS MSSQL(PASSWORD = '{secret}');
+            CREATE PAGE [Main] AS DASHBOARD ( LAYOUT ( STRUCTURE = '.' ) );
+            """);
 
         await page.ClickAsync("[data-action='save']");
         await Expect(page.Locator("[data-encrypt-passphrase]")).ToBeVisibleAsync();
@@ -342,13 +356,18 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
         await page.GotoAsync("/studio.html");
         await WaitForStudioAsync(page);
 
+        // Each document declares its page mode. An empty `.rptsql` does not say which kind of report
+        // it is, so switching to one asks — and `switchDoc` awaits that answer, which no automated
+        // caller gives. The test then hung rather than failing, for nine minutes, over a question
+        // that has nothing to do with what it is checking.
         var restored = await page.EvaluateAsync<JsonElement>(
             """
             async () => {
                 const studio = window.__STUDIO__;
+                const declared = name => `CREATE PAGE [${name}] AS DASHBOARD ( LAYOUT ( STRUCTURE = '.' ) );`;
                 studio.state.documents.push(
-                    { id: 'context-a', path: 'context-a.rptsql', name: 'context-a.rptsql', content: '', isDirty: false, projection: 'code' },
-                    { id: 'context-b', path: 'context-b.rptsql', name: 'context-b.rptsql', content: '', isDirty: false, projection: 'code' });
+                    { id: 'context-a', path: 'context-a.rptsql', name: 'context-a.rptsql', content: declared('A'), isDirty: false, projection: 'code' },
+                    { id: 'context-b', path: 'context-b.rptsql', name: 'context-b.rptsql', content: declared('B'), isDirty: false, projection: 'code' });
 
                 await studio.switchDoc('context-a');
                 const first = studio.state.documents.find(doc => doc.id === 'context-a').studioContext;
@@ -477,7 +496,15 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
         var filtered = result.GetProperty("filtered").GetString()!;
         Assert.All(result.GetProperty("operations").EnumerateObject(), operation =>
             Assert.NotEqual(JsonValueKind.Null, operation.Value.ValueKind));
-        Assert.Contains(protectedSql, patched, StringComparison.Ordinal);
+        // Compared with the line endings normalised on both sides. The claim is that the
+        // hand-authored preparation survives the patcher character for character; which endings it
+        // has is decided by the checkout — `core.autocrlf` gives this raw string CRLF on Windows and
+        // LF on CI — and by CodeMirror, which normalises every buffer it holds. Asserting the raw
+        // bytes here made the test pass on one platform and fail on the other while the product
+        // behaved identically on both. The endings a *file* is written with are a real claim and are
+        // asserted where they are actually decided, in
+        // <see cref="StudioLineEndingTests"/>.
+        Assert.Contains(NormalizeEndings(protectedSql), NormalizeEndings(patched), StringComparison.Ordinal);
         Assert.Contains("TITLE = 'Regional Sales'", patched, StringComparison.Ordinal);
         Assert.Contains("MAPPINGS (X = Region, Y = Revenue)", patched, StringComparison.Ordinal);
         Assert.DoesNotContain("SalesBar_copy", patched, StringComparison.Ordinal);
@@ -679,6 +706,10 @@ public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
         Assert.Null(parseError);
         Assert.Empty(session.PageErrors);
     }
+
+    /// <summary>Line endings belong to the checkout and to CodeMirror, not to the claim under test.</summary>
+    private static string NormalizeEndings(string text) =>
+        text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\r", "\n", StringComparison.Ordinal);
 
     private async Task<int> CreateWritableFolderAsync()
     {

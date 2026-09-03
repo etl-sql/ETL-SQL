@@ -102,6 +102,10 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
         Assert.False(File.Exists(firstFile));
         Assert.True(File.Exists(renamedFile));
 
+        // The rail panel starts collapsed on every load, so the explorer has to be opened before
+        // anything in it can be clicked. The reload above reset it, and the test used to click
+        // straight through into a button that was present but not visible.
+        await firstPage.Locator("[data-activity='explorer']").ClickAsync();
         await firstPage.Locator("[data-explorer-new-folder='']").ClickAsync();
         await firstPage.Locator(".etlsql-feedback-field input").FillAsync("archive");
         await firstPage.Locator(".etlsql-feedback-btn-primary").ClickAsync();
@@ -154,7 +158,10 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
         await exitConfirmation.GetByRole(AriaRole.Button, new() { Name = "Exit Without Saving" }).ClickAsync();
         await firstStopping.WaitAsync(TimeSpan.FromSeconds(10));
         await firstHost.StopAsync();
-        var stoppedPage = firstPage.GetByRole(AriaRole.Status);
+        // The shutdown surface, not any live region: it replaces the whole body, while the success
+        // toasts from the workspace operations above are also role="status" and are still on screen
+        // until it does. Matching the role alone resolved to six elements and failed strict mode.
+        var stoppedPage = firstPage.Locator("main[role='status']");
         await stoppedPage.WaitForAsync(new() { Timeout = 10_000 });
         Assert.Contains("project host exited cleanly", await stoppedPage.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
 
@@ -191,7 +198,7 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
         await stopping.WaitAsync(TimeSpan.FromSeconds(10));
         await host.StopAsync();
 
-        var stoppedPage = page.GetByRole(AriaRole.Status);
+        var stoppedPage = page.Locator("main[role='status']");
         await stoppedPage.WaitForAsync(new() { Timeout = 10_000 });
         Assert.Contains("project host exited cleanly", await stoppedPage.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
         Assert.Empty(session.PageErrors);

@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- A file saved from Studio keeps the line endings it was written with. CodeMirror normalises every
+  buffer it holds to a bare LF, which is the editor's business right up until the buffer is written
+  back: a CRLF file opened in Studio and saved came back entirely LF, so the first save rewrote every
+  line of a file the author had changed one line of. The diff that produces is the whole file — in
+  Studio's own Git view, which is where the author would look next to check what they had changed.
+  The ending belongs to the file rather than to the editor, so it is now recorded when the document
+  is opened and put back when it is written.
+
 - Dragging a visual onto the Studio canvas works. It looked like it already did: the palette card
   was draggable, the canvas took the drop, and the card appeared — but the visual it created had no
   source, a visual without a `SOURCE` clause is not ETL-SQL, and the patcher refuses to write a
