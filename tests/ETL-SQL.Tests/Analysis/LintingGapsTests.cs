@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -93,6 +93,58 @@ CREATE VISUAL ShareChart AS PIE (
             Assert.Equal(2, results.Count);
             Assert.Contains(results, r => r.Message.Contains("'LABEL'"));
             Assert.Contains(results, r => r.Message.Contains("'VALUE'"));
+        }
+
+        [Fact]
+        public async Task TestVisualMappingCompletenessRule_WaterfallXY_Accepted()
+        {
+            var linter = new Linter();
+            linter.AddRule(new VisualMappingCompletenessRule());
+
+            var sql = @"
+CREATE VISUAL WF AS WATERFALL (
+    SOURCE = #data,
+    MAPPINGS (X = Period, Y = Delta)
+);";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task TestVisualMappingCompletenessRule_WaterfallNameValue_AlsoAccepted()
+        {
+            var linter = new Linter();
+            linter.AddRule(new VisualMappingCompletenessRule());
+
+            var sql = @"
+CREATE VISUAL WF AS WATERFALL (
+    SOURCE = #data,
+    MAPPINGS (NAME = Period, VALUE = Delta)
+);";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task TestVisualMappingCompletenessRule_WaterfallMissingBothMappings_IsError()
+        {
+            var linter = new Linter();
+            linter.AddRule(new VisualMappingCompletenessRule());
+
+            var sql = @"
+CREATE VISUAL WF AS WATERFALL (
+    SOURCE = #data
+);";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.Equal(2, results.Count);
+            Assert.Contains(results, r => r.Message.Contains("X / NAME"));
+            Assert.Contains(results, r => r.Message.Contains("Y / VALUE"));
         }
 
         [Fact]

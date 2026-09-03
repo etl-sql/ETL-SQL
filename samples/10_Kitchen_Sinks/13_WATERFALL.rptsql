@@ -1,55 +1,194 @@
 -- Kitchen Sink: WATERFALL Visual
--- This script demonstrates the WATERFALL visual type for cumulative changes and financial bridge charts.
+-- Demonstrates all features of the WATERFALL visual type.
 
 SET REPORT TITLE = 'Kitchen Sink: WATERFALL Visual';
-SET REPORT DESCRIPTION = 'Demonstration of WATERFALL cumulative change visualization, financial bridge charts, and custom delta colors.';
+SET REPORT DESCRIPTION = 'Comprehensive demonstration of WATERFALL cumulative-change visualization: basic, connector controls, TOTAL/SUBTOTAL flags, horizontal orientation, and custom color palettes.';
 
--- 1. Mock Data Generation (Cash Flow Bridge)
-SELECT 'Opening Cash' AS Period, 1000 AS Delta INTO #cashflow
-UNION ALL SELECT 'Revenue Inflow', 600
-UNION ALL SELECT 'Refunds', -80
-UNION ALL SELECT 'Payroll', -450
-UNION ALL SELECT 'Marketing', -180
-UNION ALL SELECT 'Facilities', -120
-UNION ALL SELECT 'Net Closing', 770;
+-- ── 1. Simple cash-flow data (no TOTAL flag) ─────────────────────────────────
+SELECT 'Opening Cash'   AS Period, 1000 AS Delta INTO #cashflow
+UNION ALL SELECT 'Revenue Inflow',  600
+UNION ALL SELECT 'Refunds',         -80
+UNION ALL SELECT 'Payroll',        -450
+UNION ALL SELECT 'Marketing',      -180
+UNION ALL SELECT 'Facilities',     -120
+UNION ALL SELECT 'Net Closing',     770;
 
--- 2. Mock Data Generation (Corporate P&L Bridge)
-SELECT 'Gross Revenue' AS LineItem, 5000 AS Amount INTO #pnl
-UNION ALL SELECT 'COGS', -1800
-UNION ALL SELECT 'Operating Exp', -1200
-UNION ALL SELECT 'R&D', -600
-UNION ALL SELECT 'Tax', -400
-UNION ALL SELECT 'Net Income', 1000;
+-- ── 2. P&L bridge with TOTAL flag column (boolean 0/1) ───────────────────────
+SELECT 'Revenue'     AS Line,  5000 AS Amt, 1 AS IsTotal INTO #pnl
+UNION ALL SELECT 'COGS',       -1800,            0
+UNION ALL SELECT 'Gross',          0,            0
+UNION ALL SELECT 'OpEx',       -1200,            0
+UNION ALL SELECT 'R&D',         -600,            0
+UNION ALL SELECT 'Tax',         -400,            0
+UNION ALL SELECT 'Net Income',  1000,            1;
 
--- 3. Basic Waterfall
+-- ── 3. Bridge with separate SUBTOTAL role mapping ────────────────────────────
+SELECT 'Inflows'    AS Cat,  8000 AS Val, 0 AS IsTot, 1 AS IsSub INTO #subtotals
+UNION ALL SELECT 'Sales',    5000,            0,           0
+UNION ALL SELECT 'Licensing',2000,            0,           0
+UNION ALL SELECT 'Other',    1000,            0,           0
+UNION ALL SELECT 'Outflows',    0,            0,           1
+UNION ALL SELECT 'Wages',   -3000,            0,           0
+UNION ALL SELECT 'Rent',    -1500,            0,           0
+UNION ALL SELECT 'Net',      3500,            1,           0;
+
+-- ── 4. Bridge using 'SUBTOTAL' string inside the TOTAL column ────────────────
+SELECT 'Start'      AS Step, 10000 AS Chg, 'TOTAL'    AS Kind INTO #strflags
+UNION ALL SELECT 'Q1 Sales',   4000,            'NONE'
+UNION ALL SELECT 'Q1 Costs',  -2500,            'NONE'
+UNION ALL SELECT 'Q1 Net',        0,            'SUBTOTAL'
+UNION ALL SELECT 'Q2 Sales',   3500,            'NONE'
+UNION ALL SELECT 'Q2 Costs',  -2000,            'NONE'
+UNION ALL SELECT 'Q2 Net',        0,            'SUBTOTAL'
+UNION ALL SELECT 'Year Total',    0,            'TOTAL';
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- VISUAL 1 — Basic Waterfall (no TOTAL, default styling, NAME / VALUE mappings)
+-- ─────────────────────────────────────────────────────────────────────────────
 CREATE VISUAL BasicWaterfall AS WATERFALL (
     SOURCE = #cashflow,
-    TITLE = 'Cash Flow Waterfall Bridge',
-    MAPPINGS (X = Period, Y = Delta)
+    TITLE  = '1. Basic Waterfall — Cash Flow Bridge',
+    MAPPINGS (NAME = Period, VALUE = Delta)
 );
 
--- 4. Styled Waterfall (Custom Positive/Negative Colors & Axis Labels)
-CREATE VISUAL StyledWaterfall AS WATERFALL (
-    SOURCE = #pnl,
-    TITLE = 'Income Statement Waterfall (P&L Bridge)',
-    MAPPINGS (X = LineItem, Y = Amount),
+-- ─────────────────────────────────────────────────────────────────────────────
+-- VISUAL 2 — Connector Lines OFF (X / Y mappings)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL NoConnectors AS WATERFALL (
+    SOURCE = #cashflow,
+    TITLE  = '2. Connector Lines OFF',
+    MAPPINGS (X = Period, Y = Delta),
     OPTIONS (
-        COLORS (
-            positive = '#2e7d32',
-            negative = '#c62828',
-            total    = '#1565c0'
-        ),
-        Y_AXIS (LABEL = 'Amount ($ USD)')
+        CONNECTOR_LINES = OFF
     )
 );
 
--- Page Layout
+-- ─────────────────────────────────────────────────────────────────────────────
+-- VISUAL 3 — Custom Connector Style (NAME / VALUE mappings)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL StyledConnectors AS WATERFALL (
+    SOURCE = #cashflow,
+    TITLE  = '3. Custom Connector Color & Width',
+    MAPPINGS (NAME = Period, VALUE = Delta),
+    OPTIONS (
+        CONNECTOR_LINES      = ON,
+        CONNECTOR_LINE_COLOR = '#6366f1',
+        CONNECTOR_LINE_WIDTH = 2
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- VISUAL 4 — TOTAL Flag Column (boolean 0/1)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL TotalFlagWaterfall AS WATERFALL (
+    SOURCE   = #pnl,
+    TITLE    = '4. TOTAL Flag Column (boolean) — P&L Bridge',
+    MAPPINGS (X = Line, Y = Amt, TOTAL = IsTotal),
+    OPTIONS  (
+        COLOR_TOTAL = '#1565c0',
+        COLOR_UP    = '#2e7d32',
+        COLOR_DOWN  = '#c62828'
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- VISUAL 5 — Separate SUBTOTAL Role Mapping
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL SubtotalMapping AS WATERFALL (
+    SOURCE   = #subtotals,
+    TITLE    = '5. Dedicated SUBTOTAL Mapping',
+    MAPPINGS (X = Cat, Y = Val, TOTAL = IsTot, SUBTOTAL = IsSub),
+    OPTIONS  (
+        COLOR_TOTAL    = '#0d47a1',
+        COLOR_SUBTOTAL = '#546e7a',
+        COLOR_UP       = '#1b5e20',
+        COLOR_DOWN     = '#b71c1c'
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- VISUAL 6 — 'SUBTOTAL' String in TOTAL Column
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL StringFlagWaterfall AS WATERFALL (
+    SOURCE   = #strflags,
+    TITLE    = '6. SUBTOTAL String in TOTAL Column — Quarterly Bridge',
+    MAPPINGS (X = Step, Y = Chg, TOTAL = Kind),
+    OPTIONS  (
+        CONNECTOR_LINES  = ON,
+        COLOR_TOTAL      = '#1976d2',
+        COLOR_SUBTOTAL   = '#607d8b',
+        COLOR_UP         = '#388e3c',
+        COLOR_DOWN       = '#d32f2f'
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- VISUAL 7 — COLOR_INCREASE / COLOR_DECREASE aliases
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL ColorAliases AS WATERFALL (
+    SOURCE   = #pnl,
+    TITLE    = '7. COLOR_INCREASE / COLOR_DECREASE Aliases',
+    MAPPINGS (X = Line, Y = Amt, TOTAL = IsTotal),
+    OPTIONS  (
+        COLOR_TOTAL    = '#4a235a',
+        COLOR_SUBTOTAL = '#6d4c41',
+        COLOR_INCREASE = '#00695c',
+        COLOR_DECREASE = '#bf360c'
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- VISUAL 8 — ORIENTATION = HORIZONTAL
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL HorizontalWaterfall AS WATERFALL (
+    SOURCE   = #pnl,
+    TITLE    = '8. Horizontal Waterfall — ORIENTATION = HORIZONTAL',
+    MAPPINGS (X = Line, Y = Amt, TOTAL = IsTotal),
+    OPTIONS  (
+        ORIENTATION     = HORIZONTAL,
+        CONNECTOR_LINES = ON,
+        COLOR_TOTAL     = '#2980b9',
+        COLOR_UP        = '#27ae60',
+        COLOR_DOWN      = '#e74c3c'
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- VISUAL 9 — Horizontal + SUBTOTAL + Custom Connector
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL HorizontalSubtotal AS WATERFALL (
+    SOURCE   = #subtotals,
+    TITLE    = '9. Horizontal + SUBTOTAL Mapping + Styled Connectors',
+    MAPPINGS (X = Cat, Y = Val, TOTAL = IsTot, SUBTOTAL = IsSub),
+    OPTIONS  (
+        ORIENTATION          = HORIZONTAL,
+        CONNECTOR_LINES      = ON,
+        CONNECTOR_LINE_COLOR = '#94a3b8',
+        CONNECTOR_LINE_WIDTH = 1,
+        COLOR_TOTAL          = '#1e40af',
+        COLOR_SUBTOTAL       = '#475569',
+        COLOR_UP             = '#166534',
+        COLOR_DOWN           = '#991b1b'
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- PAGE & NAVIGATION
+-- ─────────────────────────────────────────────────────────────────────────────
 CREATE PAGE WaterfallKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A / B',
+    STRUCTURE = 'A B C / D E F / G G H / I I I',
     MAP (
         'A' = BasicWaterfall,
-        'B' = StyledWaterfall
+        'B' = NoConnectors,
+        'C' = StyledConnectors,
+        'D' = TotalFlagWaterfall,
+        'E' = SubtotalMapping,
+        'F' = StringFlagWaterfall,
+        'G' = ColorAliases,
+        'H' = HorizontalWaterfall,
+        'I' = HorizontalSubtotal
     )
 );
 
 CREATE NAVIGATION MainNav AS TAB (DEFAULT = WaterfallKitchenSink, PAGES (WaterfallKitchenSink));
+

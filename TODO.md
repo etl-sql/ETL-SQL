@@ -1371,3 +1371,209 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 - [ ] **Parallel coordinates chart**: ECharts `parallel` renders multiple numeric axes side by
   side with polylines connecting each observation's values across axes. Used for multivariate
   data exploration. No ETL-SQL equivalent. Evaluate as a new `PARALLEL` visual type.
+
+---
+
+## Kitchen Sink File Inventory
+
+The files in `samples/10_Kitchen_Sinks/` serve as regression tests when rendering changes are made.
+Each sink should exercise every supported option for its visual type. The table below tracks what is
+currently covered, what is missing from the file, and which TODO items (marked above) are the prerequisite
+before a gap can be added to the sink.
+
+The rule: **finish the feature first, then add it to the sink**. A `[ ]` gap with no prerequisite
+means the feature already exists in the engine and the sink just needs a new visual block.
+
+### 01_BAR.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `STACKED = 100PCT` | ✅ Axis Controls → 100% normalized stacking |
+| `LEGEND_TITLE`, `LEGEND_COLUMNS`, `LEGEND_ORIENTATION`, `LEGEND_REVERSE` | ✅ Legend Controls (all shipped) |
+| `LEGEND_POSITION = LEFT`, `LEGEND_POSITION = INSIDE` + `LEGEND_ANCHOR` | ✅ Legend Controls (shipped) |
+| `LEGEND_FONT_SIZE`, `LEGEND_FONT_COLOR`, `LEGEND_FONT_WEIGHT` | ✅ Legend Controls (shipped) |
+| `LEGEND = OFF` | ✅ Legend Controls (shipped) |
+| `GRID_LINES = ON/OFF`, `GRID_LINE_COLOR`, `GRID_LINE_DASH`, `GRID_LINE_WIDTH` | ✅ Gridline and Line Styling (shipped) |
+| `ZERO_LINE = ON/OFF`, `ZERO_LINE_COLOR`, `ZERO_LINE_DASH` | ✅ Gridline and Line Styling (shipped) |
+| `MINOR_GRID_LINES = ON/OFF` | ✅ Gridline and Line Styling (shipped) |
+| `BAND_SIZE = 0.5` | ✅ Bar and Area Layout (shipped) |
+| `SERIES_GAP = 0.0..1.0` | ✅ Bar and Area Layout (shipped) |
+| `AXIS_SORT = VALUE_ASC`, `ALPHA` | ✅ Axis Controls (shipped) |
+| `DATA_LABELS` with OUTSIDE / INSIDE_TOP / CENTER positions | ✅ Series and Data Labels |
+| `LABEL_BACKGROUND`, `LABEL_BORDER` on DATA_LABELS | ✅ Series and Data Labels (shipped) |
+| `RUNNING_TOTAL` overlay | ✅ Analytical Overlays (shipped) |
+| `PERCENT_OF_TOTAL` overlay | ✅ Analytical Overlays (shipped) |
+| `REFERENCE_LINE`, `REFERENCE_BAND` overlays | [ ] Analytical Overlays (pending) |
+| `BAR_MIN_HEIGHT = n` | [ ] Bar Minimum Height (pending) |
+| `FORMATTING (WHEN … THEN color)` conditional | ✅ already on BAR — just not in sink |
+| `PLOT_BACKGROUND`, `PLOT_BORDER` | [ ] Plot and Panel Styling (pending) |
+
+### 02_HBAR.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `STACKED = 100PCT` | ✅ shipped |
+| Full legend suite | ✅ shipped |
+| `AXIS_SORT` variants | ✅ shipped |
+| `BAND_SIZE`, `SERIES_GAP` | ✅ shipped |
+| `GRID_LINES`, `ZERO_LINE`, `MINOR_GRID_LINES` | ✅ shipped |
+| Remaining overlay types (AVERAGE, MOVING_AVG, LINEAR, POLYNOMIAL, RUNNING_TOTAL, PERCENT_OF_TOTAL) | ✅ shipped |
+| `COLORS` named palette | ✅ — just not exercised |
+| `DATA_LABELS` position variants | ✅ shipped |
+| `BAR_MIN_HEIGHT` | [ ] pending |
+
+### 03_LINE.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `LINE_WIDTH = n` | ✅ Marker and Line Geometry (shipped) |
+| `SYMBOL_SHAPE` (CIRCLE/SQUARE/TRIANGLE/DIAMOND) | ✅ Marker and Line Geometry (shipped) |
+| `SYMBOL_STROKE_COLOR`, `SYMBOL_STROKE_WIDTH` | ✅ Marker and Line Geometry (shipped) |
+| Full legend suite | ✅ shipped |
+| `GRID_LINES`, `ZERO_LINE`, `MINOR_GRID_LINES` | ✅ shipped |
+| `AXIS_SORT` | ✅ shipped |
+| `DATA_LABELS` | ✅ shipped |
+| `SERIES_LABELS = ON` (end-of-line labels) | ✅ Series and Data Labels (shipped) |
+| EXPONENTIAL, LOGARITHMIC, POWER overlay types | ✅ shipped (in overlays sink but not line sink) |
+| `RUNNING_TOTAL`, `PERCENT_OF_TOTAL` overlays | ✅ shipped |
+| `INTERPOLATION = STEP_BEFORE|STEP_AFTER` | [ ] Marker and Line Geometry (pending) |
+| `LINE_DASH = SOLID|DASHED|DOTTED` on series | [ ] Marker and Line Geometry (pending) |
+| `NULL_HANDLING = CONNECT|GAP|ZERO` | [ ] Missing Data / Gap Behavior (pending) |
+| `AREA = ON` + `AREA_BASELINE` | [ ] Area Fill (pending) |
+
+### 04_SCATTER.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `JITTER = ON/OFF`, `JITTER_WIDTH`, `JITTER_HEIGHT` | ✅ SCATTER / BUBBLE (shipped) |
+| `ERROR_LOW` / `ERROR_HIGH` mappings + `ERROR_BAR_STYLE` | ✅ Analytical Overlays (shipped) |
+| `SYMBOL_SHAPE`, `SYMBOL_STROKE_COLOR`, `SYMBOL_STROKE_WIDTH` | ✅ Marker and Line Geometry (shipped) |
+| `LOG = ON` / `Y_AXIS (SCALE = LOG)` | ✅ SCATTER / BUBBLE (shipped) |
+| `SIZE_RANGE (min, max)`, `MIN_BUBBLE_SIZE`, `MAX_BUBBLE_SIZE` | ✅ SCATTER / BUBBLE (shipped) |
+| Full legend suite | ✅ shipped |
+| `GRID_LINES`, `ZERO_LINE` | ✅ shipped |
+| EXPONENTIAL, LOGARITHMIC, POWER overlays | ✅ shipped |
+| `OVERLAYS` clause (currently uses `SHOW_REGRESSION`) | [ ] Cross-Cutting (pending: OVERLAYS on SCATTER) |
+| `FORMATTING (WHEN … THEN color)` | [ ] Cross-Cutting (pending) |
+| `SYMBOL_SIZE = n` | [ ] Named Chart Marks (pending) |
+
+### 05_PIE.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `SORT = VALUE_DESC / VALUE_ASC / ALPHA / SOURCE` | ✅ PIE / DONUT (shipped) |
+| `MIN_SLICE_PCT = n` + `OTHER_LABEL = 'Other'` | ✅ PIE / DONUT (shipped) |
+| `EXPLODE = 'SliceName'` | ✅ PIE / DONUT (shipped) |
+| `EXPLODE_ALL = ON` + `EXPLODE_DISTANCE = 0.1` | ✅ PIE / DONUT (shipped) |
+| `START_ANGLE = 90` | ✅ PIE / DONUT (shipped) |
+| `SLICE_BORDER_COLOR`, `SLICE_BORDER_WIDTH` | ✅ PIE / DONUT (shipped) |
+| Full legend suite (TITLE, COLUMNS, INSIDE anchor) | ✅ shipped |
+| `DATA_LABELS` with position / leader line | ✅ shipped / [ ] LEADER_LINE pending |
+
+### 06_DONUT.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| Same PIE-specific options (all shipped) | ✅ |
+| Full legend suite | ✅ shipped |
+| `LEGEND_POSITION = INSIDE` + anchor | ✅ shipped |
+
+### 07_COMBO.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `Y2_AXIS` dual-axis series | ✅ (already in COMBO) — sink needs a second visual with it |
+| `LINE_WIDTH` on LINE series in COMBO | ✅ Marker and Line Geometry (shipped) |
+| Full legend suite | ✅ shipped |
+| `GRID_LINES`, `ZERO_LINE` | ✅ shipped |
+| Overlays on COMBO | ✅ (overlays work on COMBO) |
+| `DATA_LABELS` | ✅ shipped |
+| `STACKED` bars in combo | ✅ shipped |
+| `SYNC_AXES = ON` | [ ] Dual-Axis (pending) |
+| `Y_MARK = BAR|LINE|AREA` per axis | [ ] Named Chart Marks (pending) |
+
+### 09_BOXPLOT.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `ORIENTATION = HORIZONTAL` | ✅ (ORIENTATION exists for BOXPLOT) — sink missing it |
+| Multi-series (SERIES mapping) | ✅ — sink just needs an example |
+| Full `COLORS` palette (multi-category) | ✅ — sink needs more categories |
+| Full legend suite | ✅ shipped |
+| `GRID_LINES`, `ZERO_LINE` | ✅ shipped |
+| `BAND_SIZE` | ✅ shipped |
+| `NOTCHED = ON` | [ ] BOXPLOT (pending) |
+| `SHOW_MEAN = ON` | [ ] BOXPLOT (pending) |
+
+### 11_HEATMAP.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| Diverging 3-color: `COLOR_LOW`, `COLOR_MID`, `COLOR_HIGH` + `MIDPOINT` | ✅ HEATMAP (shipped) |
+| `NULL_COLOR = '#rrggbb'` | ✅ HEATMAP (shipped) |
+| `CELL_BORDER = ON/OFF`, `CELL_BORDER_COLOR`, `CELL_BORDER_WIDTH` | ✅ HEATMAP (shipped) |
+| `X_SORT`, `Y_SORT` | ✅ HEATMAP (shipped) |
+| Full legend suite | ✅ shipped |
+
+### 12_FUNNEL.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `ORIENTATION = HORIZONTAL` | ✅ (exists) — sink missing it |
+| `SORT = SOURCE|VALUE_ASC|VALUE_DESC` | [ ] FUNNEL (pending) |
+| `PERCENT_MODE = STEP|TOTAL` | [ ] FUNNEL (pending) |
+| `FUNNEL_SHAPE = FUNNEL|PYRAMID` | [ ] FUNNEL (pending) |
+| Full legend suite | ✅ shipped |
+
+### 13_WATERFALL.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `TOTAL = is_total_column` (boolean flag mapping) | ✅ WATERFALL (shipped) |
+| `SUBTOTAL` role mapping | ✅ WATERFALL (shipped) |
+| `"SUBTOTAL"` string in TOTAL column | ✅ WATERFALL (shipped) |
+| `CONNECTOR_LINES = ON/OFF`, `CONNECTOR_LINE_COLOR`, `CONNECTOR_LINE_WIDTH` | ✅ WATERFALL (shipped) |
+| `COLOR_TOTAL`, `COLOR_SUBTOTAL`, `COLOR_UP`, `COLOR_DOWN` | ✅ WATERFALL (shipped) |
+| `ORIENTATION = HORIZONTAL` | ✅ WATERFALL (shipped) |
+| `BAR_MIN_HEIGHT` | [ ] Bar Minimum Height (pending) |
+
+### 31_OVERLAYS_ADVANCED.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `RUNNING_TOTAL` overlay | ✅ Analytical Overlays (shipped) |
+| `PERCENT_OF_TOTAL` overlay | ✅ Analytical Overlays (shipped) |
+| `REFERENCE_LINE (VALUE = n, LABEL = '...', STYLE = DASHED)` | [ ] Analytical Overlays (pending) |
+| `REFERENCE_BAND (LOW = n, HIGH = n, COLOR, LABEL)` | [ ] Analytical Overlays (pending) |
+| `FORECAST` overlay | [ ] Analytical Overlays (pending) |
+
+### 32_BUBBLE.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `MIN_BUBBLE_SIZE`, `MAX_BUBBLE_SIZE` | ✅ SCATTER / BUBBLE (shipped) |
+| `SIZE_RANGE (min, max)` | ✅ SCATTER / BUBBLE (shipped) |
+| `LOG = ON` (log scale) | ✅ SCATTER / BUBBLE (shipped) |
+| Full legend suite | ✅ shipped |
+| `GRID_LINES`, `ZERO_LINE` | ✅ shipped |
+| `SYMBOL_SIZE = n` | [ ] Named Chart Marks (pending) |
+
+### Priority Order for Sink Updates
+
+All items below are **already shipped** — no new feature work needed before updating the sink file.
+Work through them in this order:
+
+1. **13_WATERFALL.rptsql** — Full rewrite needed: TOTAL flag, SUBTOTAL mapping, SUBTOTAL string, connector lines, horizontal orientation, new color tokens.
+2. **11_HEATMAP.rptsql** — Add diverging colors, NULL_COLOR, CELL_BORDER, X_SORT/Y_SORT visuals.
+3. **05_PIE.rptsql** — Add SORT, MIN_SLICE_PCT, EXPLODE variants, START_ANGLE, SLICE_BORDER visuals.
+4. **06_DONUT.rptsql** — Same pie-specific additions.
+5. **04_SCATTER.rptsql** — Add JITTER, ERROR bars, SIZE_RANGE, SYMBOL options.
+6. **32_BUBBLE.rptsql** — Add MIN/MAX_BUBBLE_SIZE, SIZE_RANGE, LOG scale.
+7. **09_BOXPLOT.rptsql** — Add ORIENTATION=HORIZONTAL, multi-series.
+8. **03_LINE.rptsql** — Add LINE_WIDTH, SYMBOL options, EXPONENTIAL/LOG/POWER overlays, RUNNING_TOTAL, PERCENT_OF_TOTAL.
+9. **07_COMBO.rptsql** — Add Y2_AXIS example, LINE_WIDTH, overlays, STACKED bars.
+10. **01_BAR.rptsql** — Add STACKED=100PCT, full legend suite, GRID_LINES, ZERO_LINE.
+11. **02_HBAR.rptsql** — Same axis/legend additions as BAR.
+12. **31_OVERLAYS_ADVANCED.rptsql** — Add RUNNING_TOTAL, PERCENT_OF_TOTAL.
+13. **12_FUNNEL.rptsql** — Add ORIENTATION=HORIZONTAL (and pending SORT/PERCENT_MODE/PYRAMID when implemented).
+

@@ -21,19 +21,38 @@ public class VisualMappingCompletenessRule : ILintRule
         {
             if (stmt is not CreateVisualStatement visual) continue;
 
-            var requiredRoles = GetRequiredRoles(visual);
-            if (requiredRoles == null || requiredRoles.Count == 0) continue;
-
             var presentRoles = new HashSet<string>(visual.Mappings.Select(m => m.Role.ToUpperInvariant()));
-            foreach (var role in requiredRoles)
+
+            // Exact required roles — must match verbatim.
+            var requiredRoles = GetRequiredRoles(visual);
+            if (requiredRoles != null)
             {
-                if (!presentRoles.Contains(role.ToUpperInvariant()))
+                foreach (var role in requiredRoles)
+                {
+                    if (!presentRoles.Contains(role.ToUpperInvariant()))
+                    {
+                        results.Add(new LintResult
+                        {
+                            RuleName = Name,
+                            Severity = LintSeverity.Error,
+                            Message = $"Visual '{visual.Name}' of type {visual.VisualType} is missing the required mapping role: '{role}'.",
+                            LineNumber = visual.Line,
+                            ColumnNumber = visual.Column
+                        });
+                    }
+                }
+            }
+
+            // Alias-group checks: any one alias in the group satisfies the requirement.
+            foreach (var (group, label) in GetAliasGroups(visual.VisualType))
+            {
+                if (!group.Any(alias => presentRoles.Contains(alias)))
                 {
                     results.Add(new LintResult
                     {
                         RuleName = Name,
                         Severity = LintSeverity.Error,
-                        Message = $"Visual '{visual.Name}' of type {visual.VisualType} is missing the required mapping role: '{role}'.",
+                        Message = $"Visual '{visual.Name}' of type {visual.VisualType} is missing the required mapping role: '{label}' (accepted: {string.Join(", ", group)}).",
                         LineNumber = visual.Line,
                         ColumnNumber = visual.Column
                     });
@@ -44,6 +63,10 @@ public class VisualMappingCompletenessRule : ILintRule
         return Task.FromResult<IEnumerable<LintResult>>(results);
     }
 
+    /// <summary>
+    /// Returns unconditionally required single-spelling roles. Use <see cref="GetAliasGroups"/>
+    /// for roles where multiple spellings are accepted.
+    /// </summary>
     private static List<string>? GetRequiredRoles(CreateVisualStatement visual)
     {
         return visual.VisualType switch
@@ -51,7 +74,8 @@ public class VisualMappingCompletenessRule : ILintRule
             VisualType.Bar => new List<string> { "X", "Y" },
             VisualType.Line => new List<string> { "X", "Y" },
             VisualType.HorizontalBar => new List<string> { "X", "Y" },
-            VisualType.Waterfall => new List<string> { "X", "Y" },
+            // Waterfall: NAME|X and VALUE|Y are aliases — handled in GetAliasGroups.
+            VisualType.Waterfall => null,
             VisualType.Scatter => new List<string> { "X", "Y" },
             VisualType.HeatMap => new List<string> { "X", "Y", "VALUE" },
             VisualType.Pie => new List<string> { "LABEL", "VALUE" },
@@ -68,6 +92,24 @@ public class VisualMappingCompletenessRule : ILintRule
             VisualType.Map => GetMapRequiredRoles(visual),
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Returns alias groups for visual types where multiple role spellings map to the same
+    /// semantic channel. Each entry is (set-of-accepted-aliases, display-label-for-errors).
+    /// </summary>
+    private static List<(HashSet<string> Group, string Label)> GetAliasGroups(VisualType type)
+    {
+        if (type == VisualType.Waterfall)
+        {
+            return
+            [
+                (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "X", "NAME" },  "X / NAME"),
+                (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Y", "VALUE" }, "Y / VALUE"),
+            ];
+        }
+
+        return [];
     }
 
     private static List<string> GetMapRequiredRoles(CreateVisualStatement visual)
