@@ -398,7 +398,7 @@ operational flows without an unexplained application switch.
   its recipients and their permissions are — and where the row-level-security rule that refuses
   shared delivery of an identity-sensitive report already lives.
 
-### Phase 6 — Cross-Host Certification (Next)
+### Phase 6 — Cross-Host Certification (Complete)
 
 **Outcome:** Desktop and Portal prove the same representative jobs, round-trip contracts, and
 performance limits before Studio is treated as the primary workbench.
