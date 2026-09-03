@@ -375,9 +375,28 @@ operational flows without an unexplained application switch.
   and not authored**, and **per-principal sharing stays in the catalog**, which has its own
   permission model; the panel links to it with the dataset named rather than growing a second door
   with a weaker gate. On the desktop host there is no registry and the panel says so.
-- [ ] **Define scheduling and delivery handoff**: Decide whether Studio hosts schedules and
-  subscriptions or opens the Orchestrator at the exact created artifact. Cover the path from a
-  successful run to a recurring job and report delivery.
+- [x] **Define scheduling and delivery handoff**: **Decided: Studio does not host schedules or
+  subscriptions.** A schedule lives in the Orchestrator's catalog and a subscription in the Portal's,
+  each with a permission model, a history, and an operator who owns it; a workbench that listed and
+  edited them would be a second door onto both, with a weaker gate and no history — the same mistake
+  as previewing as a named user on an unsaved draft, or duplicating dataset sharing. What Studio does
+  instead is the one thing only it can: write the statements that make **this** document recurring,
+  into the file the author is looking at — `CREATE SCHEDULE`, `CREATE JOB … FOR SCRIPT|REPORT
+  '<path>'`, `ALTER JOB … ADD SCHEDULE` — and then open the Orchestrator at the job it just named.
+  **The statements are the artifact**: the recurrence is reviewable, diffable, and deployable with
+  everything else, where a button that registered a job directly would leave the fact of its
+  existence nowhere in the repository. A `.rptsql` is scheduled as a report and a `.etlsql` as a
+  script, from the document's own path. **An unsaved document is refused, with the reason** — a job
+  names a path on a server, so scheduling a buffer produces a job that fails on its first tick with a
+  missing file, hours later, to somebody else. Two jobs on one cadence **reuse the schedule that
+  names it** rather than declaring a second, or changing the cadence later becomes a search. The
+  Orchestrator page now accepts `?job=<name>` and opens that job's detail once its list has loaded,
+  so the handoff lands on the artifact rather than on a list of every job in the workspace; a name
+  that matches nothing leaves the list alone, because the job may not have been run into existence
+  yet. On a host with no orchestrator the panel says the statements are what register the job rather
+  than offering a link that goes nowhere. **Delivery stays a subscription on the report**, kept where
+  its recipients and their permissions are — and where the row-level-security rule that refuses
+  shared delivery of an identity-sensitive report already lives.
 
 ### Phase 6 — Cross-Host Certification
 

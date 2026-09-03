@@ -342,6 +342,48 @@ public sealed class StudioGovernanceTests(PortalBrowserFixture fixture)
             }
             """);
 
+    [Fact]
+    public async Task ScheduleHandoff_WritesTheStatements_AndRefusesAnUnsavedDocument()
+    {
+        using var workspace = new TempWorkspace();
+        var file = Path.Combine(workspace.Root, "sales.etlsql");
+        await File.WriteAllTextAsync(file, InitialScript);
+
+        await using var host = WorkstationEditorApp.Create([], Options(workspace.Root, file, "gov-schedule-token"));
+        await host.StartAsync();
+
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync(StudioUrl(host, "gov-schedule-token"));
+        await WaitForStudioAsync(session);
+
+        await page.Locator("[data-activity='governance']").ClickAsync();
+        await page.Locator("[data-gov-schedule]").WaitForAsync(new() { Timeout = 15_000 });
+
+        await page.Locator("[data-gov-schedule-job]").FillAsync("SalesRefresh");
+        await page.Locator("[data-gov-schedule-when]").SelectOptionAsync("cron:0 2 * * *");
+        await page.Locator("[data-gov-schedule-apply]").ClickAsync();
+
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO__.state.editorInstance.getValue().includes('ALTER JOB SalesRefresh ADD SCHEDULE')",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 15_000 });
+
+        var script = await page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()");
+        Assert.Contains("CREATE SCHEDULE Nightly ON '0 2 * * *'", script, StringComparison.Ordinal);
+        Assert.Contains("CREATE JOB SalesRefresh FOR SCRIPT", script, StringComparison.Ordinal);
+        // The job names the saved path, not the buffer.
+        Assert.Contains("sales.etlsql", script, StringComparison.Ordinal);
+
+        // The declared job is listed with somewhere to go and operate it. This host runs no
+        // orchestrator, so it says the statements are what registers the job instead of linking
+        // somewhere that is not there.
+        var listed = await page.Locator("[data-gov-schedule] .etlsql-studio-gov-tag").First.InnerTextAsync();
+        Assert.Contains("SalesRefresh", listed, StringComparison.Ordinal);
+        Assert.Empty(await page.Locator("[data-gov-job-link]").AllAsync());
+        Assert.Empty(session.PageErrors);
+    }
+
     private static WorkstationEditorOptions Options(string root, string file, string token) =>
         new(root, file, 0, false, token, StudioMode: true, InstanceId: Guid.NewGuid().ToString("D"));
 

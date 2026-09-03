@@ -26,7 +26,34 @@ public sealed record GovernanceResponsePayload(
     string? StewardQueueUrl,
     IReadOnlyList<GovernanceDatasetPayload> Datasets,
     IReadOnlyList<string> AccessLevels,
-    string? DatasetRegistryUrl);
+    string? DatasetRegistryUrl,
+    GovernanceSchedulePayload Schedule);
+
+/// <param name="CanSchedule">False for an unsaved document; <paramref name="Reason"/> says why.</param>
+/// <param name="OrchestratorUrl">
+/// Where the created job is operated, with the job named in the link. Null on a host with no
+/// orchestrator, where the panel says so rather than offering a link that goes nowhere.
+/// </param>
+public sealed record GovernanceSchedulePayload(
+    bool CanSchedule,
+    string? Reason,
+    string? Target,
+    string? TargetKind,
+    IReadOnlyList<GovernanceScheduleCadencePayload> Cadences,
+    IReadOnlyList<GovernanceDeclaredSchedulePayload> Schedules,
+    IReadOnlyList<GovernanceScheduledJobPayload> Jobs,
+    string? OrchestratorUrl);
+
+public sealed record GovernanceScheduleCadencePayload(string Label, string Cron);
+
+public sealed record GovernanceDeclaredSchedulePayload(string Name, string Cron, string? TimeZone, int Line);
+
+public sealed record GovernanceScheduledJobPayload(
+    string Job,
+    string Target,
+    string TargetKind,
+    IReadOnlyList<string> Schedules,
+    int Line);
 
 /// <param name="Encryption">
 /// none | machine | password | keyfile. Reported and never edited: a password or a key file is a
@@ -172,7 +199,9 @@ public static class DesignerGovernanceMapper
         ScriptQuality? quality = null,
         string? stewardQueueUrl = null,
         ScriptDatasetLifecycle? datasets = null,
-        string? datasetRegistryUrl = null) =>
+        string? datasetRegistryUrl = null,
+        ScriptScheduleHandoff? schedule = null,
+        string? orchestratorUrl = null) =>
         new(
             governance.Parsed,
             writeError ?? governance.Error,
@@ -238,5 +267,18 @@ public static class DesignerGovernanceMapper
             ScriptDatasetLifecycleService.AccessLevels,
             // Null on a host with no dataset registry. Per-principal sharing lives there, with its
             // own permission model; the panel links to it rather than growing a second door.
-            datasetRegistryUrl);
+            datasetRegistryUrl,
+            new GovernanceSchedulePayload(
+                schedule?.CanSchedule ?? false,
+                schedule?.Reason,
+                schedule?.SuggestedTarget,
+                schedule?.SuggestedTargetKind,
+                ScriptScheduleHandoffService.Cadences
+                    .Select(cadence => new GovernanceScheduleCadencePayload(cadence.Label, cadence.Cron))
+                    .ToArray(),
+                (schedule?.Schedules ?? []).Select(item => new GovernanceDeclaredSchedulePayload(
+                    item.Name, item.Cron, item.TimeZone, item.Line)).ToArray(),
+                (schedule?.Jobs ?? []).Select(job => new GovernanceScheduledJobPayload(
+                    job.Job, job.Target, job.TargetKind, job.Schedules, job.Line)).ToArray(),
+                orchestratorUrl));
 }

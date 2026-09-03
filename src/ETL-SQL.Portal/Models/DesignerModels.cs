@@ -432,4 +432,10 @@ public record GovernanceRequest(
     string? Path = null,
     string? Encryption = null,
     string? Secret = null,
-    string? Folder = null);
+    string? Folder = null,
+    string? DocumentUri = null,
+    string? Job = null,
+    string? Schedule = null,
+    string? Cron = null,
+    string? TimeZone = null,
+    string? ReuseSchedule = null);

@@ -3007,9 +3007,22 @@ document.getElementById('runJobSubmitBtn').addEventListener('click', async () =>
 });
 
 // ── Initial Start ─────────────────────────────────────────────────────────────
+//
+// `?job=<name>` opens that job's detail once the list has loaded. Studio writes a scheduled job into
+// a script and then sends the author here; landing on a list of every job in the workspace and
+// asking them to find the one they just made is the unexplained application switch this link exists
+// to avoid. A name that matches nothing simply leaves the list as it is — the job may not have been
+// run into existence yet, and an error about it would be wrong as often as it was right.
+async function openRequestedJob() {
+  const requested = new URLSearchParams(location.search).get('job');
+  if (!requested) return;
+  const job = (allJobs || []).find(item => jobValue(item, 'Name') === requested);
+  if (job) await openDetail(job);
+}
+
 poll();
 loadTriage();
-loadJobs();
+loadJobs().then(openRequestedJob);
 pollHandle = setInterval(poll, 5000);
 triageHandle = setInterval(loadTriage, 15000);
 

@@ -547,6 +547,7 @@ public static class WorkstationEditorApp
         var governance = new ETL_SQL.Analysis.Services.ScriptGovernanceService();
         var qualityRules = new ETL_SQL.Analysis.Services.ScriptQualityRuleService();
         var datasetLifecycle = new ETL_SQL.Analysis.Services.ScriptDatasetLifecycleService();
+        var scheduleHandoff = new ETL_SQL.Analysis.Services.ScriptScheduleHandoffService();
         var designerGen = new ETL_SQL.Reporting.Authoring.DesignerScriptGenerationService();
         var designerPatcher = new ETL_SQL.Reporting.Authoring.DesignerScriptPatcher(designerGen);
         var designerQueryFilters = new ETL_SQL.Reporting.Authoring.DesignerQueryFilterService();
@@ -795,6 +796,14 @@ public static class WorkstationEditorApp
                         (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
                         break;
                     }
+                case "schedule":
+                    {
+                        var edit = scheduleHandoff.Schedule(
+                            script, request.DocumentUri, request.Job ?? string.Empty,
+                            request.Schedule, request.Cron, request.TimeZone, request.ReuseSchedule);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
             }
 
             return Results.Json(
@@ -808,7 +817,11 @@ public static class WorkstationEditorApp
                     datasetLifecycle.Read(script),
                     // No dataset registry here either: a workstation's datasets are files on this
                     // machine, so there is nobody to share one with.
-                    datasetRegistryUrl: null),
+                    datasetRegistryUrl: null,
+                    scheduleHandoff.Read(script, request.DocumentUri),
+                    // This host runs no orchestrator, so the statements are written and the panel
+                    // says where a job is operated rather than linking somewhere that is not there.
+                    orchestratorUrl: null),
                 JsonOptions);
         });
 
@@ -1249,7 +1262,13 @@ public sealed record GovernanceAuthoringRequest(
     string? Path = null,
     string? Encryption = null,
     string? Secret = null,
-    string? Folder = null);
+    string? Folder = null,
+    string? DocumentUri = null,
+    string? Job = null,
+    string? Schedule = null,
+    string? Cron = null,
+    string? TimeZone = null,
+    string? ReuseSchedule = null);
 
 /// <summary>Which task to plan a run up to. Planning never executes anything.</summary>
 public sealed record PipelineRunPlanAuthoringRequest(string? Script, string? Id);

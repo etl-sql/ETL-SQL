@@ -49,6 +49,7 @@ public class DesignerController : ControllerBase
     private readonly ScriptGovernanceService _governance = new();
     private readonly ScriptQualityRuleService _qualityRules = new();
     private readonly ScriptDatasetLifecycleService _datasetLifecycle = new();
+    private readonly ScriptScheduleHandoffService _scheduleHandoff = new();
     private readonly PipelineRunPlanService _pipelineRunPlans = new();
     private readonly DesignerQueryFilterService _queryFilters = new();
     private readonly LanguageHoverService? _hoverService;
@@ -292,6 +293,14 @@ public class DesignerController : ControllerBase
                         (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
                         break;
                     }
+                case "schedule":
+                    {
+                        var edit = _scheduleHandoff.Schedule(
+                            script, req.DocumentUri, req.Job ?? string.Empty,
+                            req.Schedule, req.Cron, req.TimeZone, req.ReuseSchedule);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
             }
 
             return Ok(DesignerGovernanceMapper.Response(
@@ -302,7 +311,12 @@ public class DesignerController : ControllerBase
                 "/#governance/quarantine",
                 _datasetLifecycle.Read(script),
                 // Per-principal dataset sharing lives in the catalog, with its own permission model.
-                "/#datasets"));
+                "/#datasets",
+                _scheduleHandoff.Read(script, req.DocumentUri),
+                // Where the job is operated. Studio writes the statements that declare it; running,
+                // pausing, and reading its history are the Orchestrator's, and it is opened at the
+                // job by name rather than at a list of every job in the workspace.
+                "/orchestrator.html"));
         }
         finally
         {

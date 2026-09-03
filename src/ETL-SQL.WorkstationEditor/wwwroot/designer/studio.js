@@ -3865,7 +3865,13 @@ export async function createStudioWorkbench(container, opts = {}) {
 
         let governance = null;
         try {
-            governance = await designerApiJson(STUDIO_ROUTES.governance, { script: activeScriptText(), op: 'read' });
+            // The document path travels with every governance call: a schedule names a path on the
+            // server, and the panel has to be able to say so before an author asks for one.
+            governance = await designerApiJson(STUDIO_ROUTES.governance, {
+                script: activeScriptText(),
+                op: 'read',
+                documentUri: doc.path || null,
+            });
         } catch (error) {
             sidebarContent.innerHTML = `<div class="etlsql-studio-capability-state" role="alert"><strong>Governance could not be read</strong><p>${_escapeHtml(error?.message || String(error))}</p></div>`;
             return;
@@ -3903,6 +3909,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             ${selected ? governanceRulesMarkup(governance, selected) : ''}
             ${selected ? governanceRoutingMarkup(governance, selected) : ''}
             ${governanceDatasetsMarkup(governance)}
+            ${governanceScheduleMarkup(governance)}
             ${governanceSecurityMarkup(governance)}
             ${governanceFindingsMarkup(governance, selected)}`;
 
@@ -4089,6 +4096,7 @@ export async function createStudioWorkbench(container, opts = {}) {
 
         bindGovernanceQuality(scope);
         bindGovernanceDatasets();
+        bindGovernanceSchedule();
         bindGovernanceSecurity();
     }
 
@@ -4577,6 +4585,128 @@ export async function createStudioWorkbench(container, opts = {}) {
         state.governance = result;
         if (state.activeActivity === 'governance') paintGovernancePanel();
         return true;
+    }
+
+    // ── Scheduling and delivery handoff ──────────────────────────────────────
+    // Studio does not host schedules or subscriptions. Both live in catalogs that already have a
+    // permission model, a history, and an operator who owns them, and a workbench that listed and
+    // edited them would be a second door onto both with a weaker gate. What Studio does is the one
+    // thing only it can: write the statements that make *this* document recurring, into the file the
+    // author is looking at — and then open the Orchestrator at the job it just named.
+
+    function governanceScheduleMarkup(governance) {
+        const schedule = governance.schedule;
+        if (!schedule) return '';
+
+        const jobs = schedule.jobs || [];
+        const declared = schedule.schedules || [];
+        const suggestion = governanceSuggestedJobName(schedule);
+
+        return `
+            <section class="etlsql-studio-library-section" data-gov-schedule>
+                <div class="etlsql-studio-subhead"><div><strong>Run it on a schedule</strong><span>From a run that worked to a job that repeats</span></div></div>
+                ${jobs.length
+                    ? `<div class="etlsql-studio-gov-tags">${jobs.map(job => `<div class="etlsql-studio-gov-tag">
+                        <span class="etlsql-studio-gov-tag-name">${_escapeHtml(job.job)}</span>
+                        <span class="etlsql-studio-gov-tag-value">${_escapeHtml(governanceJobSummary(job, declared))}</span>
+                        ${schedule.orchestratorUrl
+                            ? `<a class="etlsql-studio-gov-origin" href="${_escapeHtml(schedule.orchestratorUrl)}?job=${encodeURIComponent(job.job)}" target="_blank" rel="noopener" data-gov-job-link>Operate it</a>`
+                            : '<span class="etlsql-studio-gov-origin">declared here</span>'}
+                    </div>`).join('')}</div>`
+                    : ''}
+                ${schedule.canSchedule
+                    ? `<div class="etlsql-studio-gov-add">
+                        <label class="etlsql-studio-field-label" for="gov-schedule-job">Job name</label>
+                        <input type="text" id="gov-schedule-job" data-gov-schedule-job value="${_escapeHtml(suggestion)}">
+                        <label class="etlsql-studio-field-label" for="gov-schedule-when">How often</label>
+                        <select id="gov-schedule-when" data-gov-schedule-when>
+                            ${declared.map(item => `<option value="reuse:${_escapeHtml(item.name)}">Reuse ${_escapeHtml(item.name)} — ${_escapeHtml(item.cron)}</option>`).join('')}
+                            ${(schedule.cadences || []).map(cadence => `<option value="cron:${_escapeHtml(cadence.cron)}">${_escapeHtml(cadence.label)}</option>`).join('')}
+                            <option value="cron:">Something else…</option>
+                        </select>
+                        <div data-gov-schedule-fields></div>
+                        <button type="button" class="etlsql-studio-btn is-primary" data-gov-schedule-apply>Write the schedule</button>
+                        <p class="etlsql-studio-outline-note">This writes CREATE SCHEDULE, CREATE JOB and ALTER JOB … ADD SCHEDULE into ${_escapeHtml(schedule.target || 'this script')}, so the recurrence is reviewable and deployable with everything else. ${schedule.orchestratorUrl
+                            ? 'Running, pausing and reading its history stay with the Orchestrator.'
+                            : 'This host runs no orchestrator; the statements register the job wherever the script is run.'}</p>
+                       </div>`
+                    : `<div class="etlsql-studio-empty-compact">${_escapeHtml(schedule.reason || 'This document cannot be scheduled yet.')}</div>`}
+                <p class="etlsql-studio-outline-note">Delivering the result to people — who gets it, in what format, on what cadence — is a subscription on the report itself, kept where its recipients and their permissions are.</p>
+            </section>`;
+    }
+
+    function governanceJobSummary(job, declared) {
+        const cadences = (job.schedules || [])
+            .map(name => declared.find(item => item.name === name))
+            .filter(Boolean)
+            .map(item => item.cron);
+        const when = cadences.length ? cadences.join(', ') : (job.schedules || []).join(', ') || 'no schedule attached';
+        return `${job.targetKind} ${job.target} · ${when}`;
+    }
+
+    /** A name derived from the file, because a job the author has to invent a name for is one they put off. */
+    function governanceSuggestedJobName(schedule) {
+        const base = String(schedule.target || 'job')
+            .split(/[\\/]/)
+            .pop()
+            .replace(/\.(etlsql|rptsql|sql)$/i, '')
+            .replace(/[^A-Za-z0-9_]/g, '_');
+        const name = /^[A-Za-z_]/.test(base) ? base : `job_${base}`;
+        return `${name}_scheduled`;
+    }
+
+    function bindGovernanceSchedule() {
+        const schedule = state.governance?.schedule;
+        if (!schedule) return;
+
+        const when = sidebarContent.querySelector('[data-gov-schedule-when]');
+        const fields = sidebarContent.querySelector('[data-gov-schedule-fields]');
+        const paintFields = () => {
+            if (!when || !fields) return;
+            const value = when.value || '';
+            if (value.startsWith('reuse:')) {
+                fields.innerHTML = '<p class="etlsql-studio-outline-note">Two jobs on the same cadence share the schedule that names it, so changing the cadence later is one edit rather than a search.</p>';
+                return;
+            }
+            const cron = value.slice('cron:'.length);
+            fields.innerHTML = `
+                <label class="etlsql-studio-field-label" for="gov-schedule-name">Schedule name</label>
+                <input type="text" id="gov-schedule-name" data-gov-schedule-name value="${_escapeHtml(governanceSuggestedScheduleName(cron))}">
+                <label class="etlsql-studio-field-label" for="gov-schedule-cron">Cadence (cron)</label>
+                <input type="text" id="gov-schedule-cron" data-gov-schedule-cron value="${_escapeHtml(cron)}" placeholder="0 2 * * *">
+                <label class="etlsql-studio-field-label" for="gov-schedule-zone">Time zone</label>
+                <input type="text" id="gov-schedule-zone" data-gov-schedule-zone placeholder="UTC — empty uses the server default">`;
+        };
+        when?.addEventListener('change', paintFields);
+        paintFields();
+
+        sidebarContent.querySelector('[data-gov-schedule-apply]')?.addEventListener('click', async () => {
+            const value = when?.value || '';
+            const reuse = value.startsWith('reuse:') ? value.slice('reuse:'.length) : null;
+            const result = await canonicalScriptMutation('Schedule this document', STUDIO_ROUTES.governance, {
+                op: 'schedule',
+                documentUri: getActiveDoc()?.path || null,
+                job: sidebarContent.querySelector('[data-gov-schedule-job]')?.value || '',
+                reuseSchedule: reuse,
+                schedule: reuse ? null : (sidebarContent.querySelector('[data-gov-schedule-name]')?.value || ''),
+                cron: reuse ? null : (sidebarContent.querySelector('[data-gov-schedule-cron]')?.value || ''),
+                timeZone: reuse ? null : (sidebarContent.querySelector('[data-gov-schedule-zone]')?.value || null),
+            });
+            if (!result) return;
+            state.governance = result;
+            if (state.activeActivity === 'governance') paintGovernancePanel();
+        });
+    }
+
+    function governanceSuggestedScheduleName(cron) {
+        const known = {
+            '0 * * * *': 'Hourly',
+            '0 2 * * *': 'Nightly',
+            '0 7 * * 1-5': 'Weekdays',
+            '0 6 * * 1': 'Weekly',
+            '0 3 1 * *': 'Monthly',
+        };
+        return known[cron] || 'OnSchedule';
     }
 
     function renderSidebarContent(activity) {
