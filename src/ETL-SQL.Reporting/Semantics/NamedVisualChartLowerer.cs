@@ -46,6 +46,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         ValidateScatterBubbleOptions(statement);
         ValidateHeatmapOptions(statement);
         ValidateWaterfallOptions(statement);
+        ValidateGanttOptions(statement);
         foreach (var opt in statement.Options) manifest.Options.TryAdd(opt.Key, opt.Value);
         if (statement.VisualType == VisualType.Scatter)
         {
@@ -319,7 +320,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 VisualType.BoxPlot => ImmutableArray.Create(new StyleToken("layout", "boxplot"), new StyleToken("preserveRows", "true")),
                 VisualType.Waterfall => ResolveWaterfallLayerStyle(statement, manifest),
                 VisualType.Candlestick => ImmutableArray.Create(new StyleToken("layout", "candlestick"), new StyleToken("preserveRows", "true")),
-                VisualType.Gantt => ImmutableArray.Create(new StyleToken("layout", "gantt"), new StyleToken("preserveRows", "true")),
+                VisualType.Gantt => ResolveGanttLayerStyle(statement, manifest),
                 VisualType.Radar => ImmutableArray.Create(new StyleToken("layout", "radar"), new StyleToken("preserveRows", "true")),
                 VisualType.Scatter when bindings.Any(b => b.Channel == FieldChannel.ErrorLow) && bindings.Any(b => b.Channel == FieldChannel.ErrorHigh) =>
                     ImmutableArray.Create(new StyleToken("errorBarStyle",
@@ -830,6 +831,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         "PROGRESS" when type == VisualType.Gantt => FieldChannel.Size,
         "MILESTONE" when type == VisualType.Gantt => FieldChannel.Shape,
         "DEPENDS_ON" when type == VisualType.Gantt => FieldChannel.Detail,
+        "GROUP" when type == VisualType.Gantt => FieldChannel.Row,
         "NAME" or "LABEL" or "CATEGORY" when type == VisualType.Funnel => FieldChannel.X,
         "VALUE" when type == VisualType.Funnel => FieldChannel.Y,
         "VALUE" when type == VisualType.Gauge => FieldChannel.Radius,
@@ -886,7 +888,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         VisualType.Candlestick
             => ["X", "OPEN", "HIGH", "LOW", "CLOSE", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.Gantt
-            => ["X", "START", "X2", "END", "Y", "LABEL", "PROGRESS", "MILESTONE", "DEPENDS_ON", "SERIES", "COLOR", "TOOLTIP"],
+            => ["X", "START", "X2", "END", "Y", "LABEL", "GROUP", "PROGRESS", "MILESTONE", "DEPENDS_ON", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.Trellis
             => ["X", "Y", "Y2", "FACET", "SERIES", "COLOR", "SIZE", "TOOLTIP"],
         VisualType.Radar
@@ -1412,6 +1414,57 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         var opt = statement.Options.FirstOrDefault(o => o.Key.Equals("ORIENTATION", StringComparison.OrdinalIgnoreCase))?.Value
             ?? manifest.Options.GetValueOrDefault("ORIENTATION");
         return string.Equals(opt, "HORIZONTAL", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static ImmutableArray<StyleToken> ResolveGanttLayerStyle(CreateVisualStatement statement, VisualManifest manifest)
+    {
+        var tokens = ImmutableArray.CreateBuilder<StyleToken>();
+        tokens.Add(new StyleToken("layout", "gantt"));
+        tokens.Add(new StyleToken("preserveRows", "true"));
+
+        void Forward(string key)
+        {
+            var val = statement.Options.FirstOrDefault(o => o.Key.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value
+                ?? manifest.Options.GetValueOrDefault(key);
+            if (!string.IsNullOrWhiteSpace(val)) tokens.Add(new StyleToken(key, val));
+        }
+
+        Forward("TODAY_LINE");
+        Forward("TODAY_COLOR");
+        Forward("TODAY_DATE");
+        Forward("LABEL_POSITION");
+
+        return tokens.ToImmutable();
+    }
+
+    private static void ValidateGanttOptions(CreateVisualStatement statement)
+    {
+        var isGantt = statement.VisualType == VisualType.Gantt;
+        foreach (var opt in statement.Options)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            if (key is "TODAY_LINE" or "TODAY_COLOR" or "TODAY_DATE")
+            {
+                if (!isGantt)
+                    throw new InvalidOperationException($"{key} option is supported only on GANTT visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            }
+
+            if (isGantt)
+            {
+                if (key == "TODAY_LINE")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0"))
+                        throw new InvalidOperationException($"Invalid TODAY_LINE '{opt.Value}'. Valid values are ON or OFF.");
+                }
+                else if (key == "LABEL_POSITION")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("LEFT" or "INSIDE" or "RIGHT" or "NONE"))
+                        throw new InvalidOperationException($"Invalid LABEL_POSITION '{opt.Value}'. Valid values are LEFT, INSIDE, RIGHT, or NONE.");
+                }
+            }
+        }
     }
 
     private static string Sanitize(string value) => new(value.Select(character => char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : '-').ToArray());

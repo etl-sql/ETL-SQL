@@ -654,5 +654,50 @@ END";
 
             Assert.Empty(results);
         }
+
+        [Fact]
+        public async Task TestVisualMappingCompletenessRule_GanttAliases_Accepted()
+        {
+            var rule = new VisualMappingCompletenessRule();
+            var sql = @"CREATE VISUAL MyGantt AS GANTT (
+                SOURCE = #t,
+                MAPPINGS (LABEL = Task, X = StartDate, X2 = EndDate)
+            );";
+            var script = Parse(sql);
+            var results = (await rule.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task TestVisualMappingCompletenessRule_GanttMissingRoles_IsError()
+        {
+            var rule = new VisualMappingCompletenessRule();
+            var sql = @"CREATE VISUAL MyGantt AS GANTT (
+                SOURCE = #t,
+                MAPPINGS (LABEL = Task, X = StartDate)
+            );";
+            var script = Parse(sql);
+            var results = (await rule.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+            Assert.Single(results);
+            Assert.Equal(LintSeverity.Error, results[0].Severity);
+            Assert.Contains("missing the required mapping role: 'END / X2'", results[0].Message);
+        }
+
+        [Fact]
+        public async Task TestVisualSourceRequiredRule_GanttMissingSource_IsError()
+        {
+            var rule = new VisualSourceRequiredRule();
+            var stmt = new CreateVisualStatement
+            {
+                Name = "MyGantt",
+                VisualType = VisualType.Gantt,
+                Source = new VisualSourceExpression()
+            };
+            var script = new Script { Statements = [stmt] };
+            var results = (await rule.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+            Assert.Single(results);
+            Assert.Equal(LintSeverity.Error, results[0].Severity);
+            Assert.Contains("requires a SOURCE clause", results[0].Message);
+        }
     }
 }

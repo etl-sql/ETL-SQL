@@ -76,6 +76,8 @@ public class VisualMappingCompletenessRule : ILintRule
             VisualType.HorizontalBar => new List<string> { "X", "Y" },
             // Waterfall: NAME|X and VALUE|Y are aliases — handled in GetAliasGroups.
             VisualType.Waterfall => null,
+            // Gantt: Y|LABEL, START|X, and END|X2 are aliases — handled in GetAliasGroups.
+            VisualType.Gantt => null,
             VisualType.Scatter => new List<string> { "X", "Y" },
             VisualType.HeatMap => new List<string> { "X", "Y", "VALUE" },
             VisualType.Pie => new List<string> { "LABEL", "VALUE" },
@@ -106,6 +108,16 @@ public class VisualMappingCompletenessRule : ILintRule
             [
                 (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "X", "NAME" },  "X / NAME"),
                 (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Y", "VALUE" }, "Y / VALUE"),
+            ];
+        }
+
+        if (type == VisualType.Gantt)
+        {
+            return
+            [
+                (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Y", "LABEL" },  "Y / LABEL"),
+                (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "START", "X" },  "START / X"),
+                (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "END", "X2" },   "END / X2"),
             ];
         }
 

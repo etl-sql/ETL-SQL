@@ -1015,20 +1015,20 @@ than record it.
 
 ### GANTT
 
-- [ ] **Milestone markers**: GANTT renders only bars (start → end spans). Tableau and Power BI Gantt
+- [x] **Milestone markers**: GANTT renders only bars (start → end spans). Tableau and Power BI Gantt
   extensions support single-point milestone markers (diamond or circle at a date with no duration).
   Add support for rows where `START = END` to render as a milestone symbol, or add an explicit
   `MILESTONE = column` mapping.
-- [ ] **Dependency arrows**: No way to draw dependency lines between tasks. This is advanced and
+- [x] **Dependency arrows**: No way to draw dependency lines between tasks. This is advanced and
   specific to project management tools, but it is the primary Gantt gap versus dedicated tools.
   Log as an evaluation item; do not commit to implementation scope yet.
-- [ ] **Today line / current-date marker**: No `TODAY_LINE = ON|OFF` option to draw a vertical
+- [x] **Today line / current-date marker**: No `TODAY_LINE = ON|OFF` option to draw a vertical
   reference line at the current date. Common in every Gantt implementation (Power BI, Tableau
   extensions, and dedicated PM tools). Add as a simple boolean with optional `TODAY_COLOR`.
-- [ ] **Row grouping / swim lanes**: No `GROUP` mapping on GANTT. Tasks that belong to the same
+- [x] **Row grouping / swim lanes**: No `GROUP` mapping on GANTT. Tasks that belong to the same
   group (e.g., a phase) cannot be visually separated into swim lanes. Add `GROUP = column` to draw
   a labeled section header row between groups.
-- [ ] **Bar label position**: No option to control whether the task label appears inside the bar,
+- [x] **Bar label position**: No option to control whether the task label appears inside the bar,
   to the left of the start, or to the right of the end. Add `LABEL_POSITION = INSIDE|LEFT|RIGHT|NONE`.
 
 ### CANDLESTICK
@@ -1873,6 +1873,18 @@ means the feature already exists in the engine and the sink just needs a new vis
 | Full legend suite | ✅ shipped |
 | `GRID_LINES`, `ZERO_LINE` | ✅ shipped |
 | `SYMBOL_SIZE = n` | [ ] Named Chart Marks (pending) |
+
+### 36_GANTT.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `PROGRESS` mapping (progress bar overlay) | ✅ GANTT (shipped) |
+| Milestone markers (`START = END` and `MILESTONE = column`) | ✅ GANTT (shipped) |
+| Dependency arrows (`DEPENDS_ON = column`) | ✅ GANTT (shipped) |
+| Today reference line (`TODAY_LINE = ON`, `TODAY_COLOR`, `TODAY_DATE`) | ✅ GANTT (shipped) |
+| Label placement (`LABEL_POSITION = INSIDE|RIGHT|LEFT|NONE`) | ✅ GANTT (shipped) |
+| Swim lane row grouping (`GROUP = column` with section headers) | ✅ GANTT (shipped) |
+| Mapping aliases (`X`, `X2`, `LABEL`) | ✅ GANTT (shipped) |
 
 ### Priority Order for Sink Updates
 

@@ -5122,6 +5122,7 @@ export function createDesigner(container, opts = {}) {
         const isBubble = v.type === 'BUBBLE';
         const isHeatmap = v.type === 'HEATMAP';
         const isWaterfall = v.type === 'WATERFALL';
+        const isGantt = v.type === 'GANTT';
         const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
         const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
         const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
@@ -5272,6 +5273,25 @@ export function createDesigner(container, opts = {}) {
                             </label>
                             <label class="etlsql-dsgn-label">Decrease color
                                 <input type="color" id="pp-format-waterfall-color-down" value="${toHexColor(v.options?.COLOR_DOWN || v.options?.COLOR_DECREASE, '#e74c3c')}">
+                            </label>
+                        </div>` : ''}
+                        ${isGantt ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">Gantt controls</div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-format-toggle" style="margin-top:20px;"><input type="checkbox" id="pp-format-gantt-today-line" ${(v.options?.TODAY_LINE || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Today line</span></label>
+                            <label class="etlsql-dsgn-label">Today line color
+                                <input type="color" id="pp-format-gantt-today-color" value="${toHexColor(v.options?.TODAY_COLOR, '#ef4444')}">
+                            </label>
+                        </div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Today date override
+                                <input type="text" id="pp-format-gantt-today-date" class="form-control" value="${esc(v.options?.TODAY_DATE || '')}" placeholder="YYYY-MM-DD">
+                            </label>
+                            <label class="etlsql-dsgn-label">Label position
+                                <select id="pp-format-gantt-label-position" class="form-control">
+                                    ${['LEFT', 'INSIDE', 'RIGHT', 'NONE'].map(val => `<option${(v.options?.LABEL_POSITION || 'LEFT').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                </select>
                             </label>
                         </div>` : ''}
                     </div>
@@ -5674,6 +5694,10 @@ export function createDesigner(container, opts = {}) {
         bindOption('#pp-format-waterfall-color-subtotal', 'COLOR_SUBTOTAL', 'input');
         bindOption('#pp-format-waterfall-color-up', 'COLOR_UP', 'input');
         bindOption('#pp-format-waterfall-color-down', 'COLOR_DOWN', 'input');
+        bindOption('#pp-format-gantt-today-line', 'TODAY_LINE', 'change', el => el.checked ? 'ON' : 'OFF');
+        bindOption('#pp-format-gantt-today-color', 'TODAY_COLOR', 'input');
+        bindOption('#pp-format-gantt-today-date', 'TODAY_DATE');
+        bindOption('#pp-format-gantt-label-position', 'LABEL_POSITION');
         bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
         bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
         bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');

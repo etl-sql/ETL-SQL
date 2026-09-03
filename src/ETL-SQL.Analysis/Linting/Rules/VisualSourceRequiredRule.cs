@@ -65,6 +65,7 @@ public class VisualSourceRequiredRule : ILintRule
             VisualType.Bubble => true,
             VisualType.Radar => true,
             VisualType.Candlestick => true,
+            VisualType.Gantt => true,
             VisualType.Map => true,
             _ => false // Text, DatePicker, Slider, Search don't need source
         };

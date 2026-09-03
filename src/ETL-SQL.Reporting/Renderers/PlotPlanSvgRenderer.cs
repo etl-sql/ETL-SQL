@@ -2141,36 +2141,131 @@ internal sealed class PlotPlanSvgRenderer
         if (maximum <= minimum) maximum = minimum + 1m;
         var plotWidth = plan.Bounds.Width - Left - Right;
         var plotHeight = plan.Bounds.Height - Top - Bottom;
-        var slot = plotHeight / yCategories.Length;
+
+        var layer = plan.Layers.FirstOrDefault();
+        var labelPos = layer?.Style.FirstOrDefault(t => t.Name.Equals("LABEL_POSITION", StringComparison.OrdinalIgnoreCase))?.Value?.ToUpperInvariant() ?? "LEFT";
+        var todayLineStr = layer?.Style.FirstOrDefault(t => t.Name.Equals("TODAY_LINE", StringComparison.OrdinalIgnoreCase))?.Value;
+        var isTodayLine = !string.IsNullOrWhiteSpace(todayLineStr) &&
+            (todayLineStr.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
+             todayLineStr.Equals("TRUE", StringComparison.OrdinalIgnoreCase) ||
+             todayLineStr == "1");
+        var todayColor = layer?.Style.FirstOrDefault(t => t.Name.Equals("TODAY_COLOR", StringComparison.OrdinalIgnoreCase))?.Value ?? "#ef4444";
+        var todayDateStr = layer?.Style.FirstOrDefault(t => t.Name.Equals("TODAY_DATE", StringComparison.OrdinalIgnoreCase))?.Value;
+
+        var hasGroups = data.Any(datum => !string.IsNullOrWhiteSpace(DisplayChannel(datum, FieldChannel.Row)));
         var tasks = new Dictionary<string, (decimal StartX, decimal EndX, decimal Y)>(StringComparer.OrdinalIgnoreCase);
         builder.AppendLine("<defs><marker id='gantt-arrow' markerWidth='7' markerHeight='7' refX='6' refY='3.5' orient='auto'><path d='M0,0 L7,3.5 L0,7 Z' fill='#6b7280'/></marker></defs>");
-        foreach (var datum in data)
+
+        void RenderTask(ResolvedDatum datum, decimal y, decimal rowHeight)
         {
             var label = DisplayChannel(datum, FieldChannel.Y) ?? $"Task {datum.RowIndex + 1}";
             var start = TemporalNumber(Channel(datum, FieldChannel.X));
             var end = TemporalNumber(Channel(datum, FieldChannel.X2));
-            var row = yCategories.IndexOf(label);
-            if (!start.HasValue || !end.HasValue || row < 0) continue;
+            if (!start.HasValue || !end.HasValue) return;
             var startX = Left + (start.Value - minimum) / (maximum - minimum) * plotWidth;
             var endX = Left + (end.Value - minimum) / (maximum - minimum) * plotWidth;
-            var y = Top + slot * (row + .5m);
             var color = SafePaint(DisplayChannel(datum, FieldChannel.Color), "#5470c6");
-            var milestone = DisplayChannel(datum, FieldChannel.Shape) is { } flag && (flag == "1" || flag.Equals("true", StringComparison.OrdinalIgnoreCase));
+            var milestoneFlag = DisplayChannel(datum, FieldChannel.Shape);
+            var milestone = !string.IsNullOrWhiteSpace(milestoneFlag) &&
+                (milestoneFlag == "1" ||
+                 milestoneFlag.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                 milestoneFlag.Equals("yes", StringComparison.OrdinalIgnoreCase) ||
+                 milestoneFlag.Equals("on", StringComparison.OrdinalIgnoreCase));
+
             if (milestone || Math.Abs(endX - startX) < 1m)
             {
-                var size = Math.Min(9m, slot * .32m);
+                var size = Math.Min(9m, rowHeight * .32m);
                 builder.AppendLine($"<path d='M {N(startX)} {N(y - size)} L {N(startX + size)} {N(y)} L {N(startX)} {N(y + size)} L {N(startX - size)} {N(y)} Z' fill='{Esc(color)}' data-row-index='{datum.RowIndex}'><title>{Esc(label)}</title></path>");
             }
             else
             {
-                var height = slot * .58m;
+                var height = rowHeight * .58m;
                 builder.AppendLine($"<rect x='{N(Math.Min(startX, endX))}' y='{N(y - height / 2m)}' width='{N(Math.Max(2m, Math.Abs(endX - startX)))}' height='{N(height)}' rx='2' fill='{Esc(color)}' data-row-index='{datum.RowIndex}'><title>{Esc(label)}: {Esc(DisplayChannel(datum, FieldChannel.X) ?? "")} – {Esc(DisplayChannel(datum, FieldChannel.X2) ?? "")}</title></rect>");
                 if (Numeric(datum, FieldChannel.Size) is { } progress)
                     builder.AppendLine($"<rect x='{N(Math.Min(startX, endX))}' y='{N(y - height / 2m)}' width='{N(Math.Max(0m, Math.Abs(endX - startX) * Math.Clamp(progress / 100m, 0m, 1m)))}' height='{N(height)}' rx='2' fill='#111827' fill-opacity='.28'/>");
             }
-            builder.AppendLine($"<text x='{N(Left - 6m)}' y='{N(y + 4m)}' text-anchor='end' font-size='9' fill='#4b5563'>{Esc(Truncate(label, 16))}</text>");
+
+            if (labelPos != "NONE")
+            {
+                if (labelPos == "INSIDE" && !milestone && Math.Abs(endX - startX) >= 35m)
+                {
+                    var minX = Math.Min(startX, endX);
+                    builder.AppendLine($"<text x='{N(minX + 6m)}' y='{N(y + 3.5m)}' text-anchor='start' font-size='9' font-weight='500' fill='#ffffff'>{Esc(Truncate(label, 20))}</text>");
+                }
+                else if (labelPos is "RIGHT" or "INSIDE")
+                {
+                    var maxX = Math.Max(startX, endX);
+                    builder.AppendLine($"<text x='{N(maxX + 6m)}' y='{N(y + 3.5m)}' text-anchor='start' font-size='9' fill='#4b5563'>{Esc(Truncate(label, 16))}</text>");
+                }
+                else
+                {
+                    builder.AppendLine($"<text x='{N(Left - 6m)}' y='{N(y + 4m)}' text-anchor='end' font-size='9' fill='#4b5563'>{Esc(Truncate(label, 16))}</text>");
+                }
+            }
+
             tasks[label] = (startX, endX, y);
         }
+
+        if (hasGroups)
+        {
+            var groups = data.GroupBy(d => DisplayChannel(d, FieldChannel.Row) ?? "")
+                .Select(g => (Name: g.Key, Items: g.ToList()))
+                .ToList();
+            int totalSlots = groups.Sum(g => (string.IsNullOrWhiteSpace(g.Name) ? 0 : 1) + g.Items.Count);
+            var slot = plotHeight / Math.Max(1, totalSlots);
+            decimal currentY = Top;
+
+            foreach (var group in groups)
+            {
+                if (!string.IsNullOrWhiteSpace(group.Name))
+                {
+                    var headerHeight = slot * .82m;
+                    var headerY = currentY + (slot - headerHeight) / 2m;
+                    builder.AppendLine($"<rect x='{N(Left)}' y='{N(headerY)}' width='{N(plotWidth)}' height='{N(headerHeight)}' rx='3' fill='#f1f5f9' stroke='#e2e8f0' stroke-width='1'/>");
+                    builder.AppendLine($"<text x='{N(Left + 8m)}' y='{N(headerY + headerHeight / 2m + 3.5m)}' font-size='10' font-weight='bold' fill='#334155'>{Esc(group.Name)}</text>");
+                    currentY += slot;
+                }
+
+                foreach (var datum in group.Items)
+                {
+                    var y = currentY + slot * .5m;
+                    RenderTask(datum, y, slot);
+                    currentY += slot;
+                }
+            }
+        }
+        else
+        {
+            var slot = plotHeight / yCategories.Length;
+            foreach (var datum in data)
+            {
+                var label = DisplayChannel(datum, FieldChannel.Y) ?? $"Task {datum.RowIndex + 1}";
+                var row = yCategories.IndexOf(label);
+                if (row < 0) continue;
+                var y = Top + slot * (row + .5m);
+                RenderTask(datum, y, slot);
+            }
+        }
+
+        if (isTodayLine)
+        {
+            decimal? todayVal = null;
+            if (!string.IsNullOrWhiteSpace(todayDateStr))
+                todayVal = TemporalNumber(ChartValue.From(todayDateStr));
+            else
+                todayVal = TemporalNumber(ChartValue.From(DateTime.UtcNow.ToString("yyyy-MM-dd")));
+
+            if (todayVal.HasValue)
+            {
+                var todayX = Left + (todayVal.Value - minimum) / (maximum - minimum) * plotWidth;
+                if (todayX >= Left && todayX <= Left + plotWidth)
+                {
+                    builder.AppendLine($"<line x1='{N(todayX)}' y1='{N(Top)}' x2='{N(todayX)}' y2='{N(Top + plotHeight)}' stroke='{Esc(todayColor)}' stroke-width='1.5' stroke-dasharray='4,3'/>");
+                    builder.AppendLine($"<text x='{N(todayX)}' y='{N(Top - 4m)}' text-anchor='middle' font-size='9' font-weight='bold' fill='{Esc(todayColor)}'>Today</text>");
+                }
+            }
+        }
+
         foreach (var datum in data)
         {
             var label = DisplayChannel(datum, FieldChannel.Y);

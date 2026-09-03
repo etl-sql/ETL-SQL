@@ -993,10 +993,11 @@ namespace ETL_SQL.Reporting.Renderers
                 pStart = Math.Clamp(pStart, 0, timelineWidth);
                 pEnd = Math.Clamp(pEnd, 0, timelineWidth);
                 int pLen = Math.Max(1, pEnd - pStart);
-
+                bool isMilestone = task.start == task.end;
+                int barLen = isMilestone ? 1 : pLen;
                 string before = new string(' ', pStart);
-                string bar = new string('█', pLen);
-                string after = new string(' ', timelineWidth - pStart - pLen);
+                string bar = isMilestone ? "◆" : new string('█', pLen);
+                string after = new string(' ', Math.Max(0, timelineWidth - pStart - barLen));
 
                 Color color = GetColorForIndex(i);
 

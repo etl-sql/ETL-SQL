@@ -1,51 +1,214 @@
+-- =============================================================================
 -- Kitchen Sink: GANTT Visual
--- This script demonstrates the newly implemented GANTT visual type.
+-- Exercises all shipped GANTT features:
+--   1. Basic Gantt with START / END / COLOR
+--   2. Alternative mapping aliases (X, X2, LABEL)
+--   3. Progress tracking overlay (PROGRESS mapping)
+--   4. Milestone markers (START = END and MILESTONE column)
+--   5. Dependency arrows (DEPENDS_ON predecessor mapping)
+--   6. Today line indicator (TODAY_LINE = ON, TODAY_COLOR, TODAY_DATE)
+--   7. Label position controls (INSIDE, RIGHT, NONE)
+--   8. Row grouping / swim lanes (GROUP mapping with section headers)
+-- =============================================================================
 
 DECLARE @today = GETDATE();
 
--- Create sample task data
-SELECT 'Planning' AS Task, DATEADD(DAY, -10, @today) AS StartDate, DATEADD(DAY, -5, @today) AS EndDate, '#5470c6' AS Color
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Dataset 1: Standard Project Tasks with Progress & Dependencies
+-- ─────────────────────────────────────────────────────────────────────────────
+SELECT 
+    'Architecture'  AS Task, 
+    DATEADD(DAY, -14, @today) AS StartDate, 
+    DATEADD(DAY, -8,  @today) AS EndDate, 
+    100 AS Pct, 
+    0   AS IsMilestone,
+    ''  AS Predecessor,
+    '#3b82f6' AS BarColor
 INTO #tasks;
 
-INSERT INTO #tasks VALUES ('Design', DATEADD(DAY, -6, @today), DATEADD(DAY, -2, @today), '#91cc75');
-INSERT INTO #tasks VALUES ('Development', DATEADD(DAY, -3, @today), DATEADD(DAY, 5, @today), '#fac858');
-INSERT INTO #tasks VALUES ('Testing', DATEADD(DAY, 4, @today), DATEADD(DAY, 8, @today), '#ee6666');
-INSERT INTO #tasks VALUES ('Deployment', DATEADD(DAY, 9, @today), DATEADD(DAY, 10, @today), '#73c0de');
+INSERT INTO #tasks VALUES ('UX Wireframes', DATEADD(DAY, -10, @today), DATEADD(DAY, -4,  @today), 100, 0, 'Architecture', '#6366f1');
+INSERT INTO #tasks VALUES ('Design Review', DATEADD(DAY, -4,  @today), DATEADD(DAY, -4,  @today), 100, 1, 'UX Wireframes', '#f59e0b');
+INSERT INTO #tasks VALUES ('Engine Dev',    DATEADD(DAY, -3,  @today), DATEADD(DAY, 7,   @today), 65,  0, 'Design Review', '#10b981');
+INSERT INTO #tasks VALUES ('UI Components', DATEADD(DAY, 0,   @today), DATEADD(DAY, 10,  @today), 40,  0, 'Design Review', '#06b6d4');
+INSERT INTO #tasks VALUES ('Integration',   DATEADD(DAY, 8,   @today), DATEADD(DAY, 14,  @today), 10,  0, 'Engine Dev',    '#8b5cf6');
+INSERT INTO #tasks VALUES ('QA Signoff',    DATEADD(DAY, 15,  @today), DATEADD(DAY, 15,  @today), 0,   1, 'Integration',   '#ef4444');
+INSERT INTO #tasks VALUES ('Production',    DATEADD(DAY, 16,  @today), DATEADD(DAY, 20,  @today), 0,   0, 'QA Signoff',    '#ec4899');
 
--- Multi-row tasks (overlapping)
-INSERT INTO #tasks VALUES ('Documentation', DATEADD(DAY, -5, @today), DATEADD(DAY, 5, @today), '#3ba272');
-INSERT INTO #tasks VALUES ('Bug Fixing', DATEADD(DAY, 0, @today), DATEADD(DAY, 7, @today), '#fc8452');
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Dataset 2: Phased Project Tasks with Swim Lane Grouping
+-- ─────────────────────────────────────────────────────────────────────────────
+SELECT 
+    'Phase 1: Initiation' AS Phase,
+    'Charter Approval'    AS TaskName,
+    DATEADD(DAY, -20, @today) AS StartDate,
+    DATEADD(DAY, -16, @today) AS EndDate
+INTO #phased_tasks;
 
-SET REPORT TITLE = 'Project Roadmap (Gantt)';
+INSERT INTO #phased_tasks VALUES ('Phase 1: Initiation', 'Kickoff Gate',      DATEADD(DAY, -16, @today), DATEADD(DAY, -16, @today));
+INSERT INTO #phased_tasks VALUES ('Phase 2: Execution',  'Sprint 1 (Backend)', DATEADD(DAY, -15, @today), DATEADD(DAY, -1,  @today));
+INSERT INTO #phased_tasks VALUES ('Phase 2: Execution',  'Sprint 2 (Frontend)',DATEADD(DAY, -8,  @today), DATEADD(DAY, 6,   @today));
+INSERT INTO #phased_tasks VALUES ('Phase 2: Execution',  'Mid-Point Review',   DATEADD(DAY, 6,   @today), DATEADD(DAY, 6,   @today));
+INSERT INTO #phased_tasks VALUES ('Phase 3: Rollout',    'Staging Deploy',     DATEADD(DAY, 7,   @today), DATEADD(DAY, 12,  @today));
+INSERT INTO #phased_tasks VALUES ('Phase 3: Rollout',    'Go-Live Launch',     DATEADD(DAY, 14,  @today), DATEADD(DAY, 14,  @today));
 
--- Standard Gantt
-CREATE VISUAL ProjectTimeline AS GANTT (
+SET REPORT TITLE = 'Gantt Chart Kitchen Sink';
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Visual 1: Standard Gantt with START / END / COLOR
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL BasicGantt AS GANTT (
     SOURCE = #tasks,
     MAPPINGS (
         Y     = Task,
         START = StartDate,
         END   = EndDate,
-        COLOR = Color
-    )
-);
-
--- Gantt with explicit roles using standard X/X2/Y mappings
-CREATE VISUAL TechnicalRoadmap AS GANTT (
-    SOURCE = #tasks,
-    MAPPINGS (
-        Y  = Task,
-        X  = StartDate,
-        X2 = EndDate
+        COLOR = BarColor
     ),
     OPTIONS (
-        TITLE = 'Technical Roadmap (Default Colors)'
+        TITLE = '1. Basic Gantt (START / END / COLOR)'
     )
 );
 
-CREATE PAGE 'Timeline' AS DASHBOARD (
-    STRUCTURE = 'A B',
-    MAP (
-        'A' = ProjectTimeline,
-        'B' = TechnicalRoadmap
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Visual 2: Alternative Mapping Aliases (X, X2, LABEL)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL AliasedGantt AS GANTT (
+    SOURCE = #tasks,
+    MAPPINGS (
+        LABEL = Task,
+        X     = StartDate,
+        X2    = EndDate
+    ),
+    OPTIONS (
+        TITLE = '2. Mapping Aliases (LABEL / X / X2)'
     )
 );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Visual 3: Progress Overlays & Milestone Markers
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL ProgressMilestoneGantt AS GANTT (
+    SOURCE = #tasks,
+    MAPPINGS (
+        Y         = Task,
+        START     = StartDate,
+        END       = EndDate,
+        PROGRESS  = Pct,
+        MILESTONE = IsMilestone,
+        COLOR     = BarColor
+    ),
+    OPTIONS (
+        TITLE = '3. Progress Bars & Milestone Markers'
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Visual 4: Predecessor Dependency Arrows
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL DependencyGantt AS GANTT (
+    SOURCE = #tasks,
+    MAPPINGS (
+        Y          = Task,
+        START      = StartDate,
+        END        = EndDate,
+        PROGRESS   = Pct,
+        DEPENDS_ON = Predecessor,
+        COLOR      = BarColor
+    ),
+    OPTIONS (
+        TITLE = '4. Dependency Arrows (DEPENDS_ON)'
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Visual 5: Today Reference Line
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL TodayLineGantt AS GANTT (
+    SOURCE = #tasks,
+    MAPPINGS (
+        Y          = Task,
+        START      = StartDate,
+        END        = EndDate,
+        PROGRESS   = Pct,
+        DEPENDS_ON = Predecessor,
+        COLOR      = BarColor
+    ),
+    OPTIONS (
+        TITLE       = '5. Today Indicator Line (TODAY_LINE = ON)',
+        TODAY_LINE  = ON,
+        TODAY_COLOR = '#ef4444'
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Visual 6: Label Placement (INSIDE)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL LabelInsideGantt AS GANTT (
+    SOURCE = #tasks,
+    MAPPINGS (
+        Y        = Task,
+        START    = StartDate,
+        END      = EndDate,
+        PROGRESS = Pct,
+        COLOR    = BarColor
+    ),
+    OPTIONS (
+        TITLE          = '6. Task Labels Inside Bars (LABEL_POSITION = INSIDE)',
+        LABEL_POSITION = INSIDE
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Visual 7: Label Placement (RIGHT)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL LabelRightGantt AS GANTT (
+    SOURCE = #tasks,
+    MAPPINGS (
+        Y     = Task,
+        START = StartDate,
+        END   = EndDate,
+        COLOR = BarColor
+    ),
+    OPTIONS (
+        TITLE          = '7. Task Labels Right of Bars (LABEL_POSITION = RIGHT)',
+        LABEL_POSITION = RIGHT
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Visual 8: Phased Swim Lanes with Section Headers (GROUP mapping)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE VISUAL SwimLaneGantt AS GANTT (
+    SOURCE = #phased_tasks,
+    MAPPINGS (
+        GROUP = Phase,
+        Y     = TaskName,
+        START = StartDate,
+        END   = EndDate
+    ),
+    OPTIONS (
+        TITLE          = '8. Swim Lanes & Phase Headers (GROUP mapping)',
+        TODAY_LINE     = ON,
+        TODAY_COLOR    = '#2563eb',
+        LABEL_POSITION = LEFT
+    )
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- PAGE & NAVIGATION
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE PAGE GanttKitchenSink AS DASHBOARD (
+    STRUCTURE = 'A B / C D / E F / G H',
+    MAP (
+        'A' = BasicGantt,
+        'B' = AliasedGantt,
+        'C' = ProgressMilestoneGantt,
+        'D' = DependencyGantt,
+        'E' = TodayLineGantt,
+        'F' = LabelInsideGantt,
+        'G' = LabelRightGantt,
+        'H' = SwimLaneGantt
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = GanttKitchenSink, PAGES (GanttKitchenSink));
