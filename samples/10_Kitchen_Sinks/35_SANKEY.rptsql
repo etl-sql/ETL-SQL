@@ -1,40 +1,141 @@
--- Kitchen Sink: SANKEY Visual (Flow Diagram)
--- This script demonstrates the SANKEY visual type for directional flows and transitions.
+-- Kitchen Sink: SANKEY Visual (Directed Flow Diagram)
+-- Comprehensive demonstration of SANKEY visuals showing layer alignments,
+-- node padding, link opacity controls, data-driven node coloring, and multi-hop flows.
 
-SET REPORT TITLE = 'Kitchen Sink: SANKEY Visual';
-SET REPORT DESCRIPTION = 'Demonstration of multi-stage flow transitions (e.g. Budget Allocation / Customer Journey).';
+SET REPORT TITLE = 'Kitchen Sink: SANKEY Visuals';
+SET REPORT DESCRIPTION = 'Showcase of Sankey flow diagrams with alignment modes, node padding, link opacity, and data-driven node colors.';
 
--- 1. Mock Data Generation (Multi-Stage Budget & Cost Flow)
-SELECT 'Total Budget' AS FlowFrom, 'Engineering' AS FlowTo, 450 AS FlowValue INTO #sankey
-UNION ALL SELECT 'Total Budget', 'Marketing', 250
-UNION ALL SELECT 'Total Budget', 'Operations', 200
-UNION ALL SELECT 'Total Budget', 'Sales', 300
-UNION ALL SELECT 'Engineering', 'Infrastructure', 180
-UNION ALL SELECT 'Engineering', 'Product Dev', 220
-UNION ALL SELECT 'Engineering', 'Security', 50
-UNION ALL SELECT 'Marketing', 'Digital Ads', 150
-UNION ALL SELECT 'Marketing', 'Events', 100
-UNION ALL SELECT 'Operations', 'Facilities', 120
-UNION ALL SELECT 'Operations', 'Compliance', 80
-UNION ALL SELECT 'Sales', 'Direct Sales', 200
-UNION ALL SELECT 'Sales', 'Channel Partners', 100;
+-- 1. Mock Data: Multi-Stage Budget Allocation (3-Level Flow)
+SELECT 'Total Budget' AS FlowFrom, 'Engineering' AS FlowTo, 450 AS FlowValue, '#2563eb' AS NodeColor INTO #budget
+UNION ALL SELECT 'Total Budget', 'Marketing', 250, '#2563eb'
+UNION ALL SELECT 'Total Budget', 'Operations', 200, '#2563eb'
+UNION ALL SELECT 'Total Budget', 'Sales', 300, '#2563eb'
+UNION ALL SELECT 'Engineering', 'Infrastructure', 180, '#0284c7'
+UNION ALL SELECT 'Engineering', 'Product Dev', 220, '#0284c7'
+UNION ALL SELECT 'Engineering', 'Security', 50, '#0284c7'
+UNION ALL SELECT 'Marketing', 'Digital Ads', 150, '#d97706'
+UNION ALL SELECT 'Marketing', 'Events', 100, '#d97706'
+UNION ALL SELECT 'Operations', 'Facilities', 120, '#64748b'
+UNION ALL SELECT 'Operations', 'Compliance', 80, '#64748b'
+UNION ALL SELECT 'Sales', 'Direct Sales', 200, '#16a34a'
+UNION ALL SELECT 'Sales', 'Channel Partners', 100, '#16a34a';
 
--- 2. Basic Sankey Flow
-CREATE VISUAL BudgetFlow AS SANKEY (
-    SOURCE = #sankey,
-    TITLE = 'Enterprise Budget Flow: Organization → Department → Function',
+-- 2. Mock Data: User Acquisition & Journey with Direct Sinks
+-- Notice: 'Direct Signup' skips straight to Activated, while others go through Trial
+SELECT 'Paid Ads' AS Channel, 'Free Trial' AS Stage, 1200 AS Users, '#3b82f6' AS SrcColor INTO #journey
+UNION ALL SELECT 'Organic Search', 'Free Trial', 2500, '#10b981'
+UNION ALL SELECT 'Referral', 'Free Trial', 800, '#8b5cf6'
+UNION ALL SELECT 'Referral', 'Activated', 300, '#8b5cf6'
+UNION ALL SELECT 'Free Trial', 'Activated', 3200, '#06b6d4'
+UNION ALL SELECT 'Free Trial', 'Churned', 1300, '#ef4444';
+
+-- 3. Visual 1: Default Sankey with JUSTIFY Alignment
+CREATE VISUAL SankeyJustify AS SANKEY (
+    SOURCE = #budget,
+    TITLE = '1. Default Sankey (NODE_ALIGN = JUSTIFY)',
     MAPPINGS (
         FROM  = FlowFrom,
         TO    = FlowTo,
         VALUE = FlowValue
+    ),
+    OPTIONS (
+        NODE_ALIGN   = JUSTIFY,
+        NODE_PADDING = 14,
+        LINK_OPACITY = 0.55
     )
 );
 
--- Page Layout
+-- 4. Visual 2: Topological Depth (NODE_ALIGN = LEFT)
+CREATE VISUAL SankeyLeft AS SANKEY (
+    SOURCE = #journey,
+    TITLE = '2. Left Alignment (NODE_ALIGN = LEFT)',
+    MAPPINGS (
+        FROM  = Channel,
+        TO    = Stage,
+        VALUE = Users
+    ),
+    OPTIONS (
+        NODE_ALIGN   = LEFT,
+        NODE_PADDING = 18,
+        LINK_OPACITY = 0.60
+    )
+);
+
+-- 5. Visual 3: Sink Snapping (NODE_ALIGN = RIGHT)
+CREATE VISUAL SankeyRight AS SANKEY (
+    SOURCE = #journey,
+    TITLE = '3. Right Alignment (NODE_ALIGN = RIGHT)',
+    MAPPINGS (
+        FROM  = Channel,
+        TO    = Stage,
+        VALUE = Users
+    ),
+    OPTIONS (
+        NODE_ALIGN   = RIGHT,
+        NODE_PADDING = 18,
+        LINK_OPACITY = 0.60
+    )
+);
+
+-- 6. Visual 4: Centered Intermediate Nodes (NODE_ALIGN = CENTER)
+CREATE VISUAL SankeyCenter AS SANKEY (
+    SOURCE = #journey,
+    TITLE = '4. Centered Alignment (NODE_ALIGN = CENTER)',
+    MAPPINGS (
+        FROM  = Channel,
+        TO    = Stage,
+        VALUE = Users
+    ),
+    OPTIONS (
+        NODE_ALIGN   = CENTER,
+        NODE_PADDING = 18,
+        LINK_OPACITY = 0.60
+    )
+);
+
+-- 7. Visual 5: Custom Node Coloring (NODE_COLOR = column)
+CREATE VISUAL SankeyColoredNodes AS SANKEY (
+    SOURCE = #budget,
+    TITLE = '5. Data-Driven Node Fill (NODE_COLOR = NodeColor)',
+    MAPPINGS (
+        FROM       = FlowFrom,
+        TO         = FlowTo,
+        VALUE      = FlowValue,
+        NODE_COLOR = NodeColor
+    ),
+    OPTIONS (
+        NODE_ALIGN   = JUSTIFY,
+        NODE_PADDING = 12,
+        LINK_OPACITY = 0.70
+    )
+);
+
+-- 8. Visual 6: Dense Padding with High Link Opacity
+CREATE VISUAL SankeyDense AS SANKEY (
+    SOURCE = #budget,
+    TITLE = '6. Dense Layout (NODE_PADDING = 24, LINK_OPACITY = 0.85)',
+    MAPPINGS (
+        FROM  = FlowFrom,
+        TO    = FlowTo,
+        VALUE = FlowValue
+    ),
+    OPTIONS (
+        NODE_ALIGN   = JUSTIFY,
+        NODE_PADDING = 24,
+        LINK_OPACITY = 0.85
+    )
+);
+
+-- Dashboard Page Layout
 CREATE PAGE SankeyKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A .',
+    STRUCTURE = 'A B / C D / E F',
     MAP (
-        'A' = BudgetFlow
+        'A' = SankeyJustify,
+        'B' = SankeyLeft,
+        'C' = SankeyRight,
+        'D' = SankeyCenter,
+        'E' = SankeyColoredNodes,
+        'F' = SankeyDense
     )
 );
 

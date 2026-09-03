@@ -1068,16 +1068,16 @@ than record it.
 
 ### SANKEY
 
-- [ ] **Node alignment**: Nodes are auto-positioned by the layout algorithm. No `NODE_ALIGN =
+- [x] **Node alignment**: Nodes are auto-positioned by the layout algorithm. No `NODE_ALIGN =
   LEFT|RIGHT|CENTER|JUSTIFY` option to control whether nodes snap to the left, right, or are
   justified between input/output layers (D3 Sankey standard). Add to OPTIONS.
-- [ ] **Node padding / link opacity**: No `NODE_PADDING = n` (vertical gap between nodes) or
+- [x] **Node padding / link opacity**: No `NODE_PADDING = n` (vertical gap between nodes) or
   `LINK_OPACITY = 0.0..1.0` option for the flow bands. Standard Sankey controls in every
   implementation (Power BI, Tableau extensions, D3). Add to OPTIONS.
-- [ ] **Node coloring**: There is no `NODE_COLOR` mapping. Node colors are derived from the link
+- [x] **Node coloring**: There is no `NODE_COLOR` mapping. Node colors are derived from the link
   colors or are renderer-assigned. Add `NODE_COLOR = column` mapping so authors can drive node
   fill from data.
-- [ ] **Multi-level / multi-hop flows**: SANKEY supports `SOURCE → TARGET` pairs only. Multi-level
+- [x] **Multi-level / multi-hop flows**: SANKEY supports `SOURCE → TARGET` pairs only. Multi-level
   flows (A → B → C in one row) require pre-exploding to two edge rows in SQL. This is workable
   but different from Tableau's Sankey extensions that accept a level column. Log as a doc clarification
   item: add an explicit note and a cookbook example showing the SQL pre-processing pattern.
@@ -1914,6 +1914,16 @@ means the feature already exists in the engine and the sink just needs a new vis
 | Label placement (`LABEL_POSITION = INSIDE|RIGHT|LEFT|NONE`) | ✅ GANTT (shipped) |
 | Swim lane row grouping (`GROUP = column` with section headers) | ✅ GANTT (shipped) |
 | Mapping aliases (`X`, `X2`, `LABEL`) | ✅ GANTT (shipped) |
+
+### 35_SANKEY.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `NODE_ALIGN = JUSTIFY\|LEFT\|RIGHT\|CENTER` option | ✅ SANKEY (shipped) |
+| `NODE_PADDING = n` vertical node spacing | ✅ SANKEY (shipped) |
+| `LINK_OPACITY = 0.0..1.0` flow band opacity | ✅ SANKEY (shipped) |
+| `NODE_COLOR` mapping for custom node fill | ✅ SANKEY (shipped) |
+| Multi-level flow SQL documentation | ✅ SANKEY (shipped) |
 
 ### Priority Order for Sink Updates
 

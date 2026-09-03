@@ -205,22 +205,177 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
     private static string Sankey(VisualManifest v, PlotBounds? bounds)
     {
-        var source = Index(v, "source", "from", fallback: 0); var target = Index(v, "target", "to", fallback: 1); var value = Index(v, "value", fallback: 2);
-        var links = v.Rows.Select((r, i) => (Source: Cell(r, source, ""), Target: Cell(r, target, ""), Value: Math.Max(.1, Number(r, value)), Row: i)).Where(e => e.Source.Length > 0 && e.Target.Length > 0).ToList();
+        var source = Index(v, "source", "from", fallback: 0);
+        var target = Index(v, "target", "to", fallback: 1);
+        var value = Index(v, "value", fallback: 2);
+        var nodeColorIndex = Index(v, "node_color", "source_color", fallback: -1);
+        if (nodeColorIndex < 0) nodeColorIndex = Index(v, "from_color", fallback: -1);
+        var targetColorIndex = Index(v, "target_color", "to_color", fallback: -1);
+
+        var links = v.Rows.Select((r, i) => (
+            Source: Cell(r, source, ""),
+            Target: Cell(r, target, ""),
+            Value: Math.Max(.1, Number(r, value)),
+            Row: i
+        )).Where(e => e.Source.Length > 0 && e.Target.Length > 0).ToList();
+
         var names = links.SelectMany(e => new[] { e.Source, e.Target }).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var inputs = FocusedLayoutInputs.From(v, names, bounds);
-        var ranks = names.ToDictionary(n => n, _ => 0, StringComparer.OrdinalIgnoreCase);
-        for (var pass = 0; pass < names.Count; pass++) foreach (var edge in links) if (!edge.Source.Equals(edge.Target, StringComparison.OrdinalIgnoreCase)) ranks[edge.Target] = Math.Max(ranks[edge.Target], Math.Min(names.Count - 1, ranks[edge.Source] + 1));
+
+        // Options validation & extraction
+        var nodeAlign = (v.Options.GetValueOrDefault("NODE_ALIGN") ?? "JUSTIFY").ToUpperInvariant();
+        if (nodeAlign is not ("LEFT" or "RIGHT" or "CENTER" or "JUSTIFY"))
+            throw new InvalidOperationException($"Invalid NODE_ALIGN '{v.Options["NODE_ALIGN"]}'. Valid values are LEFT, RIGHT, CENTER, or JUSTIFY.");
+
+        double linkOpacity = 0.55;
+        if (v.Options.TryGetValue("LINK_OPACITY", out var loStr) && !string.IsNullOrWhiteSpace(loStr))
+        {
+            if (!double.TryParse(loStr, NumberStyles.Any, CultureInfo.InvariantCulture, out linkOpacity) || linkOpacity < 0.0 || linkOpacity > 1.0)
+                throw new InvalidOperationException($"Invalid LINK_OPACITY '{loStr}'. Valid values are between 0.0 and 1.0.");
+        }
+
+        double nodePadding = 12.0;
+        if (v.Options.TryGetValue("NODE_PADDING", out var npStr) && !string.IsNullOrWhiteSpace(npStr))
+        {
+            if (!double.TryParse(npStr, NumberStyles.Any, CultureInfo.InvariantCulture, out nodePadding) || nodePadding < 0.0)
+                throw new InvalidOperationException($"Invalid NODE_PADDING '{npStr}'. Value must be a non-negative number.");
+        }
+
+        // Custom node colors from NODE_COLOR mapping
+        var customNodeColors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (nodeColorIndex >= 0 || targetColorIndex >= 0)
+        {
+            foreach (var r in v.Rows)
+            {
+                var src = Cell(r, source, "");
+                var tgt = Cell(r, target, "");
+                if (nodeColorIndex >= 0 && src.Length > 0)
+                {
+                    var c = Cell(r, nodeColorIndex, "");
+                    if (!string.IsNullOrWhiteSpace(c)) customNodeColors[src] = c;
+                }
+                if (targetColorIndex >= 0 && tgt.Length > 0)
+                {
+                    var c = Cell(r, targetColorIndex, "");
+                    if (!string.IsNullOrWhiteSpace(c)) customNodeColors[tgt] = c;
+                }
+            }
+        }
+
+        // Node depths, heights, and degrees for alignment
+        var depth = names.ToDictionary(n => n, _ => 0, StringComparer.OrdinalIgnoreCase);
+        var height = names.ToDictionary(n => n, _ => 0, StringComparer.OrdinalIgnoreCase);
+        var inDegree = names.ToDictionary(n => n, _ => 0, StringComparer.OrdinalIgnoreCase);
+        var outDegree = names.ToDictionary(n => n, _ => 0, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var edge in links)
+        {
+            if (!edge.Source.Equals(edge.Target, StringComparison.OrdinalIgnoreCase))
+            {
+                outDegree[edge.Source]++;
+                inDegree[edge.Target]++;
+            }
+        }
+
+        for (var pass = 0; pass < names.Count; pass++)
+        {
+            foreach (var edge in links)
+            {
+                if (!edge.Source.Equals(edge.Target, StringComparison.OrdinalIgnoreCase))
+                {
+                    depth[edge.Target] = Math.Max(depth[edge.Target], depth[edge.Source] + 1);
+                }
+            }
+        }
+        var maxDepth = Math.Max(1, depth.Values.DefaultIfEmpty().Max());
+
+        for (var pass = 0; pass < names.Count; pass++)
+        {
+            foreach (var edge in links)
+            {
+                if (!edge.Source.Equals(edge.Target, StringComparison.OrdinalIgnoreCase))
+                {
+                    height[edge.Source] = Math.Max(height[edge.Source], height[edge.Target] + 1);
+                }
+            }
+        }
+
+        var ranks = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var n in names)
+        {
+            ranks[n] = nodeAlign switch
+            {
+                "LEFT" => depth[n],
+                "RIGHT" => maxDepth - height[n],
+                "JUSTIFY" => (outDegree[n] == 0 && inDegree[n] > 0) ? maxDepth : depth[n],
+                "CENTER" => (int)Math.Round((depth[n] + (maxDepth - height[n])) / 2.0),
+                _ => depth[n]
+            };
+        }
         var maxRank = Math.Max(1, ranks.Values.DefaultIfEmpty().Max());
+
+        // Node positioning with node padding
+        const double nodeHeight = 20.0;
+        var availableHeight = inputs.Height - TitleBand - 40.0;
         var pos = new Dictionary<string, (double X, double Y)>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var group in names.GroupBy(n => ranks[n]))
         {
             var list = group.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
-            for (var i = 0; i < list.Count; i++) pos[list[i]] = (45 + group.Key * (inputs.Width - 100) / maxRank, TitleBand + 20 + (i + .5) * (inputs.Height - TitleBand - 40) / list.Count);
+            var colX = 45.0 + group.Key * (inputs.Width - 100.0) / maxRank;
+
+            if (list.Count == 1)
+            {
+                pos[list[0]] = (colX, TitleBand + 20.0 + availableHeight / 2.0);
+            }
+            else
+            {
+                var neededHeight = list.Count * nodeHeight + (list.Count - 1) * nodePadding;
+                double effectivePadding = nodePadding;
+                double startY;
+
+                if (neededHeight <= availableHeight)
+                {
+                    startY = TitleBand + 20.0 + (availableHeight - neededHeight) / 2.0 + nodeHeight / 2.0;
+                }
+                else
+                {
+                    effectivePadding = Math.Max(2.0, (availableHeight - list.Count * nodeHeight) / Math.Max(1, list.Count - 1));
+                    startY = TitleBand + 20.0 + nodeHeight / 2.0;
+                }
+
+                for (var i = 0; i < list.Count; i++)
+                {
+                    pos[list[i]] = (colX, startY + i * (nodeHeight + effectivePadding));
+                }
+            }
         }
-        var maxValue = links.Select(e => e.Value).DefaultIfEmpty(1).Max(); var sb = Start(v, inputs);
-        foreach (var edge in links) { var a = pos[edge.Source]; var b = pos[edge.Target]; var mid = (a.X + b.X) / 2; sb.Append($"<path data-row-index='{edge.Row}' d='M {F(a.X + 8)} {F(a.Y)} C {F(mid)} {F(a.Y)} {F(mid)} {F(b.Y)} {F(b.X - 8)} {F(b.Y)}' fill='none' stroke='{inputs.Muted}' stroke-opacity='.55' stroke-width='{F(1 + 12 * edge.Value / maxValue)}'><title>{Xml(edge.Source)} → {Xml(edge.Target)}: {F(edge.Value)}</title></path>"); }
-        for (var i = 0; i < names.Count; i++) { var p = pos[names[i]]; sb.Append($"<rect x='{F(p.X - 8)}' y='{F(p.Y - 10)}' width='16' height='20' rx='2' fill='{inputs.Color(names[i], i)}'/><text x='{F(p.X + 12)}' y='{F(p.Y + 4)}' font-size='10' fill='{inputs.OnSurface}'>{Xml(Trim(names[i], 18))}</text>"); }
+
+        var maxValue = links.Select(e => e.Value).DefaultIfEmpty(1).Max();
+        var sb = Start(v, inputs);
+
+        sb.Append($"<g class='plot-sankey' data-node-align='{nodeAlign.ToLowerInvariant()}' data-link-opacity='{F(linkOpacity)}' data-node-padding='{F(nodePadding)}'>");
+
+        foreach (var edge in links)
+        {
+            var a = pos[edge.Source];
+            var b = pos[edge.Target];
+            var mid = (a.X + b.X) / 2;
+            sb.Append($"<path data-row-index='{edge.Row}' d='M {F(a.X + 8)} {F(a.Y)} C {F(mid)} {F(a.Y)} {F(mid)} {F(b.Y)} {F(b.X - 8)} {F(b.Y)}' fill='none' stroke='{inputs.Muted}' stroke-opacity='{F(linkOpacity)}' stroke-width='{F(1 + 12 * edge.Value / maxValue)}'><title>{Xml(edge.Source)} → {Xml(edge.Target)}: {F(edge.Value)}</title></path>");
+        }
+
+        for (var i = 0; i < names.Count; i++)
+        {
+            var p = pos[names[i]];
+            var nodeName = names[i];
+            var nodeColor = customNodeColors.TryGetValue(nodeName, out var c) && !string.IsNullOrWhiteSpace(c)
+                ? c
+                : inputs.Color(nodeName, i);
+
+            sb.Append($"<rect x='{F(p.X - 8)}' y='{F(p.Y - 10)}' width='16' height='20' rx='2' fill='{nodeColor}' data-node='{Xml(nodeName)}'/><text x='{F(p.X + 12)}' y='{F(p.Y + 4)}' font-size='10' fill='{inputs.OnSurface}'>{Xml(Trim(nodeName, 18))}</text>");
+        }
+
+        sb.Append("</g>");
         return End(sb);
     }
 

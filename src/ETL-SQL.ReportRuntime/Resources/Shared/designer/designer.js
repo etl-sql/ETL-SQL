@@ -5121,6 +5121,7 @@ export function createDesigner(container, opts = {}) {
         const isCandlestick = v.type === 'CANDLESTICK';
         const isRadar = v.type === 'RADAR';
         const isFunnel = v.type === 'FUNNEL';
+        const isSankey = v.type === 'SANKEY';
         const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
         const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
         const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
@@ -5353,6 +5354,22 @@ export function createDesigner(container, opts = {}) {
                             <select id="pp-format-funnel-percent-mode" class="form-control">
                                 ${['STEP', 'TOTAL'].map(val => `<option${(v.options?.PERCENT_MODE || 'STEP').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
                             </select>
+                        </label>` : ''}
+                        ${isSankey ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">Sankey options</div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Node alignment
+                                <select id="pp-format-sankey-node-align" class="form-control">
+                                    ${['JUSTIFY', 'LEFT', 'RIGHT', 'CENTER'].map(val => `<option${(v.options?.NODE_ALIGN || 'JUSTIFY').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Node padding (px)
+                                <input type="number" min="0" max="100" id="pp-format-sankey-node-padding" class="form-control" value="${v.options?.NODE_PADDING ?? '12'}">
+                            </label>
+                        </div>
+                        <label class="etlsql-dsgn-label">Link opacity (0.0 – 1.0)
+                            <input type="number" step="0.05" min="0" max="1" id="pp-format-sankey-link-opacity" class="form-control" value="${v.options?.LINK_OPACITY ?? '0.55'}">
                         </label>` : ''}
                     </div>
                 </details>
@@ -5771,6 +5788,9 @@ export function createDesigner(container, opts = {}) {
         bindOption('#pp-format-funnel-sort', 'SORT');
         bindOption('#pp-format-funnel-show-percent', 'SHOW_PERCENT', 'change', el => el.checked ? 'ON' : 'OFF');
         bindOption('#pp-format-funnel-percent-mode', 'PERCENT_MODE');
+        bindOption('#pp-format-sankey-node-align', 'NODE_ALIGN');
+        bindOption('#pp-format-sankey-node-padding', 'NODE_PADDING');
+        bindOption('#pp-format-sankey-link-opacity', 'LINK_OPACITY');
         bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
         bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
         bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');
