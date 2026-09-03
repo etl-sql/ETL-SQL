@@ -6320,8 +6320,11 @@ export function createDesigner(container, opts = {}) {
         const on = (sel, fn) => propsPanel.querySelector(sel)?.addEventListener('change', fn);
 
         if (!v) {
-            if (!state.reportStyle) state.reportStyle = { theme: 'light' };
-            const style = state.reportStyle;
+            // Reading the inspector must not author anything. Defaulting the theme into the design
+            // state here wrote `SET REPORT THEME = 'light';` into every script that had no theme, on
+            // nothing more than a render - and the Portal refuses SetReportMetadata in an interactive
+            // run, so a report the author never themed became unrunnable in Studio.
+            const style = state.reportStyle || {};
             const currentTheme = style.theme || 'light';
             const themes = ['light', 'dark', 'midnight', 'dracula', 'nord', 'custom'];
 
@@ -6374,6 +6377,7 @@ export function createDesigner(container, opts = {}) {
             });
             on('#pp-report-theme', e => {
                 pushUndoState();
+                if (!state.reportStyle) state.reportStyle = {};
                 state.reportStyle.theme = e.target.value;
                 const themesList = ['light', 'dark', 'midnight', 'dracula', 'nord', 'custom'];
                 themesList.forEach(t => document.body.classList.remove('theme-' + t));
@@ -7250,11 +7254,62 @@ export function createDesigner(container, opts = {}) {
         renderAll();
     }
 
+    /**
+     * The parser requires a SOURCE clause on every visual except the ones that read no rows, so
+     * these are the types that can be declared without one.
+     *
+     * Kept in step with `ReportParser.ParseCreateVisual`. A type missing from this list is only ever
+     * treated as needing a source, which is the safe direction: the cost is refusing an add that
+     * would have been legal, not writing a statement that does not parse.
+     */
+    const SOURCE_OPTIONAL_TYPES = new Set([
+        'TEXT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'SEARCH', 'SLICER',
+        'MULTISELECT', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX', 'IMAGE', 'HTML',
+    ]);
+
+    /**
+     * What a newly added visual should read from.
+     *
+     * The host knows best - Studio binds the sample the author just took - so it is asked first.
+     * Standalone, the first declared dataset is the report's own answer, and failing that the source
+     * an existing visual already uses, because a second visual on a page almost always plots the
+     * same rows as the first.
+     */
+    function defaultVisualBinding() {
+        if (typeof opts.defaultVisualBinding === 'function') {
+            const hosted = opts.defaultVisualBinding();
+            if (hosted && (hosted.dataset || hosted.options?.inline_source)) return hosted;
+        }
+        const dataset = (state.datasets || []).find(item => item?.name);
+        if (dataset) return { dataset: dataset.name, options: {} };
+        for (const existing of curVis()) {
+            if (existing.dataset) return { dataset: existing.dataset, options: {} };
+            if (existing.options?.inline_source)
+                return { dataset: null, options: { inline_source: existing.options.inline_source } };
+        }
+        return null;
+    }
+
     function addVisualAt(type, col = 1, row = null, colSpan = 12, rowSpan = 4) {
         if (opts.canAddVisual && !opts.canAddVisual()) {
             opts.onAddVisualBlocked?.();
             return null;
         }
+
+        // A visual added with no source used to look like it worked and then vanish. The card
+        // rendered, but `CREATE VISUAL x AS BAR (...)` without a SOURCE clause does not parse, and
+        // the patcher refuses a patch that does not parse - so the script never changed and the
+        // visual was gone on the next reload, with nothing said. Bind the source before the card
+        // exists, and refuse the add when there is nothing to bind.
+        const upperType = type.toUpperCase();
+        const needsSource = upperType !== 'CONTAINER' && upperType !== 'BUTTON'
+            && !SOURCE_OPTIONAL_TYPES.has(upperType);
+        const binding = needsSource ? defaultVisualBinding() : null;
+        if (needsSource && !binding) {
+            opts.onAddVisualBlocked?.();
+            return null;
+        }
+
         pushUndoState();
         if (!state.pages || !state.pages.length) {
             state.pages = [{ id: 'p1', name: 'Page 1', mode: 'Dashboard', visuals: [] }];
@@ -7276,28 +7331,28 @@ export function createDesigner(container, opts = {}) {
             gridColSpan: colSpan || (type === 'KPI' ? 3 : type === 'TABLE' ? 12 : 6),
             gridRowSpan: rowSpan || (type === 'KPI' ? 2 : type === 'TABLE' ? 5 : 4),
             title: '',
-            dataset: null,
+            dataset: binding?.dataset ?? null,
             mappings: {},
-            options: {},
+            options: { ...(binding?.options ?? {}) },
         };
 
-        const uType = type.toUpperCase();
+        const uType = upperType;
         if (uType === 'BAR') {
-            visual.options = { TITLE: 'Bar Chart' };
+            Object.assign(visual.options, { TITLE: 'Bar Chart' });
         } else if (uType === 'LINE') {
-            visual.options = { TITLE: 'Trend Line' };
+            Object.assign(visual.options, { TITLE: 'Trend Line' });
         } else if (uType === 'KPI') {
-            visual.options = { TITLE: 'Key Metric' };
+            Object.assign(visual.options, { TITLE: 'Key Metric' });
             visual.gridColSpan = 3;
             visual.gridRowSpan = 2;
         } else if (uType === 'DONUT' || uType === 'PIE') {
-            visual.options = { TITLE: 'Proportions' };
+            Object.assign(visual.options, { TITLE: 'Proportions' });
         } else if (uType === 'TABLE') {
-            visual.options = { TITLE: 'Data Grid Table', PAGE_SIZE: '10' };
+            Object.assign(visual.options, { TITLE: 'Data Grid Table', PAGE_SIZE: '10' });
             visual.gridColSpan = 12;
             visual.gridRowSpan = 5;
         } else if (uType === 'SLICER') {
-            visual.options = { TITLE: 'Filter Slicer' };
+            Object.assign(visual.options, { TITLE: 'Filter Slicer' });
             visual.gridColSpan = 3;
             visual.gridRowSpan = 3;
         } else if (uType === 'CONTAINER') {

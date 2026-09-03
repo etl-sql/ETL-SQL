@@ -12,6 +12,20 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Dragging a visual onto the Studio canvas works. It looked like it already did: the palette card
+  was draggable, the canvas took the drop, and the card appeared — but the visual it created had no
+  source, a visual without a `SOURCE` clause is not ETL-SQL, and the patcher refuses to write a
+  script that does not parse. So the script never changed, nothing was reported, and the card was
+  gone on the next reload. A visual is now bound to a source before the card exists, and an add with
+  nothing to bind is refused with the reason. The same fix repairs the palette's click path for a
+  connection-backed sample, which was writing `SOURCE = alias.Table` — a qualified connection
+  reference, which `SOURCE` has never accepted — where it means the query that reads that table.
+  Separately, opening the report-properties inspector no longer authors a `SET REPORT THEME` the
+  author never wrote; it did, on nothing more than a render, and the Portal refuses report metadata
+  in an interactive run, so a report nobody had themed could not be run from Studio. All four were
+  found by running the authoring steps as one continuous journey on both hosts instead of one at a
+  time.
+
 - Studio has a document outline. The visual library already listed what was on a page but could not
   act on the list and never told the canvas anything; the outline lists every page, the row bands and
   containers those pages lay out, and the visuals inside them, and selection runs both ways — a row

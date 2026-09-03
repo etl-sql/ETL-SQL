@@ -403,10 +403,36 @@ operational flows without an unexplained application switch.
 **Outcome:** Desktop and Portal prove the same representative jobs, round-trip contracts, and
 performance limits before Studio is treated as the primary workbench.
 
-- [ ] **Complete the single end-to-end browser journey**: Existing production-host tests cover the
-  individual connect, table selection, sample, filter, edit, run, save, reload, close, shutdown,
-  relaunch, and multiple-window paths. Add one continuous connect → pick table → drag visual card →
-  filter → open Split view → edit code → run journey. Run it against both Portal and desktop hosts.
+- [x] **Complete the single end-to-end browser journey**: `StudioContinuousJourneyTests` drives one
+  continuous connect → pick table → drag a visual card onto the canvas → configure it → filter →
+  open Split view → edit code → run journey against both production hosts, and hands what each host
+  saved to `StudioCertification`. The steps each already had a test; running them in one continuous
+  pass is a different claim, because a test that sets up the state its own step needs never finds a
+  step that only works from a state the previous step does not leave behind — and this one found four
+  defects in the drag, all of them silent.
+  **The palette card was draggable and the drop did nothing.** The card set a drag payload and the
+  canvas had a drop handler, so the affordance looked live: the card even appeared on the canvas. But
+  the visual was created with no source, `CREATE VISUAL x AS BAR (...)` without a `SOURCE` clause does
+  not parse, and the patcher refuses a patch that does not parse — correctly, since writing a broken
+  document over a working one is worse. So the script never changed, nothing was said, and the visual
+  was gone on the next reload. A visual is now given a source before the card exists — the host's own
+  binding, else the first dataset, else the source a visual on the page already uses — and an add with
+  nothing to bind is refused with the reason instead of half-happening.
+  **The source it was given did not parse either.** `SOURCE` takes a temp table, a dataset, or a
+  query, never a qualified connection reference, and the sample endpoint names what it sampled —
+  `alias.Table`. That name was being written straight through as a `SOURCE` operand, so every visual
+  bound to a connection-backed sample produced a script the parser rejected — the palette's own click
+  path included, not just the drag. A connection-backed sample is now written as the query it means,
+  and the data wizard's preview shows the same thing rather than promising a clause that cannot be
+  written.
+  **Opening the inspector authored a statement.** Rendering the report-properties panel defaulted
+  `reportStyle` into the design state, so a report the author never themed gained a
+  `SET REPORT THEME = 'light';` on nothing more than a render — and the Portal refuses
+  `SetReportMetadata` in an interactive run, which made the document unrunnable in Studio. Reading the
+  panel no longer writes.
+  **"Run all" is a desktop affordance.** The Portal's interactive-run policy refuses presentation
+  statements, because a report is executed by rendering it, so the journey runs the selection on both
+  hosts — the step an author actually has mid-edit.
 - [ ] **Close cross-platform Studio performance evidence**: Review the first green Linux and macOS
   artifacts alongside the Windows baseline for startup, post-GC heap, CodeMirror input-to-frame p95,
   250-row aggregation/render p95, and full-canvas redraw/layout p95. Do not publish the old ~1 ms or

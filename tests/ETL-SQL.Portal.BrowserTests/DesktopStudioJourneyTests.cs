@@ -24,8 +24,8 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
     [Fact]
     public async Task AuthenticatedDesktopHosts_AuthoringShutdownRelaunchAndProjectWindows()
     {
-        using var firstWorkspace = new TempWorkspace();
-        using var secondWorkspace = new TempWorkspace();
+        using var firstWorkspace = new StudioTempWorkspace();
+        using var secondWorkspace = new StudioTempWorkspace();
         var firstFile = Path.Combine(firstWorkspace.Root, "users.rptsql");
         var secondFile = Path.Combine(secondWorkspace.Root, "other.etlsql");
         await File.WriteAllTextAsync(firstFile, InitialScript);
@@ -175,7 +175,7 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
     [Fact]
     public async Task Exit_WaitsForTheProjectHostToStopBeforeReportingSuccess()
     {
-        using var workspace = new TempWorkspace();
+        using var workspace = new StudioTempWorkspace();
         var file = Path.Combine(workspace.Root, "exit.etlsql");
         await File.WriteAllTextAsync(file, "SELECT 1 AS Ready;");
 
@@ -264,32 +264,5 @@ public sealed class DesktopStudioJourneyTests(PortalBrowserFixture fixture)
         }
         if (process.ExitCode != 0)
             throw new InvalidOperationException($"Git command failed: {output.GetAwaiter().GetResult()}{error.GetAwaiter().GetResult()}");
-    }
-
-    private sealed class TempWorkspace : IDisposable
-    {
-        public TempWorkspace()
-        {
-            Root = Path.Combine(Path.GetTempPath(), "etlsql-studio-browser", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(Root);
-        }
-
-        public string Root { get; }
-
-        public void Dispose()
-        {
-            try
-            {
-                if (Directory.Exists(Root)) Directory.Delete(Root, recursive: true);
-            }
-            catch (IOException)
-            {
-                // A failed assertion should not be hidden by best-effort test cleanup.
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // A failed assertion should not be hidden by best-effort test cleanup.
-            }
-        }
     }
 }

@@ -1301,6 +1301,11 @@ export async function createStudioWorkbench(container, opts = {}) {
                     snapshotPackage: activeDocumentContext().snapshotPackage,
                     requireDataFirst: true,
                     canAddVisual: hasDataSample,
+                    // Dragging a card onto the canvas has to bind the same sample the palette's own
+                    // click path binds. Without this the canvas added a source-less visual, which
+                    // cannot be written as ETL-SQL - the card appeared, the script never changed,
+                    // and the visual was gone on the next reload.
+                    defaultVisualBinding: () => visualSourceBinding(),
                     onRequestData: () => { runChooseDataStep(); },
                     onAddVisualBlocked: () => {
                         setActivity('catalog');

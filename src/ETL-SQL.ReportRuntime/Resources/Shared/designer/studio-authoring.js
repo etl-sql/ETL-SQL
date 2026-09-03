@@ -203,7 +203,24 @@ export function createStudioAuthoringSurfaces({
     function visualSourceBinding() {
         const source = activeContext().snapshot?.source || null;
         if (source && String(source).startsWith('&')) return { dataset: source, options: {} };
-        return { dataset: null, options: source ? { inline_source: source } : {} };
+        return { dataset: null, options: source ? { inline_source: visualSourceClause(source) } : {} };
+    }
+
+    /**
+     * A snapshot's source, written as something `SOURCE =` will actually accept.
+     *
+     * The sample endpoint names what it sampled — `#users`, `&sales`, or `alias.Table`. The first two
+     * are already valid SOURCE operands; the third is not, because SOURCE takes a temp table, a
+     * dataset name, or a query, and never a qualified connection reference. Passing the qualified
+     * name through produced `SOURCE = alias.Table`, which does not parse — so the patch carrying it
+     * was refused whole, the script never changed, and the visual the author had just added was gone
+     * on the next reload, with nothing said.
+     */
+    function visualSourceClause(source) {
+        const text = String(source).trim();
+        if (text.startsWith('#') || text.startsWith('&')) return text;
+        if (text.startsWith('(') || /^select\b/i.test(text)) return text;
+        return text.includes('.') ? `(SELECT * FROM ${text})` : text;
     }
 
     function guidedColumnNames() {
@@ -569,8 +586,10 @@ export function createStudioAuthoringSurfaces({
 
             // ── Actions ───────────────────────────────────────────────────────────────────────────
 
+            // A table is wrapped in its own SELECT rather than named directly: SOURCE does not take a
+            // qualified connection reference, so the preview above has to show what will be written.
             const liveSourceClause = () => (wizard.mode === 'table' && wizard.table
-                ? `${wizard.connection}.${wizard.table}`
+                ? `(SELECT * FROM ${wizard.connection}.${wizard.table})`
                 : `(${wizardQuery()})`);
 
             const useLiveSource = async () => {
