@@ -659,9 +659,10 @@ reported.
   author returns to, so this is where it matters most.
 - [ ] **The dashboard workflow cannot skip cross-filters.** Step 3 has no "none" answer, so a
   dashboard that does not want a cross-filter cannot reach Step 4 Layout through the guided path.
-- [ ] **Paginated headers and footers take text only.** A page header realistically carries a logo,
-  a rule, a run date, a page number — images and furniture, not just a text band. Needs a design
-  decision about which of those the language expresses before the UI offers them.
+- [ ] **Paginated headers and footers take text only.** A page header realistically carries a logo, a
+  rule, a run date and a page number. **Approach agreed: let a header or footer hold a container, not
+  just text.** A container can hold images and text at different sizes. That probably needs a UI for
+  designing containers, which does not exist yet - raise it as its own item once the shape is clear.
 
 **Wrong to look at**
 
@@ -671,18 +672,59 @@ reported.
 
 **The big one**
 
-- [ ] **The pipeline canvas is roughly 20% of what it should be.** Reported as "missing a lot of
-  functionality", and the shape of the complaint matters more than any single item:
-  - The palette is a strip of chips under the map, not a sidebar of draggable items like the
-    reporting canvas has. The author expects to drag a task onto the canvas, not click a chip.
-  - **No connectors are drawn between tasks**, so the execution path is invisible. The author expects
-    to drag a connector from one box to the next and see the path they just declared.
-  - The kinds offered are a small subset of what a pipeline can express.
-  This is a design gap rather than a bug list, and it should be planned as one. Note that the
-  connector *handle* does exist in code (`[data-task-connector]`) and Phase 1 and 2 describe both
-  gestures as working — the header-drag defect fixed during certification was one reason they were
-  unreachable, and this report says that fixing the gesture did not make the surface feel present.
-  Worth re-reading Phase 1 and 2 against what is actually on screen before planning.
+- [ ] **Rebuild the pipeline canvas as a teaching surface.** This is the big one, and the plan it
+  had was wrong. Recorded here in full so the next person does not have to reconstruct it.
+
+  **The goal.** ETL-SQL Studio exists to teach people to write ETL-SQL by using the UI. The loop is:
+  drag an item onto the canvas, fill in a form, then see the code it produced. That is how someone
+  learns "oh, *that* is how I write a MOVE FILE".
+
+  **What went wrong.** The canvas was designed as a *map*. ADR §7 is "Pipeline execution-map
+  projection", and §7.1 adds authoring for "one specific thing: a task". So it draws a picture of SQL
+  you already wrote. If the author has to write the SQL first, the canvas teaches nothing. The design
+  and the goal were never checked against each other.
+
+  **Evidence it is not a teaching surface today:**
+  - The palette has 7 kinds. The language has far more (see the v1 list below).
+  - The palette is click-only. No `draggable`, no `dragstart` on the chips.
+  - The round dots on each card are `card-port-left` / `card-port-right`. They are decoration - anchor
+    points for drawing edge lines, with no drag handlers. Dragging them does nothing, which is what
+    manual testing found.
+  - The real connector handle only appears on cards that are *editable tasks*, meaning a statement
+    with a section label. A plain `SELECT ... INTO #temp` has no label, so it gets no handle and
+    cannot be connected to anything.
+  - The edges drawn between plain statements come from script order only. They look like connections
+    and are not.
+  - The certified SSIS journey had to author the extract and the transform in the code pane, because
+    the palette has no entry for staging into `#temp`. The canvas could not author the two steps that
+    are the actual ETL.
+
+  **Decisions taken (2026-09-03):**
+  1. **v1 vocabulary: control flow and file operations.** Data statements come second.
+  2. **Code is shown after Add**: the editor scrolls to the new lines and highlights them.
+  3. **Auto-layout.** Where you drop decides *where in the script* the statement goes, nothing more.
+     No saved layout, so the script stays the only source of truth.
+  4. **PARALLEL is drawn as swimlanes** - one visible lane per branch.
+
+  **v1 palette, taken from the lexer rather than invented:**
+  - File and directory: `COPY_FILE`, `MOVE_FILE`, `RENAME_FILE`, `DELETE_FILE`, `COPY_DIRECTORY`,
+    `MOVE_DIRECTORY`, `RENAME_DIRECTORY`, `DELETE_DIRECTORY`, `DELETE_DIRECTORY_CONTENTS`,
+    `CREATE_DIRECTORY`.
+  - Control flow: `IF` / `ELSE IF` / `ELSE`, `FOR`, `FOREACH`, `WHILE`, `PARALLEL`, `TRY` / `CATCH`,
+    `THROW`, `BREAK`, `CONTINUE`, `WAITFOR`.
+  - Keep the existing kinds that already work: execution, validation, notification, transaction.
+
+  **Work items:**
+  - [ ] Palette becomes a draggable sidebar, grouped by category, like the reporting canvas.
+  - [ ] One form per palette entry, each writing a statement that parses, lints clean and survives
+        the formatter. `PipelineTaskEmissionTests` already sets this bar for the four existing kinds;
+        every new entry joins it.
+  - [ ] After Add, reveal and highlight the written lines in the editor.
+  - [ ] Connector handles on every card the canvas can connect, visible without hunting.
+  - [ ] Make the decorative ports either real drag targets or stop drawing them as dots.
+  - [ ] Swimlanes for `PARALLEL`.
+  - [ ] Decide what happens to statements the canvas cannot author yet. Today they render as inert
+        stages that teach the author the canvas is read-only.
 ### Phase 7 — Stabilization and Legacy Retirement
 
 **Outcome:** Studio becomes the supported flagship only after the new workbench has evidence that it
