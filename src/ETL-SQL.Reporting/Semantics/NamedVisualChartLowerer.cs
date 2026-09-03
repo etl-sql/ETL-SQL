@@ -42,6 +42,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         ValidatePointStrokeOptions(statement);
         ValidateLineWidthOption(statement);
         ValidateLegendOptions(statement);
+        ValidatePieDonutOptions(statement);
+        ValidateScatterBubbleOptions(statement);
         if (statement.VisualType == VisualType.Scatter)
         {
             var hasErrorLow = statement.Mappings.Any(m => m.Role.Equals("ERROR_LOW", StringComparison.OrdinalIgnoreCase));
@@ -170,7 +172,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         }
 
         var bindings = BuildBindings(statement, manifest).ToImmutableArray();
-        var layers = BuildLayers(statement, bindings).ToImmutableArray();
+        var layers = BuildLayers(statement, bindings, manifest).ToImmutableArray();
         var stackMode = ResolveNamedStackMode(manifest);
         if (stackMode != StackMode.None)
             layers = layers.Select(layer => layer with
@@ -192,7 +194,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 : statement.VisualType is VisualType.HorizontalBar or VisualType.Gantt
                     ? CoordinateKind.TransposedCartesian
                     : CoordinateKind.Cartesian,
-                InnerRadius: statement.VisualType == VisualType.Donut ? ResolveInnerRadius(manifest) : null),
+                StartAngle: ResolveStartAngle(statement, manifest),
+                InnerRadius: statement.VisualType == VisualType.Donut ? ResolveInnerRadius(statement, manifest) : null),
             scales: scales,
             formatting: ChartStyleTokens.Formatting(context, manifest,
                 statement.Mappings.Select(mapping => new FieldFormat(mapping.Column, mapping.Format)).ToImmutableArray()),
@@ -262,7 +265,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
 
     private static IEnumerable<MarkLayerSpec> BuildLayers(
         CreateVisualStatement statement,
-        ImmutableArray<FieldBinding> bindings)
+        ImmutableArray<FieldBinding> bindings,
+        VisualManifest manifest)
     {
         var bandSize = ResolveBandSize(statement);
         var symbolShapeOption = statement.Options.FirstOrDefault(option =>
@@ -345,6 +349,12 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 VisualType.Combo => MarkKind.Line,
                 _ => throw new InvalidOperationException()
             };
+            var position = ResolvePositionAdjustment(statement, manifest, bindings);
+            if (ResolveBubbleMinMax(statement, manifest, out var bMin, out var bMax))
+            {
+                style = style.Add(new StyleToken("MIN_BUBBLE_SIZE", bMin.ToString(CultureInfo.InvariantCulture)));
+                style = style.Add(new StyleToken("MAX_BUBBLE_SIZE", bMax.ToString(CultureInfo.InvariantCulture)));
+            }
             yield return new MarkLayerSpec(
                 "primary",
                 mark,
@@ -353,7 +363,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 style,
                 statement.Name)
             {
-                BandSize = mark == MarkKind.Rect ? bandSize : .75m
+                BandSize = mark == MarkKind.Rect ? bandSize : .75m,
+                Position = position
             };
         }
 
@@ -537,16 +548,28 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                     FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh
                 ? FieldChannel.Y
                 : binding.Channel;
+            var axis = AxisName(scaleChannel);
+            var axisScale = ParseAxisText(statement, manifest, axis, "scale")?.ToUpperInvariant();
+            if (axisScale is not null && axisScale is not ("LINEAR" or "LOG" or "LOGARITHMIC"))
+            {
+                throw new InvalidOperationException($"Invalid axis SCALE '{axisScale}'. Valid values are LINEAR, LOG, and LOGARITHMIC.");
+            }
+            var isLog = axisScale is "LOG" or "LOGARITHMIC";
+            var explicitIncludeZero = ParseAxisBool(statement, manifest, axis, "include_zero");
+            if (isLog && explicitIncludeZero == true)
+            {
+                throw new InvalidOperationException($"Logarithmic scale for axis '{axis.ToUpperInvariant()}' cannot use INCLUDE_ZERO = ON.");
+            }
             var kind = binding.SemanticKind switch
             {
                 DataSemanticKind.Temporal => ScaleKind.Time,
+                DataSemanticKind.Quantitative when isLog => ScaleKind.Logarithmic,
                 DataSemanticKind.Quantitative => ScaleKind.Linear,
                 DataSemanticKind.Ordinal => ScaleKind.Point,
                 _ => binding.Channel is FieldChannel.Color ? ScaleKind.Ordinal : ScaleKind.Band
             };
-            var axis = AxisName(scaleChannel);
-            var includeZero = ParseAxisBool(manifest, axis, "include_zero") ??
-                ((scaleChannel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or FieldChannel.Size)
+            var includeZero = explicitIncludeZero ??
+                (!isLog && (scaleChannel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or FieldChannel.Size)
                     && statement.VisualType is not VisualType.Scatter and not VisualType.Bubble);
             yield return new ScaleSpec(group.Key, scaleChannel, kind,
                 IncludeZero: includeZero,
@@ -555,12 +578,12 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                     ?? ParseDomain(manifest, binding.Channel, "min") ?? ParseStandardDomain(manifest, "MIN"),
                 DomainMaximum: GaugeBound(statement, manifest, binding.Channel, "MAX")
                     ?? ParseDomain(manifest, binding.Channel, "max") ?? ParseStandardDomain(manifest, "MAX"),
-                Reverse: ParseAxisBool(manifest, axis, "reverse") ?? false,
-                MajorTickCount: ParseAxisInt(manifest, axis, "major_tick_count"),
-                TickInterval: ParseAxisDecimal(manifest, axis, "tick_interval"),
-                MinorTicks: ParseAxisBool(manifest, axis, "minor_ticks") ?? false,
-                LabelRotation: ParseAxisText(manifest, axis, "label_rotation"),
-                LabelSkip: ParseAxisInt(manifest, axis, "label_skip"),
+                Reverse: ParseAxisBool(statement, manifest, axis, "reverse") ?? false,
+                MajorTickCount: ParseAxisInt(statement, manifest, axis, "major_tick_count"),
+                TickInterval: ParseAxisDecimal(statement, manifest, axis, "tick_interval"),
+                MinorTicks: ParseAxisBool(statement, manifest, axis, "minor_ticks") ?? false,
+                LabelRotation: ParseAxisText(statement, manifest, axis, "label_rotation"),
+                LabelSkip: ParseAxisInt(statement, manifest, axis, "label_skip"),
                 OuterPadding: kind == ScaleKind.Band && scaleChannel == FieldChannel.X
                     ? ResolveUnitInterval(manifest.Options.GetValueOrDefault("OUTER_PADDING"), "OUTER_PADDING")
                     : 0m);
@@ -607,6 +630,94 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             throw new InvalidOperationException($"LINE_WIDTH is supported only on LINE and COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
         if (!LineSeriesWidth.TryNormalize(width, out _))
             throw new InvalidOperationException($"Invalid LINE_WIDTH '{width}'. Use a pixel width from {LineSeriesWidth.Minimum} through {LineSeriesWidth.Maximum}.");
+    }
+
+    private static void ValidatePieDonutOptions(CreateVisualStatement statement)
+    {
+        var pieOptions = statement.Options.Where(option =>
+            option.Key.Equals("SORT", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("MIN_SLICE_PCT", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("OTHER_LABEL", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("EXPLODE", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("EXPLODE_ALL", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("EXPLODE_DISTANCE", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("SLICE_BORDER_COLOR", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("SLICE_BORDER_WIDTH", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("START_ANGLE", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        if (pieOptions.Count == 0) return;
+
+        var isPieOrDonut = statement.VisualType is VisualType.Pie or VisualType.Donut;
+
+        foreach (var opt in pieOptions)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            var val = opt.Value;
+
+            if (!isPieOrDonut && key is not "SORT")
+                throw new InvalidOperationException($"{key} is supported only on PIE and DONUT visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+
+            switch (key)
+            {
+                case "SORT":
+                    if (isPieOrDonut)
+                    {
+                        var sortUpper = val.ToUpperInvariant();
+                        if (sortUpper is not ("SOURCE" or "VALUE_DESC" or "VALUE_ASC" or "ALPHA" or "VALUE" or "ASC" or "DESC"))
+                            throw new InvalidOperationException($"Invalid SORT '{val}'. Valid values are SOURCE, VALUE_DESC, VALUE_ASC, or ALPHA.");
+                    }
+                    break;
+
+                case "MIN_SLICE_PCT":
+                    var trimmedPct = val.Trim().TrimEnd('%');
+                    if (!decimal.TryParse(trimmedPct, NumberStyles.Number, CultureInfo.InvariantCulture, out var pct) || pct <= 0m)
+                        throw new InvalidOperationException($"Invalid MIN_SLICE_PCT '{val}'. Must be a positive number.");
+                    if (pct > 100m)
+                        throw new InvalidOperationException($"Invalid MIN_SLICE_PCT '{val}'. Must be at most 100.");
+                    break;
+
+                case "OTHER_LABEL":
+                    if (string.IsNullOrWhiteSpace(val))
+                        throw new InvalidOperationException("OTHER_LABEL cannot be empty.");
+                    break;
+
+                case "EXPLODE":
+                    if (string.IsNullOrWhiteSpace(val))
+                        throw new InvalidOperationException("EXPLODE slice name cannot be empty.");
+                    break;
+
+                case "EXPLODE_ALL":
+                    var explodeAllUpper = val.ToUpperInvariant();
+                    if (explodeAllUpper is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0"))
+                    {
+                        if (!decimal.TryParse(val, NumberStyles.Number, CultureInfo.InvariantCulture, out var dist) || dist < 0m)
+                            throw new InvalidOperationException($"Invalid EXPLODE_ALL '{val}'. Must be ON/OFF or a non-negative number.");
+                    }
+                    break;
+
+                case "EXPLODE_DISTANCE":
+                    if (!decimal.TryParse(val, NumberStyles.Number, CultureInfo.InvariantCulture, out var ed) || ed < 0m)
+                        throw new InvalidOperationException($"Invalid EXPLODE_DISTANCE '{val}'. Must be a non-negative number.");
+                    break;
+
+                case "SLICE_BORDER_WIDTH":
+                    var trimmedBw = val.Trim().TrimEnd('p', 'x', 'P', 'X');
+                    if (!decimal.TryParse(trimmedBw, NumberStyles.Number, CultureInfo.InvariantCulture, out var bw) || bw < 0m)
+                        throw new InvalidOperationException($"Invalid SLICE_BORDER_WIDTH '{val}'. Must be a non-negative number.");
+                    break;
+
+                case "SLICE_BORDER_COLOR":
+                    if (string.IsNullOrWhiteSpace(val))
+                        throw new InvalidOperationException("SLICE_BORDER_COLOR cannot be empty.");
+                    break;
+
+                case "START_ANGLE":
+                    var trimmedAngle = val.Trim().TrimEnd('°', 'd', 'e', 'g');
+                    if (!decimal.TryParse(trimmedAngle, NumberStyles.Number, CultureInfo.InvariantCulture, out _))
+                        throw new InvalidOperationException($"Invalid START_ANGLE '{val}'. Must be a number.");
+                    break;
+            }
+        }
     }
 
     private static void ValidateLegendOptions(CreateVisualStatement statement)
@@ -865,9 +976,19 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             ? ChartValue.From(value)
             : null;
     }
-    private static decimal ResolveInnerRadius(VisualManifest manifest)
+    private static decimal? ResolveStartAngle(CreateVisualStatement statement, VisualManifest manifest)
     {
-        var text = manifest.Options.GetValueOrDefault("INNER_RADIUS")?.Trim().TrimEnd('%');
+        var text = (statement.Options.FirstOrDefault(o => o.Key.Equals("START_ANGLE", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("START_ANGLE"))?.Trim().TrimEnd('°', 'd', 'e', 'g');
+        return decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : null;
+    }
+
+    private static decimal ResolveInnerRadius(CreateVisualStatement statement, VisualManifest manifest)
+    {
+        var text = (statement.Options.FirstOrDefault(o => o.Key.Equals("INNER_RADIUS", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("INNER_RADIUS"))?.Trim().TrimEnd('%');
         return decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var value)
             ? Math.Clamp(value > 1m ? value / 100m : value, 0m, 0.9m)
             : 0.45m;
@@ -878,21 +999,187 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         FieldChannel.Y2 => "y2",
         _ => "y"
     };
-    private static string? ParseAxisText(VisualManifest manifest, string axis, string option) =>
-        manifest.Options.GetValueOrDefault($"axis:{axis}:{option}");
-    private static bool? ParseAxisBool(VisualManifest manifest, string axis, string option)
+    private static string? ParseAxisText(CreateVisualStatement statement, VisualManifest manifest, string axis, string option)
     {
-        var value = ParseAxisText(manifest, axis, option);
+        var axisObj = statement.AxisOptions.FirstOrDefault(a => a.Axis.Equals(axis, StringComparison.OrdinalIgnoreCase));
+        var optVal = axisObj?.Options.FirstOrDefault(o => o.Key.Equals(option, StringComparison.OrdinalIgnoreCase))?.Value;
+        return optVal ?? manifest.Options.GetValueOrDefault($"axis:{axis.ToLowerInvariant()}:{option.ToLowerInvariant()}");
+    }
+    private static bool? ParseAxisBool(CreateVisualStatement statement, VisualManifest manifest, string axis, string option)
+    {
+        var value = ParseAxisText(statement, manifest, axis, option);
         if (value is null) return null;
         return value.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
             value.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || value == "1";
     }
-    private static int? ParseAxisInt(VisualManifest manifest, string axis, string option) =>
-        int.TryParse(ParseAxisText(manifest, axis, option), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+    private static int? ParseAxisInt(CreateVisualStatement statement, VisualManifest manifest, string axis, string option) =>
+        int.TryParse(ParseAxisText(statement, manifest, axis, option), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
             ? value : null;
-    private static decimal? ParseAxisDecimal(VisualManifest manifest, string axis, string option) =>
-        decimal.TryParse(ParseAxisText(manifest, axis, option), NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
+    private static decimal? ParseAxisDecimal(CreateVisualStatement statement, VisualManifest manifest, string axis, string option) =>
+        decimal.TryParse(ParseAxisText(statement, manifest, axis, option), NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
             ? value : null;
+
+    public static bool TryParseSizeRange(string? text, out decimal min, out decimal max)
+    {
+        min = 0m;
+        max = 0m;
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var trimmed = text.Trim().Trim('(', ')', '[', ']');
+        var parts = trimmed.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 2) return false;
+        return decimal.TryParse(parts[0], NumberStyles.Number, CultureInfo.InvariantCulture, out min) &&
+            decimal.TryParse(parts[1], NumberStyles.Number, CultureInfo.InvariantCulture, out max);
+    }
+
+    private static bool ResolveBubbleMinMax(CreateVisualStatement statement, VisualManifest manifest, out decimal min, out decimal max)
+    {
+        min = 5m;
+        max = 65m;
+        var hasRange = false;
+        var sizeRange = statement.Options.FirstOrDefault(o => o.Key.Equals("SIZE_RANGE", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("SIZE_RANGE");
+        if (!string.IsNullOrWhiteSpace(sizeRange) && TryParseSizeRange(sizeRange, out var rMin, out var rMax))
+        {
+            min = rMin;
+            max = rMax;
+            hasRange = true;
+        }
+
+        var minBubble = statement.Options.FirstOrDefault(o => o.Key.Equals("MIN_BUBBLE_SIZE", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("MIN_BUBBLE_SIZE");
+        if (!string.IsNullOrWhiteSpace(minBubble) && decimal.TryParse(minBubble, NumberStyles.Number, CultureInfo.InvariantCulture, out var mb))
+        {
+            min = mb;
+            hasRange = true;
+        }
+
+        var maxBubble = statement.Options.FirstOrDefault(o => o.Key.Equals("MAX_BUBBLE_SIZE", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("MAX_BUBBLE_SIZE");
+        if (!string.IsNullOrWhiteSpace(maxBubble) && decimal.TryParse(maxBubble, NumberStyles.Number, CultureInfo.InvariantCulture, out var xb))
+        {
+            max = xb;
+            hasRange = true;
+        }
+
+        return hasRange || statement.VisualType == VisualType.Bubble;
+    }
+
+    private static PositionAdjustmentSpec? ResolvePositionAdjustment(
+        CreateVisualStatement statement,
+        VisualManifest manifest,
+        ImmutableArray<FieldBinding> bindings)
+    {
+        if (statement.VisualType != VisualType.Scatter) return null;
+
+        var jitterOpt = statement.Options.FirstOrDefault(o => o.Key.Equals("JITTER", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("JITTER");
+
+        if (string.IsNullOrWhiteSpace(jitterOpt) ||
+            jitterOpt.Equals("OFF", StringComparison.OrdinalIgnoreCase) ||
+            jitterOpt.Equals("FALSE", StringComparison.OrdinalIgnoreCase) ||
+            jitterOpt == "0")
+        {
+            return null;
+        }
+
+        decimal x = 0.15m;
+        var widthStr = statement.Options.FirstOrDefault(o => o.Key.Equals("JITTER:WIDTH", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("JITTER_WIDTH", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("JITTER:X", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("JITTER:WIDTH")
+            ?? manifest.Options.GetValueOrDefault("JITTER_WIDTH")
+            ?? manifest.Options.GetValueOrDefault("JITTER:X");
+        if (!string.IsNullOrWhiteSpace(widthStr) && decimal.TryParse(widthStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedW))
+        {
+            x = parsedW;
+        }
+
+        decimal y = 0.15m;
+        var heightStr = statement.Options.FirstOrDefault(o => o.Key.Equals("JITTER:HEIGHT", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("JITTER_HEIGHT", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("JITTER:Y", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("JITTER:HEIGHT")
+            ?? manifest.Options.GetValueOrDefault("JITTER_HEIGHT")
+            ?? manifest.Options.GetValueOrDefault("JITTER:Y");
+        if (!string.IsNullOrWhiteSpace(heightStr) && decimal.TryParse(heightStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedH))
+        {
+            y = parsedH;
+        }
+
+        var keyField = statement.Options.FirstOrDefault(o => o.Key.Equals("JITTER:KEY", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("JITTER_KEY", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("KEY", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("JITTER:KEY")
+            ?? manifest.Options.GetValueOrDefault("JITTER_KEY")
+            ?? statement.Mappings.FirstOrDefault(m => m.Role.Equals("KEY", StringComparison.OrdinalIgnoreCase) || m.Role.Equals("ID", StringComparison.OrdinalIgnoreCase))?.Column
+            ?? "__row_id";
+
+        int seed = 0;
+        var seedStr = statement.Options.FirstOrDefault(o => o.Key.Equals("JITTER:SEED", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("JITTER_SEED", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("JITTER:SEED")
+            ?? manifest.Options.GetValueOrDefault("JITTER_SEED");
+        if (!string.IsNullOrWhiteSpace(seedStr) && int.TryParse(seedStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedSeed))
+        {
+            seed = parsedSeed;
+        }
+
+        return new PositionAdjustmentSpec(PositionAdjustmentKind.Jitter, x, y, keyField, seed);
+    }
+
+    private static void ValidateScatterBubbleOptions(CreateVisualStatement statement)
+    {
+        var jitter = statement.Options.FirstOrDefault(o => o.Key.Equals("JITTER", StringComparison.OrdinalIgnoreCase) || o.Key.StartsWith("JITTER:", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("JITTER_WIDTH", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("JITTER_HEIGHT", StringComparison.OrdinalIgnoreCase));
+        if (jitter is not null && statement.VisualType != VisualType.Scatter)
+        {
+            throw new InvalidOperationException($"JITTER is supported only on SCATTER visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+        }
+
+        var widthStr = statement.Options.FirstOrDefault(o => o.Key.Equals("JITTER:WIDTH", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("JITTER_WIDTH", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("JITTER:X", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (!string.IsNullOrWhiteSpace(widthStr))
+        {
+            if (!decimal.TryParse(widthStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var w) || w < 0m || w > 1m)
+                throw new InvalidOperationException($"Invalid JITTER width '{widthStr}'. Must be between 0 and 1.");
+        }
+
+        var heightStr = statement.Options.FirstOrDefault(o => o.Key.Equals("JITTER:HEIGHT", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("JITTER_HEIGHT", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("JITTER:Y", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (!string.IsNullOrWhiteSpace(heightStr))
+        {
+            if (!decimal.TryParse(heightStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var h) || h < 0m || h > 1m)
+                throw new InvalidOperationException($"Invalid JITTER height '{heightStr}'. Must be between 0 and 1.");
+        }
+
+        var sizeRange = statement.Options.FirstOrDefault(o => o.Key.Equals("SIZE_RANGE", StringComparison.OrdinalIgnoreCase))?.Value;
+        var minBubble = statement.Options.FirstOrDefault(o => o.Key.Equals("MIN_BUBBLE_SIZE", StringComparison.OrdinalIgnoreCase))?.Value;
+        var maxBubble = statement.Options.FirstOrDefault(o => o.Key.Equals("MAX_BUBBLE_SIZE", StringComparison.OrdinalIgnoreCase))?.Value;
+
+        if (sizeRange is not null || minBubble is not null || maxBubble is not null)
+        {
+            if (statement.VisualType is not (VisualType.Bubble or VisualType.Scatter))
+                throw new InvalidOperationException($"SIZE_RANGE, MIN_BUBBLE_SIZE, and MAX_BUBBLE_SIZE are supported only on BUBBLE and SCATTER visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+
+            decimal min = 5m, max = 65m;
+            if (sizeRange is not null)
+            {
+                if (!TryParseSizeRange(sizeRange, out min, out max))
+                    throw new InvalidOperationException($"Invalid SIZE_RANGE '{sizeRange}'. Expected format (min_px, max_px) with positive numbers.");
+                if (min < 0m || max < 0m)
+                    throw new InvalidOperationException($"Invalid SIZE_RANGE '{sizeRange}'. Bubble sizes must be non-negative.");
+                if (min > max)
+                    throw new InvalidOperationException($"Invalid SIZE_RANGE '{sizeRange}'. Minimum bubble size ({min}) cannot exceed maximum bubble size ({max}).");
+            }
+
+            if (minBubble is not null)
+            {
+                if (!decimal.TryParse(minBubble, NumberStyles.Number, CultureInfo.InvariantCulture, out var mb) || mb < 0m)
+                    throw new InvalidOperationException($"Invalid MIN_BUBBLE_SIZE '{minBubble}'. Must be a non-negative number.");
+                min = mb;
+            }
+
+            if (maxBubble is not null)
+            {
+                if (!decimal.TryParse(maxBubble, NumberStyles.Number, CultureInfo.InvariantCulture, out var mb) || mb < 0m)
+                    throw new InvalidOperationException($"Invalid MAX_BUBBLE_SIZE '{maxBubble}'. Must be a non-negative number.");
+                max = mb;
+            }
+
+            if (min > max)
+                throw new InvalidOperationException($"Minimum bubble size ({min}) cannot exceed maximum bubble size ({max}).");
+        }
+    }
 
     private static decimal ResolveBandSize(CreateVisualStatement statement)
     {

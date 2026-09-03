@@ -3505,6 +3505,43 @@ public class ReportParser : ParserComponent
                 }
                 options.Add(new VisualOption { Key = "GRID", Value = val });
             }
+            else if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("JITTER", StringComparison.OrdinalIgnoreCase) && (_parser.Peek.Type == TokenType.EQUALS || _parser.Peek.Type == TokenType.LPAREN))
+            {
+                Advance();
+                if (Match(TokenType.EQUALS))
+                {
+                    var val = ConsumeReportOptionValue();
+                    options.Add(new VisualOption { Key = "JITTER", Value = NormalizeBoolOptionValue(val) });
+                    if (Match(TokenType.WITH))
+                    {
+                        Consume(TokenType.LPAREN, "Expected '(' after WITH in JITTER");
+                        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                        {
+                            var subKeyToken = _parser.Advance();
+                            var subKey = subKeyToken.Value.ToUpperInvariant();
+                            Consume(TokenType.EQUALS, $"Expected '=' after JITTER {subKey}");
+                            var subVal = ConsumeReportOptionValue();
+                            options.Add(new VisualOption { Key = "JITTER:" + subKey, Value = subVal });
+                            Match(TokenType.COMMA);
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' to close JITTER WITH block");
+                    }
+                }
+                else if (Match(TokenType.LPAREN))
+                {
+                    options.Add(new VisualOption { Key = "JITTER", Value = "ON" });
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        var subKeyToken = _parser.Advance();
+                        var subKey = subKeyToken.Value.ToUpperInvariant();
+                        Consume(TokenType.EQUALS, $"Expected '=' after JITTER {subKey}");
+                        var subVal = ConsumeReportOptionValue();
+                        options.Add(new VisualOption { Key = "JITTER:" + subKey, Value = subVal });
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close JITTER block");
+                }
+            }
             else
             {
                 // Accept any token as an option key — reserved keywords like STEP and DEFAULT
@@ -3546,8 +3583,17 @@ public class ReportParser : ParserComponent
             var keyToken = _parser.Advance();
             var key = keyToken.Value.ToUpperInvariant();
             Match(TokenType.EQUALS);
-            var val = ParseExpression();
-            opts.Add(new VisualOption { Key = key, Value = val is LiteralExpression lit ? lit.Value?.ToString() ?? "" : val.ToSql() });
+            string val;
+            if (_overlayKeywordTokens.Contains(_parser.Current.Type) || _parser.Current.Type == TokenType.ON || _parser.Current.Type == TokenType.OFF)
+            {
+                val = ConsumeReportOptionValue();
+            }
+            else
+            {
+                var expr = ParseExpression();
+                val = expr is LiteralExpression lit ? lit.Value?.ToString() ?? "" : expr.ToSql();
+            }
+            opts.Add(new VisualOption { Key = key, Value = val });
             Match(TokenType.COMMA);
         }
     }

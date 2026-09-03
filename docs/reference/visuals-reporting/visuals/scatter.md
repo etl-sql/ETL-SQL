@@ -19,6 +19,10 @@ CREATE VISUAL VisualName AS SCATTER (
     [SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR],
     [SYMBOL_STROKE_COLOR = '#rrggbb'],
     [SYMBOL_STROKE_WIDTH = n],
+    [JITTER = ON|OFF [WITH (WIDTH = n, HEIGHT = n)]],
+    [SIZE_RANGE = (min_px, max_px)],
+    [MIN_BUBBLE_SIZE = n],
+    [MAX_BUBBLE_SIZE = n],
     [ERROR_BAR_STYLE = CAPS|NO_CAPS],
     [SHOW_REGRESSION = ON|OFF],
     [GRID_LINES = ON|OFF],
@@ -33,7 +37,7 @@ CREATE VISUAL VisualName AS SCATTER (
       [LABEL_BORDER = 'width style #rrggbb'],
       [LEADER_LINE = ON|OFF WITH (COLOR = '#rrggbb', STYLE = SOLID|DASHED)]
     )],
-    [X_AXIS (LABEL = 'text', MIN = n, MAX = n, INCLUDE_ZERO = ON|OFF, REVERSE = ON|OFF,
+    [X_AXIS (LABEL = 'text', SCALE = LINEAR|LOG|LOGARITHMIC, MIN = n, MAX = n, INCLUDE_ZERO = ON|OFF, REVERSE = ON|OFF,
       MAJOR_TICK_COUNT = n, TICK_INTERVAL = n, MINOR_TICKS = ON|OFF,
       LABEL_ROTATION = AUTO|0|45|90, LABEL_SKIP = AUTO|n, AXIS_LINE = ON|OFF)],
     [Y_AXIS (...same axis properties...)]
@@ -60,6 +64,10 @@ CREATE VISUAL VisualName AS SCATTER (
 - **SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR** — sets a single marker geometry for a named `SCATTER` visual (default `CIRCLE`). `BUBBLE` keeps circular area marks.
 - **SYMBOL_STROKE_COLOR = '#rrggbb'** — outlines point markers with a portable hex color; without a color, markers have no stroke.
 - **SYMBOL_STROKE_WIDTH = n** — sets a non-negative marker outline width in pixels; defaults to `1` when a stroke color is present.
+- **JITTER = ON|OFF [WITH (WIDTH = n, HEIGHT = n)]** — displaces overlapping points using deterministic pseudo-random jitter offsets. Width and height amplitudes are numbers between `0` and `1` (default `0.15`). Also accepts `JITTER (WIDTH = n, HEIGHT = n)`.
+- **SIZE_RANGE = (min_px, max_px)** — sets explicit bubble size range in pixels when `SIZE` is mapped.
+- **MIN_BUBBLE_SIZE = n / MAX_BUBBLE_SIZE = n** — sets individual bubble radius limits in pixels.
+- **X_AXIS / Y_AXIS (SCALE = LINEAR|LOG|LOGARITHMIC)** — sets axis scale type. Logarithmic scale requires positive values and domain bounds; cannot be combined with `INCLUDE_ZERO = ON`.
 - **ERROR_BAR_STYLE = CAPS|NO_CAPS** — whisker cap style for error bars (default CAPS when error mappings are present)
 - **SHOW_REGRESSION = ON|OFF** — overlay a linear regression line (default OFF)
 - **GRID_LINES = ON|OFF** — show or hide background value-axis grid lines (default ON)

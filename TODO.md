@@ -641,33 +641,33 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 
 ### PIE / DONUT
 
-- [ ] **Slice sort order**: PIE and DONUT always render slices in source row order. Add
+- [x] **Slice sort order**: PIE and DONUT always render slices in source row order. Add
   `SORT = SOURCE|VALUE_DESC|VALUE_ASC|ALPHA` so authors can control whether the largest slice leads,
   matches query order, or sorts alphabetically — matching Tableau and Power BI pie behavior.
-- [ ] **Minimum slice threshold / "Other" rollup**: No option to collapse slices below a threshold into
+- [x] **Minimum slice threshold / "Other" rollup**: No option to collapse slices below a threshold into
   an "Other" segment. Add `MIN_SLICE_PCT = n` with an `OTHER_LABEL = 'text'` companion. Power BI and
   Tableau both offer this; without it, busy pies become unreadable and there is no clean workaround
   short of pre-aggregating in SQL.
-- [ ] **Slice explosion / pull-out**: No `EXPLODE = 'SliceName'` or `EXPLODE_ALL = n` option to offset
+- [x] **Slice explosion / pull-out**: No `EXPLODE = 'SliceName'` or `EXPLODE_ALL = n` option to offset
   one or all slices for emphasis. Common in Power BI and ggplot2 (via `ggforce`).
-- [ ] **Slice border/stroke**: PIE and DONUT slices have no stroke color or width control. Every
+- [x] **Slice border/stroke**: PIE and DONUT slices have no stroke color or width control. Every
   competitor offers at least a `stroke-width = 0` equivalent to remove the default inter-slice line.
   Add `SLICE_BORDER_COLOR = '#RRGGBB'` and `SLICE_BORDER_WIDTH = n` to PIE/DONUT OPTIONS.
-- [ ] **Start angle**: No `START_ANGLE = n` to rotate the first slice away from the default 12 o'clock
+- [x] **Start angle**: No `START_ANGLE = n` to rotate the first slice away from the default 12 o'clock
   position. Add to PIE and DONUT OPTIONS.
 
 ### SCATTER / BUBBLE
 
-- [ ] **COLOR mapping on BUBBLE**: `BUBBLE` accepts `X`, `Y`, `SIZE`, and `LABEL` but not `COLOR`.
+- [x] **COLOR mapping on BUBBLE**: `BUBBLE` accepts `X`, `Y`, `SIZE`, and `LABEL` but not `COLOR`.
   Adding a `COLOR` mapping for categorical coloring (matching the SCATTER visual) is missing. The gap
   is visible in the reference — `SCATTER` lists COLOR, `BUBBLE` does not.
-- [ ] **Bubble size range**: `BUBBLE` auto-scales `SIZE` to 5–65 px. There is no `MIN_BUBBLE_SIZE` or
+- [x] **Bubble size range**: `BUBBLE` auto-scales `SIZE` to 5–65 px. There is no `MIN_BUBBLE_SIZE` or
   `MAX_BUBBLE_SIZE` option. Power BI and ggplot2 both expose size-range controls. Add
   `SIZE_RANGE = (min_px, max_px)` to BUBBLE.
-- [ ] **Log scale axes**: SCATTER and BUBBLE have no `X_AXIS (SCALE = LOG)` or `Y_AXIS (SCALE = LOG)`
+- [x] **Log scale axes**: SCATTER and BUBBLE have no `X_AXIS (SCALE = LOG)` or `Y_AXIS (SCALE = LOG)`
   option. Log axes are standard in ggplot2 (`scale_x_log10`) and Tableau (right-click axis → Scale →
   Logarithmic). Add via the named-chart axis option block once MIN/MAX (section 3) is in place.
-- [ ] **Jitter on SCATTER**: No `JITTER = ON` or `JITTER (WIDTH = n, HEIGHT = n)` for SCATTER to
+- [x] **Jitter on SCATTER**: No `JITTER = ON` or `JITTER (WIDTH = n, HEIGHT = n)` for SCATTER to
   separate overlapping points. `CUSTOM CHART` has `POSITION = JITTER(...)` on POINT layers. Expose
   on named SCATTER as a simple option.
 

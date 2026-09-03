@@ -547,7 +547,14 @@ public sealed class DesignerScriptGenerationService
             || trimmed.Equals("OFF", StringComparison.OrdinalIgnoreCase)
             || trimmed.Equals("TRUE", StringComparison.OrdinalIgnoreCase)
             || trimmed.Equals("FALSE", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("NONE", StringComparison.OrdinalIgnoreCase))
+            || trimmed.Equals("NONE", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("SOURCE", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("VALUE_DESC", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("VALUE_ASC", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("ALPHA", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("LOG", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("LOGARITHMIC", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("LINEAR", StringComparison.OrdinalIgnoreCase))
             return trimmed.ToUpperInvariant();
         return $"'{EscapeStr(value)}'";
     }

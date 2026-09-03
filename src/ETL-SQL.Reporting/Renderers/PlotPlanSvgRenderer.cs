@@ -1551,6 +1551,25 @@ internal sealed class PlotPlanSvgRenderer
                 if (size.Value > maximumSize) maximumSize = size.Value;
             }
         }
+        var minRadius = 4m;
+        var maxRadius = 22m;
+        var minBubbleStr = Style(plan, "MIN_BUBBLE_SIZE") ?? LayerStyle(layer, "MIN_BUBBLE_SIZE");
+        var maxBubbleStr = Style(plan, "MAX_BUBBLE_SIZE") ?? LayerStyle(layer, "MAX_BUBBLE_SIZE");
+        var sizeRangeStr = Style(plan, "SIZE_RANGE") ?? LayerStyle(layer, "SIZE_RANGE");
+        if (!string.IsNullOrWhiteSpace(sizeRangeStr) && NamedVisualChartLowerer.TryParseSizeRange(sizeRangeStr, out var srMin, out var srMax))
+        {
+            minRadius = srMin;
+            maxRadius = srMax;
+        }
+        if (!string.IsNullOrWhiteSpace(minBubbleStr) && decimal.TryParse(minBubbleStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var mb))
+        {
+            minRadius = mb;
+        }
+        if (!string.IsNullOrWhiteSpace(maxBubbleStr) && decimal.TryParse(maxBubbleStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var xb))
+        {
+            maxRadius = xb;
+        }
+
         var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
         var labelFormat = DataFormat(plan);
         var labelFontSize = FontSize(Style(plan, "DATA_LABELS:FONT_SIZE"));
@@ -1570,7 +1589,7 @@ internal sealed class PlotPlanSvgRenderer
             var yValue = PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? ChartValue.Null());
             var xChannel = Channel(datum, FieldChannel.X) ?? ChartValue.Null();
             if (datum.IsGap || !yValue.HasValue) continue;
-            var radius = NormalizePointRadius(Numeric(datum, FieldChannel.Size), minimumSize, maximumSize);
+            var radius = NormalizePointRadius(Numeric(datum, FieldChannel.Size), minimumSize, maximumSize, minRadius, maxRadius);
             var datumColor = ResolveDatumColor(colorScale, datum, color);
             var opacity = EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? 1m;
             var label = Channel(datum, FieldChannel.Text) is { } labelValue ? PlotPlanResolver.Display(labelValue) : null;
@@ -1606,7 +1625,7 @@ internal sealed class PlotPlanSvgRenderer
                 }
                 builder.AppendLine("</g>");
             }
-            RenderPointSymbol(builder, PointShape(plan, layer, datum), x, y, Math.Clamp(radius, 1m, 30m),
+            RenderPointSymbol(builder, PointShape(plan, layer, datum), x, y, Math.Clamp(radius, 0.5m, Math.Max(30m, maxRadius)),
                 datumColor, pointClass, datum.RowIndex, label,
                 OpacityAttribute(opacity) + PointStrokeAttributes(layer));
             if (showLabels)
@@ -2075,11 +2094,11 @@ internal sealed class PlotPlanSvgRenderer
         return $"M {N(first.X)} {N(first.Y)} A {N(radius)} {N(radius)} 0 {large} {sweep} {N(last.X)} {N(last.Y)}";
     }
 
-    private static decimal NormalizePointRadius(decimal? value, decimal minimum, decimal maximum)
+    private static decimal NormalizePointRadius(decimal? value, decimal minimum, decimal maximum, decimal minRadius = 4m, decimal maxRadius = 22m)
     {
-        if (!value.HasValue) return 4m;
-        if (maximum <= minimum) return 10m;
-        return 4m + ((value.Value - minimum) / (maximum - minimum) * 18m);
+        if (!value.HasValue) return minRadius;
+        if (maximum <= minimum) return (minRadius + maxRadius) / 2m;
+        return minRadius + ((value.Value - minimum) / (maximum - minimum) * (maxRadius - minRadius));
     }
 
     private static void RenderRule(StringBuilder builder, ResolvedMarkLayer layer, in CartesianPlotArea area,
@@ -2720,17 +2739,60 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
+    private sealed record ArcItem(ResolvedDatum Datum, string Label, decimal Value, bool IsOther = false);
+
     private static void RenderArcs(StringBuilder builder, PlotPlan plan)
     {
         var layer = plan.Layers.First(item => item.Mark == MarkKind.Arc);
-        var items = layer.Data.Where(datum => !datum.IsGap).Select(datum => new
+        var rawItems = layer.Data.Where(datum => !datum.IsGap).Select(datum => new ArcItem(
+            datum,
+            PlotPlanResolver.Display(Channel(datum, FieldChannel.Theta) ?? ChartValue.From("")),
+            PlotPlanResolver.Number(Channel(datum, FieldChannel.Radius) ?? ChartValue.Null()) ?? 0m
+        )).Where(item => item.Value > 0).ToList();
+
+        // 1. Sort order: SOURCE (default), VALUE_DESC, VALUE_ASC, ALPHA
+        var sort = (Style(plan, "SORT") ?? Style(plan, "AXIS_SORT"))?.ToUpperInvariant();
+        var items = sort switch
         {
-            Datum = datum,
-            Label = PlotPlanResolver.Display(Channel(datum, FieldChannel.Theta) ?? ChartValue.From("")),
-            Value = PlotPlanResolver.Number(Channel(datum, FieldChannel.Radius) ?? ChartValue.Null()) ?? 0m
-        }).Where(item => item.Value > 0).ToList();
+            "VALUE_DESC" or "VALUE" => rawItems.OrderByDescending(x => x.Value).ThenBy(x => x.Label, StringComparer.Ordinal).ToList(),
+            "VALUE_ASC" => rawItems.OrderBy(x => x.Value).ThenBy(x => x.Label, StringComparer.Ordinal).ToList(),
+            "ALPHA" => rawItems.OrderBy(x => x.Label, StringComparer.OrdinalIgnoreCase).ToList(),
+            _ => rawItems
+        };
+
         var total = items.Sum(item => item.Value);
         if (total <= 0) return;
+
+        // 2. Minimum slice threshold / "Other" rollup
+        var minSlicePctStr = Style(plan, "MIN_SLICE_PCT");
+        var otherLabel = Style(plan, "OTHER_LABEL") ?? "Other";
+        if (!string.IsNullOrWhiteSpace(minSlicePctStr) &&
+            decimal.TryParse(minSlicePctStr.TrimEnd('%'), NumberStyles.Number, CultureInfo.InvariantCulture, out var minPct) &&
+            minPct > 0m)
+        {
+            var thresholdRatio = minPct >= 1m ? minPct / 100m : minPct;
+            var kept = new List<ArcItem>();
+            decimal otherTotal = 0m;
+            ResolvedDatum? sampleDatum = null;
+            foreach (var item in items)
+            {
+                if (item.Value / total < thresholdRatio)
+                {
+                    otherTotal += item.Value;
+                    sampleDatum ??= item.Datum;
+                }
+                else
+                {
+                    kept.Add(item);
+                }
+            }
+            if (otherTotal > 0m && kept.Count > 0)
+            {
+                kept.Add(new ArcItem(sampleDatum ?? items[0].Datum, otherLabel, otherTotal, true));
+                items = kept;
+            }
+        }
+
         var legendPosition = LegendPosition(plan);
         var rightReserve = LegendEnabled(plan) && plan.Legend.Length > 1 && legendPosition == "RIGHT" ? 125m : 16m;
         var leftReserve = LegendEnabled(plan) && plan.Legend.Length > 1 && legendPosition == "LEFT" ? 125m : 16m;
@@ -2748,32 +2810,99 @@ internal sealed class PlotPlanSvgRenderer
         var roseMode = IsEnabled(plan.Style, "ROSE_MODE");
         var maximum = items.Max(item => item.Value);
         var labels = new List<ArcLabel>();
-        var angle = -Math.PI / 2d;
+
+        // 3. Start angle: default 12 o'clock (-90° in standard SVG radians)
+        var startAngleDeg = plan.Coordinate?.StartAngle;
+        if (!startAngleDeg.HasValue)
+        {
+            var saStr = Style(plan, "START_ANGLE")?.Trim().TrimEnd('°', 'd', 'e', 'g');
+            if (decimal.TryParse(saStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedSa))
+                startAngleDeg = parsedSa;
+        }
+        var angle = -Math.PI / 2d + (double)(startAngleDeg ?? 0m) * Math.PI / 180d;
+
+        // 4. Slice borders
+        var borderColor = Style(plan, "SLICE_BORDER_COLOR") ?? "white";
+        var borderWidthStr = Style(plan, "SLICE_BORDER_WIDTH");
+        var borderWidth = 2m;
+        if (!string.IsNullOrWhiteSpace(borderWidthStr) &&
+            decimal.TryParse(borderWidthStr.TrimEnd('p', 'x', 'P', 'X'), NumberStyles.Number, CultureInfo.InvariantCulture, out var bw))
+        {
+            borderWidth = bw;
+        }
+        var hasBorder = borderWidth > 0m && !borderColor.Equals("NONE", StringComparison.OrdinalIgnoreCase) && !borderColor.Equals("TRANSPARENT", StringComparison.OrdinalIgnoreCase);
+        var strokeAttr = hasBorder
+            ? $"stroke='{Esc(borderColor)}' stroke-width='{N(borderWidth)}'"
+            : "stroke='none' stroke-width='0'";
+
+        // 5. Slice explosion / pull-out
+        var explodeSlice = Style(plan, "EXPLODE");
+        var explodeAllStr = Style(plan, "EXPLODE_ALL");
+        var explodeDistance = 10m;
+        var hasExplodeAll = false;
+        if (!string.IsNullOrWhiteSpace(explodeAllStr))
+        {
+            if (decimal.TryParse(explodeAllStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var dist))
+            {
+                explodeDistance = dist;
+                hasExplodeAll = dist > 0m;
+            }
+            else if (explodeAllStr.Equals("ON", StringComparison.OrdinalIgnoreCase) || explodeAllStr.Equals("TRUE", StringComparison.OrdinalIgnoreCase))
+            {
+                hasExplodeAll = true;
+            }
+        }
+        var explodeDistStr = Style(plan, "EXPLODE_DISTANCE");
+        if (!string.IsNullOrWhiteSpace(explodeDistStr) &&
+            decimal.TryParse(explodeDistStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var ed))
+        {
+            explodeDistance = ed;
+        }
+
         for (var index = 0; index < items.Count; index++)
         {
             var sweep = roseMode ? 2d * Math.PI / items.Count : 2d * Math.PI * (double)(items[index].Value / total);
             var end = angle + sweep;
             var large = sweep > Math.PI ? 1 : 0;
             var sliceOuter = roseMode ? Math.Max(inner + 2m, outer * (decimal)Math.Sqrt((double)(items[index].Value / maximum))) : outer;
-            var outerStart = Point(cx, cy, sliceOuter, angle);
-            var outerEnd = Point(cx, cy, sliceOuter, end);
-            var defaultColor = plan.Palette.FirstOrDefault(item => item.SeriesKey == items[index].Label)?.Color ?? "#5470c6";
+
+            var isExploded = hasExplodeAll ||
+                (!string.IsNullOrWhiteSpace(explodeSlice) && string.Equals(items[index].Label, explodeSlice, StringComparison.OrdinalIgnoreCase));
+            var sliceDx = 0m;
+            var sliceDy = 0m;
+            if (isExploded)
+            {
+                var midAngle = angle + sweep / 2d;
+                sliceDx = explodeDistance * (decimal)Math.Cos(midAngle);
+                sliceDy = explodeDistance * (decimal)Math.Sin(midAngle);
+            }
+            var sliceCx = cx + sliceDx;
+            var sliceCy = cy + sliceDy;
+
+            var outerStart = Point(sliceCx, sliceCy, sliceOuter, angle);
+            var outerEnd = Point(sliceCx, sliceCy, sliceOuter, end);
+            var defaultColor = items[index].IsOther
+                ? "#9ca3af"
+                : (plan.Palette.FirstOrDefault(item => item.SeriesKey == items[index].Label)?.Color ?? "#5470c6");
             var color = EncodingText(items[index].Datum, ConditionalEncodingChannel.Color) is { } candidate ? SafePaint(candidate, defaultColor) : defaultColor;
             string path;
             if (inner > 0)
             {
-                var innerEnd = Point(cx, cy, inner, end);
-                var innerStart = Point(cx, cy, inner, angle);
+                var innerEnd = Point(sliceCx, sliceCy, inner, end);
+                var innerStart = Point(sliceCx, sliceCy, inner, angle);
                 path = $"M {outerStart} A {N(sliceOuter)} {N(sliceOuter)} 0 {large} 1 {outerEnd} L {innerEnd} A {N(inner)} {N(inner)} 0 {large} 0 {innerStart} Z";
             }
-            else path = $"M {N(cx)} {N(cy)} L {outerStart} A {N(sliceOuter)} {N(sliceOuter)} 0 {large} 1 {outerEnd} Z";
-            builder.AppendLine($"<path d='{path}' fill='{Esc(color)}' stroke='white' stroke-width='2' data-row-index='{items[index].Datum.RowIndex}'><title>{Esc(items[index].Label)}: {N(items[index].Value)}</title></path>");
+            else path = $"M {N(sliceCx)} {N(sliceCy)} L {outerStart} A {N(sliceOuter)} {N(sliceOuter)} 0 {large} 1 {outerEnd} Z";
+
+            var sliceClass = isExploded ? "plot-arc-slice plot-arc-exploded" : "plot-arc-slice";
+            builder.AppendLine($"<path class='{sliceClass}' d='{path}' fill='{Esc(color)}' {strokeAttr} data-row-index='{items[index].Datum.RowIndex}'><title>{Esc(items[index].Label)}: {N(items[index].Value)}</title></path>");
+
             if (showLabels)
             {
                 var midpoint = angle + sweep / 2d;
                 var label = $"{items[index].Label}: {FormatDataLabel(items[index].Value, DataFormat(plan), total)}";
-                var anchor = PointCoordinates(cx, cy, sliceOuter + 2m, midpoint);
-                var elbow = PointCoordinates(cx, cy, outer + 11m, midpoint);
+                var anchor = PointCoordinates(sliceCx, sliceCy, sliceOuter + 2m, midpoint);
+                var elbow = PointCoordinates(sliceCx, sliceCy, outer + 11m, midpoint);
                 labels.Add(new ArcLabel(anchor.X, anchor.Y, elbow.X, elbow.Y, label, Math.Cos(midpoint) >= 0d));
             }
             angle = end;

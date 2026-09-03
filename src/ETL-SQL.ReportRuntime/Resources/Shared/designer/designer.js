@@ -5099,6 +5099,9 @@ export function createDesigner(container, opts = {}) {
         const overlays = v.options?.overlays || '';
         const isChart = FORMAT_INSPECTOR_CHARTS.has(v.type);
         const isCartesian = FORMAT_INSPECTOR_CARTESIAN.has(v.type);
+        const isPieOrDonut = ['PIE', 'DONUT'].includes(v.type);
+        const isScatter = v.type === 'SCATTER';
+        const isBubble = v.type === 'BUBBLE';
         const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
         const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
         const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
@@ -5162,6 +5165,29 @@ export function createDesigner(container, opts = {}) {
                             <input id="pp-number-format" class="form-control" list="pp-number-format-list" value="${esc(formatValue)}" placeholder="$#,##0.00">
                             <datalist id="pp-number-format-list"><option value="C2"></option><option value="N0"></option><option value="P1"></option><option value="$#,##0.00"></option></datalist>
                         </label>` : ''}
+                        ${isScatter ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">Jitter controls</div>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-scatter-jitter" ${(v.options?.JITTER || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Enable jitter</span></label>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Jitter width (0-1)
+                                <input type="number" id="pp-format-scatter-jitter-width" class="form-control" min="0" max="1" step="0.05" value="${esc(v.options?.['JITTER:WIDTH'] || v.options?.JITTER_WIDTH || '')}" placeholder="0.15">
+                            </label>
+                            <label class="etlsql-dsgn-label">Jitter height (0-1)
+                                <input type="number" id="pp-format-scatter-jitter-height" class="form-control" min="0" max="1" step="0.05" value="${esc(v.options?.['JITTER:HEIGHT'] || v.options?.JITTER_HEIGHT || '')}" placeholder="0.15">
+                            </label>
+                        </div>` : ''}
+                        ${isBubble ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">Bubble size controls</div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Min bubble size (px)
+                                <input type="number" id="pp-format-bubble-min-size" class="form-control" min="0" max="200" step="1" value="${esc(v.options?.MIN_BUBBLE_SIZE || '')}" placeholder="5">
+                            </label>
+                            <label class="etlsql-dsgn-label">Max bubble size (px)
+                                <input type="number" id="pp-format-bubble-max-size" class="form-control" min="0" max="200" step="1" value="${esc(v.options?.MAX_BUBBLE_SIZE || '')}" placeholder="65">
+                            </label>
+                        </div>` : ''}
                     </div>
                 </details>
 
@@ -5211,8 +5237,45 @@ export function createDesigner(container, opts = {}) {
                             <label class="etlsql-dsgn-label">Zero-line width<input type="number" id="pp-format-zero-line-width" class="form-control" min="0.1" max="10" step="0.1" value="${esc(v.options?.ZERO_LINE_WIDTH || '1.5')}"></label>
                         </div>` : ''}
                         <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-zoom-slider" ${(v.options?.ZOOM_SLIDER || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show zoom slider</span></label>
+                        ${isPieOrDonut ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">Slice controls</div>
+                        <label class="etlsql-dsgn-label">Slice sort order
+                            <select id="pp-format-pie-sort" class="form-control">
+                                ${['SOURCE', 'VALUE_DESC', 'VALUE_ASC', 'ALPHA'].map(value => `<option${(v.options?.SORT || 'SOURCE').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}
+                            </select>
+                        </label>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Min slice threshold (%)
+                                <input type="number" id="pp-format-pie-min-slice-pct" class="form-control" min="0" max="100" step="any" value="${esc(v.options?.MIN_SLICE_PCT || '')}" placeholder="None">
+                            </label>
+                            <label class="etlsql-dsgn-label">Other label
+                                <input type="text" id="pp-format-pie-other-label" class="form-control" value="${esc(v.options?.OTHER_LABEL || '')}" placeholder="Other">
+                            </label>
+                        </div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Explode slice
+                                <input type="text" id="pp-format-pie-explode" class="form-control" value="${esc(v.options?.EXPLODE || '')}" placeholder="Slice name">
+                            </label>
+                            <label class="etlsql-dsgn-label">Explode all (px)
+                                <input type="number" id="pp-format-pie-explode-all" class="form-control" min="0" max="100" step="1" value="${esc(v.options?.EXPLODE_ALL || '')}" placeholder="0">
+                            </label>
+                        </div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Border color
+                                <input type="color" id="pp-format-pie-border-color" value="${toHexColor(v.options?.SLICE_BORDER_COLOR, '#ffffff')}">
+                            </label>
+                            <label class="etlsql-dsgn-label">Border width (px)
+                                <input type="number" id="pp-format-pie-border-width" class="form-control" min="0" max="20" step="0.5" value="${esc(v.options?.SLICE_BORDER_WIDTH || '2')}">
+                            </label>
+                        </div>
+                        <label class="etlsql-dsgn-label">Start angle (degrees)
+                            <input type="number" id="pp-format-pie-start-angle" class="form-control" min="-360" max="360" step="15" value="${esc(v.options?.START_ANGLE || '')}" placeholder="0° (12 o'clock)">
+                        </label>` : ''}
                         ${isCartesian ? `<div class="etlsql-format-axis-grid">
                             <strong>X axis</strong><strong>Y axis</strong>
+                            <select data-axis="x" data-axis-key="SCALE" class="form-control">${['LINEAR', 'LOG'].map(value => `<option value="${value}"${(xAxis.SCALE || 'LINEAR').toUpperCase() === value ? ' selected' : ''}>Scale: ${value}</option>`).join('')}</select>
+                            <select data-axis="y" data-axis-key="SCALE" class="form-control">${['LINEAR', 'LOG'].map(value => `<option value="${value}"${(yAxis.SCALE || 'LINEAR').toUpperCase() === value ? ' selected' : ''}>Scale: ${value}</option>`).join('')}</select>
                             <input data-axis="x" data-axis-key="LABEL" class="form-control" value="${esc(xAxis.LABEL || xAxis.label || '')}" placeholder="Label">
                             <input data-axis="y" data-axis-key="LABEL" class="form-control" value="${esc(yAxis.LABEL || yAxis.label || '')}" placeholder="Label">
                             <input data-axis="x" data-axis-key="MIN" class="form-control" value="${esc(xAxis.MIN || xAxis.min || '')}" placeholder="Min · Auto">
@@ -5497,6 +5560,19 @@ export function createDesigner(container, opts = {}) {
         bindOption('#pp-format-grid-color', 'GRID_LINE_COLOR', 'input');
         bindOption('#pp-format-grid-dash', 'GRID_LINE_DASH');
         bindOption('#pp-format-grid-width', 'GRID_LINE_WIDTH');
+        bindOption('#pp-format-pie-sort', 'SORT');
+        bindOption('#pp-format-pie-min-slice-pct', 'MIN_SLICE_PCT');
+        bindOption('#pp-format-pie-other-label', 'OTHER_LABEL');
+        bindOption('#pp-format-pie-explode', 'EXPLODE');
+        bindOption('#pp-format-pie-explode-all', 'EXPLODE_ALL');
+        bindOption('#pp-format-pie-border-color', 'SLICE_BORDER_COLOR', 'input');
+        bindOption('#pp-format-pie-border-width', 'SLICE_BORDER_WIDTH');
+        bindOption('#pp-format-pie-start-angle', 'START_ANGLE');
+        bindOption('#pp-format-scatter-jitter', 'JITTER', 'change', (el) => el.checked ? 'ON' : 'OFF');
+        bindOption('#pp-format-scatter-jitter-width', 'JITTER_WIDTH');
+        bindOption('#pp-format-scatter-jitter-height', 'JITTER_HEIGHT');
+        bindOption('#pp-format-bubble-min-size', 'MIN_BUBBLE_SIZE');
+        bindOption('#pp-format-bubble-max-size', 'MAX_BUBBLE_SIZE');
         bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
         bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
         bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');

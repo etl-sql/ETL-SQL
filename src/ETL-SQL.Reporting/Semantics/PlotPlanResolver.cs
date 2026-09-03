@@ -179,7 +179,7 @@ public sealed class PlotPlanResolver
         var binding = spec.Bindings.FirstOrDefault(item => item.Channel is FieldChannel.X or FieldChannel.Theta);
         if (binding?.Field is not { } categoryField || !columns.TryGetValue(categoryField, out var column)) return [];
         var categories = column.Values.Select(ValueKey).Where(value => value is not null).Cast<string>().Distinct(StringComparer.Ordinal).ToList();
-        var axisSort = spec.Theme.Tokens.FirstOrDefault(token => token.Name.Equals("AXIS_SORT", StringComparison.OrdinalIgnoreCase))?.Value.ToUpperInvariant();
+        var axisSort = spec.Theme.Tokens.FirstOrDefault(token => token.Name.Equals("AXIS_SORT", StringComparison.OrdinalIgnoreCase) || token.Name.Equals("SORT", StringComparison.OrdinalIgnoreCase))?.Value.ToUpperInvariant();
         if (axisSort is "VALUE" or "VALUE_DESC")
         {
             var measureBinding = spec.Bindings.FirstOrDefault(item => item.Channel is FieldChannel.Y or FieldChannel.Radius);
@@ -191,18 +191,30 @@ public sealed class PlotPlanResolver
                     var category = ValueKey(column.Values[index]);
                     if (category is not null) sums[category] += Number(measure.Values[index]) ?? 0m;
                 }
-                categories = (axisSort == "VALUE_DESC"
-                    ? categories.OrderByDescending(category => sums[category]).ThenBy(category => category, StringComparer.Ordinal)
-                    : categories.OrderBy(category => sums[category]).ThenBy(category => category, StringComparer.Ordinal)).ToList();
+                categories = categories.OrderByDescending(category => sums[category]).ThenBy(category => category, StringComparer.Ordinal).ToList();
             }
+        }
+        else if (axisSort is "VALUE_ASC")
+        {
+            var measureBinding = spec.Bindings.FirstOrDefault(item => item.Channel is FieldChannel.Y or FieldChannel.Radius);
+            if (measureBinding?.Field is { } measureField && columns.TryGetValue(measureField, out var measure))
+            {
+                var sums = categories.ToDictionary(category => category, _ => 0m, StringComparer.Ordinal);
+                for (var index = 0; index < column.Values.Length; index++)
+                {
+                    var category = ValueKey(column.Values[index]);
+                    if (category is not null) sums[category] += Number(measure.Values[index]) ?? 0m;
+                }
+                categories = categories.OrderBy(category => sums[category]).ThenBy(category => category, StringComparer.Ordinal).ToList();
+            }
+        }
+        else if (axisSort is "ALPHA" || binding.Sort == SortDirection.Ascending)
+        {
+            categories.Sort(StringComparer.OrdinalIgnoreCase);
         }
         else if (binding.Sort == SortDirection.Descending)
         {
-            categories.Sort((left, right) => StringComparer.Ordinal.Compare(right, left));
-        }
-        else if (binding.Sort == SortDirection.Ascending)
-        {
-            categories.Sort(StringComparer.Ordinal);
+            categories.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(right, left));
         }
         return categories.ToImmutableArray();
     }
@@ -335,9 +347,17 @@ public sealed class PlotPlanResolver
                      scale.Channel == FieldChannel.X && scale.Kind is ScaleKind.Linear or ScaleKind.Logarithmic && layer.Mark == MarkKind.Point));
             if (needsMarkHeadroom)
             {
-                var padding = Math.Max(.01m, (maximum - minimum) * .05m);
-                if (scale.DomainMaximum is null) maximum += padding;
-                if ((!scale.IncludeZero || scale.Channel == FieldChannel.X) && scale.DomainMinimum is null) minimum -= padding;
+                if (scale.Kind == ScaleKind.Logarithmic)
+                {
+                    if (scale.DomainMaximum is null) maximum = (decimal)Math.Pow(10d, Math.Ceiling(Math.Log10((double)maximum)));
+                    if (scale.DomainMinimum is null) minimum = (decimal)Math.Pow(10d, Math.Floor(Math.Log10((double)minimum)));
+                }
+                else
+                {
+                    var padding = Math.Max(.01m, (maximum - minimum) * .05m);
+                    if (scale.DomainMaximum is null) maximum += padding;
+                    if ((!scale.IncludeZero || scale.Channel == FieldChannel.X) && scale.DomainMinimum is null) minimum -= padding;
+                }
             }
             if (scale.MajorTickCount is < 2 or > 100)
                 throw new InvalidOperationException($"MAJOR_TICK_COUNT for scale '{scale.Id}' must be between 2 and 100.");
@@ -1270,6 +1290,17 @@ public sealed class PlotPlanResolver
     {
         var panelByRow = facets.SelectMany(panel => panel.RowIndices.Select(row => (row, panel)))
             .ToDictionary(item => item.row, item => item.panel);
+
+        if (layers.Any(l => l.Position?.Kind == PositionAdjustmentKind.Jitter && l.Position.StableKeyField == "__row_id") &&
+            !columns.ContainsKey("__row_id"))
+        {
+            var rowIndices = Enumerable.Range(0, data.RowCount).Select(i => ChartValue.From((decimal)i)).ToImmutableArray();
+            var rowDisplays = Enumerable.Range(0, data.RowCount).Select(i => (string?)i.ToString()).ToImmutableArray();
+            var rowCol = new ChartColumn("__row_id", ChartValueKind.Decimal, DataSemanticKind.Nominal, rowIndices, rowDisplays);
+            var newCols = columns.ToDictionary(k => k.Key, v => v.Value, StringComparer.OrdinalIgnoreCase);
+            newCols["__row_id"] = rowCol;
+            columns = newCols;
+        }
 
         foreach (var layer in layers.Where(layer => layer.Position?.Kind == PositionAdjustmentKind.Jitter))
         {

@@ -941,6 +941,15 @@ Common `OPTIONS` keys for report visuals:
 | `LINE_WIDTH` | `LINE`, line series in `COMBO`; `CUSTOM` `LINE` layer styles | Decimal from `0.1` through `10` pixels | Sets the rendered series stroke width without changing point-marker or overlay widths. |
 | `BAND_SIZE` | `BAR`, `HBAR`, bar layers in `COMBO` | Decimal greater than `0` and at most `1` | Controls bar width and therefore spacing. |
 | `AXIS_SORT` | `BAR`, `HBAR`, `LINE`, `AREA`, `COMBO` | `ASC`, `DESC`, `SOURCE`, `VALUE`, `VALUE_DESC` | Controls category-axis order. `ASC` type-sorts datetime, numeric, then text values; `SOURCE` preserves query order; `VALUE` and `VALUE_DESC` sort by the metric value. |
+| `SORT` | `PIE`, `DONUT` | `SOURCE`, `VALUE_DESC`, `VALUE_ASC`, `ALPHA` | Controls slice sort order. `SOURCE` keeps query order; `VALUE_DESC` leads with largest slice; `VALUE_ASC` leads with smallest; `ALPHA` sorts alphabetically. |
+| `MIN_SLICE_PCT` | `PIE`, `DONUT` | Positive decimal number | Minimum slice percentage threshold; smaller slices collapse into a single "Other" segment. |
+| `OTHER_LABEL` | `PIE`, `DONUT` with `MIN_SLICE_PCT` | String (default `'Other'`) | Label for the collapsed small-slices segment. |
+| `EXPLODE` | `PIE`, `DONUT` | String | Slice category name to offset radially from the center for emphasis. |
+| `EXPLODE_ALL` | `PIE`, `DONUT` | `ON` / `OFF` or pixel number | Offsets all slices radially outward. |
+| `EXPLODE_DISTANCE` | `PIE`, `DONUT` | Number (pixels, default `10`) | Radial offset distance in pixels for exploded slices. |
+| `SLICE_BORDER_COLOR` | `PIE`, `DONUT` | CSS color string (default `'white'`) | Stroke color between slices. |
+| `SLICE_BORDER_WIDTH` | `PIE`, `DONUT` | Non-negative decimal pixels (default `2`) | Stroke width between slices; set to `0` to remove inter-slice separator lines. |
+| `START_ANGLE` | `PIE`, `DONUT` | Number in degrees (default `0`) | Clockwise angular rotation in degrees from the default 12 o'clock position. |
 | `ABBREVIATE` | `CARD` | `ON` / `OFF` | Shortens large numbers, such as `1250000` to `1.25M` |
 | `ALLOW_MAXIMIZE` | Visual `STYLE` | `ON` / `OFF` | Shows or hides the viewer maximize button. Data/chart visuals default `ON`; input/control visuals default `OFF`. |
 | `GOAL` | `CARD` | Numeric literal | Supplies a literal target when `MAPPINGS(GOAL = column)` is not used |
@@ -2031,6 +2040,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | :--- | :--- | :--- |
 | `ALGORITHM` | General | Canonical language token |
 | `ALL_VALUE` | General | Canonical language token |
+| `ALPHA` | General | Canonical language token |
 | `ANALYZE` | General | Canonical language token |
 | `BACK` | General | Canonical language token |
 | `BATCHSIZE` | General | Canonical language token |
@@ -2060,6 +2070,9 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `EXCLUDE_FROM_PRINT` | General | Canonical language token |
 | `EXPECT` | General | Canonical language token |
 | `EXPECTED_HASH` | General | Canonical language token |
+| `EXPLODE` | General | Canonical language token |
+| `EXPLODE_ALL` | General | Canonical language token |
+| `EXPLODE_DISTANCE` | General | Canonical language token |
 | `EXPORT_CSV` | General | Canonical language token |
 | `EXPORT_EXCEL` | General | Canonical language token |
 | `EXPORT_PDF` | General | Canonical language token |
@@ -2081,6 +2094,9 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `INPUT` | General | Canonical language token |
 | `INTEGRITY` | General | Canonical language token |
 | `INVALID` | General | Canonical language token |
+| `JITTER` | General | Canonical language token |
+| `JITTER_HEIGHT` | General | Canonical language token |
+| `JITTER_WIDTH` | General | Canonical language token |
 | `KEEP_TOGETHER` | General | Canonical language token |
 | `LEADING` | General | Canonical language token |
 | `LIMIT_TYPE` | General | Canonical language token |
@@ -2091,13 +2107,18 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `LINEAGE_TAGS` | General | Canonical language token |
 | `LOAD` | General | Canonical language token |
 | `LOCAL` | General | Canonical language token |
+| `LOG` | General | Canonical language token |
+| `LOGARITHMIC` | General | Canonical language token |
 | `MAP_BY_HEADER_NAME` | General | Canonical language token |
 | `MARGIN` | General | Canonical language token |
 | `MARGINS` | General | Canonical language token |
 | `MATCHES` | General | Canonical language token |
 | `MAX` | General | Canonical language token |
+| `MAX_BUBBLE_SIZE` | General | Canonical language token |
 | `MAXERRORS` | General | Canonical language token |
 | `MIN` | General | Canonical language token |
+| `MIN_BUBBLE_SIZE` | General | Canonical language token |
+| `MIN_SLICE_PCT` | General | Canonical language token |
 | `MODE` | General | Canonical language token |
 | `MULTISELECT` | General | Canonical language token |
 | `NONE` | General | Canonical language token |
@@ -2109,6 +2130,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `ON` | General | Canonical language token |
 | `OPERATOR_MEMORY_GRANT` | General | Canonical language token |
 | `ORIENTATION` | General | Canonical language token |
+| `OTHER_LABEL` | General | Canonical language token |
 | `OUTPUT` | General | Canonical language token |
 | `OVERFLOW` | General | Canonical language token |
 | `OVERLAY` | General | Canonical language token |
@@ -2144,9 +2166,13 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `SETS` | General | Canonical language token |
 | `SHUTDOWN` | General | Canonical language token |
 | `SIGMA` | General | Canonical language token |
+| `SIZE_RANGE` | General | Canonical language token |
 | `SKIP_ERROR` | General | Canonical language token |
+| `SLICE_BORDER_COLOR` | General | Canonical language token |
+| `SLICE_BORDER_WIDTH` | General | Canonical language token |
 | `SPARKLINE` | General | Canonical language token |
 | `SPLIT` | General | Canonical language token |
+| `START_ANGLE` | General | Canonical language token |
 | `STEWARD` | General | Canonical language token |
 | `SUBSTRING` | General | Canonical language token |
 | `SYNC` | General | Canonical language token |
@@ -2168,6 +2194,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `UNITS` | General | Canonical language token |
 | `UNLOCKED` | General | Canonical language token |
 | `VALUE` | General | Canonical language token |
+| `VALUE_ASC` | General | Canonical language token |
 | `VARIABLES` | General | Canonical language token |
 | `VERIFY` | General | Canonical language token |
 | `WARN_PERCENT` | General | Canonical language token |

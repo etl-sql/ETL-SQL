@@ -22,6 +22,15 @@ CREATE VISUAL VisualName AS PIE (
 
 - **ROSE_MODE = ON|OFF** - "nightingale" mode: radius also varies with value, not just angle (default OFF)
 - **INNER_RADIUS = number** - DONUT hole as a fraction from `0` to `0.9`, or as a percentage; the default is `0.45`
+- **SORT = SOURCE|VALUE_DESC|VALUE_ASC|ALPHA** - slice sort order: query order, largest first, smallest first, or alphabetical (default SOURCE)
+- **MIN_SLICE_PCT = number** - minimum slice percentage threshold; smaller slices collapse into an "Other" segment
+- **OTHER_LABEL = 'text'** - label for the collapsed "Other" slice (default 'Other')
+- **EXPLODE = 'SliceName'** - category slice name to pull out radially from center
+- **EXPLODE_ALL = number|ON** - pulls all slices radially outward by pixel distance (default 10)
+- **EXPLODE_DISTANCE = number** - radial offset distance in pixels for exploded slices (default 10)
+- **SLICE_BORDER_COLOR = '#rrggbb'** - separator stroke color between slices (default 'white')
+- **SLICE_BORDER_WIDTH = number** - separator stroke width between slices (default 2; 0 removes lines)
+- **START_ANGLE = number** - clockwise rotation in degrees from 12 o'clock position (default 0)
 - **LEGEND = ON|OFF** - show colour legend (default ON)
 - **DATA_LABELS = ON|OFF WITH (...)** — show slice labels and configure styling (default ON). Extended options:
   - **LEADER_LINE = ON|OFF WITH (COLOR = '#rrggbb', STYLE = SOLID|DASHED)** — connects slice outer arc to outside label (default OFF).

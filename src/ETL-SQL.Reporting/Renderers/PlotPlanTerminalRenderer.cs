@@ -737,7 +737,7 @@ internal static class PlotPlanTerminalRenderer
     private static IRenderable RenderArcs(PlotPlan plan,
         IReadOnlyList<(ResolvedMarkLayer Layer, List<ResolvedDatum> Data)> layers, int width)
     {
-        var components = layers.SelectMany(item => item.Data.Select(datum =>
+        var rawComponents = layers.SelectMany(item => item.Data.Select(datum =>
         {
             var datumLabel = Label(datum);
             var series = layers.Count == 1
@@ -746,7 +746,49 @@ internal static class PlotPlanTerminalRenderer
             var label = layers.Count > 1 && item.Data.Count == 1 ? series?.Label ?? datumLabel : datumLabel;
             return (Datum: datum, Label: label, Color: series?.Color ?? "#808080", Value: Math.Max(0m, Value(datum) ?? 0m));
         })).ToList();
+
+        // 1. Sort order
+        var sort = (Style(plan, "SORT") ?? Style(plan, "AXIS_SORT"))?.ToUpperInvariant();
+        var components = sort switch
+        {
+            "VALUE_DESC" or "VALUE" => rawComponents.OrderByDescending(c => c.Value).ThenBy(c => c.Label, StringComparer.Ordinal).ToList(),
+            "VALUE_ASC" => rawComponents.OrderBy(c => c.Value).ThenBy(c => c.Label, StringComparer.Ordinal).ToList(),
+            "ALPHA" => rawComponents.OrderBy(c => c.Label, StringComparer.OrdinalIgnoreCase).ToList(),
+            _ => rawComponents
+        };
+
         var total = components.Sum(component => component.Value);
+
+        // 2. Minimum slice threshold / "Other" rollup
+        var minSlicePctStr = Style(plan, "MIN_SLICE_PCT");
+        var otherLabel = Style(plan, "OTHER_LABEL") ?? "Other";
+        if (total > 0m && !string.IsNullOrWhiteSpace(minSlicePctStr) &&
+            decimal.TryParse(minSlicePctStr.TrimEnd('%'), NumberStyles.Number, CultureInfo.InvariantCulture, out var minPct) &&
+            minPct > 0m)
+        {
+            var thresholdRatio = minPct >= 1m ? minPct / 100m : minPct;
+            var kept = new List<(ResolvedDatum Datum, string Label, string Color, decimal Value)>();
+            decimal otherVal = 0m;
+            ResolvedDatum? sampleDatum = null;
+            foreach (var c in components)
+            {
+                if (c.Value / total < thresholdRatio)
+                {
+                    otherVal += c.Value;
+                    sampleDatum ??= c.Datum;
+                }
+                else
+                {
+                    kept.Add(c);
+                }
+            }
+            if (otherVal > 0m && kept.Count > 0)
+            {
+                kept.Add((sampleDatum ?? components[0].Datum, otherLabel, "#9ca3af", otherVal));
+                components = kept;
+            }
+        }
+
         var componentWidth = Math.Max(8, width - 28);
         var rows = components.Select(component =>
         {

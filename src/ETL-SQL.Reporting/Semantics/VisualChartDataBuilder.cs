@@ -37,6 +37,13 @@ public sealed class VisualChartDataBuilder
             columns.Add(new ChartColumn(name, kind, semanticByField.GetValueOrDefault(name, DataSemanticKind.Nominal), values, display));
         }
 
+        if (!columns.Any(c => c.Name.Equals("__row_id", StringComparison.OrdinalIgnoreCase)))
+        {
+            var rowIndices = Enumerable.Range(0, manifest.Rows.Count).Select(i => ChartValue.From((decimal)i)).ToImmutableArray();
+            var rowDisplays = Enumerable.Range(0, manifest.Rows.Count).Select(i => (string?)i.ToString()).ToImmutableArray();
+            columns.Add(new ChartColumn("__row_id", ChartValueKind.Decimal, DataSemanticKind.Nominal, rowIndices, rowDisplays));
+        }
+
         var data = ChartDataSet.Create(spec.DataReference, manifest.Rows.Count, columns.ToImmutableArray());
         data.Validate();
         return data;
