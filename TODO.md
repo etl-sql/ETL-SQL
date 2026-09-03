@@ -483,8 +483,31 @@ performance limits before Studio is treated as the primary workbench.
   number here is a p95 of one operation repeated in a headless runner, and a p95 inside the 16.7 ms
   frame budget is a different and smaller claim than a sustained refresh rate. Both were corrected
   where they were published, in the Studio ADR.
-- [ ] **Certify the SSIS-like ETL journey**: From the GUI, use MOCKDB to extract, stage in `#temp`,
-  validate, transform, branch into explicit parallel work, load, and inspect intermediate state.
+- [x] **Certify the SSIS-like ETL journey**: `StudioSsisJourneyTests` builds one from an empty file
+  on the desktop host — extract from MOCKDB, stage into `#staged`, transform into `#transformed`,
+  assert the staging arrived, fan two loads out inside a `PARALLEL` block, and read the scope panel
+  at a selected task — then hands the saved file to `StudioCertification`.
+  **The desktop host, not both.** A pipeline is a `.etlsql` file in a workspace; the Portal catalog
+  stores reports and its interactive-run policy refuses the statements a pipeline is made of, so
+  this is the host that owns the artifact rather than the convenient one.
+  **Two surfaces, honestly divided.** Staging into `#temp` is a top-level statement and the palette
+  has no chip for it, while an execution task is an `EXECUTE conn BEGIN … END` block that runs on
+  the remote engine — the wrong shape for staging. So extract and transform are authored in the code
+  pane and the validation, the parallel branch, and the loads on the canvas, which is what the
+  surfaces actually are and exercises the code ↔ canvas round-trip rather than pretending one does
+  everything.
+  **It found a dead gesture.** Dragging a task card onto another to reorder it, or into a container
+  to nest it, could never fire — from anywhere on any card, for anyone. The map binds its own
+  node-repositioning gesture to a card header, and that handler calls `preventDefault`, which
+  cancels the native drag before it starts; the header is not a small target to avoid but the whole
+  card, because these cards render about 26px tall with a 33px header. Both Phase 1 and Phase 2
+  describe these gestures as working. On a card the pipeline surface has claimed, the structural
+  gesture now wins: repositioning a node on the map is cosmetic and is not persisted, and the edit
+  it was blocking is not.
+  **And a first attempt at the test that would have hidden it.** The containment check sliced the
+  script from `PARALLEL` to the end of the file and asked whether the task appeared anywhere in it —
+  which every task *after* the block satisfies. It passed while the block stayed empty and both
+  loads sat outside it. A containment claim has to find the block's own closing `END`.
 - [ ] **Certify the SSRS-like paginated journey**: From the GUI, create a parameterized grouped report
   with details, totals, headers, repeating columns, page breaks, and a correct multi-page PDF.
 - [ ] **Certify the Power BI-like dashboard journey**: From the GUI, create KPI, trend, category, and

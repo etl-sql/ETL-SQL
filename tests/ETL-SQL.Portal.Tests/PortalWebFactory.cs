@@ -218,10 +218,30 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (disposing && Directory.Exists(TempDir))
-        {
-            try { Directory.Delete(TempDir, recursive: true); } catch { /* best effort */ }
-        }
+        if (disposing) DeleteTempDir();
+    }
+
+    /// <summary>
+    /// Deletes the temp directory on the asynchronous path too.
+    ///
+    /// <para><c>WebApplicationFactory.DisposeAsync</c> tears down the host and marks the factory
+    /// disposed without routing through <see cref="Dispose(bool)"/>. Every fixture that disposes a
+    /// factory with <c>await using</c> or through <c>IAsyncLifetime</c> — which is all of the browser
+    /// lane and most of the Portal lane — therefore left its directory behind. One stray directory
+    /// is invisible, which is the problem: the machine this was found on had 74,007 of them holding
+    /// 11 GB, and a temp directory that size is what eventually made unrelated hosts fail to start
+    /// with an error that names neither temp files nor this factory.</para>
+    /// </summary>
+    public override async ValueTask DisposeAsync()
+    {
+        await base.DisposeAsync();
+        DeleteTempDir();
+    }
+
+    private void DeleteTempDir()
+    {
+        if (!Directory.Exists(TempDir)) return;
+        try { Directory.Delete(TempDir, recursive: true); } catch { /* best effort */ }
     }
 }
 

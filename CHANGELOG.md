@@ -12,6 +12,20 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- Dragging a task card on the pipeline map does something again. Dropping one onto another to run it
+  after that one, or into a `PARALLEL` block to put it inside, could never fire — from anywhere on
+  any card. The map binds its own node-repositioning gesture to the card header and that handler
+  calls `preventDefault`, which cancels the native drag before it starts, and the header is not a
+  corner to avoid but the whole card: these cards render about 26px tall with a 33px header. Where a
+  card belongs to the pipeline surface the structural gesture now wins, because moving a node around
+  the map is cosmetic and is not saved, and the edit it was blocking is neither.
+
+- Portal test factories no longer leak their temp directory. `WebApplicationFactory.DisposeAsync`
+  does not route through `Dispose(bool)`, so every fixture disposed with `await using` — the whole
+  browser lane and most of the Portal lane — tore down its host and left its directory behind. One
+  is invisible, which is the problem: the machine this was found on had 74,007 of them holding 11 GB,
+  and a temp directory that size is what eventually makes an unrelated host fail to start with an
+  error that mentions neither temp files nor the factory.
 - A file saved from Studio keeps the line endings it was written with. CodeMirror normalises every
   buffer it holds to a bare LF, which is the editor's business right up until the buffer is written
   back: a CRLF file opened in Studio and saved came back entirely LF, so the first save rewrote every

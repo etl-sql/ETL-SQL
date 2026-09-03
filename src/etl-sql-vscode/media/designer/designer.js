@@ -471,7 +471,20 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         rightPort.style.background = _nodeColor(node.type);
         card.append(leftPort, rightPort);
 
-        header.addEventListener('mousedown', e => startNodeDrag(e, node.id, card));
+        header.addEventListener('mousedown', e => {
+            // A card the pipeline surface has claimed is a drag source for the script: dragging it
+            // onto another task reorders, and onto a container nests. Repositioning a node on the
+            // map is cosmetic and is not persisted, so where a card is both, the structural gesture
+            // wins.
+            //
+            // It has to win here rather than later, because `startNodeDrag` calls preventDefault and
+            // that cancels the native drag before it starts. The header is also not a small target
+            // to avoid: these cards render about 26px tall with a 33px header, so the header is the
+            // whole card - which meant the reorder and nest gestures could never fire at all, from
+            // anywhere on any card, for anyone.
+            if (card.classList.contains('is-editable-task')) return;
+            startNodeDrag(e, node.id, card);
+        });
         card.addEventListener('click', () => focusNode(node.id));
         card.addEventListener('dblclick', e => { e.stopPropagation(); showNodeDetails(node); });
         cardLayer.appendChild(card);
