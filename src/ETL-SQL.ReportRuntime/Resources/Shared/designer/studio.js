@@ -220,6 +220,8 @@ export async function createStudioWorkbench(container, opts = {}) {
                 </div>
             </header>
 
+            <div class="etlsql-studio-preview-banner" data-studio-preview-banner role="status" hidden></div>
+
             <!-- Workbench Body -->
             <div class="etlsql-studio-body">
                 <!-- Far-Left Activity Rail -->
@@ -391,6 +393,9 @@ export async function createStudioWorkbench(container, opts = {}) {
                     // Answers to the report's INPUT prompts, when the caller collected them. Absent
                     // means "run it as written", which is what every other run has always meant.
                     ...(parameters ? { parameters } : {}),
+                    // Absent unless the author asked for a preview identity. Present, it changes
+                    // only what the script's own row-level-security predicates see.
+                    ...(state.previewAs ? { previewAs: state.previewAs } : {}),
                 }),
             });
 
@@ -3851,6 +3856,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         }
 
         sidebarContent.innerHTML = '<div class="etlsql-studio-git-loading" role="status">Reading the script…</div>';
+        await loadPreviewAsVocabulary();
 
         let governance = null;
         try {
@@ -3891,6 +3897,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             ${selected ? governanceScopeDetailMarkup(governance, selected) : ''}
             ${selected ? governanceRulesMarkup(governance, selected) : ''}
             ${selected ? governanceRoutingMarkup(governance, selected) : ''}
+            ${governanceSecurityMarkup(governance)}
             ${governanceFindingsMarkup(governance, selected)}`;
 
         bindGovernancePanel();
@@ -4075,6 +4082,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         });
 
         bindGovernanceQuality(scope);
+        bindGovernanceSecurity();
     }
 
     async function writeGovernanceTags(scope, tags) {
@@ -4287,6 +4295,135 @@ export async function createStudioWorkbench(container, opts = {}) {
         if (!result) return;
         state.governance = result;
         if (state.activeActivity === 'governance') paintGovernancePanel();
+    }
+
+    // ── Row-level security preview ───────────────────────────────────────────
+    // A run evaluates the author's own HAS_GROUP / HAS_ROLE predicates as a named audience. It is
+    // not impersonation of a person: the audience carries no user id and never administrator
+    // authority, and the run reaches exactly the data it always could. What it changes is the one
+    // thing an author cannot otherwise see — what their predicates do to somebody else's rows.
+
+    function governanceSecurityMarkup(governance) {
+        const preview = state.previewAs;
+        const vocabulary = state.previewAsVocabulary;
+        const names = list => (list || []).join(', ');
+
+        return `
+            <section class="etlsql-studio-library-section" data-gov-security>
+                <div class="etlsql-studio-subhead"><div><strong>Row-level security</strong><span>Run as an audience to see what its rows look like</span></div></div>
+                ${preview
+                    ? `<div class="etlsql-studio-gov-tag">
+                          <span class="etlsql-studio-gov-tag-name">${_escapeHtml(preview.label || 'preview')}</span>
+                          <span class="etlsql-studio-gov-tag-value">${_escapeHtml(governancePreviewSummary(preview))}</span>
+                          <button type="button" class="etlsql-studio-icon-btn" data-gov-preview-clear title="Stop previewing" aria-label="Stop previewing">${_studioIcon('close', 12)}</button>
+                       </div>
+                       <p class="etlsql-studio-outline-note">Every run is now this audience's. Results are theirs, not yours.</p>`
+                    : '<div class="etlsql-studio-empty-compact">Runs use your own identity.</div>'}
+                <div class="etlsql-studio-gov-add">
+                    <label class="etlsql-studio-field-label" for="gov-preview-label">Audience name</label>
+                    <input type="text" id="gov-preview-label" data-gov-preview-label placeholder="e.g. a Northern sales rep" value="${_escapeHtml(preview?.label || '')}">
+                    <label class="etlsql-studio-field-label" for="gov-preview-groups">Groups</label>
+                    <input type="text" id="gov-preview-groups" data-gov-preview-groups placeholder="Comma separated" value="${_escapeHtml(names(preview?.groups))}">
+                    ${(vocabulary?.groups || []).length
+                        ? `<div class="etlsql-studio-gov-missing">${(vocabulary.groups || []).map(group => `<button type="button" class="etlsql-studio-chip" data-gov-preview-add-group="${_escapeHtml(group)}">${_escapeHtml(group)}</button>`).join('')}</div>`
+                        : ''}
+                    <label class="etlsql-studio-field-label" for="gov-preview-roles">Roles</label>
+                    <input type="text" id="gov-preview-roles" data-gov-preview-roles placeholder="Comma separated" value="${_escapeHtml(names(preview?.roles))}">
+                    ${(vocabulary?.roles || []).length
+                        ? `<div class="etlsql-studio-gov-missing">${(vocabulary.roles || []).map(role => `<button type="button" class="etlsql-studio-chip" data-gov-preview-add-role="${_escapeHtml(role)}">${_escapeHtml(role)}</button>`).join('')}</div>`
+                        : ''}
+                    <button type="button" class="etlsql-studio-btn is-primary" data-gov-preview-apply>Preview as this audience</button>
+                    ${vocabulary?.note ? `<p class="etlsql-studio-outline-note">${_escapeHtml(vocabulary.note)}</p>` : ''}
+                </div>
+            </section>`;
+    }
+
+    function governancePreviewSummary(preview) {
+        const parts = [];
+        if ((preview.groups || []).length) parts.push(`groups ${preview.groups.join(', ')}`);
+        if ((preview.roles || []).length) parts.push(`roles ${preview.roles.join(', ')}`);
+        return parts.length ? parts.join(' · ') : 'no groups or roles';
+    }
+
+    function bindGovernanceSecurity() {
+        const readList = selector => (sidebarContent.querySelector(selector)?.value || '')
+            .split(',')
+            .map(item => item.trim())
+            .filter(Boolean);
+        const appendTo = (selector, value) => {
+            const field = sidebarContent.querySelector(selector);
+            if (!field) return;
+            const current = field.value.split(',').map(item => item.trim()).filter(Boolean);
+            if (!current.some(item => item.toLowerCase() === value.toLowerCase())) current.push(value);
+            field.value = current.join(', ');
+        };
+
+        sidebarContent.querySelectorAll('[data-gov-preview-add-group]').forEach(button => {
+            button.addEventListener('click', () =>
+                appendTo('[data-gov-preview-groups]', button.getAttribute('data-gov-preview-add-group')));
+        });
+        sidebarContent.querySelectorAll('[data-gov-preview-add-role]').forEach(button => {
+            button.addEventListener('click', () =>
+                appendTo('[data-gov-preview-roles]', button.getAttribute('data-gov-preview-add-role')));
+        });
+
+        sidebarContent.querySelector('[data-gov-preview-apply]')?.addEventListener('click', () => {
+            const groups = readList('[data-gov-preview-groups]');
+            const roles = readList('[data-gov-preview-roles]');
+            const label = (sidebarContent.querySelector('[data-gov-preview-label]')?.value || '').trim();
+            if (!groups.length && !roles.length) {
+                // An audience with nothing in it is a real thing to preview — it is what a user with
+                // no membership sees — but it is also what an empty form looks like, so it has to be
+                // asked for by name rather than assumed.
+                if (!label) {
+                    _feedback.notify('Name the audience, or give it a group or role.', { title: 'Nothing previewed', tone: 'error' });
+                    return;
+                }
+            }
+            setPreviewAs({ label: label || 'preview', groups, roles });
+        });
+
+        sidebarContent.querySelector('[data-gov-preview-clear]')?.addEventListener('click', () => setPreviewAs(null));
+    }
+
+    function setPreviewAs(preview) {
+        state.previewAs = preview;
+        renderPreviewAsBanner();
+        if (state.activeActivity === 'governance') paintGovernancePanel();
+        _feedback.notify(
+            preview
+                ? `Runs now evaluate row-level security as ${preview.label}.`
+                : 'Runs use your own identity again.',
+            { title: 'Preview identity', tone: 'info' });
+    }
+
+    /**
+     * The banner is not decoration. Previewed rows look exactly like real ones, and an author who
+     * forgets which identity a result came from will read somebody else's empty result as a bug in
+     * their query — or worse, their own full result as proof the predicate works.
+     */
+    function renderPreviewAsBanner() {
+        const host = shell.querySelector('[data-studio-preview-banner]');
+        if (!host) return;
+        const preview = state.previewAs;
+        host.hidden = !preview;
+        host.innerHTML = preview
+            ? `<span>Previewing as <strong>${_escapeHtml(preview.label)}</strong> — ${_escapeHtml(governancePreviewSummary(preview))}</span>
+               <button type="button" class="etlsql-studio-btn" data-preview-banner-clear>Stop previewing</button>`
+            : '';
+        host.querySelector('[data-preview-banner-clear]')?.addEventListener('click', () => setPreviewAs(null));
+    }
+
+    async function loadPreviewAsVocabulary() {
+        if (state.previewAsVocabulary) return;
+        try {
+            const response = await authFetch(apiBase + STUDIO_ROUTES.previewAs);
+            if (!response.ok) return;
+            state.previewAsVocabulary = await response.json();
+        } catch {
+            // A host that cannot answer leaves the picker to free text, which is the whole
+            // vocabulary anyway on a host with no directory.
+        }
     }
 
     function renderSidebarContent(activity) {

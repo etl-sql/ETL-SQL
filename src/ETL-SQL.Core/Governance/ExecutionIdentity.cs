@@ -76,6 +76,49 @@ public sealed record ExecutionIdentity
         init => _scopes = ToCaseInsensitiveSet(value);
     }
 
+    /// <summary>
+    /// The identity a <b>preview-as</b> run evaluates author predicates under: an audience described
+    /// by its groups and roles, with no portal user behind it.
+    ///
+    /// <para>Three things are fixed here rather than left to each host, because a preview identity
+    /// built two ways is a security-relevant difference nobody would notice until it mattered.
+    /// <see cref="RealUser"/> stays the actual actor, so dataset and connection authority — which is
+    /// keyed on the real user — is untouched by the preview. <see cref="IsAdmin"/> is false and the
+    /// bypass with it: an administrator sees every row by design, so previewing as one would answer
+    /// "all rows" regardless of what the predicate says, which is the one answer a preview must never
+    /// give. And <see cref="EffectiveUserId"/> is null, because there is no such user — a made-up
+    /// audience that carried somebody's id would compare equal to them in a predicate written against
+    /// <c>@@CURRENT_USER_ID</c>.</para>
+    ///
+    /// <para><see cref="TenantId"/> is the caller's own, never the request's: it is a server-verified
+    /// binding for catalog and execution authority, and a preview does not get to change it.</para>
+    /// </summary>
+    /// <param name="label">What to answer <c>@@CURRENT_USER</c> with; the audience's name.</param>
+    /// <param name="scopes">
+    /// The caller's own token ceiling, carried through. A ceiling only caps what roles and grants
+    /// authorize — it never grants — so passing the caller's cannot escalate, while dropping it
+    /// would deny a service caller things their own run would have been allowed.
+    /// </param>
+    public static ExecutionIdentity Preview(
+        string? label,
+        IEnumerable<string>? groups,
+        IEnumerable<string>? roles,
+        string realUser,
+        string? tenantId,
+        IEnumerable<string>? scopes = null) =>
+        new()
+        {
+            EffectiveUser = string.IsNullOrWhiteSpace(label) ? "preview" : label!.Trim(),
+            EffectiveUserId = null,
+            TenantId = tenantId,
+            RealUser = realUser,
+            IsAdmin = false,
+            AdminBypassesRowLevelSecurity = false,
+            Groups = groups ?? [],
+            Roles = roles ?? [],
+            Scopes = scopes ?? [],
+        };
+
     public bool HasGroup(string name) =>
         !string.IsNullOrEmpty(name) && _groups.Contains(name);
 

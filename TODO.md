@@ -326,8 +326,29 @@ operational flows without an unexplained application switch.
   authoring is offered only on statements that name what they produce — a rule elsewhere has no
   stable identity to edit against, and quarantined rows from a query whose output goes straight to a
   reader have nowhere meaningful to be routed.
-- [ ] **Add row-level-security preview-as**: Preview a report as another authorized user, group, or
-  role without weakening the engine's impersonation boundary.
+- [x] **Add row-level-security preview-as**: A run can now evaluate the author's own `HAS_GROUP` /
+  `HAS_ROLE` predicates as a named **audience** — a label plus groups and roles — set from the
+  Governance rail on both hosts. The invariants live in one place, `ExecutionIdentity.Preview`, so
+  the two hosts cannot build a preview identity differently: the real actor is unchanged (dataset and
+  connection authority is keyed on it and stays exactly what it was), the audience carries **no
+  administrator authority** (an administrator sees every row by design, so previewing as one answers
+  "all rows" whatever the predicate says — the one answer a preview must never give), it carries
+  **no user id** (a made-up audience holding somebody's id would compare equal to them in a predicate
+  written against `@@CURRENT_USER_ID`), and the tenant binding is the caller's own. On the Portal the
+  shared connection is still resolved against the **caller's** identity, not the preview, so a
+  preview cannot decide what data a run reaches; runs under one audit as `AD_HOC_RUN_AS` against the
+  real actor, never the audience, because an audience is not a principal anyone can be asked about.
+  **Deliberately not a list of people.** Previewing as a *named user* is impersonation of a real
+  identity and already exists on a saved report — `POST /api/reports/{id}/execute-as/{userId}`, gated
+  by administrator authority or Manage on that report's folder. Offering it here on an unsaved draft
+  would be a second impersonation door with a weaker gate. A persistent banner says whose result is
+  on screen, because previewed rows look exactly like real ones and an author who forgets will read
+  somebody else's empty result as a bug in their query. On the desktop host this is the *only*
+  identity injected: a workstation run otherwise carries none, so RLS is fail-closed and a guarded
+  report shows nothing there with no explanation — which the browser test asserts in both directions
+  from one script. The work also fixed a real defect it exposed: the banner's `display:flex` beat the
+  user agent's `[hidden]` rule, so it would have been an empty strip that never went away and, worse,
+  stayed on screen after the preview was cleared.
 - [ ] **Add dataset lifecycle actions**: Refresh, export, publish, share, and manage dataset access
   without leaving the authoring document. Before dataset editing ships, preserve unmodeled clauses
   such as `COMPRESS` and `ENCRYPT`, or refuse the rewrite with a clear explanation.

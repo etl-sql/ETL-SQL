@@ -787,6 +787,20 @@ public static class WorkstationEditorApp
                 JsonOptions);
         });
 
+        // The audiences a run can be previewed as. This host has no directory of its own — a
+        // workstation is one person's — so it defines no groups or roles and the author names the
+        // audience their predicates test. Said out loud rather than returned as an empty list, which
+        // would read as "this tenant has no groups".
+        app.MapGet("/api/designer/preview-as", () => Results.Json(new
+        {
+            supported = true,
+            groups = Array.Empty<string>(),
+            roles = Array.Empty<string>(),
+            note = "This host has no directory, so type the group and role names your predicates check. "
+                + "Without a preview a workstation run carries no identity at all, which is why an "
+                + "RLS-guarded report shows nothing here.",
+        }, JsonOptions));
+
         app.MapPost("/api/designer/query-filter", (ApplyDesignerQueryFiltersAuthoringRequest request) =>
         {
             try

@@ -61,8 +61,18 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
         };
         ApplyParameters(context, request.Parameters);
 
+        // Preview-as is the only identity this host injects. Without one a workstation run carries
+        // no identity at all, so row-level security is fail-closed — HAS_GROUP is false and
+        // @@CURRENT_USER is null — and an RLS-guarded report shows nothing here with no explanation.
+        // Naming an audience is what lets the author see the predicate actually work.
+        var identity = request.PreviewAs is { } preview
+            ? ETL_SQL.Core.Governance.ExecutionIdentity.Preview(
+                preview.Label, preview.Groups, preview.Roles, realUser: "workstation", tenantId: null)
+            : null;
+
         await using var session = new ExecutionSession(services, context, logger);
-        var result = await session.ExecuteAsync(governedScript, timeout.Token, "workstation-editor-run");
+        var result = await session.ExecuteAsync(
+            governedScript, timeout.Token, "workstation-editor-run", executionIdentity: identity);
         var table = session.LastEvaluator?.LastResult ?? result.ResultsTables.LastOrDefault();
         var diagnostics = ToRunDiagnostics(result);
 
@@ -280,7 +290,15 @@ public sealed record RunRequest(
     /// <summary>Set once the user has acknowledged a destructive-statement warning.</summary>
     bool ConfirmDestructive = false,
     /// <summary>Answers to the script's INPUT prompts, keyed by name with or without '@'.</summary>
-    Dictionary<string, string>? Parameters = null);
+    Dictionary<string, string>? Parameters = null,
+    /// <summary>The audience to evaluate row-level-security predicates as, or null to run as nobody.</summary>
+    PreviewAsAuthoringRequest? PreviewAs = null);
+
+/// <param name="Label">What <c>@@CURRENT_USER</c> answers. A description of an audience, not a person.</param>
+public sealed record PreviewAsAuthoringRequest(
+    string? Label = null,
+    List<string>? Groups = null,
+    List<string>? Roles = null);
 /// <param name="Parameters">Answers to the report's INPUT prompts, keyed by name with or without '@'.</param>
 /// <param name="RunEveryPage">True to build the finished document rather than a deferred screen.</param>
 public sealed record PreviewRequest(

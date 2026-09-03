@@ -64,7 +64,28 @@ public record RunDesignerRequest(
     string? Selection = null,
     string? ConnectionRef = null,
     string? DocumentUri = null,
-    Dictionary<string, string>? Parameters = null);
+    Dictionary<string, string>? Parameters = null,
+    PreviewAsRequest? PreviewAs = null);
+
+/// <summary>
+/// The audience to evaluate row-level-security predicates as for this run.
+/// </summary>
+/// <param name="Label">
+/// What <c>@@CURRENT_USER</c> answers. A description of the audience, not a claim to be someone: the
+/// previewed identity carries no user id and no administrator authority.
+/// </param>
+public record PreviewAsRequest(
+    string? Label = null,
+    List<string>? Groups = null,
+    List<string>? Roles = null);
+
+/// <param name="Groups">Group names this tenant defines, for the preview picker.</param>
+/// <param name="Note">Why the list is what it is, shown to the author.</param>
+public record PreviewAsVocabularyResponse(
+    bool Supported,
+    List<string> Groups,
+    List<string> Roles,
+    string Note);
 
 public record RunDesignerResponse(
     IReadOnlyList<string> Columns,

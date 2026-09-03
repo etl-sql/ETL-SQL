@@ -23,6 +23,7 @@ export const STUDIO_ROUTES = Object.freeze({
     preview: '/api/designer/preview',
     previewPdf: '/api/designer/preview/pdf',
     dataModel: '/api/designer/data-model',
+    previewAs: '/api/designer/preview-as',
     governance: '/api/designer/governance',
     parse: '/api/designer/parse',
     patch: '/api/designer/patch',

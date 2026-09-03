@@ -51,6 +51,7 @@ public class DesignerController : ControllerBase
     private readonly PipelineRunPlanService _pipelineRunPlans = new();
     private readonly DesignerQueryFilterService _queryFilters = new();
     private readonly LanguageHoverService? _hoverService;
+    private readonly PortalDbContext? _db;
 
     public DesignerController(
         PortalDesignerSchemaService? schemaService = null,
@@ -68,7 +69,8 @@ public class DesignerController : ControllerBase
         ScriptDagProjectionService? scriptDag = null,
         PortalDesignerDataPreviewService? dataPreviewService = null,
         ILanguageHelpRegistry? languageHelp = null,
-        IFunctionRegistry? functionRegistry = null)
+        IFunctionRegistry? functionRegistry = null,
+        PortalDbContext? db = null)
     {
         _schemaService = schemaService;
         _runService = runService;
@@ -84,6 +86,7 @@ public class DesignerController : ControllerBase
         _metadata = metadata;
         _snapshots = snapshots;
         _scriptDag = scriptDag ?? new ScriptDagProjectionService();
+        _db = db;
         _hoverService = languageHelp is not null && functionRegistry is not null
             ? new LanguageHoverService(languageHelp, functionRegistry)
             : null;
@@ -676,6 +679,45 @@ public class DesignerController : ControllerBase
             // hand back the original text plus the reason so the editor can leave the buffer alone.
             return Ok(new FormatDesignerResponse(script, [new FormatDesignerDiagnostic(ex.Message)]));
         }
+    }
+
+    // ── GET /api/designer/preview-as ─────────────────────────────────────────
+    // The audiences a run can be previewed as: the group and role names this tenant defines, which
+    // are the vocabulary an author's HAS_GROUP / HAS_ROLE predicates already name in the script.
+    //
+    // Deliberately not a list of people. Previewing as a *named user* is impersonation of a real
+    // identity, and it already exists on a saved report — POST /api/reports/{id}/execute-as/{user},
+    // gated by administrator authority or Manage on that report's folder. Offering the same thing
+    // here on an unsaved draft would be a second impersonation door with a weaker gate, which is the
+    // one thing this must not be. An audience carries no user id and no administrator authority, so
+    // it grants nothing; it only changes what the author's own predicates see.
+
+    [HttpGet("preview-as")]
+    [EnableRateLimiting("designer")]
+    [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
+    public async Task<IActionResult> PreviewAsVocabulary(CancellationToken cancellationToken)
+    {
+        if (_db is null)
+            return Ok(new PreviewAsVocabularyResponse(false, [], [], "This host defines no groups or roles."));
+
+        var groups = await _db.Groups.AsNoTracking()
+            .Select(group => group.Name)
+            .Where(name => name != null)
+            .OrderBy(name => name)
+            .ToListAsync(cancellationToken);
+        var roles = await _db.Roles.AsNoTracking()
+            .Select(role => role.Name)
+            .Where(name => name != null)
+            .OrderBy(name => name)
+            .ToListAsync(cancellationToken);
+
+        return Ok(new PreviewAsVocabularyResponse(
+            true,
+            groups!,
+            roles!,
+            "A preview evaluates your row-level-security predicates as this audience. It is not a person: "
+            + "it carries no user id and never administrator authority, and it changes nothing about which "
+            + "data this run can reach. To preview as a named user, run a saved report with Run as."));
     }
 
     // ── POST /api/designer/run ───────────────────────────────────────────────

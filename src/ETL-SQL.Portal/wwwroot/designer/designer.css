@@ -4999,6 +4999,15 @@ body.vscode-dark .etlsql-cw-missing-hint {
 .etlsql-studio-gov-finding-message { font-size:.6875rem;line-height:1.4; }
 .etlsql-studio-gov-finding-code { color:var(--portal-text-soft,#8b949e);font-size:.5625rem;letter-spacing:.03em; }
 
+/* The preview-identity banner. Previewed rows look exactly like real ones, so the fact that a run
+   is somebody else's has to be visible without opening the panel that set it. */
+.etlsql-studio-preview-banner { display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 14px;border-bottom:1px solid var(--portal-border,#30363d);background:rgba(210,153,34,.14);color:var(--portal-text,#f0f6fc);font-size:.75rem; }
+.etlsql-studio-preview-banner strong { font-weight:600; }
+/* `display:flex` above beats the user-agent's `[hidden] { display:none }`, so without this the
+   banner is an empty strip that never goes away — and, worse, one that stays on screen after the
+   preview is cleared, which is the exact confusion the banner exists to prevent. */
+.etlsql-studio-preview-banner[hidden] { display:none; }
+
 /* Plain-language guidance under a diagnostic. It sits under the parser's own message rather than in
    place of it: the precise wording is what an experienced author reads first, and paraphrasing it
    away would make the panel worse for them to make it better for a beginner. */

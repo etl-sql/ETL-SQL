@@ -169,6 +169,81 @@ public sealed class StudioGovernanceTests(PortalBrowserFixture fixture)
         Assert.Empty(session.PageErrors);
     }
 
+    /// <summary>
+    /// The preview identity, proved by what a run returns rather than by the control being present.
+    ///
+    /// <para>A workstation run carries no identity at all, so <c>HAS_GROUP</c> is false and an
+    /// RLS-guarded query returns nothing — which is exactly what a broken preview also looks like.
+    /// The test therefore asserts both directions: no rows before, the row after, from the same
+    /// script.</para>
+    /// </summary>
+    [Fact]
+    public async Task PreviewAs_ChangesWhatTheAuthorsPredicatesSee()
+    {
+        const string guarded = """
+            CREATE CONNECTION sample_data AS MOCKDB();
+            SELECT 'north-only' AS Label WHERE HAS_GROUP('Region:North');
+            """;
+
+        using var workspace = new TempWorkspace();
+        var file = Path.Combine(workspace.Root, "guarded.etlsql");
+        await File.WriteAllTextAsync(file, guarded);
+
+        await using var host = WorkstationEditorApp.Create([], Options(workspace.Root, file, "gov-rls-token"));
+        await host.StartAsync();
+
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync(StudioUrl(host, "gov-rls-token"));
+        await WaitForStudioAsync(page);
+
+        Assert.Equal(0, await RunRowCountAsync(page));
+
+        await page.Locator("[data-activity='governance']").ClickAsync();
+        await page.Locator("[data-gov-preview-groups]").WaitForAsync(new() { Timeout = 15_000 });
+        await page.Locator("[data-gov-preview-label]").FillAsync("a northern rep");
+        await page.Locator("[data-gov-preview-groups]").FillAsync("Region:North");
+        await page.Locator("[data-gov-preview-apply]").ClickAsync();
+
+        // Previewed rows look exactly like real ones, so the banner is the only thing telling the
+        // author whose result they are reading.
+        var banner = page.Locator("[data-studio-preview-banner]");
+        await banner.WaitForAsync(new() { Timeout = 10_000, State = WaitForSelectorState.Visible });
+        Assert.Contains("a northern rep", await banner.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(1, await RunRowCountAsync(page));
+
+        await banner.Locator("[data-preview-banner-clear]").ClickAsync();
+        await banner.WaitForAsync(new() { Timeout = 10_000, State = WaitForSelectorState.Hidden });
+        Assert.Equal(0, await RunRowCountAsync(page));
+        Assert.Empty(session.PageErrors);
+    }
+
+    /// <summary>Runs the open script through Studio's own run path and counts the rows it returns.</summary>
+    private static async Task<int> RunRowCountAsync(IPage page) =>
+        await page.EvaluateAsync<int>("""
+            async () => {
+                const studio = window.__STUDIO__;
+                const body = {
+                    script: studio.state.editorInstance.getValue(),
+                    ...(studio.state.previewAs ? { previewAs: studio.state.previewAs } : {}),
+                };
+                // The host gates /api on the session token the page was opened with; it is in the
+                // page URL, which is how Studio's own fetches carry it too.
+                const token = new URLSearchParams(location.search).get('token') || '';
+                const url = new URL('/api/designer/run', location.href);
+                url.searchParams.set('token', token);
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                if (!response.ok) return -1;
+                const result = await response.json();
+                return (result.rows || []).length;
+            }
+            """);
+
     private static WorkstationEditorOptions Options(string root, string file, string token) =>
         new(root, file, 0, false, token, StudioMode: true, InstanceId: Guid.NewGuid().ToString("D"));
 

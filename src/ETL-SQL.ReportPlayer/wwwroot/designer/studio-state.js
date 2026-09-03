@@ -75,6 +75,9 @@ export function createStudioState(options = {}) {
         enginePlanScope: null,
         governance: null,
         governanceScopeId: null,
+        // The audience row-level-security predicates are evaluated as, or null to run as yourself.
+        previewAs: null,
+        previewAsVocabulary: null,
     };
 }
 

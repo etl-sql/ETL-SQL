@@ -42,11 +42,22 @@ public sealed class PortalDesignerRunService(
     {
         var selectedText = string.IsNullOrWhiteSpace(request.Selection) ? request.Script : request.Selection!;
         var statements = ParseGovernedStatements(selectedText);
-        var identity = await BuildIdentityAsync(user, cancellationToken);
-        if (identity is null)
+        var caller = await BuildIdentityAsync(user, cancellationToken);
+        if (caller is null)
             throw new UnauthorizedAccessException("The current portal user could not be resolved for execution.");
 
-        var script = await BuildExecutionScriptAsync(statements, request.ConnectionRef, identity, cancellationToken);
+        // Preview-as changes what the author's own row-level-security predicates see, and nothing
+        // else. The real actor is unchanged, so dataset and connection authority — keyed on the real
+        // user — is exactly what it was; see ExecutionIdentity.Preview for the invariants.
+        var identity = request.PreviewAs is { } preview
+            ? ExecutionIdentity.Preview(
+                preview.Label, preview.Groups, preview.Roles, caller.RealUser, caller.TenantId, caller.Scopes)
+            : caller;
+
+        // The caller's identity, not the previewed one: this resolves the shared connection, and a
+        // preview must not decide what data the run can reach. Only the engine's evaluation of the
+        // author's predicates sees the preview.
+        var script = await BuildExecutionScriptAsync(statements, request.ConnectionRef, caller, cancellationToken);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(TimeoutSeconds));
 
@@ -68,15 +79,20 @@ public sealed class PortalDesignerRunService(
         // Audit every statement, not just the run: an interactive run can now touch several
         // tables, and each one needs to be independently attributable.
         var resourceId = NormalizeResourceId(request.ConnectionRef);
+        // Audited against the real actor, never the previewed audience: an audience is not a
+        // principal, and an audit row attributed to one names nobody who can be asked about it.
+        var previewNote = identity.IsImpersonating
+            ? $"; PreviewAs={identity.EffectiveUser}; PreviewGroups={string.Join("|", identity.Groups)}; PreviewRoles={string.Join("|", identity.Roles)}"
+            : string.Empty;
         for (var i = 0; i < statements.Count; i++)
         {
             await audit.LogAsync(
-                identity.EffectiveUserId,
-                "AD_HOC_RUN",
+                caller.EffectiveUserId,
+                identity.IsImpersonating ? "AD_HOC_RUN_AS" : "AD_HOC_RUN",
                 "Designer",
                 resourceId,
                 $"Connection={resourceId ?? "(none)"}; Statement[{i + 1}/{statements.Count}]={statements[i].GetType().Name}; "
-                    + $"QueryHash={FingerprintQuery(statements[i].ToSql())}; Rows={table?.Rows.Count ?? 0}; ElapsedMs={elapsedMs}");
+                    + $"QueryHash={FingerprintQuery(statements[i].ToSql())}; Rows={table?.Rows.Count ?? 0}; ElapsedMs={elapsedMs}{previewNote}");
         }
 
         if (!result.Success)
