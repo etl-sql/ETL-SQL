@@ -221,13 +221,16 @@ To give authors an authentic "live data feel" without remote database lag or lat
 1. **On-Select Sample Ingestion**:
    - When a table is chosen, `POST /api/designer/data-sample` executes a clamped `TOP 250` query under caller RLS and security context.
    - The response populates the Studio's in-memory `window.__ETLSNAP__` store with typed schema and sample rows.
-2. **Zero-Latency In-Memory Aggregations**:
-   - Visual cards compute their aggregations directly in JavaScript against the sample rows:
-     - **KPI Card**: `reduce()` sum in ~0.1 ms.
-     - **Bar / Donut**: Group-by category and aggregate values in ~0.5 ms.
-     - **Line Chart**: Group-by chronological date bucket in ~0.8 ms.
-     - **Data Table**: Tabulator/grid rendering with client-side sorting in ~1 ms.
-   - Dragging fields, resizing cards, changing chart types, or altering palettes re-renders in real-time at 60 FPS without network calls.
+2. **In-Memory Aggregations**:
+   - Visual cards compute their aggregations directly in JavaScript against the sample rows, with no
+     network call, so dragging a field, resizing a card, changing a chart type, or altering a palette
+     re-renders from memory.
+   - Measured, on all three supported platforms: a 250-row aggregate and render has a p95 of
+     1.2-2.2 ms and a full canvas redraw a p95 of 1.1-2.5 ms, both well inside a 16.7 ms 60 Hz frame
+     budget. See [`studio-performance-budgets.md`](../../benchmarks/studio-performance-budgets.md).
+   - The earlier per-visual figures (~0.1 ms for a KPI, ~1 ms for a table) and the "60 FPS" claim are
+     deliberately not repeated here: nothing measures a single visual in isolation, and no benchmark
+     observes a sustained frame rate. A p95 inside the frame budget is the claim the evidence makes.
 3. **Debounced Query Sync**:
    - When the user edits dataset SQL in the Code Drawer, debounced parsing (`POST /api/designer/data-preview`) refreshes the sample rows, updating all canvas visuals immediately.
 
@@ -561,7 +564,7 @@ To ensure zero regression risk and maintain business continuity:
 ## 13. Vertical Delivery Slices
 
 - **Slice 1 — Unified Studio Shell & Left Activity Rail (in UI Sandbox)**: Modern tabbed workbench, Activity Rail icons (Files, Connections, Filters, Git, Settings), and view projection toggles (`[ 🎨 Canvas | 🌓 Split | ⌨️ Code ]`).
-- **Slice 2 — Live Data `__ETLSNAP__` Ingestion & 60 FPS Visual Canvas**: Fast sample query ingestion (`TOP 250`), in-memory browser aggregation, drag-and-drop visual card placement, and responsive container layout (`CONTAINER row { ... }`).
+- **Slice 2 — Live Data `__ETLSNAP__` Ingestion & In-Memory Visual Canvas**: Fast sample query ingestion (`TOP 250`), in-memory browser aggregation, drag-and-drop visual card placement, and responsive container layout (`CONTAINER row { ... }`).
 - **Slice 3 — Type-Aware Filter Pane & Slicer Promotion**: Global dataset `WHERE` filters, local visual `FILTERS`, distinct value checklist from `__ETLSNAP__`, relative date presets, and 1-click "Promote to Slicer".
 - **Slice 4 — Property Inspector & Smart Defaults**: Field role assignment (Measure/Category/Breakdown), aggregation selectors (`SUM`, `AVG`, `COUNT`, `MIN`, `MAX`), 1-click number formatting (currency, percent, compact), and design token themes.
 - **Slice 5 — Collapsible Code Drawer & Bi-Directional Sync**: Slide-up CodeMirror 6 editor (`Alt+C`), surgical AST text patching, debounced code-to-canvas synchronization, and inline lint diagnostics.

@@ -465,10 +465,24 @@ performance limits before Studio is treated as the primary workbench.
   **A lane note worth keeping**: a killed browser run leaves Chrome processes behind, and the next
   run then fails every fixture-backed test in about a millisecond with "The server has not been
   started". That is the leftovers, not a regression — kill stray `chrome.exe` and re-run.
-- [ ] **Close cross-platform Studio performance evidence**: Review the first green Linux and macOS
-  artifacts alongside the Windows baseline for startup, post-GC heap, CodeMirror input-to-frame p95,
-  250-row aggregation/render p95, and full-canvas redraw/layout p95. Do not publish the old ~1 ms or
-  sustained 60 FPS claims unless reproducible measurements support them.
+- [x] **Close cross-platform Studio performance evidence**: Closed on the artifacts from CI run
+  `33693971737` (`release/v0.19.0`, 2026-09-02), where the `Studio Performance Budgets` matrix was
+  green on all three platforms. No Linux or macOS hardware is needed to close this: the matrix
+  already runs the same measurement on `ubuntu-latest` and `macos-latest` and uploads one JSON
+  evidence document per runner, so the work was to fetch and read them, and the numbers are now
+  written into [`studio-performance-budgets.md`](docs/benchmarks/studio-performance-budgets.md)
+  rather than left in a build artifact that expires.
+  Every metric is inside its ceiling on every platform, the narrowest at about a quarter of budget.
+  **Startup is the only metric that varies by platform**, and by about 2x — Windows 1,142 ms against
+  Linux 543 ms and macOS 632 ms — which is a runner-profile difference rather than a Studio one, but
+  it is the number that will fail this job first. Heap is identical across all three to within
+  0.02 MiB.
+  **The old claims stay unpublished, and now there is a measurement saying why.** "~1 ms" is true
+  only on the Unix runners: Windows measures 2.2 ms aggregating and 2.5 ms redrawing, so the
+  honest figure is low single-digit milliseconds. "Sustained 60 FPS" is not measured at all — every
+  number here is a p95 of one operation repeated in a headless runner, and a p95 inside the 16.7 ms
+  frame budget is a different and smaller claim than a sustained refresh rate. Both were corrected
+  where they were published, in the Studio ADR.
 - [ ] **Certify the SSIS-like ETL journey**: From the GUI, use MOCKDB to extract, stage in `#temp`,
   validate, transform, branch into explicit parallel work, load, and inspect intermediate state.
 - [ ] **Certify the SSRS-like paginated journey**: From the GUI, create a parameterized grouped report
