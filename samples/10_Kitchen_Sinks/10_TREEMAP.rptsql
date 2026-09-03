@@ -1,68 +1,98 @@
 -- Kitchen Sink: TREEMAP Visual
--- This script demonstrates the TREEMAP visual type for flat and multi-level hierarchical area layouts.
+-- Demonstrates the TREEMAP visual type for flat and multi-level hierarchical layouts,
+-- independent color encoding, breadcrumb navigation, and label truncation/wrapping controls.
 
 SET REPORT TITLE = 'Kitchen Sink: TREEMAP Visual';
-SET REPORT DESCRIPTION = 'Demonstration of TREEMAP area charts with flat categories and nested parent-child hierarchies.';
+SET REPORT DESCRIPTION = 'Demonstration of TREEMAP area charts with flat categories, parent-child hierarchies, independent color encoding, breadcrumbs, and label overflow controls.';
 
--- 1. Mock Data Generation (Flat Categories)
-SELECT 'Electronics' AS Cat, 1500 AS Val INTO #treedata
-UNION ALL SELECT 'Furniture', 1200
-UNION ALL SELECT 'Clothing', 900
-UNION ALL SELECT 'Toys', 400
-UNION ALL SELECT 'Books', 300
-UNION ALL SELECT 'Garden', 600;
+-- 1. Mock Data: Flat Categories with Independent Status Color
+SELECT 'Enterprise Software' AS Cat, 4500 AS Val, '#2563eb' AS StatusColor INTO #flat_tree
+UNION ALL SELECT 'Cloud Infrastructure Services', 3800, '#0284c7'
+UNION ALL SELECT 'Hardware Devices & Peripherals', 2200, '#10b981'
+UNION ALL SELECT 'Professional Consulting Support', 1400, '#f59e0b'
+UNION ALL SELECT 'Consumer Mobile Subscriptions', 900, '#8b5cf6'
+UNION ALL SELECT 'Legacy Maintenance Contracts', 350, '#ef4444';
 
--- 2. Mock Data Generation (Nested Parent-Child Hierarchy)
-SELECT 'Electronics' AS Item, '' AS Parent, 3500 AS Revenue INTO #nested_tree
-UNION ALL SELECT 'Laptops', 'Electronics', 2000
-UNION ALL SELECT 'Phones', 'Electronics', 1500
-UNION ALL SELECT 'Furniture', '', 2500
-UNION ALL SELECT 'Desks', 'Furniture', 1400
-UNION ALL SELECT 'Chairs', 'Furniture', 1100
-UNION ALL SELECT 'Clothing', '', 1800
-UNION ALL SELECT 'Jackets', 'Clothing', 1000
-UNION ALL SELECT 'Shoes', 'Clothing', 800;
+-- 2. Mock Data: Nested Parent-Child Hierarchy with Metric Colors
+SELECT 'Global Operations' AS Item, '' AS Parent, 12000 AS Revenue, '#1e293b' AS NodeColor INTO #nested_tree
+UNION ALL SELECT 'North America', 'Global Operations', 6500, '#2563eb'
+UNION ALL SELECT 'Europe', 'Global Operations', 4000, '#0284c7'
+UNION ALL SELECT 'Asia Pacific', 'Global Operations', 1500, '#0d9488'
+UNION ALL SELECT 'US East Coast Enterprise', 'North America', 3800, '#3b82f6'
+UNION ALL SELECT 'US West Coast Enterprise', 'North America', 2700, '#60a5fa'
+UNION ALL SELECT 'Western Europe Central', 'Europe', 2500, '#38bdf8'
+UNION ALL SELECT 'Nordic & Baltic Region', 'Europe', 1500, '#7dd3fc'
+UNION ALL SELECT 'Japan & Korea', 'Asia Pacific', 900, '#14b8a6'
+UNION ALL SELECT 'Australia & NZ', 'Asia Pacific', 600, '#2dd4bf';
 
--- 3. Basic Flat Treemap
+-- 3. Visual 1: Basic Flat Treemap with Default Ellipsis Clipping
 CREATE VISUAL BasicTreemap AS TREEMAP (
-    SOURCE = #treedata,
-    TITLE = 'Basic Treemap (Category Size by Value)',
-    MAPPINGS (LABEL = Cat, VALUE = Val)
-);
-
--- 4. Nested Hierarchical Treemap (Slice-and-Dice Subdivisions)
-CREATE VISUAL HierarchicalTreemap AS TREEMAP (
-    SOURCE = #nested_tree,
-    TITLE = 'Hierarchical Treemap (Category › Sub-Category)',
+    SOURCE = #flat_tree,
+    TITLE = '1. Flat Treemap (Default Clipping)',
     MAPPINGS (
-        LABEL  = Item,
-        PARENT = Parent,
-        VALUE  = Revenue
+        NAME  = Cat,
+        VALUE = Val
+    ),
+    OPTIONS (
+        LABEL_MIN_SIZE = 30,
+        LABEL_OVERFLOW = CLIP
     )
 );
 
--- 5. Treemap with Custom Colors
-CREATE VISUAL StyledTreemap AS TREEMAP (
-    SOURCE = #treedata,
-    TITLE = 'Styled Treemap (Custom Palette)',
-    MAPPINGS (LABEL = Cat, VALUE = Val),
+-- 4. Visual 2: Flat Treemap with Multi-line Label Wrapping & Independent Color
+CREATE VISUAL WrappedTreemap AS TREEMAP (
+    SOURCE = #flat_tree,
+    TITLE = '2. Independent Color & Label Wrapping (LABEL_OVERFLOW = WRAP)',
+    MAPPINGS (
+        NAME  = Cat,
+        VALUE = Val,
+        COLOR = StatusColor
+    ),
     OPTIONS (
-        COLORS (
-            'Electronics' = '#4e79a7',
-            'Furniture'   = '#f28e2b',
-            'Clothing'    = '#e15759',
-            'Garden'      = '#59a14f'
-        )
+        LABEL_MIN_SIZE = 25,
+        LABEL_OVERFLOW = WRAP
+    )
+);
+
+-- 5. Visual 3: Flat Treemap with Label Suppression (LABEL_OVERFLOW = HIDDEN)
+CREATE VISUAL HiddenOverflowTreemap AS TREEMAP (
+    SOURCE = #flat_tree,
+    TITLE = '3. Label Suppression on Narrow Tiles (LABEL_OVERFLOW = HIDDEN)',
+    MAPPINGS (
+        NAME  = Cat,
+        VALUE = Val
+    ),
+    OPTIONS (
+        LABEL_MIN_SIZE = 60,
+        LABEL_OVERFLOW = HIDDEN
+    )
+);
+
+-- 6. Visual 4: Nested Hierarchical Treemap with Breadcrumb Path
+CREATE VISUAL HierarchicalTreemap AS TREEMAP (
+    SOURCE = #nested_tree,
+    TITLE = '4. Hierarchical Treemap with Breadcrumb Path (SHOW_BREADCRUMB = ON)',
+    MAPPINGS (
+        NAME   = Item,
+        PARENT = Parent,
+        VALUE  = Revenue,
+        COLOR  = NodeColor
+    ),
+    OPTIONS (
+        SHOW_BREADCRUMB = ON,
+        LABEL_MIN_SIZE  = 20,
+        LABEL_OVERFLOW  = WRAP
     )
 );
 
 -- Page Layout
 CREATE PAGE TreemapKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C .',
+    STRUCTURE = 'A B / C D',
     MAP (
         'A' = BasicTreemap,
-        'B' = StyledTreemap,
-        'C' = HierarchicalTreemap
+        'B' = WrappedTreemap,
+        'C' = HiddenOverflowTreemap,
+        'D' = HierarchicalTreemap
     )
 );
 

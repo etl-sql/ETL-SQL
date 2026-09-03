@@ -5127,6 +5127,8 @@ export function createDesigner(container, opts = {}) {
         const isRadar = v.type === 'RADAR';
         const isFunnel = v.type === 'FUNNEL';
         const isSankey = v.type === 'SANKEY';
+        const isTreemap = v.type === 'TREEMAP';
+        const isSunburst = v.type === 'SUNBURST';
         const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
         const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
         const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
@@ -5376,6 +5378,21 @@ export function createDesigner(container, opts = {}) {
                         <label class="etlsql-dsgn-label">Link opacity (0.0 – 1.0)
                             <input type="number" step="0.05" min="0" max="1" id="pp-format-sankey-link-opacity" class="form-control" value="${v.options?.LINK_OPACITY ?? '0.55'}">
                         </label>` : ''}
+                        ${(isTreemap || isSunburst) ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">${isTreemap ? 'Treemap' : 'Sunburst'} options</div>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-hierarchy-show-breadcrumb" ${(v.options?.SHOW_BREADCRUMB || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show breadcrumb path</span></label>
+                        ${isTreemap ? `
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Label min size (px)
+                                <input type="number" min="0" max="200" id="pp-format-treemap-label-min-size" class="form-control" value="${v.options?.LABEL_MIN_SIZE ?? '42'}">
+                            </label>
+                            <label class="etlsql-dsgn-label">Label overflow
+                                <select id="pp-format-treemap-label-overflow" class="form-control">
+                                    ${['CLIP', 'WRAP', 'HIDDEN'].map(val => `<option${(v.options?.LABEL_OVERFLOW || 'CLIP').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                </select>
+                            </label>
+                        </div>` : ''}` : ''}
                     </div>
                 </details>
 
@@ -5796,6 +5813,9 @@ export function createDesigner(container, opts = {}) {
         bindOption('#pp-format-sankey-node-align', 'NODE_ALIGN');
         bindOption('#pp-format-sankey-node-padding', 'NODE_PADDING');
         bindOption('#pp-format-sankey-link-opacity', 'LINK_OPACITY');
+        bindOption('#pp-format-hierarchy-show-breadcrumb', 'SHOW_BREADCRUMB', 'change', el => el.checked ? 'ON' : 'OFF');
+        bindOption('#pp-format-treemap-label-min-size', 'LABEL_MIN_SIZE');
+        bindOption('#pp-format-treemap-label-overflow', 'LABEL_OVERFLOW');
         bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
         bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
         bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');

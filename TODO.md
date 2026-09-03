@@ -1084,14 +1084,14 @@ than record it.
 
 ### TREEMAP / SUNBURST
 
-- [ ] **Color encoding independent of size**: `TREEMAP` has a `COLOR` mapping but it is optional.
+- [x] **Color encoding independent of size**: `TREEMAP` has a `COLOR` mapping but it is optional.
   `SUNBURST` has no `COLOR` mapping at all — hierarchy level colors are auto-assigned. Add `COLOR`
   mapping to SUNBURST and document the interaction between `COLOR` and hierarchy level coloring
   in both visuals.
-- [ ] **Breadcrumb / drill path display**: Clicking into a hierarchy node in TREEMAP or SUNBURST has
+- [x] **Breadcrumb / drill path display**: Clicking into a hierarchy node in TREEMAP or SUNBURST has
   no documented breadcrumb or back-navigation. Tableau and Power BI both show a path header. Add
   `SHOW_BREADCRUMB = ON|OFF` to both visuals.
-- [ ] **Label truncation control**: For narrow tiles in TREEMAP, long labels silently clip or are
+- [x] **Label truncation control**: For narrow tiles in TREEMAP, long labels silently clip or are
   hidden by the renderer. Add `LABEL_MIN_SIZE = n` (minimum tile px to show a label) and
   `LABEL_OVERFLOW = CLIP|WRAP|HIDDEN` to TREEMAP.
 
@@ -1924,6 +1924,22 @@ means the feature already exists in the engine and the sink just needs a new vis
 | `LINK_OPACITY = 0.0..1.0` flow band opacity | ✅ SANKEY (shipped) |
 | `NODE_COLOR` mapping for custom node fill | ✅ SANKEY (shipped) |
 | Multi-level flow SQL documentation | ✅ SANKEY (shipped) |
+
+### 10_TREEMAP.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `COLOR` mapping for independent tile color | ✅ TREEMAP (shipped) |
+| `SHOW_BREADCRUMB = ON\|OFF` path header | ✅ TREEMAP (shipped) |
+| `LABEL_MIN_SIZE = n` tile size threshold | ✅ TREEMAP (shipped) |
+| `LABEL_OVERFLOW = CLIP\|WRAP\|HIDDEN` overflow control | ✅ TREEMAP (shipped) |
+
+### 37_SUNBURST.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `COLOR` mapping for independent wedge color | ✅ SUNBURST (shipped) |
+| `SHOW_BREADCRUMB = ON\|OFF` path header | ✅ SUNBURST (shipped) |
 
 ### Priority Order for Sink Updates
 

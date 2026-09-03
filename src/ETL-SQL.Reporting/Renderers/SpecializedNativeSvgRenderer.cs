@@ -48,16 +48,56 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         var label = Index(v, "name", "label", fallback: 0);
         var parent = Index(v, "parent", fallback: -1);
         var value = Index(v, "value", fallback: Math.Min(1, v.Columns.Count - 1));
-        var nodes = v.Rows.Select((row, i) => new Node(Cell(row, label, $"Item {i + 1}"), Cell(row, parent, ""), Math.Max(0, Number(row, value)), i)).ToList();
+        var colorIdx = Index(v, "color", fallback: -1);
+        var nodes = v.Rows.Select((row, i) => new Node(
+            Cell(row, label, $"Item {i + 1}"),
+            Cell(row, parent, ""),
+            Math.Max(0, Number(row, value)),
+            i,
+            colorIdx >= 0 ? Cell(row, colorIdx, "") : null
+        )).ToList();
         var roots = nodes.Where(n => string.IsNullOrWhiteSpace(n.Parent) || nodes.All(p => !p.Id.Equals(n.Parent, StringComparison.OrdinalIgnoreCase))).ToList();
         if (roots.Count == 0) roots = nodes;
+
+        // Options
+        var showBreadcrumb = false;
+        if (v.Options.TryGetValue("SHOW_BREADCRUMB", out var bcStr) && !string.IsNullOrWhiteSpace(bcStr))
+        {
+            var upper = bcStr.ToUpperInvariant();
+            if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0"))
+                throw new InvalidOperationException($"Invalid SHOW_BREADCRUMB '{bcStr}'. Valid values are ON or OFF.");
+            showBreadcrumb = upper is "ON" or "TRUE" or "1";
+        }
+
+        double labelMinSize = 42.0;
+        if (v.Options.TryGetValue("LABEL_MIN_SIZE", out var lmsStr) && !string.IsNullOrWhiteSpace(lmsStr))
+        {
+            if (!double.TryParse(lmsStr, NumberStyles.Any, CultureInfo.InvariantCulture, out labelMinSize) || labelMinSize < 0.0)
+                throw new InvalidOperationException($"Invalid LABEL_MIN_SIZE '{lmsStr}'. Value must be a non-negative number.");
+        }
+
+        var labelOverflow = (v.Options.GetValueOrDefault("LABEL_OVERFLOW") ?? "CLIP").ToUpperInvariant();
+        if (labelOverflow is not ("CLIP" or "WRAP" or "HIDDEN"))
+            throw new InvalidOperationException($"Invalid LABEL_OVERFLOW '{v.Options["LABEL_OVERFLOW"]}'. Valid values are CLIP, WRAP, or HIDDEN.");
+
         var sb = Start(v, inputs);
-        Squarify(sb, inputs, roots, nodes, 8, TitleBand, inputs.Width - 16, inputs.Height - TitleBand - 8, 0);
+
+        double breadcrumbHeight = showBreadcrumb ? 22.0 : 0.0;
+        if (showBreadcrumb)
+        {
+            var pathSummary = roots.Count <= 3 ? string.Join(" · ", roots.Select(r => r.Id)) : $"{roots[0].Id} · {roots[1].Id} +{roots.Count - 2} more";
+            sb.Append($"<g class='hierarchy-breadcrumb' data-show-breadcrumb='true'>");
+            sb.Append($"<rect x='8' y='{F(TitleBand)}' width='{F(inputs.Width - 16)}' height='18' rx='3' fill='{(inputs.IsDark ? "#2b3242" : "#f1f5f9")}'/>");
+            sb.Append($"<text x='16' y='{F(TitleBand + 13)}' font-size='10' font-weight='500' fill='{inputs.Muted}'>All &gt; <tspan fill='{inputs.OnSurface}'>{Xml(pathSummary)}</tspan></text>");
+            sb.Append("</g>");
+        }
+
+        Squarify(sb, inputs, roots, nodes, 8, TitleBand + breadcrumbHeight, inputs.Width - 16, inputs.Height - TitleBand - breadcrumbHeight - 8, 0, labelMinSize, labelOverflow);
         return End(sb);
     }
 
     private static void Squarify(StringBuilder sb, FocusedLayoutInputs inputs, IReadOnlyList<Node> siblings,
-        IReadOnlyList<Node> all, double x, double y, double w, double h, int depth)
+        IReadOnlyList<Node> all, double x, double y, double w, double h, int depth, double labelMinSize = 42.0, string labelOverflow = "CLIP")
     {
         if (siblings.Count == 0 || w <= 1 || h <= 1) return;
         var weighted = siblings
@@ -90,15 +130,52 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         foreach (var layout in layouts)
         {
             var node = layout.Item.Node;
-            var color = inputs.Color(node.Id, node.Row + depth);
+            string color;
+            if (!string.IsNullOrWhiteSpace(node.Color))
+            {
+                color = node.Color.StartsWith('#') ? node.Color : inputs.Color(node.Color, node.Row);
+            }
+            else
+            {
+                color = inputs.Color(node.Id, node.Row + depth);
+            }
+
             sb.Append($"<g data-row-index='{node.Row}'><rect class='treemap-tile' x='{F(layout.Bounds.X)}' y='{F(layout.Bounds.Y)}' width='{F(Math.Max(0, layout.Bounds.Width))}' height='{F(Math.Max(0, layout.Bounds.Height))}' fill='{color}' fill-opacity='{F(Math.Max(.55, .9 - depth * .1))}' stroke='{inputs.Divider}' stroke-width='2'/><title>{Xml(node.Id)}: {F(node.Value)}</title>");
-            if (layout.Bounds.Width > 42 && layout.Bounds.Height > 20)
-                sb.Append($"<text x='{F(layout.Bounds.X + 6)}' y='{F(layout.Bounds.Y + 16)}' font-size='11' font-weight='{(depth == 0 ? "600" : "400")}' fill='{inputs.OnAccent}'>{Xml(Trim(node.Id, (int)(layout.Bounds.Width / 7)))}</text>");
+
+            var tileW = layout.Bounds.Width;
+            var tileH = layout.Bounds.Height;
+            if (tileW >= labelMinSize && tileH >= (labelMinSize * 0.4))
+            {
+                var maxChars = Math.Max(3, (int)(tileW / 7.2));
+                if (labelOverflow == "HIDDEN" && node.Id.Length > maxChars)
+                {
+                    // Hidden if text exceeds available width
+                }
+                else if (labelOverflow == "WRAP" && node.Id.Length > maxChars && tileH >= 34)
+                {
+                    var splitIdx = node.Id.LastIndexOf(' ', Math.Min(node.Id.Length - 1, maxChars));
+                    if (splitIdx > 0)
+                    {
+                        var line1 = node.Id[..splitIdx];
+                        var line2 = Trim(node.Id[(splitIdx + 1)..], maxChars);
+                        sb.Append($"<text class='treemap-label' x='{F(layout.Bounds.X + 6)}' y='{F(layout.Bounds.Y + 14)}' font-size='10' font-weight='{(depth == 0 ? "600" : "400")}' fill='{inputs.OnAccent}' data-overflow='wrap'><tspan x='{F(layout.Bounds.X + 6)}'>{Xml(line1)}</tspan><tspan x='{F(layout.Bounds.X + 6)}' dy='12'>{Xml(line2)}</tspan></text>");
+                    }
+                    else
+                    {
+                        sb.Append($"<text class='treemap-label' x='{F(layout.Bounds.X + 6)}' y='{F(layout.Bounds.Y + 16)}' font-size='11' font-weight='{(depth == 0 ? "600" : "400")}' fill='{inputs.OnAccent}' data-overflow='wrap'>{Xml(Trim(node.Id, maxChars))}</text>");
+                    }
+                }
+                else
+                {
+                    sb.Append($"<text class='treemap-label' x='{F(layout.Bounds.X + 6)}' y='{F(layout.Bounds.Y + 16)}' font-size='11' font-weight='{(depth == 0 ? "600" : "400")}' fill='{inputs.OnAccent}' data-overflow='clip'>{Xml(Trim(node.Id, maxChars))}</text>");
+                }
+            }
+
             sb.Append("</g>");
             var children = all.Where(candidate => candidate.Parent.Equals(node.Id, StringComparison.OrdinalIgnoreCase)).ToList();
             if (children.Count > 0)
                 Squarify(sb, inputs, children, all, layout.Bounds.X + 4, layout.Bounds.Y + 21,
-                    Math.Max(0, layout.Bounds.Width - 8), Math.Max(0, layout.Bounds.Height - 25), depth + 1);
+                    Math.Max(0, layout.Bounds.Width - 8), Math.Max(0, layout.Bounds.Height - 25), depth + 1, labelMinSize, labelOverflow);
         }
     }
 
@@ -157,38 +234,79 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         var explicitLabel = Index(v, "label", "name", fallback: -1);
         var parent = Index(v, "parent", fallback: -1);
         var value = Index(v, "value", fallback: v.Columns.Count - 1);
-        var paths = new List<(string[] Parts, double Value, int Row)>();
+        var colorIdx = Index(v, "color", fallback: -1);
+
+        var paths = new List<(string[] Parts, double Value, int Row, string? Color)>();
         if (explicitLabel >= 0 && parent >= 0)
         {
-            var raw = v.Rows.Select((row, i) => new Node(Cell(row, explicitLabel, $"Item {i + 1}"), Cell(row, parent, ""), Math.Max(0, Number(row, value)), i)).ToList();
-            foreach (var node in raw) paths.Add((Path(node, raw), node.Value, node.Row));
+            var raw = v.Rows.Select((row, i) => new Node(
+                Cell(row, explicitLabel, $"Item {i + 1}"),
+                Cell(row, parent, ""),
+                Math.Max(0, Number(row, value)),
+                i,
+                colorIdx >= 0 ? Cell(row, colorIdx, "") : null
+            )).ToList();
+            foreach (var node in raw) paths.Add((Path(node, raw), node.Value, node.Row, node.Color));
         }
         else
         {
             var levels = Enumerable.Range(1, 8).Select(i => Index(v, $"level{i}", fallback: -1)).Where(i => i >= 0).ToArray();
             if (levels.Length == 0) levels = Enumerable.Range(0, Math.Max(1, v.Columns.Count - 1)).ToArray();
-            paths.AddRange(v.Rows.Select((row, i) => (levels.Select(level => Cell(row, level, "")).Where(s => s.Length > 0).ToArray(), Math.Max(0, Number(row, value)), i)));
+            paths.AddRange(v.Rows.Select((row, i) => (
+                levels.Select(level => Cell(row, level, "")).Where(s => s.Length > 0).ToArray(),
+                Math.Max(0, Number(row, value)),
+                i,
+                colorIdx >= 0 ? Cell(row, colorIdx, "") : null
+            )));
         }
 
-        // A sunburst's series are its root segments: every ring under one root shares that root's
-        // colour, so the wedge and a BAR of the same category read the same.
         var roots = paths.Select(path => path.Parts.FirstOrDefault() ?? string.Empty)
             .Where(part => part.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         var inputs = FocusedLayoutInputs.From(v, roots, bounds);
 
+        // Options
+        var showBreadcrumb = false;
+        if (v.Options.TryGetValue("SHOW_BREADCRUMB", out var bcStr) && !string.IsNullOrWhiteSpace(bcStr))
+        {
+            var upper = bcStr.ToUpperInvariant();
+            if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0"))
+                throw new InvalidOperationException($"Invalid SHOW_BREADCRUMB '{bcStr}'. Valid values are ON or OFF.");
+            showBreadcrumb = upper is "ON" or "TRUE" or "1";
+        }
+
         var maxDepth = Math.Max(1, paths.Select(p => p.Parts.Length).DefaultIfEmpty(1).Max());
         var total = paths.Sum(p => p.Value); if (total <= 0) total = Math.Max(1, paths.Count);
         var cx = inputs.Width / 2;
-        var cy = (TitleBand + inputs.Height) / 2;
-        var radius = Math.Min(inputs.Width, inputs.Height - TitleBand) * .42;
-        var sb = Start(v, inputs); var cursor = -Math.PI / 2;
+        var breadcrumbHeight = showBreadcrumb ? 22.0 : 0.0;
+        var cy = (TitleBand + breadcrumbHeight + inputs.Height) / 2;
+        var radius = Math.Min(inputs.Width, inputs.Height - TitleBand - breadcrumbHeight) * .42;
+        var sb = Start(v, inputs);
+
+        if (showBreadcrumb)
+        {
+            var pathSummary = roots.Count <= 3 ? string.Join(" · ", roots) : $"{roots[0]} · {roots[1]} +{roots.Count - 2} more";
+            sb.Append($"<g class='hierarchy-breadcrumb' data-show-breadcrumb='true'>");
+            sb.Append($"<rect x='8' y='{F(TitleBand)}' width='{F(inputs.Width - 16)}' height='18' rx='3' fill='{(inputs.IsDark ? "#2b3242" : "#f1f5f9")}'/>");
+            sb.Append($"<text x='16' y='{F(TitleBand + 13)}' font-size='10' font-weight='500' fill='{inputs.Muted}'>All &gt; <tspan fill='{inputs.OnSurface}'>{Xml(pathSummary)}</tspan></text>");
+            sb.Append("</g>");
+        }
+
+        var cursor = -Math.PI / 2;
         foreach (var path in paths)
         {
             var root = path.Parts.FirstOrDefault() ?? string.Empty;
             var rootIndex = roots.FindIndex(item => item.Equals(root, StringComparison.OrdinalIgnoreCase));
-            var color = inputs.Color(root, rootIndex >= 0 ? rootIndex : path.Row);
+            string color;
+            if (!string.IsNullOrWhiteSpace(path.Color))
+            {
+                color = path.Color.StartsWith('#') ? path.Color : inputs.Color(path.Color, path.Row);
+            }
+            else
+            {
+                color = inputs.Color(root, rootIndex >= 0 ? rootIndex : path.Row);
+            }
             var sweep = 2 * Math.PI * (path.Value <= 0 ? 1 : path.Value) / total;
             for (var depth = 0; depth < path.Parts.Length; depth++)
             {
@@ -498,7 +616,7 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
     private static string F(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
     private static string Xml(string value) => System.Security.SecurityElement.Escape(value) ?? "";
     private static string Trim(string value, int max) => max > 1 && value.Length > max ? value[..(max - 1)] + "…" : value;
-    private sealed record Node(string Id, string Parent, double Value, int Row);
+    private sealed record Node(string Id, string Parent, double Value, int Row, string? Color = null);
     private sealed record TreemapItem(Node Node, double Area);
     private sealed record TreemapBounds(double X, double Y, double Width, double Height);
     private sealed record TreemapLayout(TreemapItem Item, TreemapBounds Bounds);

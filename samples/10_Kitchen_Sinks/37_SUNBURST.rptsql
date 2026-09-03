@@ -1,38 +1,84 @@
 -- Kitchen Sink: SUNBURST Visual (Concentric Radial Hierarchy)
--- This script demonstrates the SUNBURST visual type for multi-level hierarchical breakdown.
+-- Demonstrates SUNBURST visuals with multi-level column groupings, parent-child hierarchies,
+-- independent color encoding, and breadcrumb path navigation.
 
 SET REPORT TITLE = 'Kitchen Sink: SUNBURST Visual';
-SET REPORT DESCRIPTION = 'Demonstration of multi-level hierarchical breakdown using radial rings.';
+SET REPORT DESCRIPTION = 'Demonstration of multi-level hierarchical breakdown using radial rings with breadcrumb path and custom color encoding.';
 
--- 1. Mock Data Generation (Multi-level revenue breakdown: Category › Region › Product)
-SELECT 'Electronics' AS Level1, 'North' AS Level2, 'Laptops' AS Level3, 3500 AS Revenue INTO #sunburst
-UNION ALL SELECT 'Electronics', 'North', 'Monitors', 1800
-UNION ALL SELECT 'Electronics', 'South', 'Laptops', 2800
-UNION ALL SELECT 'Electronics', 'South', 'Monitors', 1400
-UNION ALL SELECT 'Furniture',   'North', 'Desks',   2100
-UNION ALL SELECT 'Furniture',   'North', 'Chairs',  1200
-UNION ALL SELECT 'Furniture',   'South', 'Desks',   1600
-UNION ALL SELECT 'Furniture',   'South', 'Chairs',   900
-UNION ALL SELECT 'Clothing',    'North', 'Jackets', 1500
-UNION ALL SELECT 'Clothing',    'South', 'Jackets', 1100;
+-- 1. Mock Data: Multi-level Revenue Breakdown with Color Mapping
+SELECT 'Electronics' AS Level1, 'North' AS Level2, 'Laptops' AS Level3, 3500 AS Revenue, '#2563eb' AS ColorCode INTO #sunburst_levels
+UNION ALL SELECT 'Electronics', 'North', 'Monitors', 1800, '#3b82f6'
+UNION ALL SELECT 'Electronics', 'South', 'Laptops', 2800, '#60a5fa'
+UNION ALL SELECT 'Electronics', 'South', 'Monitors', 1400, '#93c5fd'
+UNION ALL SELECT 'Furniture',   'North', 'Desks',   2100, '#0d9488'
+UNION ALL SELECT 'Furniture',   'North', 'Chairs',  1200, '#14b8a6'
+UNION ALL SELECT 'Furniture',   'South', 'Desks',   1600, '#2dd4bf'
+UNION ALL SELECT 'Furniture',   'South', 'Chairs',   900, '#5eead4'
+UNION ALL SELECT 'Clothing',    'North', 'Jackets', 1500, '#d97706'
+UNION ALL SELECT 'Clothing',    'South', 'Jackets', 1100, '#f59e0b';
 
--- 2. Sunburst Chart (Level-based Mappings)
-CREATE VISUAL CategorySunburst AS SUNBURST (
-    SOURCE = #sunburst,
-    TITLE = 'Revenue Sunburst (Category › Region › Product)',
+-- 2. Mock Data: Parent-Child Ragged Hierarchy
+SELECT 'Executive' AS Role, '' AS Manager, 10 AS Cost, '#1e293b' AS RoleColor INTO #org_hierarchy
+UNION ALL SELECT 'Engineering', 'Executive', 250, '#2563eb'
+UNION ALL SELECT 'Frontend Core', 'Engineering', 90, '#3b82f6'
+UNION ALL SELECT 'Backend Platform', 'Engineering', 160, '#60a5fa'
+UNION ALL SELECT 'Sales & Marketing', 'Executive', 180, '#059669'
+UNION ALL SELECT 'Enterprise Sales', 'Sales & Marketing', 120, '#10b981'
+UNION ALL SELECT 'Growth Marketing', 'Sales & Marketing', 60, '#34d399';
+
+-- 3. Visual 1: Level-based Sunburst with Breadcrumb Header
+CREATE VISUAL LevelSunburst AS SUNBURST (
+    SOURCE = #sunburst_levels,
+    TITLE = '1. Level-Based Radial Hierarchy with Breadcrumb (SHOW_BREADCRUMB = ON)',
     MAPPINGS (
         LEVEL1 = Level1,
         LEVEL2 = Level2,
         LEVEL3 = Level3,
         VALUE  = Revenue
+    ),
+    OPTIONS (
+        SHOW_BREADCRUMB = ON
+    )
+);
+
+-- 4. Visual 2: Level-based Sunburst with Independent Color Mapping
+CREATE VISUAL ColoredSunburst AS SUNBURST (
+    SOURCE = #sunburst_levels,
+    TITLE = '2. Independent Color Encoding (COLOR = ColorCode)',
+    MAPPINGS (
+        LEVEL1 = Level1,
+        LEVEL2 = Level2,
+        LEVEL3 = Level3,
+        VALUE  = Revenue,
+        COLOR  = ColorCode
+    ),
+    OPTIONS (
+        SHOW_BREADCRUMB = ON
+    )
+);
+
+-- 5. Visual 3: Parent-Child Ragged Hierarchy Sunburst
+CREATE VISUAL OrgSunburst AS SUNBURST (
+    SOURCE = #org_hierarchy,
+    TITLE = '3. Parent-Child Hierarchy with Custom Fill',
+    MAPPINGS (
+        LABEL  = Role,
+        PARENT = Manager,
+        VALUE  = Cost,
+        COLOR  = RoleColor
+    ),
+    OPTIONS (
+        SHOW_BREADCRUMB = ON
     )
 );
 
 -- Page Layout
 CREATE PAGE SunburstKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A .',
+    STRUCTURE = 'A B / C .',
     MAP (
-        'A' = CategorySunburst
+        'A' = LevelSunburst,
+        'B' = ColoredSunburst,
+        'C' = OrgSunburst
     )
 );
 
