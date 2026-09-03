@@ -233,13 +233,14 @@ public class DesignerAuthoringEmissionTests
     }
 
     [Fact]
-    public void RewritingADatasetDropsClausesTheDesignerCannotRepresent()
+    public void RewritingADatasetKeepsClausesTheDesignerCannotRepresent()
     {
-        // A documented limitation, asserted so it is found by a test rather than by an author whose
-        // encryption setting quietly disappeared. Nothing edits an existing dataset today — the wizard
-        // only creates, and an unchanged dataset is skipped entirely by the test above. When dataset
-        // editing is built (W4.1), it must either carry COMPRESS/ENCRYPT/KEYFILE through the authoring
-        // model or refuse to rewrite a statement that uses them. This is what a rewrite produces now.
+        // This used to be the other way round: a rewrite regenerated the whole statement from
+        // designer state, which models neither COMPRESS nor ENCRYPT, so changing a dataset's query
+        // dropped both. The limitation was asserted here so a test would find it rather than an
+        // author whose encryption setting had quietly disappeared. It is now fixed the third way the
+        // note left open — by editing only the query's own span, so the bytes holding an unmodelled
+        // clause are never written at all.
         var state = Parsing.Parse(HandAuthored);
         var edited = state with
         {
@@ -250,8 +251,8 @@ public class DesignerAuthoringEmissionTests
 
         Assert.Contains("SELECT Region FROM #regional", patched, System.StringComparison.Ordinal);
         Assert.Contains("TTL = '2h'", patched, System.StringComparison.Ordinal);
-        Assert.DoesNotContain("COMPRESS = ON", patched, System.StringComparison.Ordinal);
-        Assert.DoesNotContain("ENCRYPT = MACHINE", patched, System.StringComparison.Ordinal);
+        Assert.Contains("COMPRESS = ON", patched, System.StringComparison.Ordinal);
+        Assert.Contains("ENCRYPT = MACHINE", patched, System.StringComparison.Ordinal);
     }
     // ── Parameter editing (W1.2) ──────────────────────────────────────────────────────────────────
 

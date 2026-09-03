@@ -546,6 +546,7 @@ public static class WorkstationEditorApp
         var dataModel = new ETL_SQL.Analysis.Services.ScriptDataModelService();
         var governance = new ETL_SQL.Analysis.Services.ScriptGovernanceService();
         var qualityRules = new ETL_SQL.Analysis.Services.ScriptQualityRuleService();
+        var datasetLifecycle = new ETL_SQL.Analysis.Services.ScriptDatasetLifecycleService();
         var designerGen = new ETL_SQL.Reporting.Authoring.DesignerScriptGenerationService();
         var designerPatcher = new ETL_SQL.Reporting.Authoring.DesignerScriptPatcher(designerGen);
         var designerQueryFilters = new ETL_SQL.Reporting.Authoring.DesignerQueryFilterService();
@@ -774,6 +775,26 @@ public static class WorkstationEditorApp
                         (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
                         break;
                     }
+                case "dataset-access":
+                    {
+                        var edit = datasetLifecycle.SetAccess(script, request.Dataset ?? string.Empty, request.Access ?? string.Empty);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
+                case "dataset-ttl":
+                    {
+                        var edit = datasetLifecycle.SetTtl(script, request.Dataset ?? string.Empty, request.Ttl);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
+                case "dataset-step":
+                    {
+                        var edit = datasetLifecycle.AddLifecycleStatement(
+                            script, request.Dataset ?? string.Empty, request.Action ?? string.Empty,
+                            request.Path, request.Encryption, request.Secret, request.Folder, request.Access);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
             }
 
             return Results.Json(
@@ -783,7 +804,11 @@ public static class WorkstationEditorApp
                     // The desktop host has no steward queue: it is a Portal view over persisted
                     // quarantine evidence, and this host persists none. Null, so the panel says
                     // where the queue lives rather than offering a link that goes nowhere.
-                    stewardQueueUrl: null),
+                    stewardQueueUrl: null,
+                    datasetLifecycle.Read(script),
+                    // No dataset registry here either: a workstation's datasets are files on this
+                    // machine, so there is nobody to share one with.
+                    datasetRegistryUrl: null),
                 JsonOptions);
         });
 
@@ -1217,7 +1242,14 @@ public sealed record GovernanceAuthoringRequest(
     string? Target = null,
     string? Retention = null,
     string? Handling = null,
-    bool Remove = false);
+    bool Remove = false,
+    string? Dataset = null,
+    string? Access = null,
+    string? Ttl = null,
+    string? Path = null,
+    string? Encryption = null,
+    string? Secret = null,
+    string? Folder = null);
 
 /// <summary>Which task to plan a run up to. Planning never executes anything.</summary>
 public sealed record PipelineRunPlanAuthoringRequest(string? Script, string? Id);

@@ -23,7 +23,28 @@ public sealed record GovernanceResponsePayload(
     IReadOnlyList<string> Required,
     IReadOnlyList<GovernanceQualityStatementPayload> Quality,
     GovernanceQualityVocabularyPayload QualityVocabulary,
-    string? StewardQueueUrl);
+    string? StewardQueueUrl,
+    IReadOnlyList<GovernanceDatasetPayload> Datasets,
+    IReadOnlyList<string> AccessLevels,
+    string? DatasetRegistryUrl);
+
+/// <param name="Encryption">
+/// none | machine | password | keyfile. Reported and never edited: a password or a key file is a
+/// credential, and a surface that rewrites the clause holding one has read it, sent it through a
+/// request, and written it back for no reason the author asked for.
+/// </param>
+/// <param name="Lifecycle">The refresh/export/publish steps this script already declares.</param>
+public sealed record GovernanceDatasetPayload(
+    string Name,
+    string Access,
+    string? Ttl,
+    bool Compress,
+    string Encryption,
+    int Line,
+    IReadOnlyList<GovernanceDatasetStepPayload> Lifecycle);
+
+/// <param name="Kind">refresh | export | publish</param>
+public sealed record GovernanceDatasetStepPayload(string Kind, string Detail, int Line);
 
 /// <param name="MissingQuarantineTarget">
 /// A column elects QUARANTINE and the statement routes nowhere, so those rows have nowhere to go.
@@ -149,7 +170,9 @@ public static class DesignerGovernanceMapper
         bool applied,
         string? writeError,
         ScriptQuality? quality = null,
-        string? stewardQueueUrl = null) =>
+        string? stewardQueueUrl = null,
+        ScriptDatasetLifecycle? datasets = null,
+        string? datasetRegistryUrl = null) =>
         new(
             governance.Parsed,
             writeError ?? governance.Error,
@@ -202,5 +225,18 @@ public static class DesignerGovernanceMapper
                 RuleForms),
             // Null on a host with no steward queue. The panel says where the queue lives rather than
             // offering a link that goes nowhere.
-            stewardQueueUrl);
+            stewardQueueUrl,
+            (datasets?.Datasets ?? []).Select(dataset => new GovernanceDatasetPayload(
+                dataset.Name,
+                dataset.Access,
+                dataset.Ttl,
+                dataset.Compress,
+                dataset.Encryption,
+                dataset.Line,
+                dataset.Lifecycle.Select(step => new GovernanceDatasetStepPayload(
+                    step.Kind, step.Detail, step.Line)).ToArray())).ToArray(),
+            ScriptDatasetLifecycleService.AccessLevels,
+            // Null on a host with no dataset registry. Per-principal sharing lives there, with its
+            // own permission model; the panel links to it rather than growing a second door.
+            datasetRegistryUrl);
 }

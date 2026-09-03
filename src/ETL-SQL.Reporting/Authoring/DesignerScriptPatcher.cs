@@ -179,15 +179,7 @@ public sealed class DesignerScriptPatcher
             var lifespan = DesignerScriptGenerationService.DatasetLifespanClauses(dataset);
             if (existing.TryGetValue(name, out var statement))
             {
-                var sameQuery = string.Equals(statement.SourceQuery.ToSql().Trim().TrimEnd(';'), query, StringComparison.Ordinal);
-                var sameLifespan = string.Equals(
-                    DesignerScriptGenerationService.DatasetLifespanClauses(dataset with { Ttl = statement.Ttl }),
-                    lifespan,
-                    StringComparison.Ordinal);
-                if (sameQuery && sameLifespan)
-                    continue;
-                var desired = $"CREATE DATASET {name}{lifespan} AS ({lineEnding}  {query}{lineEnding});";
-                AddStatementReplacementIfChanged(script, statement, desired, replacements);
+                PatchExistingDataset(script, statement, dataset, query, replacements);
                 continue;
             }
 
@@ -680,5 +672,141 @@ public sealed class DesignerScriptPatcher
     }
 
     private readonly record struct ClauseSpan(int Start, int End, string Text);
+    /// <summary>
+    /// Edits only the two things designer state models about an existing dataset — its source query
+    /// and its TTL — and leaves every other byte of the statement where it was.
+    ///
+    /// <para>This used to regenerate the whole statement from designer state, and designer state
+    /// models neither <c>ACCESS</c> nor <c>COMPRESS</c> nor <c>ENCRYPT</c>/<c>PASSWORD</c>/
+    /// <c>KEYFILE</c>. Any edit that changed a dataset's query — applying a dataset-scoped filter is
+    /// one, and it is one click — therefore rewrote <c>ACCESS PUBLIC</c> back to the private default
+    /// and dropped the encryption mode, silently, in a file the author had already reviewed. A clause
+    /// nothing in the pipeline models must survive the pipeline untouched, and the way to guarantee
+    /// that is to never write the bytes that hold it.</para>
+    ///
+    /// <para>It also means <c>PASSWORD = '…'</c> is never read out of the script and written back
+    /// through the designer round-trip, which is a journey a secret has no reason to make.</para>
+    /// </summary>
+    private static void PatchExistingDataset(
+        string script,
+        CreateDatasetStatement statement,
+        DesignerAuthoringDataset dataset,
+        string query,
+        List<SpanReplacement> replacements)
+    {
+        var source = statement.SourceQuery;
+        if (source.StartOffset > 0 && source.EndOffset > source.StartOffset && source.EndOffset <= script.Length)
+        {
+            var written = script[source.StartOffset..source.EndOffset].Trim().TrimEnd(';');
+            if (!string.Equals(written, query, StringComparison.Ordinal))
+                replacements.Add(new SpanReplacement(source.StartOffset, source.EndOffset, query));
+        }
+
+        var desiredTtl = NormalizeDatasetTtl(dataset.Ttl);
+        var writtenTtl = NormalizeDatasetTtl(statement.Ttl);
+        if (string.Equals(desiredTtl, writtenTtl, StringComparison.OrdinalIgnoreCase)) return;
+
+        var clause = FindDatasetTtlClause(script, statement);
+        if (clause is { } span)
+        {
+            replacements.Add(desiredTtl.Length == 0
+                // Take the space that separated it, so removing the only option leaves the statement
+                // reading exactly as it did before one was added.
+                ? new SpanReplacement(TrimSpaceBefore(script, span.Start), span.End, string.Empty)
+                : new SpanReplacement(span.Start, span.End, $"TTL = '{EscapeDatasetString(desiredTtl)}'"));
+            return;
+        }
+
+        if (desiredTtl.Length == 0) return;
+        var insertAt = DatasetNameEnd(script, statement);
+        if (insertAt >= 0)
+            replacements.Add(new SpanReplacement(insertAt, insertAt, $" TTL = '{EscapeDatasetString(desiredTtl)}'"));
+    }
+
+    /// <summary>Durations round-trip as authored text, which may or may not arrive already quoted.</summary>
+    private static string NormalizeDatasetTtl(string? value) => (value ?? string.Empty).Trim().Trim('\'');
+
+    private static string EscapeDatasetString(string value) => value.Replace("'", "''", StringComparison.Ordinal);
+
+    private static int TrimSpaceBefore(string script, int start)
+    {
+        while (start > 0 && script[start - 1] == ' ') start--;
+        return start;
+    }
+
+    /// <summary>
+    /// The span of an existing <c>TTL = '…'</c> clause, found by relexing the statement's own bytes.
+    /// The clause has no AST node of its own and the options before <c>AS</c> are order-free, so
+    /// there is nowhere else its position could come from.
+    /// </summary>
+    private static (int Start, int End)? FindDatasetTtlClause(string script, CreateDatasetStatement statement)
+    {
+        var tokens = DatasetOptionTokens(script, statement);
+        for (var index = 0; index < tokens.Count; index++)
+        {
+            if (tokens[index].Type != TokenType.TTL) continue;
+
+            var last = tokens[index];
+            for (var next = index + 1; next < tokens.Count; next++)
+            {
+                if (tokens[next].Type == TokenType.EQUALS)
+                {
+                    last = tokens[next];
+                    continue;
+                }
+                if (tokens[next].Type == TokenType.STRING_LITERAL) last = tokens[next];
+                break;
+            }
+            return (statement.StartOffset + tokens[index].Offset, statement.StartOffset + last.EndOffset);
+        }
+        return null;
+    }
+
+    /// <summary>The offset just past the <c>&amp;name</c>, where a new option clause goes.</summary>
+    private static int DatasetNameEnd(string script, CreateDatasetStatement statement)
+    {
+        var tokens = DatasetOptionTokens(script, statement, includeName: true);
+        return tokens.Count == 0 ? -1 : statement.StartOffset + tokens[0].EndOffset;
+    }
+
+    /// <summary>
+    /// The tokens between the dataset name and <c>AS</c>, with offsets relative to the statement.
+    /// </summary>
+    private static IReadOnlyList<Token> DatasetOptionTokens(
+        string script,
+        CreateDatasetStatement statement,
+        bool includeName = false)
+    {
+        if (statement.StartOffset < 0
+            || statement.EndOffset <= statement.StartOffset
+            || statement.EndOffset > script.Length)
+        {
+            return [];
+        }
+
+        List<Token> tokens;
+        try
+        {
+            tokens = new Lexer(script[statement.StartOffset..statement.EndOffset]).Tokenize();
+        }
+        catch
+        {
+            return [];
+        }
+
+        // CREATE DATASET &name <options…> AS
+        var start = tokens.FindIndex(token => token.Type == TokenType.DATASET);
+        if (start < 0 || start + 1 >= tokens.Count) return [];
+
+        var options = new List<Token>();
+        for (var index = start + 1; index < tokens.Count; index++)
+        {
+            if (tokens[index].Type == TokenType.AS) break;
+            if (index == start + 1 && !includeName) continue;
+            options.Add(tokens[index]);
+        }
+        return options;
+    }
+
     private readonly record struct SpanReplacement(int Start, int End, string Text);
 }

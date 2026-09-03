@@ -37,7 +37,7 @@ public sealed class StudioGovernanceTests(PortalBrowserFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await page.GotoAsync(StudioUrl(host, "gov-token"));
-        await WaitForStudioAsync(page);
+        await WaitForStudioAsync(session);
 
         await page.Locator("[data-activity='governance']").ClickAsync();
         var rows = page.Locator("[data-gov-scope]");
@@ -88,7 +88,7 @@ public sealed class StudioGovernanceTests(PortalBrowserFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await page.GotoAsync(StudioUrl(host, "gov-refuse-token"));
-        await WaitForStudioAsync(page);
+        await WaitForStudioAsync(session);
 
         await page.Locator("[data-activity='governance']").ClickAsync();
         await page.Locator("[data-gov-scope='table:#users']").WaitForAsync(new() { Timeout = 15_000 });
@@ -120,7 +120,7 @@ public sealed class StudioGovernanceTests(PortalBrowserFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await page.GotoAsync(StudioUrl(host, "gov-rule-token"));
-        await WaitForStudioAsync(page);
+        await WaitForStudioAsync(session);
 
         await page.Locator("[data-activity='governance']").ClickAsync();
         await page.Locator("[data-gov-scope='column:#users.UserName']").WaitForAsync(new() { Timeout = 15_000 });
@@ -195,7 +195,7 @@ public sealed class StudioGovernanceTests(PortalBrowserFixture fixture)
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
         await page.GotoAsync(StudioUrl(host, "gov-rls-token"));
-        await WaitForStudioAsync(page);
+        await WaitForStudioAsync(session);
 
         Assert.Equal(0, await RunRowCountAsync(page));
 
@@ -217,6 +217,104 @@ public sealed class StudioGovernanceTests(PortalBrowserFixture fixture)
         await banner.WaitForAsync(new() { Timeout = 10_000, State = WaitForSelectorState.Hidden });
         Assert.Equal(0, await RunRowCountAsync(page));
         Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DatasetLifecycle_ChangesAccessAndWritesAStepWithoutTouchingTheOtherClauses()
+    {
+        const string dataset = """
+            CREATE CONNECTION sample_data AS MOCKDB();
+
+            SELECT UserID, UserName INTO #users FROM sample_data.Users;
+
+            CREATE DATASET &people COMPRESS = ON ENCRYPT = MACHINE TTL = '1h' AS (
+              SELECT UserID, UserName FROM #users
+            );
+
+            -- A .rptsql with no page has no declared workflow, so opening one asks the author
+            -- "dashboard or paginated?" before the workbench finishes booting. A fixture without a
+            -- page therefore waits on a modal nobody answers, which reads as a hang.
+            CREATE PAGE Main AS DASHBOARD ( LAYOUT ( STRUCTURE = '.' ) );
+            """;
+
+        using var workspace = new TempWorkspace();
+        var file = Path.Combine(workspace.Root, "people.rptsql");
+        await File.WriteAllTextAsync(file, dataset);
+
+        await using var host = WorkstationEditorApp.Create([], Options(workspace.Root, file, "gov-dataset-token"));
+        await host.StartAsync();
+
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync(StudioUrl(host, "gov-dataset-token"));
+        await WaitForStudioAsync(session);
+
+        await page.Locator("[data-activity='governance']").ClickAsync();
+        var card = page.Locator("[data-gov-dataset='&people']");
+        await card.WaitForAsync(new() { Timeout = 15_000 });
+
+        await card.Locator("[data-gov-dataset-access]").SelectOptionAsync("PUBLIC");
+        await card.Locator("[data-gov-dataset-ttl]").FillAsync("24h");
+        await card.Locator("[data-gov-dataset-save]").ClickAsync();
+
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO__.state.editorInstance.getValue().includes('ACCESS PUBLIC')",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 15_000 });
+
+        await page.Locator("[data-gov-dataset='&people'] [data-gov-dataset-step]").SelectOptionAsync("export");
+        await page.Locator("[data-gov-dataset='&people'] [data-gov-dataset-path]").FillAsync("people.parquet");
+        await page.Locator("[data-gov-dataset='&people'] [data-gov-dataset-secret]").FillAsync("hunter2");
+        await page.Locator("[data-gov-dataset='&people'] [data-gov-dataset-step-add]").ClickAsync();
+
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO__.state.editorInstance.getValue().includes('EXPORT DATASET &people')",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 15_000 });
+
+        var script = await page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()");
+        Assert.Contains("TTL = '24h'", script, StringComparison.Ordinal);
+        // The clauses no authoring model represents are still exactly where the author put them.
+        Assert.Contains("COMPRESS = ON", script, StringComparison.Ordinal);
+        Assert.Contains("ENCRYPT = MACHINE", script, StringComparison.Ordinal);
+        Assert.Contains("EXPORT DATASET &people TO 'people.parquet' ENCRYPT = PASSWORD PASSWORD = 'hunter2';", script, StringComparison.Ordinal);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DatasetLifecycle_RefusesAnExportWithNoTransportCredential()
+    {
+        const string dataset = """
+            CREATE CONNECTION sample_data AS MOCKDB();
+            SELECT UserID INTO #users FROM sample_data.Users;
+            CREATE DATASET &people AS ( SELECT UserID FROM #users );
+            """;
+
+        using var workspace = new TempWorkspace();
+        var file = Path.Combine(workspace.Root, "people.etlsql");
+        await File.WriteAllTextAsync(file, dataset);
+
+        await using var host = WorkstationEditorApp.Create([], Options(workspace.Root, file, "gov-dataset-refuse"));
+        await host.StartAsync();
+
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync(StudioUrl(host, "gov-dataset-refuse"));
+        await WaitForStudioAsync(session);
+
+        await page.Locator("[data-activity='governance']").ClickAsync();
+        var card = page.Locator("[data-gov-dataset='&people']");
+        await card.WaitForAsync(new() { Timeout = 15_000 });
+
+        await card.Locator("[data-gov-dataset-step]").SelectOptionAsync("export");
+        await card.Locator("[data-gov-dataset-path]").FillAsync("people.parquet");
+        await card.Locator("[data-gov-dataset-step-add]").ClickAsync();
+
+        var toast = page.Locator(".etlsql-feedback-toast").Filter(new() { HasTextString = "transport credential" });
+        await toast.First.WaitForAsync(new() { Timeout = 10_000 });
+
+        var script = await page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()");
+        Assert.DoesNotContain("EXPORT DATASET", script, StringComparison.Ordinal);
     }
 
     /// <summary>Runs the open script through Studio's own run path and counts the rows it returns.</summary>
@@ -250,9 +348,28 @@ public sealed class StudioGovernanceTests(PortalBrowserFixture fixture)
     private static string StudioUrl(Microsoft.AspNetCore.Builder.WebApplication app, string token) =>
         $"{WorkstationEditorApp.GetListeningUrl(app)}/studio?token={Uri.EscapeDataString(token)}";
 
-    private static async Task WaitForStudioAsync(IPage page) =>
-        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
-            new PageWaitForFunctionOptions { Timeout = 20_000 });
+    /// <summary>
+    /// Waits for the workbench to finish booting, and says why it did not when it does not.
+    ///
+    /// <para>Boot renders the shell before it finishes, so a failure leaves a page that looks like
+    /// Studio and is not: every control is drawn and none of them works. The page's own errors are
+    /// the only thing that distinguishes that from a slow start, so they are reported here.</para>
+    /// </summary>
+    private static async Task WaitForStudioAsync(BrowserSession session)
+    {
+        try
+        {
+            await session.Page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
+                new PageWaitForFunctionOptions { Timeout = 20_000 });
+        }
+        catch (TimeoutException ex)
+        {
+            throw new Xunit.Sdk.XunitException(
+                $"Studio did not boot at {session.Page.Url}. "
+                + $"Page errors: {string.Join(" | ", session.PageErrors)}. "
+                + $"Console errors: {string.Join(" | ", session.ConsoleErrors)}.", ex);
+        }
+    }
 
     private sealed class TempWorkspace : IDisposable
     {

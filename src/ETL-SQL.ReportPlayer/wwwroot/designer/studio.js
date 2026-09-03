@@ -3902,6 +3902,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             ${selected ? governanceScopeDetailMarkup(governance, selected) : ''}
             ${selected ? governanceRulesMarkup(governance, selected) : ''}
             ${selected ? governanceRoutingMarkup(governance, selected) : ''}
+            ${governanceDatasetsMarkup(governance)}
             ${governanceSecurityMarkup(governance)}
             ${governanceFindingsMarkup(governance, selected)}`;
 
@@ -4087,6 +4088,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         });
 
         bindGovernanceQuality(scope);
+        bindGovernanceDatasets();
         bindGovernanceSecurity();
     }
 
@@ -4429,6 +4431,152 @@ export async function createStudioWorkbench(container, opts = {}) {
             // A host that cannot answer leaves the picker to free text, which is the whole
             // vocabulary anyway on a host with no directory.
         }
+    }
+
+    // ── Dataset lifecycle ────────────────────────────────────────────────────
+    // What the script says about each dataset it creates — who may see it, how long it lives, and
+    // the refresh, export and publish steps it performs on it. Every write is a span edit on the
+    // clause it names: a CREATE DATASET carries clauses no authoring model represents, and the way
+    // to guarantee they survive is to never write the bytes that hold them.
+
+    function governanceDatasetsMarkup(governance) {
+        const datasets = governance.datasets || [];
+        if (!datasets.length) return '';
+
+        return `
+            <section class="etlsql-studio-library-section" data-gov-datasets>
+                <div class="etlsql-studio-subhead"><div><strong>Datasets</strong><span>${datasets.length} in this script</span></div></div>
+                ${datasets.map(dataset => governanceDatasetMarkup(governance, dataset)).join('')}
+            </section>`;
+    }
+
+    function governanceDatasetMarkup(governance, dataset) {
+        const levels = governance.accessLevels || ['PRIVATE', 'PUBLIC'];
+        const steps = dataset.lifecycle || [];
+        return `
+            <div class="etlsql-studio-gov-dataset" data-gov-dataset="${_escapeHtml(dataset.name)}">
+                <div class="etlsql-studio-gov-tag">
+                    <span class="etlsql-studio-gov-tag-name">${_escapeHtml(dataset.name)}</span>
+                    <span class="etlsql-studio-gov-tag-value">${_escapeHtml(governanceDatasetSummary(dataset))}</span>
+                </div>
+                ${dataset.encryption === 'password' || dataset.encryption === 'keyfile'
+                    ? `<p class="etlsql-studio-outline-note">Its encryption credential is written in the script and is not edited here — a panel that rewrote that clause would read the credential and send it back for no reason you asked for.</p>`
+                    : ''}
+                <div class="etlsql-studio-gov-add">
+                    <label class="etlsql-studio-field-label">Who may see it</label>
+                    <select data-gov-dataset-access>
+                        ${levels.map(level => `<option value="${_escapeHtml(level)}"${level === dataset.access ? ' selected' : ''}>${_escapeHtml(level)}</option>`).join('')}
+                    </select>
+                    <label class="etlsql-studio-field-label">How long it lives</label>
+                    <input type="text" data-gov-dataset-ttl placeholder="e.g. 1h — empty to keep it until refreshed" value="${_escapeHtml(dataset.ttl || '')}">
+                    <button type="button" class="etlsql-studio-btn" data-gov-dataset-save>Apply</button>
+
+                    <label class="etlsql-studio-field-label">Add a step</label>
+                    <select data-gov-dataset-step>
+                        <option value="refresh">Refresh — rebuild it from its query</option>
+                        <option value="export">Export — write a portable copy</option>
+                        <option value="publish">Publish — import an exported copy</option>
+                    </select>
+                    <div data-gov-dataset-step-fields></div>
+                    <button type="button" class="etlsql-studio-btn is-primary" data-gov-dataset-step-add>Write the statement</button>
+                    <p class="etlsql-studio-outline-note">A step is a statement in the script, so it runs every time the script does and says why it exists. ${governance.datasetRegistryUrl
+                        ? `Refreshing or sharing one copy right now is the catalog's job — <a href="${_escapeHtml(governance.datasetRegistryUrl)}" target="_blank" rel="noopener" data-gov-registry-link>open it there</a>.`
+                        : 'This host has no dataset registry, so there is nobody to share a copy with.'}</p>
+                </div>
+                ${steps.length
+                    ? `<div class="etlsql-studio-gov-tags">${steps.map(step => `<div class="etlsql-studio-gov-tag">
+                        <span class="etlsql-studio-gov-tag-name">${_escapeHtml(step.kind)}</span>
+                        <span class="etlsql-studio-gov-tag-value">${_escapeHtml(step.detail || 'in this script')}</span>
+                        <button type="button" class="etlsql-studio-icon-btn" data-gov-dataset-goto="${step.line}" title="Show it" aria-label="Show it">${_studioIcon('code', 12)}</button>
+                    </div>`).join('')}</div>`
+                    : ''}
+            </div>`;
+    }
+
+    function governanceDatasetSummary(dataset) {
+        const parts = [dataset.access.toLowerCase()];
+        if (dataset.ttl) parts.push(`kept ${dataset.ttl}`);
+        if (dataset.compress) parts.push('compressed');
+        parts.push(dataset.encryption === 'none' ? 'not encrypted' : `${dataset.encryption} encryption`);
+        return parts.join(' · ');
+    }
+
+    function governanceDatasetStepFieldsMarkup(kind, governance) {
+        if (kind === 'refresh') {
+            return '<p class="etlsql-studio-outline-note">Rebuilds the dataset from its own query at this point in the script.</p>';
+        }
+        const levels = governance.accessLevels || ['PRIVATE', 'PUBLIC'];
+        return `
+            <input type="text" data-gov-dataset-path placeholder="${kind === 'export' ? 'File to write' : 'Exported file to read'}" aria-label="File">
+            <select data-gov-dataset-encryption aria-label="Transport credential">
+                <option value="PASSWORD">Protected by a password</option>
+                <option value="KEYFILE">Protected by a key file</option>
+            </select>
+            <input type="text" data-gov-dataset-secret placeholder="Password or key file path" aria-label="Transport credential value">
+            ${kind === 'publish'
+                ? `<input type="text" data-gov-dataset-folder placeholder="Folder to publish into (optional)" aria-label="Folder">
+                   <select data-gov-dataset-publish-access aria-label="Access level">
+                       ${levels.map(level => `<option value="${_escapeHtml(level)}">${_escapeHtml(level)}</option>`).join('')}
+                   </select>`
+                : ''}
+            <p class="etlsql-studio-outline-note">The file leaves this machine, so it cannot carry the at-rest key only this machine holds. A password or key file is what lets it be published somewhere else.</p>`;
+    }
+
+    function bindGovernanceDatasets() {
+        const governance = state.governance;
+        sidebarContent.querySelectorAll('[data-gov-dataset]').forEach(host => {
+            const name = host.getAttribute('data-gov-dataset');
+            const stepSelect = host.querySelector('[data-gov-dataset-step]');
+            const stepFields = host.querySelector('[data-gov-dataset-step-fields]');
+            const paintStep = () => {
+                if (stepFields) stepFields.innerHTML = governanceDatasetStepFieldsMarkup(stepSelect?.value || 'refresh', governance);
+            };
+            stepSelect?.addEventListener('change', paintStep);
+            paintStep();
+
+            host.querySelector('[data-gov-dataset-save]')?.addEventListener('click', async () => {
+                const access = host.querySelector('[data-gov-dataset-access]')?.value;
+                const ttl = host.querySelector('[data-gov-dataset-ttl]')?.value ?? '';
+                const dataset = (governance.datasets || []).find(item => item.name === name);
+                // Two clauses, two edits, and only the ones that actually changed — so applying a TTL
+                // never touches the access level and vice versa.
+                if (dataset && access && access !== dataset.access) {
+                    if (!await writeGovernanceDataset('Set dataset access', { op: 'dataset-access', dataset: name, access })) return;
+                }
+                if (dataset && (ttl.trim() || '') !== (dataset.ttl || '')) {
+                    await writeGovernanceDataset('Set dataset lifetime', { op: 'dataset-ttl', dataset: name, ttl: ttl.trim() || null });
+                }
+            });
+
+            host.querySelector('[data-gov-dataset-step-add]')?.addEventListener('click', () => {
+                const kind = stepSelect?.value || 'refresh';
+                void writeGovernanceDataset(`Add ${kind}`, {
+                    op: 'dataset-step',
+                    dataset: name,
+                    action: kind,
+                    path: host.querySelector('[data-gov-dataset-path]')?.value || null,
+                    encryption: host.querySelector('[data-gov-dataset-encryption]')?.value || null,
+                    secret: host.querySelector('[data-gov-dataset-secret]')?.value || null,
+                    folder: host.querySelector('[data-gov-dataset-folder]')?.value || null,
+                    access: host.querySelector('[data-gov-dataset-publish-access]')?.value || null,
+                });
+            });
+
+            host.querySelectorAll('[data-gov-dataset-goto]').forEach(button => {
+                button.addEventListener('click', () => {
+                    const line = Number(button.getAttribute('data-gov-dataset-goto'));
+                    if (Number.isFinite(line) && line > 0) state.editorInstance?.revealLine?.(line);
+                });
+            });
+        });
+    }
+
+    async function writeGovernanceDataset(label, operation) {
+        const result = await canonicalScriptMutation(label, STUDIO_ROUTES.governance, operation);
+        if (!result) return false;
+        state.governance = result;
+        if (state.activeActivity === 'governance') paintGovernancePanel();
+        return true;
     }
 
     function renderSidebarContent(activity) {

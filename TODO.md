@@ -349,9 +349,32 @@ operational flows without an unexplained application switch.
   from one script. The work also fixed a real defect it exposed: the banner's `display:flex` beat the
   user agent's `[hidden]` rule, so it would have been an empty strip that never went away and, worse,
   stayed on screen after the preview was cleared.
-- [ ] **Add dataset lifecycle actions**: Refresh, export, publish, share, and manage dataset access
-  without leaving the authoring document. Before dataset editing ships, preserve unmodeled clauses
-  such as `COMPRESS` and `ENCRYPT`, or refuse the rewrite with a clear explanation.
+- [x] **Add dataset lifecycle actions**: The Governance panel lists every `CREATE DATASET` the
+  script declares — who may see it, how long it lives, whether it is compressed and how it is
+  encrypted — and authors the parts that are the script's to decide. **The clause-preservation
+  requirement came first, and it was already broken.** `PatchDatasets` regenerated the whole
+  statement from designer state, which models only the query and the TTL, so any edit that touched a
+  dataset's query rewrote `ACCESS PUBLIC` back to the private default and dropped the encryption
+  mode — and applying a dataset-scoped filter is such an edit, one click, in a file the author had
+  already reviewed. There was a test asserting the loss as a known limitation; it now asserts the
+  opposite. The fix is the third option that note left open: **never write the bytes that hold an
+  unmodelled clause.** An edit is a span — the query's own span, the TTL clause's own span — so a
+  clause nothing in the pipeline models survives the pipeline untouched, and `PASSWORD = '…'` is
+  never read out of the script and written back through a round-trip it had no reason to make. A
+  second silent loss fell out of the same investigation: `ToStateDto` dropped `Ttl`, so a round-trip
+  through the browser handed the patcher a dataset whose TTL was null — indistinguishable from "the
+  author cleared it" — and deleted the clause. **Access and TTL are authored** by the same span
+  discipline in a purpose-built editor, so making a dataset public edits the `ACCESS` clause and
+  nothing else, and making it private again removes the clause rather than writing the default.
+  **Refresh, export and publish are written as statements**, not performed as buttons: a
+  `REFRESH DATASET &sales;` in the script is a durable declaration that runs every time the script
+  does and says why it exists, where a button refreshes one copy once and leaves no trace. An export
+  or publish is refused without a transport credential, because the file leaves the machine that
+  wrote it and cannot carry the at-rest key only that machine holds — a statement without one
+  produces a file nothing can publish, and finding that out is a run away. **Encryption is reported
+  and not authored**, and **per-principal sharing stays in the catalog**, which has its own
+  permission model; the panel links to it with the dataset named rather than growing a second door
+  with a weaker gate. On the desktop host there is no registry and the panel says so.
 - [ ] **Define scheduling and delivery handoff**: Decide whether Studio hosts schedules and
   subscriptions or opens the Orchestrator at the exact created artifact. Cover the path from a
   successful run to a recurring job and report delivery.

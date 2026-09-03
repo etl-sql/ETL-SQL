@@ -48,6 +48,7 @@ public class DesignerController : ControllerBase
     private readonly ScriptDataModelService _dataModel = new();
     private readonly ScriptGovernanceService _governance = new();
     private readonly ScriptQualityRuleService _qualityRules = new();
+    private readonly ScriptDatasetLifecycleService _datasetLifecycle = new();
     private readonly PipelineRunPlanService _pipelineRunPlans = new();
     private readonly DesignerQueryFilterService _queryFilters = new();
     private readonly LanguageHoverService? _hoverService;
@@ -271,6 +272,26 @@ public class DesignerController : ControllerBase
                         (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
                         break;
                     }
+                case "dataset-access":
+                    {
+                        var edit = _datasetLifecycle.SetAccess(script, req.Dataset ?? string.Empty, req.Access ?? string.Empty);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
+                case "dataset-ttl":
+                    {
+                        var edit = _datasetLifecycle.SetTtl(script, req.Dataset ?? string.Empty, req.Ttl);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
+                case "dataset-step":
+                    {
+                        var edit = _datasetLifecycle.AddLifecycleStatement(
+                            script, req.Dataset ?? string.Empty, req.Action ?? string.Empty,
+                            req.Path, req.Encryption, req.Secret, req.Folder, req.Access);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
             }
 
             return Ok(DesignerGovernanceMapper.Response(
@@ -278,7 +299,10 @@ public class DesignerController : ControllerBase
                 _qualityRules.Read(script),
                 // The steward queue is the Portal's own governance view. It is where a quarantined
                 // row is inspected, corrected, and replayed, so the panel links straight to it.
-                "/#governance/quarantine"));
+                "/#governance/quarantine",
+                _datasetLifecycle.Read(script),
+                // Per-principal dataset sharing lives in the catalog, with its own permission model.
+                "/#datasets"));
         }
         finally
         {

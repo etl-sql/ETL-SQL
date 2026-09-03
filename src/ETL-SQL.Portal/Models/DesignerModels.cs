@@ -425,4 +425,11 @@ public record GovernanceRequest(
     string? Target = null,
     string? Retention = null,
     string? Handling = null,
-    bool Remove = false);
+    bool Remove = false,
+    string? Dataset = null,
+    string? Access = null,
+    string? Ttl = null,
+    string? Path = null,
+    string? Encryption = null,
+    string? Secret = null,
+    string? Folder = null);

@@ -74,10 +74,14 @@ internal static class DesignerAuthoringStateAdapter
                 page.PrintLayout.MarginBottom, page.PrintLayout.MarginLeft,
                 page.PrintLayout.Units, page.PrintLayout.Overflow,
                 page.PrintLayout.CustomWidth, page.PrintLayout.CustomHeight))).ToList(),
+        // TTL travels in both directions. It was dropped here, so a round-trip through the browser
+        // handed the patcher a dataset whose TTL was null — indistinguishable from "the author
+        // cleared it" — and the clause was deleted from a script nobody had asked to change.
         (state.Datasets ?? []).Select(dataset => new DesignerDatasetDto(
             dataset.Id,
             dataset.Name,
-            dataset.Query)).ToList(),
+            dataset.Query,
+            dataset.Ttl)).ToList(),
         state.ReportStyle is null
             ? null
             : new DesignerReportStyleDto(
