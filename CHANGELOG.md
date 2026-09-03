@@ -12,6 +12,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- The Portal can create a dataset from the GUI. The catalog panel lists the aliases the host offers,
+  but the New dataset wizard offered only the connections the script itself declares - and a Portal
+  report declares none, it reads catalog aliases. The wizard reported no connections and sent the
+  author off to create one they already had, two panels below a list of them. It now merges the
+  host's aliases with the script's own, the script's first, because those are the ones that make a
+  report runnable anywhere and the host's are the only ones there are.
 - Previewing or exporting a report that uses a shared connection works. A Portal report names its
   connection through the catalog rather than declaring it, and the run path declared that alias
   before executing while the preview path did not - so the same script that ran perfectly in the

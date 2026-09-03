@@ -535,8 +535,27 @@ performance limits before Studio is treated as the primary workbench.
   exported as `Unknown source: <alias>`. The preview now declares the aliases a script references but
   does not declare itself, resolved one at a time through the catalog under the caller's own identity
   so an alias they may not use is refused rather than quietly borrowed.
-- [ ] **Certify the Power BI-like dashboard journey**: From the GUI, create KPI, trend, category, and
-  detail visuals with slicers, cross-filtering, and persistent formatting.
+- [x] **Certify the Power BI-like dashboard journey**: `StudioDashboardJourneyTests` builds one on
+  the Portal — a dataset, then a KPI (`CARD`), a trend (`LINE` over `OrderDate`), a category
+  breakdown (`BAR` by `Region`) and a detail `TABLE`, each titled in the chart builder, then a filter
+  promoted to a viewer control — and hands the saved script to `StudioCertification`.
+  **Cross-filtering is asserted as the mechanism, not as the word.** A `SLICER` in the script proves
+  nothing: the first version of this journey produced one, wired to a parameter, while three of the
+  four visuals still showed everything, because a visual-scoped filter edits one visual's own source.
+  The journey now builds on a dataset so every visual reads one named query, scopes the filter to
+  that dataset, and asserts `@selected_region` inside the `CREATE DATASET` body — which is the only
+  place it can be and narrow the page.
+  **Formatting is asserted after the reload**, from the bytes the host returned rather than the
+  editor that typed them, because formatting that survives until the tab closes is not persistent.
+  **It found the Portal could not create a dataset at all.** The catalog panel lists the ACL-filtered
+  aliases the host offers, but the New dataset wizard offered only the connections the *script*
+  declares — and a Portal report declares none, it reads catalog aliases. So the wizard reported no
+  connections and sent the author off to create one they already had, two panels below a list of
+  them. The wizard now merges the host's aliases with the script's own, the script's first, because
+  those are the ones that make a report runnable anywhere and the host's are the only ones there are.
+  **And a smaller one in the rail**: adding a visual selects it, which swaps the panel for the format
+  inspector while the rail still reads "palette", so the next click on that rail button collapses the
+  panel instead of showing the list again.
 - [x] **Apply the common certification contract**: One harness, `StudioCertification`, holds all five
   clauses — production host, `.etlsql`/`.rptsql` only, parser/linter/formatter, save-and-reload, and
   the code ↔ canvas round-trip — because three journeys each asserting their own version of "the

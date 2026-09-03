@@ -1580,7 +1580,12 @@ export async function createStudioWorkbench(container, opts = {}) {
             runReport: parameters => (parameters
                 ? executeRun(getActiveDoc(), { script: activeScriptText(), label: 'report', parameters })
                 : shell.querySelector('[data-action="run"]')?.click()),
-            openConnectionWizard: handleOpenConnectionWizard
+            openConnectionWizard: handleOpenConnectionWizard,
+            // The aliases this host will actually let the author read, which is not the same list as
+            // the connections the script declares. On the Portal a report normally declares none and
+            // reads catalog aliases instead, so a wizard that only knew the script's own found
+            // nothing and sent the author off to create a connection they already had.
+            availableConnections: loadConnectionAliases
         }
     });
 

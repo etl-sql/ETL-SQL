@@ -796,6 +796,25 @@ export function createStudioAuthoringSurfaces({
             if (intent && connection && wizard.connections.includes(connection)) openConnection(connection);
             else paint();
 
+            // The aliases the host offers, merged in as they arrive. The script's own come first
+            // because they are the ones that make the report runnable anywhere; the host's are added
+            // rather than substituted, because on the Portal they are the only ones there are.
+            Promise.resolve(shell.availableConnections?.() ?? []).then(hosted => {
+                const names = (hosted || [])
+                    .map(item => (typeof item === 'string' ? item : item?.alias || item?.name))
+                    .filter(Boolean);
+                const seen = new Set(wizard.connections.map(alias => String(alias).toLowerCase()));
+                for (const name of names) {
+                    if (seen.has(String(name).toLowerCase())) continue;
+                    seen.add(String(name).toLowerCase());
+                    wizard.connections.push(name);
+                }
+                if (wizard.pane === 'start' || wizard.pane === 'connection') paint();
+            }).catch(() => {
+                // An alias list that cannot be read leaves the script's own, which is what the
+                // wizard offered before and is still a usable answer.
+            });
+
             Promise.all([scriptDatasetNames(), registryDatasets()]).then(([scripts, registry]) => {
                 wizard.scriptDatasets = scripts;
                 // A registered dataset this script already declares would be two routes to the same
