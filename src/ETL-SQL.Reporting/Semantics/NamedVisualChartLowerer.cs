@@ -48,6 +48,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         ValidateWaterfallOptions(statement);
         ValidateGanttOptions(statement);
         ValidateCandlestickOptions(statement);
+        ValidateRadarOptions(statement);
         foreach (var opt in statement.Options) manifest.Options.TryAdd(opt.Key, opt.Value);
         if (statement.VisualType == VisualType.Scatter)
         {
@@ -317,7 +318,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 VisualType.Waterfall => ResolveWaterfallLayerStyle(statement, manifest),
                 VisualType.Candlestick => ResolveCandlestickLayerStyle(statement, manifest),
                 VisualType.Gantt => ResolveGanttLayerStyle(statement, manifest),
-                VisualType.Radar => ImmutableArray.Create(new StyleToken("layout", "radar"), new StyleToken("preserveRows", "true")),
+                VisualType.Radar => ResolveRadarLayerStyle(statement, manifest),
                 VisualType.Scatter when bindings.Any(b => b.Channel == FieldChannel.ErrorLow) && bindings.Any(b => b.Channel == FieldChannel.ErrorHigh) =>
                     ImmutableArray.Create(new StyleToken("errorBarStyle",
                         (statement.Options.FirstOrDefault(o => o.Key.Equals("ERROR_BAR_STYLE", StringComparison.OrdinalIgnoreCase))?.Value ?? "CAPS").ToUpperInvariant())),
@@ -892,6 +893,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         "LOW" when type == VisualType.Candlestick => FieldChannel.Low,
         "CLOSE" when type == VisualType.Candlestick => FieldChannel.Close,
         "VOLUME" when type == VisualType.Candlestick => FieldChannel.Y2,
+        "DIMENSION" or "METRIC" or "DETAIL" when type == VisualType.Radar => FieldChannel.Detail,
         "Y" or "VALUE" when type is not VisualType.Pie and not VisualType.Donut => FieldChannel.Y,
         "Y2" => FieldChannel.Y2,
         "LABEL" or "CATEGORY" when type is VisualType.Pie or VisualType.Donut => FieldChannel.Theta,
@@ -930,7 +932,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         VisualType.Trellis
             => ["X", "Y", "Y2", "FACET", "SERIES", "COLOR", "SIZE", "TOOLTIP"],
         VisualType.Radar
-            => ["X", "Y", "SERIES", "COLOR", "TOOLTIP"],
+            => ["X", "Y", "SERIES", "COLOR", "DIMENSION", "METRIC", "DETAIL", "TOOLTIP"],
         VisualType.Combo
             => ["X", "Y", "Y2", "SERIES", "COLOR", "TOOLTIP"],
         _ => ["X", "Y", "Y2", "SERIES", "COLOR", "SIZE", "TOOLTIP"]
@@ -1548,6 +1550,70 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 {
                     if (string.IsNullOrWhiteSpace(opt.Value))
                         throw new InvalidOperationException($"Candlestick option '{key}' cannot be empty.");
+                }
+            }
+        }
+    }
+
+    private static ImmutableArray<StyleToken> ResolveRadarLayerStyle(
+        CreateVisualStatement statement,
+        VisualManifest manifest)
+    {
+        var tokens = ImmutableArray.CreateBuilder<StyleToken>();
+        tokens.Add(new StyleToken("layout", "radar"));
+        tokens.Add(new StyleToken("preserveRows", "true"));
+
+        void Forward(string key)
+        {
+            var val = statement.Options.FirstOrDefault(o => o.Key.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value
+                ?? manifest.Options.GetValueOrDefault(key);
+            if (!string.IsNullOrWhiteSpace(val)) tokens.Add(new StyleToken(key, val));
+        }
+
+        Forward("INDEPENDENT_AXES");
+        Forward("FILL_OPACITY");
+        Forward("SHAPE");
+        Forward("FILL");
+
+        return tokens.ToImmutable();
+    }
+
+    private static void ValidateRadarOptions(CreateVisualStatement statement)
+    {
+        var isRadar = statement.VisualType == VisualType.Radar;
+        foreach (var opt in statement.Options)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            if (key is "INDEPENDENT_AXES" or "FILL_OPACITY")
+            {
+                if (!isRadar)
+                    throw new InvalidOperationException($"{key} option is supported only on RADAR visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            }
+
+            if (isRadar)
+            {
+                if (key == "INDEPENDENT_AXES")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0"))
+                        throw new InvalidOperationException($"Invalid INDEPENDENT_AXES '{opt.Value}'. Valid values are ON or OFF.");
+                }
+                else if (key == "FILL_OPACITY")
+                {
+                    if (!double.TryParse(opt.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var opacity) || opacity < 0.0 || opacity > 1.0)
+                        throw new InvalidOperationException($"Invalid FILL_OPACITY '{opt.Value}'. Must be a number between 0.0 and 1.0.");
+                }
+                else if (key == "SHAPE")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("POLYGON" or "CIRCLE"))
+                        throw new InvalidOperationException($"Invalid SHAPE '{opt.Value}'. Valid values are POLYGON or CIRCLE.");
+                }
+                else if (key == "FILL")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0"))
+                        throw new InvalidOperationException($"Invalid FILL '{opt.Value}'. Valid values are ON or OFF.");
                 }
             }
         }

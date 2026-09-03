@@ -1,61 +1,102 @@
 -- Kitchen Sink: RADAR Visual
--- This script demonstrates the RADAR (Spider) visual type for multi-dimensional comparisons.
+-- Comprehensive demonstration of RADAR (Spider) charts for multi-dimensional performance,
+-- competency profiles, concentric circular vs polygon shapes, fill opacity, and independent per-axis scaling.
 
-SET REPORT TITLE = 'Kitchen Sink: RADAR Visual';
-SET REPORT DESCRIPTION = 'Demonstration of RADAR (Spider) chart capabilities for multi-dimensional performance and skill metrics.';
+SET REPORT TITLE = 'Kitchen Sink: RADAR Visuals';
+SET REPORT DESCRIPTION = 'Comprehensive showcase of radar charts with shape styles, fill opacity, and independent per-axis scaling.';
 
--- 1. Mock Data Generation (Product Benchmark Metrics)
-SELECT 'Product A' AS Name, 80 AS Quality, 70 AS Speed, 90 AS Support, 60 AS Value, 85 AS UX INTO #radar
+-- 1. Product Benchmark Metrics (Same 0-100 scale across dimensions)
+SELECT 'Product A' AS Name, 80 AS Quality, 70 AS Speed, 90 AS Support, 60 AS Value, 85 AS UX INTO #benchmark
 UNION ALL SELECT 'Product B', 60, 90, 70, 80, 65
 UNION ALL SELECT 'Product C', 90, 60, 85, 50, 95;
 
--- 2. Mock Data Generation (Engineering Skill Profiles)
-SELECT 'DevOps' AS Role, 95 AS Cloud, 85 AS Automation, 70 AS Coding, 60 AS Architecture, 90 AS Monitoring INTO #skills
-UNION ALL SELECT 'FullStack', 70, 75, 95, 80, 65
-UNION ALL SELECT 'Architect', 85, 65, 75, 95, 75;
+-- 2. Multi-Metric Engine Telemetry (Radically different unit magnitudes)
+SELECT 'Engine Alpha' AS Engine, 3200 AS RPM, 88.5 AS TempCelsius, 2.4 AS BoostBar, 94.0 AS EfficiencyPct, 420 AS TorqueNm INTO #telemetry
+UNION ALL SELECT 'Engine Beta', 4500, 102.0, 1.8, 89.0, 380
+UNION ALL SELECT 'Engine Gamma', 2800, 78.0, 3.1, 96.5, 490;
 
--- 3. Basic Radar Chart
+-- 3. Basic Radar (Default Polygon Shape, Default Opacity)
 CREATE VISUAL BasicRadar AS RADAR (
-    SOURCE = #radar,
-    TITLE = 'Product Performance Benchmark'
+    SOURCE = #benchmark,
+    TITLE = '1. Basic Radar (Default Polygon Shape)'
 );
 
--- 4. Styled Radar with Custom Colors and Legend
-CREATE VISUAL StyledRadar AS RADAR (
-    SOURCE = #radar,
-    TITLE = 'Styled Radar Chart (Product Comparison)',
+-- 4. Concentric Circular Shape Grid
+CREATE VISUAL CircularRadar AS RADAR (
+    SOURCE = #benchmark,
+    TITLE = '2. Concentric Circle Shape (SHAPE = CIRCLE)',
     OPTIONS (
-        COLORS (
-            'Product A' = '#4e79a7',
-            'Product B' = '#f28e2b',
-            'Product C' = '#e15759'
-        ),
+        SHAPE = CIRCLE,
         LEGEND_POSITION = BOTTOM
     )
 );
 
--- 5. Filled Area Skills Radar
-CREATE VISUAL SkillsRadar AS RADAR (
-    SOURCE = #skills,
-    TITLE = 'Role Skill Competency Matrix (Filled Area)',
+-- 5. Custom Fill Opacity for Overlapping Series
+CREATE VISUAL OpacityRadar AS RADAR (
+    SOURCE = #benchmark,
+    TITLE = '3. Custom Semi-Transparent Fill (FILL_OPACITY = 0.40)',
     OPTIONS (
-        FILL = ON,
+        SHAPE = POLYGON,
+        FILL_OPACITY = 0.40,
         COLORS (
-            'DevOps'    = '#3ba272',
-            'FullStack' = '#5470c6',
-            'Architect' = '#fac858'
+            'Product A' = '#2563eb',
+            'Product B' = '#d97706',
+            'Product C' = '#dc2626'
         ),
         LEGEND_POSITION = RIGHT
     )
 );
 
--- Page Layout
+-- 6. Unfilled Wireframe Outlines (FILL = OFF)
+CREATE VISUAL OutlineRadar AS RADAR (
+    SOURCE = #benchmark,
+    TITLE = '4. Wireframe Outlines (FILL = OFF)',
+    OPTIONS (
+        FILL = OFF,
+        SHAPE = CIRCLE,
+        COLORS (
+            'Product A' = '#059669',
+            'Product B' = '#7c3aed',
+            'Product C' = '#e11d48'
+        ),
+        LEGEND_POSITION = BOTTOM
+    )
+);
+
+-- 7. Independent Per-Axis Scaling for Differing Units
+CREATE VISUAL IndependentAxesRadar AS RADAR (
+    SOURCE = #telemetry,
+    TITLE = '5. Independent Per-Axis Scales (INDEPENDENT_AXES = ON)',
+    OPTIONS (
+        INDEPENDENT_AXES = ON,
+        SHAPE = CIRCLE,
+        FILL_OPACITY = 0.25,
+        LEGEND_POSITION = RIGHT
+    )
+);
+
+-- 8. Global Scale with Same Telemetry (Demonstrating distorted distortion without INDEPENDENT_AXES)
+CREATE VISUAL GlobalScaleTelemetry AS RADAR (
+    SOURCE = #telemetry,
+    TITLE = '6. Global Shared Scale (RPM dominates without INDEPENDENT_AXES)',
+    OPTIONS (
+        INDEPENDENT_AXES = OFF,
+        SHAPE = POLYGON,
+        FILL_OPACITY = 0.20,
+        LEGEND_POSITION = BOTTOM
+    )
+);
+
+-- Dashboard Page Layout
 CREATE PAGE RadarKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C C',
+    STRUCTURE = 'A B / C D / E F',
     MAP (
         'A' = BasicRadar,
-        'B' = StyledRadar,
-        'C' = SkillsRadar
+        'B' = CircularRadar,
+        'C' = OpacityRadar,
+        'D' = OutlineRadar,
+        'E' = IndependentAxesRadar,
+        'F' = GlobalScaleTelemetry
     )
 );
 

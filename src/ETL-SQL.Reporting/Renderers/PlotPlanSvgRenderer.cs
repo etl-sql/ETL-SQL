@@ -2399,12 +2399,66 @@ internal sealed class PlotPlanSvgRenderer
         var maximum = PlotPlanResolver.Number(radiusScale.Domain[^1]) ?? 1m;
         var cx = plan.Bounds.Width / 2m; var cy = plan.Bounds.Height / 2m + 10m;
         var outer = Math.Min(plan.Bounds.Width, plan.Bounds.Height) / 2m - 58m;
+
+        var firstLayer = plan.Layers.FirstOrDefault();
+        var isIndependentAxes = IsEnabled(plan.Style, "INDEPENDENT_AXES") ||
+            (firstLayer is not null && LayerStyle(firstLayer, "INDEPENDENT_AXES")?.ToUpperInvariant() is "ON" or "TRUE" or "1");
+
+        var shape = (Style(plan, "SHAPE") ?? (firstLayer is not null ? LayerStyle(firstLayer, "SHAPE") : null) ?? "POLYGON").ToUpperInvariant();
+
+        var rawOpacity = Style(plan, "FILL_OPACITY") ?? (firstLayer is not null ? LayerStyle(firstLayer, "FILL_OPACITY") : null);
+        var fillOpacity = "0.18";
+        if (!string.IsNullOrWhiteSpace(rawOpacity) && decimal.TryParse(rawOpacity, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedOpacity))
+        {
+            fillOpacity = Math.Clamp(parsedOpacity, 0m, 1m).ToString(CultureInfo.InvariantCulture);
+        }
+
+        var fillOpt = Style(plan, "FILL") ?? (firstLayer is not null ? LayerStyle(firstLayer, "FILL") : null);
+        var isFillOff = fillOpt is not null && (fillOpt.Equals("OFF", StringComparison.OrdinalIgnoreCase) || fillOpt.Equals("FALSE", StringComparison.OrdinalIgnoreCase) || fillOpt == "0");
+
+        // Calculate per-axis domain if INDEPENDENT_AXES is enabled
+        var axisScales = new (decimal Min, decimal Max)[dimensions.Length];
+        if (isIndependentAxes)
+        {
+            for (var dimIndex = 0; dimIndex < dimensions.Length; dimIndex++)
+            {
+                var dimValues = plan.Layers
+                    .Select(layer => dimIndex < layer.Data.Length ? Numeric(layer.Data[dimIndex], FieldChannel.Radius) : null)
+                    .Where(v => v.HasValue)
+                    .Select(v => v!.Value)
+                    .ToList();
+
+                var dimMin = dimValues.Count > 0 ? dimValues.Min() : 0m;
+                var dimMax = dimValues.Count > 0 ? dimValues.Max() : 1m;
+
+                if (dimMin > 0m) dimMin = 0m;
+                if (dimMax <= dimMin) dimMax = dimMin + 1m;
+
+                axisScales[dimIndex] = (dimMin, dimMax);
+            }
+        }
+        else
+        {
+            for (var dimIndex = 0; dimIndex < dimensions.Length; dimIndex++)
+            {
+                axisScales[dimIndex] = (minimum, maximum);
+            }
+        }
+
+        builder.AppendLine($"<g class='plot-radar' data-shape='{Esc(shape.ToLowerInvariant())}' data-independent-axes='{(isIndependentAxes ? "true" : "false")}'>");
         for (var ring = 1; ring <= 4; ring++)
         {
             var ringRadius = outer * ring / 4m;
-            var points = Enumerable.Range(0, dimensions.Length)
-                .Select(index => Point(cx, cy, ringRadius, -Math.PI / 2d + 2d * Math.PI * index / dimensions.Length));
-            builder.AppendLine($"<polygon points='{string.Join(" ", points)}' fill='none' stroke='#d1d5db'/>");
+            if (shape == "CIRCLE")
+            {
+                builder.AppendLine($"<circle cx='{N(cx)}' cy='{N(cy)}' r='{N(ringRadius)}' fill='none' stroke='#d1d5db'/>");
+            }
+            else
+            {
+                var points = Enumerable.Range(0, dimensions.Length)
+                    .Select(index => Point(cx, cy, ringRadius, -Math.PI / 2d + 2d * Math.PI * index / dimensions.Length));
+                builder.AppendLine($"<polygon points='{string.Join(" ", points)}' fill='none' stroke='#d1d5db'/>");
+            }
         }
         for (var index = 0; index < dimensions.Length; index++)
         {
@@ -2412,19 +2466,23 @@ internal sealed class PlotPlanSvgRenderer
             var edge = PointCoordinates(cx, cy, outer, angle);
             var label = PointCoordinates(cx, cy, outer + 18m, angle);
             builder.AppendLine($"<line x1='{N(cx)}' y1='{N(cy)}' x2='{N(edge.X)}' y2='{N(edge.Y)}' stroke='#e5e7eb'/>");
-            builder.AppendLine($"<text x='{N(label.X)}' y='{N(label.Y + 3m)}' text-anchor='middle' font-size='9' fill='#4b5563'>{Esc(Truncate(dimensions[index], 13))}</text>");
+            var axisRangeTitle = isIndependentAxes ? $" [{N(axisScales[index].Min)}..{N(axisScales[index].Max)}]" : "";
+            builder.AppendLine($"<text x='{N(label.X)}' y='{N(label.Y + 3m)}' text-anchor='middle' font-size='9' fill='#4b5563'><title>{Esc(dimensions[index])}{axisRangeTitle}</title>{Esc(Truncate(dimensions[index], 13))}</text>");
         }
         foreach (var layer in plan.Layers)
         {
             var points = layer.Data.Select((datum, index) =>
             {
-                var value = Numeric(datum, FieldChannel.Radius) ?? minimum;
-                var ratio = maximum <= minimum ? 0m : Math.Clamp((value - minimum) / (maximum - minimum), 0m, 1m);
+                var (axisMin, axisMax) = index < axisScales.Length ? axisScales[index] : (minimum, maximum);
+                var value = Numeric(datum, FieldChannel.Radius) ?? axisMin;
+                var ratio = axisMax <= axisMin ? 0m : Math.Clamp((value - axisMin) / (axisMax - axisMin), 0m, 1m);
                 return Point(cx, cy, outer * ratio, -Math.PI / 2d + 2d * Math.PI * index / dimensions.Length);
             }).ToArray();
             var color = plan.Palette.FirstOrDefault(item => item.SeriesKey == layer.SeriesKey)?.Color ?? "#5470c6";
-            builder.AppendLine($"<polygon points='{string.Join(" ", points)}' fill='{Esc(color)}' fill-opacity='.18' stroke='{Esc(color)}' stroke-width='{LineWidth(layer, "2")}' data-row-index='{layer.Data.FirstOrDefault()?.RowIndex ?? 0}'><title>{Esc(layer.SeriesKey ?? layer.Id)}</title></polygon>");
+            var fillAttr = isFillOff ? "fill='none'" : $"fill='{Esc(color)}' fill-opacity='{Esc(fillOpacity)}'";
+            builder.AppendLine($"<polygon points='{string.Join(" ", points)}' {fillAttr} stroke='{Esc(color)}' stroke-width='{LineWidth(layer, "2")}' data-row-index='{layer.Data.FirstOrDefault()?.RowIndex ?? 0}'><title>{Esc(layer.SeriesKey ?? layer.Id)}</title></polygon>");
         }
+        builder.AppendLine("</g>");
         RenderLegend(builder, plan);
     }
 

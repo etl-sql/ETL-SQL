@@ -1046,13 +1046,13 @@ than record it.
 
 ### RADAR
 
-- [ ] **Per-axis scale**: `RADAR` applies a single `MIN`/`MAX` to all axes. Tableau and ggplot2
+- [x] **Per-axis scale**: `RADAR` applies a single `MIN`/`MAX` to all axes. Tableau and ggplot2
   (`coord_polar` + custom scales) support independent axis scales when dimensions have different
   units. Add `INDEPENDENT_AXES = ON|OFF` to allow each dimension column to auto-scale independently.
-- [ ] **Fill opacity**: Multi-series radar charts overlap. No `FILL_OPACITY = 0.0..1.0` option to
+- [x] **Fill opacity**: Multi-series radar charts overlap. No `FILL_OPACITY = 0.0..1.0` option to
   make polygon fills semi-transparent. The overlap makes filled radars unreadable. Add alongside
   `LEGEND` controls.
-- [ ] **Radar shape style**: No option for `SHAPE = POLYGON|CIRCLE` to control whether the background
+- [x] **Radar shape style**: No option for `SHAPE = POLYGON|CIRCLE` to control whether the background
   grid is drawn as nested polygons or concentric circles (ggplot2 `coord_radar` supports this).
 
 ### FUNNEL
@@ -1873,6 +1873,16 @@ means the feature already exists in the engine and the sink just needs a new vis
 | Full legend suite | ✅ shipped |
 | `GRID_LINES`, `ZERO_LINE` | ✅ shipped |
 | `SYMBOL_SIZE = n` | [ ] Named Chart Marks (pending) |
+
+### 14_RADAR.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `SHAPE = POLYGON\|CIRCLE` option | ✅ RADAR (shipped) |
+| `FILL_OPACITY = 0.0..1.0` option | ✅ RADAR (shipped) |
+| `INDEPENDENT_AXES = ON\|OFF` per-axis auto-scaling | ✅ RADAR (shipped) |
+| `FILL = ON\|OFF` wireframe/fill control | ✅ RADAR (shipped) |
+| `DIMENSION`, `METRIC`, `DETAIL` explicit role mappings | ✅ RADAR (shipped) |
 
 ### 15_CANDLESTICK.rptsql
 

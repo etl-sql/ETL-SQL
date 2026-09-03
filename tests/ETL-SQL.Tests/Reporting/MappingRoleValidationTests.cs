@@ -122,6 +122,9 @@ public class MappingRoleValidationTests
     [InlineData(VisualType.Pie, "VALUE")]
     [InlineData(VisualType.Donut, "CATEGORY")]
     [InlineData(VisualType.Donut, "VALUE")]
+    [InlineData(VisualType.Radar, "DIMENSION")]
+    [InlineData(VisualType.Radar, "METRIC")]
+    [InlineData(VisualType.Radar, "DETAIL")]
     public void TypeSpecificRole_Accepted(VisualType type, string role)
     {
         var stmt = MakeVisual(type, (role, "Col1"));

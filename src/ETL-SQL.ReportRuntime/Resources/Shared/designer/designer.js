@@ -5119,6 +5119,7 @@ export function createDesigner(container, opts = {}) {
         const isWaterfall = v.type === 'WATERFALL';
         const isGantt = v.type === 'GANTT';
         const isCandlestick = v.type === 'CANDLESTICK';
+        const isRadar = v.type === 'RADAR';
         const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
         const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
         const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
@@ -5315,6 +5316,20 @@ export function createDesigner(container, opts = {}) {
                             </label>
                             <label class="etlsql-dsgn-label">Down wick color
                                 <input type="color" id="pp-format-candlestick-wick-color-down" value="${toHexColor(v.options?.WICK_COLOR_DOWN, '#ef5350')}">
+                            </label>
+                        </div>` : ''}
+                        ${isRadar ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">Radar options</div>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-radar-independent-axes" ${(v.options?.INDEPENDENT_AXES || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Independent axes</span></label>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Shape style
+                                <select id="pp-format-radar-shape" class="form-control">
+                                    ${['POLYGON', 'CIRCLE'].map(val => `<option${(v.options?.SHAPE || 'POLYGON').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Fill opacity (0.0 – 1.0)
+                                <input type="number" step="0.05" min="0" max="1" id="pp-format-radar-fill-opacity" class="form-control" value="${v.options?.FILL_OPACITY ?? '0.18'}">
                             </label>
                         </div>` : ''}
                     </div>
@@ -5727,6 +5742,9 @@ export function createDesigner(container, opts = {}) {
         bindOption('#pp-format-candlestick-wick-color-up', 'WICK_COLOR_UP', 'input');
         bindOption('#pp-format-candlestick-wick-color-down', 'WICK_COLOR_DOWN', 'input');
         bindOption('#pp-format-candlestick-volume-color', 'VOLUME_COLOR', 'input');
+        bindOption('#pp-format-radar-independent-axes', 'INDEPENDENT_AXES', 'change', el => el.checked ? 'ON' : 'OFF');
+        bindOption('#pp-format-radar-shape', 'SHAPE');
+        bindOption('#pp-format-radar-fill-opacity', 'FILL_OPACITY');
         bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
         bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
         bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');
