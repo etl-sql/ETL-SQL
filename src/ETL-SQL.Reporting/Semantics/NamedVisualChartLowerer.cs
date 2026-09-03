@@ -45,6 +45,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         ValidatePieDonutOptions(statement);
         ValidateScatterBubbleOptions(statement);
         ValidateHeatmapOptions(statement);
+        ValidateWaterfallOptions(statement);
         foreach (var opt in statement.Options) manifest.Options.TryAdd(opt.Key, opt.Value);
         if (statement.VisualType == VisualType.Scatter)
         {
@@ -193,7 +194,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             layers: layers,
             coordinate: new CoordinateSpec(IsPolar(statement.VisualType)
                 ? CoordinateKind.Polar
-                : statement.VisualType is VisualType.HorizontalBar or VisualType.Gantt
+                : statement.VisualType is VisualType.HorizontalBar or VisualType.Gantt ||
+                  (statement.VisualType is VisualType.Waterfall or VisualType.BoxPlot or VisualType.Funnel && IsHorizontal(statement, manifest))
                     ? CoordinateKind.TransposedCartesian
                     : CoordinateKind.Cartesian,
                 StartAngle: ResolveStartAngle(statement, manifest),
@@ -315,7 +317,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 VisualType.Funnel => ImmutableArray.Create(new StyleToken("layout", "funnel")),
                 VisualType.Gauge => ImmutableArray.Create(new StyleToken("layout", "gauge")),
                 VisualType.BoxPlot => ImmutableArray.Create(new StyleToken("layout", "boxplot"), new StyleToken("preserveRows", "true")),
-                VisualType.Waterfall => ImmutableArray.Create(new StyleToken("layout", "waterfall"), new StyleToken("preserveRows", "true")),
+                VisualType.Waterfall => ResolveWaterfallLayerStyle(statement, manifest),
                 VisualType.Candlestick => ImmutableArray.Create(new StyleToken("layout", "candlestick"), new StyleToken("preserveRows", "true")),
                 VisualType.Gantt => ImmutableArray.Create(new StyleToken("layout", "gantt"), new StyleToken("preserveRows", "true")),
                 VisualType.Radar => ImmutableArray.Create(new StyleToken("layout", "radar"), new StyleToken("preserveRows", "true")),
@@ -840,6 +842,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         "NAME" when type == VisualType.Waterfall => FieldChannel.X,
         "VALUE" when type == VisualType.Waterfall => FieldChannel.Y,
         "TOTAL" when type == VisualType.Waterfall => FieldChannel.Detail,
+        "SUBTOTAL" when type == VisualType.Waterfall => FieldChannel.Low,
         "LOW" when type == VisualType.BoxPlot => FieldChannel.Low,
         "Q1" when type == VisualType.BoxPlot => FieldChannel.Q1,
         "MEDIAN" when type == VisualType.BoxPlot => FieldChannel.Median,
@@ -877,7 +880,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         VisualType.HeatMap
             => ["X", "Y", "VALUE", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.Waterfall
-            => ["NAME", "X", "VALUE", "Y", "TOTAL", "SERIES", "COLOR", "TOOLTIP"],
+            => ["NAME", "X", "VALUE", "Y", "TOTAL", "SUBTOTAL", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.BoxPlot
             => ["X", "LOW", "Q1", "MEDIAN", "Q3", "HIGH", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.Candlestick
@@ -1342,6 +1345,73 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         }
 
         return new ColorRangeSpec(ColorRangeKind.Gradient, lowColor, highColor, null, null, nullColor);
+    }
+
+    private static void ValidateWaterfallOptions(CreateVisualStatement statement)
+    {
+        var isWaterfall = statement.VisualType == VisualType.Waterfall;
+        foreach (var opt in statement.Options)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            if (key is "CONNECTOR_LINES" or "CONNECTOR_LINE_COLOR" or "CONNECTOR_LINE_WIDTH" or "COLOR_SUBTOTAL" or "COLOR_TOTAL")
+            {
+                if (!isWaterfall)
+                    throw new InvalidOperationException($"{key} option is supported only on WATERFALL visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            }
+
+            if (isWaterfall)
+            {
+                if (key == "CONNECTOR_LINES")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE"))
+                        throw new InvalidOperationException($"Invalid CONNECTOR_LINES '{opt.Value}'. Expected ON or OFF.");
+                }
+                else if (key == "CONNECTOR_LINE_WIDTH")
+                {
+                    if (!decimal.TryParse(opt.Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var width) || width < 0m)
+                        throw new InvalidOperationException($"Invalid CONNECTOR_LINE_WIDTH '{opt.Value}'. Must be a non-negative number.");
+                }
+            }
+
+            if (key == "ORIENTATION")
+            {
+                if (statement.VisualType is not (VisualType.Waterfall or VisualType.Funnel or VisualType.BoxPlot or VisualType.Bar or VisualType.HorizontalBar))
+                    throw new InvalidOperationException($"ORIENTATION option is not supported on {statement.VisualType.ToString().ToUpperInvariant()} visuals.");
+                var upper = opt.Value.ToUpperInvariant();
+                if (upper is not ("HORIZONTAL" or "VERTICAL"))
+                    throw new InvalidOperationException($"Invalid ORIENTATION '{opt.Value}'. Valid values are HORIZONTAL or VERTICAL.");
+            }
+        }
+    }
+
+    private static ImmutableArray<StyleToken> ResolveWaterfallLayerStyle(CreateVisualStatement statement, VisualManifest manifest)
+    {
+        var tokens = ImmutableArray.CreateBuilder<StyleToken>();
+        tokens.Add(new StyleToken("layout", "waterfall"));
+        tokens.Add(new StyleToken("preserveRows", "true"));
+
+        if (IsHorizontal(statement, manifest))
+            tokens.Add(new StyleToken("orientation", "horizontal"));
+
+        foreach (var opt in statement.Options)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            if (key is "CONNECTOR_LINES" or "CONNECTOR_LINE_COLOR" or "CONNECTOR_LINE_WIDTH" or
+                "COLOR_TOTAL" or "COLOR_SUBTOTAL" or "COLOR_UP" or "COLOR_DOWN" or "COLOR_INCREASE" or "COLOR_DECREASE")
+            {
+                tokens.Add(new StyleToken(opt.Key.ToLowerInvariant(), opt.Value));
+            }
+        }
+
+        return tokens.ToImmutable();
+    }
+
+    private static bool IsHorizontal(CreateVisualStatement statement, VisualManifest manifest)
+    {
+        var opt = statement.Options.FirstOrDefault(o => o.Key.Equals("ORIENTATION", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("ORIENTATION");
+        return string.Equals(opt, "HORIZONTAL", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string Sanitize(string value) => new(value.Select(character => char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : '-').ToArray());

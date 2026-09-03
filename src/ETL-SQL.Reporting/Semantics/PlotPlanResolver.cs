@@ -643,6 +643,19 @@ public sealed class PlotPlanResolver
         return sorted[lower] + (position - lower) * (sorted[upper] - sorted[lower]);
     }
 
+    private static bool IsFlagTrue(ChartValue? value)
+    {
+        if (value is null || value.Kind == ChartValueKind.Null) return false;
+        if (value.Kind == ChartValueKind.Boolean) return value.Boolean == true;
+        if (Number(value) is { } num) return num != 0m;
+        var text = Display(value).Trim();
+        return string.Equals(text, "true", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(text, "1", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(text, "yes", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(text, "y", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(text, "on", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ResolvedMarkLayer ResolveWaterfall(
         MarkLayerSpec layer,
         ChartSpec spec,
@@ -655,14 +668,28 @@ public sealed class PlotPlanResolver
         var output = raw.Select(datum =>
         {
             var delta = Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null()) ?? 0m;
-            var total = Truthy(Channel(datum, FieldChannel.Detail) ?? ChartValue.From(false));
-            var start = total ? 0m : running;
-            var end = total ? delta : running + delta;
+            var totalVal = Channel(datum, FieldChannel.Detail);
+            var totalText = totalVal is not null ? Display(totalVal)?.Trim() : null;
+            var subtotalVal = Channel(datum, FieldChannel.Low);
+            var isSubtotal = (totalText is not null && (totalText.Equals("SUBTOTAL", StringComparison.OrdinalIgnoreCase) || totalText.Equals("SUB_TOTAL", StringComparison.OrdinalIgnoreCase) || totalText.Equals("SUB", StringComparison.OrdinalIgnoreCase)))
+                || IsFlagTrue(subtotalVal);
+            var isTotal = !isSubtotal && (IsFlagTrue(totalVal) || (totalText is not null && totalText.Equals("TOTAL", StringComparison.OrdinalIgnoreCase)));
+            var isAnchor = isTotal || isSubtotal;
+
+            var start = isAnchor ? 0m : running;
+            var end = isAnchor ? (delta != 0m ? delta : running) : running + delta;
             running = end;
+
+            var barType = isTotal ? "TOTAL" : isSubtotal ? "SUBTOTAL" : (end >= start ? "INCREASE" : "DECREASE");
+
             return datum with
             {
-                Channels = datum.Channels.Add(new ResolvedChannelValue(FieldChannel.YStart, ChartValue.From(start), start.ToString(CultureInfo.InvariantCulture)))
+                Channels = datum.Channels
+                    .Add(new ResolvedChannelValue(FieldChannel.YStart, ChartValue.From(start), start.ToString(CultureInfo.InvariantCulture)))
                     .Add(new ResolvedChannelValue(FieldChannel.YEnd, ChartValue.From(end), end.ToString(CultureInfo.InvariantCulture)))
+                    .Add(new ResolvedChannelValue(FieldChannel.XStart, ChartValue.From(start), start.ToString(CultureInfo.InvariantCulture)))
+                    .Add(new ResolvedChannelValue(FieldChannel.XEnd, ChartValue.From(end), end.ToString(CultureInfo.InvariantCulture)))
+                    .Add(new ResolvedChannelValue(FieldChannel.Text, ChartValue.From(barType), barType))
             };
         }).ToImmutableArray();
         return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, spec.Id, output)

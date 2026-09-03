@@ -688,13 +688,13 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 
 ### WATERFALL
 
-- [ ] **Connector lines between bars**: Waterfall charts in Power BI and ggplot2 (`ggplot2::geom_waterfall`)
+- [x] **Connector lines between bars**: Waterfall charts in Power BI and ggplot2 (`ggplot2::geom_waterfall`)
   draw a thin horizontal connector at the top/bottom of each bar linking to the next. No such option
   exists. Add `CONNECTOR_LINES = ON|OFF`.
-- [ ] **Subtotal bars**: Beyond the `TOTAL` flag for grand totals, there is no way to mark intermediate
+- [x] **Subtotal bars**: Beyond the `TOTAL` flag for grand totals, there is no way to mark intermediate
   subtotal bars (which reset the running base). Power BI waterfall has this. Add a `SUBTOTAL` value for
   the `TOTAL` mapping column, or add a dedicated `SUBTOTAL` mapping.
-- [ ] **Horizontal waterfall**: No `ORIENTATION = HORIZONTAL` option, unlike FUNNEL and BOXPLOT which
+- [x] **Horizontal waterfall**: No `ORIENTATION = HORIZONTAL` option, unlike FUNNEL and BOXPLOT which
   expose orientation. Add to WATERFALL.
 
 ### GANTT

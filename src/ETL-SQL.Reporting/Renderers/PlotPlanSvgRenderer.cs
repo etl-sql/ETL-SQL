@@ -2003,23 +2003,105 @@ internal sealed class PlotPlanSvgRenderer
         var categories = plan.Scales.First(item => item.Channel == FieldChannel.X).Categories;
         var plotWidth = plan.Bounds.Width - Left - Right;
         var plotHeight = plan.Bounds.Height - Top - Bottom;
-        var slot = plotWidth / Math.Max(1, layer.Data.Length);
-        decimal? previousEndY = null;
-        for (var index = 0; index < layer.Data.Length; index++)
+
+        var isHorizontal = plan.Coordinate?.Kind == CoordinateKind.TransposedCartesian
+            || string.Equals(Style(plan, "ORIENTATION"), "HORIZONTAL", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(LayerStyle(layer, "orientation"), "horizontal", StringComparison.OrdinalIgnoreCase);
+
+        var connectorOpt = Style(plan, "CONNECTOR_LINES") ?? LayerStyle(layer, "connector_lines");
+        var showConnectors = !string.Equals(connectorOpt, "OFF", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(connectorOpt, "FALSE", StringComparison.OrdinalIgnoreCase);
+        var connectorColor = SafePaint(Style(plan, "CONNECTOR_LINE_COLOR") ?? LayerStyle(layer, "connector_line_color"), "#9ca3af");
+        var connectorWidth = Style(plan, "CONNECTOR_LINE_WIDTH") ?? LayerStyle(layer, "connector_line_width");
+        var strokeWidthAttr = !string.IsNullOrEmpty(connectorWidth) ? $" stroke-width='{Esc(connectorWidth)}'" : "";
+
+        var totalColor = SafePaint(Style(plan, "COLOR_TOTAL") ?? LayerStyle(layer, "color_total"), "#2980b9");
+        var subtotalColor = SafePaint(Style(plan, "COLOR_SUBTOTAL") ?? LayerStyle(layer, "color_subtotal"), "#475569");
+        var upColor = SafePaint(Style(plan, "COLOR_UP") ?? Style(plan, "COLOR_INCREASE") ?? LayerStyle(layer, "color_up") ?? LayerStyle(layer, "color_increase"), "#27ae60");
+        var downColor = SafePaint(Style(plan, "COLOR_DOWN") ?? Style(plan, "COLOR_DECREASE") ?? LayerStyle(layer, "color_down") ?? LayerStyle(layer, "color_decrease"), "#e74c3c");
+
+        if (isHorizontal)
         {
-            var datum = layer.Data[index];
-            var start = Numeric(datum, FieldChannel.YStart); var end = Numeric(datum, FieldChannel.YEnd);
-            if (start is null || end is null) continue;
-            var startY = MapY(start.Value, scale, plotHeight); var endY = MapY(end.Value, scale, plotHeight);
-            var x = Left + slot * index + slot * .15m; var width = slot * .7m;
-            var totalText = DisplayChannel(datum, FieldChannel.Detail);
-            var total = Math.Abs(start.Value) < .000001m && totalText is not null &&
-                (totalText.Equals("true", StringComparison.OrdinalIgnoreCase) || totalText == "1");
-            var color = total ? "#2980b9" : end.Value >= start.Value ? "#27ae60" : "#e74c3c";
-            if (previousEndY.HasValue) builder.AppendLine($"<line x1='{N(x - slot * .15m)}' y1='{N(previousEndY.Value)}' x2='{N(x)}' y2='{N(previousEndY.Value)}' stroke='#9ca3af' stroke-dasharray='3 2'/>");
-            builder.AppendLine($"<rect x='{N(x)}' y='{N(Math.Min(startY, endY))}' width='{N(width)}' height='{N(Math.Max(1m, Math.Abs(startY - endY)))}' fill='{color}' data-row-index='{datum.RowIndex}'><title>{Esc(categories[index])}: {N(end.Value - start.Value)}</title></rect>");
-            builder.AppendLine($"<text x='{N(x + width / 2m)}' y='{N(Top + plotHeight + 16m)}' text-anchor='middle' font-size='9' fill='#666'>{Esc(Truncate(categories[index], 10))}</text>");
-            previousEndY = endY;
+            var slot = plotHeight / Math.Max(1, layer.Data.Length);
+            decimal? previousEndX = null;
+            for (var index = 0; index < layer.Data.Length; index++)
+            {
+                var datum = layer.Data[index];
+                var start = Numeric(datum, FieldChannel.YStart) ?? Numeric(datum, FieldChannel.XStart);
+                var end = Numeric(datum, FieldChannel.YEnd) ?? Numeric(datum, FieldChannel.XEnd);
+                if (start is null || end is null) continue;
+
+                var startX = MapHorizontal(start.Value, scale, plotWidth);
+                var endX = MapHorizontal(end.Value, scale, plotWidth);
+                var y = Top + slot * index + slot * .15m;
+                var height = slot * .7m;
+
+                var barType = DisplayChannel(datum, FieldChannel.Text);
+                var total = string.Equals(barType, "TOTAL", StringComparison.OrdinalIgnoreCase);
+                var subtotal = string.Equals(barType, "SUBTOTAL", StringComparison.OrdinalIgnoreCase);
+
+                if (!total && !subtotal)
+                {
+                    var totalText = DisplayChannel(datum, FieldChannel.Detail);
+                    total = Math.Abs(start.Value) < .000001m && totalText is not null &&
+                        (totalText.Equals("true", StringComparison.OrdinalIgnoreCase) || totalText == "1" || totalText.Equals("total", StringComparison.OrdinalIgnoreCase));
+                    subtotal = Math.Abs(start.Value) < .000001m && totalText is not null &&
+                        (totalText.Equals("subtotal", StringComparison.OrdinalIgnoreCase) || totalText.Equals("sub_total", StringComparison.OrdinalIgnoreCase));
+                }
+
+                var color = total ? totalColor : subtotal ? subtotalColor : end.Value >= start.Value ? upColor : downColor;
+
+                if (showConnectors && previousEndX.HasValue)
+                {
+                    builder.AppendLine($"<line x1='{N(previousEndX.Value)}' y1='{N(y - slot * .15m)}' x2='{N(previousEndX.Value)}' y2='{N(y)}' stroke='{Esc(connectorColor)}'{strokeWidthAttr} stroke-dasharray='3 2'/>");
+                }
+
+                var barX = Math.Min(startX, endX);
+                var barW = Math.Max(1m, Math.Abs(startX - endX));
+                var catName = index < categories.Length ? categories[index] : $"Item {index + 1}";
+
+                builder.AppendLine($"<rect x='{N(barX)}' y='{N(y)}' width='{N(barW)}' height='{N(height)}' fill='{color}' data-row-index='{datum.RowIndex}'><title>{Esc(catName)}: {N(end.Value - start.Value)}</title></rect>");
+                builder.AppendLine($"<text x='{N(Left - 6m)}' y='{N(y + height / 2m + 3m)}' text-anchor='end' font-size='9' fill='#666'>{Esc(Truncate(catName, 12))}</text>");
+
+                previousEndX = endX;
+            }
+        }
+        else
+        {
+            var slot = plotWidth / Math.Max(1, layer.Data.Length);
+            decimal? previousEndY = null;
+            for (var index = 0; index < layer.Data.Length; index++)
+            {
+                var datum = layer.Data[index];
+                var start = Numeric(datum, FieldChannel.YStart); var end = Numeric(datum, FieldChannel.YEnd);
+                if (start is null || end is null) continue;
+                var startY = MapY(start.Value, scale, plotHeight); var endY = MapY(end.Value, scale, plotHeight);
+                var x = Left + slot * index + slot * .15m; var width = slot * .7m;
+
+                var barType = DisplayChannel(datum, FieldChannel.Text);
+                var total = string.Equals(barType, "TOTAL", StringComparison.OrdinalIgnoreCase);
+                var subtotal = string.Equals(barType, "SUBTOTAL", StringComparison.OrdinalIgnoreCase);
+
+                if (!total && !subtotal)
+                {
+                    var totalText = DisplayChannel(datum, FieldChannel.Detail);
+                    total = Math.Abs(start.Value) < .000001m && totalText is not null &&
+                        (totalText.Equals("true", StringComparison.OrdinalIgnoreCase) || totalText == "1" || totalText.Equals("total", StringComparison.OrdinalIgnoreCase));
+                    subtotal = Math.Abs(start.Value) < .000001m && totalText is not null &&
+                        (totalText.Equals("subtotal", StringComparison.OrdinalIgnoreCase) || totalText.Equals("sub_total", StringComparison.OrdinalIgnoreCase));
+                }
+
+                var color = total ? totalColor : subtotal ? subtotalColor : end.Value >= start.Value ? upColor : downColor;
+
+                if (showConnectors && previousEndY.HasValue)
+                {
+                    builder.AppendLine($"<line x1='{N(x - slot * .15m)}' y1='{N(previousEndY.Value)}' x2='{N(x)}' y2='{N(previousEndY.Value)}' stroke='{Esc(connectorColor)}'{strokeWidthAttr} stroke-dasharray='3 2'/>");
+                }
+
+                builder.AppendLine($"<rect x='{N(x)}' y='{N(Math.Min(startY, endY))}' width='{N(width)}' height='{N(Math.Max(1m, Math.Abs(startY - endY)))}' fill='{color}' data-row-index='{datum.RowIndex}'><title>{Esc(categories[index])}: {N(end.Value - start.Value)}</title></rect>");
+                builder.AppendLine($"<text x='{N(x + width / 2m)}' y='{N(Top + plotHeight + 16m)}' text-anchor='middle' font-size='9' fill='#666'>{Esc(Truncate(categories[index], 10))}</text>");
+                previousEndY = endY;
+            }
         }
     }
 

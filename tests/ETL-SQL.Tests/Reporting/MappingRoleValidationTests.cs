@@ -103,6 +103,7 @@ public class MappingRoleValidationTests
     [InlineData(VisualType.Waterfall, "NAME")]
     [InlineData(VisualType.Waterfall, "VALUE")]
     [InlineData(VisualType.Waterfall, "TOTAL")]
+    [InlineData(VisualType.Waterfall, "SUBTOTAL")]
     [InlineData(VisualType.Gantt, "START")]
     [InlineData(VisualType.Gantt, "END")]
     [InlineData(VisualType.Gantt, "PROGRESS")]

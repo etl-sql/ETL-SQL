@@ -5103,6 +5103,7 @@ export function createDesigner(container, opts = {}) {
         const isScatter = v.type === 'SCATTER';
         const isBubble = v.type === 'BUBBLE';
         const isHeatmap = v.type === 'HEATMAP';
+        const isWaterfall = v.type === 'WATERFALL';
         const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
         const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
         const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
@@ -5225,6 +5226,34 @@ export function createDesigner(container, opts = {}) {
                                 <select id="pp-format-heatmap-y-sort" class="form-control">
                                     ${['', 'SOURCE', 'ALPHA', 'VALUE_DESC', 'VALUE_ASC'].map(value => `<option value="${value}"${(v.options?.Y_SORT || '').toUpperCase() === value ? ' selected' : ''}>${value || '(Default)'}</option>`).join('')}
                                 </select>
+                            </label>
+                        </div>` : ''}
+                        ${isWaterfall ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">Waterfall controls</div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Orientation
+                                <select id="pp-format-waterfall-orientation" class="form-control">
+                                    <option value="VERTICAL"${(v.options?.ORIENTATION || 'VERTICAL').toUpperCase() === 'VERTICAL' ? ' selected' : ''}>Vertical</option>
+                                    <option value="HORIZONTAL"${(v.options?.ORIENTATION || '').toUpperCase() === 'HORIZONTAL' ? ' selected' : ''}>Horizontal</option>
+                                </select>
+                            </label>
+                            <label class="etlsql-format-toggle" style="margin-top:20px;"><input type="checkbox" id="pp-format-waterfall-connector-lines" ${(v.options?.CONNECTOR_LINES || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Connector lines</span></label>
+                        </div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Total color
+                                <input type="color" id="pp-format-waterfall-color-total" value="${toHexColor(v.options?.COLOR_TOTAL, '#2980b9')}">
+                            </label>
+                            <label class="etlsql-dsgn-label">Subtotal color
+                                <input type="color" id="pp-format-waterfall-color-subtotal" value="${toHexColor(v.options?.COLOR_SUBTOTAL, '#475569')}">
+                            </label>
+                        </div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Increase color
+                                <input type="color" id="pp-format-waterfall-color-up" value="${toHexColor(v.options?.COLOR_UP || v.options?.COLOR_INCREASE, '#27ae60')}">
+                            </label>
+                            <label class="etlsql-dsgn-label">Decrease color
+                                <input type="color" id="pp-format-waterfall-color-down" value="${toHexColor(v.options?.COLOR_DOWN || v.options?.COLOR_DECREASE, '#e74c3c')}">
                             </label>
                         </div>` : ''}
                     </div>
@@ -5591,9 +5620,9 @@ export function createDesigner(container, opts = {}) {
             v.options.GRID_LINES = event.target.checked ? 'ON' : 'OFF';
             sync();
         });
-        const bindOption = (selector, key, eventName = 'change') => panel.querySelector(selector)?.addEventListener(eventName, event => {
+        const bindOption = (selector, key, eventName = 'change', getValue = el => el.value) => panel.querySelector(selector)?.addEventListener(eventName, event => {
             v.options ||= {};
-            v.options[key] = event.target.value;
+            v.options[key] = getValue(event.target);
             sync();
         });
         bindOption('#pp-format-grid-color', 'GRID_LINE_COLOR', 'input');
@@ -5621,6 +5650,12 @@ export function createDesigner(container, opts = {}) {
         bindOption('#pp-format-heatmap-border-color', 'CELL_BORDER_COLOR', 'input');
         bindOption('#pp-format-heatmap-x-sort', 'X_SORT');
         bindOption('#pp-format-heatmap-y-sort', 'Y_SORT');
+        bindOption('#pp-format-waterfall-orientation', 'ORIENTATION');
+        bindOption('#pp-format-waterfall-connector-lines', 'CONNECTOR_LINES', 'change', el => el.checked ? 'ON' : 'OFF');
+        bindOption('#pp-format-waterfall-color-total', 'COLOR_TOTAL', 'input');
+        bindOption('#pp-format-waterfall-color-subtotal', 'COLOR_SUBTOTAL', 'input');
+        bindOption('#pp-format-waterfall-color-up', 'COLOR_UP', 'input');
+        bindOption('#pp-format-waterfall-color-down', 'COLOR_DOWN', 'input');
         bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
         bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
         bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');
