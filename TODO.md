@@ -626,6 +626,63 @@ than oversights; none is started.
   proves the preview. Nothing proves a genuine second user opening the same report and seeing less.
 - [ ] **The schedule handoff stops at the statements**: Phase 5 writes `CREATE JOB` and opens the
   Orchestrator at it. Nothing proves the job then runs on its cadence.
+### Phase 6b — Findings from manual evaluation, 2026-09-03 (Next)
+
+Nine findings from driving Studio by hand. They are worth more than the automated journeys that
+preceded them: every one is a thing a person tried to do, and the journeys had certified the paths
+around several of them without noticing. Ordered by severity below, not by the order they were
+reported.
+
+**Broken — an author hits these immediately**
+
+- [ ] **"Start with sample data" produces a bar chart with no data.** The seeded starter dashboard
+  renders an empty plot: the axis falls back to its default 1 / 0.75 / 0.5 domain and no bars are
+  drawn, while the card still reports `BAR · Sampled`. So the one button offered as "the best place
+  to start" ends on an empty chart. Not yet diagnosed; suspects are the seeded script's mappings not
+  matching the sample's columns, and the seed path producing a snapshot the preview cannot read.
+- [ ] **The paginated dataset wizard reports no tables for a connection that has them.** Picking
+  MOCKDB in Step 1 shows "This connection reported no tables you can read", while the catalog panel
+  lists that connection's tables perfectly. Both call the same `schema` route with the same
+  `documentUri`, and the wizard takes the zero-tables branch rather than the error branch, so the
+  request succeeded and came back empty. **Check first whether this is a regression from the wizard
+  now offering host aliases** (Phase 6a work): before that change the wizard never got far enough to
+  ask for a schema, so this may be the second half of the same defect rather than a new one.
+- [ ] **A bar chart does not use the width it is given.** Bars cluster in the middle-right of the
+  tile with a wide empty band to the left, and resizing the tile does not redistribute them. Looks
+  like the plot is laid out against something other than the tile's measured width.
+
+**Missing — the surface exists but cannot do the job**
+
+- [ ] **No aggregate selector in the properties inspector.** The chart builder offers one per role
+  (`[data-role-aggregate]`) and the inspector does not, so an aggregate can be chosen while creating
+  a visual and never changed afterwards without editing the script. The inspector is the surface an
+  author returns to, so this is where it matters most.
+- [ ] **The dashboard workflow cannot skip cross-filters.** Step 3 has no "none" answer, so a
+  dashboard that does not want a cross-filter cannot reach Step 4 Layout through the guided path.
+- [ ] **Paginated headers and footers take text only.** A page header realistically carries a logo,
+  a rule, a run date, a page number — images and furniture, not just a text band. Needs a design
+  decision about which of those the language expresses before the UI offers them.
+
+**Wrong to look at**
+
+- [ ] **A selection inside the current line is invisible.** CodeMirror's active-line highlight paints
+  over the selection, so selecting text on the line the caret is on shows nothing. Almost certainly
+  layering or the selection colour losing to the active-line background.
+
+**The big one**
+
+- [ ] **The pipeline canvas is roughly 20% of what it should be.** Reported as "missing a lot of
+  functionality", and the shape of the complaint matters more than any single item:
+  - The palette is a strip of chips under the map, not a sidebar of draggable items like the
+    reporting canvas has. The author expects to drag a task onto the canvas, not click a chip.
+  - **No connectors are drawn between tasks**, so the execution path is invisible. The author expects
+    to drag a connector from one box to the next and see the path they just declared.
+  - The kinds offered are a small subset of what a pipeline can express.
+  This is a design gap rather than a bug list, and it should be planned as one. Note that the
+  connector *handle* does exist in code (`[data-task-connector]`) and Phase 1 and 2 describe both
+  gestures as working — the header-drag defect fixed during certification was one reason they were
+  unreachable, and this report says that fixing the gesture did not make the surface feel present.
+  Worth re-reading Phase 1 and 2 against what is actually on screen before planning.
 ### Phase 7 — Stabilization and Legacy Retirement
 
 **Outcome:** Studio becomes the supported flagship only after the new workbench has evidence that it
