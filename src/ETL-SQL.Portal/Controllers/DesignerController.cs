@@ -47,6 +47,7 @@ public class DesignerController : ControllerBase
     private readonly ScriptScopeService _pipelineScope = new();
     private readonly ScriptDataModelService _dataModel = new();
     private readonly ScriptGovernanceService _governance = new();
+    private readonly ScriptQualityRuleService _qualityRules = new();
     private readonly PipelineRunPlanService _pipelineRunPlans = new();
     private readonly DesignerQueryFilterService _queryFilters = new();
     private readonly LanguageHoverService? _hoverService;
@@ -243,15 +244,38 @@ public class DesignerController : ControllerBase
             var applied = false;
             string? writeError = null;
 
-            if (string.Equals(req.Op, "write", StringComparison.OrdinalIgnoreCase))
+            switch ((req.Op ?? "read").ToLowerInvariant())
             {
-                var edit = _governance.Write(script, req.ScopeId ?? string.Empty, req.Tags ?? []);
-                applied = edit.Applied;
-                writeError = edit.Error;
-                script = edit.Script;
+                case "write":
+                    {
+                        var edit = _governance.Write(script, req.ScopeId ?? string.Empty, req.Tags ?? []);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
+                case "rule":
+                    {
+                        var edit = req.Remove
+                            ? _qualityRules.RemoveRule(script, req.ScopeId ?? string.Empty, req.Index ?? -1)
+                            : _qualityRules.SetRule(script, req.ScopeId ?? string.Empty, req.Index ?? -1, req.Rule, req.Action);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
+                case "routing":
+                    {
+                        var edit = _qualityRules.SetRouting(
+                            script, req.StatementId ?? string.Empty, req.Action ?? string.Empty,
+                            req.Target, req.Retention, req.Handling, req.Remove);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
             }
 
-            return Ok(DesignerGovernanceMapper.Response(_governance.Read(script), script, applied, writeError));
+            return Ok(DesignerGovernanceMapper.Response(
+                _governance.Read(script), script, applied, writeError,
+                _qualityRules.Read(script),
+                // The steward queue is the Portal's own governance view. It is where a quarantined
+                // row is inspected, corrected, and replayed, so the panel links straight to it.
+                "/#governance/quarantine"));
         }
         finally
         {

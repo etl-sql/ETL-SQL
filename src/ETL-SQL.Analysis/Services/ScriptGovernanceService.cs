@@ -156,7 +156,7 @@ public sealed class ScriptGovernanceService
     public ScriptGovernance Read(string? scriptText)
     {
         var source = scriptText ?? string.Empty;
-        if (!TryParse(source, out var ast, out var parseError))
+        if (!ScriptTextEditing.TryParse(source, out var ast, out var parseError))
             return ScriptGovernance.Failed(parseError);
 
         var projection = Project(source, ast);
@@ -174,7 +174,7 @@ public sealed class ScriptGovernanceService
         ArgumentNullException.ThrowIfNull(tags);
         if (tags.Count == 0) return GovernanceEditResult.Ok(source);
 
-        if (!TryParse(source, out var ast, out var parseError))
+        if (!ScriptTextEditing.TryParse(source, out var ast, out var parseError))
             return GovernanceEditResult.Refused(source, parseError);
 
         var projection = Project(source, ast);
@@ -282,7 +282,7 @@ public sealed class ScriptGovernanceService
         scopes.Add(BuildScope("script", "script", "This script", null, GovernanceWriteTarget.Header, 1, scriptTags, null,
             "Applied to every table and column this script records that does not carry the tag itself."));
 
-        foreach (var statement in Flatten(ast.Statements))
+        foreach (var statement in ScriptTextEditing.Flatten(ast.Statements))
         {
             switch (statement)
             {
@@ -706,7 +706,7 @@ public sealed class ScriptGovernanceService
         foreach (var (name, value) in writes) merged[name] = value;
         foreach (var name in removals) merged.Remove(name);
 
-        var lineEnding = DetectLineEnding(source);
+        var lineEnding = ScriptTextEditing.DetectLineEnding(source);
         var rendered = merged.Count == 0 ? string.Empty : RenderTagComment(merged) + lineEnding;
 
         // The header is the leading run of tag comments the parser folds into Script.Metadata; it
@@ -716,9 +716,9 @@ public sealed class ScriptGovernanceService
             return rendered.Length == 0 ? null : rendered + source;
 
         var start = header[0].Offset;
-        var end = EndOfLine(source, header[^1].EndOffset);
+        var end = ScriptTextEditing.EndOfLine(source, header[^1].EndOffset);
         var suffix = rendered.Length == 0 && end < source.Length && source[end] == '\n' ? 1 : 0;
-        return Splice(source, start, Math.Min(source.Length, end + suffix), rendered);
+        return ScriptTextEditing.Splice(source, start, Math.Min(source.Length, end + suffix), rendered);
     }
 
     /// <summary>
@@ -762,7 +762,7 @@ public sealed class ScriptGovernanceService
         var rendered = merged.Count == 0 ? string.Empty : RenderTagComment(merged);
 
         if (owned.Length == 0)
-            return rendered.Length == 0 ? null : Splice(source, span.End, span.End, " " + rendered);
+            return rendered.Length == 0 ? null : ScriptTextEditing.Splice(source, span.End, span.End, " " + rendered);
 
         // Replace the last comment in place and drop the rest, so a column that carried its tags in
         // two comments ends up with one and nothing else on the line moves.
@@ -773,7 +773,7 @@ public sealed class ScriptGovernanceService
             var replacement = index == owned.Length - 1 ? rendered : string.Empty;
             var start = token.Offset;
             if (replacement.Length == 0 && start > 0 && edited[start - 1] == ' ') start--;
-            edited = Splice(edited, start, token.EndOffset, replacement);
+            edited = ScriptTextEditing.Splice(edited, start, token.EndOffset, replacement);
         }
         return edited;
     }
@@ -782,7 +782,7 @@ public sealed class ScriptGovernanceService
 
     private static (SelectColumn Column, Span Span)? FindProjectedColumn(string source, Script ast, GovernanceScope scope)
     {
-        foreach (var statement in Flatten(ast.Statements))
+        foreach (var statement in ScriptTextEditing.Flatten(ast.Statements))
         {
             SelectStatement? select = null;
             string? target = null;
@@ -802,34 +802,13 @@ public sealed class ScriptGovernanceService
             foreach (var column in select.Columns)
             {
                 if (!string.Equals(OutputName(column), scope.Name, StringComparison.OrdinalIgnoreCase)) continue;
-                var start = Offset(source, column.Line, column.Column);
-                var end = Offset(source, column.EndLine, column.EndColumn);
+                var start = ScriptTextEditing.Offset(source, column.Line, column.Column);
+                var end = ScriptTextEditing.Offset(source, column.EndLine, column.EndColumn);
                 if (start < 0 || end < start) return null;
                 return (column, new Span(start, end));
             }
         }
         return null;
-    }
-
-    /// <summary>
-    /// The character offset of a 1-based line/column pair, or -1 when the position is not in this
-    /// text. Select columns carry positions rather than offsets, and an inline tag is written at a
-    /// position, so the conversion has to happen somewhere; doing it here keeps it in one place.
-    /// </summary>
-    private static int Offset(string source, int line, int column)
-    {
-        if (line <= 0 || column <= 0) return -1;
-
-        var offset = 0;
-        for (var remaining = line - 1; remaining > 0; remaining--)
-        {
-            var next = source.IndexOf('\n', offset);
-            if (next < 0) return -1;
-            offset = next + 1;
-        }
-
-        var result = offset + column - 1;
-        return result > source.Length ? -1 : result;
     }
 
     /// <summary>Writes an <c>INSERT TAG</c> / <c>DELETE TAG</c> statement for a scope with no declaration site.</summary>
@@ -841,7 +820,7 @@ public sealed class ScriptGovernanceService
         IReadOnlyList<KeyValuePair<string, string>> writes,
         IReadOnlyList<string> removals)
     {
-        var lineEnding = DetectLineEnding(source);
+        var lineEnding = ScriptTextEditing.DetectLineEnding(source);
         var table = scope.Table ?? scope.Name;
         var column = scope.Kind == "column" ? scope.Name : null;
 
@@ -859,9 +838,9 @@ public sealed class ScriptGovernanceService
         if (text.Length == 0) return null;
 
         var insertAt = InsertPoint(source, ast, table);
-        var prefix = NeedsBlankLineBefore(source, insertAt) ? lineEnding : string.Empty;
+        var prefix = ScriptTextEditing.NeedsBlankLineBefore(source, insertAt) ? lineEnding : string.Empty;
         var suffix = insertAt >= source.Length ? lineEnding : lineEnding;
-        return Splice(source, insertAt, insertAt, prefix + text + suffix);
+        return ScriptTextEditing.Splice(source, insertAt, insertAt, prefix + text + suffix);
     }
 
     /// <summary>
@@ -873,16 +852,16 @@ public sealed class ScriptGovernanceService
     /// </summary>
     private static int InsertPoint(string source, Script ast, string table)
     {
-        foreach (var statement in Flatten(ast.Statements))
+        foreach (var statement in ScriptTextEditing.Flatten(ast.Statements))
         {
             if (string.Equals(statement.GetCreatedTable(), table, StringComparison.OrdinalIgnoreCase))
-                return EndOfLine(source, statement.EndOffset);
+                return ScriptTextEditing.EndOfLine(source, statement.EndOffset);
         }
 
-        foreach (var statement in Flatten(ast.Statements))
+        foreach (var statement in ScriptTextEditing.Flatten(ast.Statements))
         {
             if (statement.GetSourceTables().Any(read => string.Equals(read, table, StringComparison.OrdinalIgnoreCase)))
-                return StartOfLine(source, statement.StartOffset);
+                return ScriptTextEditing.StartOfLine(source, statement.StartOffset);
         }
 
         return source.Length;
@@ -921,68 +900,15 @@ public sealed class ScriptGovernanceService
         }
     }
 
-    private static string Splice(string script, int start, int end, string text) =>
-        script[..start] + text + script[end..];
 
-    private static string DetectLineEnding(string source) => source.Contains("\r\n") ? "\r\n" : "\n";
-
-    private static int EndOfLine(string source, int offset)
-    {
-        var index = Math.Clamp(offset, 0, source.Length);
-        while (index < source.Length && source[index] != '\n') index++;
-        return index < source.Length ? index + 1 : index;
-    }
-
-    private static int StartOfLine(string source, int offset)
-    {
-        var index = Math.Clamp(offset, 0, source.Length);
-        while (index > 0 && source[index - 1] != '\n') index--;
-        return index;
-    }
-
-    private static bool NeedsBlankLineBefore(string source, int offset)
-    {
-        if (offset <= 0 || offset > source.Length) return false;
-        var preceding = source[..offset].TrimEnd('\r', '\n');
-        if (preceding.Length == 0) return false;
-        var newlines = source[preceding.Length..offset].Count(character => character == '\n');
-        return newlines < 2;
-    }
-
-    // ── Parsing helpers ──────────────────────────────────────────────────────
-
-    private static bool TryParse(string source, out Script ast, out string error)
-    {
-        ast = new Script();
-        error = string.Empty;
-        try
-        {
-            var lexer = new Lexer(source);
-            var parser = new CoreParser(lexer.Tokenize(), source);
-            ast = parser.Parse();
-        }
-        catch (Exception exception)
-        {
-            error = exception.Message;
-            return false;
-        }
-
-        var failure = ast.Diagnostics.FirstOrDefault(diagnostic => diagnostic.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error);
-        if (failure is not null)
-        {
-            error = $"Line {failure.Line}: {failure.Message}";
-            return false;
-        }
-        return true;
-    }
-
-    private static GovernanceEditResult Commit(string original, string edited)
-    {
-        if (!TryParse(edited, out _, out var error))
-            return GovernanceEditResult.Refused(original, $"That tag would not parse: {error}");
-        return GovernanceEditResult.Ok(edited);
-    }
-
+    /// <summary>
+    /// Applies an edit only if the result still parses. An edit that would produce a script the
+    /// parser rejects is refused with its reason, never written and never silently dropped.
+    /// </summary>
+    private static GovernanceEditResult Commit(string original, string edited) =>
+        ScriptTextEditing.TryParse(edited, out _, out var error)
+            ? GovernanceEditResult.Ok(edited)
+            : GovernanceEditResult.Refused(original, $"That tag would not parse: {error}");
     /// <summary>
     /// The labelled task that writes each statement, for grouping only. A label introduces the
     /// statement that follows it, so the label in force is the last one seen at the same level.
@@ -1002,33 +928,5 @@ public sealed class ScriptGovernanceService
             current = null;
         }
         return producers;
-    }
-
-    private static IEnumerable<Statement> Flatten(IEnumerable<Statement> statements)
-    {
-        foreach (var statement in statements)
-        {
-            yield return statement;
-
-            IEnumerable<Statement> children = statement switch
-            {
-                BlockStatement block => block.Statements,
-                IfStatement conditional => new[] { conditional.IfBody }
-                    .Concat(conditional.ElseIfClauses?.Select(clause => clause.Body) ?? [])
-                    .Concat(conditional.ElseBody is null ? [] : [conditional.ElseBody]),
-                WhileStatement loop => [loop.Body],
-                ForStatement loop => [loop.Body],
-                ForeachStatement loop => [loop.Body],
-                TryCatchStatement guard => [guard.TryBody, guard.CatchBody],
-                CreateProcedureStatement procedure => [procedure.Body],
-                CreateFunctionStatement function => [function.Body],
-                ParallelStatement parallel => [parallel.Body],
-                ParallelForStatement parallel => [parallel.Body],
-                _ => [],
-            };
-
-            foreach (var child in Flatten(children))
-                yield return child;
-        }
     }
 }

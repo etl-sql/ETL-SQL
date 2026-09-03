@@ -20,7 +20,56 @@ public sealed record GovernanceResponsePayload(
     IReadOnlyList<GovernanceFindingPayload> Findings,
     IReadOnlyList<string> Tasks,
     IReadOnlyList<GovernanceTagDefinitionPayload> Catalog,
-    IReadOnlyList<string> Required);
+    IReadOnlyList<string> Required,
+    IReadOnlyList<GovernanceQualityStatementPayload> Quality,
+    GovernanceQualityVocabularyPayload QualityVocabulary,
+    string? StewardQueueUrl);
+
+/// <param name="MissingQuarantineTarget">
+/// A column elects QUARANTINE and the statement routes nowhere, so those rows have nowhere to go.
+/// </param>
+public sealed record GovernanceQualityStatementPayload(
+    string Id,
+    string Kind,
+    int Line,
+    IReadOnlyList<GovernanceQualityColumnPayload> Columns,
+    IReadOnlyList<GovernanceQualityRoutingPayload> Routing,
+    bool MissingQuarantineTarget);
+
+/// <param name="ScopeId">The same id the tag side uses, so one row addresses both.</param>
+public sealed record GovernanceQualityColumnPayload(
+    string ScopeId,
+    string Column,
+    string Table,
+    int Line,
+    IReadOnlyList<GovernanceQualityClausePayload> Clauses);
+
+/// <param name="ActionExplicit">False when no action was written; the effective action is still WARN.</param>
+public sealed record GovernanceQualityClausePayload(
+    int Index,
+    string Rule,
+    string Action,
+    bool ActionExplicit,
+    int Line);
+
+public sealed record GovernanceQualityRoutingPayload(
+    string Action,
+    string? Target,
+    string? Retention,
+    string Handling,
+    int Line);
+
+/// <param name="RuleForms">
+/// The rule shapes the picker offers, each with the text it writes. A form is a starting point, not
+/// a grammar: what reaches the script is what the author typed, and the parser is what accepts it.
+/// </param>
+public sealed record GovernanceQualityVocabularyPayload(
+    IReadOnlyList<string> Actions,
+    IReadOnlyList<string> Handling,
+    IReadOnlyList<GovernanceQualityRuleFormPayload> RuleForms);
+
+/// <param name="Template">The text placed in the rule box, with «guillemet» placeholders to replace.</param>
+public sealed record GovernanceQualityRuleFormPayload(string Label, string Template, string Hint);
 
 /// <param name="WriteTarget">inline | statement | header — the form a new tag here would take.</param>
 /// <param name="Producer">The labelled task that writes this object, for grouping only.</param>
@@ -73,11 +122,34 @@ public sealed record GovernanceTagDefinitionPayload(
 /// </summary>
 public static class DesignerGovernanceMapper
 {
+    /// <summary>
+    /// The rule shapes the picker offers. Starting points only — the text stays editable and the
+    /// parser is what decides whether it is a rule, so this list can grow without becoming a second,
+    /// diverging definition of the grammar.
+    /// </summary>
+    private static readonly GovernanceQualityRuleFormPayload[] RuleForms =
+    [
+        new("Not null", "NOT NULL", "The only rule that fails on NULL; every other rule skips it."),
+        new("Not blank", "NOT BLANK", "Must contain a non-whitespace character."),
+        new("Unique", "UNIQUE", "Or UNIQUE WITH (a, b) for a composite key."),
+        new("At least", ">= «number»", "A numeric floor, compared as decimal."),
+        new("At most", "<= «number»", "A numeric ceiling, compared as decimal."),
+        new("Between", "BETWEEN «lower» AND «upper»", "Inclusive; the bounds are expressions, so dates and variables work."),
+        new("One of", "IN ('«a»', '«b»')", "Membership in a literal list. NOT IN excludes instead."),
+        new("Length", "LENGTH BETWEEN «min» AND «max»", "Character count of the rendered value."),
+        new("Matches", "MATCHES '«pattern»'", "Searches rather than matches whole. No backreferences or lookaround."),
+        new("Castable", "CASTABLE AS «type»", "Uses the engine's own conversion, the one behind TRY_CAST."),
+        new("Exists in", "EXISTS IN «table»(«column»)", "A relationship check. EXISTS WITH (a, b) IN t(x, y) for a scoped key."),
+        new("Expression", "EXPR («predicate»)", "A cross-column predicate over the whole projected row."),
+    ];
+
     public static GovernanceResponsePayload Response(
         ScriptGovernance governance,
         string script,
         bool applied,
-        string? writeError) =>
+        string? writeError,
+        ScriptQuality? quality = null,
+        string? stewardQueueUrl = null) =>
         new(
             governance.Parsed,
             writeError ?? governance.Error,
@@ -109,5 +181,26 @@ public static class DesignerGovernanceMapper
                     definition.Scopes,
                     definition.AllowedValues))
                 .ToArray(),
-            StewardshipTagCatalog.RequiredStewardshipTags.ToArray());
+            StewardshipTagCatalog.RequiredStewardshipTags.ToArray(),
+            (quality?.Statements ?? []).Select(statement => new GovernanceQualityStatementPayload(
+                statement.Id,
+                statement.Kind,
+                statement.Line,
+                statement.Columns.Select(column => new GovernanceQualityColumnPayload(
+                    column.ScopeId,
+                    column.Column,
+                    column.Table,
+                    column.Line,
+                    column.Clauses.Select(clause => new GovernanceQualityClausePayload(
+                        clause.Index, clause.Rule, clause.Action, clause.ActionExplicit, clause.Line)).ToArray())).ToArray(),
+                statement.Routing.Select(routing => new GovernanceQualityRoutingPayload(
+                    routing.Action, routing.Target, routing.Retention, routing.Handling, routing.Line)).ToArray(),
+                statement.MissingQuarantineTarget)).ToArray(),
+            new GovernanceQualityVocabularyPayload(
+                ScriptQualityRuleService.ColumnActions,
+                ScriptQualityRuleService.HandlingModes,
+                RuleForms),
+            // Null on a host with no steward queue. The panel says where the queue lives rather than
+            // offering a link that goes nowhere.
+            stewardQueueUrl);
 }

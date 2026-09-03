@@ -303,8 +303,29 @@ operational flows without an unexplained application switch.
   both hosts through one shared response mapper; the browser cover drives the real desktop host end
   to end, because the seams that have failed silently in this workbench are the ones between the rail
   button, the route, and the author's buffer.
-- [ ] **Add data-quality rule authoring**: Attach `EXPECT` rules to queries or tables and link the
-  author to quarantine inspection and replay.
+- [x] **Add data-quality rule authoring**: The same Governance panel now authors a column's
+  `EXPECT` clauses and the statement's `ON FAILURE` routing, because a rule and a tag are governance
+  an author attaches to the same column — but the panel keeps them apart, since a tag *describes* a
+  column and an `EXPECT` clause *decides which rows leave the statement*. Rules are edited as
+  grammar, never as the `@expect`/`@fail` tags the engine projects from them: a hand-written rule tag
+  is inert and looks enforced, which is why the tag surface refuses to author one. **Nothing
+  re-implements the rule grammar.** The picker offers twelve starting shapes with `«guillemet»`
+  placeholders, the text stays editable, and the verdict comes from reparsing the whole script — a
+  service that decided for itself what `MATCHES` accepts would diverge from the parser the moment
+  either changed, and the divergence would surface as a rule that lints clean and never runs.
+  **Routing stays a statement-level decision**, as the language has it: a column elects an action and
+  the statement says where those rows go, because a per-column target would let two columns of one
+  statement disagree about where the same run's rows land. The panel reports the case nothing else
+  catches — a column electing `QUARANTINE` on a statement that routes nowhere, where the rows have
+  no destination and the run only says so when it happens — rather than quietly writing a route the
+  author did not choose. An omitted action is shown as `WARN (default)`, because "defaults to warn"
+  and "somebody chose warn" are different facts about a pipeline. **Quarantine inspection and replay**
+  are linked from the routing section on the Portal, straight to the steward queue that reads the
+  persisted evidence; the desktop host sends no link and says where the queue lives instead, because
+  it persists no quarantine evidence and a link that goes nowhere is worse than a sentence. Rule
+  authoring is offered only on statements that name what they produce — a rule elsewhere has no
+  stable identity to edit against, and quarantined rows from a query whose output goes straight to a
+  reader have nowhere meaningful to be routed.
 - [ ] **Add row-level-security preview-as**: Preview a report as another authorized user, group, or
   role without weakening the engine's impersonation boundary.
 - [ ] **Add dataset lifecycle actions**: Refresh, export, publish, share, and manage dataset access

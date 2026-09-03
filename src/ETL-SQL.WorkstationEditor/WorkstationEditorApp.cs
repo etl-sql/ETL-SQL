@@ -545,6 +545,7 @@ public static class WorkstationEditorApp
         var pipelineRunPlans = new ETL_SQL.Analysis.Services.PipelineRunPlanService();
         var dataModel = new ETL_SQL.Analysis.Services.ScriptDataModelService();
         var governance = new ETL_SQL.Analysis.Services.ScriptGovernanceService();
+        var qualityRules = new ETL_SQL.Analysis.Services.ScriptQualityRuleService();
         var designerGen = new ETL_SQL.Reporting.Authoring.DesignerScriptGenerationService();
         var designerPatcher = new ETL_SQL.Reporting.Authoring.DesignerScriptPatcher(designerGen);
         var designerQueryFilters = new ETL_SQL.Reporting.Authoring.DesignerQueryFilterService();
@@ -749,17 +750,40 @@ public static class WorkstationEditorApp
             var applied = false;
             string? writeError = null;
 
-            if (string.Equals(request.Op, "write", StringComparison.OrdinalIgnoreCase))
+            switch ((request.Op ?? "read").ToLowerInvariant())
             {
-                var edit = governance.Write(script, request.ScopeId ?? string.Empty, request.Tags ?? []);
-                applied = edit.Applied;
-                writeError = edit.Error;
-                script = edit.Script;
+                case "write":
+                    {
+                        var edit = governance.Write(script, request.ScopeId ?? string.Empty, request.Tags ?? []);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
+                case "rule":
+                    {
+                        var edit = request.Remove
+                            ? qualityRules.RemoveRule(script, request.ScopeId ?? string.Empty, request.Index ?? -1)
+                            : qualityRules.SetRule(script, request.ScopeId ?? string.Empty, request.Index ?? -1, request.Rule, request.Action);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
+                case "routing":
+                    {
+                        var edit = qualityRules.SetRouting(
+                            script, request.StatementId ?? string.Empty, request.Action ?? string.Empty,
+                            request.Target, request.Retention, request.Handling, request.Remove);
+                        (applied, writeError, script) = (edit.Applied, edit.Error, edit.Script);
+                        break;
+                    }
             }
 
             return Results.Json(
                 ETL_SQL.Analysis.Services.DesignerGovernanceMapper.Response(
-                    governance.Read(script), script, applied, writeError),
+                    governance.Read(script), script, applied, writeError,
+                    qualityRules.Read(script),
+                    // The desktop host has no steward queue: it is a Portal view over persisted
+                    // quarantine evidence, and this host persists none. Null, so the panel says
+                    // where the queue lives rather than offering a link that goes nowhere.
+                    stewardQueueUrl: null),
                 JsonOptions);
         });
 
@@ -1171,7 +1195,15 @@ public sealed record GovernanceAuthoringRequest(
     string? Script,
     string? Op = null,
     string? ScopeId = null,
-    Dictionary<string, string?>? Tags = null);
+    Dictionary<string, string?>? Tags = null,
+    int? Index = null,
+    string? Rule = null,
+    string? Action = null,
+    string? StatementId = null,
+    string? Target = null,
+    string? Retention = null,
+    string? Handling = null,
+    bool Remove = false);
 
 /// <summary>Which task to plan a run up to. Planning never executes anything.</summary>
 public sealed record PipelineRunPlanAuthoringRequest(string? Script, string? Id);

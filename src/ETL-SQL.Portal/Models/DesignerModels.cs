@@ -396,4 +396,12 @@ public record GovernanceRequest(
     string? Script,
     string? Op = null,
     string? ScopeId = null,
-    Dictionary<string, string?>? Tags = null);
+    Dictionary<string, string?>? Tags = null,
+    int? Index = null,
+    string? Rule = null,
+    string? Action = null,
+    string? StatementId = null,
+    string? Target = null,
+    string? Retention = null,
+    string? Handling = null,
+    bool Remove = false);

@@ -107,6 +107,68 @@ public sealed class StudioGovernanceTests(PortalBrowserFixture fixture)
         Assert.DoesNotContain("freshness", script, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task GovernanceRail_AuthorsAnExpectRule_AndRoutesTheRowsItRejects()
+    {
+        using var workspace = new TempWorkspace();
+        var file = Path.Combine(workspace.Root, "users.etlsql");
+        await File.WriteAllTextAsync(file, InitialScript);
+
+        await using var host = WorkstationEditorApp.Create([], Options(workspace.Root, file, "gov-rule-token"));
+        await host.StartAsync();
+
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync(StudioUrl(host, "gov-rule-token"));
+        await WaitForStudioAsync(page);
+
+        await page.Locator("[data-activity='governance']").ClickAsync();
+        await page.Locator("[data-gov-scope='column:#users.UserName']").WaitForAsync(new() { Timeout = 15_000 });
+        await page.Locator("[data-gov-scope='column:#users.UserName']").ClickAsync();
+
+        await page.Locator("[data-gov-rule-text]").WaitForAsync(new() { Timeout = 10_000 });
+        await page.Locator("[data-gov-rule-text]").FillAsync("NOT BLANK");
+        await page.Locator("[data-gov-rule-action]").SelectOptionAsync("QUARANTINE");
+        await page.Locator("[data-gov-rule-apply]").ClickAsync();
+
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO__.state.editorInstance.getValue().includes('EXPECT NOT BLANK ON FAILURE QUARANTINE')",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 15_000 });
+
+        // The rule elects QUARANTINE and the statement routes nowhere, so those rows have nowhere to
+        // go. Nothing in the language refuses that; the panel has to be what says so.
+        await page.Locator("[data-gov-scope='table:#users']").ClickAsync();
+        var warning = page.Locator("[data-gov-routing] .etlsql-studio-gov-finding");
+        await warning.First.WaitForAsync(new() { Timeout = 10_000 });
+        Assert.Contains("nowhere to go", await warning.First.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+
+        await page.Locator("[data-gov-routing-action]").SelectOptionAsync("QUARANTINE");
+        await page.Locator("[data-gov-routing-target]").FillAsync("#rejected_users");
+        await page.Locator("[data-gov-routing-retention]").FillAsync("30 DAYS");
+        await page.Locator("[data-gov-routing-apply]").ClickAsync();
+
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO__.state.editorInstance.getValue().includes('ON FAILURE QUARANTINE TO #rejected_users')",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 15_000 });
+
+        var script = await page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()");
+        Assert.Contains("RETENTION = '30 DAYS'", script, StringComparison.Ordinal);
+        Assert.Contains("HANDLING = STEWARD", script, StringComparison.Ordinal);
+
+        // With the rows routed, the warning is gone and the panel points at where they are inspected.
+        await page.Locator("[data-gov-scope='table:#users']").ClickAsync();
+        await page.Locator("[data-gov-routing]").WaitForAsync(new() { Timeout = 10_000 });
+        var routing = await page.Locator("[data-gov-routing]").InnerTextAsync();
+        Assert.DoesNotContain("nowhere to go", routing, StringComparison.OrdinalIgnoreCase);
+        // No steward queue on the desktop host, so it says where the queue lives rather than
+        // offering a link that goes nowhere.
+        Assert.Contains("steward queue", routing, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await page.Locator("[data-gov-steward-link]").AllAsync());
+        Assert.Empty(session.PageErrors);
+    }
+
     private static WorkstationEditorOptions Options(string root, string file, string token) =>
         new(root, file, 0, false, token, StudioMode: true, InstanceId: Guid.NewGuid().ToString("D"));
 
