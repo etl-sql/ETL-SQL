@@ -1714,37 +1714,109 @@ internal sealed class PlotPlanSvgRenderer
 
     private static void RenderFunnel(StringBuilder builder, PlotPlan plan)
     {
-        var data = plan.Layers.First().Data.Where(datum => !datum.IsGap).ToList();
+        var firstLayer = plan.Layers.FirstOrDefault();
+        var data = (firstLayer?.Data ?? []).Where(datum => !datum.IsGap).ToList();
+        if (data.Count == 0) return;
+
         var values = data.Select(datum => Math.Max(0m, PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null()) ?? 0m)).ToList();
         var maximum = values.DefaultIfEmpty(1m).Max();
         if (maximum <= 0m) maximum = 1m;
+
         var showValues = IsEnabled(plan.Style, "DATA_LABELS");
-        const decimal labelGutter = 150m;
+        var showPercent = IsEnabled(plan.Style, "SHOW_PERCENT") ||
+            (firstLayer is not null && LayerStyle(firstLayer, "SHOW_PERCENT")?.ToUpperInvariant() is "ON" or "TRUE" or "1");
+        var percentMode = (Style(plan, "PERCENT_MODE") ?? (firstLayer is not null ? LayerStyle(firstLayer, "PERCENT_MODE") : null) ?? "STEP").ToUpperInvariant();
+        var shape = (Style(plan, "FUNNEL_SHAPE") ?? Style(plan, "SHAPE") ?? (firstLayer is not null ? LayerStyle(firstLayer, "FUNNEL_SHAPE") : null) ?? "FUNNEL").ToUpperInvariant();
+
+        const decimal labelGutter = 160m;
         var availableWidth = Math.Max(120m, plan.Bounds.Width - Left - Right - labelGutter);
         var center = Left + availableWidth / 2m;
         var labelX = Left + availableWidth + 18m;
         var top = Top + 8m;
         var rowHeight = Math.Max(18m, (plan.Bounds.Height - top - 25m) / Math.Max(1, data.Count));
+
+        // Denominator for TOTAL percent mode
+        var totalDenominator = shape == "PYRAMID" && values.Count > 0 ? values[^1] : (values.Count > 0 ? values[0] : 1m);
+        if (totalDenominator <= 0m) totalDenominator = 1m;
+
+        builder.AppendLine($"<g class='plot-funnel' data-shape='{Esc(shape.ToLowerInvariant())}' data-percent-mode='{Esc(percentMode.ToLowerInvariant())}'>");
+
         for (var index = 0; index < data.Count; index++)
         {
             var currentWidth = availableWidth * values[index] / maximum;
-            var nextWidth = index + 1 < values.Count ? availableWidth * values[index + 1] / maximum : currentWidth * .72m;
+            decimal topWidth;
+            decimal bottomWidth;
+
+            if (shape == "PYRAMID")
+            {
+                topWidth = index > 0 ? availableWidth * values[index - 1] / maximum : currentWidth * 0.28m;
+                bottomWidth = currentWidth;
+            }
+            else
+            {
+                topWidth = currentWidth;
+                bottomWidth = index + 1 < values.Count ? availableWidth * values[index + 1] / maximum : currentWidth * 0.72m;
+            }
+
             var y1 = top + index * rowHeight;
             var y2 = y1 + rowHeight - 2m;
             var color = plan.Palette.ElementAtOrDefault(index)?.Color ?? DefaultColor(index);
-            var points = $"{N(center - currentWidth / 2m)},{N(y1)} {N(center + currentWidth / 2m)},{N(y1)} {N(center + nextWidth / 2m)},{N(y2)} {N(center - nextWidth / 2m)},{N(y2)}";
+            var points = $"{N(center - topWidth / 2m)},{N(y1)} {N(center + topWidth / 2m)},{N(y1)} {N(center + bottomWidth / 2m)},{N(y2)} {N(center - bottomWidth / 2m)},{N(y2)}";
             var label = DisplayChannel(data[index], FieldChannel.X) ?? $"Stage {index + 1}";
-            builder.AppendLine($"<polygon points='{points}' fill='{Esc(color)}' data-row-index='{data[index].RowIndex}'><title>{Esc(label)}: {N(values[index])}</title></polygon>");
+
+            decimal pct;
+            if (percentMode == "TOTAL")
+            {
+                pct = Math.Round(values[index] / totalDenominator * 100m, 1);
+            }
+            else // STEP
+            {
+                if (index == 0)
+                {
+                    pct = 100m;
+                }
+                else
+                {
+                    var prevVal = values[index - 1];
+                    pct = prevVal > 0m ? Math.Round(values[index] / prevVal * 100m, 1) : 0m;
+                }
+            }
+
+            var pctStr = $"{pct.ToString("0.#", CultureInfo.InvariantCulture)}%";
+            var tooltip = showPercent ? $"{Esc(label)}: {N(values[index])} ({pctStr})" : $"{Esc(label)}: {N(values[index])}";
+
+            builder.AppendLine($"<polygon points='{points}' fill='{Esc(color)}' data-row-index='{data[index].RowIndex}' data-percent='{N(pct)}'><title>{tooltip}</title></polygon>");
+
             var midY = y1 + rowHeight / 2m;
-            var rightEdge = center + (currentWidth + nextWidth) / 4m;
+            var rightEdge = center + (topWidth + bottomWidth) / 4m;
             builder.AppendLine($"<path d='M {N(rightEdge + 3m)} {N(midY)} H {N(labelX - 6m)}' fill='none' stroke='#9ca3af' stroke-width='1'/>");
-            var fullLabel = showValues ? $"{label} · {N(values[index])}" : label;
-            if (showValues)
+
+            string fullLabel;
+            if (showValues && showPercent)
+            {
+                fullLabel = $"{label} · {N(values[index])} ({pctStr})";
+            }
+            else if (showValues)
+            {
+                fullLabel = $"{label} · {N(values[index])}";
+            }
+            else if (showPercent)
+            {
+                fullLabel = $"{label} · {pctStr}";
+            }
+            else
+            {
+                fullLabel = label;
+            }
+
+            if (showValues || showPercent)
             {
                 RenderDataLabelBackground(builder, plan, data[index].RowIndex, labelX, midY + 4m, "start", 10m, fullLabel);
             }
             builder.AppendLine($"<text x='{N(labelX)}' y='{N(midY + 4m)}' text-anchor='start' font-size='10' fill='#374151'>{Esc(fullLabel)}</text>");
         }
+
+        builder.AppendLine("</g>");
     }
 
     private static void RenderGauge(StringBuilder builder, PlotPlan plan)

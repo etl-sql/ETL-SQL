@@ -49,7 +49,18 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         ValidateGanttOptions(statement);
         ValidateCandlestickOptions(statement);
         ValidateRadarOptions(statement);
+        ValidateFunnelOptions(statement);
         foreach (var opt in statement.Options) manifest.Options.TryAdd(opt.Key, opt.Value);
+        if (statement.VisualType == VisualType.Funnel)
+        {
+            var shape = statement.Options.FirstOrDefault(o => o.Key.Equals("FUNNEL_SHAPE", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("SHAPE", StringComparison.OrdinalIgnoreCase))?.Value;
+            var defaultSort = shape?.Equals("PYRAMID", StringComparison.OrdinalIgnoreCase) == true ? "VALUE_ASC" : "VALUE_DESC";
+            if (!statement.Options.Any(o => o.Key.Equals("SORT", StringComparison.OrdinalIgnoreCase)) &&
+                !manifest.Options.ContainsKey("SORT"))
+            {
+                manifest.Options["SORT"] = defaultSort;
+            }
+        }
         if (statement.VisualType == VisualType.Scatter)
         {
             var hasErrorLow = statement.Mappings.Any(m => m.Role.Equals("ERROR_LOW", StringComparison.OrdinalIgnoreCase));
@@ -312,7 +323,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             var style = statement.VisualType switch
             {
                 VisualType.HeatMap => ResolveHeatMapLayerStyle(statement, manifest),
-                VisualType.Funnel => ImmutableArray.Create(new StyleToken("layout", "funnel")),
+                VisualType.Funnel => ResolveFunnelLayerStyle(statement, manifest),
                 VisualType.Gauge => ImmutableArray.Create(new StyleToken("layout", "gauge")),
                 VisualType.BoxPlot => ImmutableArray.Create(new StyleToken("layout", "boxplot"), new StyleToken("preserveRows", "true")),
                 VisualType.Waterfall => ResolveWaterfallLayerStyle(statement, manifest),
@@ -1614,6 +1625,81 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                     var upper = opt.Value.ToUpperInvariant();
                     if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0"))
                         throw new InvalidOperationException($"Invalid FILL '{opt.Value}'. Valid values are ON or OFF.");
+                }
+            }
+        }
+    }
+
+    private static ImmutableArray<StyleToken> ResolveFunnelLayerStyle(
+        CreateVisualStatement statement,
+        VisualManifest manifest)
+    {
+        var tokens = ImmutableArray.CreateBuilder<StyleToken>();
+        tokens.Add(new StyleToken("layout", "funnel"));
+
+        void Forward(string key, string? defaultVal = null)
+        {
+            var val = statement.Options.FirstOrDefault(o => o.Key.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value
+                ?? manifest.Options.GetValueOrDefault(key)
+                ?? defaultVal;
+            if (!string.IsNullOrWhiteSpace(val)) tokens.Add(new StyleToken(key, val));
+        }
+
+        var shape = statement.Options.FirstOrDefault(o => o.Key.Equals("FUNNEL_SHAPE", StringComparison.OrdinalIgnoreCase) || o.Key.Equals("SHAPE", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("FUNNEL_SHAPE")
+            ?? manifest.Options.GetValueOrDefault("SHAPE")
+            ?? "FUNNEL";
+        tokens.Add(new StyleToken("FUNNEL_SHAPE", shape.ToUpperInvariant()));
+
+        var defaultSort = shape.Equals("PYRAMID", StringComparison.OrdinalIgnoreCase) ? "VALUE_ASC" : "VALUE_DESC";
+        var sort = statement.Options.FirstOrDefault(o => o.Key.Equals("SORT", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("SORT")
+            ?? defaultSort;
+        tokens.Add(new StyleToken("SORT", sort.ToUpperInvariant()));
+
+        Forward("SHOW_PERCENT");
+        Forward("PERCENT_MODE", "STEP");
+
+        return tokens.ToImmutable();
+    }
+
+    private static void ValidateFunnelOptions(CreateVisualStatement statement)
+    {
+        var isFunnel = statement.VisualType == VisualType.Funnel;
+        foreach (var opt in statement.Options)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            if (key is "PERCENT_MODE" or "FUNNEL_SHAPE")
+            {
+                if (!isFunnel)
+                    throw new InvalidOperationException($"{key} option is supported only on FUNNEL visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            }
+
+            if (isFunnel)
+            {
+                if (key == "SORT")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("SOURCE" or "VALUE_DESC" or "VALUE_ASC" or "VALUE"))
+                        throw new InvalidOperationException($"Invalid SORT '{opt.Value}'. Valid values are SOURCE, VALUE_DESC, or VALUE_ASC.");
+                }
+                else if (key == "SHOW_PERCENT")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0"))
+                        throw new InvalidOperationException($"Invalid SHOW_PERCENT '{opt.Value}'. Valid values are ON or OFF.");
+                }
+                else if (key == "PERCENT_MODE")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("STEP" or "TOTAL"))
+                        throw new InvalidOperationException($"Invalid PERCENT_MODE '{opt.Value}'. Valid values are STEP or TOTAL.");
+                }
+                else if (key is "FUNNEL_SHAPE" or "SHAPE")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("FUNNEL" or "PYRAMID"))
+                        throw new InvalidOperationException($"Invalid {key} '{opt.Value}'. Valid values are FUNNEL or PYRAMID.");
                 }
             }
         }

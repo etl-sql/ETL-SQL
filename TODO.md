@@ -1057,13 +1057,13 @@ than record it.
 
 ### FUNNEL
 
-- [ ] **Funnel sort control**: Stages are ordered by `VALUE` descending by default. There is no
+- [x] **Funnel sort control**: Stages are ordered by `VALUE` descending by default. There is no
   `SORT = SOURCE|VALUE_DESC|VALUE_ASC` option to preserve query order (needed when stages are not
   monotonically decreasing, e.g., a marketing funnel with re-engagement stages). Add to OPTIONS.
-- [ ] **Absolute vs. relative percentage display**: `SHOW_PERCENT = ON` shows the stage-to-stage
+- [x] **Absolute vs. relative percentage display**: `SHOW_PERCENT = ON` shows the stage-to-stage
   conversion rate. No option to show percent-of-total (first stage as denominator) alongside or
   instead. Add `PERCENT_MODE = STEP|TOTAL`.
-- [ ] **Pyramid orientation**: Funnel charts traditionally widen at the top. A pyramid inverts this
+- [x] **Pyramid orientation**: Funnel charts traditionally widen at the top. A pyramid inverts this
   (widens at the bottom). Power BI offers both. Add `FUNNEL_SHAPE = FUNNEL|PYRAMID`.
 
 ### SANKEY
@@ -1873,6 +1873,15 @@ means the feature already exists in the engine and the sink just needs a new vis
 | Full legend suite | ✅ shipped |
 | `GRID_LINES`, `ZERO_LINE` | ✅ shipped |
 | `SYMBOL_SIZE = n` | [ ] Named Chart Marks (pending) |
+
+### 12_FUNNEL.rptsql
+
+| Gap | Prerequisite TODO |
+| :--- | :--- |
+| `SORT = SOURCE\|VALUE_DESC\|VALUE_ASC` option | ✅ FUNNEL (shipped) |
+| `SHOW_PERCENT = ON\|OFF` conversion percentage toggle | ✅ FUNNEL (shipped) |
+| `PERCENT_MODE = STEP\|TOTAL` conversion calculation | ✅ FUNNEL (shipped) |
+| `FUNNEL_SHAPE = FUNNEL\|PYRAMID` orientation option | ✅ FUNNEL (shipped) |
 
 ### 14_RADAR.rptsql
 

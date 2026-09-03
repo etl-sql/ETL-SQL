@@ -1,57 +1,121 @@
 -- Kitchen Sink: FUNNEL Visual
--- This script demonstrates the FUNNEL visual type for pipeline and conversion drop-off analysis.
+-- Comprehensive demonstration of FUNNEL and PYRAMID visuals showing stage drop-off,
+-- step vs total conversion rates, query order preservation, and custom stage palettes.
 
-SET REPORT TITLE = 'Kitchen Sink: FUNNEL Visual';
-SET REPORT DESCRIPTION = 'Demonstration of FUNNEL conversion visualization, stage palettes, and data labels.';
+SET REPORT TITLE = 'Kitchen Sink: FUNNEL Visuals';
+SET REPORT DESCRIPTION = 'Comprehensive showcase of funnel and pyramid visuals with step/total percentages and stage sorting controls.';
 
--- 1. Mock Data Generation (Sales Pipeline Stages)
-SELECT '1. Prospects' AS Stage, 1000 AS Count INTO #funnel
+-- 1. Mock Data Generation (Sales Conversion Pipeline)
+SELECT '1. Prospects' AS Stage, 1000 AS Count INTO #sales
 UNION ALL SELECT '2. Qualified', 600
 UNION ALL SELECT '3. Proposal', 300
 UNION ALL SELECT '4. Negotiation', 150
 UNION ALL SELECT '5. Closed Won', 80;
 
--- 2. Basic Funnel
-CREATE VISUAL BasicFunnel AS FUNNEL (
-    SOURCE = (SELECT Stage, Count FROM #funnel ORDER BY Count DESC),
-    TITLE = 'Sales Conversion Funnel (Volume by Stage)',
-    MAPPINGS (LABEL = Stage, VALUE = Count)
-);
+-- 2. Mock Data Generation (Marketing Journey with Re-Engagement Stage)
+SELECT '1. Ad Click' AS Stage, 5000 AS Visitors INTO #marketing
+UNION ALL SELECT '2. Landing Page', 3200
+UNION ALL SELECT '3. Email Drip Re-engage', 3800
+UNION ALL SELECT '4. Checkout Started', 1400
+UNION ALL SELECT '5. Purchase Completed', 950;
 
--- 3. Funnel with Data Labels and Value Counts
-CREATE VISUAL LabeledFunnel AS FUNNEL (
-    SOURCE = (SELECT Stage, Count FROM #funnel ORDER BY Count DESC),
-    TITLE = 'Conversion Funnel with Explicit Counts',
+-- 3. Mock Data Generation (Organizational Pyramid Hierarchy)
+SELECT 'Executive' AS Level, 8 AS Headcount INTO #org
+UNION ALL SELECT 'Directors', 24
+UNION ALL SELECT 'Managers', 75
+UNION ALL SELECT 'Team Leads', 180
+UNION ALL SELECT 'Individual Contributors', 720;
+
+-- 4. Basic Funnel (Default VALUE_DESC Sorting)
+CREATE VISUAL BasicFunnel AS FUNNEL (
+    SOURCE = #sales,
+    TITLE = '1. Basic Funnel (Default VALUE_DESC Sort)',
     MAPPINGS (LABEL = Stage, VALUE = Count),
     OPTIONS (
         DATA_LABELS = ON
     )
 );
 
--- 4. Styled Funnel with Custom Stage Colors
+-- 5. Stage-to-Stage Conversion (PERCENT_MODE = STEP)
+CREATE VISUAL StepPercentFunnel AS FUNNEL (
+    SOURCE = #sales,
+    TITLE = '2. Step Conversion (PERCENT_MODE = STEP)',
+    MAPPINGS (LABEL = Stage, VALUE = Count),
+    OPTIONS (
+        SHOW_PERCENT = ON,
+        PERCENT_MODE = STEP,
+        DATA_LABELS  = ON
+    )
+);
+
+-- 6. Total Pipeline Conversion (PERCENT_MODE = TOTAL)
+CREATE VISUAL TotalPercentFunnel AS FUNNEL (
+    SOURCE = #sales,
+    TITLE = '3. Total Pipeline Retention (PERCENT_MODE = TOTAL)',
+    MAPPINGS (LABEL = Stage, VALUE = Count),
+    OPTIONS (
+        SHOW_PERCENT = ON,
+        PERCENT_MODE = TOTAL,
+        DATA_LABELS  = ON
+    )
+);
+
+-- 7. Query Order Preservation (SORT = SOURCE for Non-Monotonic Funnel)
+CREATE VISUAL SourceOrderFunnel AS FUNNEL (
+    SOURCE = #marketing,
+    TITLE = '4. Query Order Preservation (SORT = SOURCE)',
+    MAPPINGS (LABEL = Stage, VALUE = Visitors),
+    OPTIONS (
+        SORT         = SOURCE,
+        SHOW_PERCENT = ON,
+        PERCENT_MODE = STEP,
+        DATA_LABELS  = ON
+    )
+);
+
+-- 8. Inverted Pyramid Orientation (FUNNEL_SHAPE = PYRAMID)
+CREATE VISUAL HierarchyPyramid AS FUNNEL (
+    SOURCE = #org,
+    TITLE = '5. Inverted Pyramid (FUNNEL_SHAPE = PYRAMID)',
+    MAPPINGS (LABEL = Level, VALUE = Headcount),
+    OPTIONS (
+        FUNNEL_SHAPE = PYRAMID,
+        SORT         = SOURCE,
+        SHOW_PERCENT = ON,
+        PERCENT_MODE = TOTAL,
+        DATA_LABELS  = ON
+    )
+);
+
+-- 9. Styled Funnel with Brand Colors
 CREATE VISUAL StyledFunnel AS FUNNEL (
-    SOURCE = (SELECT Stage, Count FROM #funnel ORDER BY Count DESC),
-    TITLE = 'Styled Pipeline (Brand Colors)',
+    SOURCE = #sales,
+    TITLE = '6. Styled Funnel (Custom Stage Palette)',
     MAPPINGS (LABEL = Stage, VALUE = Count),
     OPTIONS (
         COLORS (
-            '1. Prospects'   = '#4e79a7',
-            '2. Qualified'   = '#76b7b2',
-            '3. Proposal'    = '#f28e2b',
-            '4. Negotiation' = '#e15759',
-            '5. Closed Won'  = '#59a14f'
+            '1. Prospects'   = '#2563eb',
+            '2. Qualified'   = '#0284c7',
+            '3. Proposal'    = '#d97706',
+            '4. Negotiation' = '#ea580c',
+            '5. Closed Won'  = '#16a34a'
         ),
-        DATA_LABELS = ON
+        SHOW_PERCENT = ON,
+        PERCENT_MODE = STEP,
+        DATA_LABELS  = ON
     )
 );
 
--- Page Layout
+-- Dashboard Page Layout
 CREATE PAGE FunnelKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C .',
+    STRUCTURE = 'A B / C D / E F',
     MAP (
         'A' = BasicFunnel,
-        'B' = LabeledFunnel,
-        'C' = StyledFunnel
+        'B' = StepPercentFunnel,
+        'C' = TotalPercentFunnel,
+        'D' = SourceOrderFunnel,
+        'E' = HierarchyPyramid,
+        'F' = StyledFunnel
     )
 );
 

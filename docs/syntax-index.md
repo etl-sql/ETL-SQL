@@ -1949,6 +1949,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `SCRIPT` | Script & Job Execution | Canonical language token |
 | `START` | Script & Job Execution | Canonical language token |
 | `STEP` | Script & Job Execution | Canonical language token |
+| `STEP` | Script & Job Execution | Canonical language token |
 | `STOP` | Script & Job Execution | Canonical language token |
 | `TRIGGER` | Script & Job Execution | Canonical language token |
 | `UNTIL` | Script & Job Execution | Canonical language token |
@@ -2102,6 +2103,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `FORMAT` | General | Canonical language token |
 | `FRESHNESS` | General | Canonical language token |
 | `FROM_ENCODING` | General | Canonical language token |
+| `FUNNEL_SHAPE` | General | Canonical language token |
 | `HANDLING` | General | Canonical language token |
 | `HASH_FILE` | General | Canonical language token |
 | `HELP` | General | Canonical language token |
@@ -2162,6 +2164,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `PAGE_SIZE` | General | Canonical language token |
 | `PARALLEL` | General | Canonical language token |
 | `PARENTS` | General | Canonical language token |
+| `PERCENT_MODE` | General | Canonical language token |
 | `PERSIST` | General | Canonical language token |
 | `PLACING` | General | Canonical language token |
 | `POLL_INTERVAL_MS` | General | Canonical language token |
@@ -2170,6 +2173,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `PRINT` | General | Canonical language token |
 | `PRINT_LAYOUT` | General | Canonical language token |
 | `PROGRESS_BAR` | General | Canonical language token |
+| `PYRAMID` | General | Canonical language token |
 | `QUARANTINE` | General | Canonical language token |
 | `QUARANTINE_PERCENT` | General | Canonical language token |
 | `REFRESH` | General | Canonical language token |
@@ -2187,6 +2191,7 @@ See [Getting Started](guides/onboarding/getting-started.md) and [Administration]
 | `SESSION` | General | Canonical language token |
 | `SESSIONS` | General | Canonical language token |
 | `SETS` | General | Canonical language token |
+| `SHOW_PERCENT` | General | Canonical language token |
 | `SHUTDOWN` | General | Canonical language token |
 | `SIGMA` | General | Canonical language token |
 | `SIZE_RANGE` | General | Canonical language token |

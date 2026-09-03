@@ -5125,6 +5125,7 @@ export function createDesigner(container, opts = {}) {
         const isGantt = v.type === 'GANTT';
         const isCandlestick = v.type === 'CANDLESTICK';
         const isRadar = v.type === 'RADAR';
+        const isFunnel = v.type === 'FUNNEL';
         const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
         const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
         const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
@@ -5337,6 +5338,27 @@ export function createDesigner(container, opts = {}) {
                                 <input type="number" step="0.05" min="0" max="1" id="pp-format-radar-fill-opacity" class="form-control" value="${v.options?.FILL_OPACITY ?? '0.18'}">
                             </label>
                         </div>` : ''}
+                        ${isFunnel ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">Funnel options</div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Funnel shape
+                                <select id="pp-format-funnel-shape" class="form-control">
+                                    ${['FUNNEL', 'PYRAMID'].map(val => `<option${(v.options?.FUNNEL_SHAPE || v.options?.SHAPE || 'FUNNEL').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Stage sort
+                                <select id="pp-format-funnel-sort" class="form-control">
+                                    ${['VALUE_DESC', 'VALUE_ASC', 'SOURCE'].map(val => `<option${(v.options?.SORT || 'VALUE_DESC').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                </select>
+                            </label>
+                        </div>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-funnel-show-percent" ${(v.options?.SHOW_PERCENT || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show conversion %</span></label>
+                        <label class="etlsql-dsgn-label">Percent mode
+                            <select id="pp-format-funnel-percent-mode" class="form-control">
+                                ${['STEP', 'TOTAL'].map(val => `<option${(v.options?.PERCENT_MODE || 'STEP').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                            </select>
+                        </label>` : ''}
                     </div>
                 </details>
 
@@ -5750,6 +5772,10 @@ export function createDesigner(container, opts = {}) {
         bindOption('#pp-format-radar-independent-axes', 'INDEPENDENT_AXES', 'change', el => el.checked ? 'ON' : 'OFF');
         bindOption('#pp-format-radar-shape', 'SHAPE');
         bindOption('#pp-format-radar-fill-opacity', 'FILL_OPACITY');
+        bindOption('#pp-format-funnel-shape', 'FUNNEL_SHAPE');
+        bindOption('#pp-format-funnel-sort', 'SORT');
+        bindOption('#pp-format-funnel-show-percent', 'SHOW_PERCENT', 'change', el => el.checked ? 'ON' : 'OFF');
+        bindOption('#pp-format-funnel-percent-mode', 'PERCENT_MODE');
         bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
         bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
         bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');
