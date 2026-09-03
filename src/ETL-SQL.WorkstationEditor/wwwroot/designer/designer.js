@@ -5176,8 +5176,25 @@ export function createDesigner(container, opts = {}) {
                         <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-legend" ${(v.options?.LEGEND || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show legend</span></label>
                         <label class="etlsql-dsgn-label">Legend placement
                             <select id="pp-format-legend-position" class="form-control">
-                                ${['TOP', 'RIGHT', 'BOTTOM', 'LEFT'].map(value => `<option${(v.options?.LEGEND_POSITION || 'BOTTOM').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}
+                                ${['TOP', 'RIGHT', 'BOTTOM', 'LEFT', 'INSIDE'].map(value => `<option${(v.options?.LEGEND_POSITION || 'BOTTOM').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}
                             </select>
+                        </label>
+                        <label class="etlsql-dsgn-label" id="pp-format-legend-anchor-wrap" style="${(v.options?.LEGEND_POSITION || '').toUpperCase() === 'INSIDE' ? '' : 'display:none;'}">Legend anchor
+                            <select id="pp-format-legend-anchor" class="form-control">
+                                ${['TOP_RIGHT', 'TOP_LEFT', 'BOTTOM_RIGHT', 'BOTTOM_LEFT'].map(value => `<option${(v.options?.LEGEND_ANCHOR || 'TOP_RIGHT').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}
+                            </select>
+                        </label>
+                        <label class="etlsql-dsgn-label">Legend orientation
+                            <select id="pp-format-legend-orientation" class="form-control">
+                                ${['', 'HORIZONTAL', 'VERTICAL'].map(value => `<option value="${value}"${(v.options?.LEGEND_ORIENTATION || '').toUpperCase() === value ? ' selected' : ''}>${value || '(Default)'}</option>`).join('')}
+                            </select>
+                        </label>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-legend-reverse" ${(v.options?.LEGEND_REVERSE || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Reverse series order</span></label>
+                        <label class="etlsql-dsgn-label">Legend title
+                            <input type="text" id="pp-format-legend-title" class="form-control" value="${esc(v.options?.LEGEND_TITLE || '')}" placeholder="Title or NONE">
+                        </label>
+                        <label class="etlsql-dsgn-label">Legend columns
+                            <input type="number" id="pp-format-legend-columns" class="form-control" min="1" max="20" value="${esc(v.options?.LEGEND_COLUMNS || '')}" placeholder="Auto">
                         </label>
                         <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-grid-lines" ${(v.options?.GRID_LINES || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show background grid lines</span></label>
                         ${isCartesian ? `<div class="etlsql-dsgn-typography-grid">
@@ -5440,6 +5457,36 @@ export function createDesigner(container, opts = {}) {
         panel.querySelector('#pp-format-legend-position')?.addEventListener('change', event => {
             v.options ||= {};
             v.options.LEGEND_POSITION = event.target.value;
+            const anchorWrap = panel.querySelector('#pp-format-legend-anchor-wrap');
+            if (anchorWrap) anchorWrap.style.display = event.target.value === 'INSIDE' ? '' : 'none';
+            sync();
+        });
+        panel.querySelector('#pp-format-legend-anchor')?.addEventListener('change', event => {
+            v.options ||= {};
+            v.options.LEGEND_ANCHOR = event.target.value;
+            sync();
+        });
+        panel.querySelector('#pp-format-legend-orientation')?.addEventListener('change', event => {
+            v.options ||= {};
+            if (event.target.value) v.options.LEGEND_ORIENTATION = event.target.value;
+            else delete v.options.LEGEND_ORIENTATION;
+            sync();
+        });
+        panel.querySelector('#pp-format-legend-reverse')?.addEventListener('change', event => {
+            v.options ||= {};
+            v.options.LEGEND_REVERSE = event.target.checked ? 'ON' : 'OFF';
+            sync();
+        });
+        panel.querySelector('#pp-format-legend-title')?.addEventListener('input', event => {
+            v.options ||= {};
+            if (event.target.value) v.options.LEGEND_TITLE = event.target.value;
+            else delete v.options.LEGEND_TITLE;
+            sync();
+        });
+        panel.querySelector('#pp-format-legend-columns')?.addEventListener('change', event => {
+            v.options ||= {};
+            if (event.target.value) v.options.LEGEND_COLUMNS = event.target.value;
+            else delete v.options.LEGEND_COLUMNS;
             sync();
         });
         panel.querySelector('#pp-format-grid-lines')?.addEventListener('change', event => {

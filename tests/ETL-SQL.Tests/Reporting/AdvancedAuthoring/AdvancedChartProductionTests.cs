@@ -1022,7 +1022,7 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
             new CoordinateSpec(CoordinateKind.Cartesian),
             [new ScaleSpec("x", FieldChannel.X, ScaleKind.Linear, false, []), new ScaleSpec("y", FieldChannel.Y, ScaleKind.Linear, false, [])],
             new FormattingSpec("en-US", "UTC", "", []), new NullHandlingSpec(NullValuePolicy.Gap, []),
-            new ThemeSpec("default", []), new AccessibilitySpec("Clustered labeled scatter.", null, null, true));
+            new ThemeSpec("default", [new StyleToken("DATA_LABELS:LEADER_LINE", "ON")]), new AccessibilitySpec("Clustered labeled scatter.", null, null, true));
         var labels = Enumerable.Range(1, 10).Select(index => ChartValue.From($"Nearby point {index:D2}")).ToImmutableArray();
         var data = ChartDataSet.Create("#data", 10,
         [

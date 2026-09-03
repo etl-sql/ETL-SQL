@@ -26,13 +26,49 @@ namespace ETL_SQL.Reporting.Renderers
         protected static Dictionary<string, object> LegendOpt(VisualManifest v)
         {
             v.Options.TryGetValue("LEGEND_POSITION", out var pos);
-            return (pos ?? "bottom").ToLowerInvariant() switch
+            v.Options.TryGetValue("LEGEND_ORIENTATION", out var orient);
+            v.Options.TryGetValue("LEGEND_ANCHOR", out var anchor);
+            v.Options.TryGetValue("LEGEND_FONT_SIZE", out var fontSize);
+            v.Options.TryGetValue("LEGEND_FONT_COLOR", out var fontColor);
+            v.Options.TryGetValue("LEGEND_FONT_WEIGHT", out var fontWeight);
+            v.Options.TryGetValue("LEGEND_TITLE", out var title);
+
+            var dict = (pos ?? "bottom").ToLowerInvariant() switch
             {
                 "left" => new Dictionary<string, object> { ["orient"] = "vertical", ["left"] = "left", ["top"] = "middle" },
                 "right" => new Dictionary<string, object> { ["orient"] = "vertical", ["right"] = "right", ["top"] = "middle" },
                 "top" => new Dictionary<string, object> { ["orient"] = "horizontal", ["top"] = "top" },
+                "inside" => (anchor ?? "TOP_RIGHT").ToUpperInvariant() switch
+                {
+                    "TOP_LEFT" => new Dictionary<string, object> { ["orient"] = "vertical", ["left"] = "left", ["top"] = "top" },
+                    "BOTTOM_LEFT" => new Dictionary<string, object> { ["orient"] = "vertical", ["left"] = "left", ["bottom"] = "bottom" },
+                    "BOTTOM_RIGHT" => new Dictionary<string, object> { ["orient"] = "vertical", ["right"] = "right", ["bottom"] = "bottom" },
+                    _ => new Dictionary<string, object> { ["orient"] = "vertical", ["right"] = "right", ["top"] = "top" }
+                },
                 _ => new Dictionary<string, object> { ["orient"] = "horizontal", ["bottom"] = "bottom" }
             };
+
+            if (!string.IsNullOrWhiteSpace(orient))
+            {
+                dict["orient"] = orient.ToLowerInvariant();
+            }
+
+            if (!string.IsNullOrWhiteSpace(title) && !title.Equals("NONE", StringComparison.OrdinalIgnoreCase))
+            {
+                dict["title"] = title;
+            }
+
+            var textStyle = new Dictionary<string, object>();
+            if (!string.IsNullOrWhiteSpace(fontSize) && double.TryParse(fontSize.TrimEnd('p', 'x', 'P', 'X', 't', 'T'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var size))
+                textStyle["fontSize"] = size;
+            if (!string.IsNullOrWhiteSpace(fontColor))
+                textStyle["color"] = fontColor;
+            if (!string.IsNullOrWhiteSpace(fontWeight))
+                textStyle["fontWeight"] = fontWeight;
+            if (textStyle.Count > 0)
+                dict["textStyle"] = textStyle;
+
+            return dict;
         }
 
         protected static Dictionary<string, object?> BuildAxisOpts(VisualManifest v, string axis, string type, object? data = null)

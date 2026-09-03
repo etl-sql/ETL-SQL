@@ -924,7 +924,15 @@ Common `OPTIONS` keys for report visuals:
 | `FORMAT` | `CARD`, `TABLE`, data labels | .NET format string such as `'N0'`, `'C2'`, `'P1'` | Numeric display format |
 | `GRID_LINES` | Cartesian charts | `ON` / `OFF` | Shows or hides background grid lines. |
 | `ZOOM_SLIDER` | Browser-rendered native charts | `ON` / `OFF` | Adds a visible range selector. |
-| `LEGEND_POSITION` | Charts with legends | `TOP`, `RIGHT`, `BOTTOM`, `LEFT` | Places the legend outside the plot. |
+| `LEGEND_POSITION` | Charts with legends | `TOP`, `RIGHT`, `BOTTOM`, `LEFT`, `INSIDE` | Places the legend outside or inside the plot. |
+| `LEGEND_ANCHOR` | Charts with `LEGEND_POSITION = INSIDE` | `TOP_LEFT`, `TOP_RIGHT`, `BOTTOM_LEFT`, `BOTTOM_RIGHT` | Anchor corner for inside overlay legend (default `TOP_RIGHT`). |
+| `LEGEND_ORIENTATION` | Charts with legends | `HORIZONTAL`, `VERTICAL` | Sets legend layout orientation. |
+| `LEGEND_REVERSE` | Charts with legends | `ON` / `OFF` | Flips series order in the legend (default `OFF`). |
+| `LEGEND_TITLE` | Charts with legends | `'text'` / `NONE` | Sets or suppresses legend title text. |
+| `LEGEND_COLUMNS` | Charts with legends | Positive integer | Column count for multi-column legend layout. |
+| `LEGEND_FONT_SIZE` | Charts with legends | Numeric pixel size | Font size for legend text. |
+| `LEGEND_FONT_COLOR` | Charts with legends | CSS color string | Font color for legend text. |
+| `LEGEND_FONT_WEIGHT` | Charts with legends | `NORMAL`, `BOLD`, etc. | Font weight for legend text. |
 | `DATA_LABELS` | Charts | `ON` / `OFF` with `POSITION`, `FONT_SIZE`, `COLOR`, `LABEL_BACKGROUND`, `LABEL_BORDER`, and `LEADER_LINE` | Shows values on marks with optional background, border, and leader line styling. |
 | `SERIES_LABELS` | `LINE`, `COMBO` | `ON` / `OFF` with `POSITION = START\|END` | Renders a series title label at the first or last renderable point of each series (default `OFF`). |
 | `SYMBOLS` | `LINE`, line layers in `COMBO` | `ON` / `OFF` | Shows or hides data-point markers. |

@@ -73,7 +73,15 @@ Titles and subtitles support simple string assignment, inline markdown, or struc
 - **GRID_LINES = ON|OFF** — Shows or hides Cartesian background grid lines. Default `ON`.
 - **ZOOM_SLIDER = ON|OFF** — Adds an accessible range selector below browser-rendered native charts. Default `OFF`; static and print renderers keep the full range.
 - **LEGEND = ON|OFF** — Shows or hides the legend.
-- **LEGEND_POSITION = TOP|RIGHT|BOTTOM|LEFT** — Places the legend outside the plot. Default `BOTTOM`.
+- **LEGEND_POSITION = TOP|RIGHT|BOTTOM|LEFT|INSIDE** — Places the legend outside the plot or overlaying inside. Default `BOTTOM`.
+- **LEGEND_ANCHOR = TOP_LEFT|TOP_RIGHT|BOTTOM_LEFT|BOTTOM_RIGHT** — Anchors overlay legend inside the plot area when `LEGEND_POSITION = INSIDE`. Default `TOP_RIGHT`.
+- **LEGEND_ORIENTATION = HORIZONTAL|VERTICAL** — Controls legend item layout direction (defaults to renderer-inferred).
+- **LEGEND_REVERSE = ON|OFF** — Flips series display order in the legend (default `OFF`).
+- **LEGEND_TITLE = 'text'|NONE** — Sets or suppresses the legend title text.
+- **LEGEND_COLUMNS = n** — Sets column count for multi-column horizontal/wrapped legend layout.
+- **LEGEND_FONT_SIZE = n** — Font size in pixels for legend items.
+- **LEGEND_FONT_COLOR = '#rrggbb'** — Text color for legend items.
+- **LEGEND_FONT_WEIGHT = NORMAL|BOLD** — Font weight for legend items.
 - **DATA_LABELS = ON|OFF WITH (...)** — Shows mark labels and accepts `POSITION`, `COLOR`, `FONT_SIZE`, `FONT_WEIGHT`, `FONT_FAMILY`, `FORMAT`, `LABEL_BACKGROUND`, `LABEL_BORDER`, and nested `LEADER_LINE`.
 - **DATA_LABELS POSITION** — Accepts `OUTSIDE_TOP`, `OUTSIDE_MIDDLE`, `OUTSIDE_BOTTOM`, `INSIDE_TOP`, `INSIDE_MIDDLE`, or `INSIDE_BOTTOM`.
 - **DATA_LABELS LABEL_BACKGROUND = '#rrggbb'** — Background fill color for data label badges across all named charts supporting `DATA_LABELS`.

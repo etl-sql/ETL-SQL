@@ -166,6 +166,8 @@ internal sealed class PlotPlanSvgRenderer
 
         var hasRightLegend = LegendEnabled(plan) && LegendPosition(plan) == "RIGHT" && plan.Legend.Length > 1;
         var legendWidth = hasRightLegend ? 120m : 0m;
+        var hasLeftLegend = LegendEnabled(plan) && LegendPosition(plan) == "LEFT" && plan.Legend.Length > 1;
+        var leftLegendWidth = hasLeftLegend ? 120m : 0m;
 
         var seriesLabelsEnabled = IsEnabled(plan.Style, "SERIES_LABELS");
         var seriesLabelsPos = (Style(plan, "SERIES_LABELS:POSITION") ?? "END").Trim().ToUpperInvariant();
@@ -202,9 +204,9 @@ internal sealed class PlotPlanSvgRenderer
             .DefaultIfEmpty(0m)
             .Max();
 
-        var remainingWidth = Math.Max(0m, totalWidth - minPlotWidth - BaseLeftMargin - BaseRightMargin - legendWidth);
+        var remainingWidth = Math.Max(0m, totalWidth - minPlotWidth - BaseLeftMargin - BaseRightMargin - legendWidth - leftLegendWidth);
 
-        var plotLeft = BaseLeftMargin;
+        var plotLeft = BaseLeftMargin + leftLegendWidth;
         if (seriesLabelsEnabled && isStartPos && maxSeriesLabelWidth > 0m)
         {
             var startGutter = Math.Min(maxSeriesLabelWidth, remainingWidth);
@@ -705,9 +707,54 @@ internal sealed class PlotPlanSvgRenderer
         var position = Style(plan, "LEGEND_POSITION");
         if (!string.IsNullOrWhiteSpace(position)) return position.ToUpperInvariant();
         position = Style(plan, "LEGEND");
-        return position is "TOP" or "BOTTOM" or "LEFT" or "RIGHT"
+        return position is "TOP" or "BOTTOM" or "LEFT" or "RIGHT" or "INSIDE"
             ? position.ToUpperInvariant()
             : "BOTTOM";
+    }
+
+    private static string LegendAnchor(PlotPlan plan)
+    {
+        var anchor = Style(plan, "LEGEND_ANCHOR");
+        return anchor?.ToUpperInvariant() switch
+        {
+            "TOP_LEFT" => "TOP_LEFT",
+            "BOTTOM_LEFT" => "BOTTOM_LEFT",
+            "BOTTOM_RIGHT" => "BOTTOM_RIGHT",
+            _ => "TOP_RIGHT"
+        };
+    }
+
+    private static bool LegendIsVertical(PlotPlan plan, string position)
+    {
+        var orientation = Style(plan, "LEGEND_ORIENTATION");
+        if (!string.IsNullOrWhiteSpace(orientation))
+        {
+            if (orientation.Equals("VERTICAL", StringComparison.OrdinalIgnoreCase)) return true;
+            if (orientation.Equals("HORIZONTAL", StringComparison.OrdinalIgnoreCase)) return false;
+        }
+        return position is "LEFT" or "RIGHT" or "INSIDE";
+    }
+
+    private static bool LegendIsReverse(PlotPlan plan)
+    {
+        var reverse = Style(plan, "LEGEND_REVERSE");
+        return reverse is not null && (reverse.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
+            reverse.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || reverse == "1");
+    }
+
+    private static int? LegendColumns(PlotPlan plan)
+    {
+        var colStr = Style(plan, "LEGEND_COLUMNS");
+        if (int.TryParse(colStr, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cols) && cols > 0)
+            return cols;
+        return null;
+    }
+
+    private static string? LegendTitle(PlotPlan plan)
+    {
+        var title = Style(plan, "LEGEND_TITLE");
+        if (string.IsNullOrWhiteSpace(title) || title.Equals("NONE", StringComparison.OrdinalIgnoreCase)) return null;
+        return title;
     }
 
     private static void RenderLegend(StringBuilder builder, PlotPlan plan)
@@ -725,20 +772,251 @@ internal sealed class PlotPlanSvgRenderer
             builder.AppendLine($"<text x='{N(colorbarX + 110m)}' y='{N(colorbarY + 19m)}' text-anchor='end' font-size='8' fill='#555'>{Esc(continuous.Ticks[^1].Label)}</text>");
             return;
         }
-        if (plan.Legend.Length <= 1) return;
+
+        if (plan.Legend.Length == 0) return;
+        var explicitOn = Style(plan, "LEGEND") is "ON" or "TRUE" or "1";
+        var legendTitle = LegendTitle(plan);
+        if (plan.Legend.Length <= 1 && !explicitOn && legendTitle is null) return;
+
+        var entries = LegendIsReverse(plan)
+            ? plan.Legend.Reverse().ToArray()
+            : plan.Legend.ToArray();
+
+        var fontSizeStr = Style(plan, "LEGEND_FONT_SIZE") ?? "9";
+        var fontColor = Style(plan, "LEGEND_FONT_COLOR") ?? "#444";
+        var fontWeight = Style(plan, "LEGEND_FONT_WEIGHT");
+        var weightAttr = !string.IsNullOrWhiteSpace(fontWeight) ? $" font-weight='{Esc(fontWeight)}'" : "";
+
+        decimal fontSizeVal = 9m;
+        var trimmedSize = fontSizeStr.Trim().TrimEnd('p', 'x', 'P', 'X', 't', 'T');
+        if (decimal.TryParse(trimmedSize, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedSize) && parsedSize > 0)
+            fontSizeVal = parsedSize;
+
+        var rowHeight = Math.Max(16m, fontSizeVal + 7m);
         var position = LegendPosition(plan);
-        var vertical = position is "LEFT" or "RIGHT";
-        var x = position == "RIGHT" ? plan.Bounds.Width - 105m : Left;
-        var y = position == "TOP" ? 29m : plan.Bounds.Height - 12m;
-        if (position == "LEFT") x = 8m;
-        for (var index = 0; index < plan.Legend.Length; index++)
+        var isInside = position == "INSIDE";
+        var anchor = isInside ? LegendAnchor(plan) : "TOP_RIGHT";
+        var isVertical = LegendIsVertical(plan, position);
+        var columns = LegendColumns(plan);
+
+        if (isInside)
         {
-            var entry = plan.Legend[index];
-            var entryX = vertical ? x : x;
-            var entryY = vertical ? Top + index * 16m : y;
+            RenderInsideLegend(builder, plan, entries, legendTitle, fontSizeStr, fontSizeVal, fontColor, fontWeight, weightAttr, rowHeight, anchor, isVertical, columns);
+            return;
+        }
+
+        if (isVertical)
+        {
+            RenderVerticalLegend(builder, plan, entries, legendTitle, fontSizeStr, fontSizeVal, fontColor, fontWeight, weightAttr, rowHeight, position, columns);
+            return;
+        }
+
+        RenderHorizontalLegend(builder, plan, entries, legendTitle, fontSizeStr, fontSizeVal, fontColor, fontWeight, weightAttr, rowHeight, position, columns);
+    }
+
+    private static void RenderInsideLegend(
+        StringBuilder builder,
+        PlotPlan plan,
+        LegendEntry[] entries,
+        string? legendTitle,
+        string fontSizeStr,
+        decimal fontSizeVal,
+        string fontColor,
+        string? fontWeight,
+        string weightAttr,
+        decimal rowHeight,
+        string anchor,
+        bool isVertical,
+        int? columns)
+    {
+        var titleWeight = !string.IsNullOrWhiteSpace(fontWeight) ? $" font-weight='{Esc(fontWeight)}'" : " font-weight='bold'";
+        int cols = columns ?? (isVertical ? 1 : Math.Min(entries.Length, 4));
+        int rows = (int)Math.Ceiling((double)entries.Length / cols);
+
+        decimal maxLabelWidth = entries.Length > 0
+            ? entries.Max(e => Math.Max(50m, e.Label.Length * (fontSizeVal * 0.65m) + 25m))
+            : 65m;
+        if (legendTitle is not null)
+            maxLabelWidth = Math.Max(maxLabelWidth, legendTitle.Length * (fontSizeVal * 0.7m) + 12m);
+
+        decimal boxWidth = cols * maxLabelWidth + 16m;
+        decimal titleHeight = legendTitle is not null ? rowHeight : 0m;
+        decimal boxHeight = rows * rowHeight + titleHeight + 12m;
+
+        decimal plotAreaLeft = Left;
+        decimal plotAreaTop = Top;
+        decimal plotAreaRight = plan.Bounds.Width - Right;
+        decimal plotAreaBottom = plan.Bounds.Height - Bottom;
+
+        decimal boxX = anchor switch
+        {
+            "TOP_LEFT" or "BOTTOM_LEFT" => plotAreaLeft + 8m,
+            _ => plotAreaRight - boxWidth - 8m
+        };
+
+        decimal boxY = anchor switch
+        {
+            "BOTTOM_LEFT" or "BOTTOM_RIGHT" => plotAreaBottom - boxHeight - 8m,
+            _ => plotAreaTop + 8m
+        };
+
+        builder.AppendLine("<g class='plot-legend plot-legend-inside'>");
+        builder.AppendLine($"<rect class='plot-legend-bg' x='{N(boxX)}' y='{N(boxY)}' width='{N(boxWidth)}' height='{N(boxHeight)}' fill='white' fill-opacity='0.88' stroke='#e5e7eb' stroke-width='1' rx='4'/>");
+
+        decimal contentX = boxX + 8m;
+        decimal currentY = boxY + 6m + fontSizeVal;
+
+        if (legendTitle is not null)
+        {
+            builder.AppendLine($"<text class='plot-legend-title' x='{N(contentX)}' y='{N(currentY)}' font-size='{Esc(fontSizeStr)}' fill='{Esc(fontColor)}'{titleWeight}>{Esc(legendTitle)}</text>");
+            currentY += rowHeight;
+        }
+
+        for (int i = 0; i < entries.Length; i++)
+        {
+            var entry = entries[i];
+            int col = i % cols;
+            int row = i / cols;
+            decimal entryX = contentX + col * maxLabelWidth;
+            decimal entryY = currentY + row * rowHeight;
+
             builder.AppendLine($"<rect x='{N(entryX)}' y='{N(entryY - 8m)}' width='9' height='9' fill='{Esc(SafePaint(entry.Color, "#5470c6"))}'/>");
-            builder.AppendLine($"<text x='{N(entryX + 13m)}' y='{N(entryY)}' font-size='9' fill='#444'>{Esc(entry.Label)}</text>");
-            if (!vertical) x += Math.Max(65m, entry.Label.Length * 6m + 25m);
+            builder.AppendLine($"<text x='{N(entryX + 13m)}' y='{N(entryY)}' font-size='{Esc(fontSizeStr)}' fill='{Esc(fontColor)}'{weightAttr}>{Esc(entry.Label)}</text>");
+        }
+
+        builder.AppendLine("</g>");
+    }
+
+    private static void RenderVerticalLegend(
+        StringBuilder builder,
+        PlotPlan plan,
+        LegendEntry[] entries,
+        string? legendTitle,
+        string fontSizeStr,
+        decimal fontSizeVal,
+        string fontColor,
+        string? fontWeight,
+        string weightAttr,
+        decimal rowHeight,
+        string position,
+        int? columns)
+    {
+        var titleWeight = !string.IsNullOrWhiteSpace(fontWeight) ? $" font-weight='{Esc(fontWeight)}'" : " font-weight='bold'";
+        decimal x = position == "RIGHT" ? plan.Bounds.Width - 105m : (position == "LEFT" ? 8m : Left);
+        decimal y = position == "TOP" ? 29m : (position == "BOTTOM" ? plan.Bounds.Height - 12m - (entries.Length - 1) * rowHeight : Top);
+
+        if (legendTitle is not null)
+        {
+            builder.AppendLine($"<text class='plot-legend-title' x='{N(x)}' y='{N(y)}' font-size='{Esc(fontSizeStr)}' fill='{Esc(fontColor)}'{titleWeight}>{Esc(legendTitle)}</text>");
+            y += rowHeight;
+        }
+
+        int cols = columns ?? 1;
+        decimal colWidth = cols > 1
+            ? Math.Max(70m, entries.Max(e => e.Label.Length * (fontSizeVal * 0.65m) + 25m))
+            : 0m;
+
+        for (int i = 0; i < entries.Length; i++)
+        {
+            var entry = entries[i];
+            int col = i % cols;
+            int row = i / cols;
+            decimal entryX = cols > 1 ? x + col * colWidth : x;
+            decimal entryY = y + row * rowHeight;
+
+            builder.AppendLine($"<rect x='{N(entryX)}' y='{N(entryY - 8m)}' width='9' height='9' fill='{Esc(SafePaint(entry.Color, "#5470c6"))}'/>");
+            builder.AppendLine($"<text x='{N(entryX + 13m)}' y='{N(entryY)}' font-size='{Esc(fontSizeStr)}' fill='{Esc(fontColor)}'{weightAttr}>{Esc(entry.Label)}</text>");
+        }
+    }
+
+    private static void RenderHorizontalLegend(
+        StringBuilder builder,
+        PlotPlan plan,
+        LegendEntry[] entries,
+        string? legendTitle,
+        string fontSizeStr,
+        decimal fontSizeVal,
+        string fontColor,
+        string? fontWeight,
+        string weightAttr,
+        decimal rowHeight,
+        string position,
+        int? columns)
+    {
+        var titleWeight = !string.IsNullOrWhiteSpace(fontWeight) ? $" font-weight='{Esc(fontWeight)}'" : " font-weight='bold'";
+        decimal startX = position == "RIGHT" ? plan.Bounds.Width - 105m : (position == "LEFT" ? 8m : Left);
+        decimal maxX = position == "RIGHT" ? plan.Bounds.Width - 10m : (position == "LEFT" ? Left : plan.Bounds.Width - Right);
+        decimal availableWidth = Math.Max(100m, maxX - startX);
+
+        if (columns.HasValue)
+        {
+            int cols = columns.Value;
+            int totalRows = (int)Math.Ceiling((double)entries.Length / cols);
+            decimal colWidth = Math.Max(65m, availableWidth / cols);
+            decimal startY = position == "TOP" ? 29m : (position == "BOTTOM" ? plan.Bounds.Height - 12m - (totalRows - 1) * rowHeight : Top);
+
+            if (legendTitle is not null)
+            {
+                builder.AppendLine($"<text class='plot-legend-title' x='{N(startX)}' y='{N(startY)}' font-size='{Esc(fontSizeStr)}' fill='{Esc(fontColor)}'{titleWeight}>{Esc(legendTitle)}</text>");
+                startY += rowHeight;
+            }
+
+            for (int i = 0; i < entries.Length; i++)
+            {
+                var entry = entries[i];
+                int col = i % cols;
+                int row = i / cols;
+                decimal entryX = startX + col * colWidth;
+                decimal entryY = startY + row * rowHeight;
+
+                builder.AppendLine($"<rect x='{N(entryX)}' y='{N(entryY - 8m)}' width='9' height='9' fill='{Esc(SafePaint(entry.Color, "#5470c6"))}'/>");
+                builder.AppendLine($"<text x='{N(entryX + 13m)}' y='{N(entryY)}' font-size='{Esc(fontSizeStr)}' fill='{Esc(fontColor)}'{weightAttr}>{Esc(entry.Label)}</text>");
+            }
+            return;
+        }
+
+        decimal curX = startX;
+        decimal titleWidth = legendTitle is not null ? legendTitle.Length * (fontSizeVal * 0.7m) + 12m : 0m;
+        curX += titleWidth;
+        int simRows = 1;
+        for (int i = 0; i < entries.Length; i++)
+        {
+            decimal itemWidth = Math.Max(65m, entries[i].Label.Length * 6m + 25m);
+            if (curX + itemWidth > maxX && curX > startX)
+            {
+                simRows++;
+                curX = startX;
+            }
+            curX += itemWidth;
+        }
+
+        decimal renderStartY = position == "TOP" ? 29m : (position == "BOTTOM" ? plan.Bounds.Height - 12m - (simRows - 1) * rowHeight : Top);
+        curX = startX;
+        decimal renderCurrentY = renderStartY;
+
+        if (legendTitle is not null)
+        {
+            builder.AppendLine($"<text class='plot-legend-title' x='{N(curX)}' y='{N(renderCurrentY)}' font-size='{Esc(fontSizeStr)}' fill='{Esc(fontColor)}'{titleWeight}>{Esc(legendTitle)}:</text>");
+            curX += titleWidth;
+        }
+
+        for (int i = 0; i < entries.Length; i++)
+        {
+            var entry = entries[i];
+            decimal itemWidth = Math.Max(65m, entry.Label.Length * 6m + 25m);
+            if (curX + itemWidth > maxX && curX > startX)
+            {
+                curX = startX;
+                renderCurrentY += rowHeight;
+            }
+
+            decimal entryX = curX;
+            decimal entryY = renderCurrentY;
+
+            builder.AppendLine($"<rect x='{N(entryX)}' y='{N(entryY - 8m)}' width='9' height='9' fill='{Esc(SafePaint(entry.Color, "#5470c6"))}'/>");
+            builder.AppendLine($"<text x='{N(entryX + 13m)}' y='{N(entryY)}' font-size='{Esc(fontSizeStr)}' fill='{Esc(fontColor)}'{weightAttr}>{Esc(entry.Label)}</text>");
+
+            curX += itemWidth;
         }
     }
 

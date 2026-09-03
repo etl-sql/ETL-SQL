@@ -45,9 +45,17 @@ internal static class PlotPlanTerminalRenderer
             }
             content.Add(grid);
         }
-        if (plan.Legend.Length > 1)
-            content.Add(new Markup(string.Join("  ", plan.Legend.Select(entry =>
-                $"[#{entry.Color.TrimStart('#')}]{PointGlyphs[entry.Order % PointGlyphs.Length]}[/] {Markup.Escape(entry.Label)} [grey]({Markup.Escape(entry.Color)})[/]"))));
+        if (LegendEnabled(plan) && (plan.Legend.Length > 1 || Style(plan, "LEGEND") is "ON" or "TRUE" or "1" || Style(plan, "LEGEND_TITLE") is not null))
+        {
+            var entries = LegendIsReverse(plan) ? plan.Legend.Reverse() : plan.Legend;
+            var legendItems = string.Join("  ", entries.Select(entry =>
+                $"[#{entry.Color.TrimStart('#')}]{PointGlyphs[entry.Order % PointGlyphs.Length]}[/] {Markup.Escape(entry.Label)} [grey]({Markup.Escape(entry.Color)})[/]"));
+            var title = LegendTitle(plan);
+            if (title is not null)
+                content.Add(new Markup($"[bold]{Markup.Escape(title)}:[/] {legendItems}"));
+            else
+                content.Add(new Markup(legendItems));
+        }
         var continuousColor = plan.Scales.FirstOrDefault(scale => scale.ColorRange is not null)?.ColorRange;
         if (continuousColor is not null)
         {
@@ -72,8 +80,8 @@ internal static class PlotPlanTerminalRenderer
             {
                 var data = layer.Data.Where(datum => rows.Contains(datum.RowIndex)).ToList();
                 var series = plan.Series.FirstOrDefault(item => item.Key == layer.SeriesKey);
-                var overlayType = layer.Style.FirstOrDefault(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase))?.Value;
-                var rawLabel = layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value;
+                var overlayType = !layer.Style.IsDefault ? layer.Style.FirstOrDefault(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase))?.Value : null;
+                var rawLabel = !layer.Style.IsDefault ? layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value : null;
                 var label = !string.IsNullOrWhiteSpace(rawLabel)
                     ? rawLabel
                     : overlayType switch
@@ -807,4 +815,36 @@ internal static class PlotPlanTerminalRenderer
     }
     private static ChartValue? Channel(ResolvedDatum datum, FieldChannel channel) => datum.Channels.FirstOrDefault(item => item.Channel == channel)?.Value;
     private static string Truncate(string value, int width) => value.Length <= width ? value : value[..Math.Max(1, width - 1)] + "…";
+
+    private static bool LegendEnabled(PlotPlan plan)
+    {
+        var value = Style(plan, "LEGEND");
+        return value is null || (!value.Equals("OFF", StringComparison.OrdinalIgnoreCase) &&
+            !value.Equals("FALSE", StringComparison.OrdinalIgnoreCase) && value != "0");
+    }
+
+    private static bool LegendIsReverse(PlotPlan plan)
+    {
+        var reverse = Style(plan, "LEGEND_REVERSE");
+        return reverse is not null && (reverse.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
+            reverse.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || reverse == "1");
+    }
+
+    private static string? LegendTitle(PlotPlan plan)
+    {
+        var title = Style(plan, "LEGEND_TITLE");
+        if (string.IsNullOrWhiteSpace(title) || title.Equals("NONE", StringComparison.OrdinalIgnoreCase)) return null;
+        return title;
+    }
+
+    private static string? Style(PlotPlan plan, string name)
+    {
+        if (plan.Style.IsDefault) return null;
+        for (var i = 0; i < plan.Style.Length; i++)
+        {
+            if (plan.Style[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                return plan.Style[i].Value;
+        }
+        return null;
+    }
 }

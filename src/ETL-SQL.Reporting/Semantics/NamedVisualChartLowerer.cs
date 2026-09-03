@@ -41,6 +41,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         }
         ValidatePointStrokeOptions(statement);
         ValidateLineWidthOption(statement);
+        ValidateLegendOptions(statement);
         if (statement.VisualType == VisualType.Scatter)
         {
             var hasErrorLow = statement.Mappings.Any(m => m.Role.Equals("ERROR_LOW", StringComparison.OrdinalIgnoreCase));
@@ -606,6 +607,83 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             throw new InvalidOperationException($"LINE_WIDTH is supported only on LINE and COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
         if (!LineSeriesWidth.TryNormalize(width, out _))
             throw new InvalidOperationException($"Invalid LINE_WIDTH '{width}'. Use a pixel width from {LineSeriesWidth.Minimum} through {LineSeriesWidth.Maximum}.");
+    }
+
+    private static void ValidateLegendOptions(CreateVisualStatement statement)
+    {
+        var legendOptions = statement.Options.Where(option =>
+            option.Key.Equals("LEGEND", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("LEGEND_POSITION", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("LEGEND_ANCHOR", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("LEGEND_ORIENTATION", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("LEGEND_REVERSE", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("LEGEND_COLUMNS", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("LEGEND_TITLE", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("LEGEND_FONT_SIZE", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("LEGEND_FONT_COLOR", StringComparison.OrdinalIgnoreCase) ||
+            option.Key.Equals("LEGEND_FONT_WEIGHT", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        if (legendOptions.Count == 0) return;
+
+        if (statement.VisualType == VisualType.Gauge)
+            throw new InvalidOperationException("LEGEND options are not supported on GAUGE visuals.");
+
+        var hasAnchor = statement.Options.Any(option => option.Key.Equals("LEGEND_ANCHOR", StringComparison.OrdinalIgnoreCase));
+        var posValue = statement.Options.FirstOrDefault(option => option.Key.Equals("LEGEND_POSITION", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? statement.Options.FirstOrDefault(option => option.Key.Equals("LEGEND", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (hasAnchor && !string.Equals(posValue, "INSIDE", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("LEGEND_ANCHOR requires LEGEND_POSITION = INSIDE.");
+
+        foreach (var opt in legendOptions)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            var val = opt.Value;
+
+            switch (key)
+            {
+                case "LEGEND":
+                    if (val.ToUpperInvariant() is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0" or "TOP" or "BOTTOM" or "LEFT" or "RIGHT" or "INSIDE"))
+                        throw new InvalidOperationException($"Invalid LEGEND value '{val}'.");
+                    break;
+
+                case "LEGEND_POSITION":
+                    if (val.ToUpperInvariant() is not ("TOP" or "BOTTOM" or "LEFT" or "RIGHT" or "INSIDE"))
+                        throw new InvalidOperationException($"Invalid LEGEND_POSITION '{val}'. Valid values are TOP, BOTTOM, LEFT, RIGHT, or INSIDE.");
+                    break;
+
+                case "LEGEND_ANCHOR":
+                    if (val.ToUpperInvariant() is not ("TOP_LEFT" or "TOP_RIGHT" or "BOTTOM_LEFT" or "BOTTOM_RIGHT"))
+                        throw new InvalidOperationException($"Invalid LEGEND_ANCHOR '{val}'. Valid values are TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, or BOTTOM_RIGHT.");
+                    break;
+
+                case "LEGEND_ORIENTATION":
+                    if (val.ToUpperInvariant() is not ("HORIZONTAL" or "VERTICAL"))
+                        throw new InvalidOperationException($"Invalid LEGEND_ORIENTATION '{val}'. Valid values are HORIZONTAL or VERTICAL.");
+                    break;
+
+                case "LEGEND_REVERSE":
+                    if (val.ToUpperInvariant() is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0"))
+                        throw new InvalidOperationException($"Invalid LEGEND_REVERSE value '{val}'. Valid values are ON or OFF.");
+                    break;
+
+                case "LEGEND_COLUMNS":
+                    if (!int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out var cols) || cols <= 0)
+                        throw new InvalidOperationException($"Invalid LEGEND_COLUMNS '{val}'. Must be a positive integer.");
+                    break;
+
+                case "LEGEND_FONT_SIZE":
+                    var trimmedSize = val.Trim().TrimEnd('p', 'x', 'P', 'X', 't', 'T');
+                    if (!decimal.TryParse(trimmedSize, NumberStyles.Number, CultureInfo.InvariantCulture, out var size) || size <= 0)
+                        throw new InvalidOperationException($"Invalid LEGEND_FONT_SIZE '{val}'. Must be a positive number.");
+                    break;
+
+                case "LEGEND_FONT_WEIGHT":
+                    var weightUpper = val.ToUpperInvariant();
+                    if (weightUpper is not ("NORMAL" or "BOLD" or "BOLDER" or "LIGHTER" or "100" or "200" or "300" or "400" or "500" or "600" or "700" or "800" or "900"))
+                        throw new InvalidOperationException($"Invalid LEGEND_FONT_WEIGHT '{val}'.");
+                    break;
+            }
+        }
     }
 
     private static bool HasPrimaryValueMapping(CreateVisualStatement statement) =>

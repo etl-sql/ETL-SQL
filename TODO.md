@@ -566,17 +566,17 @@ chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 
 ### Legend Controls
 
-- [ ] **Legend title**: No option to set or suppress the legend title text. Add `LEGEND_TITLE = 'text'`
+- [x] **Legend title**: No option to set or suppress the legend title text. Add `LEGEND_TITLE = 'text'`
   and `LEGEND_TITLE = NONE` to all named charts that support `LEGEND = ON|OFF`.
-- [ ] **Legend typography**: No per-legend font controls. Global `STYLE (FONT = ...)` applies broadly.
+- [x] **Legend typography**: No per-legend font controls. Global `STYLE (FONT = ...)` applies broadly.
   Add `LEGEND_FONT_SIZE`, `LEGEND_FONT_COLOR`, and `LEGEND_FONT_WEIGHT` to named chart OPTIONS.
-- [ ] **Legend orientation**: Position (`TOP|RIGHT|BOTTOM|LEFT`) is supported but orientation within the
+- [x] **Legend orientation**: Position (`TOP|RIGHT|BOTTOM|LEFT`) is supported but orientation within the
   legend box is renderer-inferred. Add `LEGEND_ORIENTATION = HORIZONTAL|VERTICAL`.
-- [ ] **Legend reverse order**: No `LEGEND_REVERSE = ON|OFF` to flip the series order in the legend,
+- [x] **Legend reverse order**: No `LEGEND_REVERSE = ON|OFF` to flip the series order in the legend,
   which matters for stacked charts where the visual and legend stacking order should match.
-- [ ] **Legend inside placement**: Only outside placement is supported. Add `LEGEND_POSITION = INSIDE`
+- [x] **Legend inside placement**: Only outside placement is supported. Add `LEGEND_POSITION = INSIDE`
   with `LEGEND_ANCHOR = TOP_LEFT|TOP_RIGHT|BOTTOM_LEFT|BOTTOM_RIGHT` for overlay legends.
-- [ ] **Legend multi-column layout**: No `LEGEND_COLUMNS = n` or wrapping control. Add for horizontal
+- [x] **Legend multi-column layout**: No `LEGEND_COLUMNS = n` or wrapping control. Add for horizontal
   multi-row legends at `TOP` or `BOTTOM` position.
 
 ### Plot and Panel Styling

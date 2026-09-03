@@ -546,7 +546,8 @@ public sealed class DesignerScriptGenerationService
             || trimmed.Equals("ON", StringComparison.OrdinalIgnoreCase)
             || trimmed.Equals("OFF", StringComparison.OrdinalIgnoreCase)
             || trimmed.Equals("TRUE", StringComparison.OrdinalIgnoreCase)
-            || trimmed.Equals("FALSE", StringComparison.OrdinalIgnoreCase))
+            || trimmed.Equals("FALSE", StringComparison.OrdinalIgnoreCase)
+            || trimmed.Equals("NONE", StringComparison.OrdinalIgnoreCase))
             return trimmed.ToUpperInvariant();
         return $"'{EscapeStr(value)}'";
     }
