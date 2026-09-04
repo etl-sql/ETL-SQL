@@ -168,6 +168,78 @@ CREATE VISUAL FullMatrixSink AS MATRIX (
     )
 );
 
+-- ═════════════════════════════════════════════════════════════════════════════
+-- PAGE 3 — Advanced Controls: COLUMN_TOTAL, ROW_TOTAL, FORMATTING, DATA_BAR, DEFAULT_EXPAND
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- COLUMN_TOTAL adds the bottom margin column sum row;
+-- ROW_TOTAL adds the right-hand row sum column.
+CREATE VISUAL TotalsMatrix AS MATRIX (
+    SOURCE = #sales,
+    TITLE  = '3A  Totals — COLUMN_TOTAL = ON and ROW_TOTAL = ON',
+    MAPPINGS (
+        ROW   = category,
+        COL   = region,
+        VALUE = revenue
+    ),
+    OPTIONS (
+        AGGREGATE    = SUM,
+        COLUMN_TOTAL = ON,
+        ROW_TOTAL    = ON
+    )
+);
+
+-- FORMATTING accepts WHEN condition THEN color [FONT color] evaluated on numeric cells.
+CREATE VISUAL FormattedMatrix AS MATRIX (
+    SOURCE = #sales,
+    TITLE  = '3B  Conditional Formatting — Highlight High and Low Cells',
+    MAPPINGS (
+        ROW   = category,
+        COL   = region,
+        VALUE = revenue
+    ),
+    OPTIONS (
+        AGGREGATE    = SUM,
+        COLUMN_TOTAL = ON
+    ),
+    FORMATTING (
+        WHEN value > 50000 THEN '#d1fae5' FONT '#065f46',
+        WHEN value < 25000 THEN '#fee2e2' FONT '#991b1b'
+    )
+);
+
+-- VALUE DATA_BAR renders proportional magnitude fill bars behind cell text.
+CREATE VISUAL DataBarMatrix AS MATRIX (
+    SOURCE = #sales,
+    TITLE  = '3C  VALUE DATA_BAR — Magnitude Fill Bars',
+    MAPPINGS (
+        ROW   = category,
+        COL   = region,
+        VALUE = revenue DATA_BAR COLOR '#3b82f6'
+    ),
+    OPTIONS (
+        AGGREGATE = SUM
+    )
+);
+
+-- DEFAULT_EXPAND = LEVEL_1 initializes multi-level row trees with level 0 open and level 1 collapsed.
+CREATE VISUAL ExpandStateMatrix AS MATRIX (
+    SOURCE = #sales2,
+    TITLE  = '3D  DEFAULT_EXPAND = LEVEL_1 — Initial Expansion Depth',
+    MAPPINGS (
+        ROW1  = category,
+        ROW2  = subcategory,
+        COL   = region,
+        VALUE = revenue
+    ),
+    OPTIONS (
+        AGGREGATE      = SUM,
+        DEFAULT_EXPAND = LEVEL_1,
+        COLUMN_TOTAL   = ON,
+        ROW_TOTAL      = ON
+    )
+);
+
 -- ── Pages & Navigation ────────────────────────────────────────────────────────
 
 CREATE PAGE BasicAndMultiDim AS DASHBOARD (
@@ -189,7 +261,18 @@ CREATE PAGE MultiValueAndSorting AS DASHBOARD (
     )
 );
 
+CREATE PAGE AdvancedControls AS DASHBOARD (
+    STRUCTURE = 'A B / C D',
+    MAP (
+        'A' = TotalsMatrix,
+        'B' = FormattedMatrix,
+        'C' = DataBarMatrix,
+        'D' = ExpandStateMatrix
+    )
+);
+
 CREATE NAVIGATION MainNav AS TAB (
     DEFAULT = BasicAndMultiDim,
-    PAGES   (BasicAndMultiDim, MultiValueAndSorting)
+    PAGES   (BasicAndMultiDim, MultiValueAndSorting, AdvancedControls)
 );
+

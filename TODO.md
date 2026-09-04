@@ -1233,16 +1233,16 @@ than record it.
 
 ### MATRIX
 
-- [ ] **Column totals**: `GRAND_TOTAL = ON` adds a row total. There is no column grand-total option
+- [x] **Column totals**: `GRAND_TOTAL = ON` adds a row total. There is no column grand-total option
   (a bottom-margin row summing all COL values). Power BI matrix and Tableau pivot both offer both.
   Add `COLUMN_TOTAL = ON|OFF`.
-- [ ] **Conditional cell formatting**: `FORMATTING` on TABLE accepts `WHEN condition THEN color`.
+- [x] **Conditional cell formatting**: `FORMATTING` on TABLE accepts `WHEN condition THEN color`.
   MATRIX has no `FORMATTING` clause. Heatmap-style cell coloring (color by value range) and
   threshold-based highlighting are absent. Add `FORMATTING (WHEN value > n THEN '#RRGGBB')` to
   MATRIX, similar to TABLE.
-- [ ] **Cell data bars in MATRIX**: TABLE supports `DATA_BAR` on column mappings. MATRIX has no
+- [x] **Cell data bars in MATRIX**: TABLE supports `DATA_BAR` on column mappings. MATRIX has no
   equivalent for visualizing magnitude within a cell. Add `VALUE DATA_BAR` mapping syntax to MATRIX.
-- [ ] **Expand/collapse default state**: MATRIX row groups are collapsible but the default expanded
+- [x] **Expand/collapse default state**: MATRIX row groups are collapsible but the default expanded
   depth is not controllable. Add `DEFAULT_EXPAND = ALL|NONE|LEVEL_1|LEVEL_2` to OPTIONS.
 
 ### TABLE

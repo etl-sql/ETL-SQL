@@ -922,9 +922,119 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         var cw = (inputs.Width - 20) / cols; var ch = Math.Min(28, (inputs.Height - TitleBand - 8) / (rows + 1));
         var (even, odd) = inputs.BandFills;
         for (var c = 0; c < cols; c++) { sb.Append($"<rect x='{F(10 + c * cw)}' y='{F(TitleBand)}' width='{F(cw)}' height='{F(ch)}' fill='{inputs.HeaderFill}' stroke='{inputs.Divider}'/><text x='{F(14 + c * cw)}' y='{F(TitleBand + 18)}' font-size='10' font-weight='bold' fill='{inputs.OnSurface}'>{Xml(Trim(v.Columns[c], 16))}</text>"); }
-        for (var r = 0; r < v.Rows.Count; r++) for (var c = 0; c < cols; c++) sb.Append($"<g data-row-index='{r}'><rect x='{F(10 + c * cw)}' y='{F(TitleBand + (r + 1) * ch)}' width='{F(cw)}' height='{F(ch)}' fill='{(r % 2 == 0 ? even : odd)}' stroke='{inputs.Divider}'/><text x='{F(14 + c * cw)}' y='{F(TitleBand + (r + 1) * ch + 18)}' font-size='10' fill='{inputs.OnSurface}'>{Xml(Trim(Cell(v.Rows[r], c, ""), 18))}</text></g>");
+        var isDataBar = v.Options.ContainsKey("mapping:value:data_bar") ||
+                        (v.Options.TryGetValue("DATA_BAR", out var dbOpt) && (dbOpt.Equals("ON", StringComparison.OrdinalIgnoreCase) || dbOpt.Equals("TRUE", StringComparison.OrdinalIgnoreCase))) ||
+                        (v.Options.TryGetValue("DATA_BARS", out var dbsOpt) && (dbsOpt.Equals("ON", StringComparison.OrdinalIgnoreCase) || dbsOpt.Equals("TRUE", StringComparison.OrdinalIgnoreCase)));
+        var barColor = v.Options.GetValueOrDefault("mapping:value:data_bar_color") ?? v.Options.GetValueOrDefault("DATA_BAR_COLOR") ?? "#4472C4";
+        double maxNum = 1;
+        if (isDataBar)
+        {
+            foreach (var row in v.Rows)
+                for (var c = 0; c < cols; c++)
+                    if (double.TryParse(Cell(row, c, ""), NumberStyles.Any, CultureInfo.InvariantCulture, out var n) && n > maxNum)
+                        maxNum = n;
+        }
+
+        for (var r = 0; r < v.Rows.Count; r++)
+        {
+            for (var c = 0; c < cols; c++)
+            {
+                var cellRaw = Cell(v.Rows[r], c, "");
+                var (customBg, customFg) = EvaluateMatrixCellFormatting(v, cellRaw, v.Columns[c]);
+                var bgFill = customBg ?? (r % 2 == 0 ? even : odd);
+                var textFill = customFg ?? (customBg != null ? "#000000" : inputs.OnSurface);
+                sb.Append($"<g data-row-index='{r}'><rect x='{F(10 + c * cw)}' y='{F(TitleBand + (r + 1) * ch)}' width='{F(cw)}' height='{F(ch)}' fill='{bgFill}' stroke='{inputs.Divider}'/>");
+                if (isDataBar && double.TryParse(cellRaw, NumberStyles.Any, CultureInfo.InvariantCulture, out var val) && val > 0)
+                {
+                    var barW = Math.Min(cw, (val / maxNum) * cw);
+                    sb.Append($"<rect class='matrix-data-bar' x='{F(10 + c * cw)}' y='{F(TitleBand + (r + 1) * ch)}' width='{F(barW)}' height='{F(ch)}' fill='{barColor}' opacity='0.35'/>");
+                }
+                sb.Append($"<text x='{F(14 + c * cw)}' y='{F(TitleBand + (r + 1) * ch + 18)}' font-size='10' fill='{textFill}'>{Xml(Trim(cellRaw, 18))}</text></g>");
+            }
+        }
         return End(sb);
     }
+
+    private static (string? Bg, string? Fg) EvaluateMatrixCellFormatting(VisualManifest v, string rawVal, string colName)
+    {
+        if (v.FormattingRules == null || v.FormattingRules.Count == 0) return (null, null);
+        if (!double.TryParse(rawVal, NumberStyles.Any, CultureInfo.InvariantCulture, out var num)) return (null, null);
+
+        foreach (var rule in v.FormattingRules)
+        {
+            if (string.IsNullOrWhiteSpace(rule.Condition)) continue;
+            if (EvaluateMatrixNumericCondition(rule.Condition, num, colName))
+            {
+                return (rule.Color, rule.FontColor);
+            }
+        }
+        return (null, null);
+    }
+
+    private static bool EvaluateMatrixNumericCondition(string cond, double val, string colName)
+    {
+        var expr = cond.Trim();
+        while (expr.StartsWith('(') && expr.EndsWith(')'))
+        {
+            expr = expr[1..^1].Trim();
+        }
+        var mBetween = System.Text.RegularExpressions.Regex.Match(expr, @"(?:(?:[\w""\[\]]+)\s+)?BETWEEN\s+(-?[\d.]+)\s+AND\s+(-?[\d.]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (mBetween.Success)
+        {
+            if (double.TryParse(mBetween.Groups[1].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var low) &&
+                double.TryParse(mBetween.Groups[2].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var high))
+            {
+                return val >= low && val <= high;
+            }
+        }
+
+        var andIdx = expr.IndexOf(" AND ", StringComparison.OrdinalIgnoreCase);
+        if (andIdx >= 0)
+        {
+            return EvaluateMatrixNumericCondition(expr[..andIdx], val, colName) &&
+                   EvaluateMatrixNumericCondition(expr[(andIdx + 5)..], val, colName);
+        }
+        var orIdx = expr.IndexOf(" OR ", StringComparison.OrdinalIgnoreCase);
+        if (orIdx >= 0)
+        {
+            return EvaluateMatrixNumericCondition(expr[..orIdx], val, colName) ||
+                   EvaluateMatrixNumericCondition(expr[(orIdx + 4)..], val, colName);
+        }
+
+        var mBare = System.Text.RegularExpressions.Regex.Match(expr, @"^([<>!=]=?|<>)\s*(-?[\d.]+)$");
+        if (mBare.Success)
+        {
+            var op = mBare.Groups[1].Value;
+            if (double.TryParse(mBare.Groups[2].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out var target))
+                return CompareMatrixNumeric(val, op, target);
+        }
+
+        var mComp = System.Text.RegularExpressions.Regex.Match(expr, @"^(.*?)\s*([<>!=]=?|<>)\s*(.*?)$");
+        if (mComp.Success)
+        {
+            var left = mComp.Groups[1].Value.Trim().Trim('(', ')', '[', ']', '"');
+            var op = mComp.Groups[2].Value;
+            var right = mComp.Groups[3].Value.Trim().Trim('(', ')', '[', ']', '"');
+
+            if (double.TryParse(right, NumberStyles.Any, CultureInfo.InvariantCulture, out var rNum))
+                return CompareMatrixNumeric(val, op, rNum);
+            if (double.TryParse(left, NumberStyles.Any, CultureInfo.InvariantCulture, out var lNum))
+                return CompareMatrixNumeric(lNum, op, val);
+        }
+
+        return false;
+    }
+
+    private static bool CompareMatrixNumeric(double a, string op, double b) => op switch
+    {
+        ">" => a > b,
+        ">=" => a >= b,
+        "<" => a < b,
+        "<=" => a <= b,
+        "=" or "==" => Math.Abs(a - b) < 1e-9,
+        "!=" or "<>" => Math.Abs(a - b) >= 1e-9,
+        _ => false
+    };
 
     // ── Shared plumbing ────────────────────────────────────────────────────────
 

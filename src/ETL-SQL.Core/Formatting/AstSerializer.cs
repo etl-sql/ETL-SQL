@@ -1987,7 +1987,14 @@ public static class AstSerializer
 
         if (m.Role != null && m.Role != "COLUMN" && !string.Equals(m.Role, m.Column, StringComparison.OrdinalIgnoreCase))
         {
-            return $"{m.Role} = {m.Column}";
+            var rsb = new System.Text.StringBuilder($"{m.Role} = {m.Column}");
+            if (m.DataBar)
+            {
+                rsb.Append(" DATA_BAR");
+                if (!string.IsNullOrEmpty(m.DataBarColor))
+                    rsb.Append($" COLOR '{m.DataBarColor.Replace("'", "''")}'");
+            }
+            return rsb.ToString();
         }
 
         var sb = new System.Text.StringBuilder();

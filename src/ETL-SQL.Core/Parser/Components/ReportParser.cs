@@ -3173,12 +3173,44 @@ public class ReportParser : ParserComponent
             Advance();
             var name = nameToken.Value;
 
+            bool dataBar = false;
+            string? dataBarColor = null;
+
+            if (_parser.Current.Type == TokenType.DATA_BAR)
+            {
+                Advance();
+                dataBar = true;
+                if (_parser.Current.Type == TokenType.COLOR || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("COLOR", StringComparison.OrdinalIgnoreCase)))
+                {
+                    Advance();
+                    dataBarColor = Consume(TokenType.STRING_LITERAL, "Expected color string after DATA_BAR COLOR").Value;
+                }
+            }
+
             if (_parser.Current.Type == TokenType.EQUALS)
             {
                 // ROLE = column syntax (MATRIX, charts, etc.)
                 Advance();
                 var column = ConsumeIdentifier($"Expected column name after '=' for role '{name}'").Value;
-                result.Add(new VisualMapping { Role = name.ToUpperInvariant(), Column = column });
+
+                if (!dataBar && _parser.Current.Type == TokenType.DATA_BAR)
+                {
+                    Advance();
+                    dataBar = true;
+                    if (_parser.Current.Type == TokenType.COLOR || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("COLOR", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        Advance();
+                        dataBarColor = Consume(TokenType.STRING_LITERAL, "Expected color string after DATA_BAR COLOR").Value;
+                    }
+                }
+
+                result.Add(new VisualMapping
+                {
+                    Role = name.ToUpperInvariant(),
+                    Column = column,
+                    DataBar = dataBar,
+                    DataBarColor = dataBarColor
+                });
             }
             else
             {
@@ -3187,10 +3219,10 @@ public class ReportParser : ParserComponent
                 //                                [IMAGE [WIDTH n] | HYPERLINK [LABEL 'text']]
                 //                                [AS 'alias'] [HIDDEN]
                 string? format = null, align = null, displayName = null;
-                string? dataBarColor = null, colorScaleFrom = null, colorScaleTo = null;
+                string? colorScaleFrom = null, colorScaleTo = null;
                 string? cellRenderer = null, hyperlinkLabel = null, progressColor = null;
                 int? imageWidth = null;
-                bool dataBar = false, hidden = false, progressBar = false;
+                bool hidden = false, progressBar = false;
                 decimal? progressMinimum = null, progressMaximum = null;
                 while (!ReportCheck(TokenType.RPAREN) && !ReportCheck(TokenType.COMMA) && !ReportAtEnd())
                 {
@@ -3631,7 +3663,7 @@ public class ReportParser : ParserComponent
             var key = keyToken.Value.ToUpperInvariant();
             Match(TokenType.EQUALS);
             string val;
-            if (_overlayKeywordTokens.Contains(_parser.Current.Type) || _parser.Current.Type == TokenType.ON || _parser.Current.Type == TokenType.OFF)
+            if (_overlayKeywordTokens.Contains(_parser.Current.Type))
             {
                 val = ConsumeReportOptionValue();
             }
@@ -3993,10 +4025,13 @@ public class ReportParser : ParserComponent
             Consume(TokenType.THEN, "Expected THEN after formatting condition");
             var color = Consume(TokenType.STRING_LITERAL, "Expected color string after THEN").Value;
             string? fontColor = null;
-            if (_parser.Current.Type == TokenType.FONT_COLOR)
+            if (_parser.Current.Type == TokenType.FONT_COLOR ||
+                (_parser.Current.Type == TokenType.IDENTIFIER &&
+                 (_parser.Current.Value.Equals("FONT", StringComparison.OrdinalIgnoreCase) ||
+                  _parser.Current.Value.Equals("FONT_COLOR", StringComparison.OrdinalIgnoreCase))))
             {
                 Advance();
-                fontColor = Consume(TokenType.STRING_LITERAL, "Expected color string after FONT_COLOR").Value;
+                fontColor = Consume(TokenType.STRING_LITERAL, "Expected color string after FONT or FONT_COLOR").Value;
             }
             result.Add(new FormattingRule { Condition = condition, Color = color, FontColor = fontColor });
             Match(TokenType.COMMA);

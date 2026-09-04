@@ -65,8 +65,16 @@ internal static class MatrixPivotBuilder
                 Aggregate(groups[rowKey].GetValueOrDefault(key)?.ElementAtOrDefault(index), aggregate))))
             .ToList()).ToList();
 
+        var colTotalOpt = visual.Options.GetValueOrDefault("COLUMN_TOTAL");
+        var grandTotalOpt = visual.Options.GetValueOrDefault("GRAND_TOTAL");
+        var rowTotalOpt = visual.Options.GetValueOrDefault("ROW_TOTAL");
+
+        bool columnTotalsEnabled = IsOn(colTotalOpt) || (IsOn(grandTotalOpt) && !IsOff(colTotalOpt));
+        bool rowTotalsEnabled = IsOn(rowTotalOpt);
+        var defaultExpand = (visual.Options.GetValueOrDefault("DEFAULT_EXPAND") ?? "ALL").ToUpperInvariant();
+
         List<string?>? grandTotals = null;
-        if (IsOn(visual.Options.GetValueOrDefault("GRAND_TOTAL")))
+        if (columnTotalsEnabled)
         {
             grandTotals = Enumerable.Repeat<string?>(null, rowColumns.Count)
                 .Concat(columnKeys.SelectMany(key => Enumerable.Range(0, valueCount).Select(index =>
@@ -76,6 +84,44 @@ internal static class MatrixPivotBuilder
                             : []).ToList(), aggregate))))
                 .ToList();
         }
+
+        var isDataBar = visual.Options.ContainsKey("mapping:value:data_bar") ||
+                        IsOn(visual.Options.GetValueOrDefault("DATA_BAR")) ||
+                        IsOn(visual.Options.GetValueOrDefault("DATA_BARS"));
+        var dataBarColor = visual.Options.GetValueOrDefault("mapping:value:data_bar_color") ??
+                           visual.Options.GetValueOrDefault("DATA_BAR_COLOR") ?? "#4472C4";
+        double dataBarMin = 0d;
+        double dataBarMax = 0d;
+        if (isDataBar)
+        {
+            double minVal = double.MaxValue;
+            double maxVal = double.MinValue;
+            bool hasVal = false;
+            foreach (var r in rows)
+            {
+                for (int i = rowColumns.Count; i < r.Count; i++)
+                {
+                    if (r[i] != null && double.TryParse(r[i], NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+                    {
+                        if (d < minVal) minVal = d;
+                        if (d > maxVal) maxVal = d;
+                        hasVal = true;
+                    }
+                }
+            }
+            if (hasVal)
+            {
+                dataBarMin = minVal < 0 ? minVal : 0d;
+                dataBarMax = maxVal;
+            }
+        }
+
+        var formattingRules = visual.FormattingRules?.Select(r => new
+        {
+            condition = r.Condition,
+            color = r.Color,
+            fontColor = r.FontColor
+        }).ToList() ?? [];
 
         return JsonSerializer.Serialize(new
         {
@@ -87,7 +133,15 @@ internal static class MatrixPivotBuilder
             rows,
             grandTotals,
             valueHeaders = valueCount > 1 ? valueColumns.Select(value => value.Column).ToArray() : null,
-            subtotalsEnabled = IsOn(visual.Options.GetValueOrDefault("SUBTOTALS"))
+            subtotalsEnabled = IsOn(visual.Options.GetValueOrDefault("SUBTOTALS")),
+            columnTotalsEnabled,
+            rowTotalsEnabled,
+            defaultExpand,
+            dataBar = isDataBar,
+            dataBarColor,
+            dataBarMin,
+            dataBarMax,
+            formattingRules
         });
     }
 
@@ -123,4 +177,8 @@ internal static class MatrixPivotBuilder
     private static bool IsOn(string? value) =>
         value?.Equals("ON", StringComparison.OrdinalIgnoreCase) == true ||
         value?.Equals("TRUE", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static bool IsOff(string? value) =>
+        value?.Equals("OFF", StringComparison.OrdinalIgnoreCase) == true ||
+        value?.Equals("FALSE", StringComparison.OrdinalIgnoreCase) == true;
 }

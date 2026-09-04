@@ -900,6 +900,8 @@ body.theme-dark, body.vscode-dark, .theme-dark {
     line-height: 14px;
     cursor: pointer;
   }
+  .matrix-row-total { background: #eef2fa; font-weight: 600; }
+  .theme-dark .matrix-row-total { background: #263044; color: #eef; }
   .matrix-grand-total .matrix-dim { background: #e0e7f3; font-weight: 700; }
   .matrix-grand-total .matrix-val { background: #e0e7f3; font-weight: 700; }
   .matrix-subtotal-row .matrix-dim { background: #eef2fa; font-weight: 600; font-style: italic; }

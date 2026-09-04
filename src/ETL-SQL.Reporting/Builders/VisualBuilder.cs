@@ -327,9 +327,15 @@ namespace ETL_SQL.Reporting.Builders
                     TableCalculationField = o.TableCalculationField
                 }).ToList();
 
-            // Conditional formatting rules (TABLE)
+            // Conditional formatting rules
             if (vStmt.FormattingRules.Count > 0)
             {
+                vm.FormattingRules = vStmt.FormattingRules.Select(r => new FormattingRuleManifest
+                {
+                    Condition = r.Condition.ToSql(),
+                    Color = r.Color,
+                    FontColor = r.FontColor
+                }).ToList();
                 vm.RowStyles = new List<string?>();
                 if (vStmt.FormattingRules.Any(r => r.FontColor != null))
                     vm.RowFontStyles = new List<string?>();
@@ -345,7 +351,13 @@ namespace ETL_SQL.Reporting.Builders
 
             // Mappings
             foreach (var mapping in vStmt.Mappings)
+            {
                 vm.Options["mapping:" + mapping.Role.ToLowerInvariant()] = mapping.Column;
+                if (mapping.DataBar)
+                    vm.Options["mapping:" + mapping.Role.ToLowerInvariant() + ":data_bar"] = "true";
+                if (!string.IsNullOrWhiteSpace(mapping.DataBarColor))
+                    vm.Options["mapping:" + mapping.Role.ToLowerInvariant() + ":data_bar_color"] = mapping.DataBarColor;
+            }
 
             // Actions
             foreach (var action in vStmt.Actions)
