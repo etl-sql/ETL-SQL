@@ -30,7 +30,14 @@ namespace ETL_SQL.Connectors.MockDb
         private string? _activeTable;
 
         public string Dialect => _dialect;
-        public bool SupportsSqlPushdown => true;
+
+        // MOCKDB holds DataTables in memory; there is no SQL engine behind it. ExecuteRawSql is a
+        // string matcher that understands a projection and one `WHERE col = val` and silently drops
+        // everything else, so claiming pushdown handed it whole statements it could not honour:
+        // a GROUP BY came back ungrouped and an aggregate came back as a column of nulls, with no
+        // error to say so. Reporting the truth routes those statements through the engine's own
+        // execution path, which is where grouping and aggregation actually live.
+        public bool SupportsSqlPushdown => false;
 
         private readonly IMockDataSeeder _seeder;
         private readonly Task _initTask;
