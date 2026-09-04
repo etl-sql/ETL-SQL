@@ -259,9 +259,19 @@ public static class WorkstationEditorApp
 
             try
             {
-                var tables = await metadata.GetTablesAsync(connection, documentUri);
+                // TryGetTablesAsync rather than GetTablesAsync, because the catch below never fired
+                // on this path: the manager swallowed every failure and answered an empty list, so
+                // an unknown connection, an unloaded connector and a refused login all left here as
+                // a cheerful 200 with no tables. The dataset wizard has only that list to go on, and
+                // rendered all three as "this connection reported no tables you can read".
+                var read = await metadata.TryGetTablesAsync(connection, documentUri);
+                if (read.Outcome == SchemaReadOutcome.UnknownConnection)
+                    return Results.Json(new { error = SecretRedactor.Redact(read.Error ?? "Unknown connection.") }, JsonOptions, statusCode: StatusCodes.Status404NotFound);
+                if (read.Outcome == SchemaReadOutcome.Failed)
+                    return Results.BadRequest(new { error = SecretRedactor.Redact(read.Error ?? "The connection could not be read.") });
+
                 var tableList = new List<object>();
-                foreach (var table in tables)
+                foreach (var table in read.Tables)
                 {
                     var columns = await metadata.GetColumnDetailsAsync(connection, table, documentUri);
                     tableList.Add(new

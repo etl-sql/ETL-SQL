@@ -244,11 +244,17 @@ export default {
 
     window.__STUDIO_INSTANCE__ = workbench;
     window.__STUDIO_API_REQUESTS__ = apiRequests;
+    // The seed the mock host answers from, exposed so a test can put the host into a state the
+    // fixtures do not cover — a connection whose schema read fails, for instance. The mock closes
+    // over this same object, so a mutation here is visible to the next request.
+    window.__STUDIO_SEED_STATE__ = STUDIO_DESIGN_STATE;
     stage.querySelector('.etlsql-studio-shell')?.setAttribute('data-studio-ready', 'true');
 
     return () => {
       window.__STUDIO_INSTANCE__ = null;
       window.__STUDIO_API_REQUESTS__ = null;
+      delete STUDIO_DESIGN_STATE.unreadableConnections;
+      window.__STUDIO_SEED_STATE__ = null;
       window.__STUDIO_API_DELAY__ = null;
       window.__STUDIO_NO_GIT__ = null;
       workbench?.dispose?.();

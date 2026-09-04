@@ -35,6 +35,46 @@ public record TableKeyEvidence(
     public bool IsEmpty => KeyColumns.Count == 0 && ForeignKeys.Count == 0;
 }
 
+/// <summary>Why a schema read produced the table list it did.</summary>
+public enum SchemaReadOutcome
+{
+    /// <summary>The connection was read. The list is what it actually holds, empty included.</summary>
+    Ok,
+
+    /// <summary>No connection by that name is registered for this document or host.</summary>
+    UnknownConnection,
+
+    /// <summary>The connection is known but could not be read - it failed to connect, or refused.</summary>
+    Failed
+}
+
+/// <summary>
+/// A schema read that says which of the three things happened rather than only what came back.
+/// </summary>
+/// <remarks>
+/// <see cref="IMetadataManager.GetTablesAsync"/> answers an empty list to all three: a connection
+/// with no tables, a connection nobody registered, and a connection that threw on connect. That is
+/// the right shape for completion, which must not throw at a caret, and the wrong shape for anything
+/// that reports back to a person - the paginated dataset wizard told authors "this connection
+/// reported no tables you can read" about connections whose read had failed outright, because a
+/// failure and an empty catalogue are the same value. Callers with a person on the other end should
+/// use <see cref="IMetadataManager.TryGetTablesAsync"/> and say which one it was.
+/// </remarks>
+public sealed record SchemaRead(
+    SchemaReadOutcome Outcome,
+    IReadOnlyList<string> Tables,
+    string? Error)
+{
+    public static SchemaRead Read(IReadOnlyList<string> tables) => new(SchemaReadOutcome.Ok, tables, null);
+
+    public static SchemaRead Unknown(string connectionName) => new(
+        SchemaReadOutcome.UnknownConnection,
+        [],
+        $"No connection named '{connectionName}' is registered for this document.");
+
+    public static SchemaRead Failure(string error) => new(SchemaReadOutcome.Failed, [], error);
+}
+
 public static class EngineCatalog
 {
     public static readonly List<string> Tables = new()
@@ -130,6 +170,21 @@ public interface IMetadataManager
     void ClearDocumentConnections(string uri);
     List<ConnectionInfo> GetConnections(string? uri = null);
     Task<IEnumerable<string>> GetTablesAsync(string connectionName, string? uri = null);
+
+    /// <summary>
+    /// The same read as <see cref="GetTablesAsync"/>, but it distinguishes a connection that holds
+    /// no tables from one that is not registered and one whose read failed.
+    /// </summary>
+    /// <remarks>
+    /// Default-implemented over <see cref="GetTablesAsync"/> so the alternate managers (TUI, the
+    /// language server's stubs, tests) need no change; they simply report every answer as a
+    /// successful read, which is exactly what they did before this existed. A manager that knows the
+    /// difference should override it, and any surface that shows the result to a person should
+    /// prefer it - see <see cref="SchemaRead"/>.
+    /// </remarks>
+    async Task<SchemaRead> TryGetTablesAsync(string connectionName, string? uri = null) =>
+        SchemaRead.Read((await GetTablesAsync(connectionName, uri)).ToList());
+
     Task<IEnumerable<string>> GetViewsAsync(string connectionName, string? uri = null);
     Task<IEnumerable<string>> GetTempTablesAsync(string? uri = null);
     void RegisterTempTable(string uri, string name, List<string> columns);

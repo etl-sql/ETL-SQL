@@ -668,25 +668,32 @@ reported.
   grouped projection, one row per region, the seed's own promise that the KPI total equals the sum of
   the chart's regions, and that the rendered SVG reports `0 skipped rows`; `MockDbQuerySemanticsTests`
   pins the connector directly. All go red if the flag is put back.
-- [ ] **The paginated dataset wizard reports no tables for a connection that has them.** Picking
-  MOCKDB in Step 1 shows "This connection reported no tables you can read", while the catalog panel
-  lists that connection's tables perfectly. **The diagnosis recorded here was wrong and is corrected:**
-  the wizard's `catch` set `tables = []`, which is exactly what the zero-tables branch tests, so a
-  *failed* read rendered as that confident sentence. "It took the zero-tables branch, so the request
-  succeeded and came back empty" therefore does not follow — both branches produce it.
-  Two real defects on this path are fixed: the Portal's `GET /api/designer/schema` never bound
-  `documentUri` and passed null, filing every discovery under the shared `default` bucket while
-  `/complete` and `/data-preview` looked under the document's own key; and the wizard now
-  distinguishes a failed read from an empty connection.
-  **Still open:** the user-visible symptom is not reproduced. The two candidate mechanisms, neither
-  confirmed, are that the alias picked was script-declared (`CREATE CONNECTION` in the script) rather
-  than a host alias — `IConnectionCatalogProvider.ResolveAsync` resolves only the host catalog and
-  throws `KeyNotFoundException`, giving a 404 — and, on the desktop host, that
-  `MetadataManager.GetTablesAsync` returns an **empty list rather than an error** for a connection it
-  does not know (`if (conn == null) return Enumerable.Empty<string>()`), which is a genuine 200-with-
-  zero-tables. Note the wizard merges host aliases into the script's own (Phase 6a) and labels every
-  entry "Declared in this report", so an author cannot tell which kind they picked. Reproducing this
-  needs the UI driven against a host.
+- [x] **The paginated dataset wizard reports no tables for a connection that has them.** Picking a
+  connection in Step 1 shows "This connection reported no tables you can read", while the catalog
+  panel lists that connection's tables perfectly. **Two earlier diagnoses were wrong** and are left
+  recorded above in the commit history; the mechanism is now confirmed and fixed on both sides.
+  **The server made a claim it had no basis for.** `MetadataManager.GetTablesAsync` answered an
+  empty list to four different situations - a connection nobody registered, a connection whose
+  connector type this host has not loaded, a connection that threw on connect, and a connection that
+  genuinely holds no tables - and logged the exception where nobody was looking. The desktop schema
+  route wraps that call in a `try`/`catch` that returns 400 with the reason, but **nothing ever
+  reached it**, so the route answered `200 {"tables": []}` for all four. The wizard has only that
+  list to go on, and an empty list is exactly what selects its zero-tables branch.
+  `TryGetTablesAsync` now returns the outcome alongside the list, and the route answers 404 for an
+  unknown connection and 400 with the reason for a failed read. `GetTablesAsync` keeps its lossy
+  contract deliberately: it runs at a caret during completion, where throwing would be worse than
+  offering nothing.
+  **The wizard also mislabelled where a connection came from.** Host aliases are merged into the
+  script's own list (Phase 6a) and every entry was rendered "Declared in this report" - including
+  the ones that are not. The empty-state pane already explains at length that only a
+  `CREATE CONNECTION` in the script travels with the report; the populated pane contradicted it.
+  Entries now say which they are.
+  Covered by `DesignerSchemaFailureReportingTests` (the manager's three outcomes, and the desktop
+  route answering 404/400 with the reason rather than an empty list) and two Studio browser tests -
+  one for the origin labels, one driving the wizard against a genuine 404 to pin that it says the
+  read failed. **That last branch had no test at all**: the previous session's client-side fix was
+  unasserted, and the sandbox could not even produce a failing schema read until this added
+  `seedState.unreadableConnections`. All go red if the fixes are reverted.
 - [x] **A bar chart does not use the width it is given.** The plot was laid out correctly; nothing
   sized it afterwards. **Two defects, one on each side of the same handoff.**
   A native chart is drawn server-side on a bounded canvas and delivered as SVG carrying that

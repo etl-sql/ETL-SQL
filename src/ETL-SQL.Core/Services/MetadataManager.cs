@@ -442,13 +442,36 @@ public class MetadataManager : IMetadataManager
         return GetConnection(connectionName, uri)?.Type;
     }
 
-    public async Task<IEnumerable<string>> GetTablesAsync(string connectionName, string? uri = null)
+    /// <summary>
+    /// Completion's view of the table list: every failure is an empty list.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately lossy, and kept that way. This runs at a caret while someone is typing, where
+    /// throwing or blocking on a dead connection would be worse than offering nothing. Callers that
+    /// report to a person want <see cref="TryGetTablesAsync"/> instead, which is the same read with
+    /// the outcome still attached.
+    /// </remarks>
+    public async Task<IEnumerable<string>> GetTablesAsync(string connectionName, string? uri = null) =>
+        (await TryGetTablesAsync(connectionName, uri)).Tables;
+
+    /// <summary>
+    /// The table list plus why it is what it is.
+    /// </summary>
+    /// <remarks>
+    /// Four different things used to leave here as the same empty list: a connection nobody
+    /// registered, one whose connector type is not loaded, one that threw on connect, and one that
+    /// genuinely holds no tables. The paginated dataset wizard showed the last one's wording -
+    /// "this connection reported no tables you can read" - for all four, so a failed read read back
+    /// to the author as a confident statement about the connection, and the exception went to the
+    /// log where nobody was looking. The three failures are now distinguishable at the call site.
+    /// </remarks>
+    public async Task<SchemaRead> TryGetTablesAsync(string connectionName, string? uri = null)
     {
-        if (connectionName.Equals("eng", StringComparison.OrdinalIgnoreCase)) return EngineCatalog.Tables;
+        if (connectionName.Equals("eng", StringComparison.OrdinalIgnoreCase)) return SchemaRead.Read(EngineCatalog.Tables);
         try
         {
             var conn = GetConnection(connectionName, uri);
-            if (conn == null) return Enumerable.Empty<string>();
+            if (conn == null) return SchemaRead.Unknown(connectionName);
 
             var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
             if (_tables.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type))
@@ -456,11 +479,13 @@ public class MetadataManager : IMetadataManager
                 // Stale-while-revalidate: serve instantly, refresh in the background when aged.
                 if (!conn.IsMetadataOnly && ShouldBackgroundRefresh(key))
                     TriggerBackgroundRefresh(connectionName, ResolveConnectionString(conn), conn.IsDocument ? uri : null);
-                return cached;
+                return SchemaRead.Read(cached.ToList());
             }
 
+            // A metadata-only connection has no wire to read, so an empty list here is the true
+            // answer rather than a failure to get one.
             if (conn.IsMetadataOnly)
-                return Enumerable.Empty<string>();
+                return SchemaRead.Read([]);
 
             var connectionString = ResolveConnectionString(conn);
 
@@ -486,11 +511,13 @@ public class MetadataManager : IMetadataManager
                 {
                     tablesList.AddRange(dcTemps.Where(t => !tablesList.Contains(t, StringComparer.OrdinalIgnoreCase)));
                 }
-                return tablesList;
+                return SchemaRead.Read(tablesList);
             }
 
             var connector = _connectors.GetConnector(conn.Type);
-            if (connector == null) return Enumerable.Empty<string>();
+            if (connector == null)
+                return SchemaRead.Failure(
+                    $"Connection '{connectionName}' is declared as '{conn.Type}', which is not a connector this host has loaded.");
 
             await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, connectionString);
             var tables = (await source.GetTablesAsync()).ToList();
@@ -512,12 +539,12 @@ public class MetadataManager : IMetadataManager
             // Trigger background refresh to fetch and cache columns as well
             TriggerBackgroundRefresh(connectionName, connectionString, conn.IsDocument ? uri : null);
 
-            return tables;
+            return SchemaRead.Read(tables);
         }
         catch (Exception ex)
         {
             _logger.Error("GetTablesAsync error: {Message}", ex, ex.Message);
-            return Enumerable.Empty<string>();
+            return SchemaRead.Failure(ex.Message);
         }
     }
 

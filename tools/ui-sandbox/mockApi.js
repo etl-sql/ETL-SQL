@@ -213,6 +213,22 @@ export function makeMockApi(seedState) {
       }
     } else if (path.endsWith('/api/designer/schema')) {
       const connParam = new URL(url, window.location.origin).searchParams.get('connection') || 'demo';
+      // A schema read that fails is a state the wizard has to render differently from a connection
+      // with no tables, and there was no way to reach it here — so the branch that says "could not
+      // be read" was unreachable in the sandbox and untested. Naming an alias in
+      // `seedState.unreadableConnections` makes the host answer the way a real one does when it
+      // cannot resolve the alias.
+      const unreadable = (seedState?.unreadableConnections || [])
+        .some(alias => String(alias).toLowerCase() === String(connParam).toLowerCase());
+      if (unreadable) {
+        const message = `No connection named '${connParam}' is registered for this document.`;
+        return {
+          ok: false,
+          status: 404,
+          json: async () => ({ error: message }),
+          text: async () => message,
+        };
+      }
       data = { connection: connParam, tables: mockSchemaTables() };
     } else if (path.endsWith('/api/scripts/upload')) {
       data = { path: 'sandbox/' + (body.fileName || 'report.rptsql') };

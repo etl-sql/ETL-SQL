@@ -377,6 +377,12 @@ export function createStudioAuthoringSurfaces({
             scriptDatasets: null,
             registry: null,
             connections: declaredConnectionNames(shell.getScriptText()),
+            // Which of `connections` the script itself declares. The host's aliases are merged into
+            // the same list below, and without this every entry was labelled "Declared in this
+            // report" - including the ones that are not, which is the difference that decides
+            // whether the report still runs for anybody else.
+            scriptConnections: new Set(
+                declaredConnectionNames(shell.getScriptText()).map(alias => String(alias).toLowerCase())),
             connection: null,
             tables: null,
             table: null,
@@ -493,10 +499,16 @@ export function createStudioAuthoringSurfaces({
                     });
                 }
                 return api.render({
-                    lede: 'Pick the connection this dataset reads from. These are the connections this report declares.',
-                    body: errorMarkup() + `<div class="etlsql-studio-choice-list">${wizard.connections.map(alias => `
-                        <button type="button" data-pick-connection="${escapeHtml(alias)}" class="${wizard.connection === alias ? 'active' : ''}">
-                            <strong>${escapeHtml(alias)}</strong><span>Declared in this report</span></button>`).join('')}</div>`,
+                    lede: 'Pick the connection this dataset reads from. The ones this report declares travel with it; '
+                        + 'the ones this host knows about do not, so a report built on those runs here and fails elsewhere.',
+                    body: errorMarkup() + `<div class="etlsql-studio-choice-list">${wizard.connections.map(alias => {
+                        const declared = wizard.scriptConnections.has(String(alias).toLowerCase());
+                        return `
+                        <button type="button" data-pick-connection="${escapeHtml(alias)}" data-connection-origin="${declared ? 'script' : 'host'}" class="${wizard.connection === alias ? 'active' : ''}">
+                            <strong>${escapeHtml(alias)}</strong><span>${declared
+                                ? 'Declared in this report'
+                                : 'Known to this host — not declared in this report'}</span></button>`;
+                    }).join('')}</div>`,
                     actions: [
                         { id: 'back', label: 'Back', run: () => { wizard.pane = 'start'; wizard.error = null; paint(); } },
                         { id: 'connect', label: 'New connection…', run: openConnectionThenReturn },

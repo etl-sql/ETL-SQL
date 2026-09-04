@@ -93,6 +93,83 @@ public sealed class StudioWizardContractTests(PortalBrowserFixture fixture) : IA
 
     // ── Rule 4: preview before write ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// The connection step must say which aliases the report declares and which only this host
+    /// knows, because that is the difference between a report that runs for the next person and one
+    /// that does not.
+    /// </summary>
+    /// <remarks>
+    /// The host's aliases are merged into the script's own list, and every entry was rendered with
+    /// the same subtitle - "Declared in this report" - so an author could pick a host alias while
+    /// being told it travelled with the report. The empty-state pane already explains this exact
+    /// hazard at length; the populated pane contradicted it.
+    /// </remarks>
+    [Fact]
+    public async Task ConnectionStep_SaysWhichAliasesTheReportDeclaresAndWhichAreOnlyThisHost()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = await OpenStudioAsync(session);
+
+        await page.ClickAsync("[data-workflow-step='catalog']");
+        await page.ClickAsync("[data-start-path='create']");
+
+        // sales_overview.rptsql declares corp_db; the sandbox host offers staging_db and
+        // analytics_dw, which the wizard merges in.
+        var declared = page.Locator("[data-pick-connection='corp_db']");
+        await declared.WaitForAsync();
+        var hosted = page.Locator("[data-pick-connection='staging_db']");
+        await hosted.WaitForAsync();
+
+        Assert.Equal("script", await declared.GetAttributeAsync("data-connection-origin"));
+        Assert.Equal("host", await hosted.GetAttributeAsync("data-connection-origin"));
+
+        // The subtitle is what an author actually reads, so assert the words and not only the
+        // attribute the test could have been written to match.
+        Assert.Contains("Declared in this report", await declared.InnerTextAsync(), StringComparison.Ordinal);
+        Assert.DoesNotContain("Declared in this report", await hosted.InnerTextAsync(), StringComparison.Ordinal);
+        Assert.Contains("not declared in this report", await hosted.InnerTextAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(session.PageErrors);
+    }
+
+    /// <summary>
+    /// A schema read that fails must not be reported as a connection that holds no tables.
+    /// </summary>
+    /// <remarks>
+    /// This is the client half of the finding, and it had no test: the wizard's <c>catch</c> set
+    /// <c>tables = []</c>, which is exactly what selects the zero-tables branch, so a 404 or a 500
+    /// rendered as "this connection reported no tables you can read" - a confident claim about the
+    /// connection that the server never made. The server half is covered by
+    /// <c>DesignerSchemaFailureReportingTests</c>, which stops the desktop host answering 200 with
+    /// an empty list in the first place; this pins that the wizard still says the right thing when a
+    /// read fails for any of the reasons a host cannot rule out.
+    /// </remarks>
+    [Fact]
+    public async Task ConnectionStep_SaysAReadFailed_RatherThanClaimingTheConnectionHasNoTables()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = await OpenStudioAsync(session);
+
+        // Put the mock host into the state a real one reaches when it cannot resolve the alias, so
+        // the wizard's own error path runs against a genuine 404 rather than a stubbed branch.
+        await page.EvaluateAsync("() => { window.__STUDIO_SEED_STATE__.unreadableConnections = ['corp_db']; }");
+
+        await page.ClickAsync("[data-workflow-step='catalog']");
+        await page.ClickAsync("[data-start-path='create']");
+        await page.ClickAsync("[data-pick-connection='corp_db']");
+
+        var pane = page.Locator("[data-dialog-body]");
+        await pane.Locator(".etlsql-studio-guided-note").First.WaitForAsync();
+        var text = await pane.InnerTextAsync();
+
+        Assert.DoesNotContain("reported no tables you can read", text, StringComparison.Ordinal);
+        Assert.Contains("could not be read", text, StringComparison.Ordinal);
+
+        // The server's own reason, not just a generic apology: it is the only thing that tells the
+        // author whether to fix the alias, the credentials, or the host.
+        Assert.Contains("is registered for this document", text, StringComparison.Ordinal);
+        Assert.Empty(session.PageErrors);
+    }
+
     [Fact]
     public async Task DatasetWizard_WritesExactlyTheCreateDatasetItPreviewed()
     {
