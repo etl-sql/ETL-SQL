@@ -16,7 +16,10 @@ END;
 - `FOR ... IN` query loops
 - `FOREACH` loops
 - `WHILE` loops
-- `PARALLEL` blocks (exits the parallel worker, not the whole block)
+
+`PARALLEL` is not a loop. A `BREAK` inside a `PARALLEL` block that is not also inside one of the
+loops above fails that branch at run time — only `FOR`, `FOREACH`, and `WHILE` catch it. To leave a
+loop from inside a `PARALLEL` nested in it, the `BREAK` still belongs to the loop, not to the block.
 
 ## Notes
 - BREAK exits only one level of nesting. For nested loops, use a flag variable or restructure the logic.

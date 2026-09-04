@@ -815,8 +815,12 @@ reported.
         on the node (it carries only `line` and `key`), and `_computeLayout` would have to assign
         lane rows before positions. Overriding `card.style.top` after the fact was the cheap route and
         is worse than the current picture — `drawConnections` measures the elements, so every edge in
-        and out of the block would be drawn to the wrong place. The children of a `PARALLEL` still
-        read as a chain until this is done, which is the remaining lie on the map.
+        and out of the block would be drawn to the wrong place.
+        **Correcting an earlier note here: the branches do not draw as a chain.** `AppendParallel`
+        already fans out one `BRANCH n` edge per branch and converges them on the next stage. What is
+        missing is that a fan-out means two different things on this map — `PARALLEL` runs all of
+        them, `IF` runs one — and nothing distinguishes the two shapes. That, not a chain, is what
+        lanes would fix, and it is why the item is worth doing rather than dropping.
   - [x] Decide what happens to statements the canvas cannot author yet. **Decision: they stay, and
         they say what they are.** They keep their place, because the map is a true picture of the
         script and hiding them would make it a false one; they are drawn with a dashed border, they
@@ -1260,14 +1264,14 @@ than record it.
 
 ### CARD
 
-- [ ] **Comparison period label**: `DELTA` shows a numeric difference but `DELTA_LABEL` is a static
+- [x] **Comparison period label**: `DELTA` shows a numeric difference but `DELTA_LABEL` is a static
   string. No way to bind the comparison label dynamically from a column (e.g., "vs Q3 2025" from
   data). Add `DELTA_LABEL = column` as an alternative to the static string form.
-- [ ] **Conditional value color**: The `COLOR_MET / COLOR_CLOSE / COLOR_MISSED` options apply to the
+- [x] **Conditional value color**: The `COLOR_MET / COLOR_CLOSE / COLOR_MISSED` options apply to the
   status badge only. The large VALUE number itself has no conditional coloring independent of goal
   status. Add `VALUE_COLOR = 'css-color'` and a `FORMATTING (WHEN condition THEN color)` clause to
   CARD for threshold-driven value color (common Power BI KPI card behavior).
-- [ ] **Sparkline color and reference line**: The CARD `SPARKLINE` accepts TYPE but no `COLOR` or
+- [x] **Sparkline color and reference line**: The CARD `SPARKLINE` accepts TYPE but no `COLOR` or
   `REFERENCE_LINE` options. You cannot set the sparkline line color or add a goal reference line
   without rebuilding as a full chart. Add `COLOR = '#RRGGBB'` and `REFERENCE_LINE = n` to the
   SPARKLINE mapping.

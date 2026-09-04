@@ -82,6 +82,58 @@ SELECT UserID FROM #staging;");
         Assert.Contains(dag.Edges, e => e.Source == dag.Nodes[2].Id && e.Target == dag.Nodes[3].Id);
     }
 
+    /// <summary>
+    /// A labelled branch is one branch, not two.
+    ///
+    /// <para>Every other body goes through <c>AppendSequence</c>, which folds a section label into
+    /// the statement it names. <c>AppendParallel</c> walks the body itself — it needs one edge per
+    /// branch rather than a chain — and did not repeat that rule, so each labelled task inside a
+    /// <c>PARALLEL</c> was counted twice: once as a nameless <c>left_branch:</c> stage and once as
+    /// its statement. Two tasks drew as BRANCH 1 through 4.</para>
+    ///
+    /// <para>The test above this one uses unlabelled branches, which is why it never noticed. On the
+    /// one construct in the language that means concurrency, the map was claiming twice as many
+    /// things run at once as actually do — and the pipeline canvas authors its branches *with*
+    /// labels, because a label is the only thing it can address a task by.</para>
+    /// </summary>
+    [Fact]
+    public void ALabelledParallelBranchIsOneBranchAndKeepsItsName()
+    {
+        var dag = Build("""
+            PARALLEL BEGIN
+              load_north:
+              SELECT 1 INTO #north;
+              load_south:
+              SELECT 2 INTO #south;
+            END;
+            EXPECT SCHEMA #north (Value INT);
+            """);
+
+        Assert.Equal(4, dag.Nodes.Count);
+        Assert.DoesNotContain(dag.Nodes, node => node.Label.Contains("load_north:", StringComparison.Ordinal));
+
+        var parallel = dag.Nodes[0];
+        Assert.Equal("parallel", parallel.Type);
+
+        var branches = dag.Edges.Where(edge => edge.Source == parallel.Id).ToList();
+        Assert.Equal(2, branches.Count);
+        Assert.Equal(["BRANCH 1", "BRANCH 2"], branches.Select(edge => edge.Label));
+
+        // The label survives as the branch's key, which is what the canvas addresses it by. A branch
+        // that lost its name would be a card the author could see and not edit.
+        var named = branches
+            .Select(edge => dag.Nodes.Single(node => node.Id == edge.Target))
+            .Select(node => node.Key)
+            .ToList();
+        Assert.Equal(["load_north", "load_south"], named);
+
+        // And both still join the stage after the block: PARALLEL waits for all of them.
+        var join = dag.Nodes[3];
+        Assert.Equal("validation", join.Type);
+        foreach (var edge in branches)
+            Assert.Contains(dag.Edges, e => e.Source == edge.Target && e.Target == join.Id);
+    }
+
     [Fact]
     public void ProjectsLoopBodyAndCompletionPathsWithoutCreatingACycle()
     {

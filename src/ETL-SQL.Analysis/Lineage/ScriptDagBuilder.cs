@@ -255,6 +255,16 @@ public static class ScriptDagBuilder
             if (branch is DeclareStatement or SetVariableStatement or PrintStatement)
                 continue;
 
+            // A label that names the next statement is that branch's name, not a branch of its own.
+            // This walks the body itself rather than going through AppendSequence — it needs one
+            // edge per branch, not a chain — so it has to repeat that rule, and for a while it did
+            // not: every labelled task inside a PARALLEL was counted twice, once as a nameless
+            // "load_north:" stage and once as its statement. Two tasks drew as BRANCH 1 through 4.
+            // On the one construct in the language that means concurrency, that is the map claiming
+            // twice as many things run at once as actually do.
+            if (branch is SectionLabelStatement label && graph.NamesAStatement(label))
+                continue;
+
             branchNumber++;
             exits.AddRange(AppendStatement(
                 branch,
