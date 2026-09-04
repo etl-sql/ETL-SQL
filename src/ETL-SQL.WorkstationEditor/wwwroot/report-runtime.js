@@ -3552,6 +3552,23 @@
         const stateKey      = 'table:' + (visual.name || visual.id || '');
         const state         = _uiStates[stateKey] || (_uiStates[stateKey] = { sortCol: -1, sortDir: 'asc', page: 0, search: '' });
 
+        const defaultSortStr = opts['DEFAULT_SORT'] || opts['default_sort'] || '';
+        const defaultSorts   = [];
+        if (defaultSortStr) {
+            const rawItems = defaultSortStr.replace(/^\(|\)$/g, '').split(',');
+            rawItems.forEach(item => {
+                const parts = item.trim().split(/\s+/);
+                if (parts.length > 0 && parts[0]) {
+                    const colName = parts[0].replace(/^['"\[]|['"\]]$/g, '').toLowerCase();
+                    const colIdx = visual.columns.findIndex(c => c.toLowerCase() === colName);
+                    if (colIdx >= 0) {
+                        const dir = parts.length > 1 && parts[1].toUpperCase() === 'DESC' ? 'desc' : 'asc';
+                        defaultSorts.push({ colIndex: colIdx, dir: dir });
+                    }
+                }
+            });
+        }
+
         if (crossFilter) {
             container.setAttribute('data-cross-filter', '1');
             container._visualData = visual;
@@ -3568,6 +3585,16 @@
                     const an = parseFloat(av), bn = parseFloat(bv);
                     const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : String(av).localeCompare(String(bv));
                     return state.sortDir === 'asc' ? cmp : -cmp;
+                });
+            } else if (defaultSorts.length > 0) {
+                rows = rows.slice().sort((a, b) => {
+                    for (const s of defaultSorts) {
+                        const av = a[s.colIndex] ?? '', bv = b[s.colIndex] ?? '';
+                        const an = parseFloat(av), bn = parseFloat(bv);
+                        const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : String(av).localeCompare(String(bv));
+                        if (cmp !== 0) return s.dir === 'asc' ? cmp : -cmp;
+                    }
+                    return 0;
                 });
             }
             return rows;
@@ -3597,6 +3624,26 @@
             wrapper.appendChild(searchRow);
         }
 
+        let leftAccum = 0;
+        const leftOffsets = [];
+        visual.columns.forEach((col, ci) => {
+            const meta = colMeta[ci] || {};
+            if (meta.freeze === 'left') {
+                leftOffsets[ci] = leftAccum;
+                leftAccum += (meta.width || 120);
+            }
+        });
+
+        let rightAccum = 0;
+        const rightOffsets = [];
+        for (let ci = visual.columns.length - 1; ci >= 0; ci--) {
+            const meta = colMeta[ci] || {};
+            if (meta.freeze === 'right') {
+                rightOffsets[ci] = rightAccum;
+                rightAccum += (meta.width || 120);
+            }
+        }
+
         const table  = document.createElement('table');
         const thead  = document.createElement('thead');
         const headerRow = document.createElement('tr');
@@ -3614,6 +3661,18 @@
             const meta = colMeta[ci] || {};
             if (meta.hidden) th.style.display = 'none';
             if (meta.align) th.style.textAlign = meta.align;
+            if (meta.width) {
+                th.style.width = meta.width + 'px';
+                th.style.minWidth = meta.width + 'px';
+                th.style.maxWidth = meta.width + 'px';
+            }
+            if (meta.freeze === 'left') {
+                th.classList.add('table-cell-frozen-left');
+                th.style.left = (leftOffsets[ci] || 0) + 'px';
+            } else if (meta.freeze === 'right') {
+                th.classList.add('table-cell-frozen-right');
+                th.style.right = (rightOffsets[ci] || 0) + 'px';
+            }
 
             const label = document.createElement('span');
             label.textContent = col;
@@ -3641,11 +3700,18 @@
         const tbody = document.createElement('tbody');
         table.appendChild(tbody);
 
-        // Summary footer
+        // Summary (Top or Bottom)
+        const totalPosition = (visual.summaryData?.totalPosition || opts['TOTAL_POSITION'] || opts['total_position'] || 'BOTTOM').toUpperCase();
         if (visual.summaryData) {
-            const tfoot = document.createElement('tfoot');
+            let summaryRow = null;
             if (visual.summaryData.grandTotals) {
-                const tr = document.createElement('tr');
+                summaryRow = document.createElement('tr');
+                summaryRow.className = 'summary-row' + (totalPosition === 'TOP' ? ' summary-row-top' : '');
+                if (hasDetail) {
+                    const expTd = document.createElement('td');
+                    expTd.className = 'summary-cell';
+                    summaryRow.appendChild(expTd);
+                }
                 visual.columns.forEach((col, ci) => {
                     const td  = document.createElement('td');
                     td.className = 'summary-cell';
@@ -3653,24 +3719,45 @@
                     const val  = visual.summaryData.grandTotals[col] ?? '';
                     td.textContent = val ? formatValue(val, meta.format) : '';
                     if (meta.align) td.style.textAlign = meta.align;
-                    tr.appendChild(td);
+                    if (meta.width) {
+                        td.style.width = meta.width + 'px';
+                        td.style.minWidth = meta.width + 'px';
+                        td.style.maxWidth = meta.width + 'px';
+                    }
+                    if (meta.freeze === 'left') {
+                        td.classList.add('table-cell-frozen-left');
+                        td.style.left = (leftOffsets[ci] || 0) + 'px';
+                    } else if (meta.freeze === 'right') {
+                        td.classList.add('table-cell-frozen-right');
+                        td.style.right = (rightOffsets[ci] || 0) + 'px';
+                    }
+                    summaryRow.appendChild(td);
                 });
-                tfoot.appendChild(tr);
             }
+
+            let aggRow = null;
             if (visual.summaryData.aggregates && visual.summaryData.aggregates.length > 0) {
-                const tr = document.createElement('tr');
+                aggRow = document.createElement('tr');
                 const td = document.createElement('td');
-                td.colSpan = visual.columns.length;
+                td.colSpan = visual.columns.length + (hasDetail ? 1 : 0);
                 td.className = 'summary-aggregates';
                 visual.summaryData.aggregates.forEach(agg => {
                     const sp = document.createElement('span');
                     sp.textContent = (agg.alias || (agg.aggregate + '(' + agg.column + ')')) + ' = ' + agg.value;
                     td.appendChild(sp);
                 });
-                tr.appendChild(td);
-                tfoot.appendChild(tr);
+                aggRow.appendChild(td);
             }
-            table.appendChild(tfoot);
+
+            if (totalPosition === 'TOP') {
+                if (summaryRow) thead.appendChild(summaryRow);
+                if (aggRow) thead.appendChild(aggRow);
+            } else {
+                const tfoot = document.createElement('tfoot');
+                if (summaryRow) tfoot.appendChild(summaryRow);
+                if (aggRow) tfoot.appendChild(aggRow);
+                table.appendChild(tfoot);
+            }
         }
 
         wrapper.appendChild(table);
@@ -3682,7 +3769,15 @@
         function updateSortArrows() {
             Array.from(headerRow.children).forEach((th, ci) => {
                 const arrow = th.querySelector('.sort-arrow');
-                if (arrow) arrow.textContent = state.sortCol === ci ? (state.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+                if (!arrow) return;
+                const colIdx = hasDetail ? ci - 1 : ci;
+                if (colIdx < 0) return;
+                if (state.sortCol >= 0) {
+                    arrow.textContent = state.sortCol === colIdx ? (state.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+                } else {
+                    const match = defaultSorts.find(s => s.colIndex === colIdx);
+                    arrow.textContent = match ? (match.dir === 'asc' ? ' ▲' : ' ▼') : '';
+                }
             });
         }
 
@@ -3819,6 +3914,22 @@
                     const fmtVal = formatValue(rawVal, meta.format || opts['FORMAT']);
                     if (meta.hidden) td.style.display = 'none';
                     if (meta.align) td.style.textAlign = meta.align;
+                    if (meta.width) {
+                        td.style.width = meta.width + 'px';
+                        td.style.minWidth = meta.width + 'px';
+                        td.style.maxWidth = meta.width + 'px';
+                        td.style.overflow = 'hidden';
+                        td.style.textOverflow = 'ellipsis';
+                        td.style.whiteSpace = 'nowrap';
+                        if (rawVal) td.title = rawVal;
+                    }
+                    if (meta.freeze === 'left') {
+                        td.classList.add('table-cell-frozen-left');
+                        td.style.left = (leftOffsets[ci] || 0) + 'px';
+                    } else if (meta.freeze === 'right') {
+                        td.classList.add('table-cell-frozen-right');
+                        td.style.right = (rightOffsets[ci] || 0) + 'px';
+                    }
 
                     // COLOR_SCALE: gradient background based on column min/max
                     if (meta.colorScaleFrom && meta.colorScaleTo && meta.colorScaleMax !== undefined) {

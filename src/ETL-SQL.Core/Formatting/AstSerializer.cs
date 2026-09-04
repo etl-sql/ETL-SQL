@@ -1431,6 +1431,37 @@ public static class AstSerializer
             sb.AppendLine($"    STYLE = {s.StyleName},");
         if (s.Styles.Count > 0 || !s.Palette.IsDefaultOrEmpty)
             sb.AppendLine($"    STYLE ( {FormatStyleAssignments(s.Styles, s.Palette)} ),");
+        if (s.Summaries.Count > 0 || s.SummaryOptions != null)
+        {
+            var summaryParts = new List<string>();
+            if (s.SummaryOptions != null)
+            {
+                if (s.SummaryOptions.GrandTotalRow && s.SummaryOptions.GrandTotalColumn)
+                    summaryParts.Add("GRAND_TOTAL = ON");
+                else if (s.SummaryOptions.GrandTotalRow)
+                    summaryParts.Add("GRAND_TOTAL_ROW = ON");
+                else if (s.SummaryOptions.GrandTotalColumn)
+                    summaryParts.Add("GRAND_TOTAL_COLUMN = ON");
+                if (s.SummaryOptions.SummarizeRow)
+                    summaryParts.Add("SUMMARIZE_ROW = ON");
+                if (s.SummaryOptions.SummarizeColumn)
+                {
+                    if (s.SummaryOptions.SpecificColumns != null)
+                        summaryParts.Add($"SUMMARIZE_COLUMN ({string.Join(", ", s.SummaryOptions.SpecificColumns)}) = ON");
+                    else
+                        summaryParts.Add("SUMMARIZE_COLUMN = ON");
+                }
+                if (!string.IsNullOrEmpty(s.SummaryOptions.TotalPosition))
+                    summaryParts.Add($"TOTAL_POSITION = {s.SummaryOptions.TotalPosition.ToUpperInvariant()}");
+            }
+            foreach (var item in s.Summaries)
+            {
+                var alias = !string.IsNullOrEmpty(item.Alias) ? $" AS '{item.Alias.Replace("'", "''")}'" : "";
+                summaryParts.Add($"{item.Aggregate}({item.Column}){alias}");
+            }
+            if (summaryParts.Count > 0)
+                sb.AppendLine($"    SUMMARY ( {string.Join(", ", summaryParts)} ),");
+        }
         if (s.FormattingRules.Count > 0)
             sb.AppendLine($"    FORMATTING ( {string.Join(", ", s.FormattingRules.Select(FormatFormattingRule))} ),");
         if (s.Overlays.Count > 0)
@@ -1467,7 +1498,19 @@ public static class AstSerializer
                 && !option.Key.StartsWith("SERIES_LABELS:", StringComparison.OrdinalIgnoreCase)
                 && !option.Key.Equals("DATA_LABELS", StringComparison.OrdinalIgnoreCase)
                 && !option.Key.Equals("SERIES_LABELS", StringComparison.OrdinalIgnoreCase))
-            .Select(option => $"{option.Key} = '{option.Value.Replace("'", "''")}'")
+            .Select(option =>
+            {
+                if (option.Key.Equals("DEFAULT_SORT", StringComparison.OrdinalIgnoreCase))
+                {
+                    var val = option.Value;
+                    if (!val.StartsWith("(") && !val.EndsWith(")"))
+                        val = $"({val})";
+                    return $"{option.Key} = {val}";
+                }
+                if (option.Key.Equals("TOTAL_POSITION", StringComparison.OrdinalIgnoreCase))
+                    return $"{option.Key} = {option.Value.ToUpperInvariant()}";
+                return $"{option.Key} = '{option.Value.Replace("'", "''")}'";
+            })
             .ToList();
 
         AddNestedToggle("DATA_LABELS", allowNestedLeaderLine: true);
@@ -2003,6 +2046,10 @@ public static class AstSerializer
             sb.Append($" FORMAT '{m.Format.Replace("'", "''")}'");
         if (!string.IsNullOrEmpty(m.Align))
             sb.Append($" ALIGN '{m.Align.Replace("'", "''")}'");
+        if (!string.IsNullOrEmpty(m.Freeze))
+            sb.Append($" FREEZE {m.Freeze.ToUpperInvariant()}");
+        if (m.Width.HasValue)
+            sb.Append($" WIDTH {m.Width.Value}");
         if (m.DataBar)
         {
             sb.Append(" DATA_BAR");

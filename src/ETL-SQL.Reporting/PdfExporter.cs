@@ -425,13 +425,21 @@ namespace ETL_SQL.Reporting
             int sample = Math.Min(cap, 50);
             for (int ci = 0; ci < v.Columns.Count; ci++)
             {
-                int maxLen = (v.Columns[ci] ?? "").Length;
-                for (int i = 0; i < sample; i++)
+                var meta = v.ColumnMeta != null && ci < v.ColumnMeta.Count ? v.ColumnMeta[ci] : null;
+                if (meta?.Width.HasValue == true)
                 {
-                    var row = v.Rows[i];
-                    if (ci < row.Count) maxLen = Math.Max(maxLen, FormatCell(row[ci]).Length);
+                    weights[ci] = Math.Clamp(meta.Width.Value, 4, 400);
                 }
-                weights[ci] = Math.Clamp(maxLen, 4, 40);
+                else
+                {
+                    int maxLen = (v.Columns[ci] ?? "").Length;
+                    for (int i = 0; i < sample; i++)
+                    {
+                        var row = v.Rows[i];
+                        if (ci < row.Count) maxLen = Math.Max(maxLen, FormatCell(row[ci]).Length);
+                    }
+                    weights[ci] = Math.Clamp(maxLen, 4, 40);
+                }
             }
             double totalWeight = weights.Sum();
 
@@ -452,6 +460,27 @@ namespace ETL_SQL.Reporting
                 p.Format.Font.Bold = true;
                 p.Format.Font.Size = Unit.FromPoint(9);
             }
+
+            var totalPos = (v.SummaryData?.TotalPosition ?? (v.Options.TryGetValue("TOTAL_POSITION", out var tp) ? tp : "BOTTOM")).ToUpperInvariant();
+
+            void AddSummaryRow()
+            {
+                if (v.SummaryData?.GrandTotals == null) return;
+                var sRow = table.AddRow();
+                sRow.Shading.Color = _greyLight2;
+                sRow.Borders.Top.Width = Unit.FromPoint(1);
+                sRow.Borders.Bottom.Width = Unit.FromPoint(1);
+                for (int ci = 0; ci < v.Columns.Count; ci++)
+                {
+                    var col = v.Columns[ci];
+                    var val = v.SummaryData.GrandTotals.TryGetValue(col, out var gt) ? gt : "";
+                    var p = sRow.Cells[ci].AddParagraph(FormatCell(val));
+                    p.Format.Font.Bold = true;
+                    p.Format.Font.Size = Unit.FromPoint(9);
+                }
+            }
+
+            if (totalPos == "TOP") AddSummaryRow();
 
             for (int i = 0; i < cap; i++)
             {
@@ -478,6 +507,7 @@ namespace ETL_SQL.Reporting
                 }
             }
 
+            if (totalPos == "BOTTOM") AddSummaryRow();
         }
 
         private static string FormatCell(string? raw) => ReportCellFormatter.FormatCellForPdf(raw);

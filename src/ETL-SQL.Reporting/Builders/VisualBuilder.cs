@@ -485,6 +485,8 @@ namespace ETL_SQL.Reporting.Builders
                     CalculateSummaries(vStmt, vm);
                     if (vStmt.VisualType == VisualType.Table && vStmt.Mappings.Count > 0)
                         ApplyTableMappings(vStmt, vm);
+                    if (vStmt.VisualType == VisualType.Table)
+                        ApplyTableSort(vStmt, vm);
                     await BuildMicroChartsAsync(vStmt, vm);
                     if (vStmt.VisualType == VisualType.Html && vStmt.HtmlTemplate != null)
                         BuildHtmlVisual(vStmt, vm);
@@ -975,9 +977,9 @@ namespace ETL_SQL.Reporting.Builders
             var metas = selected.Select((x, si) =>
             {
                 var m = x.m;
-                var hasAny = m.Format != null || m.Align != null || m.DataBar || m.ColorScaleFrom != null || m.CellRenderer != null || m.SparklineColumns != null || m.ProgressBar || m.Hidden;
+                var hasAny = m.Format != null || m.Align != null || m.DataBar || m.ColorScaleFrom != null || m.CellRenderer != null || m.SparklineColumns != null || m.ProgressBar || m.Hidden || m.Freeze != null || m.Width != null;
                 if (!hasAny) return (ColumnMetaManifest?)null;
-                var meta = new ColumnMetaManifest { Format = m.Format, Align = m.Align, Hidden = m.Hidden };
+                var meta = new ColumnMetaManifest { Format = m.Format, Align = m.Align, Hidden = m.Hidden, Freeze = m.Freeze?.ToLowerInvariant(), Width = m.Width };
                 if (m.DataBar)
                 {
                     meta.DataBar = true;
@@ -1089,13 +1091,24 @@ namespace ETL_SQL.Reporting.Builders
         private void CalculateSummaries(CreateVisualStatement vStmt, VisualManifest vm)
         {
             if (vm.Rows.Count == 0 || vm.Columns.Count == 0) return;
-            if (vStmt.Summaries.Count == 0 && (vStmt.SummaryOptions == null ||
+
+            var grandTotalOpt = vStmt.Options.FirstOrDefault(o => o.Key.Equals("GRAND_TOTAL", StringComparison.OrdinalIgnoreCase))?.Value;
+            bool hasGrandTotalInOptions = !string.IsNullOrWhiteSpace(grandTotalOpt) &&
+                !grandTotalOpt.Equals("OFF", StringComparison.OrdinalIgnoreCase) &&
+                !grandTotalOpt.Equals("FALSE", StringComparison.OrdinalIgnoreCase);
+
+            if (vStmt.Summaries.Count == 0 && !hasGrandTotalInOptions && (vStmt.SummaryOptions == null ||
                 (!vStmt.SummaryOptions.GrandTotalRow && !vStmt.SummaryOptions.GrandTotalColumn &&
                  !vStmt.SummaryOptions.SummarizeRow && !vStmt.SummaryOptions.SummarizeColumn)))
                 return;
 
             var summaryData = new TableSummaryData();
             vm.SummaryData = summaryData;
+
+            var totalPos = vStmt.SummaryOptions?.TotalPosition
+                ?? vStmt.Options.FirstOrDefault(o => o.Key.Equals("TOTAL_POSITION", StringComparison.OrdinalIgnoreCase))?.Value
+                ?? "BOTTOM";
+            summaryData.TotalPosition = totalPos.ToUpperInvariant();
 
             // 1. Specific Aggregates
             foreach (var item in vStmt.Summaries)
@@ -1113,24 +1126,98 @@ namespace ETL_SQL.Reporting.Builders
                 });
             }
 
-            // 2. Grand Totals (if enabled, compute SUM for all numeric columns or specific ones)
-            if (vStmt.SummaryOptions != null && (vStmt.SummaryOptions.GrandTotalRow || vStmt.SummaryOptions.SummarizeColumn))
+            // 2. Grand Totals (if enabled, compute SUM or specified aggregate for numeric columns or specific ones)
+            if ((vStmt.SummaryOptions != null && (vStmt.SummaryOptions.GrandTotalRow || vStmt.SummaryOptions.SummarizeColumn)) || hasGrandTotalInOptions)
             {
                 summaryData.GrandTotals = new Dictionary<string, string>();
-                var colsToSummarize = vStmt.SummaryOptions.SpecificColumns ?? vm.Columns;
+                var colsToSummarize = vStmt.SummaryOptions?.SpecificColumns ?? vm.Columns;
+                var agg = "SUM";
+                if (hasGrandTotalInOptions && !grandTotalOpt!.Equals("ON", StringComparison.OrdinalIgnoreCase) && !grandTotalOpt.Equals("TRUE", StringComparison.OrdinalIgnoreCase))
+                {
+                    agg = grandTotalOpt.ToUpperInvariant();
+                }
 
                 foreach (var colName in colsToSummarize)
                 {
                     var colIndex = vm.Columns.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
                     if (colIndex < 0) continue;
 
-                    // Only SUM numeric looking columns for Grand Totals automatically
-                    var sum = ComputeAggregate(vm.Rows, colIndex, "SUM");
-                    if (sum != "0" || IsNumericColumn(vm.Rows, colIndex))
+                    var sum = ComputeAggregate(vm.Rows, colIndex, agg);
+                    if (sum != "0" || IsNumericColumn(vm.Rows, colIndex) || agg == "COUNT")
                     {
                         summaryData.GrandTotals[colName] = sum;
                     }
                 }
+            }
+        }
+
+        private void ApplyTableSort(CreateVisualStatement vStmt, VisualManifest vm)
+        {
+            var defaultSort = vStmt.Options.FirstOrDefault(o => o.Key.Equals("DEFAULT_SORT", StringComparison.OrdinalIgnoreCase))?.Value;
+            if (string.IsNullOrWhiteSpace(defaultSort) || vm.Rows.Count <= 1 || vm.Columns.Count == 0) return;
+
+            var rawSpecs = defaultSort.Trim().TrimStart('(').TrimEnd(')').Split(',', StringSplitOptions.RemoveEmptyEntries);
+            var sortSpecs = new List<(int ColumnIndex, bool Descending)>();
+            foreach (var rawSpec in rawSpecs)
+            {
+                var parts = rawSpec.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 0) continue;
+                var colName = parts[0].Trim('\'', '"', '[', ']');
+                var desc = parts.Length > 1 && parts[1].Equals("DESC", StringComparison.OrdinalIgnoreCase);
+
+                var idx = vm.Columns.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
+                if (idx < 0)
+                {
+                    var mapping = vStmt.Mappings.FirstOrDefault(m =>
+                        m.Column.Equals(colName, StringComparison.OrdinalIgnoreCase) ||
+                        (m.DisplayName != null && m.DisplayName.Equals(colName, StringComparison.OrdinalIgnoreCase)));
+                    if (mapping != null)
+                    {
+                        var targetName = mapping.DisplayName ?? mapping.Column;
+                        idx = vm.Columns.FindIndex(c => c.Equals(targetName, StringComparison.OrdinalIgnoreCase));
+                    }
+                }
+                if (idx >= 0)
+                {
+                    sortSpecs.Add((idx, desc));
+                }
+            }
+
+            if (sortSpecs.Count == 0) return;
+
+            var indexedRows = vm.Rows.Select((row, originalIndex) => (row, originalIndex)).ToList();
+            indexedRows.Sort((a, b) =>
+            {
+                foreach (var (ci, desc) in sortSpecs)
+                {
+                    var va = ci < a.row.Count ? a.row[ci] : null;
+                    var vb = ci < b.row.Count ? b.row[ci] : null;
+                    int cmp;
+                    if (va == null && vb == null) cmp = 0;
+                    else if (va == null) cmp = -1;
+                    else if (vb == null) cmp = 1;
+                    else if (decimal.TryParse(va, NumberStyles.Any, CultureInfo.InvariantCulture, out var na) &&
+                             decimal.TryParse(vb, NumberStyles.Any, CultureInfo.InvariantCulture, out var nb))
+                    {
+                        cmp = na.CompareTo(nb);
+                    }
+                    else
+                    {
+                        cmp = string.Compare(va, vb, StringComparison.OrdinalIgnoreCase);
+                    }
+
+                    if (cmp != 0)
+                        return desc ? -cmp : cmp;
+                }
+                return a.originalIndex.CompareTo(b.originalIndex);
+            });
+
+            vm.Rows = indexedRows.Select(x => x.row).ToList();
+            if (vm.RawRows.Count == indexedRows.Count)
+            {
+                var newRaw = indexedRows.Select(x => vm.RawRows[x.originalIndex]).ToList();
+                vm.RawRows.Clear();
+                vm.RawRows.AddRange(newRaw);
             }
         }
 

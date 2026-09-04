@@ -235,6 +235,8 @@ public record VisualMapping : AstNode
     public decimal? ProgressMinimum { get; init; }
     public decimal? ProgressMaximum { get; init; }
     public string? ProgressColor { get; init; }
+    public string? Freeze { get; init; }  // "LEFT" | "RIGHT"
+    public int? Width { get; init; }
     public bool Hidden { get; init; }
     public override string ToSql() => AstSerializer.Format(this);
 }
@@ -386,6 +388,7 @@ public record TableSummaryOptions : AstNode
     public bool SummarizeRow { get; init; }
     public bool SummarizeColumn { get; init; }
     public List<string>? SpecificColumns { get; init; }
+    public string? TotalPosition { get; init; }
 }
 
 public record FormattingRule : AstNode

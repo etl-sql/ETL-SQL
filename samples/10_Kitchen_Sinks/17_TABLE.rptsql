@@ -222,6 +222,31 @@ CREATE PAGE RichContent AS DASHBOARD (
     )
 );
 
+-- ═════════════════════════════════════════════════════════════════════════════
+-- PAGE 4 — Advanced Controls: FREEZE / WIDTH / DEFAULT_SORT / TOTAL_POSITION
+-- ═════════════════════════════════════════════════════════════════════════════
+
+CREATE VISUAL AdvancedControlsTable AS TABLE (
+    SOURCE = #products,
+    TITLE  = '4A  FREEZE, WIDTH, DEFAULT_SORT & TOTAL_POSITION = TOP',
+    MAPPINGS (
+        product FREEZE LEFT WIDTH 140                                       AS 'Product',
+        category WIDTH 120,
+        price   FORMAT 'C2' ALIGN 'right' WIDTH 100                        AS 'Price',
+        margin  FORMAT 'P1' ALIGN 'right' WIDTH 100                        AS 'Margin %',
+        revenue FORMAT 'N0' ALIGN 'right' WIDTH 120 DATA_BAR COLOR '#4472C4' AS 'Revenue',
+        status  FREEZE RIGHT WIDTH 110                                      AS 'Status'
+    ),
+    OPTIONS (
+        STRIPED        = ON,
+        SEARCH         = ON,
+        PAGE_SIZE      = 10,
+        DEFAULT_SORT   = (category ASC, revenue DESC),
+        GRAND_TOTAL    = SUM,
+        TOTAL_POSITION = TOP
+    )
+);
+
 CREATE PAGE CombinedAndOptions AS DASHBOARD (
     STRUCTURE = 'A / B',
     MAP (
@@ -230,7 +255,14 @@ CREATE PAGE CombinedAndOptions AS DASHBOARD (
     )
 );
 
+CREATE PAGE AdvancedControls AS DASHBOARD (
+    STRUCTURE = 'A',
+    MAP (
+        'A' = AdvancedControlsTable
+    )
+);
+
 CREATE NAVIGATION MainNav AS TAB (
     DEFAULT = CellFormatting,
-    PAGES   (CellFormatting, RichContent, CombinedAndOptions)
+    PAGES   (CellFormatting, RichContent, CombinedAndOptions, AdvancedControls)
 );

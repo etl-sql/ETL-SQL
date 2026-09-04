@@ -995,6 +995,14 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("sparklineType")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? SparklineType { get; set; }  // "line" | "bar" | "area"
+
+        [JsonPropertyName("freeze")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Freeze { get; set; }
+
+        [JsonPropertyName("width")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? Width { get; set; }
     }
 
     public class OverlayManifest
@@ -1045,6 +1053,10 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("grandTotals")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? GrandTotals { get; set; }
+
+        [JsonPropertyName("totalPosition")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? TotalPosition { get; set; }
     }
 
     public class SummaryItemData

@@ -34,6 +34,8 @@ CREATE VISUAL RecentOrders AS TABLE (
 - **`column_name HYPERLINK [LABEL 'text']`**: Render cell value as a clickable link.
 - **`SPARKLINE(col1, col2, ...) [LINE|BAR|AREA] [AS 'alias']`**: Mini trend chart across columns.
 - **`column_name PROGRESS_BAR (MIN = n, MAX = n, COLOR = '#RRGGBB') [AS 'alias']`** — Native progress indicator using the declared numeric range.
+- **`column_name FREEZE LEFT|RIGHT`** — Pin column to the left or right boundary during horizontal scrolling.
+- **`column_name WIDTH n`** — Set explicit column width in pixels.
 
 *Note: Mappings are combinable, e.g.:*  
 `column FORMAT 'C2' ALIGN 'right' DATA_BAR COLOR '#4472C4' AS 'Revenue'`
@@ -45,7 +47,9 @@ CREATE VISUAL RecentOrders AS TABLE (
 
 - **`PAGE_SIZE = n`**: Rows per page (default `50`; `0` = no pagination).
 - **`STRIPED = ON|OFF`**: Alternating row background colours (default `ON`).
-- **`GRAND_TOTAL = SUM|AVG|COUNT`**: Footer row with the chosen aggregate per numeric column.
+- **`GRAND_TOTAL = SUM|AVG|COUNT`**: Total row with the chosen aggregate per numeric column.
+- **`TOTAL_POSITION = TOP|BOTTOM`**: Position grand totals at the top (under headers) or bottom (default `BOTTOM`).
+- **`DEFAULT_SORT = (column [ASC|DESC], ...)`**: Multi-column initial sort order without sorting in SQL.
 - **`SUMMARIZE_ROW = ON|OFF`**: Show a totals row at the top instead of the footer.
 - **`SEARCH = ON|OFF`**: Client-side search box above the table (default `ON`).
 - **`FONT_SIZE = n`**: Table body font size in pixels.

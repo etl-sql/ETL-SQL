@@ -1247,15 +1247,15 @@ than record it.
 
 ### TABLE
 
-- [ ] **Column pinning / freeze**: No `FREEZE = LEFT|RIGHT` on a TABLE column mapping to keep it
+- [x] **Column pinning / freeze**: No `FREEZE = LEFT|RIGHT` on a TABLE column mapping to keep it
   visible during horizontal scroll. Power BI and virtually every data grid supports this. Add as a
   mapping modifier: `column FREEZE LEFT AS 'Name'`.
-- [ ] **Column width control**: Column widths are renderer-inferred. No `WIDTH = n` on a TABLE
+- [x] **Column width control**: Column widths are renderer-inferred. No `WIDTH = n` on a TABLE
   column mapping. Add `column WIDTH 120 AS 'Name'`.
-- [ ] **Multi-column sort default**: TABLE allows interactive click-to-sort but no
+- [x] **Multi-column sort default**: TABLE allows interactive click-to-sort but no
   `DEFAULT_SORT = (column DESC, column2 ASC)` to set the initial sort order without sorting in SQL.
   Add to OPTIONS.
-- [ ] **Row group totals position**: `GRAND_TOTAL` places the total row at the bottom. No
+- [x] **Row group totals position**: `GRAND_TOTAL` places the total row at the bottom. No
   `TOTAL_POSITION = TOP|BOTTOM` option. Power BI tables can show totals at the top.
 
 ### CARD

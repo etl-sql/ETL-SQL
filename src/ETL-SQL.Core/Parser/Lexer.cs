@@ -187,6 +187,9 @@ public class Lexer
         dict["GRAND_TOTAL_COLUMN"] = TokenType.GRAND_TOTAL_COLUMN;
         dict["SUMMARIZE_ROW"] = TokenType.SUMMARIZE_ROW;
         dict["SUMMARIZE_COLUMN"] = TokenType.SUMMARIZE_COLUMN;
+        dict["FREEZE"] = TokenType.FREEZE;
+        dict["TOTAL_POSITION"] = TokenType.TOTAL_POSITION;
+        dict["DEFAULT_SORT"] = TokenType.DEFAULT_SORT;
         dict["GRID"] = TokenType.GRID;
         dict["DATA_LABELS"] = TokenType.DATA_LABELS;
         dict["DATA_LABELS_POSITION"] = TokenType.DATA_LABELS_POSITION;

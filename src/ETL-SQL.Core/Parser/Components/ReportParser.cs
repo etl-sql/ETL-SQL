@@ -3221,7 +3221,8 @@ public class ReportParser : ParserComponent
                 string? format = null, align = null, displayName = null;
                 string? colorScaleFrom = null, colorScaleTo = null;
                 string? cellRenderer = null, hyperlinkLabel = null, progressColor = null;
-                int? imageWidth = null;
+                string? freeze = null;
+                int? imageWidth = null, width = null;
                 bool hidden = false, progressBar = false;
                 decimal? progressMinimum = null, progressMaximum = null;
                 while (!ReportCheck(TokenType.RPAREN) && !ReportCheck(TokenType.COMMA) && !ReportAtEnd())
@@ -3292,6 +3293,43 @@ public class ReportParser : ParserComponent
                             hyperlinkLabel = Consume(TokenType.STRING_LITERAL, "Expected label string after LABEL").Value;
                         }
                     }
+                    else if (Match(TokenType.FREEZE) || IsCurrentValue("FREEZE"))
+                    {
+                        Match(TokenType.EQUALS);
+                        if (Match(TokenType.LEFT) || IsCurrentValue("LEFT"))
+                        {
+                            freeze = "LEFT";
+                            if (IsCurrentValue("LEFT")) Advance();
+                        }
+                        else if (Match(TokenType.RIGHT) || IsCurrentValue("RIGHT"))
+                        {
+                            freeze = "RIGHT";
+                            if (IsCurrentValue("RIGHT")) Advance();
+                        }
+                        else if (_parser.Current.Type == TokenType.STRING_LITERAL)
+                        {
+                            freeze = Advance().Value.ToUpperInvariant();
+                        }
+                        else
+                        {
+                            throw new SyntaxException("Expected LEFT or RIGHT after FREEZE", _parser.Current.Line, _parser.Current.Column);
+                        }
+                    }
+                    else if (IsCurrentValue("WIDTH") || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("WIDTH", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        Advance();
+                        Match(TokenType.EQUALS);
+                        if (_parser.Current.Type == TokenType.NUMBER && int.TryParse(_parser.Current.Value, out var w))
+                        {
+                            width = w;
+                            Advance();
+                        }
+                        else if (_parser.Current.Type == TokenType.STRING_LITERAL)
+                        {
+                            var rawStr = Advance().Value.Trim().TrimEnd('p', 'x', 'P', 'X');
+                            if (int.TryParse(rawStr, out var sw)) width = sw;
+                        }
+                    }
                     else if (IsCurrentValue("PROGRESS_BAR"))
                     {
                         Advance();
@@ -3346,6 +3384,8 @@ public class ReportParser : ParserComponent
                     ProgressMinimum = progressMinimum,
                     ProgressMaximum = progressMaximum,
                     ProgressColor = progressColor,
+                    Freeze = freeze,
+                    Width = width,
                     Hidden = hidden
                 });
             }
@@ -3637,6 +3677,61 @@ public class ReportParser : ParserComponent
                         keyToken.Column);
                 }
                 Match(TokenType.EQUALS);
+                if (key == "DEFAULT_SORT")
+                {
+                    if (Match(TokenType.LPAREN))
+                    {
+                        var sorts = new List<string>();
+                        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                        {
+                            var colToken = _parser.Advance();
+                            var colName = colToken.Value;
+                            var dir = "ASC";
+                            if (Match(TokenType.DESC) || (ReportCheck(TokenType.IDENTIFIER) && _parser.Current.Value.Equals("DESC", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                dir = "DESC";
+                                if (ReportCheck(TokenType.IDENTIFIER) && _parser.Current.Value.Equals("DESC", StringComparison.OrdinalIgnoreCase)) Advance();
+                            }
+                            else if (Match(TokenType.ASC) || (ReportCheck(TokenType.IDENTIFIER) && _parser.Current.Value.Equals("ASC", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                dir = "ASC";
+                                if (ReportCheck(TokenType.IDENTIFIER) && _parser.Current.Value.Equals("ASC", StringComparison.OrdinalIgnoreCase)) Advance();
+                            }
+                            sorts.Add($"{colName} {dir}");
+                            Match(TokenType.COMMA);
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' to close DEFAULT_SORT");
+                        options.Add(new VisualOption { Key = key, Value = string.Join(", ", sorts) });
+                        Match(TokenType.COMMA);
+                        continue;
+                    }
+                    else
+                    {
+                        var colToken = _parser.Advance();
+                        var colName = colToken.Value;
+                        var dir = "ASC";
+                        if (Match(TokenType.DESC) || (ReportCheck(TokenType.IDENTIFIER) && _parser.Current.Value.Equals("DESC", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            dir = "DESC";
+                            if (ReportCheck(TokenType.IDENTIFIER) && _parser.Current.Value.Equals("DESC", StringComparison.OrdinalIgnoreCase)) Advance();
+                        }
+                        else if (Match(TokenType.ASC) || (ReportCheck(TokenType.IDENTIFIER) && _parser.Current.Value.Equals("ASC", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            dir = "ASC";
+                            if (ReportCheck(TokenType.IDENTIFIER) && _parser.Current.Value.Equals("ASC", StringComparison.OrdinalIgnoreCase)) Advance();
+                        }
+                        options.Add(new VisualOption { Key = key, Value = $"{colName} {dir}" });
+                        Match(TokenType.COMMA);
+                        continue;
+                    }
+                }
+                if (key == "TOTAL_POSITION")
+                {
+                    var posVal = ConsumeReportOptionValue().ToUpperInvariant();
+                    options.Add(new VisualOption { Key = key, Value = posVal });
+                    Match(TokenType.COMMA);
+                    continue;
+                }
                 if (key == "STACKED" && _parser.Current.Type == TokenType.NUMBER && _parser.Current.Value == "100" &&
                     _parser.Peek.Type == TokenType.IDENTIFIER && _parser.Peek.Value.Equals("PCT", StringComparison.OrdinalIgnoreCase))
                 {
@@ -4394,6 +4489,7 @@ public class ReportParser : ParserComponent
         var summaries = new List<TableSummaryItem>();
         bool grandTotalRow = false, grandTotalCol = false, sumRow = false, sumCol = false;
         List<string>? specificCols = null;
+        string? totalPosition = null;
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -4435,6 +4531,11 @@ public class ReportParser : ParserComponent
                     Consume(TokenType.RPAREN, "Expected ')' to close column list");
                 }
             }
+            else if (Match(TokenType.TOTAL_POSITION) || IsCurrentValue("TOTAL_POSITION"))
+            {
+                Match(TokenType.EQUALS);
+                totalPosition = ConsumeReportOptionValue().ToUpperInvariant();
+            }
             else if (_parser.Current.Type == TokenType.IDENTIFIER || _parser.Current.Type == TokenType.SUM || _parser.Current.Type == TokenType.AVG || _parser.Current.Type == TokenType.COUNT || _parser.Current.Type == TokenType.MIN || _parser.Current.Type == TokenType.MAX)
             {
                 var agg = Advance().Value.ToUpperInvariant();
@@ -4474,7 +4575,8 @@ public class ReportParser : ParserComponent
             GrandTotalColumn = grandTotalCol,
             SummarizeRow = sumRow,
             SummarizeColumn = sumCol,
-            SpecificColumns = specificCols
+            SpecificColumns = specificCols,
+            TotalPosition = totalPosition
         });
     }
 

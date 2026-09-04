@@ -989,3 +989,46 @@ body.theme-dark, body.vscode-dark, .theme-dark {
     transform: scale(2.2);
     margin: 32px 0;
   }
+
+/* Table Frozen Columns */
+.table-cell-frozen-left, .table-cell-frozen-right {
+  position: sticky !important;
+  background: #fff;
+}
+.theme-dark .table-cell-frozen-left, .theme-dark .table-cell-frozen-right {
+  background: #1e1e1e;
+}
+th.table-cell-frozen-left, th.table-cell-frozen-right {
+  z-index: 4 !important;
+  background: #f0f0f0;
+}
+.theme-dark th.table-cell-frozen-left, .theme-dark th.table-cell-frozen-right {
+  background: #2d2d2d;
+}
+.table-row-alt .table-cell-frozen-left, .table-row-alt .table-cell-frozen-right {
+  background: #f7f7f7;
+}
+.theme-dark .table-row-alt .table-cell-frozen-left, .theme-dark .table-row-alt .table-cell-frozen-right {
+  background: #2a2a2a;
+}
+tfoot td.table-cell-frozen-left, tfoot td.table-cell-frozen-right,
+thead tr.summary-row-top td.table-cell-frozen-left, thead tr.summary-row-top td.table-cell-frozen-right {
+  z-index: 3 !important;
+  background: #f0f3f6;
+}
+.theme-dark tfoot td.table-cell-frozen-left, .theme-dark tfoot td.table-cell-frozen-right,
+.theme-dark thead tr.summary-row-top td.table-cell-frozen-left, .theme-dark thead tr.summary-row-top td.table-cell-frozen-right {
+  background: #25282c;
+}
+
+/* Top Grand Total Row */
+thead tr.summary-row-top td {
+  font-weight: bold;
+  background: #f0f3f6;
+  border-bottom: 2px solid #bbb;
+}
+.theme-dark thead tr.summary-row-top td {
+  background: #25282c;
+  border-bottom: 2px solid #444;
+  color: #ddd;
+}

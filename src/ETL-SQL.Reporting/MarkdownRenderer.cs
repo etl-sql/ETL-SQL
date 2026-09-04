@@ -267,6 +267,17 @@ namespace ETL_SQL.Reporting
             sb.AppendLine("| " + string.Join(" | ", v.Columns.Select(EscapeCell)) + " |");
             sb.AppendLine("| " + string.Join(" | ", v.Columns.Select(_ => "---")) + " |");
 
+            var totalPos = (v.SummaryData?.TotalPosition ?? (v.Options.TryGetValue("TOTAL_POSITION", out var tp) ? tp : "BOTTOM")).ToUpperInvariant();
+
+            void EmitSummaryRow()
+            {
+                if (v.SummaryData?.GrandTotals == null) return;
+                var cells = v.Columns.Select(c => v.SummaryData.GrandTotals.TryGetValue(c, out var gt) ? $"**{EscapeCell(ReportCellFormatter.FormatCell(gt))}**" : "");
+                sb.AppendLine("| " + string.Join(" | ", cells) + " |");
+            }
+
+            if (totalPos == "TOP") EmitSummaryRow();
+
             // Rows (cap at 1000 for document readability)
             int cap = Math.Min(v.Rows.Count, 1000);
             for (int i = 0; i < cap; i++)
@@ -284,6 +295,8 @@ namespace ETL_SQL.Reporting
                 });
                 sb.AppendLine("| " + string.Join(" | ", cells) + " |");
             }
+
+            if (totalPos == "BOTTOM") EmitSummaryRow();
 
             if (v.Rows.Count > 1000)
                 sb.AppendLine($"*… {v.Rows.Count - 1000:N0} more rows not shown.*");

@@ -170,6 +170,8 @@ export interface ColumnMetaManifest {
     imageWidth?: number;
     hyperlinkLabel?: string;
     sparklineType?: 'line' | 'bar' | 'area';
+    freeze?: 'left' | 'right' | string;
+    width?: number;
 }
 
 export interface VisualManifest {
