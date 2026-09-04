@@ -401,11 +401,8 @@ public class CatalogController(
         view = ETL_SQL.Portal.Services.StewardshipProjection.NormalizeView(view);
 
         var scanLimit = Math.Max(limit * 20, 1000);
-        var latestTargets = (await lineageCatalog.GetRecentLineageAsync(scanLimit))
-            .GroupBy(
-                e => $"{e.TargetTable}\u001f{e.TargetColumn ?? string.Empty}",
-                StringComparer.OrdinalIgnoreCase)
-            .Select(g => g.First())
+        var latestTargets = ETL_SQL.Core.Data.LineageAssetCollapse
+            .LatestPerAsset(await lineageCatalog.GetRecentLineageAsync(scanLimit))
             .ToList();
 
         var allItems = latestTargets

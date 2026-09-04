@@ -3183,11 +3183,7 @@ namespace ETL_SQL.Orchestrator.Storage
             cmd.AddParam("@scanLimit", Math.Max(limit * 20, limit));
             cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
 
-            var latestByTarget = (await ReadLineageHistoryAsync(cmd))
-                .GroupBy(
-                    e => $"{e.TargetTable}\u001f{e.TargetColumn ?? string.Empty}",
-                    StringComparer.OrdinalIgnoreCase)
-                .Select(g => g.First());
+            var latestByTarget = LineageAssetCollapse.LatestPerAsset(await ReadLineageHistoryAsync(cmd));
 
             var required = requiredTags
                 .Select(ETL_SQL.Common.StewardshipTagCatalog.Canonicalize)

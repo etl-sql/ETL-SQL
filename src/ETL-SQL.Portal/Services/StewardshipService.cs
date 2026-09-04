@@ -292,9 +292,7 @@ public sealed class GovernanceService(
     {
         _ = ct;
         var entries = await lineageCatalog.GetRecentLineageAsync(5000);
-        return entries
-            .GroupBy(e => $"{e.TargetTable}{e.TargetColumn ?? string.Empty}", StringComparer.OrdinalIgnoreCase)
-            .Select(g => g.First())
+        return LineageAssetCollapse.LatestPerAsset(entries)
             .Select(e => StewardshipProjection.ToAsset(e, settings.StaleAfterDays))
             .ToList();
     }

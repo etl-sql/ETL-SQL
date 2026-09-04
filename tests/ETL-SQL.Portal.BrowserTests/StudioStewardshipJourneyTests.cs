@@ -20,11 +20,11 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// come back clean — which is the whole job, and the only claim a steward actually cares about. It
 /// spans two surfaces, the engine's lineage, and a scan in between.</para>
 ///
-/// <para><b>It also gives the estate something to score.</b>
-/// <c>GovernanceDashboardUiTests.LiveData_RendersScoresWithTheRuleThatTookEachPoint</c> asserts its
-/// deductions only <c>if</c> the estate has assets, and it never does, so the test named for scores
-/// has never asserted one. Here the asset is created on purpose and the deduction is asserted
-/// unconditionally.</para>
+/// <para><b>Every asset it scores is its own.</b> The lane shares one Portal, so an assertion made
+/// on "the estate" is an assertion on whatever every other test happened to leave behind. Both
+/// halves publish and run a uniquely named report and then read the workqueue row for that asset,
+/// which is why they can assert a deduction unconditionally rather than branching on whether the
+/// estate has anything in it.</para>
 /// </summary>
 [Trait("Category", "Browser")]
 [Collection(PortalBrowserCollection.Name)]
@@ -46,17 +46,15 @@ public sealed class StudioStewardshipJourneyTests(PortalBrowserFixture fixture)
         """;
 
     /// <summary>
-    /// The half that holds: an ungoverned asset reaches the steward with its score explained.
+    /// An ungoverned asset reaches the steward with its score explained.
     ///
-    /// <para>Held, not failing. It passes on its own, but running a scan is not a local act: the lane
-    /// shares one Portal and <c>GovernanceDashboardUiTests.NeverScannedEstate_SaysSo...</c> asserts
-    /// that the estate has never been scanned, which no test can guarantee once a second one scans.
-    /// That neighbour was already order-dependent - <c>LiveData_RendersScores...</c> scans too, and
-    /// it only passed by running first - and this class perturbed the order enough to expose it.
-    /// Un-skip once the never-scanned state is asserted somewhere it can be owned rather than raced
-    /// for. See TODO.md, Phase 6a.</para>
+    /// <para>This is the first test in the lane to put a real asset in the estate, which is why it
+    /// was held: scanning is not a local act, and
+    /// <c>GovernanceDashboardUiTests.NeverScannedEstate_SaysSo...</c> asserted a state any scan
+    /// destroys. That state is now owned by the test that makes the claim rather than raced for on
+    /// the shared Portal, so this one is free to scan.</para>
     /// </summary>
-    [Fact(Skip = "Held: running a scan invalidates NeverScannedEstate on the shared lane Portal. See TODO.md, Phase 6a.")]
+    [Fact]
     public async Task Certifies_TheStewardshipFinding()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
@@ -78,7 +76,7 @@ public sealed class StudioStewardshipJourneyTests(PortalBrowserFixture fixture)
         await RunReportAsync(page, folderName, reportName);
 
         // ── The steward's finding ────────────────────────────────────────────
-        var deductions = await ScanAndReadDeductionsAsync(page, "steward_demo");
+        var deductions = await ScanAndReadDeductionsAsync(page, TaggedTable.TrimStart('#'));
 
         // Asserted unconditionally, on this journey's own asset: the estate has one because this
         // journey ran it, and every point it lost is explained by the rule that took it.
@@ -92,21 +90,90 @@ public sealed class StudioStewardshipJourneyTests(PortalBrowserFixture fixture)
 
 
     /// <summary>
-    /// The half that does not: tagging the asset in Studio, saving and re-running leaves the steward
-    /// still seeing it as untagged.
+    /// The other half of the job: the author fixes the finding where the metadata is written, and a
+    /// re-scan closes it.
     ///
-    /// <para>Skipped rather than deleted, and skipped rather than left red, because it is a real
-    /// finding with evidence and the lane it lives in has to stay readable. See the Stewardship
-    /// journey entry in TODO.md: five <c>INSERT TAG FOR TABLE</c> statements are written and saved,
-    /// the report runs, and only the last one to execute reaches lineage - the estate reports
-    /// <c>owner</c> populated and <c>steward, contact, classification, quality</c> still missing.
+    /// <para><b>The whole loop, not the halves.</b> The rail has tests that a tag is authored and the
+    /// dashboard has tests that a finding is rendered. Neither says the second reflects the first,
+    /// and it did not: five <c>INSERT TAG FOR TABLE</c> statements were written and saved, the report
+    /// ran, and the steward saw one tag - the last statement to execute - because every governance
+    /// surface read the newest lineage row instead of replaying the run. The author saw five tags in
+    /// their script and the steward saw one, with nothing reported.</para>
+    ///
+    /// <para><b>Closed is asserted as closed</b>, not as "the row changed": the asset is still in the
+    /// estate after the fix, and what must be gone is the missing-metadata deduction. A test that
+    /// waited for the row to disappear would pass on an asset that simply stopped being scanned.
     /// </para>
     /// </summary>
-    [Fact(Skip = "Open defect: only the last INSERT TAG statement reaches lineage. See TODO.md, Studio Phase 6 stewardship journey.")]
+    [Fact]
     public async Task Certifies_TheStewardshipFixLoop()
     {
-        await Task.CompletedTask;
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var folderName = $"Steward Fix Folder {suffix}";
+        var reportName = $"Steward Fix Report {suffix}";
+        var scriptFileName = $"steward_fix_{suffix}.rptsql";
+        await File.WriteAllTextAsync(
+            Path.Combine(fixture.Factory.TempDir, "scripts", scriptFileName), UngovernedScript);
+
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await fixture.SignInAsync(page);
+
+        await CreateFolderAsync(page, folderName);
+        await PublishReportAsync(page, reportName, scriptFileName, folderName);
+        await RunReportAsync(page, folderName, reportName);
+
+        // ── The finding, before the fix ──────────────────────────────────────
+        var before = await ScanAndReadDeductionsAsync(page, TaggedTable.TrimStart('#'));
+        Assert.Contains("missing-metadata", before, StringComparison.OrdinalIgnoreCase);
+
+        // ── The fix, in the surface the author actually uses ─────────────────
+        var reportId = await ReportIdAsync(reportName);
+        await page.GotoAsync($"/studio.html?reportId={reportId}");
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
+            new PageWaitForFunctionOptions { Timeout = 20_000 });
+
+        await page.Locator("[data-activity='governance']").ClickAsync();
+        var scope = page.Locator($"[data-gov-scope='table:{TaggedTable}']");
+        await scope.WaitForAsync(new LocatorWaitForOptions { Timeout = 20_000 });
+        await scope.ClickAsync();
+
+        foreach (var tag in RequiredTags) await ApplyTagAsync(page, tag);
+
+        // Every tag the author entered is in the script they are about to save. Asserted before the
+        // save, because a rail that silently dropped one would otherwise look like a scan defect.
+        var edited = await page.EvaluateAsync<string>(
+            "() => window.__STUDIO__.state.editorInstance.getValue()");
+        foreach (var tag in RequiredTags)
+            Assert.Contains($"{tag} =", edited, StringComparison.OrdinalIgnoreCase);
+
+        await page.Keyboard.PressAsync("Control+s");
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO__.state.documents[0].isDirty === false",
+            null, new PageWaitForFunctionOptions { Timeout = 20_000 });
+
+        // ── The finding, after ───────────────────────────────────────────────
+        // Re-run first: tags reach the estate through lineage, and lineage is written by a run.
+        await RunReportAsync(page, folderName, reportName);
+        var after = await ScanAndReadDeductionsAsync(page, TaggedTable.TrimStart('#'));
+
+        Assert.DoesNotContain("missing-metadata", after, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(session.PageErrors);
     }
+
+    /// <summary>Gives one tag a value in the governance rail and applies it.</summary>
+    private static async Task ApplyTagAsync(IPage page, string tag)
+    {
+        await page.Locator("[data-gov-name]").SelectOptionAsync(tag);
+        await SetTagValueAsync(page, tag);
+        await page.Locator("[data-gov-apply]").ClickAsync();
+        await page.WaitForFunctionAsync(
+            "name => window.__STUDIO__.state.editorInstance.getValue().toLowerCase().includes(name + ' =')",
+            tag, new PageWaitForFunctionOptions { Timeout = 15_000 });
+    }
+
+    /// <summary>The asset both halves act on: the table the script stages and the rail tags.</summary>
+    private const string TaggedTable = "#steward_demo";
 
     /// <summary>The tags an asset has to carry before the estate stops deducting for their absence.</summary>
     private static readonly string[] RequiredTags =

@@ -579,38 +579,52 @@ performance limits before Studio is treated as the primary workbench.
 **Outcome:** The one representative job with no competitor equivalent is certified, and the coverage
 gaps the three competitor journeys did not touch are named rather than assumed.
 
-- [ ] **Certify the data-stewardship journey**: `StudioStewardshipJourneyTests`. Half of it is
-  written and green; half is blocked on a real defect and is skipped rather than left red.
-  **Green — `Certifies_TheStewardshipFinding`**: publish and run an ungoverned report, scan, and
-  find the asset in the steward's workqueue scored down with the rule that took each point and the
-  tags it names. This is the first test in the lane to put a real asset in the estate.
-  Both halves are currently **held (skipped), not failing**, for two different reasons.
-  **Skipped — `Certifies_TheStewardshipFixLoop`**: tag the asset in Studio's governance rail, save,
-  re-run, re-scan, and the finding should close. It does not. The cut body is worth restoring from
-  git history when the defect below is fixed.
-- [ ] **`NeverScannedEstate` cannot survive a neighbour that scans** *(holds the green half above)*.
-  The lane shares one Portal, and that test asserts the estate has never been scanned — a state any
-  other test destroys by scanning. It was already order-dependent, because
-  `LiveData_RendersScoresWithTheRuleThatTookEachPoint` scans too and only passed by running first;
-  adding a second scanning class exposed it. The never-scanned state needs to be asserted somewhere
-  it can be owned rather than raced for, after which the stewardship finding test can be un-skipped.
-- [ ] **Only the last `INSERT TAG FOR TABLE` reaches lineage** *(found by the journey above;
-  blocks it)*. The rail writes one statement per tag, each inserted above the last, and all five
-  save correctly:
-  `quality`, `classification`, `contact`, `steward`, `owner` — top to bottom, so `owner` executes
-  last. After a re-run the steward's estate shows **Owner: analytics** and
-  `missing-metadata −5: Missing required metadata: steward, contact, classification, quality`.
-  One tag in five survives, and it is the last one executed, which points at replace-not-merge
-  semantics somewhere in the chain. Not yet isolated between three candidates: the engine's
-  `INSERT TAG` statement replacing rather than merging the tag set; lineage capture recording only
-  the tags live at the final statement; or the rail being wrong to write five statements instead of
-  merging into one. **Whichever it is, the author sees five tags in their script and the steward
-  sees one, with nothing reported** — so it is silent, which is the shape this phase kept finding.
-- [ ] **Make `GovernanceDashboardUiTests.LiveData_RendersScoresWithTheRuleThatTookEachPoint`
-  unconditional**: it asserts its deductions only `if` the estate has assets, and the estate is
-  always empty, so the test named for scores has never asserted one — measured, not guessed. The
-  stewardship journey above now creates a real asset; this test should either seed its own or assert
-  without the branch.
+- [x] **Certify the data-stewardship journey**: `StudioStewardshipJourneyTests`, both halves green
+  and neither skipped. **`Certifies_TheStewardshipFinding`**: publish and run an ungoverned report,
+  scan, and find the asset in the steward's workqueue scored down with the rule that took each point
+  and the tags it names. **`Certifies_TheStewardshipFixLoop`**: tag that asset in Studio's governance
+  rail, save, re-run, re-scan, and the finding closes.
+  **Each half owns the asset it asserts on.** The lane shares one Portal, so "the estate" is whatever
+  every other test left behind; both halves publish a uniquely named report and read the workqueue
+  row for that asset, which is what lets them assert a deduction unconditionally.
+  **The fix loop is asserted as closed, not as changed**: the asset is still in the estate afterwards
+  and what must be gone is the `missing-metadata` deduction — waiting for the row to disappear would
+  pass on an asset that simply stopped being scanned. And the tags are asserted in the editor before
+  the save as well as in the estate after it, so a rail that dropped one is not reported as a scan
+  defect. Reverting the fix below turns the loop red and leaves the finding half green, which is the
+  split the defect actually had.
+- [x] **`NeverScannedEstate` cannot survive a neighbour that scans** *(held the finding half)*.
+  Split into the two claims it was conflating. That the **server** reports `lastScan: null` for an
+  unscanned estate is asserted on an isolated database by
+  `GovernanceDashboardTests.NeverScanned_IsReportedAsUnscanned_NotAsAnEstateWithNoFindings`, which
+  already existed. That the **page** renders that as "never scanned" rather than a clean bill of
+  health is now asserted on a response the test owns: the real dashboard response is fetched and its
+  `lastScan` is replaced with null, so every other value on the page is still the server's own.
+  Fetched rather than fabricated, because a hand-written payload freezes a shape the product can
+  move away from. Nothing on the lane can now put that test into a state it did not choose.
+- [x] **Only the last `INSERT TAG FOR TABLE` reaches lineage** *(found by the journey above)*.
+  None of the three suspects was it. The engine merges (`LineageTracker.ApplyTags` upserts into the
+  live tag dictionary), lineage capture is faithful (each statement writes its own `TABLE_TAGS` row,
+  which is what an audit trail has to do), and the rail is right to write one statement per tag.
+  **The loss was on the read side, in three copies.** Governance surfaces collapse lineage history to
+  one row per asset with `GroupBy(...).First()` — the newest row — and then read *that row's* tags as
+  though they were the asset's whole tag set. With five tag statements the newest row is the last one
+  executed, so four tags vanish. The same collapse was written three times: `StewardshipService`,
+  `CatalogController` and `SQLiteJobHistoryStore.GetMissingMetadataAsync`, which is how a defect this
+  visible stayed invisible — no single place was obviously wrong.
+  One definition now, `LineageAssetCollapse` in `ETL-SQL.Core`, and it replays the run instead of
+  sampling it: the asset's rows are applied in execution order, later writes win per key, and
+  `TABLE_TAG_DELETE` removes rather than merges. **Scoped to the asset's most recent run** — merging
+  across runs would resurrect a tag no statement in the current script explains. Covered by
+  `LineageAssetCollapseTests`, six tests, two of which go red if the replay is reduced back to
+  sampling. Collapsing in one place also fixed a latent second bug: two of the three keys joined
+  table and column with nothing at all, so `ab`.`c` and `a`.`bc` were one asset.
+- [x] **Make `GovernanceDashboardUiTests.LiveData_RendersScoresWithTheRuleThatTookEachPoint`
+  unconditional**: it asserted its deductions only `if` the estate had assets, and the estate was
+  always empty, so the test named for scores took the "estate is empty" branch on every run and had
+  never asserted one. It now seeds its own uniquely named ungoverned asset before scanning and reads
+  that asset's row, so there is no branch: the deduction, the points and the rule that took them are
+  asserted every time.
 
 **Coverage the three competitor journeys do not reach.** Named here so they are decisions rather
 than oversights; none is started.
