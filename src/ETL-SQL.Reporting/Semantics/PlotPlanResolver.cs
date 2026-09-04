@@ -332,14 +332,15 @@ public sealed class PlotPlanResolver
             var raw = bindings.SelectMany(binding => BindingValues(binding, columns)).Where(value => value.Kind != ChartValueKind.Null).ToList();
             var layout = spec.Layers.Select(layer => layer.Style.FirstOrDefault(token => token.Name.Equals("layout", StringComparison.OrdinalIgnoreCase))?.Value)
                 .FirstOrDefault(value => value is not null);
-            if (scale.Channel == FieldChannel.Y && layout is "boxplot" or "waterfall")
+            if ((scale.Channel == FieldChannel.Y || scale.Channel == FieldChannel.X) && layout is "boxplot" or "waterfall")
             {
                 var channels = layout == "boxplot"
-                    ? new[] { FieldChannel.Low, FieldChannel.Q1, FieldChannel.Median, FieldChannel.Q3, FieldChannel.High }
-                    : new[] { FieldChannel.YStart, FieldChannel.YEnd };
-                raw = resolvedLayers.SelectMany(layer => layer.Data).SelectMany(datum => datum.Channels)
+                    ? new[] { FieldChannel.Low, FieldChannel.Q1, FieldChannel.Median, FieldChannel.Q3, FieldChannel.High, FieldChannel.Mean }
+                    : new[] { FieldChannel.YStart, FieldChannel.YEnd, FieldChannel.XStart, FieldChannel.XEnd };
+                var boxOrWaterfallRaw = resolvedLayers.SelectMany(layer => layer.Data).SelectMany(datum => datum.Channels)
                     .Where(channel => channels.Contains(channel.Channel) && channel.Value.Kind != ChartValueKind.Null)
                     .Select(channel => channel.Value).ToList();
+                if (boxOrWaterfallRaw.Count > 0) raw = boxOrWaterfallRaw;
             }
             if (scale.Channel is FieldChannel.Y or FieldChannel.Y2 && resolvedLayers.Any(layer => layer.Stack != StackMode.None))
             {
@@ -620,6 +621,7 @@ public sealed class PlotPlanResolver
             var median = Percentile(values, .5m);
             var q3 = Percentile(values, .75m);
             var high = values.Length == 0 ? 0m : values[^1];
+            var mean = values.Length == 0 ? 0m : values.Average();
             return new ResolvedDatum(rowIndices.FirstOrDefault(categoryIndex),
             [
                 new ResolvedChannelValue(FieldChannel.X, ChartValue.From(category), category),
@@ -627,7 +629,8 @@ public sealed class PlotPlanResolver
                 new ResolvedChannelValue(FieldChannel.Q1, ChartValue.From(q1), q1.ToString(CultureInfo.InvariantCulture)),
                 new ResolvedChannelValue(FieldChannel.Median, ChartValue.From(median), median.ToString(CultureInfo.InvariantCulture)),
                 new ResolvedChannelValue(FieldChannel.Q3, ChartValue.From(q3), q3.ToString(CultureInfo.InvariantCulture)),
-                new ResolvedChannelValue(FieldChannel.High, ChartValue.From(high), high.ToString(CultureInfo.InvariantCulture))
+                new ResolvedChannelValue(FieldChannel.High, ChartValue.From(high), high.ToString(CultureInfo.InvariantCulture)),
+                new ResolvedChannelValue(FieldChannel.Mean, ChartValue.From(mean), mean.ToString(CultureInfo.InvariantCulture))
             ], values.Length == 0);
         }).ToImmutableArray();
         return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, spec.Id, resolvedData)

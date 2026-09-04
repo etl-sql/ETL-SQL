@@ -649,18 +649,44 @@ reported.
 
 **Broken — an author hits these immediately**
 
-- [ ] **"Start with sample data" produces a bar chart with no data.** The seeded starter dashboard
-  renders an empty plot: the axis falls back to its default 1 / 0.75 / 0.5 domain and no bars are
-  drawn, while the card still reports `BAR · Sampled`. So the one button offered as "the best place
-  to start" ends on an empty chart. Not yet diagnosed; suspects are the seeded script's mappings not
-  matching the sample's columns, and the seed path producing a snapshot the preview cannot read.
+- [x] **"Start with sample data" produces a bar chart with no data.** Neither suspect was it. The
+  mappings matched and the seed path was fine; **MOCKDB was answering the wrong query**.
+  `MockSqlDataSource` declared `SupportsSqlPushdown = true`, so the engine handed it whole statements
+  to execute, and its `ExecuteRawSql` is a string matcher that understands a projection and one
+  `WHERE col = val` and silently ignores the rest. `SELECT Region, COUNT(*) ... GROUP BY Region`
+  contains a `*` — because of `COUNT(*)` — so it fell through to "return the whole table": the
+  visuals came back holding all 250 raw `demo.Orders` rows instead of the 4-row `#temp` tables they
+  name, the chart's `Y` column did not exist in what it was handed, and the renderer skipped 246 of
+  250 rows onto a default 0–1 axis. `SELECT SUM(Total) AS Revenue` projected a column off a table
+  that has no such column, so the KPI card summed 250 nulls. **No error was raised in any of these
+  cases**, which is why a wrong answer looked like a real one.
+  MOCKDB holds `DataTable`s in memory and has no SQL engine, so it now reports that it cannot execute
+  SQL, which routes these statements through the engine's own execution path where grouping and
+  aggregation actually live.
+  `StudioSampleDashboardTests` passed throughout this, because it asserted only `Rows.Count > 0` and
+  250 wrong rows satisfy that — the same vacuous shape Phase 6 kept finding. It now asserts the
+  grouped projection, one row per region, the seed's own promise that the KPI total equals the sum of
+  the chart's regions, and that the rendered SVG reports `0 skipped rows`; `MockDbQuerySemanticsTests`
+  pins the connector directly. All go red if the flag is put back.
 - [ ] **The paginated dataset wizard reports no tables for a connection that has them.** Picking
   MOCKDB in Step 1 shows "This connection reported no tables you can read", while the catalog panel
-  lists that connection's tables perfectly. Both call the same `schema` route with the same
-  `documentUri`, and the wizard takes the zero-tables branch rather than the error branch, so the
-  request succeeded and came back empty. **Check first whether this is a regression from the wizard
-  now offering host aliases** (Phase 6a work): before that change the wizard never got far enough to
-  ask for a schema, so this may be the second half of the same defect rather than a new one.
+  lists that connection's tables perfectly. **The diagnosis recorded here was wrong and is corrected:**
+  the wizard's `catch` set `tables = []`, which is exactly what the zero-tables branch tests, so a
+  *failed* read rendered as that confident sentence. "It took the zero-tables branch, so the request
+  succeeded and came back empty" therefore does not follow — both branches produce it.
+  Two real defects on this path are fixed: the Portal's `GET /api/designer/schema` never bound
+  `documentUri` and passed null, filing every discovery under the shared `default` bucket while
+  `/complete` and `/data-preview` looked under the document's own key; and the wizard now
+  distinguishes a failed read from an empty connection.
+  **Still open:** the user-visible symptom is not reproduced. The two candidate mechanisms, neither
+  confirmed, are that the alias picked was script-declared (`CREATE CONNECTION` in the script) rather
+  than a host alias — `IConnectionCatalogProvider.ResolveAsync` resolves only the host catalog and
+  throws `KeyNotFoundException`, giving a 404 — and, on the desktop host, that
+  `MetadataManager.GetTablesAsync` returns an **empty list rather than an error** for a connection it
+  does not know (`if (conn == null) return Enumerable.Empty<string>()`), which is a genuine 200-with-
+  zero-tables. Note the wizard merges host aliases into the script's own (Phase 6a) and labels every
+  entry "Declared in this report", so an author cannot tell which kind they picked. Reproducing this
+  needs the UI driven against a host.
 - [ ] **A bar chart does not use the width it is given.** Bars cluster in the middle-right of the
   tile with a wide empty band to the left, and resizing the tile does not redistribute them. Looks
   like the plot is laid out against something other than the tile's measured width.
@@ -1111,12 +1137,12 @@ than record it.
 
 ### BOXPLOT
 
-- [ ] **Notched boxes**: No `NOTCHED = ON|OFF` option for confidence-interval notches around the
+- [x] **Notched boxes**: No `NOTCHED = ON|OFF` option for confidence-interval notches around the
   median, which is standard in ggplot2 (`geom_boxplot(notch = TRUE)`) and used in scientific
   reporting. Add to OPTIONS.
-- [ ] **Mean marker**: No option to overlay the mean value as a distinct point or line on each box.
+- [x] **Mean marker**: No option to overlay the mean value as a distinct point or line on each box.
   ggplot2 `stat_summary(fun = mean, geom = "point")` is the equivalent. Add `SHOW_MEAN = ON|OFF`.
-- [ ] **Violin overlay / violin-only mode**: ggplot2 `geom_violin` shows the full distribution shape.
+- [x] **Violin overlay / violin-only mode**: ggplot2 `geom_violin` shows the full distribution shape.
   No violin option on BOXPLOT. This is lower priority but worth noting as a distribution-chart gap.
 
 ### NETWORK
@@ -1826,14 +1852,14 @@ means the feature already exists in the engine and the sink just needs a new vis
 
 | Gap | Prerequisite TODO |
 | :--- | :--- |
-| `ORIENTATION = HORIZONTAL` | ✅ (ORIENTATION exists for BOXPLOT) — sink missing it |
-| Multi-series (SERIES mapping) | ✅ — sink just needs an example |
-| Full `COLORS` palette (multi-category) | ✅ — sink needs more categories |
+| `ORIENTATION = HORIZONTAL` | ✅ shipped in 09_BOXPLOT.rptsql |
+| Multi-series / multi-cohort | ✅ shipped in 09_BOXPLOT.rptsql |
+| Full `COLORS` palette (multi-category) | ✅ shipped in 09_BOXPLOT.rptsql |
 | Full legend suite | ✅ shipped |
 | `GRID_LINES`, `ZERO_LINE` | ✅ shipped |
 | `BAND_SIZE` | ✅ shipped |
-| `NOTCHED = ON` | [ ] BOXPLOT (pending) |
-| `SHOW_MEAN = ON` | [ ] BOXPLOT (pending) |
+| `NOTCHED = ON` | ✅ BOXPLOT (shipped) |
+| `SHOW_MEAN = ON` | ✅ BOXPLOT (shipped) |
 
 ### 11_HEATMAP.rptsql
 
@@ -1966,7 +1992,7 @@ Work through them in this order:
 4. **06_DONUT.rptsql** — Same pie-specific additions.
 5. **04_SCATTER.rptsql** — Add JITTER, ERROR bars, SIZE_RANGE, SYMBOL options.
 6. **32_BUBBLE.rptsql** — Add MIN/MAX_BUBBLE_SIZE, SIZE_RANGE, LOG scale.
-7. **09_BOXPLOT.rptsql** — Add ORIENTATION=HORIZONTAL, multi-series.
+7. ~~**09_BOXPLOT.rptsql** — Add ORIENTATION=HORIZONTAL, multi-series.~~ ✅ Done.
 8. **03_LINE.rptsql** — Add LINE_WIDTH, SYMBOL options, EXPONENTIAL/LOG/POWER overlays, RUNNING_TOTAL, PERCENT_OF_TOTAL.
 9. **07_COMBO.rptsql** — Add Y2_AXIS example, LINE_WIDTH, overlays, STACKED bars.
 10. **01_BAR.rptsql** — Add STACKED=100PCT, full legend suite, GRID_LINES, ZERO_LINE.

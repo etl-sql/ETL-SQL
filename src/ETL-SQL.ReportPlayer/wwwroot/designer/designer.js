@@ -5129,6 +5129,7 @@ export function createDesigner(container, opts = {}) {
         const isSankey = v.type === 'SANKEY';
         const isTreemap = v.type === 'TREEMAP';
         const isSunburst = v.type === 'SUNBURST';
+        const isBoxPlot = v.type === 'BOXPLOT';
         const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
         const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
         const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
@@ -5393,6 +5394,24 @@ export function createDesigner(container, opts = {}) {
                                 </select>
                             </label>
                         </div>` : ''}` : ''}
+                        ${isBoxPlot ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">Box plot options</div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Box style
+                                <select id="pp-format-boxplot-style" class="form-control">
+                                    ${['BOX', 'VIOLIN', 'BOTH'].map(val => `<option${(v.options?.BOX_STYLE || 'BOX').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Orientation
+                                <select id="pp-format-boxplot-orientation" class="form-control">
+                                    ${['VERTICAL', 'HORIZONTAL'].map(val => `<option${(v.options?.ORIENTATION || 'VERTICAL').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                </select>
+                            </label>
+                        </div>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-boxplot-notched" ${(v.options?.NOTCHED || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Notched boxes (median CI)</span></label>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-boxplot-show-mean" ${(v.options?.SHOW_MEAN || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show mean marker</span></label>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-boxplot-show-violin" ${(v.options?.SHOW_VIOLIN || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show violin density</span></label>` : ''}
                     </div>
                 </details>
 
@@ -5816,6 +5835,11 @@ export function createDesigner(container, opts = {}) {
         bindOption('#pp-format-hierarchy-show-breadcrumb', 'SHOW_BREADCRUMB', 'change', el => el.checked ? 'ON' : 'OFF');
         bindOption('#pp-format-treemap-label-min-size', 'LABEL_MIN_SIZE');
         bindOption('#pp-format-treemap-label-overflow', 'LABEL_OVERFLOW');
+        bindOption('#pp-format-boxplot-style', 'BOX_STYLE');
+        bindOption('#pp-format-boxplot-orientation', 'ORIENTATION');
+        bindOption('#pp-format-boxplot-notched', 'NOTCHED', 'change', el => el.checked ? 'ON' : 'OFF');
+        bindOption('#pp-format-boxplot-show-mean', 'SHOW_MEAN', 'change', el => el.checked ? 'ON' : 'OFF');
+        bindOption('#pp-format-boxplot-show-violin', 'SHOW_VIOLIN', 'change', el => el.checked ? 'ON' : 'OFF');
         bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
         bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
         bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');

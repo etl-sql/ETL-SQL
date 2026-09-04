@@ -50,6 +50,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         ValidateCandlestickOptions(statement);
         ValidateRadarOptions(statement);
         ValidateFunnelOptions(statement);
+        ValidateBoxPlotOptions(statement);
         foreach (var opt in statement.Options) manifest.Options.TryAdd(opt.Key, opt.Value);
         if (statement.VisualType == VisualType.Funnel)
         {
@@ -325,7 +326,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 VisualType.HeatMap => ResolveHeatMapLayerStyle(statement, manifest),
                 VisualType.Funnel => ResolveFunnelLayerStyle(statement, manifest),
                 VisualType.Gauge => ImmutableArray.Create(new StyleToken("layout", "gauge")),
-                VisualType.BoxPlot => ImmutableArray.Create(new StyleToken("layout", "boxplot"), new StyleToken("preserveRows", "true")),
+                VisualType.BoxPlot => ResolveBoxPlotLayerStyle(statement, manifest),
                 VisualType.Waterfall => ResolveWaterfallLayerStyle(statement, manifest),
                 VisualType.Candlestick => ResolveCandlestickLayerStyle(statement, manifest),
                 VisualType.Gantt => ResolveGanttLayerStyle(statement, manifest),
@@ -597,7 +598,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 ? FieldChannel.X
                 : group.Key.Equals("y", StringComparison.OrdinalIgnoreCase) &&
                 binding.Channel is FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or
-                    FieldChannel.High or FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or
+                    FieldChannel.High or FieldChannel.Mean or FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or
                     FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh
                 ? FieldChannel.Y
                 : binding.Channel;
@@ -899,6 +900,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         "MEDIAN" when type == VisualType.BoxPlot => FieldChannel.Median,
         "Q3" when type == VisualType.BoxPlot => FieldChannel.Q3,
         "HIGH" when type == VisualType.BoxPlot => FieldChannel.High,
+        "MEAN" when type == VisualType.BoxPlot => FieldChannel.Mean,
         "OPEN" when type == VisualType.Candlestick => FieldChannel.Open,
         "HIGH" when type == VisualType.Candlestick => FieldChannel.High,
         "LOW" when type == VisualType.Candlestick => FieldChannel.Low,
@@ -935,7 +937,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         VisualType.Waterfall
             => ["NAME", "X", "VALUE", "Y", "TOTAL", "SUBTOTAL", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.BoxPlot
-            => ["X", "LOW", "Q1", "MEDIAN", "Q3", "HIGH", "SERIES", "COLOR", "TOOLTIP"],
+            => ["X", "Y", "LOW", "Q1", "MEDIAN", "Q3", "HIGH", "MEAN", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.Candlestick
             => ["X", "OPEN", "HIGH", "LOW", "CLOSE", "VOLUME", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.Gantt
@@ -958,7 +960,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         if (type is VisualType.HeatMap or VisualType.Gantt && channel == FieldChannel.Y)
             return DataSemanticKind.Nominal;
         if (channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd or
-            FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or
+            FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or FieldChannel.Mean or
             FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or
             FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh or FieldChannel.Radius or FieldChannel.Size)
             return DataSemanticKind.Quantitative;
@@ -979,7 +981,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         FieldChannel.Y => "y",
         FieldChannel.Y2 => "y2",
         FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or
-            FieldChannel.Q3 or FieldChannel.High or FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or
+            FieldChannel.Q3 or FieldChannel.High or FieldChannel.Mean or FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or
             FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh => "y",
         FieldChannel.Color => "color",
         FieldChannel.Theta => "theta",
@@ -1700,6 +1702,82 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                     var upper = opt.Value.ToUpperInvariant();
                     if (upper is not ("FUNNEL" or "PYRAMID"))
                         throw new InvalidOperationException($"Invalid {key} '{opt.Value}'. Valid values are FUNNEL or PYRAMID.");
+                }
+            }
+        }
+    }
+
+    private static ImmutableArray<StyleToken> ResolveBoxPlotLayerStyle(
+        CreateVisualStatement statement,
+        VisualManifest manifest)
+    {
+        var tokens = ImmutableArray.CreateBuilder<StyleToken>();
+        tokens.Add(new StyleToken("layout", "boxplot"));
+        tokens.Add(new StyleToken("preserveRows", "true"));
+
+        void Forward(string key, string? defaultVal = null)
+        {
+            var val = statement.Options.FirstOrDefault(o => o.Key.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value
+                ?? manifest.Options.GetValueOrDefault(key)
+                ?? defaultVal;
+            if (!string.IsNullOrWhiteSpace(val)) tokens.Add(new StyleToken(key, val));
+        }
+
+        Forward("NOTCHED", "OFF");
+        Forward("SHOW_MEAN", "OFF");
+        Forward("SHOW_VIOLIN", "OFF");
+        Forward("VIOLIN", "OFF");
+        Forward("BOX_STYLE", "BOX");
+        Forward("ORIENTATION", "VERTICAL");
+        Forward("MEAN_COLOR");
+        Forward("VIOLIN_COLOR");
+
+        return tokens.ToImmutable();
+    }
+
+    private static void ValidateBoxPlotOptions(CreateVisualStatement statement)
+    {
+        var isBoxPlot = statement.VisualType == VisualType.BoxPlot;
+        foreach (var opt in statement.Options)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            if (key is "NOTCHED" or "SHOW_MEAN" or "SHOW_VIOLIN" or "VIOLIN" or "BOX_STYLE" or "MEAN_COLOR" or "VIOLIN_COLOR")
+            {
+                if (!isBoxPlot)
+                    throw new InvalidOperationException($"{key} option is supported only on BOXPLOT visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            }
+
+            if (isBoxPlot)
+            {
+                if (key == "NOTCHED")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0"))
+                        throw new InvalidOperationException($"Invalid NOTCHED '{opt.Value}'. Valid values are ON or OFF.");
+                }
+                else if (key == "SHOW_MEAN")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0"))
+                        throw new InvalidOperationException($"Invalid SHOW_MEAN '{opt.Value}'. Valid values are ON or OFF.");
+                }
+                else if (key is "SHOW_VIOLIN" or "VIOLIN")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE" or "1" or "0"))
+                        throw new InvalidOperationException($"Invalid {key} '{opt.Value}'. Valid values are ON or OFF.");
+                }
+                else if (key == "BOX_STYLE")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("BOX" or "VIOLIN" or "BOTH"))
+                        throw new InvalidOperationException($"Invalid BOX_STYLE '{opt.Value}'. Valid values are BOX, VIOLIN, or BOTH.");
+                }
+                else if (key == "ORIENTATION")
+                {
+                    var upper = opt.Value.ToUpperInvariant();
+                    if (upper is not ("VERTICAL" or "HORIZONTAL"))
+                        throw new InvalidOperationException($"Invalid ORIENTATION '{opt.Value}'. Valid values are VERTICAL or HORIZONTAL.");
                 }
             }
         }

@@ -28,6 +28,7 @@ public enum FieldChannel
     Median,
     Q3,
     High,
+    Mean,
     Open,
     Close,
     ErrorLow,
@@ -465,7 +466,7 @@ public sealed record ChartSpec(
                     throw new InvalidDataException("A VALUE binding bypasses data scales and cannot declare SCALE.");
                 if (binding.SourceKind == BindingSourceKind.Value && binding.Axis != AxisRole.None)
                     throw new InvalidDataException("A VALUE binding cannot declare an axis.");
-                if (binding.SourceKind == BindingSourceKind.Value && binding.Channel is FieldChannel.X or FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd or FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh)
+                if (binding.SourceKind == BindingSourceKind.Value && binding.Channel is FieldChannel.X or FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd or FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh or FieldChannel.Mean)
                     throw new InvalidDataException($"A visual-range VALUE cannot bind positional channel {binding.Channel}.");
             }
             if (binding.ScaleId is not null && !scaleIds.Contains(binding.ScaleId))
@@ -699,7 +700,7 @@ public sealed record ChartSpec(
     private static bool CompatibleScaleChannel(FieldChannel scale, FieldChannel binding) => scale == binding ||
         scale == FieldChannel.X && binding is FieldChannel.X2 or FieldChannel.XStart or FieldChannel.XEnd ||
         scale == FieldChannel.Y && binding is FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd or
-            FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or
+            FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or FieldChannel.Mean or
             FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or
             FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh;
 

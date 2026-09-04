@@ -2032,34 +2032,188 @@ internal sealed class PlotPlanSvgRenderer
     private static void RenderBoxPlot(StringBuilder builder, PlotPlan plan)
     {
         var layer = plan.Layers.First();
-        var scale = plan.Scales.First(item => item.Channel == FieldChannel.Y);
-        var categories = plan.Scales.First(item => item.Channel == FieldChannel.X).Categories;
         var plotWidth = plan.Bounds.Width - Left - Right;
         var plotHeight = plan.Bounds.Height - Top - Bottom;
-        var slot = plotWidth / Math.Max(1, categories.Length);
-        builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/><line x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
-        foreach (var tick in scale.Ticks)
+
+        var isHorizontal = plan.Coordinate?.Kind == CoordinateKind.TransposedCartesian
+            || string.Equals(Style(plan, "ORIENTATION"), "HORIZONTAL", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(LayerStyle(layer, "orientation"), "horizontal", StringComparison.OrdinalIgnoreCase);
+
+        var notchedOpt = Style(plan, "NOTCHED") ?? LayerStyle(layer, "notched");
+        var isNotched = string.Equals(notchedOpt, "ON", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(notchedOpt, "TRUE", StringComparison.OrdinalIgnoreCase)
+            || notchedOpt == "1";
+
+        var showMeanOpt = Style(plan, "SHOW_MEAN") ?? LayerStyle(layer, "show_mean");
+        var showMean = string.Equals(showMeanOpt, "ON", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(showMeanOpt, "TRUE", StringComparison.OrdinalIgnoreCase)
+            || showMeanOpt == "1";
+
+        var showViolinOpt = Style(plan, "SHOW_VIOLIN") ?? Style(plan, "VIOLIN") ?? LayerStyle(layer, "show_violin") ?? LayerStyle(layer, "violin");
+        var boxStyleOpt = (Style(plan, "BOX_STYLE") ?? LayerStyle(layer, "box_style") ?? "BOX").ToUpperInvariant();
+        var showViolin = string.Equals(showViolinOpt, "ON", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(showViolinOpt, "TRUE", StringComparison.OrdinalIgnoreCase)
+            || showViolinOpt == "1"
+            || boxStyleOpt is "VIOLIN" or "BOTH";
+        var showBox = boxStyleOpt is not "VIOLIN";
+
+        var meanColor = SafePaint(Style(plan, "MEAN_COLOR") ?? LayerStyle(layer, "mean_color"), "#dc2626");
+        var violinColor = SafePaint(Style(plan, "VIOLIN_COLOR") ?? LayerStyle(layer, "violin_color"), "#93c5fd");
+
+        if (isHorizontal)
         {
-            var y = MapY(PlotPlanResolver.Number(tick.Value) ?? 0m, scale, plotHeight);
-            builder.AppendLine($"<line x1='{N(Left)}' y1='{N(y)}' x2='{N(Left + plotWidth)}' y2='{N(y)}' stroke='#e5e7eb'/><text x='{N(Left - 6m)}' y='{N(y + 4m)}' text-anchor='end' font-size='9' fill='#666'>{Esc(tick.Label)}</text>");
+            var valueScale = plan.Scales.First(item => item.Channel == FieldChannel.X || item.Channel == FieldChannel.Y);
+            var catScale = plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.X && item != valueScale)
+                ?? plan.Scales.First(item => item.Categories.Length > 0);
+            var categories = catScale.Categories;
+            var slot = plotHeight / Math.Max(1, categories.Length);
+
+            builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/><line x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
+            foreach (var tick in valueScale.Ticks)
+            {
+                var x = MapHorizontal(PlotPlanResolver.Number(tick.Value) ?? 0m, valueScale, plotWidth);
+                builder.AppendLine($"<line x1='{N(x)}' y1='{N(Top)}' x2='{N(x)}' y2='{N(Top + plotHeight)}' stroke='#e5e7eb'/><text x='{N(x)}' y='{N(Top + plotHeight + 14m)}' text-anchor='middle' font-size='9' fill='#666'>{Esc(tick.Label)}</text>");
+            }
+
+            foreach (var datum in layer.Data)
+            {
+                var low = Numeric(datum, FieldChannel.Low); var q1 = Numeric(datum, FieldChannel.Q1);
+                var median = Numeric(datum, FieldChannel.Median); var q3 = Numeric(datum, FieldChannel.Q3); var high = Numeric(datum, FieldChannel.High);
+                var mean = Numeric(datum, FieldChannel.Mean);
+                if (low is null || q1 is null || median is null || q3 is null || high is null) continue;
+                var category = DisplayChannel(datum, FieldChannel.X) ?? DisplayChannel(datum, FieldChannel.Text);
+                var categoryIndex = category is null ? -1 : categories.IndexOf(category);
+                if (categoryIndex < 0) continue;
+                var y = Top + slot * (categoryIndex + .5m);
+                var boxHeight = slot * .48m;
+                var lowX = MapHorizontal(low.Value, valueScale, plotWidth);
+                var q1X = MapHorizontal(q1.Value, valueScale, plotWidth);
+                var medianX = MapHorizontal(median.Value, valueScale, plotWidth);
+                var q3X = MapHorizontal(q3.Value, valueScale, plotWidth);
+                var highX = MapHorizontal(high.Value, valueScale, plotWidth);
+                var boxColor = SafePaint(Style(plan, "COLOR:" + category), "#93c5fd");
+                var borderColor = SafePaint(Style(plan, "COLOR:" + category), "#2563eb");
+
+                builder.AppendLine($"<g data-row-index='{datum.RowIndex}'><title>{Esc(category!)}: {N(low.Value)}, {N(q1.Value)}, {N(median.Value)}, {N(q3.Value)}, {N(high.Value)}</title>");
+
+                if (showViolin)
+                {
+                    var hViolin = boxHeight * 1.35m;
+                    builder.AppendLine($"<path class='plot-violin' d='M {N(lowX)} {N(y)} C {N(q1X)} {N(y - hViolin / 2m)} {N(q3X)} {N(y - hViolin / 2m)} {N(highX)} {N(y)} C {N(q3X)} {N(y + hViolin / 2m)} {N(q1X)} {N(y + hViolin / 2m)} {N(lowX)} {N(y)} Z' fill='{Esc(violinColor)}' fill-opacity='.3' stroke='{Esc(borderColor)}' stroke-dasharray='2 2'/>");
+                }
+
+                if (showBox)
+                {
+                    builder.AppendLine($"<line x1='{N(lowX)}' y1='{N(y)}' x2='{N(highX)}' y2='{N(y)}' stroke='#374151'/>");
+                    builder.AppendLine($"<line x1='{N(highX)}' y1='{N(y - boxHeight / 4m)}' x2='{N(highX)}' y2='{N(y + boxHeight / 4m)}' stroke='#374151'/>");
+                    builder.AppendLine($"<line x1='{N(lowX)}' y1='{N(y - boxHeight / 4m)}' x2='{N(lowX)}' y2='{N(y + boxHeight / 4m)}' stroke='#374151'/>");
+
+                    if (isNotched)
+                    {
+                        var iqr = Math.Max(0.01m, q3.Value - q1.Value);
+                        var notch = 1.58m * iqr / 3m;
+                        var notchLowVal = Math.Max(q1.Value, median.Value - notch);
+                        var notchHighVal = Math.Min(q3.Value, median.Value + notch);
+                        var notchLowX = MapHorizontal(notchLowVal, valueScale, plotWidth);
+                        var notchHighX = MapHorizontal(notchHighVal, valueScale, plotWidth);
+                        var hNotch = boxHeight * .6m;
+
+                        builder.AppendLine($"<path class='plot-boxplot-box' d='M {N(q1X)} {N(y - boxHeight / 2m)} L {N(notchLowX)} {N(y - boxHeight / 2m)} L {N(medianX)} {N(y - hNotch / 2m)} L {N(notchHighX)} {N(y - boxHeight / 2m)} L {N(q3X)} {N(y - boxHeight / 2m)} L {N(q3X)} {N(y + boxHeight / 2m)} L {N(notchHighX)} {N(y + boxHeight / 2m)} L {N(medianX)} {N(y + hNotch / 2m)} L {N(notchLowX)} {N(y + boxHeight / 2m)} L {N(q1X)} {N(y + boxHeight / 2m)} Z' fill='{Esc(boxColor)}' stroke='{Esc(borderColor)}' data-notched='true'/>");
+                        builder.AppendLine($"<line x1='{N(medianX)}' y1='{N(y - hNotch / 2m)}' x2='{N(medianX)}' y2='{N(y + hNotch / 2m)}' stroke='#1e3a8a' stroke-width='2'/>");
+                    }
+                    else
+                    {
+                        var bX = Math.Min(q1X, q3X);
+                        var bW = Math.Max(1m, Math.Abs(q3X - q1X));
+                        builder.AppendLine($"<rect class='plot-boxplot-box' x='{N(bX)}' y='{N(y - boxHeight / 2m)}' width='{N(bW)}' height='{N(boxHeight)}' fill='{Esc(boxColor)}' stroke='{Esc(borderColor)}'/>");
+                        builder.AppendLine($"<line x1='{N(medianX)}' y1='{N(y - boxHeight / 2m)}' x2='{N(medianX)}' y2='{N(y + boxHeight / 2m)}' stroke='#1e3a8a' stroke-width='2'/>");
+                    }
+                }
+
+                if (showMean && mean.HasValue)
+                {
+                    var meanX = MapHorizontal(mean.Value, valueScale, plotWidth);
+                    builder.AppendLine($"<polygon class='plot-boxplot-mean' points='{N(meanX)},{N(y - 4m)} {N(meanX + 4m)},{N(y)} {N(meanX)},{N(y + 4m)} {N(meanX - 4m)},{N(y)}' fill='{Esc(meanColor)}' stroke='#ffffff' stroke-width='1' data-mean='{N(mean.Value)}'><title>Mean: {N(mean.Value)}</title></polygon>");
+                }
+
+                builder.AppendLine("</g>");
+                builder.AppendLine($"<text x='{N(Left - 6m)}' y='{N(y + 3m)}' text-anchor='end' font-size='9' fill='#666'>{Esc(Truncate(category!, 12))}</text>");
+            }
         }
-        foreach (var datum in layer.Data)
+        else
         {
-            var low = Numeric(datum, FieldChannel.Low); var q1 = Numeric(datum, FieldChannel.Q1);
-            var median = Numeric(datum, FieldChannel.Median); var q3 = Numeric(datum, FieldChannel.Q3); var high = Numeric(datum, FieldChannel.High);
-            if (low is null || q1 is null || median is null || q3 is null || high is null) continue;
-            var category = DisplayChannel(datum, FieldChannel.X);
-            var categoryIndex = category is null ? -1 : categories.IndexOf(category);
-            if (categoryIndex < 0) continue;
-            var x = Left + slot * (categoryIndex + .5m);
-            var boxWidth = slot * .48m;
-            var lowY = MapY(low.Value, scale, plotHeight); var q1Y = MapY(q1.Value, scale, plotHeight);
-            var medianY = MapY(median.Value, scale, plotHeight); var q3Y = MapY(q3.Value, scale, plotHeight); var highY = MapY(high.Value, scale, plotHeight);
-            var boxColor = SafePaint(Style(plan, "COLOR:" + category), "#93c5fd");
-            var borderColor = SafePaint(Style(plan, "COLOR:" + category), "#2563eb");
-            builder.AppendLine($"<g data-row-index='{datum.RowIndex}'><title>{Esc(category!)}: {N(low.Value)}, {N(q1.Value)}, {N(median.Value)}, {N(q3.Value)}, {N(high.Value)}</title><line x1='{N(x)}' y1='{N(highY)}' x2='{N(x)}' y2='{N(lowY)}' stroke='#374151'/><line x1='{N(x - boxWidth / 4m)}' y1='{N(highY)}' x2='{N(x + boxWidth / 4m)}' y2='{N(highY)}' stroke='#374151'/><line x1='{N(x - boxWidth / 4m)}' y1='{N(lowY)}' x2='{N(x + boxWidth / 4m)}' y2='{N(lowY)}' stroke='#374151'/><rect x='{N(x - boxWidth / 2m)}' y='{N(q3Y)}' width='{N(boxWidth)}' height='{N(Math.Max(1m, q1Y - q3Y))}' fill='{Esc(boxColor)}' stroke='{Esc(borderColor)}'/><line x1='{N(x - boxWidth / 2m)}' y1='{N(medianY)}' x2='{N(x + boxWidth / 2m)}' y2='{N(medianY)}' stroke='#1e3a8a' stroke-width='2'/></g>");
-            builder.AppendLine($"<text x='{N(x)}' y='{N(Top + plotHeight + 16m)}' text-anchor='middle' font-size='9' fill='#666'>{Esc(Truncate(category!, 12))}</text>");
+            var scale = plan.Scales.First(item => item.Channel == FieldChannel.Y);
+            var categories = plan.Scales.First(item => item.Channel == FieldChannel.X).Categories;
+            var slot = plotWidth / Math.Max(1, categories.Length);
+
+            builder.AppendLine($"<line x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/><line x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
+            foreach (var tick in scale.Ticks)
+            {
+                var y = MapY(PlotPlanResolver.Number(tick.Value) ?? 0m, scale, plotHeight);
+                builder.AppendLine($"<line x1='{N(Left)}' y1='{N(y)}' x2='{N(Left + plotWidth)}' y2='{N(y)}' stroke='#e5e7eb'/><text x='{N(Left - 6m)}' y='{N(y + 4m)}' text-anchor='end' font-size='9' fill='#666'>{Esc(tick.Label)}</text>");
+            }
+
+            foreach (var datum in layer.Data)
+            {
+                var low = Numeric(datum, FieldChannel.Low); var q1 = Numeric(datum, FieldChannel.Q1);
+                var median = Numeric(datum, FieldChannel.Median); var q3 = Numeric(datum, FieldChannel.Q3); var high = Numeric(datum, FieldChannel.High);
+                var mean = Numeric(datum, FieldChannel.Mean);
+                if (low is null || q1 is null || median is null || q3 is null || high is null) continue;
+                var category = DisplayChannel(datum, FieldChannel.X);
+                var categoryIndex = category is null ? -1 : categories.IndexOf(category);
+                if (categoryIndex < 0) continue;
+                var x = Left + slot * (categoryIndex + .5m);
+                var boxWidth = slot * .48m;
+                var lowY = MapY(low.Value, scale, plotHeight); var q1Y = MapY(q1.Value, scale, plotHeight);
+                var medianY = MapY(median.Value, scale, plotHeight); var q3Y = MapY(q3.Value, scale, plotHeight); var highY = MapY(high.Value, scale, plotHeight);
+                var boxColor = SafePaint(Style(plan, "COLOR:" + category), "#93c5fd");
+                var borderColor = SafePaint(Style(plan, "COLOR:" + category), "#2563eb");
+
+                builder.AppendLine($"<g data-row-index='{datum.RowIndex}'><title>{Esc(category!)}: {N(low.Value)}, {N(q1.Value)}, {N(median.Value)}, {N(q3.Value)}, {N(high.Value)}</title>");
+
+                if (showViolin)
+                {
+                    var wViolin = boxWidth * 1.35m;
+                    builder.AppendLine($"<path class='plot-violin' d='M {N(x)} {N(lowY)} C {N(x - wViolin / 2m)} {N(q1Y)} {N(x - wViolin / 2m)} {N(q3Y)} {N(x)} {N(highY)} C {N(x + wViolin / 2m)} {N(q3Y)} {N(x + wViolin / 2m)} {N(q1Y)} {N(x)} {N(lowY)} Z' fill='{Esc(violinColor)}' fill-opacity='.3' stroke='{Esc(borderColor)}' stroke-dasharray='2 2'/>");
+                }
+
+                if (showBox)
+                {
+                    builder.AppendLine($"<line x1='{N(x)}' y1='{N(highY)}' x2='{N(x)}' y2='{N(lowY)}' stroke='#374151'/>");
+                    builder.AppendLine($"<line x1='{N(x - boxWidth / 4m)}' y1='{N(highY)}' x2='{N(x + boxWidth / 4m)}' y2='{N(highY)}' stroke='#374151'/>");
+                    builder.AppendLine($"<line x1='{N(x - boxWidth / 4m)}' y1='{N(lowY)}' x2='{N(x + boxWidth / 4m)}' y2='{N(lowY)}' stroke='#374151'/>");
+
+                    if (isNotched)
+                    {
+                        var iqr = Math.Max(0.01m, q3.Value - q1.Value);
+                        var notch = 1.58m * iqr / 3m;
+                        var notchLowVal = Math.Max(q1.Value, median.Value - notch);
+                        var notchHighVal = Math.Min(q3.Value, median.Value + notch);
+                        var notchLowY = MapY(notchLowVal, scale, plotHeight);
+                        var notchHighY = MapY(notchHighVal, scale, plotHeight);
+                        var wNotch = boxWidth * .6m;
+
+                        builder.AppendLine($"<path class='plot-boxplot-box' d='M {N(x - boxWidth / 2m)} {N(q3Y)} L {N(x + boxWidth / 2m)} {N(q3Y)} L {N(x + boxWidth / 2m)} {N(notchHighY)} L {N(x + wNotch / 2m)} {N(medianY)} L {N(x + boxWidth / 2m)} {N(notchLowY)} L {N(x + boxWidth / 2m)} {N(q1Y)} L {N(x - boxWidth / 2m)} {N(q1Y)} L {N(x - boxWidth / 2m)} {N(notchLowY)} L {N(x - wNotch / 2m)} {N(medianY)} L {N(x - boxWidth / 2m)} {N(notchHighY)} Z' fill='{Esc(boxColor)}' stroke='{Esc(borderColor)}' data-notched='true'/>");
+                        builder.AppendLine($"<line x1='{N(x - wNotch / 2m)}' y1='{N(medianY)}' x2='{N(x + wNotch / 2m)}' y2='{N(medianY)}' stroke='#1e3a8a' stroke-width='2'/>");
+                    }
+                    else
+                    {
+                        builder.AppendLine($"<rect class='plot-boxplot-box' x='{N(x - boxWidth / 2m)}' y='{N(q3Y)}' width='{N(boxWidth)}' height='{N(Math.Max(1m, q1Y - q3Y))}' fill='{Esc(boxColor)}' stroke='{Esc(borderColor)}'/>");
+                        builder.AppendLine($"<line x1='{N(x - boxWidth / 2m)}' y1='{N(medianY)}' x2='{N(x + boxWidth / 2m)}' y2='{N(medianY)}' stroke='#1e3a8a' stroke-width='2'/>");
+                    }
+                }
+
+                if (showMean && mean.HasValue)
+                {
+                    var meanY = MapY(mean.Value, scale, plotHeight);
+                    builder.AppendLine($"<polygon class='plot-boxplot-mean' points='{N(x)},{N(meanY - 4m)} {N(x + 4m)},{N(meanY)} {N(x)},{N(meanY + 4m)} {N(x - 4m)},{N(meanY)}' fill='{Esc(meanColor)}' stroke='#ffffff' stroke-width='1' data-mean='{N(mean.Value)}'><title>Mean: {N(mean.Value)}</title></polygon>");
+                }
+
+                builder.AppendLine("</g>");
+                builder.AppendLine($"<text x='{N(x)}' y='{N(Top + plotHeight + 16m)}' text-anchor='middle' font-size='9' fill='#666'>{Esc(Truncate(category!, 12))}</text>");
+            }
         }
+
         var xTitle = Style(plan, "axis:x:label");
         var yTitle = Style(plan, "axis:y:label");
         if (!string.IsNullOrWhiteSpace(xTitle))
@@ -3013,11 +3167,34 @@ internal sealed class PlotPlanSvgRenderer
     {
         if (scale is null) return;
         var slot = area.Width / Math.Max(1, categories.Length);
+
+        var notchedOpt = LayerStyle(layer, "notched");
+        var isNotched = string.Equals(notchedOpt, "ON", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(notchedOpt, "TRUE", StringComparison.OrdinalIgnoreCase)
+            || notchedOpt == "1";
+
+        var showMeanOpt = LayerStyle(layer, "show_mean");
+        var showMean = string.Equals(showMeanOpt, "ON", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(showMeanOpt, "TRUE", StringComparison.OrdinalIgnoreCase)
+            || showMeanOpt == "1";
+
+        var showViolinOpt = LayerStyle(layer, "show_violin") ?? LayerStyle(layer, "violin");
+        var boxStyleOpt = (LayerStyle(layer, "box_style") ?? "BOX").ToUpperInvariant();
+        var showViolin = string.Equals(showViolinOpt, "ON", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(showViolinOpt, "TRUE", StringComparison.OrdinalIgnoreCase)
+            || showViolinOpt == "1"
+            || boxStyleOpt is "VIOLIN" or "BOTH";
+        var showBox = boxStyleOpt is not "VIOLIN";
+
+        var meanColor = SafePaint(LayerStyle(layer, "mean_color"), "#dc2626");
+        var violinColor = SafePaint(LayerStyle(layer, "violin_color"), color);
+
         builder.AppendLine($"<g class='plot-boxplot' data-layer='{Esc(layer.Id)}'>");
         foreach (var datum in layer.Data)
         {
             var low = Numeric(datum, FieldChannel.Low); var q1 = Numeric(datum, FieldChannel.Q1);
             var median = Numeric(datum, FieldChannel.Median); var q3 = Numeric(datum, FieldChannel.Q3); var high = Numeric(datum, FieldChannel.High);
+            var mean = Numeric(datum, FieldChannel.Mean);
             if (low is null || q1 is null || median is null || q3 is null || high is null) continue;
             var category = DisplayChannel(datum, FieldChannel.X);
             var index = category is null ? -1 : categories.IndexOf(category);
@@ -3025,7 +3202,48 @@ internal sealed class PlotPlanSvgRenderer
             var x = area.Left + slot * (index + .5m); var width = slot * layer.BandSize * .65m;
             var lowY = MapY(low.Value, scale, area.Height); var q1Y = MapY(q1.Value, scale, area.Height);
             var medianY = MapY(median.Value, scale, area.Height); var q3Y = MapY(q3.Value, scale, area.Height); var highY = MapY(high.Value, scale, area.Height);
-            builder.AppendLine($"<g data-row-index='{datum.RowIndex}'><title>{Esc(category!)}: low {N(low.Value)}, Q1 {N(q1.Value)}, median {N(median.Value)}, Q3 {N(q3.Value)}, high {N(high.Value)}</title><line x1='{N(x)}' y1='{N(highY)}' x2='{N(x)}' y2='{N(lowY)}' stroke='{Esc(color)}'/><line x1='{N(x - width / 4m)}' y1='{N(highY)}' x2='{N(x + width / 4m)}' y2='{N(highY)}' stroke='{Esc(color)}'/><line x1='{N(x - width / 4m)}' y1='{N(lowY)}' x2='{N(x + width / 4m)}' y2='{N(lowY)}' stroke='{Esc(color)}'/><rect x='{N(x - width / 2m)}' y='{N(q3Y)}' width='{N(width)}' height='{N(Math.Max(1m, q1Y - q3Y))}' fill='{Esc(color)}' fill-opacity='.35' stroke='{Esc(color)}'/><line x1='{N(x - width / 2m)}' y1='{N(medianY)}' x2='{N(x + width / 2m)}' y2='{N(medianY)}' stroke='{Esc(color)}' stroke-width='2'/></g>");
+
+            builder.AppendLine($"<g data-row-index='{datum.RowIndex}'><title>{Esc(category!)}: low {N(low.Value)}, Q1 {N(q1.Value)}, median {N(median.Value)}, Q3 {N(q3.Value)}, high {N(high.Value)}</title>");
+
+            if (showViolin)
+            {
+                var wViolin = width * 1.35m;
+                builder.AppendLine($"<path class='plot-violin' d='M {N(x)} {N(lowY)} C {N(x - wViolin / 2m)} {N(q1Y)} {N(x - wViolin / 2m)} {N(q3Y)} {N(x)} {N(highY)} C {N(x + wViolin / 2m)} {N(q3Y)} {N(x + wViolin / 2m)} {N(q1Y)} {N(x)} {N(lowY)} Z' fill='{Esc(violinColor)}' fill-opacity='.25' stroke='{Esc(color)}' stroke-dasharray='2 2'/>");
+            }
+
+            if (showBox)
+            {
+                builder.AppendLine($"<line x1='{N(x)}' y1='{N(highY)}' x2='{N(x)}' y2='{N(lowY)}' stroke='{Esc(color)}'/>");
+                builder.AppendLine($"<line x1='{N(x - width / 4m)}' y1='{N(highY)}' x2='{N(x + width / 4m)}' y2='{N(highY)}' stroke='{Esc(color)}'/>");
+                builder.AppendLine($"<line x1='{N(x - width / 4m)}' y1='{N(lowY)}' x2='{N(x + width / 4m)}' y2='{N(lowY)}' stroke='{Esc(color)}'/>");
+
+                if (isNotched)
+                {
+                    var iqr = Math.Max(0.01m, q3.Value - q1.Value);
+                    var notch = 1.58m * iqr / 3m;
+                    var notchLowVal = Math.Max(q1.Value, median.Value - notch);
+                    var notchHighVal = Math.Min(q3.Value, median.Value + notch);
+                    var notchLowY = MapY(notchLowVal, scale, area.Height);
+                    var notchHighY = MapY(notchHighVal, scale, area.Height);
+                    var wNotch = width * .6m;
+
+                    builder.AppendLine($"<path class='plot-boxplot-box' d='M {N(x - width / 2m)} {N(q3Y)} L {N(x + width / 2m)} {N(q3Y)} L {N(x + width / 2m)} {N(notchHighY)} L {N(x + wNotch / 2m)} {N(medianY)} L {N(x + width / 2m)} {N(notchLowY)} L {N(x + width / 2m)} {N(q1Y)} L {N(x - width / 2m)} {N(q1Y)} L {N(x - width / 2m)} {N(notchLowY)} L {N(x - wNotch / 2m)} {N(medianY)} L {N(x - width / 2m)} {N(notchHighY)} Z' fill='{Esc(color)}' fill-opacity='.35' stroke='{Esc(color)}' data-notched='true'/>");
+                    builder.AppendLine($"<line x1='{N(x - wNotch / 2m)}' y1='{N(medianY)}' x2='{N(x + wNotch / 2m)}' y2='{N(medianY)}' stroke='{Esc(color)}' stroke-width='2'/>");
+                }
+                else
+                {
+                    builder.AppendLine($"<rect class='plot-boxplot-box' x='{N(x - width / 2m)}' y='{N(q3Y)}' width='{N(width)}' height='{N(Math.Max(1m, q1Y - q3Y))}' fill='{Esc(color)}' fill-opacity='.35' stroke='{Esc(color)}'/>");
+                    builder.AppendLine($"<line x1='{N(x - width / 2m)}' y1='{N(medianY)}' x2='{N(x + width / 2m)}' y2='{N(medianY)}' stroke='{Esc(color)}' stroke-width='2'/>");
+                }
+            }
+
+            if (showMean && mean.HasValue)
+            {
+                var meanY = MapY(mean.Value, scale, area.Height);
+                builder.AppendLine($"<polygon class='plot-boxplot-mean' points='{N(x)},{N(meanY - 4m)} {N(x + 4m)},{N(meanY)} {N(x)},{N(meanY + 4m)} {N(x - 4m)},{N(meanY)}' fill='{Esc(meanColor)}' stroke='#ffffff' stroke-width='1' data-mean='{N(mean.Value)}'><title>Mean: {N(mean.Value)}</title></polygon>");
+            }
+
+            builder.AppendLine("</g>");
         }
         builder.AppendLine("</g>");
     }

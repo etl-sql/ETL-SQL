@@ -44,7 +44,7 @@ public class VisualMappingCompletenessRule : ILintRule
             }
 
             // Alias-group checks: any one alias in the group satisfies the requirement.
-            foreach (var (group, label) in GetAliasGroups(visual.VisualType))
+            foreach (var (group, label) in GetAliasGroups(visual))
             {
                 if (!group.Any(alias => presentRoles.Contains(alias)))
                 {
@@ -87,7 +87,8 @@ public class VisualMappingCompletenessRule : ILintRule
             VisualType.Gauge => new List<string> { "VALUE" },
             VisualType.Slicer => new List<string> { "VALUE" },
             VisualType.MultiSelect => new List<string> { "VALUE" },
-            VisualType.BoxPlot => new List<string> { "X", "LOW", "Q1", "MEDIAN", "Q3", "HIGH" },
+            // BoxPlot: Either raw distribution (X/CATEGORY + Y/VALUE) or precomputed stats (X/CATEGORY + LOW/MIN + Q1 + MEDIAN + Q3 + HIGH/MAX) — handled in GetAliasGroups.
+            VisualType.BoxPlot => null,
             VisualType.Combo => new List<string> { "X" },
             VisualType.Bubble => new List<string> { "X", "Y" },
             VisualType.Candlestick => new List<string> { "X", "OPEN", "HIGH", "LOW", "CLOSE" },
@@ -100,9 +101,9 @@ public class VisualMappingCompletenessRule : ILintRule
     /// Returns alias groups for visual types where multiple role spellings map to the same
     /// semantic channel. Each entry is (set-of-accepted-aliases, display-label-for-errors).
     /// </summary>
-    private static List<(HashSet<string> Group, string Label)> GetAliasGroups(VisualType type)
+    private static List<(HashSet<string> Group, string Label)> GetAliasGroups(CreateVisualStatement visual)
     {
-        if (type == VisualType.Waterfall)
+        if (visual.VisualType == VisualType.Waterfall)
         {
             return
             [
@@ -111,13 +112,40 @@ public class VisualMappingCompletenessRule : ILintRule
             ];
         }
 
-        if (type == VisualType.Gantt)
+        if (visual.VisualType == VisualType.Gantt)
         {
             return
             [
                 (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Y", "LABEL" },  "Y / LABEL"),
                 (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "START", "X" },  "START / X"),
                 (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "END", "X2" },   "END / X2"),
+            ];
+        }
+
+        if (visual.VisualType == VisualType.BoxPlot)
+        {
+            var present = new HashSet<string>(visual.Mappings.Select(m => m.Role.ToUpperInvariant()));
+            var usesPrecomputed = present.Contains("LOW") || present.Contains("MIN") ||
+                                  present.Contains("Q1") || present.Contains("MEDIAN") ||
+                                  present.Contains("Q3") || present.Contains("HIGH") || present.Contains("MAX");
+
+            if (usesPrecomputed)
+            {
+                return
+                [
+                    (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "X", "CATEGORY" }, "X / CATEGORY"),
+                    (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "LOW", "MIN" }, "LOW / MIN"),
+                    (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Q1" }, "Q1"),
+                    (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "MEDIAN" }, "MEDIAN"),
+                    (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Q3" }, "Q3"),
+                    (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "HIGH", "MAX" }, "HIGH / MAX"),
+                ];
+            }
+
+            return
+            [
+                (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "X", "CATEGORY" }, "X / CATEGORY"),
+                (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Y", "VALUE" }, "Y / VALUE"),
             ];
         }
 

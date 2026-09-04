@@ -1,39 +1,135 @@
 -- Kitchen Sink: BOXPLOT Visual
--- This script demonstrates the BOXPLOT visual type.
+-- Comprehensive demonstration of BOXPLOT capabilities: pre-calculated stats, raw distribution,
+-- notched boxes (confidence intervals), arithmetic mean markers, violin density overlay, and horizontal orientation.
 
 SET REPORT TITLE = 'Kitchen Sink: BOXPLOT Visual';
-SET REPORT DESCRIPTION = 'Demonstration of BOXPLOT (Box-and-Whisker) capabilities.';
+SET REPORT DESCRIPTION = 'Demonstration of BOXPLOT (Box-and-Whisker, Notched, Mean Marker, Violin Overlay, and Horizontal Orientation).';
 
--- 1. Mock Data Generation (Pre-calculated stats)
-SELECT 'Category A' AS Cat, 10 AS Low, 20 AS Q1, 25 AS Median, 35 AS Q3, 50 AS High INTO #stats
-UNION ALL SELECT 'Category B', 5, 15, 22, 30, 45
-UNION ALL SELECT 'Category C', 12, 18, 28, 40, 55;
+-- 1. Mock Pre-calculated Five-Number Summary with Mean
+SELECT 'Cohort A' AS Cohort, 12 AS LowVal, 22 AS Q1Val, 30 AS MedVal, 32 AS MeanVal, 42 AS Q3Val, 58 AS HighVal INTO #precalc_summary
+UNION ALL SELECT 'Cohort B', 8, 18, 26, 27, 36, 49
+UNION ALL SELECT 'Cohort C', 16, 28, 38, 41, 52, 65;
 
--- 2. Basic Boxplot
-CREATE VISUAL BasicBoxplot AS BOXPLOT (
-    SOURCE = #stats,
-    TITLE = 'Basic Boxplot',
-    MAPPINGS (X = Cat, LOW = Low, Q1 = Q1, MEDIAN = Median, Q3 = Q3, HIGH = High)
+-- 2. Mock Raw Observations for Engine Distribution & Violin Density Computation
+SELECT 'North' AS Region, 14 AS Score INTO #raw_scores
+UNION ALL SELECT 'North', 18
+UNION ALL SELECT 'North', 19
+UNION ALL SELECT 'North', 21
+UNION ALL SELECT 'North', 22
+UNION ALL SELECT 'North', 23
+UNION ALL SELECT 'North', 25
+UNION ALL SELECT 'North', 26
+UNION ALL SELECT 'North', 28
+UNION ALL SELECT 'North', 31
+UNION ALL SELECT 'North', 34
+UNION ALL SELECT 'North', 48
+UNION ALL SELECT 'South', 8
+UNION ALL SELECT 'South', 12
+UNION ALL SELECT 'South', 15
+UNION ALL SELECT 'South', 16
+UNION ALL SELECT 'South', 17
+UNION ALL SELECT 'South', 18
+UNION ALL SELECT 'South', 19
+UNION ALL SELECT 'South', 20
+UNION ALL SELECT 'South', 22
+UNION ALL SELECT 'South', 24
+UNION ALL SELECT 'South', 38
+UNION ALL SELECT 'West', 20
+UNION ALL SELECT 'West', 24
+UNION ALL SELECT 'West', 27
+UNION ALL SELECT 'West', 29
+UNION ALL SELECT 'West', 30
+UNION ALL SELECT 'West', 32
+UNION ALL SELECT 'West', 33
+UNION ALL SELECT 'West', 35
+UNION ALL SELECT 'West', 38
+UNION ALL SELECT 'West', 42
+UNION ALL SELECT 'West', 55;
+
+-- Visual 1: Pre-Calculated Notched Boxplot with Mean Indicator
+CREATE VISUAL NotchedMeanBoxplot AS BOXPLOT (
+    SOURCE = #precalc_summary,
+    TITLE = 'Notched Box Plot with Mean Diamond Marker',
+    MAPPINGS (
+        X = Cohort,
+        LOW = LowVal,
+        Q1 = Q1Val,
+        MEDIAN = MedVal,
+        MEAN = MeanVal,
+        Q3 = Q3Val,
+        HIGH = HighVal
+    ),
+    OPTIONS (
+        NOTCHED = ON,
+        SHOW_MEAN = ON,
+        MEAN_COLOR = '#ef4444',
+        COLORS ('Cohort A' = '#3b82f6', 'Cohort B' = '#10b981', 'Cohort C' = '#8b5cf6'),
+        X_AXIS (LABEL = 'Experimental Cohort'),
+        Y_AXIS (LABEL = 'Response Score')
+    )
 );
 
--- 3. Boxplot with Custom Styles
-CREATE VISUAL StyledBoxplot AS BOXPLOT (
-    SOURCE = #stats,
-    TITLE = 'Styled Boxplot',
-    MAPPINGS (X = Cat, LOW = Low, Q1 = Q1, MEDIAN = Median, Q3 = Q3, HIGH = High),
+-- Visual 2: Raw Data Violin Density Overlay (BOX_STYLE = BOTH)
+CREATE VISUAL ViolinBoxPlot AS BOXPLOT (
+    SOURCE = #raw_scores,
+    TITLE = 'Violin Density Hull + Box Overlay (Raw Data)',
+    MAPPINGS (
+        X = Region,
+        Y = Score
+    ),
     OPTIONS (
-        COLORS ('Category A' = '#4e79a7'),
-        X_AXIS (LABEL = 'Category Name'),
-        Y_AXIS (LABEL = 'Distribution Range')
+        BOX_STYLE = BOTH,
+        SHOW_MEAN = ON,
+        SHOW_OUTLIERS = ON,
+        COLORS ('North' = '#2563eb', 'South' = '#059669', 'West' = '#d97706'),
+        X_AXIS (LABEL = 'Geographic Region'),
+        Y_AXIS (LABEL = 'Performance Score')
+    )
+);
+
+-- Visual 3: Horizontal Orientation Notched Box Plot
+CREATE VISUAL HorizontalBoxplot AS BOXPLOT (
+    SOURCE = #raw_scores,
+    TITLE = 'Horizontal Box Plot with Outliers & Mean',
+    MAPPINGS (
+        X = Region,
+        Y = Score
+    ),
+    OPTIONS (
+        ORIENTATION = HORIZONTAL,
+        NOTCHED = ON,
+        SHOW_MEAN = ON,
+        COLORS ('North' = '#6366f1', 'South' = '#ec4899', 'West' = '#14b8a6'),
+        Y_AXIS (LABEL = 'Region'),
+        X_AXIS (LABEL = 'Score')
+    )
+);
+
+-- Visual 4: Pure Violin Mode (BOX_STYLE = VIOLIN)
+CREATE VISUAL PureViolinPlot AS BOXPLOT (
+    SOURCE = #raw_scores,
+    TITLE = 'Violin Distribution Density Profile',
+    MAPPINGS (
+        X = Region,
+        Y = Score
+    ),
+    OPTIONS (
+        BOX_STYLE = VIOLIN,
+        SHOW_MEAN = ON,
+        VIOLIN_COLOR = '#8b5cf6',
+        X_AXIS (LABEL = 'Region'),
+        Y_AXIS (LABEL = 'Score')
     )
 );
 
 -- Page Layout
 CREATE PAGE BoxplotKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B',
+    STRUCTURE = 'A B / C D',
     MAP (
-        'A' = BasicBoxplot,
-        'B' = StyledBoxplot
+        'A' = NotchedMeanBoxplot,
+        'B' = ViolinBoxPlot,
+        'C' = HorizontalBoxplot,
+        'D' = PureViolinPlot
     )
 );
 
