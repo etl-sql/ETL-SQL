@@ -171,21 +171,29 @@ public class DesignerController : ControllerBase
             var script = req.Script ?? string.Empty;
             var result = (req.Op ?? string.Empty).ToLowerInvariant() switch
             {
-                "add" => _pipelineTasks.Add(script, new PipelineTaskDraft(
-                    req.Id ?? string.Empty,
-                    ParseTaskKind(req.Kind),
-                    req.Connection,
-                    req.Body,
-                    req.Source,
-                    req.Target,
-                    req.Condition,
-                    req.Message,
-                    req.Recipient,
-                    req.Sender,
-                    req.Subject,
-                    req.After,
-                    req.Variable,
-                    req.Collection)),
+                "add" => ParseTaskKind(req.Kind) is { } kind
+                    ? _pipelineTasks.Add(script, new PipelineTaskDraft(
+                        req.Id ?? string.Empty,
+                        kind,
+                        req.Connection,
+                        req.Body,
+                        req.Source,
+                        req.Target,
+                        req.Condition,
+                        req.Message,
+                        req.Recipient,
+                        req.Sender,
+                        req.Subject,
+                        req.After,
+                        req.Variable,
+                        req.Collection,
+                        req.Start,
+                        req.End,
+                        req.Step,
+                        req.Delay,
+                        req.Until,
+                        req.Into))
+                    : PipelineEditResult.Refused(script, $"This host does not know a task kind called '{req.Kind}'."),
                 "update" => _pipelineTasks.Update(script, req.Id ?? string.Empty, req.NewId, req.Connection, req.Body, req.Variable, req.Collection),
                 "move" => _pipelineTasks.Move(script, req.Id ?? string.Empty, req.After),
                 // `after` names the container to move into; null moves the task back out of the one
@@ -218,7 +226,8 @@ public class DesignerController : ControllerBase
                         task.Guarded,
                         task.Container,
                         task.Variable,
-                        task.Collection))
+                        task.Collection,
+                        task.EndLine))
                     .ToList()));
         }
         finally
@@ -325,14 +334,14 @@ public class DesignerController : ControllerBase
     }
 
     /// <summary>
-    /// The task kind a request names. An unknown kind falls back to an execution task rather than
-    /// throwing: the palette is the only caller, and a 500 for a typo in a client string would be a
-    /// worse answer than the refusal the service already gives for a draft it cannot complete.
+    /// The task kind a request names, or null when this host has no such kind.
+    ///
+    /// <para>It used to fall back to an execution task. That turned a client this host is too old to
+    /// understand into a silently wrong statement — a palette chip saying MOVE DIRECTORY writing an
+    /// <c>EXECUTE</c> block — which is the failure shape this surface keeps having to fix. An
+    /// unknown kind is refused by name, and the canvas says so.</para>
     /// </summary>
-    private static PipelineTaskKind ParseTaskKind(string? kind) =>
-        Enum.TryParse<PipelineTaskKind>(kind, ignoreCase: true, out var parsed)
-            ? parsed
-            : PipelineTaskKind.Execution;
+    private static PipelineTaskKind? ParseTaskKind(string? kind) => PipelineTaskKinds.Parse(kind);
 
     /// <summary>
     /// The edge condition a connect request names, or null when it names one that does not exist.

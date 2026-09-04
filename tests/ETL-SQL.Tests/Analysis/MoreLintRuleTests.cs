@@ -529,6 +529,55 @@ namespace ETL_SQL.Tests.Analysis
             Assert.NotEmpty(results);
         }
 
+        /// <summary>
+        /// A RENAME names the file, it does not place it.
+        ///
+        /// <para>The documented form is <c>RENAME FILE 'old_path' TO 'new_name'</c>, and the engine
+        /// joins a bare name to the source's own directory without authorizing it as a path. Warning
+        /// that the name is "relative" is therefore a finding no correct RENAME can clear, and it
+        /// reached an author through the pipeline canvas, which offers RENAME as a palette entry.</para>
+        /// </summary>
+        [Fact]
+        public async Task AbsolutePath_RenameToABareName_IsNotAPath()
+        {
+            var linter = new Linter();
+            linter.AddRule(new AbsolutePathRule());
+
+            var file = await linter.AnalyzeAsync(
+                Parse(@"RENAME FILE 'C:\data\orders.csv' TO 'orders_20260904.csv';"), new DefaultLintContext());
+            Assert.Empty(file);
+
+            var directory = await linter.AnalyzeAsync(
+                Parse(@"RENAME DIRECTORY 'C:\data\current' TO '2026-09';"), new DefaultLintContext());
+            Assert.Empty(directory);
+        }
+
+        /// <summary>
+        /// A rename destination carrying a separator is a path again, and is held to the rule.
+        /// </summary>
+        [Fact]
+        public async Task AbsolutePath_RenameToARelativePath_IsStillAWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new AbsolutePathRule());
+
+            var results = await linter.AnalyzeAsync(
+                Parse(@"RENAME FILE 'C:\data\orders.csv' TO 'archive\orders.csv';"), new DefaultLintContext());
+            Assert.NotEmpty(results);
+        }
+
+        /// <summary>The source of a rename is a real path and is checked like any other.</summary>
+        [Fact]
+        public async Task AbsolutePath_RenameFromARelativePath_IsStillAWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new AbsolutePathRule());
+
+            var results = await linter.AnalyzeAsync(
+                Parse("RENAME FILE 'orders.csv' TO 'orders_20260904.csv';"), new DefaultLintContext());
+            Assert.NotEmpty(results);
+        }
+
         // ── DatasetEncryptWithoutKeyRule ──────────────────────────────────────
 
         [Fact]

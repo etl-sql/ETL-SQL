@@ -2071,10 +2071,52 @@ export function createStudioAuthoringSurfaces({
      * values is the whole task, and a workbench for a file path would be theatre.
      */
     const PIPELINE_TASK_FIELDS = {
-        fileoperation: [
+        // ── Files ────────────────────────────────────────────────────────────
+        // Two paths, or one, named after the verb rather than generically: "Copy from" and
+        // "Move from" are the same field and a different sentence, and the sentence is what tells
+        // the author which statement they are writing.
+        copyfile: [
             { name: 'source', label: 'Copy from', placeholder: 'C:\\data\\orders.csv' },
             { name: 'target', label: 'Copy to', placeholder: 'C:\\data\\archive\\orders.csv' },
         ],
+        movefile: [
+            { name: 'source', label: 'Move from', placeholder: 'C:\\data\\incoming\\orders.csv' },
+            { name: 'target', label: 'Move to', placeholder: 'C:\\data\\working\\orders.csv' },
+        ],
+        // A rename takes a name, not a path: the engine puts the file back where it already was.
+        // Saying so on the field is the difference between one attempt and three.
+        renamefile: [
+            { name: 'source', label: 'Rename', placeholder: 'C:\\data\\working\\orders.csv' },
+            { name: 'target', label: 'To this name', placeholder: 'orders_20260904.csv', hint: 'A name, not a path. It stays in the folder it is in.' },
+        ],
+        deletefile: [
+            { name: 'source', label: 'Delete', placeholder: 'C:\\data\\working\\orders.csv' },
+        ],
+
+        // ── Directories ──────────────────────────────────────────────────────
+        createdirectory: [
+            { name: 'source', label: 'Create', placeholder: 'C:\\data\\archive\\2026-09' },
+        ],
+        copydirectory: [
+            { name: 'source', label: 'Copy from', placeholder: 'C:\\data\\archive\\2026-09' },
+            { name: 'target', label: 'Copy to', placeholder: 'D:\\mirror\\2026-09' },
+        ],
+        movedirectory: [
+            { name: 'source', label: 'Move from', placeholder: 'C:\\data\\archive\\2026-09' },
+            { name: 'target', label: 'Move to', placeholder: 'D:\\cold\\2026-09' },
+        ],
+        renamedirectory: [
+            { name: 'source', label: 'Rename', placeholder: 'C:\\data\\archive\\current' },
+            { name: 'target', label: 'To this name', placeholder: '2026-09', hint: 'A name, not a path. It stays where it is.' },
+        ],
+        deletedirectorycontents: [
+            { name: 'source', label: 'Empty', placeholder: 'C:\\data\\working', hint: 'The folder stays; what is inside it goes.' },
+        ],
+        deletedirectory: [
+            { name: 'source', label: 'Delete', placeholder: 'C:\\data\\working', hint: 'The folder and everything in it.' },
+        ],
+
+        // ── Checks and messages ──────────────────────────────────────────────
         validation: [
             { name: 'condition', label: 'Assert that', placeholder: '(SELECT COUNT(*) FROM #orders) > 0', mono: true },
             { name: 'message', label: 'Fail with', placeholder: 'No orders were staged.' },
@@ -2085,6 +2127,14 @@ export function createStudioAuthoringSurfaces({
             { name: 'subject', label: 'Subject', placeholder: 'Nightly load finished' },
             { name: 'body', label: 'Body', placeholder: 'All records processed.' },
         ],
+        throw: [
+            { name: 'message', label: 'Fail with', placeholder: 'The nightly load found nothing to do.' },
+        ],
+        waitfor: [
+            { name: 'delay', label: 'Wait for', placeholder: '00:00:30', mono: true, hint: 'hh:mm:ss.' },
+        ],
+
+        // ── Containers ───────────────────────────────────────────────────────
         // A parallel block and a transaction scope have nothing to fill in: they are named, and then
         // filled by dragging tasks into them.
         parallel: [],
@@ -2093,7 +2143,50 @@ export function createStudioAuthoringSurfaces({
             { name: 'variable', label: 'Item variable', placeholder: '@row', mono: true },
             { name: 'collection', label: 'Iterates over', placeholder: '#orders', mono: true },
         ],
+        for: [
+            { name: 'variable', label: 'Counter', placeholder: '@day', mono: true },
+            { name: 'start', label: 'From', placeholder: '1', mono: true },
+            { name: 'end', label: 'To', placeholder: '7', mono: true },
+            { name: 'step', label: 'Step', placeholder: '1', mono: true, optional: true, hint: 'Leave blank to count by one.' },
+        ],
+        while: [
+            { name: 'condition', label: 'Repeat while', placeholder: '@rows_left > 0', mono: true },
+        ],
+        if: [
+            { name: 'condition', label: 'Only when', placeholder: '(SELECT COUNT(*) FROM #orders) > 0', mono: true },
+        ],
+
+        // BREAK and CONTINUE are the whole statement. The editor still opens, because the label is
+        // how the canvas will address the card afterwards, and it is the only thing to fill in.
+        break: [],
+        continue: [],
     };
+
+    /**
+     * The fields the host can rewrite in an existing task, by kind.
+     *
+     * A subset of `PIPELINE_TASK_FIELDS` on purpose, and the two are different lists rather than one
+     * list with flags because they answer different questions: what a statement is made of, and what
+     * this build can change without regenerating it. Regenerating is what the rest would take, and a
+     * regenerated file statement would silently drop a `WITH (OVERWRITE = ON)` the author added by
+     * hand — so the fields grow onto this list as the host learns to locate each one, never before.
+     */
+    const PIPELINE_EDITABLE_FIELDS = {
+        foreach: PIPELINE_TASK_FIELDS.foreach,
+    };
+
+    /**
+     * Where the statement is about to be written, in the words of the script rather than the canvas.
+     *
+     * The dialog used to promise "the end of the pipeline" whatever the author had done, which
+     * stopped being true the moment a chip could be dropped onto a task or into a block. A sentence
+     * about where an edit lands is only worth showing while it is accurate.
+     */
+    function placementPhrase(placement) {
+        if (placement?.into) return `inside ${placement.into}`;
+        if (placement?.after) return `after ${placement.after}`;
+        return 'at the end of the pipeline';
+    }
 
     /** Kinds that run against a connection the script declares, and so need one to exist first. */
     const PIPELINE_KINDS_NEEDING_CONNECTION = new Set(['execution', 'notification']);
@@ -2112,12 +2205,15 @@ export function createStudioAuthoringSurfaces({
      * @param task        The task being edited, or null for a new one.
      * @param connections `[{ name }]` the script declares, from the canonical parse.
      * @param suggestedId Label to start a new task with.
+     * @param placement   `{ after, into }` where the drop landed, so the dialog can say where the
+     *                    statement is about to be written rather than assuming the end of the file.
      */
     async function openPipelineTaskEditor({
         kind = 'execution',
         task = null,
         connections = [],
         suggestedId = 'task_1',
+        placement = null,
     } = {}) {
         const editing = Boolean(task);
         const taskKind = String(task?.kind || kind || 'execution').toLowerCase();
@@ -2144,7 +2240,17 @@ export function createStudioAuthoringSurfaces({
             return openPipelineTaskEditor({ kind, task, connections: [{ name: created }], suggestedId });
         }
 
-        const fields = PIPELINE_TASK_FIELDS[taskKind] ?? [];
+        // What this dialog may ask about depends on whether it is writing a statement or rewriting
+        // one. The host edits an existing task by replacing named token runs inside it, and today it
+        // can locate those runs for an execution task's connection and body and for a loop's header.
+        // Every other field would be collected here, sent, and silently ignored — a form that eats
+        // what the author typed and reports success, which is the failure shape this whole surface
+        // is being rebuilt to stop. So an edit offers the label alone and says where the rest lives.
+        const fields = editing
+            ? (PIPELINE_EDITABLE_FIELDS[taskKind] ?? [])
+            : (PIPELINE_TASK_FIELDS[taskKind] ?? []);
+        const partiallyEditable = editing
+            && (PIPELINE_TASK_FIELDS[taskKind] ?? []).length > fields.length;
         const draft = {
             id: task?.id || suggestedId,
             connection: aliases.includes(task?.connection) ? task.connection : aliases[0] || '',
@@ -2184,7 +2290,7 @@ export function createStudioAuthoringSurfaces({
                         draft.error = 'Write the SQL this task runs before adding it.';
                         return repaint();
                     }
-                    const blank = fields.find(field => !String(draft[field.name] || '').trim());
+                    const blank = fields.find(field => !field.optional && !String(draft[field.name] || '').trim());
                     if (blank) {
                         draft.error = `${blank.label} is needed before this task can be written.`;
                         return repaint();
@@ -2201,6 +2307,13 @@ export function createStudioAuthoringSurfaces({
                     lede: `This task becomes a labelled statement in the script. The label is what the canvas `
                         + `tracks it by, so it survives a hand edit.`,
                     body: (draft.error ? guidedNoteMarkup(draft.error, 'error') : '')
+                        + (partiallyEditable ? guidedNoteMarkup([
+                            'Renaming is what this dialog can do to a ',
+                            { strong: taskKindLabel(taskKind).toLowerCase() },
+                            ' task. The rest of the statement is edited in the script — '
+                            + 'Show in script opens it at the right line — because rewriting it from these '
+                            + 'fields would drop any option you added there by hand.',
+                        ], 'info') : '')
                         + `<div class="etlsql-studio-pipeline-fields">
                             <label>Label
                                 <input type="text" data-task-id value="${escapeHtml(draft.id)}" spellcheck="false">
@@ -2209,11 +2322,12 @@ export function createStudioAuthoringSurfaces({
                                 <select data-task-connection>${aliases.map(alias =>
                                     `<option${alias === draft.connection ? ' selected' : ''}>${escapeHtml(alias)}</option>`).join('')}</select>
                             </label>` : ''}
-                            ${fields.map(field => `<label>${escapeHtml(field.label)}
+                            ${fields.map(field => `<label>${escapeHtml(field.label)}${field.optional ? ' <em>(optional)</em>' : ''}
                                 <input type="text" data-task-field="${escapeHtml(field.name)}"
                                     value="${escapeHtml(draft[field.name] || '')}"
                                     placeholder="${escapeHtml(field.placeholder || '')}"
                                     ${field.mono ? 'spellcheck="false"' : ''}>
+                                ${field.hint ? `<small>${escapeHtml(field.hint)}</small>` : ''}
                             </label>`).join('')}
                         </div>`
                         + (taskKind === 'execution'
@@ -2228,7 +2342,7 @@ export function createStudioAuthoringSurfaces({
                         + mutationExplanationMarkup(editing
                             ? `Rewrites ${task.id} in place. Only that statement changes: hand edits elsewhere, and `
                               + 'the tasks that wait for this one, are left as they are.'
-                            : `Adds one ${taskKindLabel(taskKind).toLowerCase()} task to the end of the pipeline, under the `
+                            : `Adds one ${taskKindLabel(taskKind).toLowerCase()} task ${placementPhrase(placement)}, under the `
                               + 'label above. Nothing already in the script is moved or rewritten, and nothing runs until '
                               + 'you run it.'),
                     actions: [

@@ -32,7 +32,8 @@ public sealed record PipelineTask(
     int InnerEnd = -1,
     string? Container = null,
     string? Variable = null,
-    string? Collection = null);
+    string? Collection = null,
+    int EndLine = 0);
 
 /// <summary>
 /// When a task runs relative to the one it waits for.
@@ -85,7 +86,36 @@ public enum PipelineTaskKind
     Execution,
 
     /// <summary><c>COPY FILE &lt;source&gt; TO &lt;target&gt;</c>.</summary>
-    FileOperation,
+    CopyFile,
+
+    /// <summary><c>MOVE FILE &lt;source&gt; TO &lt;target&gt;</c>.</summary>
+    MoveFile,
+
+    /// <summary><c>RENAME FILE &lt;source&gt; TO &lt;target&gt;</c>.</summary>
+    RenameFile,
+
+    /// <summary><c>DELETE FILE &lt;source&gt;</c>.</summary>
+    DeleteFile,
+
+    /// <summary><c>CREATE DIRECTORY &lt;source&gt;</c>.</summary>
+    CreateDirectory,
+
+    /// <summary><c>DELETE DIRECTORY &lt;source&gt;</c>.</summary>
+    DeleteDirectory,
+
+    /// <summary>
+    /// <c>DELETE DIRECTORY_CONTENTS &lt;source&gt;</c> — empties a directory and keeps it.
+    /// </summary>
+    DeleteDirectoryContents,
+
+    /// <summary><c>RENAME DIRECTORY &lt;source&gt; TO &lt;target&gt;</c>.</summary>
+    RenameDirectory,
+
+    /// <summary><c>MOVE DIRECTORY &lt;source&gt; TO &lt;target&gt;</c>.</summary>
+    MoveDirectory,
+
+    /// <summary><c>COPY DIRECTORY &lt;source&gt; TO &lt;target&gt;</c>.</summary>
+    CopyDirectory,
 
     /// <summary><c>ASSERT &lt;condition&gt;, &lt;message&gt;</c> — a quality gate that halts the run.</summary>
     Validation,
@@ -116,13 +146,109 @@ public enum PipelineTaskKind
     /// from the word: a failure inside rolls the whole thing back.</para>
     /// </summary>
     Transaction,
+
+    /// <summary>
+    /// <c>IF &lt;condition&gt; BEGIN … END</c> — a container whose children run only when the
+    /// condition holds.
+    ///
+    /// <para>Only the <c>IF</c> body is a canvas scope. A hand-written <c>ELSE</c> is left alone and
+    /// its statements stay ordinary read-only projection stages, because a second body under one
+    /// label would give two different scopes the same identity.</para>
+    /// </summary>
+    If,
+
+    /// <summary><c>FOR @i = &lt;start&gt; TO &lt;end&gt; [STEP n] BEGIN … END</c> — a counted loop.</summary>
+    For,
+
+    /// <summary><c>WHILE &lt;condition&gt; BEGIN … END</c> — a container run until the test fails.</summary>
+    While,
+
+    /// <summary><c>THROW &lt;message&gt;</c> — fails the run deliberately.</summary>
+    Throw,
+
+    /// <summary><c>BREAK</c> — leaves the innermost loop. Only legal inside one.</summary>
+    Break,
+
+    /// <summary><c>CONTINUE</c> — starts the loop's next item. Only legal inside one.</summary>
+    Continue,
+
+    /// <summary><c>WAITFOR DELAY 'hh:mm:ss'</c> or <c>WAITFOR TIME 'hh:mm:ss'</c>.</summary>
+    WaitFor,
 }
 
-/// <summary>Kinds that hold other tasks.</summary>
+/// <summary>How a kind behaves, for the handful of places that have to ask.</summary>
 public static class PipelineTaskKinds
 {
+    /// <summary>Kinds that hold other tasks.</summary>
     public static bool IsContainer(this PipelineTaskKind kind) =>
-        kind is PipelineTaskKind.Parallel or PipelineTaskKind.Foreach or PipelineTaskKind.Transaction;
+        kind is PipelineTaskKind.Parallel
+            or PipelineTaskKind.Foreach
+            or PipelineTaskKind.Transaction
+            or PipelineTaskKind.If
+            or PipelineTaskKind.For
+            or PipelineTaskKind.While;
+
+    /// <summary>
+    /// Containers that run their children once per item.
+    ///
+    /// <para>This is what <c>BREAK</c> and <c>CONTINUE</c> need: the engine refuses them anywhere
+    /// else, so the canvas has to know which containers are loops before it offers them.</para>
+    /// </summary>
+    public static bool IsLoop(this PipelineTaskKind kind) =>
+        kind is PipelineTaskKind.Foreach or PipelineTaskKind.For or PipelineTaskKind.While;
+
+    /// <summary>Kinds that are only legal inside a loop.</summary>
+    public static bool NeedsALoop(this PipelineTaskKind kind) =>
+        kind is PipelineTaskKind.Break or PipelineTaskKind.Continue;
+
+    /// <summary>Kinds whose statement names a second path as well as a first.</summary>
+    public static bool HasTarget(this PipelineTaskKind kind) =>
+        kind is PipelineTaskKind.CopyFile
+            or PipelineTaskKind.MoveFile
+            or PipelineTaskKind.RenameFile
+            or PipelineTaskKind.RenameDirectory
+            or PipelineTaskKind.MoveDirectory
+            or PipelineTaskKind.CopyDirectory;
+
+    /// <summary>
+    /// The kind a client named, or null when it named one that does not exist.
+    ///
+    /// <para>Shared by every host rather than reimplemented per route: the desktop and the Portal
+    /// serve the same Studio build, so a kind one of them understands and the other silently
+    /// rewrites is a defect the author only sees at run time. A name this build does not know is a
+    /// refusal the canvas reports; guessing at some default kind would write a statement nobody
+    /// asked for.</para>
+    ///
+    /// <para>Naming nothing is different from naming something wrong, and stays what it has always
+    /// been: <see cref="PipelineTaskKind.Execution"/>, the same default
+    /// <see cref="PipelineTaskDraft"/> carries. Nothing is written on that alone — an execution
+    /// draft with no connection and no body is refused for those.</para>
+    /// </summary>
+    public static PipelineTaskKind? Parse(string? kind)
+    {
+        var name = (kind ?? string.Empty).Trim();
+        if (name.Length == 0) return PipelineTaskKind.Execution;
+        if (RetiredNames.TryGetValue(name, out var retired)) return retired;
+        return Enum.TryParse<PipelineTaskKind>(name, ignoreCase: true, out var parsed) ? parsed : null;
+    }
+
+    /// <summary>
+    /// Kind names an older client still sends.
+    ///
+    /// <para><c>fileoperation</c> meant COPY FILE back when copying was the only file verb the
+    /// canvas could write. A client pinned to that build is still out there, and refusing the name
+    /// would break a palette chip that used to work.</para>
+    /// </summary>
+    private static readonly Dictionary<string, PipelineTaskKind> RetiredNames =
+        new(StringComparer.OrdinalIgnoreCase) { ["fileoperation"] = PipelineTaskKind.CopyFile };
+
+    /// <summary>Kinds whose statement names a path on the file system.</summary>
+    public static bool HasSource(this PipelineTaskKind kind) =>
+        kind.HasTarget()
+        || kind is PipelineTaskKind.DeleteFile
+            or PipelineTaskKind.CreateDirectory
+            or PipelineTaskKind.DeleteDirectory
+            or PipelineTaskKind.DeleteDirectoryContents;
 }
 
 /// <summary>
@@ -130,8 +256,23 @@ public static class PipelineTaskKinds
 /// validated, so a caller can carry one draft across a kind change without losing what it typed.
 /// </summary>
 /// <param name="After">Id of the task it follows, or null to append at the end of the script.</param>
-/// <param name="Variable">Foreach only: the loop variable, with or without its leading <c>@</c>.</param>
+/// <param name="Into">
+/// Id of the container it goes inside, for a drop onto a container rather than beside a task.
+///
+/// <para>Separate from <c>After</c> because an empty container has no child to sit after, and
+/// because an add followed by a nest would be two edits — two entries in the author's undo history
+/// for one gesture, with a moment in between where the statement is in the wrong block.</para>
+/// </param>
+/// <param name="Variable">Foreach and For: the loop variable, with or without its leading <c>@</c>.</param>
 /// <param name="Collection">Foreach only: what it iterates — a list variable, a <c>#temp</c>, or a subquery.</param>
+/// <param name="Start">For only: the first value of the counter.</param>
+/// <param name="End">For only: the last value of the counter.</param>
+/// <param name="Step">For only: how far the counter moves each time, or null for one.</param>
+/// <param name="Delay">WaitFor only: <c>hh:mm:ss</c>, read as a duration or a wall-clock time.</param>
+/// <param name="Until">
+/// WaitFor only: true to wait until that time of day rather than for that long. Two forms of one
+/// statement rather than two kinds, because <c>WAITFOR</c> is one thing an author is looking for.
+/// </param>
 public sealed record PipelineTaskDraft(
     string Id,
     PipelineTaskKind Kind = PipelineTaskKind.Execution,
@@ -146,7 +287,13 @@ public sealed record PipelineTaskDraft(
     string? Subject = null,
     string? After = null,
     string? Variable = null,
-    string? Collection = null);
+    string? Collection = null,
+    string? Start = null,
+    string? End = null,
+    string? Step = null,
+    string? Delay = null,
+    bool Until = false,
+    string? Into = null);
 
 /// <summary>
 /// The outcome of an edit. A refusal carries the reason rather than handing back the original script
@@ -219,8 +366,28 @@ public sealed partial class PipelineTaskAuthoringService
         var text = RenderTask(draft, lineEnding);
 
         int insertAt;
-        if (draft.After is null)
+        if (draft.Into is not null)
         {
+            // Dropped onto a container rather than beside a task. The statement is written straight
+            // into the block, so the gesture is one edit and one undo, and there is no moment where
+            // the script holds it at the wrong level.
+            var container = Find(tasks, draft.Into);
+            if (container is null)
+                return PipelineEditResult.Refused(source, $"No task called '{draft.Into}' to add inside.");
+            if (!container.Kind.IsContainer())
+                return PipelineEditResult.Refused(source, $"'{container.Id}' does not hold other tasks.");
+            if (draft.Kind.NeedsALoop() && !container.Kind.IsLoop() && !InALoop(tasks, container))
+                return PipelineEditResult.Refused(source, OnlyInALoop(draft.Kind, container.Id));
+            if (ChildInsertionPoint(source, container) is not { } point)
+                return PipelineEditResult.Refused(source, $"Could not find where inside '{container.Id}' to put '{draft.Id}'.");
+
+            insertAt = point;
+            text = Reindent(text, LabelIndent(source, container.StartOffset) + "    ", lineEnding);
+        }
+        else if (draft.After is null)
+        {
+            if (draft.Kind.NeedsALoop())
+                return PipelineEditResult.Refused(source, OnlyInALoop(draft.Kind, null));
             insertAt = source.Length;
         }
         else
@@ -228,6 +395,13 @@ public sealed partial class PipelineTaskAuthoringService
             var anchor = Find(tasks, draft.After);
             if (anchor is null)
                 return PipelineEditResult.Refused(source, $"No task called '{draft.After}' to add after.");
+
+            // BREAK and CONTINUE only mean anything inside a loop, and the engine refuses them
+            // anywhere else. Refused here, naming the construct, rather than written into the script
+            // for the parser to reject in terms of a keyword the author picked off a palette.
+            if (draft.Kind.NeedsALoop() && !InALoop(tasks, anchor))
+                return PipelineEditResult.Refused(source, OnlyInALoop(draft.Kind, anchor.Id));
+
             insertAt = EndOfLine(source, anchor.EndOffset);
 
             // Adding after a task that lives in a container puts the new one in that container, so
@@ -253,10 +427,10 @@ public sealed partial class PipelineTaskAuthoringService
         PipelineTaskKind.Execution when string.IsNullOrWhiteSpace(draft.Body) =>
             "An execution task needs the SQL it runs.",
 
-        PipelineTaskKind.FileOperation when string.IsNullOrWhiteSpace(draft.Source) =>
-            "A file task needs a source path.",
-        PipelineTaskKind.FileOperation when string.IsNullOrWhiteSpace(draft.Target) =>
-            "A file task needs a target path.",
+        _ when draft.Kind.HasSource() && string.IsNullOrWhiteSpace(draft.Source) =>
+            $"A {PathNoun(draft.Kind)} task needs a source path.",
+        _ when draft.Kind.HasTarget() && string.IsNullOrWhiteSpace(draft.Target) =>
+            $"A {PathNoun(draft.Kind)} task needs a target path.",
 
         PipelineTaskKind.Validation when string.IsNullOrWhiteSpace(draft.Condition) =>
             "A validation task needs a condition to assert.",
@@ -281,8 +455,44 @@ public sealed partial class PipelineTaskAuthoringService
         PipelineTaskKind.Foreach when UnusableExpression(draft.Collection!) is { } badCollection =>
             badCollection,
 
+        PipelineTaskKind.If when string.IsNullOrWhiteSpace(draft.Condition) =>
+            "A branch needs the condition it tests.",
+        PipelineTaskKind.If when UnusableExpression(draft.Condition!) is { } badIf => badIf,
+
+        PipelineTaskKind.While when string.IsNullOrWhiteSpace(draft.Condition) =>
+            "A loop needs the condition it repeats on.",
+        PipelineTaskKind.While when UnusableExpression(draft.Condition!) is { } badWhile => badWhile,
+
+        PipelineTaskKind.For when !IsValidTaskId((draft.Variable ?? string.Empty).TrimStart('@')) =>
+            $"'{draft.Variable}' is not a usable counter variable.",
+        PipelineTaskKind.For when string.IsNullOrWhiteSpace(draft.Start) =>
+            "A counted loop needs the value it counts from.",
+        PipelineTaskKind.For when string.IsNullOrWhiteSpace(draft.End) =>
+            "A counted loop needs the value it counts to.",
+        PipelineTaskKind.For when UnusableExpression(draft.Start!) is { } badStart => badStart,
+        PipelineTaskKind.For when UnusableExpression(draft.End!) is { } badEnd => badEnd,
+        PipelineTaskKind.For when !string.IsNullOrWhiteSpace(draft.Step)
+            && UnusableExpression(draft.Step!) is { } badStep => badStep,
+
+        PipelineTaskKind.Throw when string.IsNullOrWhiteSpace(draft.Message) =>
+            "A throw needs the message it fails with.",
+
+        // A duration the engine cannot read fails the run at the WAITFOR rather than here, and the
+        // author gets a parser message about a string they typed into a form.
+        PipelineTaskKind.WaitFor when string.IsNullOrWhiteSpace(draft.Delay) =>
+            "A wait needs a duration, as hh:mm:ss.",
+        PipelineTaskKind.WaitFor when !ClockTime().IsMatch(draft.Delay!.Trim()) =>
+            $"'{draft.Delay!.Trim()}' is not a time. Write it as hh:mm:ss.",
+
         _ => null,
     };
+
+    /// <summary>What to call a path-carrying kind in a message the author reads.</summary>
+    private static string PathNoun(PipelineTaskKind kind) =>
+        kind.ToString().Contains("Directory", StringComparison.Ordinal) ? "directory" : "file";
+
+    [GeneratedRegex(@"^\d{1,3}:[0-5]?\d:[0-5]?\d(\.\d{1,3})?$")]
+    private static partial Regex ClockTime();
 
     /// <summary>Removes a task and the label that names it.</summary>
     public PipelineEditResult Remove(string? script, string id)
@@ -542,6 +752,12 @@ public sealed partial class PipelineTaskAuthoringService
             if (task.Container is null) return PipelineEditResult.Ok(source);
             var parent = Find(tasks, task.Container);
             if (parent is null) return PipelineEditResult.Refused(source, $"Could not find what '{task.Id}' is inside.");
+
+            // Moving out lands the task beside its container. That is still inside a loop when the
+            // container itself is in one — a BREAK in an IF inside a WHILE may leave the IF — and it
+            // is not when the container was the loop.
+            if (task.Kind.NeedsALoop() && !InALoop(tasks, parent))
+                return PipelineEditResult.Refused(source, OnlyInALoop(task.Kind, null));
             insertAt = EndOfLine(source, parent.EndOffset);
             indent = LabelIndent(source, parent.StartOffset);
         }
@@ -559,6 +775,8 @@ public sealed partial class PipelineTaskAuthoringService
                 return PipelineEditResult.Ok(source);
             if (container.Kind == PipelineTaskKind.Parallel && ConcurrentWithADeclaredEdge(tasks, task, container.Id) is { } clash)
                 return PipelineEditResult.Refused(source, clash);
+            if (task.Kind.NeedsALoop() && !container.Kind.IsLoop() && !InALoop(tasks, container))
+                return PipelineEditResult.Refused(source, OnlyInALoop(task.Kind, container.Id));
 
             if (ChildInsertionPoint(source, container) is not { } point)
                 return PipelineEditResult.Refused(source, $"Could not find where inside '{container.Id}' to put '{task.Id}'.");
@@ -1358,7 +1576,8 @@ public sealed partial class PipelineTaskAuthoringService
                     outer.StartOffset,
                     inner.StartOffset,
                     inner.EndOffset,
-                    container));
+                    container,
+                    EndLine: LastLine(script, label.Line, start, end)));
                 continue;
             }
 
@@ -1380,11 +1599,30 @@ public sealed partial class PipelineTaskAuthoringService
                 inner.EndOffset,
                 container,
                 loop.Item1,
-                loop.Item2));
+                loop.Item2,
+                LastLine(script, label.Line, start, end)));
 
             if (kind.IsContainer() && ChildStatements(inner) is { } children)
                 ReadInto(script, children, label.LabelName, tasks);
         }
+    }
+
+    /// <summary>
+    /// The last line a task occupies, counted from the line its label sits on.
+    ///
+    /// <para>Counted within the task's own span rather than from the top of the file, so reading a
+    /// script of any size costs what the tasks cost. It is what lets the editor reveal and highlight
+    /// exactly the lines an Add wrote, which is the whole point of writing them there.</para>
+    /// </summary>
+    private static int LastLine(string script, int firstLine, int start, int end)
+    {
+        var line = firstLine;
+        for (var i = start; i < end; i++)
+        {
+            if (script[i] == '\n') line++;
+        }
+
+        return line;
     }
 
     /// <summary>The statements a container holds, in the order the engine runs them.</summary>
@@ -1392,7 +1630,14 @@ public sealed partial class PipelineTaskAuthoringService
     {
         ParallelStatement parallel => parallel.Body.Statements,
         ForeachStatement loop when loop.Body is BlockStatement block => block.Statements,
+        ForStatement loop when loop.Body is BlockStatement block => block.Statements,
+        WhileStatement loop when loop.Body is BlockStatement block => block.Statements,
         TryCatchStatement scope when scope.TryBody is BlockStatement block => block.Statements,
+
+        // The IF body only. An ELSE is the author's, and its statements stay ordinary read-only
+        // stages: adopting them would put two scopes under one label, and the canvas would have no
+        // way to say which of them a dragged task was dropped into.
+        IfStatement branch when branch.IfBody is BlockStatement block => block.Statements,
         _ => null,
     };
 
@@ -1572,11 +1817,41 @@ public sealed partial class PipelineTaskAuthoringService
     private static PipelineTaskKind? KindOf(Statement statement) => statement switch
     {
         ExecutePushdownStatement => PipelineTaskKind.Execution,
-        FileOperationStatement => PipelineTaskKind.FileOperation,
         AssertStatement => PipelineTaskKind.Validation,
         EmailStatement => PipelineTaskKind.Notification,
         ParallelStatement => PipelineTaskKind.Parallel,
         ForeachStatement => PipelineTaskKind.Foreach,
+
+        // A file or directory statement is read back as the verb it was written with, so the card
+        // says MOVE where the script says MOVE. The compression and encryption verbs share these
+        // statement types and are deliberately not modelled: they carry passphrases and key files
+        // the canvas has no field for, so they stay read-only projection stages.
+        FileOperationStatement file => file.Type switch
+        {
+            FileOpType.Copy => PipelineTaskKind.CopyFile,
+            FileOpType.Move => PipelineTaskKind.MoveFile,
+            FileOpType.Rename => PipelineTaskKind.RenameFile,
+            FileOpType.Delete => PipelineTaskKind.DeleteFile,
+            _ => null,
+        },
+        DirectoryOperationStatement directory => directory.Type switch
+        {
+            DirectoryOpType.Create => PipelineTaskKind.CreateDirectory,
+            DirectoryOpType.Delete => PipelineTaskKind.DeleteDirectory,
+            DirectoryOpType.DeleteContents => PipelineTaskKind.DeleteDirectoryContents,
+            DirectoryOpType.Rename => PipelineTaskKind.RenameDirectory,
+            DirectoryOpType.Move => PipelineTaskKind.MoveDirectory,
+            DirectoryOpType.Copy => PipelineTaskKind.CopyDirectory,
+            _ => null,
+        },
+
+        IfStatement => PipelineTaskKind.If,
+        ForStatement => PipelineTaskKind.For,
+        WhileStatement => PipelineTaskKind.While,
+        ThrowStatement => PipelineTaskKind.Throw,
+        BreakStatement => PipelineTaskKind.Break,
+        ContinueStatement => PipelineTaskKind.Continue,
+        WaitForStatement => PipelineTaskKind.WaitFor,
         // A TRY/CATCH that opens a transaction is a scope; one that does not is the author's own
         // error handling, and the canvas has nothing to say about it.
         TryCatchStatement scope when OpensATransaction(scope) => PipelineTaskKind.Transaction,
@@ -1585,6 +1860,32 @@ public sealed partial class PipelineTaskAuthoringService
 
     private static bool OpensATransaction(TryCatchStatement scope) =>
         scope.TryBody is BlockStatement { Statements: [BeginTransactionStatement, ..] };
+
+    /// <summary>
+    /// Whether a task dropped beside <paramref name="sibling"/> would land inside a loop.
+    ///
+    /// <para>Walks the containers outwards, because a loop three blocks up is still the loop a
+    /// <c>BREAK</c> leaves. Only containers the canvas reads are on that chain — a hand-written
+    /// unlabelled loop is not a task, so this answers no and the edit is refused rather than
+    /// written on a guess.</para>
+    /// </summary>
+    private static bool InALoop(IReadOnlyList<PipelineTask> tasks, PipelineTask sibling)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var container = Find(tasks, sibling.Container); container is not null; container = Find(tasks, container.Container))
+        {
+            if (container.Kind.IsLoop()) return true;
+            if (!seen.Add(container.Id)) return false; // A cycle cannot happen in a parsed script; not looping forever if it does.
+        }
+
+        return false;
+    }
+
+    private static string OnlyInALoop(PipelineTaskKind kind, string? siblingId) =>
+        siblingId is null
+            ? $"{kind.ToString().ToUpperInvariant()} only means something inside a loop. Drop it into a FOR, FOREACH, or WHILE block."
+            : $"{kind.ToString().ToUpperInvariant()} only means something inside a loop, and '{siblingId}' is not in one. "
+              + "Drop it into a FOR, FOREACH, or WHILE block.";
 
     internal static PipelineTask? Find(IReadOnlyList<PipelineTask> tasks, string? id) =>
         id is null ? null : tasks.FirstOrDefault(task => string.Equals(task.Id, id, StringComparison.OrdinalIgnoreCase));
@@ -1702,8 +2003,18 @@ public sealed partial class PipelineTaskAuthoringService
         PipelineTaskKind.Execution =>
             $"{draft.Id}:{lineEnding}EXECUTE {draft.Connection} BEGIN{RenderBody(draft.Body, lineEnding)}END;",
 
-        PipelineTaskKind.FileOperation =>
-            $"{draft.Id}:{lineEnding}COPY FILE {Literal(draft.Source)} TO {Literal(draft.Target)};",
+        // File and directory work. Every one of these is one verb over one or two paths, so they
+        // share a renderer rather than repeating the same escape and the same label ten times.
+        PipelineTaskKind.CopyFile => Path2(draft, "COPY FILE", lineEnding),
+        PipelineTaskKind.MoveFile => Path2(draft, "MOVE FILE", lineEnding),
+        PipelineTaskKind.RenameFile => Path2(draft, "RENAME FILE", lineEnding),
+        PipelineTaskKind.DeleteFile => Path1(draft, "DELETE FILE", lineEnding),
+        PipelineTaskKind.CreateDirectory => Path1(draft, "CREATE DIRECTORY", lineEnding),
+        PipelineTaskKind.DeleteDirectory => Path1(draft, "DELETE DIRECTORY", lineEnding),
+        PipelineTaskKind.DeleteDirectoryContents => Path1(draft, "DELETE DIRECTORY_CONTENTS", lineEnding),
+        PipelineTaskKind.RenameDirectory => Path2(draft, "RENAME DIRECTORY", lineEnding),
+        PipelineTaskKind.MoveDirectory => Path2(draft, "MOVE DIRECTORY", lineEnding),
+        PipelineTaskKind.CopyDirectory => Path2(draft, "COPY DIRECTORY", lineEnding),
 
         PipelineTaskKind.Validation =>
             $"{draft.Id}:{lineEnding}ASSERT {draft.Condition},{lineEnding}    {Literal(draft.Message)};",
@@ -1741,8 +2052,41 @@ public sealed partial class PipelineTaskAuthoringService
             + $"    THROW;{lineEnding}"
             + "END CATCH;",
 
+        // Control flow. The containers are written empty for the same reason PARALLEL is: the author
+        // fills them by dragging tasks in, and a placeholder statement would be something the canvas
+        // put in the file that nobody asked for.
+        PipelineTaskKind.If =>
+            $"{draft.Id}:{lineEnding}IF {draft.Condition?.Trim()}{lineEnding}BEGIN{lineEnding}END;",
+
+        PipelineTaskKind.While =>
+            $"{draft.Id}:{lineEnding}WHILE {draft.Condition?.Trim()}{lineEnding}BEGIN{lineEnding}END;",
+
+        PipelineTaskKind.For =>
+            $"{draft.Id}:{lineEnding}FOR @{(draft.Variable ?? string.Empty).TrimStart('@')} "
+            + $"= {draft.Start?.Trim()} TO {draft.End?.Trim()}"
+            + (string.IsNullOrWhiteSpace(draft.Step) ? string.Empty : $" STEP {draft.Step.Trim()}")
+            + $"{lineEnding}BEGIN{lineEnding}END;",
+
+        PipelineTaskKind.Throw =>
+            $"{draft.Id}:{lineEnding}THROW {Literal(draft.Message)};",
+
+        PipelineTaskKind.Break => $"{draft.Id}:{lineEnding}BREAK;",
+
+        PipelineTaskKind.Continue => $"{draft.Id}:{lineEnding}CONTINUE;",
+
+        PipelineTaskKind.WaitFor =>
+            $"{draft.Id}:{lineEnding}WAITFOR {(draft.Until ? "TIME" : "DELAY")} {Literal(draft.Delay?.Trim())};",
+
         _ => throw new ArgumentOutOfRangeException(nameof(draft), draft.Kind, "Unknown pipeline task kind."),
     };
+
+    /// <summary>A labelled file or directory statement over one path.</summary>
+    private static string Path1(PipelineTaskDraft draft, string verb, string lineEnding) =>
+        $"{draft.Id}:{lineEnding}{verb} {Literal(draft.Source)};";
+
+    /// <summary>A labelled file or directory statement over a source and a destination.</summary>
+    private static string Path2(PipelineTaskDraft draft, string verb, string lineEnding) =>
+        $"{draft.Id}:{lineEnding}{verb} {Literal(draft.Source)} TO {Literal(draft.Target)};";
 
     /// <summary>A single-quoted ETL-SQL string literal with embedded quotes doubled.</summary>
     private static string Literal(string? value) =>

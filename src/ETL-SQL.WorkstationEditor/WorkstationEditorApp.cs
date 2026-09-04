@@ -589,23 +589,33 @@ public static class WorkstationEditorApp
             var script = request.Script ?? string.Empty;
             var result = (request.Op ?? string.Empty).ToLowerInvariant() switch
             {
-                "add" => pipelineTasks.Add(script, new ETL_SQL.Analysis.Services.PipelineTaskDraft(
-                    request.Id ?? string.Empty,
-                    Enum.TryParse<ETL_SQL.Analysis.Services.PipelineTaskKind>(request.Kind, ignoreCase: true, out var kind)
-                        ? kind
-                        : ETL_SQL.Analysis.Services.PipelineTaskKind.Execution,
-                    request.Connection,
-                    request.Body,
-                    request.Source,
-                    request.Target,
-                    request.Condition,
-                    request.Message,
-                    request.Recipient,
-                    request.Sender,
-                    request.Subject,
-                    request.After,
-                    request.Variable,
-                    request.Collection)),
+                // A kind this host does not know is refused by name. It used to fall back to an
+                // execution task, which turned a palette chip saying MOVE DIRECTORY into an EXECUTE
+                // block the author never asked for and only found out about at run time.
+                "add" => ETL_SQL.Analysis.Services.PipelineTaskKinds.Parse(request.Kind) is { } kind
+                    ? pipelineTasks.Add(script, new ETL_SQL.Analysis.Services.PipelineTaskDraft(
+                        request.Id ?? string.Empty,
+                        kind,
+                        request.Connection,
+                        request.Body,
+                        request.Source,
+                        request.Target,
+                        request.Condition,
+                        request.Message,
+                        request.Recipient,
+                        request.Sender,
+                        request.Subject,
+                        request.After,
+                        request.Variable,
+                        request.Collection,
+                        request.Start,
+                        request.End,
+                        request.Step,
+                        request.Delay,
+                        request.Until,
+                        request.Into))
+                    : ETL_SQL.Analysis.Services.PipelineEditResult.Refused(
+                        script, $"This host does not know a task kind called '{request.Kind}'."),
                 "update" => pipelineTasks.Update(
                     script, request.Id ?? string.Empty, request.NewId, request.Connection, request.Body,
                     request.Variable, request.Collection),
@@ -638,6 +648,8 @@ public static class WorkstationEditorApp
                         connection = task.Connection,
                         body = task.Body,
                         line = task.Line,
+                        // With `line`, the span the editor reveals and highlights after an add.
+                        endLine = task.EndLine,
                         dependsOn = task.DependsOn.Select(dependency => new
                         {
                             id = dependency.Id,
@@ -1246,7 +1258,13 @@ public sealed record PipelineTaskAuthoringRequest(
     string? Edge = null,
     string? Expression = null,
     string? Variable = null,
-    string? Collection = null);
+    string? Collection = null,
+    string? Start = null,
+    string? End = null,
+    string? Step = null,
+    string? Delay = null,
+    bool Until = false,
+    string? Into = null);
 public sealed record PipelineScopeAuthoringRequest(string? Script, string? Id, int? Line = null);
 
 public sealed record DataModelAuthoringRequest(string? Script, string? DocumentUri = null);

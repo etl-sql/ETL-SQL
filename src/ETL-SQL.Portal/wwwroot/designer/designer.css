@@ -6783,20 +6783,78 @@ body.vscode-dark .etlsql-cw-missing-hint {
 /* The map itself stays the read-only engine projection. These styles only mark which cards carry a
    section label, and therefore which ones the canvas can edit and reorder. */
 
+/* The map and the authoring column sit side by side: the palette is something you drag *from* onto
+   something you drop *on*, and a palette under the map is a gesture across the whole viewport. */
+.etlsql-studio-dag-body-row {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    align-items: stretch;
+}
+
 .etlsql-studio-pipeline-editor {
-    flex: 0 0 auto;
+    flex: 0 0 232px;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 10px 14px;
-    border-top: 1px solid var(--portal-border, #30363d);
+    padding: 10px 12px;
+    overflow-y: auto;
+    border-right: 1px solid var(--portal-border, #30363d);
     background: var(--portal-surface, #161b22);
+}
+
+/* Narrow enough that a sidebar would take the map: the column goes back under it. */
+@media (max-width: 900px) {
+    .etlsql-studio-dag-body-row {
+        flex-direction: column-reverse;
+    }
+
+    .etlsql-studio-pipeline-editor {
+        flex: 0 0 auto;
+        max-height: 40%;
+        border-right: 0;
+        border-top: 1px solid var(--portal-border, #30363d);
+    }
 }
 
 .etlsql-studio-pipeline-tools {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.etlsql-studio-palette-lede {
+    margin: 0;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.6875rem;
+    line-height: 1.45;
+}
+
+.etlsql-studio-palette-lede code {
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    color: var(--portal-text, #f0f6fc);
+}
+
+.etlsql-studio-palette-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.etlsql-studio-palette-group h4 {
+    margin: 4px 0 0;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.5625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.etlsql-studio-palette-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
 }
 
 .etlsql-studio-pipeline-hint {
@@ -6872,21 +6930,22 @@ body.vscode-dark .etlsql-cw-missing-hint {
 
 .etlsql-studio-pipeline-palette {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 6px;
 }
 
 .etlsql-studio-task-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
+    gap: 5px;
+    padding: 3px 9px;
     border: 1px solid var(--portal-border, #30363d);
     border-radius: 999px;
     background: var(--portal-bg, #0d1117);
     color: var(--portal-text, #f0f6fc);
     font-size: 0.6875rem;
-    cursor: pointer;
+    /* grab, not pointer: the chip's first meaning is that it can be dragged onto the map. */
+    cursor: grab;
 }
 
 .etlsql-studio-task-chip:hover {
@@ -6894,8 +6953,58 @@ body.vscode-dark .etlsql-cw-missing-hint {
     background: rgba(56, 139, 253, 0.09);
 }
 
+.etlsql-studio-task-chip.is-dragging-chip {
+    opacity: 0.5;
+    cursor: grabbing;
+}
+
+/* A block is drawn as one: square shoulders say it holds things, a pill says it is one thing. */
+.etlsql-studio-task-chip.is-container-chip {
+    border-radius: 5px;
+    border-style: dashed;
+}
+
 .etlsql-studio-task-chip-glyph {
     color: var(--portal-accent, #58a6ff);
+}
+
+/* Says out loud that the engine will only take this statement inside a loop, so the chip is not a
+   promise the drop cannot keep. */
+.etlsql-studio-task-chip-tag {
+    padding: 0 4px;
+    border-radius: 3px;
+    background: rgba(210, 153, 34, 0.16);
+    color: var(--portal-warning, #d29922);
+    font-size: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Dropping on empty map means "at the end of the script", and the map says so while a chip is over
+   it — otherwise the author is aiming at nothing and finding out afterwards. */
+.etlsql-studio-dag-canvas.is-drop-target {
+    outline: 2px dashed rgba(88, 166, 255, 0.5);
+    outline-offset: -6px;
+}
+
+/* A stage the canvas can show but not author. It keeps its place on the map — it is a true picture
+   of the script — and is drawn as something to read rather than something to grab. */
+.etlsql-dag-card.is-projection-stage {
+    border-style: dashed;
+    cursor: default;
+}
+
+/* Where an edge line meets a card, and nothing more. These used to be drawn as filled dots the same
+   size and shape as the connector handle, so the obvious thing to drag was the thing that did
+   nothing. They stay in the DOM because the map anchors every line on them. */
+.card-port-left.is-anchor-port,
+.card-port-right.is-anchor-port {
+    width: 5px;
+    height: 5px;
+    border: 0;
+    background: var(--portal-text-soft, #8b949e);
+    opacity: 0.5;
+    pointer-events: none;
 }
 
 .etlsql-studio-pipeline-selected {

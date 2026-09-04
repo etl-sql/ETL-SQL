@@ -41,12 +41,18 @@ public class AbsolutePathRule : ILintRule
         else if (statement is FileOperationStatement fileOp)
         {
             CheckPathExpression(fileOp.Source, results);
-            CheckPathExpression(fileOp.Destination, results);
+            // A RENAME destination that carries no separator is a new name, not a path: the engine
+            // joins it to the source's own directory and never authorizes it as a path. Asking for
+            // an absolute one there is a warning no correct RENAME can avoid. One that does carry a
+            // separator is a path again, and is checked like any other.
+            if (fileOp.Type != FileOpType.Rename || !IsBareName(fileOp.Destination))
+                CheckPathExpression(fileOp.Destination, results);
         }
         else if (statement is DirectoryOperationStatement dirOp)
         {
             CheckPathExpression(dirOp.Path, results);
-            CheckPathExpression(dirOp.Destination, results);
+            if (dirOp.Type != DirectoryOpType.Rename || !IsBareName(dirOp.Destination))
+                CheckPathExpression(dirOp.Destination, results);
         }
         else if (statement is BulkInsertStatement bulk)
         {
@@ -116,6 +122,12 @@ public class AbsolutePathRule : ILintRule
             AnalyzeStatement(tryCatch.CatchBody, results);
         }
     }
+
+    /// <summary>True when this literal is a single name rather than any kind of path.</summary>
+    private static bool IsBareName(Expression? expr) =>
+        expr is LiteralExpression { Value: string name }
+        && !string.IsNullOrWhiteSpace(name)
+        && name.IndexOfAny(['/', '\\']) < 0;
 
     private void CheckPathExpression(Expression? expr, List<LintResult> results)
     {

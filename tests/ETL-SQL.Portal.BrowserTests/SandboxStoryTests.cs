@@ -1034,9 +1034,15 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.False(await page.Locator("[data-dag-node='quality_gate']").EvaluateAsync<bool>("element => element.draggable"));
 
         // The palette offers every kind that passed its emission gate, and none of them is a dead
-        // control — a chip that cannot write its statement would be worse than no chip.
-        Assert.Equal(7, await page.Locator("[data-task-kind]").CountAsync());
+        // control — a chip that cannot write its statement would be worse than no chip. The count is
+        // deliberately exact: it is the vocabulary the canvas claims to teach, and a chip quietly
+        // disappearing from a drawer is the kind of loss nothing else here would notice.
+        Assert.Equal(23, await page.Locator("[data-task-kind]").CountAsync());
         Assert.Equal(0, await page.Locator("[data-task-kind][disabled]").CountAsync());
+
+        // Grouped, and every chip is a drag source: the drag is the gesture the canvas exists for.
+        Assert.Equal(4, await page.Locator("[data-palette-group]").CountAsync());
+        Assert.Equal(23, await page.Locator("[data-task-kind][draggable='true']").CountAsync());
 
         // Renaming goes through the task editor, and writes only the label.
         await task.ClickAsync();
@@ -1072,7 +1078,7 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
 
         // A half-filled task is refused before anything is written, with a sentence about the field
         // that is missing rather than a parse error about syntax the author never typed.
-        await page.ClickAsync("[data-task-kind='fileoperation']");
+        await page.ClickAsync("[data-task-kind='copyfile']");
         await page.Locator("[data-task-field='source']").WaitForAsync();
         await page.Locator("[data-task-id]").FillAsync("half_filled");
         await page.ClickAsync("[data-dialog-action='save']");
@@ -1084,6 +1090,112 @@ public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLife
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }
+
+    /// <summary>
+    /// The loop the canvas exists for: drag a statement onto the map, fill in a form, and read the
+    /// ETL-SQL it produced.
+    ///
+    /// <para>The third step is the one that was missing. A canvas that quietly edits a file you
+    /// cannot see is something you operate; one that shows you the statement it just wrote is
+    /// something you learn the language from, which is the whole reason Studio has a palette.</para>
+    /// </summary>
+    [Fact]
+    public async Task Studio_DraggingAPaletteChipWritesAStatementAndShowsTheAuthorTheCode()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await WaitForStudioAsync(page);
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
+        await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Engine projection')");
+
+        string Script() => page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content").Result;
+
+        // ── Dropped onto a task: written after that task, not at the end of the file ──────────
+        await DragChipAsync(page, "movefile", "[data-task-key='load_orders']");
+        await page.Locator("[data-task-field='source']").WaitForAsync();
+
+        // The dialog says where the statement is about to land, because the drop decided it.
+        Assert.Contains("after load_orders",
+            await page.Locator("[data-dialog-body]").InnerTextAsync(), StringComparison.Ordinal);
+
+        await page.Locator("[data-task-id]").FillAsync("stage_extract");
+        await page.Locator("[data-task-field='source']").FillAsync(@"C:\data\incoming\orders.csv");
+        await page.Locator("[data-task-field='target']").FillAsync(@"C:\data\working\orders.csv");
+        await page.ClickAsync("[data-dialog-action='save']");
+        await page.WaitForFunctionAsync("""() => !!document.querySelector("[data-task-key='stage_extract']")""");
+
+        var written = Script();
+        Assert.Contains("stage_extract:", written, StringComparison.Ordinal);
+        Assert.Contains(@"MOVE FILE 'C:\data\incoming\orders.csv' TO 'C:\data\working\orders.csv';",
+            written, StringComparison.Ordinal);
+
+        // The statement it wrote is the statement the editor is now showing, selected. This is the
+        // half of the loop that teaches: the author sees the ETL-SQL their gesture produced.
+        var selected = await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.editorInstance.getSelection()");
+        Assert.Contains("stage_extract:", selected, StringComparison.Ordinal);
+        Assert.Contains("MOVE FILE", selected, StringComparison.Ordinal);
+
+        // Exactly the statement, and nothing else in the file: a selection that ran to the end of
+        // the script would contain these two strings too and teach the author nothing about which
+        // lines were theirs.
+        Assert.DoesNotContain("load_orders:", selected, StringComparison.Ordinal);
+
+        // ── Dropped onto a block: written inside it, in one edit ─────────────────────────────
+        await page.ClickAsync("[data-task-kind='parallel']");
+        await page.Locator("[data-task-id]").FillAsync("load_both");
+        await page.ClickAsync("[data-dialog-action='save']");
+        await page.WaitForFunctionAsync("""() => !!document.querySelector("[data-task-key='load_both']")""");
+
+        var beforeNesting = Script();
+
+        await DragChipAsync(page, "createdirectory", "[data-task-key='load_both']");
+        await page.Locator("[data-task-field='source']").WaitForAsync();
+        Assert.Contains("inside load_both",
+            await page.Locator("[data-dialog-body]").InnerTextAsync(), StringComparison.Ordinal);
+        await page.Locator("[data-task-id]").FillAsync("make_archive");
+        await page.Locator("[data-task-field='source']").FillAsync(@"C:\data\archive");
+        await page.ClickAsync("[data-dialog-action='save']");
+        await page.WaitForFunctionAsync("""() => !!document.querySelector("[data-task-key='make_archive']")""");
+
+        // Inside the block, and one edit rather than an add followed by a move: the author's undo
+        // goes back to the script as it was before the drop, not to a half-done state.
+        var nested = Script();
+        Assert.Matches(@"PARALLEL BEGIN\s*\r?\n\s*make_archive:", nested);
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.undo()");
+        await page.WaitForFunctionAsync(
+            """() => !document.querySelector("[data-task-key='make_archive']")""");
+        Assert.Equal(beforeNesting.Trim(), Script().Trim());
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
+    }
+
+    /// <summary>
+    /// Drags a palette chip onto a target, the way a pointer does.
+    ///
+    /// <para>Playwright's own drag helpers move a mouse; the palette is an HTML5 drag source, so the
+    /// gesture has to be the drag events themselves — with the same `DataTransfer` throughout, since
+    /// what the chip puts on it during `dragstart` is the only thing the drop has to go on.</para>
+    /// </summary>
+    private static Task DragChipAsync(IPage page, string kind, string targetSelector) =>
+        page.EvaluateAsync($$"""
+            () => {
+              const chip = document.querySelector("[data-task-kind='{{kind}}']");
+              const target = document.querySelector("{{targetSelector}}");
+              if (!chip) throw new Error("No palette chip for {{kind}}.");
+              if (!target) throw new Error("No drop target {{targetSelector}}.");
+              const dt = new DataTransfer();
+              chip.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: dt }));
+              target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+              target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+              chip.dispatchEvent(new DragEvent('dragend', { bubbles: true, dataTransfer: dt }));
+            }
+            """);
 
     [Fact]
     public async Task Studio_PipelineDependencies_AreDeclaredInTheScriptAndNeverImplyConcurrency()

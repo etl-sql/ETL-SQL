@@ -20,58 +20,249 @@
 import { escapeHtml, noteMarkup } from './studio-authoring-ui.js';
 
 /**
- * The palette. Every kind here writes exactly one labelled statement, and every one of them is
- * covered by a focused parse, lint, formatter, and reference test before it appears — a chip that
- * emits a statement failing any of those is worse than no chip, because the author finds out when
+ * The palette, grouped the way an author looks for something.
+ *
+ * Every entry writes exactly one labelled statement, and every one of them is covered by a focused
+ * parse, lint, formatter, and reference test before it appears here — `PipelineTaskEmissionTests`
+ * is that gate, and it fails when a kind the service can write has no draft in it. A chip that emits
+ * a statement failing any of those checks is worse than no chip, because the author finds out when
  * the pipeline runs rather than when they click.
+ *
+ * The vocabulary is taken from the language rather than invented for the canvas: these are the
+ * control-flow and file constructs ETL-SQL actually has, named as the script names them, so that
+ * dragging one in and reading what it wrote is a way to learn the language.
+ *
+ * `needsLoop` marks the two entries the engine only accepts inside a loop. They are still shown —
+ * finding out BREAK exists is the point of a palette — and they say so on the chip rather than
+ * appearing to work and failing at run time.
  */
-export const PIPELINE_TASK_KINDS = Object.freeze([
+export const PIPELINE_TASK_GROUPS = Object.freeze([
     Object.freeze({
-        id: 'execution',
-        label: 'Execution',
-        glyph: '▶',
-        hint: 'Run a block of SQL on a connection this script declares.',
+        id: 'work',
+        label: 'Work',
+        hint: 'The statements that do something to your data.',
+        kinds: Object.freeze([
+            Object.freeze({
+                id: 'execution',
+                label: 'Execution',
+                glyph: '\u25B6',
+                hint: 'Run a block of SQL on a connection this script declares.',
+            }),
+            Object.freeze({
+                id: 'validation',
+                label: 'Validation',
+                glyph: '\u2713',
+                hint: 'Assert a condition and stop the run with a message when it fails.',
+            }),
+            Object.freeze({
+                id: 'notification',
+                label: 'Notification',
+                glyph: '\u2709',
+                hint: 'Send an email through an SMTP connection this script declares.',
+            }),
+            Object.freeze({
+                id: 'throw',
+                label: 'Fail',
+                glyph: '\u26A1',
+                hint: 'Stop the run with your own error. Inside a TRY, the CATCH takes over.',
+            }),
+            Object.freeze({
+                id: 'waitfor',
+                label: 'Wait',
+                glyph: '\u23F1',
+                hint: 'Pause for a duration, or until a time of day.',
+            }),
+        ]),
     }),
     Object.freeze({
-        id: 'fileoperation',
-        label: 'File',
-        glyph: '🗎',
-        hint: 'Copy a file from one path to another.',
+        id: 'flow',
+        label: 'Control flow',
+        hint: 'Blocks that decide what runs, how often, and what happens when something fails.',
+        kinds: Object.freeze([
+            Object.freeze({
+                id: 'if',
+                label: 'If',
+                glyph: '\u2442',
+                container: true,
+                hint: 'A block that runs only when its condition is true.',
+            }),
+            Object.freeze({
+                id: 'foreach',
+                label: 'For each',
+                glyph: '\u21BB',
+                container: true,
+                hint: 'A block run once per item of a list, a #temp table, or a query.',
+            }),
+            Object.freeze({
+                id: 'for',
+                label: 'Count',
+                glyph: '\u2261',
+                container: true,
+                hint: 'A block run once per number, counting from one value to another.',
+            }),
+            Object.freeze({
+                id: 'while',
+                label: 'While',
+                glyph: '\u27F3',
+                container: true,
+                hint: 'A block repeated for as long as its condition holds.',
+            }),
+            Object.freeze({
+                id: 'parallel',
+                label: 'Parallel',
+                glyph: '\u21C9',
+                container: true,
+                hint: 'A block whose tasks all start at the same time. This is the only thing in ETL-SQL that means concurrency.',
+            }),
+            Object.freeze({
+                id: 'transaction',
+                label: 'Transaction',
+                glyph: '\u26E8',
+                container: true,
+                hint: 'A block that commits as one unit and rolls back if anything inside it fails.',
+            }),
+            Object.freeze({
+                id: 'break',
+                label: 'Break',
+                glyph: '\u23F9',
+                needsLoop: true,
+                hint: 'Leaves the loop it is in. Only legal inside a loop.',
+            }),
+            Object.freeze({
+                id: 'continue',
+                label: 'Continue',
+                glyph: '\u23ED',
+                needsLoop: true,
+                hint: 'Skips to the loop\'s next item. Only legal inside a loop.',
+            }),
+        ]),
     }),
     Object.freeze({
-        id: 'validation',
-        label: 'Validation',
-        glyph: '✓',
-        hint: 'Assert a condition and stop the run with a message when it fails.',
+        id: 'files',
+        label: 'Files',
+        hint: 'One file at a time, by path.',
+        kinds: Object.freeze([
+            Object.freeze({
+                id: 'copyfile',
+                label: 'Copy file',
+                glyph: '\u2398',
+                hint: 'Copy a file to another path, leaving the original where it is.',
+            }),
+            Object.freeze({
+                id: 'movefile',
+                label: 'Move file',
+                glyph: '\u2192',
+                hint: 'Move a file to another path.',
+            }),
+            Object.freeze({
+                id: 'renamefile',
+                label: 'Rename file',
+                glyph: '\u270E',
+                hint: 'Give a file a new name, in the directory it is already in.',
+            }),
+            Object.freeze({
+                id: 'deletefile',
+                label: 'Delete file',
+                glyph: '\u2717',
+                hint: 'Delete one file.',
+            }),
+        ]),
     }),
     Object.freeze({
-        id: 'notification',
-        label: 'Notification',
-        glyph: '✉',
-        hint: 'Send an email through an SMTP connection this script declares.',
-    }),
-    Object.freeze({
-        id: 'parallel',
-        label: 'Parallel',
-        glyph: '⇉',
-        container: true,
-        hint: 'A block whose tasks all start at the same time. This is the only thing in ETL-SQL that means concurrency.',
-    }),
-    Object.freeze({
-        id: 'foreach',
-        label: 'For each',
-        glyph: '↻',
-        container: true,
-        hint: 'A block run once per item of a list, a #temp table, or a query.',
-    }),
-    Object.freeze({
-        id: 'transaction',
-        label: 'Transaction',
-        glyph: '⛨',
-        container: true,
-        hint: 'A block that commits as one unit and rolls back if anything inside it fails.',
+        id: 'directories',
+        label: 'Directories',
+        hint: 'Whole folders, by path.',
+        kinds: Object.freeze([
+            Object.freeze({
+                id: 'createdirectory',
+                label: 'Create folder',
+                glyph: '\u002B',
+                hint: 'Create a directory, and any parent it needs.',
+            }),
+            Object.freeze({
+                id: 'copydirectory',
+                label: 'Copy folder',
+                glyph: '\u29C9',
+                hint: 'Copy a directory and everything in it.',
+            }),
+            Object.freeze({
+                id: 'movedirectory',
+                label: 'Move folder',
+                glyph: '\u21E5',
+                hint: 'Move a directory and everything in it.',
+            }),
+            Object.freeze({
+                id: 'renamedirectory',
+                label: 'Rename folder',
+                glyph: '\u270D',
+                hint: 'Give a directory a new name, where it already sits.',
+            }),
+            Object.freeze({
+                id: 'deletedirectorycontents',
+                label: 'Empty folder',
+                glyph: '\u2205',
+                hint: 'Delete what is inside a directory and keep the directory.',
+            }),
+            Object.freeze({
+                id: 'deletedirectory',
+                label: 'Delete folder',
+                glyph: '\u2326',
+                hint: 'Delete a directory and everything in it.',
+            }),
+        ]),
     }),
 ]);
+
+/**
+ * Every palette entry, flat.
+ *
+ * Kept as the exported name it has always had, because other modules look a kind up by id and do
+ * not care which drawer it is filed under.
+ */
+export const PIPELINE_TASK_KINDS = Object.freeze(
+    PIPELINE_TASK_GROUPS.flatMap(group => group.kinds));
+
+/** The palette entry for a kind, or null when this build does not offer it. */
+export function taskKind(kind) {
+    return PIPELINE_TASK_KINDS.find(entry => entry.id === String(kind || '').toLowerCase()) ?? null;
+}
+
+/**
+ * The drag format a palette chip carries.
+ *
+ * A type of its own so the canvas can tell a chip from a card during `dragover`, where the payload
+ * itself cannot be read. Anything else dragged over the map — a file, a selection from the script —
+ * has no such type and is left alone rather than being guessed at.
+ */
+export const PALETTE_DRAG_TYPE = 'application/x-etlsql-task-kind';
+
+/** One drawer of the palette. */
+function paletteGroupMarkup(group) {
+    return `<section class="etlsql-studio-palette-group" data-palette-group="${escapeHtml(group.id)}">
+        <h4 title="${escapeHtml(group.hint)}">${escapeHtml(group.label)}</h4>
+        <div class="etlsql-studio-palette-chips">
+            ${group.kinds.map(paletteChipMarkup).join('')}
+        </div>
+    </section>`;
+}
+
+/**
+ * One chip.
+ *
+ * A button as well as a drag source: the drag is the gesture the canvas is for, and the button is
+ * the one that works without a mouse. The two do the same thing, so neither is a second-class path.
+ */
+function paletteChipMarkup(kind) {
+    return `<button type="button"
+        class="etlsql-studio-task-chip${kind.container ? ' is-container-chip' : ''}"
+        draggable="true"
+        data-task-kind="${escapeHtml(kind.id)}"
+        title="${escapeHtml(kind.hint)}${kind.needsLoop ? ' Drop it inside a loop.' : ''}">
+        <span class="etlsql-studio-task-chip-glyph" aria-hidden="true">${escapeHtml(kind.glyph)}</span>
+        <span class="etlsql-studio-task-chip-label">${escapeHtml(kind.label)}</span>
+        ${kind.needsLoop ? '<span class="etlsql-studio-task-chip-tag">in a loop</span>' : ''}
+    </button>`;
+}
 
 /** True when this kind holds other tasks. */
 export function isContainerKind(kind) {
@@ -124,9 +315,14 @@ function edgeCondition(id) {
         ?? PIPELINE_EDGE_CONDITIONS[0];
 }
 
-/** The palette entry for a kind the host reported, so a card can say what it is. */
+/** What to call a kind the host reported, so a card can say what it is. */
 export function taskKindLabel(kind) {
-    return PIPELINE_TASK_KINDS.find(entry => entry.id === String(kind || '').toLowerCase())?.label ?? 'Task';
+    return taskKind(kind)?.label ?? 'Task';
+}
+
+/** True when the engine only accepts this kind inside a loop. */
+export function needsALoop(kind) {
+    return Boolean(taskKind(kind)?.needsLoop);
 }
 
 /**
@@ -171,6 +367,14 @@ export function attachPipelineTaskEditing(host, canvas, {
     runtime = null,
 } = {}) {
     const selected = tasks.find(task => sameId(task.id, selectedId)) || null;
+
+    // What is being dragged, and what the gesture means: a palette chip being added, a card being
+    // reordered, or a connector declaring a dependency. Held here rather than read back off the
+    // document, because the drag payload is deliberately unreadable during dragover and a component
+    // that queries the shell to find out what it is dragging has reached outside its own host.
+    let dragging = null;
+    let draggingKind = null;
+
     const listeners = [];
     const on = (element, type, handler) => {
         element.addEventListener(type, handler);
@@ -179,21 +383,38 @@ export function attachPipelineTaskEditing(host, canvas, {
 
     host.innerHTML = `
         <div class="etlsql-studio-pipeline-tools">
-            <div class="etlsql-studio-pipeline-palette" role="group" aria-label="Add a task">
-                ${PIPELINE_TASK_KINDS.map(kind => `<button type="button"
-                    class="etlsql-studio-task-chip"
-                    data-task-kind="${escapeHtml(kind.id)}"
-                    title="${escapeHtml(kind.hint)}">
-                    <span class="etlsql-studio-task-chip-glyph" aria-hidden="true">${escapeHtml(kind.glyph)}</span>
-                    <span>${escapeHtml(kind.label)}</span>
-                </button>`).join('')}
-            </div>
+            <aside class="etlsql-studio-pipeline-palette" data-task-palette aria-label="Statements you can add">
+                <p class="etlsql-studio-palette-lede">Drag one onto the map, or click to add it after
+                    ${selected ? `<code>${escapeHtml(selected.id)}</code>` : 'the last statement'}.</p>
+                ${PIPELINE_TASK_GROUPS.map(paletteGroupMarkup).join('')}
+            </aside>
             <span class="etlsql-studio-pipeline-hint">${escapeHtml(hint(tasks, selected))}</span>
         </div>
         <div class="etlsql-studio-pipeline-inspector" data-task-inspector>${inspectorMarkup(selected, Boolean(onRunTo))}</div>`;
 
+    // A click adds beside the selection; a drag decides where from where it lands. Both are kept:
+    // the drag is the gesture the canvas is for, and the click is the one that works from a keyboard.
     for (const chip of host.querySelectorAll('[data-task-kind]')) {
-        on(chip, 'click', () => onAdd({ kind: chip.dataset.taskKind, after: selected?.id ?? null }));
+        const kind = chip.dataset.taskKind;
+        on(chip, 'click', () => onAdd({ kind, after: selected?.id ?? null }));
+        on(chip, 'dragstart', event => {
+            dragging = kind;
+            draggingKind = 'palette';
+            event.dataTransfer.effectAllowed = 'copy';
+            // Both formats on purpose. The custom type is what the canvas tests for during dragover,
+            // where the payload itself is unreadable; the plain text is what makes the chip mean
+            // something when it is dropped into the script pane or another editor.
+            event.dataTransfer.setData(PALETTE_DRAG_TYPE, kind);
+            event.dataTransfer.setData('text/plain', kind);
+            chip.classList.add('is-dragging-chip');
+        });
+        on(chip, 'dragend', () => {
+            dragging = null;
+            draggingKind = null;
+            chip.classList.remove('is-dragging-chip');
+            canvas.classList.remove('is-drop-target');
+            for (const card of canvas.querySelectorAll('[data-task-key]')) card.classList.remove('is-drop-target');
+        });
     }
 
     const inspector = host.querySelector('[data-task-inspector]');
@@ -267,13 +488,6 @@ export function attachPipelineTaskEditing(host, canvas, {
     // Only labelled cards take part. Everything else on the map is a projection stage: real, and
     // deliberately not draggable, because the canvas cannot edit it losslessly yet.
 
-    // What is being dragged, and whether the drag started on the card or on its connector handle.
-    // Held here rather than read back off the document: the drag payload is deliberately unreadable
-    // during dragover, and a component that queries the shell to find out what it is dragging has
-    // reached outside its own host.
-    let dragging = null;
-    let draggingKind = null;
-
     const containers = new Set(tasks
         .filter(task => isContainerKind(task.kind))
         .map(task => String(task.id).toLowerCase()));
@@ -289,15 +503,26 @@ export function attachPipelineTaskEditing(host, canvas, {
         // Dragging the card body reorders; dragging this handle declares a dependency. Two gestures
         // because they mean different things: one moves a statement, the other writes a declaration
         // about what has to finish first.
+        //
+        // The handle is the dot the map already draws on the right edge of the card, promoted to a
+        // real control. It used to be decoration beside a separate handle the author had to find:
+        // the obvious thing to grab did nothing, and the thing that worked was somewhere else. Where
+        // the map has no dot to promote — an older projection, a re-render — one is created, so a
+        // connectable card always has a visible handle.
         if (!card.querySelector('[data-task-connector]')) {
-            const handle = card.ownerDocument.createElement('button');
-            handle.type = 'button';
-            handle.className = 'etlsql-dag-connector';
+            const existing = card.querySelector('.card-port-right');
+            const handle = existing ?? card.ownerDocument.createElement('span');
+            handle.classList.add('etlsql-dag-connector');
+            // The map paints a port the colour of the node type. A control is not decoration, so it
+            // drops the inline colour and takes the accent every other control on this surface uses.
+            handle.style.background = '';
             handle.dataset.taskConnector = id;
             handle.draggable = true;
+            handle.tabIndex = 0;
+            handle.setAttribute('role', 'button');
             handle.title = `Drag onto another task to make it run after ${id}`;
             handle.setAttribute('aria-label', `Connect ${id} to another task`);
-            card.appendChild(handle);
+            if (!existing) card.appendChild(handle);
 
             on(handle, 'click', event => event.stopPropagation());
             on(handle, 'dragstart', event => {
@@ -331,15 +556,32 @@ export function attachPipelineTaskEditing(host, canvas, {
             cards.forEach(other => other.classList.remove('is-drop-target'));
         });
         on(card, 'dragover', event => {
-            if (!dragging || sameId(id, dragging)) return;
+            if (!dragging) return;
+            if (draggingKind !== 'palette' && sameId(id, dragging)) return;
             event.preventDefault();
-            event.dataTransfer.dropEffect = draggingKind === 'connect' ? 'link' : 'move';
+            event.stopPropagation();
+            event.dataTransfer.dropEffect = draggingKind === 'connect' ? 'link'
+                : draggingKind === 'palette' ? 'copy' : 'move';
             card.classList.add('is-drop-target');
         });
         on(card, 'dragleave', () => card.classList.remove('is-drop-target'));
         on(card, 'drop', event => {
             event.preventDefault();
+            event.stopPropagation();
             card.classList.remove('is-drop-target');
+
+            // A chip dropped on a container goes inside it and one dropped on a task goes after it.
+            // Both are one request: where it was dropped decides where in the script it is written,
+            // and nothing else about the drop is remembered.
+            if (draggingKind === 'palette') {
+                const kind = event.dataTransfer.getData(PALETTE_DRAG_TYPE) || dragging;
+                if (!kind) return;
+                onAdd(containers.has(String(id).toLowerCase())
+                    ? { kind, into: id, after: null }
+                    : { kind, after: id, into: null });
+                return;
+            }
+
             const moved = event.dataTransfer.getData('text/plain') || dragging;
             if (!moved || sameId(moved, id)) return;
 
@@ -360,6 +602,55 @@ export function attachPipelineTaskEditing(host, canvas, {
         });
     }
 
+    // Every other card on the map is a projection stage the canvas cannot author. It keeps its shape
+    // and its position — it is a true picture of the script — and its round dots stop pretending to
+    // be controls. They looked exactly like the handle that does something, and dragging one was the
+    // first thing manual testing tried.
+    //
+    // Marked rather than removed: the map anchors every edge line on these two elements and skips
+    // any edge whose endpoints are missing, so deleting them erases the arrows between the stages
+    // they connect. They are drawn as what they are — the point a line meets the card.
+    for (const card of canvas.querySelectorAll('.etlsql-dag-card:not([data-task-key])')) {
+        for (const port of card.querySelectorAll('.card-port-left, .card-port-right')) {
+            port.classList.add('is-anchor-port');
+            port.style.background = '';
+        }
+        card.classList.add('is-projection-stage');
+        if (!card.title) {
+            card.title = 'This statement is on the map because the script has it. The canvas cannot '
+                + 'author this one yet, so it is shown rather than editable.';
+        }
+    }
+
+    // An editable card's left dot is an anchor too — the point an incoming line meets it — so it is
+    // drawn the same muted way. After this, the only filled dot anywhere on the map is the connector
+    // handle, and a dot that looks like a control is one.
+    for (const card of cards) {
+        const inbound = card.querySelector('.card-port-left');
+        if (!inbound) continue;
+        inbound.classList.add('is-anchor-port');
+        inbound.style.background = '';
+    }
+
+    // A chip dropped on empty canvas goes at the end of the script. That is the one place on the map
+    // with no statement under the cursor, so it is the only drop that can mean "just add it".
+    on(canvas, 'dragover', event => {
+        if (draggingKind !== 'palette' || !dragging) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        canvas.classList.add('is-drop-target');
+    });
+    on(canvas, 'dragleave', event => {
+        if (event.target === canvas) canvas.classList.remove('is-drop-target');
+    });
+    on(canvas, 'drop', event => {
+        canvas.classList.remove('is-drop-target');
+        if (draggingKind !== 'palette') return;
+        event.preventDefault();
+        const kind = event.dataTransfer.getData(PALETTE_DRAG_TYPE) || dragging;
+        if (kind) onAdd({ kind, after: null, into: null });
+    });
+
     return {
         dispose: () => {
             listeners.forEach(off => off());
@@ -373,8 +664,14 @@ function sameId(left, right) {
 }
 
 function hint(tasks, selected) {
-    if (!tasks.length) return 'No editable tasks yet. Add one from the palette, or keep writing the script — the map follows either way.';
-    if (!selected) return `${tasks.length} editable task${tasks.length === 1 ? '' : 's'}. Select one to edit it, or drag it onto another to run it after that one.`;
+    if (!tasks.length) {
+        return 'Nothing on the map yet. Drag a statement from the palette onto it — the script it writes '
+            + 'appears in the code pane, which is where the map comes from in the first place.';
+    }
+    if (!selected) {
+        return `${tasks.length} editable task${tasks.length === 1 ? '' : 's'}. Drop a palette chip on one to `
+            + 'write a statement after it, on a block to write it inside, or on empty space for the end of the script.';
+    }
     return `${selected.id} selected. Drag it onto another task to run it after that one, then set when the edge hands over.`;
 }
 
@@ -393,7 +690,9 @@ function inspectorMarkup(task, runnable) {
         ? [{ strong: taskKindLabel(task.kind) }, ' on ', { code: task.connection }]
         : task.kind === 'foreach' && task.collection
             ? [{ strong: taskKindLabel(task.kind) }, ' over ', { code: task.collection }]
-            : [{ strong: taskKindLabel(task.kind) }];
+            : task.kind === 'for' && task.variable
+                ? [{ strong: taskKindLabel(task.kind) }, ' on ', { code: task.variable }]
+                : [{ strong: taskKindLabel(task.kind) }];
 
     if (task.container) {
         detail.push(' · inside ', { code: task.container });
@@ -596,7 +895,31 @@ function containerNote(task) {
         return noteMarkup([
             'Everything dropped in here runs once per item, in order, with ',
             { code: task.variable || '@item' },
-            ' bound to the current one.',
+            ' bound to the current one. BREAK leaves the loop; CONTINUE starts the next item.',
+        ], 'info');
+    }
+
+    if (task.kind === 'for') {
+        return noteMarkup([
+            'Everything dropped in here runs once per number, with ',
+            { code: task.variable || '@i' },
+            ' holding it. BREAK leaves the loop; CONTINUE starts the next number.',
+        ], 'info');
+    }
+
+    if (task.kind === 'while') {
+        return noteMarkup([
+            'Everything dropped in here runs again for as long as the condition holds — so something '
+            + 'inside has to change what the condition reads, or the loop never ends. BREAK leaves it.',
+        ], 'info');
+    }
+
+    if (task.kind === 'if') {
+        return noteMarkup([
+            'Everything dropped in here runs only when the condition is true. An ',
+            { code: 'ELSE' },
+            ' branch is written in the script rather than on the canvas: the canvas tracks one block '
+            + 'per label, so it would have no way to say which of two you dropped into.',
         ], 'info');
     }
 

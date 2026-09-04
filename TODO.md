@@ -739,7 +739,8 @@ reported.
 **The big one**
 
 - [ ] **Rebuild the pipeline canvas as a teaching surface.** This is the big one, and the plan it
-  had was wrong. Recorded here in full so the next person does not have to reconstruct it.
+  had was wrong. Recorded here in full so the next person does not have to reconstruct it. **Six of
+  the seven work items below shipped 2026-09-04; swimlanes are what is left.**
 
   **The goal.** ETL-SQL Studio exists to teach people to write ETL-SQL by using the UI. The loop is:
   drag an item onto the canvas, fill in a form, then see the code it produced. That is how someone
@@ -750,7 +751,7 @@ reported.
   you already wrote. If the author has to write the SQL first, the canvas teaches nothing. The design
   and the goal were never checked against each other.
 
-  **Evidence it is not a teaching surface today:**
+  **Evidence it was not a teaching surface (all but the last two fixed 2026-09-04):**
   - The palette has 7 kinds. The language has far more (see the v1 list below).
   - The palette is click-only. No `draggable`, no `dragstart` on the chips.
   - The round dots on each card are `card-port-left` / `card-port-right`. They are decoration - anchor
@@ -781,16 +782,60 @@ reported.
   - Keep the existing kinds that already work: execution, validation, notification, transaction.
 
   **Work items:**
-  - [ ] Palette becomes a draggable sidebar, grouped by category, like the reporting canvas.
-  - [ ] One form per palette entry, each writing a statement that parses, lints clean and survives
-        the formatter. `PipelineTaskEmissionTests` already sets this bar for the four existing kinds;
-        every new entry joins it.
-  - [ ] After Add, reveal and highlight the written lines in the editor.
-  - [ ] Connector handles on every card the canvas can connect, visible without hunting.
-  - [ ] Make the decorative ports either real drag targets or stop drawing them as dots.
-  - [ ] Swimlanes for `PARALLEL`.
-  - [ ] Decide what happens to statements the canvas cannot author yet. Today they render as inert
-        stages that teach the author the canvas is read-only.
+  - [x] Palette becomes a draggable sidebar, grouped by category, like the reporting canvas. Four
+        drawers — work, control flow, files, directories — beside the map rather than under it,
+        because a palette you drag *from* onto something you drop *on* should not span the viewport.
+        Every chip is both a drag source and a button, so the gesture the canvas is for and the one
+        that works from a keyboard do the same thing.
+  - [x] One form per palette entry, each writing a statement that parses, lints clean and survives
+        the formatter. All 23 kinds are in `PipelineTaskEmissionTests`, and it now fails when a kind
+        the service can write has no draft in it, so the gate cannot be skipped by adding an enum
+        member. `PipelinePaletteContractTests` checks the palette against the host's vocabulary in
+        both directions: a chip with no emitter and an emitter with no chip both go red.
+        **The gate caught two defects on the way in.** `AbsolutePathRule` warned "relative path" on
+        every correct `RENAME` — the documented form is `RENAME FILE 'old' TO 'new_name'` and the
+        engine joins a bare name to the source's own directory, so it was a finding no author could
+        ever clear. And `ParseTaskKind` on both hosts fell back to an *execution task* for any kind
+        it did not recognise, so a client one version ahead would have had a chip saying MOVE
+        DIRECTORY write an `EXECUTE` block; unknown kinds are now refused by name, with the retired
+        `fileoperation` still mapping to `COPY FILE` for clients pinned to the old build.
+  - [x] After Add, reveal and highlight the written lines in the editor. `revealLines` selects the
+        span the host reports for the statement it just wrote — its own re-read, not the client's
+        guess — and opens the code pane when the projection is canvas-only. A selection rather than a
+        decoration: the CodeMirror bundle exports no `Decoration`/`StateField`, and a selection is
+        the one highlight the author can then copy or type over.
+  - [x] Connector handles on every card the canvas can connect, visible without hunting.
+  - [x] Make the decorative ports either real drag targets or stop drawing them as dots. Both, in
+        the one change: on an editable card the right-hand port *is* the connector handle now
+        (it used to be decoration sitting beside a separate handle, so the obvious thing to grab did
+        nothing and the thing that worked was somewhere else), and on a card the canvas cannot author
+        the ports are removed outright.
+  - [ ] **Swimlanes for `PARALLEL`.** Not done, and deliberately not faked. Lanes need the layout to
+        know which container each node is in: the projection would have to carry container membership
+        on the node (it carries only `line` and `key`), and `_computeLayout` would have to assign
+        lane rows before positions. Overriding `card.style.top` after the fact was the cheap route and
+        is worse than the current picture — `drawConnections` measures the elements, so every edge in
+        and out of the block would be drawn to the wrong place. The children of a `PARALLEL` still
+        read as a chain until this is done, which is the remaining lie on the map.
+  - [x] Decide what happens to statements the canvas cannot author yet. **Decision: they stay, and
+        they say what they are.** They keep their place, because the map is a true picture of the
+        script and hiding them would make it a false one; they are drawn with a dashed border, they
+        explain themselves on hover, and they lose every affordance that would suggest otherwise.
+
+  **Also still open, found while doing the above:**
+  - [ ] **An existing task's editor can only rename most kinds.** The host rewrites a task by
+        replacing named token runs inside it, and it can locate those runs for an execution task's
+        connection and body and for a `FOREACH` header — nothing else. So the edit dialog offers the
+        label alone for the other kinds and says the rest is edited in the script. Fixing it properly
+        means teaching the service to find each field's span (the two path literals of a file verb,
+        the condition between `IF` and its `BEGIN`, a `FOR` header's bounds), *not* re-rendering the
+        statement from the form: a regenerated `COPY FILE` would silently drop a
+        `WITH (OVERWRITE = ON)` the author added by hand, which is the same defect shape as the
+        dataset clauses lost in v0.19.
+  - [ ] **An `IF` written by the canvas cannot be given an `ELSE` on the canvas.** The canvas tracks
+        one block per label, so a second body under the same label would have no way to say which of
+        the two a dropped task went into. A hand-written `ELSE` is left alone and its statements stay
+        read-only projection stages; the container note in the inspector says so.
 ### Phase 7 — Stabilization and Legacy Retirement
 
 **Outcome:** Studio becomes the supported flagship only after the new workbench has evidence that it

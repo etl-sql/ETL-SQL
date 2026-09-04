@@ -1,0 +1,106 @@
+using System.Text.RegularExpressions;
+using ETL_SQL.Analysis.Services;
+
+namespace ETL_SQL.Portal.Tests;
+
+/// <summary>
+/// Asserts that the palette the author sees and the vocabulary the host can write are the same list.
+///
+/// <para>The pipeline canvas has a chip per task kind, and the host has an emitter per task kind, and
+/// until now nothing checked one against the other. Both directions fail badly and quietly. A chip
+/// with no emitter is a control that refuses every time it is used — which is how the canvas came to
+/// have decorative ports and a palette of seven entries for a language with far more. An emitter with
+/// no chip is a statement the canvas can read back off the script and never offer to write, so a
+/// pipeline the author opens shows a card they could not have created.</para>
+///
+/// <para>This reads the canonical <c>studio-pipeline-canvas.js</c> rather than a copy, because the
+/// asset is synced to five hosts and the shared original is the one the sync writes from.</para>
+/// </summary>
+[Trait("Category", "Portal")]
+public sealed class PipelinePaletteContractTests
+{
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "ETL-SQL.slnx")))
+            dir = dir.Parent;
+        Assert.NotNull(dir);
+        return dir!.FullName;
+    }
+
+    /// <summary>The `id:` of every palette entry, in the order the drawers list them.</summary>
+    private static IReadOnlyList<string> PaletteKindIds()
+    {
+        var source = File.ReadAllText(Path.Combine(
+            RepoRoot(), "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer",
+            "studio-pipeline-canvas.js"));
+
+        var groups = Regex.Match(
+            source,
+            @"export const PIPELINE_TASK_GROUPS = Object\.freeze\(\[(?<body>.*?)\n\]\);",
+            RegexOptions.Singleline);
+        Assert.True(groups.Success,
+            "PIPELINE_TASK_GROUPS was not found. The palette has to stay a declared table so this "
+            + "contract can be checked against the host's vocabulary.");
+
+        var ids = Regex.Matches(groups.Groups["body"].Value, @"\bid: '(?<id>[a-z]+)'")
+            .Select(match => match.Groups["id"].Value)
+            .ToList();
+        Assert.NotEmpty(ids);
+        return ids;
+    }
+
+    /// <summary>Group ids sit in the same table as chip ids, and are not task kinds.</summary>
+    private static readonly HashSet<string> GroupIds =
+        new(StringComparer.Ordinal) { "work", "flow", "files", "directories" };
+
+    [Fact]
+    public void EveryPaletteChipNamesAKindTheHostCanWrite()
+    {
+        var unknown = PaletteKindIds()
+            .Where(id => !GroupIds.Contains(id))
+            .Where(id => PipelineTaskKinds.Parse(id) is null)
+            .ToList();
+
+        Assert.True(unknown.Count == 0,
+            "These palette chips name a kind no host can write, so every use of them is refused: "
+            + string.Join(", ", unknown));
+    }
+
+    [Fact]
+    public void EveryKindTheHostCanWriteHasAPaletteChip()
+    {
+        var offered = PaletteKindIds().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var missing = Enum.GetValues<PipelineTaskKind>()
+            .Where(kind => !offered.Contains(kind.ToString()))
+            .ToList();
+
+        Assert.True(missing.Count == 0,
+            "The host can write these kinds and the palette does not offer them, so an author can "
+            + "meet one on the canvas without ever being able to create it: "
+            + string.Join(", ", missing));
+    }
+
+    /// <summary>
+    /// The kind name an older client still sends keeps working.
+    /// </summary>
+    /// <remarks>
+    /// <c>fileoperation</c> meant COPY FILE when copying was the only file verb the canvas had. A
+    /// client pinned to that build is still out there, and the parse used to fall back to an
+    /// execution task for anything it did not recognise — so a stale chip would have gone on
+    /// "working" while writing a completely different statement.
+    /// </remarks>
+    [Fact]
+    public void TheRetiredKindNameStillMeansWhatItMeant()
+    {
+        Assert.Equal(PipelineTaskKind.CopyFile, PipelineTaskKinds.Parse("fileoperation"));
+        Assert.Equal(PipelineTaskKind.CopyFile, PipelineTaskKinds.Parse("FileOperation"));
+        Assert.Null(PipelineTaskKinds.Parse("not_a_kind"));
+
+        // Naming nothing is not the same as naming something wrong. An absent kind is the default
+        // the draft record already carries, and nothing is written on it alone: an execution draft
+        // with no connection and no body is refused for those.
+        Assert.Equal(PipelineTaskKind.Execution, PipelineTaskKinds.Parse(null));
+        Assert.Equal(PipelineTaskKind.Execution, PipelineTaskKinds.Parse("  "));
+    }
+}

@@ -189,7 +189,13 @@ public record PipelineTaskRequest(
     string? Edge = null,
     string? Expression = null,
     string? Variable = null,
-    string? Collection = null);
+    string? Collection = null,
+    string? Start = null,
+    string? End = null,
+    string? Step = null,
+    string? Delay = null,
+    bool Until = false,
+    string? Into = null);
 
 /// <summary>
 /// The result of a pipeline edit. <c>Applied</c> false with an <c>Error</c> is an ordinary answer —
@@ -205,10 +211,15 @@ public record PipelineTaskResponse(bool Applied, string Script, string? Error, L
 /// <param name="Container">The container this task sits inside, or null when it is top level.</param>
 /// <param name="Variable">Foreach only: the loop variable.</param>
 /// <param name="Collection">Foreach only: what it iterates over.</param>
+/// <param name="EndLine">
+/// The last line the task occupies. With <c>Line</c> it is the span the editor reveals and
+/// highlights after an add, so the author sees the statement the canvas just wrote for them.
+/// </param>
 public record PipelineTaskDto(
     string Id, string Kind, string Connection, string Body, int Line,
     List<PipelineDependencyDto> DependsOn, bool Guarded = false,
-    string? Container = null, string? Variable = null, string? Collection = null);
+    string? Container = null, string? Variable = null, string? Collection = null,
+    int EndLine = 0);
 
 /// <param name="Condition">always | onsuccess | onfailure | oncompletion | expression.</param>
 public record PipelineDependencyDto(string Id, string Condition, string? Expression = null);

@@ -1850,17 +1850,24 @@ function mockParseTasks(script) {
   const tasks = [];
   // A task is a label followed by one statement. The kind is read from the statement's first word,
   // the same way the host reads it from the parsed node type.
-  const head = /^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*:[ \t]*\r?\n[ \t]*(EXEC(?:UTE)?|COPY|ASSERT|SEND|PARALLEL|FOREACH|BEGIN[ \t]+TRY)\b/gim;
+  const head = /^[ \t]*([A-Za-z_][A-Za-z0-9_]*)[ \t]*:[ \t]*\r?\n[ \t]*((?:COPY|MOVE|RENAME|DELETE|CREATE)[ \t]+(?:FILE|DIRECTORY_CONTENTS|DIRECTORY)|EXEC(?:UTE)?|ASSERT|SEND|PARALLEL|FOREACH|IF|FOR|WHILE|THROW|BREAK|CONTINUE|WAITFOR|BEGIN[ \t]+TRY)\b/gim;
   let match;
   while ((match = head.exec(script)) !== null) {
     const keyword = match[2].toUpperCase().replace(/\s+/g, ' ');
-    const kind = keyword.startsWith('EXEC') ? 'execution'
-      : keyword === 'COPY' ? 'fileoperation'
+    const kind = MOCK_KIND_BY_VERB[keyword] ?? (
+      keyword.startsWith('EXEC') ? 'execution'
         : keyword === 'ASSERT' ? 'validation'
           : keyword === 'PARALLEL' ? 'parallel'
             : keyword === 'FOREACH' ? 'foreach'
-              : keyword === 'BEGIN TRY' ? 'transaction'
-                : 'notification';
+              : keyword === 'IF' ? 'if'
+                : keyword === 'FOR' ? 'for'
+                  : keyword === 'WHILE' ? 'while'
+                    : keyword === 'THROW' ? 'throw'
+                      : keyword === 'BREAK' ? 'break'
+                        : keyword === 'CONTINUE' ? 'continue'
+                          : keyword === 'WAITFOR' ? 'waitfor'
+                            : keyword === 'BEGIN TRY' ? 'transaction'
+                              : 'notification');
 
     // An execution task ends at its matching END; the others end at their terminating semicolon.
     let end;
@@ -1868,13 +1875,16 @@ function mockParseTasks(script) {
     let body = '';
     let variable = null;
     let collection = null;
-    if (kind === 'parallel' || kind === 'foreach' || kind === 'transaction') {
+    if (MOCK_CONTAINER_KINDS.includes(kind)) {
       end = mockContainerEnd(script, match.index, kind);
       if (kind === 'foreach') {
         const header = /FOREACH[ \t]+(@[A-Za-z_][A-Za-z0-9_]*)[ \t]+IN[ \t]+([\s\S]*?)\r?\n[ \t]*BEGIN\b/i
           .exec(script.slice(match.index, end));
         variable = header?.[1] ?? null;
         collection = header?.[2]?.trim() ?? null;
+      }
+      if (kind === 'for') {
+        variable = /FOR[ \t]+(@[A-Za-z_][A-Za-z0-9_]*)/i.exec(script.slice(match.index, end))?.[1] ?? null;
       }
     } else if (kind === 'execution') {
       connection = /\bEXEC(?:UTE)?[ \t]+([A-Za-z_][A-Za-z0-9_]*)/i.exec(script.slice(match.index))?.[1] ?? '';
@@ -1912,7 +1922,7 @@ function mockParseTasks(script) {
     // A task sits inside the innermost container whose span already covers it. Containers are
     // always found first because their label comes earlier in the script than their children's.
     const container = tasks
-      .filter(other => other.kind === 'parallel' || other.kind === 'foreach' || other.kind === 'transaction')
+      .filter(other => MOCK_CONTAINER_KINDS.includes(other.kind))
       .filter(other => other.start < match.index && other.end > end)
       .sort((left, right) => right.start - left.start)[0]?.id ?? null;
 
@@ -1926,11 +1936,13 @@ function mockParseTasks(script) {
       container,
       dependsOn,
       line: script.slice(0, match.index).split('\n').length,
+      // With `line`, the span the editor reveals and highlights after an add.
+      endLine: script.slice(0, end).split('\n').length,
       start: tagLines.length ? lineStart : match.index,
       end,
     });
     // Containers are re-entered rather than skipped, so the tasks they hold are found too.
-    head.lastIndex = kind === 'parallel' || kind === 'foreach' || kind === 'transaction'
+    head.lastIndex = MOCK_CONTAINER_KINDS.includes(kind)
       ? script.indexOf('\n', match.index) + 1
       : end;
   }
@@ -1964,12 +1976,65 @@ function mockContainerEnd(script, from, kind) {
   return script.length;
 }
 
+/**
+ * The file and directory verbs, as one table.
+ *
+ * Written once and read by both the renderer and the reader, because the two disagreeing is the
+ * failure this mock has already caused twice: a statement the sandbox writes and then cannot find
+ * makes every card that follows it vanish, and the UI gets blamed for it.
+ */
+const MOCK_PATH_KINDS = {
+  copyfile: { verb: 'COPY FILE', target: true },
+  movefile: { verb: 'MOVE FILE', target: true },
+  renamefile: { verb: 'RENAME FILE', target: true },
+  deletefile: { verb: 'DELETE FILE', target: false },
+  createdirectory: { verb: 'CREATE DIRECTORY', target: false },
+  copydirectory: { verb: 'COPY DIRECTORY', target: true },
+  movedirectory: { verb: 'MOVE DIRECTORY', target: true },
+  renamedirectory: { verb: 'RENAME DIRECTORY', target: true },
+  deletedirectory: { verb: 'DELETE DIRECTORY', target: false },
+  deletedirectorycontents: { verb: 'DELETE DIRECTORY_CONTENTS', target: false },
+};
+
+/** The kind a leading verb reads back as, so a written statement is found again as what it is. */
+const MOCK_KIND_BY_VERB = Object.fromEntries(
+  Object.entries(MOCK_PATH_KINDS).map(([kind, entry]) => [entry.verb, kind]));
+
+/** Containers whose children the canvas owns. */
+const MOCK_CONTAINER_KINDS = ['parallel', 'foreach', 'transaction', 'if', 'for', 'while'];
+
 /** The statement a kind writes. Mirrors the host's renderer closely enough to drive the UI. */
 function mockRenderTask(body) {
   const literal = value => `'${String(value ?? '').replace(/'/g, "''")}'`;
-  const kind = String(body.kind || 'execution').toLowerCase();
-  if (kind === 'fileoperation') {
-    return `${body.id}:\nCOPY FILE ${literal(body.source)} TO ${literal(body.target)};\n`;
+  // The name COPY FILE used to answer to before the palette had the rest of the file verbs.
+  const kind = String(body.kind || 'execution').toLowerCase() === 'fileoperation'
+    ? 'copyfile'
+    : String(body.kind || 'execution').toLowerCase();
+  if (MOCK_PATH_KINDS[kind]) {
+    const { verb, target } = MOCK_PATH_KINDS[kind];
+    return `${body.id}:\n${verb} ${literal(body.source)}`
+      + `${target ? ` TO ${literal(body.target)}` : ''};\n`;
+  }
+  if (kind === 'throw') {
+    return `${body.id}:\nTHROW ${literal(body.message)};\n`;
+  }
+  if (kind === 'waitfor') {
+    return `${body.id}:\nWAITFOR ${body.until ? 'TIME' : 'DELAY'} ${literal(String(body.delay || '').trim())};\n`;
+  }
+  if (kind === 'break' || kind === 'continue') {
+    return `${body.id}:\n${kind.toUpperCase()};\n`;
+  }
+  if (kind === 'if') {
+    return `${body.id}:\nIF ${String(body.condition || '').trim()}\nBEGIN\nEND;\n`;
+  }
+  if (kind === 'while') {
+    return `${body.id}:\nWHILE ${String(body.condition || '').trim()}\nBEGIN\nEND;\n`;
+  }
+  if (kind === 'for') {
+    const step = String(body.step || '').trim();
+    return `${body.id}:\nFOR @${String(body.variable || 'i').replace(/^@/, '')}`
+      + ` = ${String(body.start || '').trim()} TO ${String(body.end || '').trim()}`
+      + `${step ? ` STEP ${step}` : ''}\nBEGIN\nEND;\n`;
   }
   if (kind === 'validation') {
     return `${body.id}:\nASSERT ${body.condition},\n    ${literal(body.message)};\n`;
@@ -2248,8 +2313,8 @@ function mockPipelineTask(body) {
   const tasks = mockParseTasks(script);
   const find = id => tasks.find(task => task.id.toLowerCase() === String(id || '').toLowerCase());
   const refuse = error => ({ applied: false, script, error, tasks: strip(tasks) });
-  const strip = list => list.map(({ id, kind, connection, body: text, line, dependsOn, container, variable, collection }) =>
-    ({ id, kind, connection, body: text, line, dependsOn, container, variable, collection }));
+  const strip = list => list.map(({ id, kind, connection, body: text, line, endLine, dependsOn, container, variable, collection }) =>
+    ({ id, kind, connection, body: text, line, endLine, dependsOn, container, variable, collection }));
   const lineEnd = offset => {
     const next = script.indexOf('\n', offset);
     return next === -1 ? script.length : next + 1;
@@ -2266,9 +2331,30 @@ function mockPipelineTask(body) {
     if (find(body.id)) return refuse(`This script already has a task called '${body.id}'.`);
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(String(body.id || ''))) return refuse(`'${body.id}' is not a usable task label.`);
     const text = mockRenderTask(body);
-    const anchor = body.after ? find(body.after) : null;
-    const at = anchor ? lineEnd(anchor.end) : script.length;
-    next = `${script.slice(0, at)}${at >= script.length ? '\n' : ''}${text}${at >= script.length ? '' : '\n'}${script.slice(at)}`;
+
+    // Dropped onto a block rather than beside a task: the statement is written straight inside it,
+    // in one edit, exactly as the host does it.
+    if (body.into) {
+      const container = find(body.into);
+      if (!container) return refuse(`No task called '${body.into}' to add inside.`);
+      if (!MOCK_CONTAINER_KINDS.includes(container.kind)) {
+        return refuse(`'${container.id}' does not hold other tasks.`);
+      }
+      const at = container.kind === 'transaction'
+        ? (() => {
+          const commit = /\n[ \t]*COMMIT\b/i.exec(script.slice(container.start, container.end));
+          return commit ? container.start + commit.index + 1 : -1;
+        })()
+        : script.lastIndexOf('\n', container.end - 1) + 1;
+      if (at < 0) return refuse(`Could not find where inside '${container.id}' to put '${body.id}'.`);
+      const indent = (/^[ \t]*/.exec(script.slice(container.start).split('\n')[0]) ?? [''])[0] + '    ';
+      const shifted = text.replace(/\n$/, '').split('\n').map(line => (line.trim() ? indent + line : '')).join('\n');
+      next = `${script.slice(0, at)}${shifted}\n${script.slice(at)}`;
+    } else {
+      const anchor = body.after ? find(body.after) : null;
+      const at = anchor ? lineEnd(anchor.end) : script.length;
+      next = `${script.slice(0, at)}${at >= script.length ? '\n' : ''}${text}${at >= script.length ? '' : '\n'}${script.slice(at)}`;
+    }
   } else if (op === 'remove') {
     next = script.slice(0, target.start) + script.slice(lineEnd(target.end));
   } else if (op === 'move') {
@@ -2288,7 +2374,7 @@ function mockPipelineTask(body) {
     if (body.after) {
       const container = after.find(t => t.id.toLowerCase() === String(body.after).toLowerCase());
       if (!container) return refuse(`No task called '${body.after}'.`);
-      if (!['parallel', 'foreach', 'transaction'].includes(container.kind)) {
+      if (!MOCK_CONTAINER_KINDS.includes(container.kind)) {
         return refuse(`'${container.id}' does not hold other tasks.`);
       }
       if (container.id.toLowerCase() === target.id.toLowerCase()) return refuse('A container cannot hold itself.');

@@ -338,9 +338,18 @@ invalid intermediate bytes.
 
 ## 7.1 Pipeline task authoring
 
-Editing on the canvas was gated on a canonical parser/patcher contract that proved byte preservation
-first. That gate has been met, and the canvas can now author one specific thing: a **task**, which is
-a top-level section label plus the single statement it introduces.
+**The canvas is a teaching surface, not only a map.** Studio exists so that people learn to write
+ETL-SQL by using it: drag a statement onto the canvas, fill in a form, and read the code it produced.
+Section 7 describes an accurate picture of a script you have already written, and for a while §7.1
+described authoring for "one specific thing: a task" — which left the palette with seven entries for
+a language that has far more, and meant the certified SSIS journey had to author its extract and its
+transform in the code pane because the canvas had no entry for either. A map you can only draw after
+you have written the script teaches nothing. Both sections are true of the canvas; this one is what
+it is *for*.
+
+A **task** is a top-level section label plus the single statement it introduces. Editing on the
+canvas was gated on a canonical parser/patcher contract that proved byte preservation first, and that
+gate has been met.
 
 - **Identity is the label, never the node id.** Node ids are positional (`s0`, `s1`, …), so a hand
   edit above a task renumbers everything below it and a canvas tracking ids would follow the wrong
@@ -351,12 +360,39 @@ a top-level section label plus the single statement it introduces.
   indentation, and every statement the canvas does not model — come through unchanged. The result is
   reparsed before it is returned, and an edit that would not parse is refused with its reason rather
   than applied or silently dropped.
-- **Four task kinds**, each writing one statement: `EXECUTE <connection> BEGIN … END`, `COPY FILE`,
-  `ASSERT`, and `SEND EMAIL`. A kind appears in the palette only once its emitted statement passes a
-  focused parse, lint, formatter, and reference check (`PipelineTaskEmissionTests`). That gate is
-  load-bearing: `SEND EMAIL` failed it, because the parser requires a `FROM` clause whatever the
-  connector's `DEFAULT_FROM` says, so the notification task carries a sender field rather than
-  emitting something that would not parse.
+- **The vocabulary is taken from the lexer, not invented.** The palette offers work
+  (`EXECUTE`, `ASSERT`, `SEND EMAIL`, `THROW`, `WAITFOR`), control flow (`IF`, `FOREACH`, `FOR`,
+  `WHILE`, `PARALLEL`, a transaction scope, `BREAK`, `CONTINUE`), the file verbs (`COPY`, `MOVE`,
+  `RENAME`, `DELETE FILE`) and the directory verbs (`CREATE`, `COPY`, `MOVE`, `RENAME`, `DELETE`,
+  `DELETE DIRECTORY_CONTENTS`) — grouped in a sidebar the author drags from, with a form per entry.
+- **A kind appears in the palette only once its emitted statement passes a focused parse, lint,
+  formatter, and reference check** (`PipelineTaskEmissionTests`), and that suite fails if a kind the
+  service can write has no draft in it. The gate is load-bearing and has caught two defects on the
+  way in: `SEND EMAIL` needs a `FROM` clause whatever the connector's `DEFAULT_FROM` says, so the
+  notification task carries a sender field; and `AbsolutePathRule` warned that every correct
+  `RENAME` destination was a "relative path", because a rename takes a name and not a path.
+  `PipelinePaletteContractTests` checks the palette and the host's vocabulary against each other in
+  both directions, so a chip with no emitter and an emitter with no chip both fail.
+- **`BREAK` and `CONTINUE` are refused outside a loop**, by the service rather than by the engine at
+  run time, with a sentence naming the three constructs that would make them legal.
+- **Where a chip is dropped decides where in the script it is written, and nothing else.** Onto a
+  task writes it after that task; onto a block writes it inside, as one edit rather than an add
+  followed by a move; onto empty canvas appends it. There is no saved layout: the script stays the
+  only thing that says what the pipeline is.
+- **After an add, the editor reveals and selects the lines that were written.** This is the half of
+  the loop that teaches — a canvas that quietly edits a file you cannot see is something you operate
+  rather than something you learn the language from — and on the canvas-only projection the code pane
+  is opened to do it.
+- **A card the canvas cannot author is drawn as what it is.** It keeps its place on the map, is drawn
+  with a dashed border, says so on hover, and loses the round ports: those were anchor points for
+  drawing edge lines, they looked exactly like the connector handle that does something, and dragging
+  one was the first thing manual testing tried. On a card the canvas *can* connect, the right-hand
+  port is that handle rather than sitting beside it.
+- **What an existing task's editor may ask about is what the host can rewrite in place.** Today that
+  is an execution task's connection and body and a loop's header; the rest of a statement is edited
+  in the script. Collecting a field, sending it, and ignoring it would be a form that eats what the
+  author typed and reports success, and regenerating the statement instead would silently drop a
+  `WITH (OVERWRITE = ON)` they had added by hand.
 - **The execution task is authored in the shared query workbench**, so the SQL a task runs gets the
   same completions, hover, diagnostics, run, and results as the script pane.
 

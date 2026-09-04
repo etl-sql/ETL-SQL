@@ -790,8 +790,10 @@ export async function createStudioWorkbench(container, opts = {}) {
                     </div>
                     <span class="etlsql-studio-dag-status is-${_escapeHtml(tone)}" data-dag-status>${_escapeHtml(message)}</span>
                 </header>
-                <div class="etlsql-studio-dag-canvas" data-dag-canvas></div>
-                <div class="etlsql-studio-pipeline-editor" data-pipeline-editor></div>
+                <div class="etlsql-studio-dag-body-row">
+                    <div class="etlsql-studio-pipeline-editor" data-pipeline-editor></div>
+                    <div class="etlsql-studio-dag-canvas" data-dag-canvas></div>
+                </div>
             </section>`;
         const dagCanvas = canvasContainer.querySelector('[data-dag-canvas]');
         state.dagInstance = renderDag(dagCanvas, { nodes, edges }, {
@@ -824,7 +826,11 @@ export async function createStudioWorkbench(container, opts = {}) {
                     state.selectedTaskId = id;
                     renderVisualStage();
                 },
-                onAdd: async ({ kind, after }) => {
+                // `after` is the task it was dropped beside and `into` the container it was dropped
+                // inside — where it lands on the map decides where in the script it is written, and
+                // nothing else about the drop is remembered. There is no saved layout, so the script
+                // stays the only thing that says what this pipeline is.
+                onAdd: async ({ kind, after, into }) => {
                     // The editor collects the whole task before anything is written, so a half-filled
                     // statement never reaches the script and the author never sees a parse error
                     // about syntax they did not type.
@@ -832,10 +838,12 @@ export async function createStudioWorkbench(container, opts = {}) {
                         kind,
                         connections,
                         suggestedId: uniqueTaskId(tasks),
+                        placement: { after, into },
                     });
                     if (!intent) return;
                     state.selectedTaskId = intent.id;
-                    await canonicalPipelineMutation('Add task', { op: 'add', after, ...intent });
+                    const result = await canonicalPipelineMutation('Add task', { op: 'add', after, into, ...intent });
+                    revealWrittenTask(doc, result, intent.id);
                 },
                 onEdit: async ({ id }) => {
                     const task = tasks.find(entry => String(entry.id).toLowerCase() === String(id).toLowerCase());
@@ -881,6 +889,33 @@ export async function createStudioWorkbench(container, opts = {}) {
             });
 
         void refreshPipelineScope(doc, state.selectedTaskId);
+    }
+
+    /**
+     * Shows the author the ETL-SQL a canvas gesture just wrote.
+     *
+     * This is what makes the palette a way to learn the language rather than a way to avoid it: drag
+     * a chip in, fill in a form, and the statement it produced is on screen, selected, with the code
+     * pane open at it. A canvas that quietly edits a file you cannot see teaches nothing.
+     *
+     * The line span comes from the host's own re-read of the script it just wrote, so it is where the
+     * statement actually landed — not where the client assumed it would go. A refused edit reveals
+     * nothing, because there is nothing to look at and the refusal has already been reported.
+     */
+    function revealWrittenTask(doc, result, taskId) {
+        if (!result?.applied || !taskId) return;
+        const written = (result.tasks ?? []).find(
+            task => String(task.id).toLowerCase() === String(taskId).toLowerCase());
+        const line = Number(written?.line) || 0;
+        if (!line) return;
+
+        // On the canvas-only projection there is no code pane to reveal into, so open one. The whole
+        // gesture is "see what it wrote", and it cannot be completed on a surface with no script.
+        if (doc?.projection === 'canvas') setProjection('split');
+
+        const endLine = Number(written?.endLine) || line;
+        if (state.editorInstance?.revealLines) state.editorInstance.revealLines(line, endLine);
+        else state.editorInstance?.gotoLine?.(line);
     }
 
     /**
@@ -5286,6 +5321,20 @@ export async function createStudioWorkbench(container, opts = {}) {
             getValue: () => ta.value,
             setValue: (v) => { ta.value = v; },
             gotoLine: () => {},
+            // The textarea fallback can still show the author what a canvas gesture wrote, which is
+            // the half of the loop that teaches. A no-op here would make the palette silently less
+            // useful on exactly the hosts where CodeMirror failed to load.
+            revealLines: (fromLine, toLine = fromLine) => {
+                const lines = ta.value.split('\n');
+                const first = Math.max(1, Math.min(lines.length, Number(fromLine) || 1));
+                const last = Math.max(first, Math.min(lines.length, Number(toLine) || first));
+                const from = lines.slice(0, first - 1).join('\n').length + (first > 1 ? 1 : 0);
+                const to = lines.slice(0, last).join('\n').length;
+                ta.focus();
+                ta.setSelectionRange(from, to);
+                return { from, to };
+            },
+            getSelection: () => ta.value.slice(ta.selectionStart, ta.selectionEnd),
             focus: () => ta.focus()
         };
     }

@@ -1684,6 +1684,35 @@ export async function createScriptEditor(container, opts = {}) {
             view.dispatch({ effects: EditorView.scrollIntoView(start, { y: 'center' }) });
             return { from: start, to: end };
         },
+        /**
+         * Scrolls to a run of lines and selects them, so the author can see what was just written.
+         *
+         * This is the second half of every canvas gesture that adds a statement. Dragging a chip
+         * onto the map and being shown the ETL-SQL it produced is the whole point of the surface:
+         * without it the canvas is something you operate, and with it, it is something you learn the
+         * language from.
+         *
+         * A selection rather than a decoration, deliberately — it is the one highlight this editor
+         * can make that the author can then copy, extend, or type over, and it survives the next
+         * keystroke by getting out of the way rather than lingering as an artefact.
+         *
+         * @param fromLine 1-based first line.
+         * @param toLine   1-based last line; defaults to `fromLine`.
+         */
+        revealLines: (fromLine, toLine = fromLine) => {
+            if (!view) return null;
+            const lines = view.state.doc.lines;
+            const first = Math.max(1, Math.min(lines, Number(fromLine) || 1));
+            const last = Math.max(first, Math.min(lines, Number(toLine) || first));
+            const from = view.state.doc.line(first).from;
+            const to = view.state.doc.line(last).to;
+            view.dispatch({
+                selection: { anchor: from, head: to },
+                effects: EditorView.scrollIntoView(from, { y: 'center' }),
+            });
+            view.focus();
+            return { from, to };
+        },
         gotoLine: (line, column = 1) => {
             if (!view) return;
             const safeLine = Math.max(1, Math.min(view.state.doc.lines, Number(line) || 1));
@@ -1691,6 +1720,12 @@ export async function createScriptEditor(container, opts = {}) {
             const pos = Math.min(docLine.to, docLine.from + Math.max(0, (Number(column) || 1) - 1));
             view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
             view.focus();
+        },
+        /** The text the author has selected, empty when nothing is. The mirror of revealLines. */
+        getSelection: () => {
+            if (!view) return '';
+            const { from, to } = view.state.selection.main;
+            return view.state.doc.sliceString(from, to);
         },
         /** The 1-based line the caret sits on; 1 before the view exists. The mirror of gotoLine. */
         getCursorLine: () => {
