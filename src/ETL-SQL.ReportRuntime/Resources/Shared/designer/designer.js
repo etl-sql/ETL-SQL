@@ -5160,6 +5160,7 @@ export function createDesigner(container, opts = {}) {
         const isTreemap = v.type === 'TREEMAP';
         const isSunburst = v.type === 'SUNBURST';
         const isBoxPlot = v.type === 'BOXPLOT';
+        const isNetwork = v.type === 'NETWORK';
         const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
         const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
         const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
@@ -5442,6 +5443,29 @@ export function createDesigner(container, opts = {}) {
                         <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-boxplot-notched" ${(v.options?.NOTCHED || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Notched boxes (median CI)</span></label>
                         <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-boxplot-show-mean" ${(v.options?.SHOW_MEAN || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show mean marker</span></label>
                         <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-boxplot-show-violin" ${(v.options?.SHOW_VIOLIN || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show violin density</span></label>` : ''}
+                        ${isNetwork ? `
+                        <div class="etlsql-dsgn-section-divider"></div>
+                        <div class="etlsql-dsgn-section-title">Network options</div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Layout
+                                <select id="pp-format-network-layout" class="form-control">
+                                    ${['FORCE', 'CIRCULAR'].map(val => `<option${(v.options?.LAYOUT || 'FORCE').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Repulsion force
+                                <input type="number" min="50" max="5000" step="50" id="pp-format-network-repulsion" class="form-control" value="${v.options?.REPULSION ?? '500'}">
+                            </label>
+                        </div>
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Min label size (px)
+                                <input type="number" min="0" max="50" id="pp-format-network-label-min-size" class="form-control" value="${v.options?.NODE_LABEL_MIN_SIZE ?? '0'}">
+                            </label>
+                            <label class="etlsql-dsgn-label">Node color
+                                <input type="color" id="pp-format-network-node-color" class="form-control form-control-color" value="${v.options?.NODE_COLOR || '#2563eb'}">
+                            </label>
+                        </div>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-network-directed" ${(v.options?.DIRECTED || v.options?.ARROWS || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Directed edges (arrows)</span></label>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-network-node-labels" ${(v.options?.NODE_LABELS || v.options?.LABELS || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show node labels</span></label>` : ''}
                     </div>
                 </details>
 
@@ -5870,6 +5894,12 @@ export function createDesigner(container, opts = {}) {
         bindOption('#pp-format-boxplot-notched', 'NOTCHED', 'change', el => el.checked ? 'ON' : 'OFF');
         bindOption('#pp-format-boxplot-show-mean', 'SHOW_MEAN', 'change', el => el.checked ? 'ON' : 'OFF');
         bindOption('#pp-format-boxplot-show-violin', 'SHOW_VIOLIN', 'change', el => el.checked ? 'ON' : 'OFF');
+        bindOption('#pp-format-network-layout', 'LAYOUT');
+        bindOption('#pp-format-network-repulsion', 'REPULSION');
+        bindOption('#pp-format-network-label-min-size', 'NODE_LABEL_MIN_SIZE');
+        bindOption('#pp-format-network-node-color', 'NODE_COLOR', 'input');
+        bindOption('#pp-format-network-directed', 'DIRECTED', 'change', el => el.checked ? 'ON' : 'OFF');
+        bindOption('#pp-format-network-node-labels', 'NODE_LABELS', 'change', el => el.checked ? 'ON' : 'OFF');
         bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
         bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
         bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');
@@ -6728,6 +6758,7 @@ export function createDesigner(container, opts = {}) {
 
         const REQUIRED_ROLES = {
             SANKEY: ['Source', 'Target', 'Value'],
+            NETWORK: ['From', 'To'],
             DONUT: ['Category', 'Value'], PIE: ['Category', 'Value'], FUNNEL: ['Category', 'Value'], SUNBURST: ['Category', 'Value'],
             BAR: ['Category', 'Value'], HBAR: ['Category', 'Value'], LINE: ['Category', 'Value'], COMBO: ['Category', 'Value'],
             WATERFALL: ['Category', 'Value'], CANDLESTICK: ['Category', 'Value'],

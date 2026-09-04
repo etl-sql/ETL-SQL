@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using ETL_SQL.Reporting.Contracts;
 using ETL_SQL.Reporting.Semantics;
 using ETL_SQL.Reporting.Semantics.Runtime;
 
@@ -501,18 +502,387 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
     private static string Network(VisualManifest v, PlotBounds? bounds)
     {
-        var source = Index(v, "from", "source", fallback: 0); var target = Index(v, "to", "target", fallback: 1); var weight = Index(v, "value", "weight", fallback: -1);
-        var links = v.Rows.Select((r, i) => (A: Cell(r, source, ""), B: Cell(r, target, ""), W: Math.Max(.1, Number(r, weight, 1)), Row: i)).Where(e => e.A.Length > 0 && e.B.Length > 0).ToList();
-        var names = links.SelectMany(e => new[] { e.A, e.B }).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
-        var inputs = FocusedLayoutInputs.From(v, names, bounds);
+        var source = Index(v, "from", "source", fallback: 0);
+        var target = Index(v, "to", "target", fallback: 1);
+        var weight = Index(v, "value", "weight", fallback: -1);
+        var sizeCol = Index(v, "node_size", "size", fallback: -1);
+        var targetSizeCol = Index(v, "target_size", "to_size", fallback: -1);
+        var groupCol = Index(v, "node_group", "group", fallback: -1);
+        var xCol = Index(v, "node_x", "x", fallback: -1);
+        var yCol = Index(v, "node_y", "y", fallback: -1);
+
+        var links = v.Rows.Select((r, i) => (
+            A: Cell(r, source, ""),
+            B: Cell(r, target, ""),
+            W: Math.Max(.1, Number(r, weight, 1)),
+            Row: i
+        )).Where(e => e.A.Length > 0 && e.B.Length > 0).ToList();
+
+        var names = links.SelectMany(e => new[] { e.A, e.B })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var nodeSizes = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        var nodeGroups = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var fixedCoords = new Dictionary<string, (double X, double Y)>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var r in v.Rows)
+        {
+            var a = Cell(r, source, "");
+            var b = Cell(r, target, "");
+            if (sizeCol >= 0 && a.Length > 0)
+            {
+                var sz = Number(r, sizeCol, double.NaN);
+                if (!double.IsNaN(sz))
+                    nodeSizes[a] = nodeSizes.TryGetValue(a, out var prev) ? Math.Max(prev, sz) : sz;
+            }
+            if (targetSizeCol >= 0 && b.Length > 0)
+            {
+                var sz = Number(r, targetSizeCol, double.NaN);
+                if (!double.IsNaN(sz))
+                    nodeSizes[b] = nodeSizes.TryGetValue(b, out var prev) ? Math.Max(prev, sz) : sz;
+            }
+            if (groupCol >= 0)
+            {
+                var grp = Cell(r, groupCol, "");
+                if (grp.Length > 0)
+                {
+                    if (a.Length > 0 && !nodeGroups.ContainsKey(a)) nodeGroups[a] = grp;
+                    if (b.Length > 0 && !nodeGroups.ContainsKey(b)) nodeGroups[b] = grp;
+                }
+            }
+            if (xCol >= 0 && yCol >= 0 && a.Length > 0 && !fixedCoords.ContainsKey(a))
+            {
+                var x = Number(r, xCol, double.NaN);
+                var y = Number(r, yCol, double.NaN);
+                if (!double.IsNaN(x) && !double.IsNaN(y))
+                {
+                    fixedCoords[a] = (x, y);
+                }
+            }
+        }
+
+        const double minRadius = 5.0;
+        const double maxRadius = 24.0;
+        const double defaultRadius = 9.0;
+
+        var radii = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        if (nodeSizes.Count > 0)
+        {
+            var minVal = nodeSizes.Values.Min();
+            var maxVal = nodeSizes.Values.Max();
+            foreach (var name in names)
+            {
+                if (nodeSizes.TryGetValue(name, out var val))
+                {
+                    if (maxVal > minVal)
+                    {
+                        var t = Math.Clamp((val - minVal) / (maxVal - minVal), 0, 1);
+                        radii[name] = minRadius + (maxRadius - minRadius) * Math.Sqrt(t);
+                    }
+                    else
+                    {
+                        radii[name] = defaultRadius;
+                    }
+                }
+                else
+                {
+                    radii[name] = defaultRadius;
+                }
+            }
+        }
+        else
+        {
+            foreach (var name in names)
+            {
+                radii[name] = defaultRadius;
+            }
+        }
+
+        var distinctGroups = groupCol >= 0 && nodeGroups.Count > 0
+            ? nodeGroups.Values.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(g => g, StringComparer.OrdinalIgnoreCase).ToList()
+            : names;
+        var inputs = FocusedLayoutInputs.From(v, distinctGroups, bounds);
+
+        var layout = v.Options.GetValueOrDefault("LAYOUT") ?? "FORCE";
+        double repulsion = 500;
+        if (v.Options.TryGetValue("REPULSION", out var repStr) &&
+            double.TryParse(repStr, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedRep) &&
+            parsedRep > 0)
+        {
+            repulsion = parsedRep;
+        }
+
+        var isDirected = false;
+        if (v.Options.TryGetValue("DIRECTED", out var dirStr) || v.Options.TryGetValue("ARROWS", out dirStr))
+        {
+            isDirected = dirStr.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
+                         dirStr.Equals("TRUE", StringComparison.OrdinalIgnoreCase) ||
+                         dirStr.Equals("1", StringComparison.OrdinalIgnoreCase);
+        }
+
+        var showLabels = true;
+        if (v.Options.TryGetValue("NODE_LABELS", out var nlStr) || v.Options.TryGetValue("LABELS", out nlStr))
+        {
+            showLabels = !nlStr.Equals("OFF", StringComparison.OrdinalIgnoreCase) &&
+                         !nlStr.Equals("FALSE", StringComparison.OrdinalIgnoreCase) &&
+                         !nlStr.Equals("0", StringComparison.OrdinalIgnoreCase);
+        }
+
+        double minLabelSize = 0;
+        if (v.Options.TryGetValue("NODE_LABEL_MIN_SIZE", out var mlsStr) &&
+            double.TryParse(mlsStr, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedMls))
+        {
+            minLabelSize = parsedMls;
+        }
+
+        v.Options.TryGetValue("NODE_COLOR", out var customNodeColor);
+
         var cx = inputs.Width / 2;
         var cy = (TitleBand + inputs.Height) / 2;
-        var radius = Math.Min(inputs.Width, inputs.Height - TitleBand) * .38;
-        var pos = names.Select((n, i) => (n, p: (X: cx + radius * Math.Cos(2 * Math.PI * i / Math.Max(1, names.Count) - Math.PI / 2), Y: cy + radius * Math.Sin(2 * Math.PI * i / Math.Max(1, names.Count) - Math.PI / 2)))).ToDictionary(x => x.n, x => x.p, StringComparer.OrdinalIgnoreCase);
-        var max = links.Select(e => e.W).DefaultIfEmpty(1).Max(); var sb = Start(v, inputs);
-        foreach (var edge in links) { var a = pos[edge.A]; var b = pos[edge.B]; sb.Append($"<line data-row-index='{edge.Row}' x1='{F(a.X)}' y1='{F(a.Y)}' x2='{F(b.X)}' y2='{F(b.Y)}' stroke='{inputs.Muted}' stroke-width='{F(1 + 5 * edge.W / max)}'><title>{Xml(edge.A)} ↔ {Xml(edge.B)}: {F(edge.W)}</title></line>"); }
-        for (var i = 0; i < names.Count; i++) { var p = pos[names[i]]; sb.Append($"<circle cx='{F(p.X)}' cy='{F(p.Y)}' r='9' fill='{inputs.Color(names[i], i)}'/><text x='{F(p.X)}' y='{F(p.Y + (p.Y < cy ? -14 : 23))}' text-anchor='middle' font-size='10' fill='{inputs.OnSurface}'>{Xml(Trim(names[i], 16))}</text>"); }
+        var plotMinX = 28.0;
+        var plotMaxX = inputs.Width - 28.0;
+        var plotMinY = TitleBand + 24.0;
+        var plotMaxY = inputs.Height - 24.0;
+
+        var mappedFixedPositions = new Dictionary<string, (double X, double Y)>(StringComparer.OrdinalIgnoreCase);
+        if (fixedCoords.Count > 0)
+        {
+            var minFx = fixedCoords.Values.Min(c => c.X);
+            var maxFx = fixedCoords.Values.Max(c => c.X);
+            var minFy = fixedCoords.Values.Min(c => c.Y);
+            var maxFy = fixedCoords.Values.Max(c => c.Y);
+
+            foreach (var (k, c) in fixedCoords)
+            {
+                double px;
+                if (maxFx > minFx)
+                    px = plotMinX + (c.X - minFx) / (maxFx - minFx) * (plotMaxX - plotMinX);
+                else if (c.X >= 0 && c.X <= inputs.Width)
+                    px = Math.Clamp(c.X, plotMinX, plotMaxX);
+                else
+                    px = cx;
+
+                double py;
+                if (maxFy > minFy)
+                    py = plotMinY + (c.Y - minFy) / (maxFy - minFy) * (plotMaxY - plotMinY);
+                else if (c.Y >= 0 && c.Y <= inputs.Height)
+                    py = Math.Clamp(c.Y, plotMinY, plotMaxY);
+                else
+                    py = cy;
+
+                mappedFixedPositions[k] = (px, py);
+            }
+        }
+
+        Dictionary<string, (double X, double Y)> pos;
+        if (layout.Equals("CIRCULAR", StringComparison.OrdinalIgnoreCase))
+        {
+            var radius = Math.Min(inputs.Width, inputs.Height - TitleBand) * .38;
+            pos = names.Select((n, i) =>
+            {
+                if (mappedFixedPositions.TryGetValue(n, out var fixedPos))
+                    return (n, fixedPos);
+                var angle = 2 * Math.PI * i / Math.Max(1, names.Count) - Math.PI / 2;
+                return (n, (X: cx + radius * Math.Cos(angle), Y: cy + radius * Math.Sin(angle)));
+            }).ToDictionary(x => x.n, x => x.Item2, StringComparer.OrdinalIgnoreCase);
+        }
+        else
+        {
+            pos = ComputeForceLayout(names, links, mappedFixedPositions, inputs.Width, inputs.Height, repulsion, cx, cy, plotMinX, plotMaxX, plotMinY, plotMaxY);
+        }
+
+        var max = links.Select(e => e.W).DefaultIfEmpty(1).Max();
+        var sb = Start(v, inputs);
+
+        var markerId = $"arrow-{Math.Abs(v.Name.GetHashCode())}";
+        if (isDirected)
+        {
+            sb.Append($"<defs><marker id='{markerId}' viewBox='0 0 10 10' refX='7' refY='5' markerWidth='6' markerHeight='6' orient='auto-start-reverse'><path d='M 0 1.5 L 8 5 L 0 8.5 z' fill='{inputs.Muted}'/></marker></defs>");
+        }
+
+        foreach (var edge in links)
+        {
+            var a = pos[edge.A];
+            var b = pos[edge.B];
+            var rA = radii.GetValueOrDefault(edge.A, defaultRadius);
+            var rB = radii.GetValueOrDefault(edge.B, defaultRadius);
+
+            double x1 = a.X, y1 = a.Y, x2 = b.X, y2 = b.Y;
+            var dx = b.X - a.X;
+            var dy = b.Y - a.Y;
+            var dist = Math.Sqrt(dx * dx + dy * dy);
+
+            if (dist > 0.001)
+            {
+                var ux = dx / dist;
+                var uy = dy / dist;
+                if (isDirected && dist > rA + rB + 2)
+                {
+                    x1 = a.X + ux * rA;
+                    y1 = a.Y + uy * rA;
+                    x2 = b.X - ux * (rB + 2);
+                    y2 = b.Y - uy * (rB + 2);
+                }
+            }
+
+            var edgeWidth = 1 + 5 * edge.W / max;
+            var arrowAttr = isDirected ? $" marker-end='url(#{markerId})'" : "";
+            var titleArrow = isDirected ? "→" : "↔";
+            sb.Append($"<line data-row-index='{edge.Row}' x1='{F(x1)}' y1='{F(y1)}' x2='{F(x2)}' y2='{F(y2)}' stroke='{inputs.Muted}' stroke-width='{F(edgeWidth)}'{arrowAttr}><title>{Xml(edge.A)} {titleArrow} {Xml(edge.B)}: {F(edge.W)}</title></line>");
+        }
+
+        for (var i = 0; i < names.Count; i++)
+        {
+            var name = names[i];
+            var p = pos[name];
+            var r = radii.GetValueOrDefault(name, defaultRadius);
+
+            var group = nodeGroups.TryGetValue(name, out var grp) ? grp : name;
+            var fillColor = !string.IsNullOrWhiteSpace(customNodeColor) && ChartPalette.IsSafePaint(customNodeColor)
+                ? customNodeColor
+                : inputs.Color(group, i);
+
+            sb.Append($"<circle cx='{F(p.X)}' cy='{F(p.Y)}' r='{F(r)}' fill='{fillColor}'/>");
+            if (showLabels && r >= minLabelSize)
+            {
+                var labelY = p.Y + (p.Y < cy ? -(r + 5) : (r + 14));
+                sb.Append($"<text x='{F(p.X)}' y='{F(labelY)}' text-anchor='middle' font-size='10' fill='{inputs.OnSurface}'>{Xml(Trim(name, 16))}</text>");
+            }
+        }
         return End(sb);
+    }
+
+    private static Dictionary<string, (double X, double Y)> ComputeForceLayout(
+        List<string> names,
+        List<(string A, string B, double W, int Row)> links,
+        Dictionary<string, (double X, double Y)> fixedPositions,
+        double width,
+        double height,
+        double repulsion,
+        double cx,
+        double cy,
+        double minX,
+        double maxX,
+        double minY,
+        double maxY)
+    {
+        var pos = new Dictionary<string, (double X, double Y)>(StringComparer.OrdinalIgnoreCase);
+        var n = names.Count;
+        if (n == 0) return pos;
+
+        var initRadius = Math.Min(maxX - minX, maxY - minY) * 0.35;
+        for (var i = 0; i < n; i++)
+        {
+            var name = names[i];
+            if (fixedPositions.TryGetValue(name, out var fixedPos))
+            {
+                pos[name] = fixedPos;
+            }
+            else
+            {
+                var angle = 2 * Math.PI * i / n - Math.PI / 2;
+                pos[name] = (cx + initRadius * Math.Cos(angle), cy + initRadius * Math.Sin(angle));
+            }
+        }
+
+        if (n == 1) return pos;
+
+        var area = (maxX - minX) * (maxY - minY);
+        var k = Math.Sqrt(area / n) * Math.Sqrt(Math.Max(50.0, repulsion) / 500.0);
+        var k2 = k * k;
+
+        var avgWeight = links.Select(l => l.W).DefaultIfEmpty(1.0).Average();
+        if (avgWeight <= 0) avgWeight = 1.0;
+
+        const int iterations = 70;
+        var initTemp = Math.Min(maxX - minX, maxY - minY) * 0.15;
+
+        var dispX = new double[n];
+        var dispY = new double[n];
+        var nameToIndex = names.Select((name, idx) => (name, idx)).ToDictionary(x => x.name, x => x.idx, StringComparer.OrdinalIgnoreCase);
+
+        for (var iter = 0; iter < iterations; iter++)
+        {
+            Array.Clear(dispX, 0, n);
+            Array.Clear(dispY, 0, n);
+
+            var temp = initTemp * (1.0 - (double)iter / iterations);
+
+            for (var i = 0; i < n; i++)
+            {
+                var pi = pos[names[i]];
+                for (var j = i + 1; j < n; j++)
+                {
+                    var pj = pos[names[j]];
+                    var dx = pi.X - pj.X;
+                    var dy = pi.Y - pj.Y;
+                    var dist = Math.Sqrt(dx * dx + dy * dy);
+                    if (dist < 0.01) { dx = 0.1 * ((i % 3) - 1); dy = 0.1 * ((j % 3) - 1); dist = Math.Max(0.01, Math.Sqrt(dx * dx + dy * dy)); }
+
+                    var force = k2 / dist;
+                    var fx = (dx / dist) * force;
+                    var fy = (dy / dist) * force;
+
+                    dispX[i] += fx;
+                    dispY[i] += fy;
+                    dispX[j] -= fx;
+                    dispY[j] -= fy;
+                }
+            }
+
+            foreach (var edge in links)
+            {
+                if (!nameToIndex.TryGetValue(edge.A, out var u) || !nameToIndex.TryGetValue(edge.B, out var v))
+                    continue;
+                if (u == v) continue;
+
+                var pu = pos[names[u]];
+                var pv = pos[names[v]];
+                var dx = pu.X - pv.X;
+                var dy = pu.Y - pv.Y;
+                var dist = Math.Sqrt(dx * dx + dy * dy);
+                if (dist < 0.01) continue;
+
+                var weightFactor = Math.Clamp(edge.W / avgWeight, 0.5, 2.0);
+                var force = (dist * dist / k) * weightFactor;
+                var fx = (dx / dist) * force;
+                var fy = (dy / dist) * force;
+
+                dispX[u] -= fx;
+                dispY[u] -= fy;
+                dispX[v] += fx;
+                dispY[v] += fy;
+            }
+
+            for (var i = 0; i < n; i++)
+            {
+                var p = pos[names[i]];
+                dispX[i] += (cx - p.X) * 0.05;
+                dispY[i] += (cy - p.Y) * 0.05;
+            }
+
+            for (var i = 0; i < n; i++)
+            {
+                var name = names[i];
+                if (fixedPositions.ContainsKey(name)) continue;
+
+                var dx = dispX[i];
+                var dy = dispY[i];
+                var dispLen = Math.Sqrt(dx * dx + dy * dy);
+                if (dispLen > 0.001)
+                {
+                    var step = Math.Min(dispLen, temp);
+                    var cur = pos[name];
+                    var nx = Math.Clamp(cur.X + (dx / dispLen) * step, minX, maxX);
+                    var ny = Math.Clamp(cur.Y + (dy / dispLen) * step, minY, maxY);
+                    pos[name] = (nx, ny);
+                }
+            }
+        }
+
+        return pos;
     }
 
     // ── MAP ────────────────────────────────────────────────────────────────────

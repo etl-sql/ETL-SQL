@@ -1,39 +1,95 @@
 -- Kitchen Sink: NETWORK Visual (Relationship Graph)
--- This script demonstrates the NETWORK visual type for node-link graphs and relationship networks.
+-- This script demonstrates the NETWORK visual type for node-link graphs, relationship networks,
+-- force-directed simulations, directed arrowheads, node size scaling, and coordinate pinning.
 
 SET REPORT TITLE = 'Kitchen Sink: NETWORK Visual';
-SET REPORT DESCRIPTION = 'Demonstration of node-link relationship graphs with weighted edges.';
+SET REPORT DESCRIPTION = 'Demonstration of node-link relationship graphs with weighted edges, directed arrows, force layout, and pinned coordinates.';
 
 -- 1. Mock Data Generation (Team Collaboration Network)
-SELECT 'Alice' AS SourceNode, 'Bob' AS TargetNode, 15 AS SharedDeals INTO #network
-UNION ALL SELECT 'Alice', 'Charlie', 8
-UNION ALL SELECT 'Bob', 'Charlie', 12
-UNION ALL SELECT 'Bob', 'David', 6
-UNION ALL SELECT 'Charlie', 'Eve', 18
-UNION ALL SELECT 'David', 'Eve', 10
-UNION ALL SELECT 'Eve', 'Frank', 14
-UNION ALL SELECT 'Frank', 'Alice', 5;
+SELECT 'Alice' AS SourceNode, 'Bob' AS TargetNode, 15 AS SharedDeals, 120 AS DealVolume, 'Sales' AS Team INTO #collab_network
+UNION ALL SELECT 'Alice', 'Charlie', 8, 120, 'Sales'
+UNION ALL SELECT 'Bob', 'Charlie', 12, 90, 'Sales'
+UNION ALL SELECT 'Bob', 'David', 6, 90, 'Sales'
+UNION ALL SELECT 'Charlie', 'Eve', 18, 140, 'Support'
+UNION ALL SELECT 'David', 'Eve', 10, 60, 'Support'
+UNION ALL SELECT 'Eve', 'Frank', 14, 110, 'Product'
+UNION ALL SELECT 'Frank', 'Alice', 5, 75, 'Product';
 
--- 2. Basic Network Graph
+-- 2. Mock Data for Pipeline Lineage (Pinned Coordinates)
+SELECT 'RawIngest' AS StageFrom, 'StagingClean' AS StageTo, 50 AS BatchRows, 80.0 AS PosX, 175.0 AS PosY, 15 AS NodeWeight INTO #pipeline_lineage
+UNION ALL SELECT 'StagingClean', 'AnalyticsMart', 45, 240.0, 175.0, 20
+UNION ALL SELECT 'AnalyticsMart', 'ExecutiveDashboard', 12, 420.0, 100.0, 25
+UNION ALL SELECT 'AnalyticsMart', 'OperationalFeed', 33, 420.0, 250.0, 18;
+
+-- 3. Mock Data for Circular Ring Network
+SELECT 'Core' AS FromNode, 'ServiceA' AS ToNode, 10 AS TrafficWeight INTO #ring_network
+UNION ALL SELECT 'ServiceA', 'ServiceB', 8
+UNION ALL SELECT 'ServiceB', 'ServiceC', 12
+UNION ALL SELECT 'ServiceC', 'ServiceD', 9
+UNION ALL SELECT 'ServiceD', 'ServiceE', 11
+UNION ALL SELECT 'ServiceE', 'Core', 15;
+
+-- 4. Visual 1: Directed Force-Directed Graph with Node Size and Grouping
 CREATE VISUAL CollaborationNetwork AS NETWORK (
-    SOURCE = #network,
+    SOURCE = #collab_network,
     TITLE = 'Sales Team Cross-Collaboration Graph',
     MAPPINGS (
-        FROM  = SourceNode,
-        TO    = TargetNode,
-        VALUE = SharedDeals
+        FROM       = SourceNode,
+        TO         = TargetNode,
+        VALUE      = SharedDeals,
+        NODE_SIZE  = DealVolume,
+        NODE_GROUP = Team
     ),
     OPTIONS (
-        LAYOUT = FORCE,
-        REPULSION = 500
+        LAYOUT              = FORCE,
+        REPULSION           = 600,
+        DIRECTED            = ON,
+        NODE_LABELS         = ON,
+        NODE_LABEL_MIN_SIZE = 8
+    )
+);
+
+-- 5. Visual 2: Fixed / Pinned Coordinate Lineage Graph
+CREATE VISUAL PipelineLineageGraph AS NETWORK (
+    SOURCE = #pipeline_lineage,
+    TITLE = 'Data Pipeline Stage Lineage Flow',
+    MAPPINGS (
+        FROM      = StageFrom,
+        TO        = StageTo,
+        VALUE     = BatchRows,
+        NODE_SIZE = NodeWeight,
+        NODE_X    = PosX,
+        NODE_Y    = PosY
+    ),
+    OPTIONS (
+        DIRECTED    = ON,
+        NODE_LABELS = ON
+    )
+);
+
+-- 6. Visual 3: Radial Ring Network with Circular Layout
+CREATE VISUAL RingTopologyGraph AS NETWORK (
+    SOURCE = #ring_network,
+    TITLE = 'Microservice Mesh Topology (Circular)',
+    MAPPINGS (
+        FROM  = FromNode,
+        TO    = ToNode,
+        VALUE = TrafficWeight
+    ),
+    OPTIONS (
+        LAYOUT      = CIRCULAR,
+        DIRECTED    = OFF,
+        NODE_LABELS = ON
     )
 );
 
 -- Page Layout
 CREATE PAGE NetworkKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A .',
+    STRUCTURE = 'A B / C .',
     MAP (
-        'A' = CollaborationNetwork
+        'A' = CollaborationNetwork,
+        'B' = PipelineLineageGraph,
+        'C' = RingTopologyGraph
     )
 );
 

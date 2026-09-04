@@ -89,6 +89,8 @@ public class VisualMappingCompletenessRule : ILintRule
             VisualType.MultiSelect => new List<string> { "VALUE" },
             // BoxPlot: Either raw distribution (X/CATEGORY + Y/VALUE) or precomputed stats (X/CATEGORY + LOW/MIN + Q1 + MEDIAN + Q3 + HIGH/MAX) — handled in GetAliasGroups.
             VisualType.BoxPlot => null,
+            // Network: FROM|SOURCE and TO|TARGET are required aliases — handled in GetAliasGroups.
+            VisualType.Network => null,
             VisualType.Combo => new List<string> { "X" },
             VisualType.Bubble => new List<string> { "X", "Y" },
             VisualType.Candlestick => new List<string> { "X", "OPEN", "HIGH", "LOW", "CLOSE" },
@@ -146,6 +148,15 @@ public class VisualMappingCompletenessRule : ILintRule
             [
                 (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "X", "CATEGORY" }, "X / CATEGORY"),
                 (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Y", "VALUE" }, "Y / VALUE"),
+            ];
+        }
+
+        if (visual.VisualType == VisualType.Network)
+        {
+            return
+            [
+                (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "FROM", "SOURCE" }, "FROM / SOURCE"),
+                (new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "TO", "TARGET" }, "TO / TARGET"),
             ];
         }
 

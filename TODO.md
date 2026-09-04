@@ -1218,18 +1218,18 @@ than record it.
 
 ### NETWORK
 
-- [ ] **Node size mapping**: NETWORK nodes have no `NODE_SIZE` mapping. Node area conveying a metric
+- [x] **Node size mapping**: NETWORK nodes have no `NODE_SIZE` mapping. Node area conveying a metric
   (e.g., degree centrality, revenue) is standard in Gephi, Tableau network extensions, and
   networkD3. Add `NODE_SIZE = column` mapping.
-- [ ] **Edge directionality arrows**: No `DIRECTED = ON|OFF` option to render arrowheads on edges.
+- [x] **Edge directionality arrows**: No `DIRECTED = ON|OFF` option to render arrowheads on edges.
   Without arrows, directed graphs (source → target) are visually indistinguishable from undirected
   ones. Add `DIRECTED = ON|OFF` to OPTIONS.
-- [ ] **Node label control**: Node labels are always rendered (FROM/TO column values). No option to
+- [x] **Node label control**: Node labels are always rendered (FROM/TO column values). No option to
   show, hide, or threshold labels (e.g., only show labels for nodes with degree > n). Add
   `NODE_LABELS = ON|OFF` and `NODE_LABEL_MIN_SIZE = n` (hide label if the node is below n px).
-- [ ] **Fixed node positions**: No way to pin a node at a specific coordinate. LAYOUT is FORCE or
+- [x] **Fixed node positions**: No way to pin a node at a specific coordinate. LAYOUT is FORCE or
   CIRCULAR, both fully algorithmic. This is an advanced need but comes up in lineage diagrams where
-  a canonical left-to-right layout matters. Log as evaluation only.
+  a canonical left-to-right layout matters. Evaluated and supported via `NODE_X` and `NODE_Y` mappings.
 
 ### MATRIX
 
