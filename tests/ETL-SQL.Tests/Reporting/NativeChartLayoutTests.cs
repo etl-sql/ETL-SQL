@@ -21,6 +21,53 @@ public sealed class NativeChartLayoutTests
         Assert.Equal(expected, NativeChartLayoutProfile.Default.Resolve(containerWidth));
     }
 
+    /// <summary>
+    /// The STANDARD stamp on a freshly built manifest has to describe the canvas the chart was
+    /// actually drawn on.
+    /// </summary>
+    /// <remarks>
+    /// <c>DashboardService_CachesByReportVisualTier</c> below asserted the tier string and stopped
+    /// there, and the string was right for as long as the drawing was wrong: <c>VisualBuilder</c>
+    /// resolves against the plot resolver's own 600x350 default, and the default stamp only wrote
+    /// the label. The browser trusts the label — its resize observer asks the server for a
+    /// re-layout only when the container's tier differs from the stamped one — so a chart in any
+    /// tile between 480 and 959 pixels wide sat on a canvas 120 pixels narrower than the tier it
+    /// claimed, and resizing anywhere inside that band changed nothing. Asserting the bounds and
+    /// the SVG's own width rather than the word is what makes the stamp checkable.
+    /// </remarks>
+    [Fact]
+    public async Task DefaultStamp_DrawsTheCanvasItClaims()
+    {
+        var scriptPath = GetSamplePath(Path.Combine(
+            "samples", "08_Reporting", "custom_statistical_financial_layers.rptsql"));
+        await using var service = new DashboardService(
+            scriptPath,
+            DashboardTestHelper.CreateMockScopeFactory());
+
+        var manifest = await service.GetManifestAsync();
+        var standard = NativeChartLayoutProfile.Default[NativeChartLayoutTier.Standard].Bounds;
+
+        var stamped = manifest.Visuals
+            .Where(visual => visual.Layout is not null && visual.PlotPlan is not null)
+            .ToList();
+        Assert.NotEmpty(stamped);
+
+        foreach (var visual in stamped)
+        {
+            Assert.Equal("STANDARD", visual.Layout!.Tier);
+            Assert.Equal(standard.Width, visual.Layout.Width);
+            Assert.Equal(standard.Height, visual.Layout.Height);
+
+            // The plan, not just the manifest: the manifest is what the browser reads, the plan is
+            // what the renderer measured against, and the defect was the two disagreeing.
+            Assert.Equal(standard.Width, visual.PlotPlan!.Bounds.Width);
+            Assert.Equal(standard.Height, visual.PlotPlan.Bounds.Height);
+
+            // And the delivered drawing, which is the only one of the three the author sees.
+            Assert.Contains($"width='{standard.Width:0}' height='{standard.Height:0}'", visual.NativeSvg);
+        }
+    }
+
     [Fact]
     public async Task DashboardService_CachesByReportVisualTier_AndPreservesInteractionState()
     {

@@ -687,9 +687,28 @@ reported.
   zero-tables. Note the wizard merges host aliases into the script's own (Phase 6a) and labels every
   entry "Declared in this report", so an author cannot tell which kind they picked. Reproducing this
   needs the UI driven against a host.
-- [ ] **A bar chart does not use the width it is given.** Bars cluster in the middle-right of the
-  tile with a wide empty band to the left, and resizing the tile does not redistribute them. Looks
-  like the plot is laid out against something other than the tile's measured width.
+- [x] **A bar chart does not use the width it is given.** The plot was laid out correctly; nothing
+  sized it afterwards. **Two defects, one on each side of the same handoff.**
+  A native chart is drawn server-side on a bounded canvas and delivered as SVG carrying that
+  canvas's pixel `width` and `height`. The design canvas injects it with `innerHTML` and had no rule
+  sizing it, so it laid out at its intrinsic 600x350 inside `.etlsql-dsgn-vcard-body`, which clips:
+  the author saw the **top-left corner** of a chart - the wide left axis margin, then whichever bars
+  fell inside the card - and dragging the tile wider only uncovered more of the same fixed drawing.
+  Every other card-body renderer already sets `width:100%;height:100%` inline on its SVG; this path
+  was the one that did not.
+  The second is why resizing did nothing in the published runtime either.
+  `NativeChartLayoutResolver.StampDefault` **labelled** a visual STANDARD without drawing it that
+  way - `VisualBuilder` resolves against the plot resolver's own 600x350 default, and the stamp only
+  wrote the manifest. The browser trusts the label: its resize observer asks the server for a
+  re-layout only when the container's tier differs from the stamped one, so every chart in a tile
+  between 480 and 959 pixels wide kept a canvas 120 pixels narrower than the tier it was already
+  claiming. `StampDefault` now resolves rather than stamps.
+  `DashboardService_CachesByReportVisualTier` asserted `Layout?.Tier == "STANDARD"` and stopped
+  there, and that string stayed right for as long as the drawing was wrong - the noun, not the
+  mechanism. `DefaultStamp_DrawsTheCanvasItClaims` now asserts the plan bounds, the manifest
+  dimensions and the delivered SVG's own width, and `StudioChartTileWidthTests` measures the
+  rendered tile: the drawing fills the tile's width, the last bar is inside it rather than clipped
+  away, and widening the tile moves the bars apart. Both go red if either fix is reverted.
 
 **Missing — the surface exists but cannot do the job**
 

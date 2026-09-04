@@ -96,10 +96,23 @@ public static class NativeChartLayoutResolver
     public static bool Supports(VisualManifest visual) =>
         visual.ChartSpec is not null && visual.ChartData is not null || FocusedTypes.Contains(visual.VisualType);
 
+    /// <summary>
+    /// Puts a native visual on the STANDARD canvas.
+    /// </summary>
+    /// <remarks>
+    /// This used to stamp the manifest and stop there, which labelled a chart STANDARD without
+    /// drawing it that way: <c>VisualBuilder</c> resolves a plot plan against the resolver's own
+    /// 600x350 default, so the SVG stayed 600x350 while the manifest told the browser its canvas
+    /// was 720x420. The browser believes the label — its resize observer only asks the server for a
+    /// re-layout when the container's tier differs from the stamped one — so every chart in a tile
+    /// between 480 and 959 pixels wide kept a canvas 120 pixels narrower than the tier it was
+    /// already claiming, and no amount of resizing inside that band corrected it. Resolving here
+    /// makes the stamp true.
+    /// </remarks>
     public static void StampDefault(VisualManifest visual, NativeChartLayoutProfile? profile = null)
     {
         if (Supports(visual))
-            visual.Layout = (profile ?? NativeChartLayoutProfile.Default).Manifest(NativeChartLayoutTier.Standard);
+            Resolve(visual, NativeChartLayoutTier.Standard, profile);
     }
 
     public static void Resolve(VisualManifest visual, NativeChartLayoutTier tier, NativeChartLayoutProfile? profile = null)
