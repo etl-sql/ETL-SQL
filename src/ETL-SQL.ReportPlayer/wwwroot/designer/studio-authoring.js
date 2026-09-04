@@ -524,7 +524,10 @@ export function createStudioAuthoringSurfaces({
                                         <strong>${escapeHtml(table.name)}</strong>
                                         <span>${table.columns?.length || 0} field${table.columns?.length === 1 ? '' : 's'}</span>
                                     </button>`).join('')}</div>`
-                                : guidedNoteMarkup('This connection reported no tables you can read.', 'warning'))
+                                : guidedNoteMarkup(wizard.tablesFailed
+                                    ? 'The tables for this connection could not be read, so there is nothing to pick from yet. '
+                                      + 'The reason is above. Writing the query yourself does not need this list.'
+                                    : 'This connection reported no tables you can read.', 'warning'))
                         : '<div class="etlsql-studio-query-workbench" data-query-workbench></div>')
                     + (wizard.preview ? sampleRowsMarkup(wizard.preview) : ''),
                 actions: [
@@ -670,6 +673,7 @@ export function createStudioAuthoringSurfaces({
             const openConnection = async alias => {
                 wizard.connection = alias;
                 wizard.tables = null;
+                wizard.tablesFailed = false;
                 wizard.table = null;
                 wizard.preview = null;
                 wizard.pane = 'source';
@@ -682,8 +686,15 @@ export function createStudioAuthoringSurfaces({
                         fallbackError: `The schema for ${alias} could not be read.`,
                     });
                     wizard.tables = schema.tables || [];
+                    wizard.tablesFailed = false;
                 } catch (error) {
+                    // An empty list here is not the same claim as "this connection has no tables",
+                    // but the step read it as one: the catch set tables to [], which is exactly what
+                    // the zero-tables branch tests, so a failed schema read rendered as a confident
+                    // statement about the connection. That is what sent a manual evaluation of this
+                    // step looking for an empty result the server never returned.
                     wizard.tables = [];
+                    wizard.tablesFailed = true;
                     wizard.error = error.message;
                 }
                 paint();

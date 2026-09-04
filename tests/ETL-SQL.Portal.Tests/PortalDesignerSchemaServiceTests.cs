@@ -3,7 +3,9 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
+using ETL_SQL.Portal.Controllers;
 using ETL_SQL.Portal.Services;
+using Microsoft.AspNetCore.Mvc;
 
 namespace ETL_SQL.Portal.Tests;
 
@@ -140,10 +142,68 @@ public sealed class PortalDesignerSchemaServiceTests
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => Task.FromResult<IEnumerable<string>>(columns);
     }
 
+    /// <summary>
+    /// The schema route's <c>documentUri</c> is the scoping key: <see cref="PortalDesignerSchemaService"/>
+    /// files the tables and columns it discovers under it, and /complete and /data-preview go looking
+    /// for them under the document's own key. The controller action used to omit the parameter
+    /// entirely and pass null, so every discovery landed in the shared "default" bucket and no client
+    /// could find what it had just asked for.
+    ///
+    /// <para>This drives the action rather than the service, because the service was always given
+    /// whatever it was handed — the value was being dropped one layer above it.</para>
+    /// </summary>
+    [Fact]
+    public async Task SchemaAction_FilesDiscoveryUnderTheCallersDocument_NotTheDefaultBucket()
+    {
+        static (DesignerController Controller, RecordingMetadataManager Metadata) Build()
+        {
+            var metadata = new RecordingMetadataManager();
+            var service = new PortalDesignerSchemaService(
+                new FakeCatalogProvider(),
+                new FakeSecretProvider(),
+                new FakeConnectorRegistry(new FakeConnector(new FakeDataSource(["Orders"], ["Id"]))),
+                metadata,
+                new PortalConfig());
+            var controller = new DesignerController(schemaService: service)
+            {
+                ControllerContext = new ControllerContext
+                {
+                    HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext
+                    {
+                        User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "1")]))
+                    }
+                }
+            };
+            return (controller, metadata);
+        }
+
+        var (withDocument, documentMetadata) = Build();
+        Assert.IsType<OkObjectResult>(await withDocument.Schema("sales", "report.rptsql", default));
+
+        var (withoutDocument, defaultMetadata) = Build();
+        Assert.IsType<OkObjectResult>(await withoutDocument.Schema("sales", null, default));
+
+        Assert.NotNull(documentMetadata.RegisteredUri);
+        Assert.NotNull(defaultMetadata.RegisteredUri);
+
+        // The document's key is what /complete and /data-preview build from the same documentUri, so
+        // it has to be the one discovery is filed under — and it must not collide with the key a
+        // caller that named no document gets.
+        Assert.Equal(
+            PortalDesignerSchemaService.ResolveDocumentUri(
+                new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "1")])),
+                "sales",
+                "report.rptsql"),
+            documentMetadata.RegisteredUri);
+        Assert.NotEqual(defaultMetadata.RegisteredUri, documentMetadata.RegisteredUri);
+        Assert.EndsWith("/default", defaultMetadata.RegisteredUri);
+    }
+
     private sealed class RecordingMetadataManager : IMetadataManager
     {
         public bool DebugMode { get; set; }
         public IReadOnlyList<string> Tables { get; private set; } = [];
+        public string? RegisteredUri { get; private set; }
         public Dictionary<string, List<ColumnMetadata>> Columns { get; } = new(StringComparer.OrdinalIgnoreCase);
         public void RegisterConnection(string name, string type, string connectionString) { }
         public void RegisterDocumentConnection(string uri, string name, string type, string connectionString) { }
@@ -155,6 +215,7 @@ public sealed class PortalDesignerSchemaServiceTests
             IReadOnlyDictionary<string, IEnumerable<ColumnMetadata>> columns,
             IEnumerable<string>? views = null)
         {
+            RegisteredUri = uri;
             Tables = tables.ToList();
             foreach (var (table, tableColumns) in columns)
                 Columns[table] = tableColumns.ToList();

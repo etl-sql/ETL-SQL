@@ -533,7 +533,10 @@ public class DesignerController : ControllerBase
     [HttpGet("schema")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
-    public async Task<IActionResult> Schema([FromQuery] string connection, CancellationToken cancellationToken)
+    public async Task<IActionResult> Schema(
+        [FromQuery] string connection,
+        [FromQuery] string? documentUri,
+        CancellationToken cancellationToken)
     {
         if (_schemaService is null)
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Designer schema service is not configured." });
@@ -543,7 +546,13 @@ public class DesignerController : ControllerBase
 
         try
         {
-            return Ok(await _schemaService.GetSchemaAsync(connection, User, null, cancellationToken));
+            // Every Studio client sends documentUri on this route, and this action used to drop it on
+            // the floor and pass null. The value is the scoping key: GetSchemaAsync registers the
+            // resolved connection's tables and columns under it, so discovering a schema filed the
+            // result under the "default" bucket while /complete and /data-preview — which both call
+            // ResolveDocumentUri with the real value — went looking under the document's own. The
+            // discovery a client had just paid for was invisible to the calls that needed it.
+            return Ok(await _schemaService.GetSchemaAsync(connection, User, documentUri, cancellationToken));
         }
         catch (ArgumentException ex)
         {
