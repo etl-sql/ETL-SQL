@@ -1716,12 +1716,6 @@ export async function createScriptEditor(container, opts = {}) {
             view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
             view.focus();
         },
-        /** The text the author has selected, empty when nothing is. The mirror of revealLines. */
-        getSelection: () => {
-            if (!view) return '';
-            const { from, to } = view.state.selection.main;
-            return view.state.doc.sliceString(from, to);
-        },
         /** The 1-based line the caret sits on; 1 before the view exists. The mirror of gotoLine. */
         getCursorLine: () => {
             if (!view) return 1;
