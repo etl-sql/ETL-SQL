@@ -1032,6 +1032,7 @@
             const defaultPageName = navDef
                 ? (navDef.defaultPage || (firstVisible && firstVisible.name))
                 : (firstVisible && firstVisible.name);
+            const effectiveActivePage = activePageName || defaultPageName;
 
             manifest.pages.forEach(page => {
                 const reportStyles = manifest.styles || {};
@@ -1040,20 +1041,30 @@
                 const section = renderPage(manifest, page, pageSections, pageTheme);
                 root.appendChild(section);
 
-                // Hidden pages start invisible; DRILL_DOWN can show them programmatically.
-                if (page.isHidden || (navDef && page.name !== defaultPageName)) {
+                // Hidden pages start invisible; active page starts visible with active class
+                const isPageActive = !page.isHidden && (page.name === effectiveActivePage);
+                if (isPageActive) {
+                    section.style.display = 'block';
+                    section.classList.add('active');
+                } else {
                     section.style.display = 'none';
+                    section.classList.remove('active');
                 }
             });
 
             if (navDef) {
                 renderNavBar(root, navDef, pageSections, manifest.pages, manifest);
+                const activeSection = effectiveActivePage ? pageSections[effectiveActivePage] : null;
+                if (activeSection) {
+                    resizeChartsIn(activeSection);
+                }
             } else if (manifest.pages.length > 0) {
                 // No navigation — show the first page by default
                 const firstPage = manifest.pages.find(p => !p.isHidden) || manifest.pages[0];
                 const section = pageSections[firstPage.name];
                 if (section) {
                     section.style.display = 'block';
+                    section.classList.add('active');
                     resizeChartsIn(section);
                 }
             }
@@ -1435,12 +1446,14 @@
             el.dataset.page = pageName;
             el.addEventListener('click', () => {
                 try {
-                    navDef.pages.forEach(n => {
+                    pages.forEach(p => {
+                        const n = p.name;
                         const s = pageSections[n];
                         if (s) {
                             if (n === pageName) {
                                 s.style.display = 'block';
-                                const pgDef = pages.find(p => p.name === n);
+                                s.classList.add('active');
+                                const pgDef = pages.find(item => item.name === n);
                                 const trans = (pgDef?.options?.TRANSITION || navDef.options?.TRANSITION || '').toUpperCase();
                                 if (trans === 'FADE') {
                                     s.style.opacity = '0';
@@ -1452,6 +1465,7 @@
                                 }
                             } else {
                                 s.style.display = 'none';
+                                s.classList.remove('active');
                             }
                         }
                     });
@@ -8128,7 +8142,10 @@
 
         try {
             document.querySelectorAll('.page').forEach(page => {
-                /** @type {HTMLElement} */ (page).style.display = page === targetPage ? 'block' : 'none';
+                const isTarget = (page === targetPage);
+                /** @type {HTMLElement} */ (page).style.display = isTarget ? 'block' : 'none';
+                if (isTarget) page.classList.add('active');
+                else page.classList.remove('active');
             });
         } catch (e) { console.error(e); }
 
@@ -8153,6 +8170,8 @@
 
     function getActivePage() {
         return Array.from(document.querySelectorAll('.page'))
+            .find(page => /** @type {HTMLElement} */ (page).style.display !== 'none' && page.classList.contains('active')) ||
+            Array.from(document.querySelectorAll('.page'))
             .find(page => /** @type {HTMLElement} */ (page).style.display !== 'none') || null;
     }
 
