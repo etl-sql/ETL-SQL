@@ -12,6 +12,18 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- **ETL-SQL Studio ships as an Alpha, and does not replace the Report Builder or the Workstation
+  Editor.** Both remain the supported way to do the work Studio is still proving it can do; nothing
+  is deprecated and no entry point is retired in this release. Studio is available, usable, and
+  worth trying — what holds it at Alpha is evidence rather than missing features: three of the five
+  hosts it runs on are not yet certified, the certified journeys are all an author's rather than a
+  reader's, and row-level security has not been proven under a second identity opening the same
+  report. Three authoring limits are known: an `IF` created on the pipeline canvas cannot be given
+  an `ELSE` there, the task editor can rename most kinds but not edit their other fields, and
+  `PARALLEL` branches are drawn without swimlanes. Hand-written scripts are unaffected either way —
+  Studio reads and writes ordinary `.rptsql` and `.etlsql`, and surgical patching leaves SQL,
+  CTEs, comments and whitespace it did not target alone.
+
 - The Portal can create a dataset from the GUI. The catalog panel lists the aliases the host offers,
   but the New dataset wizard offered only the connections the script itself declares - and a Portal
   report declares none, it reads catalog aliases. The wizard reported no connections and sent the

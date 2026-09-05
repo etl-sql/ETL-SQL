@@ -1339,7 +1339,9 @@
     }
 
     /**
-     * @param {HTMLElement} container
+     * @param {HTMLElement | DocumentFragment} container The nav is prepended or inserted before
+     *   the first page, so anything that can take a child works. `renderManifest` builds into a
+     *   DocumentFragment, which is not an HTMLElement.
      * @param {*} navDef
      * @param {Record<string, HTMLElement>} pageSections
      * @param {Array<*>} pages

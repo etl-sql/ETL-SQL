@@ -9,6 +9,30 @@ Unfinished `ROADMAP.md` initiatives and release gates are represented below.
 
 ---
 
+## v0.19.0 open work
+
+Everything still to do before v0.19.0 ships. The rest of this file is the completed record, kept in
+place so it can be checked against the code in a later closed-item audit — do not read a `[x]`
+section as work in flight.
+
+| What | Where | Count |
+| :--- | :--- | ---: |
+| Release evidence gates | [§2](#2-v0190-release-evidence-gates) | 5 |
+| Failing reporting tests — 5 tests, 3 causes | [§4, open reds](#open-reds-in-this-area-tackle-after-the-power-bi-like-dashboard-journey) | 3 |
+| Chart property gaps | [§4](#4-chart-property-gaps) | 13 |
+| Kitchen sink coverage | [Inventory](#kitchen-sink-file-inventory) | 14 |
+
+The 14 kitchen-sink rows are not independent work: each names a chart gap above as its prerequisite,
+and the rule is unchanged — finish the feature first, then add it to the sink.
+
+**Deferred to v0.20.0, and why.** Studio's remaining scope, the browser and Portal test lanes, and
+the orchestrator's metric chips are all in *Code Stability* in [`ROADMAP.md`](ROADMAP.md). Studio
+ships in v0.19.0 as an Alpha that does not replace `ReportBuilder` or `WorkstationEditor`, so none of
+its open gaps is a v0.19.0 blocker; Phase 7, legacy retirement, is deliberately not scheduled until
+the Alpha has certified evidence behind it.
+
+---
+
 ## 1. ETL-SQL Studio
 
 Authoritative reference: [`docs/architecture/decisions/etl-sql-studio.md`](docs/architecture/decisions/etl-sql-studio.md).
@@ -626,20 +650,10 @@ gaps the three competitor journeys did not touch are named rather than assumed.
   that asset's row, so there is no branch: the deduction, the points and the rule that took them are
   asserted every time.
 
-**Coverage the three competitor journeys do not reach.** Named here so they are decisions rather
-than oversights; none is started.
+**Coverage the three competitor journeys do not reach.** Four items — three uncertified hosts,
+no reader's journey, row-level security under a second identity, and a schedule handoff that stops
+at the statements it writes. **The open tail of this phase moved to v0.20.0.** Studio ships in v0.19.0 as an Alpha that does not replace `ReportBuilder` or `WorkstationEditor`; what is left is slice 4 of *Code Stability* in [`ROADMAP.md`](ROADMAP.md). The completed record above stays here to be checked against the code later.
 
-- [ ] **Three of the five hosts are uncertified**: one `studio.js` serves Portal, desktop, the VS
-  Code webview, ReportPlayer and the shared runtime. Certification covers Portal and desktop; no
-  test drives the VS Code or Player hosts at all. Host-route divergence has produced defects here
-  before, which is why the drift gate and the sync script exist.
-- [ ] **Every certified journey is an author's**: nobody has proven the reader's — open a published
-  report, move a slicer, watch it cross-filter, export. That is what a dashboard is for, and where
-  row-level security actually applies.
-- [ ] **Row-level security under a second identity**: `PreviewAs_ChangesWhatTheAuthorsPredicatesSee`
-  proves the preview. Nothing proves a genuine second user opening the same report and seeing less.
-- [ ] **The schedule handoff stops at the statements**: Phase 5 writes `CREATE JOB` and opens the
-  Orchestrator at it. Nothing proves the job then runs on its cadence.
 ### Phase 6b — Findings from manual evaluation, 2026-09-03 (Next)
 
 Nine findings from driving Studio by hand. They are worth more than the automated journeys that
@@ -719,69 +733,10 @@ reported.
 
 **Missing — the surface exists but cannot do the job**
 
-- [ ] **No aggregate selector in the properties inspector.** The chart builder offers one per role
-  (`[data-role-aggregate]`) and the inspector does not, so an aggregate can be chosen while creating
-  a visual and never changed afterwards without editing the script. The inspector is the surface an
-  author returns to, so this is where it matters most.
-- [ ] **The dashboard workflow cannot skip cross-filters.** Step 3 has no "none" answer, so a
-  dashboard that does not want a cross-filter cannot reach Step 4 Layout through the guided path.
-- [ ] **Paginated headers and footers take text only.** A page header realistically carries a logo, a
-  rule, a run date and a page number. **Approach agreed: let a header or footer hold a container, not
-  just text.** A container can hold images and text at different sizes. That probably needs a UI for
-  designing containers, which does not exist yet - raise it as its own item once the shape is clear.
+**The pipeline canvas rebuild: six of seven done.** The completed steps are kept here so the work
+can be checked against the code later; the seventh, `PARALLEL` swimlanes, is v0.20.0 work and is not
+faked in the meantime.
 
-**Wrong to look at**
-
-- [ ] **A selection inside the current line is invisible.** CodeMirror's active-line highlight paints
-  over the selection, so selecting text on the line the caret is on shows nothing. Almost certainly
-  layering or the selection colour losing to the active-line background.
-
-**The big one**
-
-- [ ] **Rebuild the pipeline canvas as a teaching surface.** This is the big one, and the plan it
-  had was wrong. Recorded here in full so the next person does not have to reconstruct it. **Six of
-  the seven work items below shipped 2026-09-04; swimlanes are what is left.**
-
-  **The goal.** ETL-SQL Studio exists to teach people to write ETL-SQL by using the UI. The loop is:
-  drag an item onto the canvas, fill in a form, then see the code it produced. That is how someone
-  learns "oh, *that* is how I write a MOVE FILE".
-
-  **What went wrong.** The canvas was designed as a *map*. ADR §7 is "Pipeline execution-map
-  projection", and §7.1 adds authoring for "one specific thing: a task". So it draws a picture of SQL
-  you already wrote. If the author has to write the SQL first, the canvas teaches nothing. The design
-  and the goal were never checked against each other.
-
-  **Evidence it was not a teaching surface (all but the last two fixed 2026-09-04):**
-  - The palette has 7 kinds. The language has far more (see the v1 list below).
-  - The palette is click-only. No `draggable`, no `dragstart` on the chips.
-  - The round dots on each card are `card-port-left` / `card-port-right`. They are decoration - anchor
-    points for drawing edge lines, with no drag handlers. Dragging them does nothing, which is what
-    manual testing found.
-  - The real connector handle only appears on cards that are *editable tasks*, meaning a statement
-    with a section label. A plain `SELECT ... INTO #temp` has no label, so it gets no handle and
-    cannot be connected to anything.
-  - The edges drawn between plain statements come from script order only. They look like connections
-    and are not.
-  - The certified SSIS journey had to author the extract and the transform in the code pane, because
-    the palette has no entry for staging into `#temp`. The canvas could not author the two steps that
-    are the actual ETL.
-
-  **Decisions taken (2026-09-03):**
-  1. **v1 vocabulary: control flow and file operations.** Data statements come second.
-  2. **Code is shown after Add**: the editor scrolls to the new lines and highlights them.
-  3. **Auto-layout.** Where you drop decides *where in the script* the statement goes, nothing more.
-     No saved layout, so the script stays the only source of truth.
-  4. **PARALLEL is drawn as swimlanes** - one visible lane per branch.
-
-  **v1 palette, taken from the lexer rather than invented:**
-  - File and directory: `COPY_FILE`, `MOVE_FILE`, `RENAME_FILE`, `DELETE_FILE`, `COPY_DIRECTORY`,
-    `MOVE_DIRECTORY`, `RENAME_DIRECTORY`, `DELETE_DIRECTORY`, `DELETE_DIRECTORY_CONTENTS`,
-    `CREATE_DIRECTORY`.
-  - Control flow: `IF` / `ELSE IF` / `ELSE`, `FOR`, `FOREACH`, `WHILE`, `PARALLEL`, `TRY` / `CATCH`,
-    `THROW`, `BREAK`, `CONTINUE`, `WAITFOR`.
-  - Keep the existing kinds that already work: execution, validation, notification, transaction.
-
-  **Work items:**
   - [x] Palette becomes a draggable sidebar, grouped by category, like the reporting canvas. Four
         drawers — work, control flow, files, directories — beside the map rather than under it,
         because a palette you drag *from* onto something you drop *on* should not span the viewport.
@@ -810,97 +765,25 @@ reported.
         (it used to be decoration sitting beside a separate handle, so the obvious thing to grab did
         nothing and the thing that worked was somewhere else), and on a card the canvas cannot author
         the ports are removed outright.
-  - [ ] **Swimlanes for `PARALLEL`.** Not done, and deliberately not faked. Lanes need the layout to
-        know which container each node is in: the projection would have to carry container membership
-        on the node (it carries only `line` and `key`), and `_computeLayout` would have to assign
-        lane rows before positions. Overriding `card.style.top` after the fact was the cheap route and
-        is worse than the current picture — `drawConnections` measures the elements, so every edge in
-        and out of the block would be drawn to the wrong place.
-        **Correcting an earlier note here: the branches do not draw as a chain.** `AppendParallel`
-        already fans out one `BRANCH n` edge per branch and converges them on the next stage. What is
-        missing is that a fan-out means two different things on this map — `PARALLEL` runs all of
-        them, `IF` runs one — and nothing distinguishes the two shapes. That, not a chain, is what
-        lanes would fix, and it is why the item is worth doing rather than dropping.
-        **Superseded by the item below: a lane is a `BEGIN … END` block, so no lane-aware layout is
-        needed.** Do that first and revisit what, if anything, is left here.
-
-- [ ] **A `PARALLEL` thread can already be its own `BEGIN … END` block. Nothing is missing from the
-      language — the gap is the documentation and the canvas.** Read from the code, not yet run:
-
-      ```
-      PARALLEL BEGIN
-          BEGIN <thread 1> END;
-          BEGIN <thread 2> END;
-      END;
-      ```
-
-      - **Parser** — `StatementParser.cs:254`: a bare `BEGIN` at statement position that is not
-        `BEGIN TRY` or `BEGIN TRANSACTION` goes to `FlowParser.ParseBlock()` and yields a
-        `BlockStatement`. A `PARALLEL` body is itself parsed by `ParseBlock`, which loops
-        `ParseStatement`, so a nested block is legal there.
-      - **Engine** — `ParallelStatementHandler` forks per *top-level statement of the body*
-        (`stmt.Body.Statements.Select(... context.Fork() ...)`). A nested block is one statement, so
-        it is **one fork and one thread**, and every loop, `IF` and statement inside it runs
-        sequentially within that thread. `ConcurrencyLimit` also defaults to `Body.Statements.Count`,
-        which under grouping is the number of threads — the right number.
-      - **Projection** — `AppendParallel` hands each branch to `AppendStatement`, and a
-        `BlockStatement` becomes `AppendSequence(block.Statements, incoming: [BRANCH n])`: the
-        block's first statement takes the `BRANCH n` edge and the rest chain behind it. One block
-        already projects as one branch with its contents in order.
-
-      **So the three things to fix are:**
-
-      - [ ] **Confirm it with a test first.** The above is read from the source and has not been run:
-            one parse/execute case for `PARALLEL BEGIN BEGIN … END; BEGIN … END; END;` asserting two
-            forks, not four statements. If this fails, everything below is void and the language work
-            is real after all.
-      - [ ] **`docs/reference/control-flow/parallel.md` is incomplete.** It shows only flat statements
-            and says "All statements inside the block start at the same time" — true, but it never
-            shows that a statement may itself be a `BEGIN … END` group. A reader concludes the flat
-            form is the only form, and therefore that a thread cannot contain more than one
-            statement. Add the grouped form, and say plainly that one top-level statement is one
-            thread, so a group is how a thread gets more than one step.
-      - [ ] **`PipelineTaskAuthoringService` does not know about blocks.** `KindOf` has no
-            `BlockStatement` case, so a labelled `thread_1: BEGIN … END;` is not a task the canvas
-            can address — no card, not draggable, not a container. `ChildStatements` has no
-            `BlockStatement` case either, so its contents are not read as nested tasks. Both need one
-            case each, plus a palette entry for the block itself. This is what makes the canvas able
-            to author the form the language already accepts.
-
-      **What this buys the UI.** A swimlane is then just the bounds of a `BEGIN … END` block, and
-      whatever the author drops inside — a loop, an `IF`, a chain of steps — is inside that lane by
-      construction. No container membership on the projection node, no lane rows in
-      `_computeLayout`, no fighting `drawConnections`.
   - [x] Decide what happens to statements the canvas cannot author yet. **Decision: they stay, and
         they say what they are.** They keep their place, because the map is a true picture of the
         script and hiding them would make it a false one; they are drawn with a dashed border, they
         explain themselves on hover, and they lose every affordance that would suggest otherwise.
 
-  **Also still open, found while doing the above:**
-  - [ ] **An existing task's editor can only rename most kinds.** The host rewrites a task by
-        replacing named token runs inside it, and it can locate those runs for an execution task's
-        connection and body and for a `FOREACH` header — nothing else. So the edit dialog offers the
-        label alone for the other kinds and says the rest is edited in the script. Fixing it properly
-        means teaching the service to find each field's span (the two path literals of a file verb,
-        the condition between `IF` and its `BEGIN`, a `FOR` header's bounds), *not* re-rendering the
-        statement from the form: a regenerated `COPY FILE` would silently drop a
-        `WITH (OVERWRITE = ON)` the author added by hand, which is the same defect shape as the
-        dataset clauses lost in v0.19.
-  - [ ] **An `IF` written by the canvas cannot be given an `ELSE` on the canvas.** The canvas tracks
-        one block per label, so a second body under the same label would have no way to say which of
-        the two a dropped task went into. A hand-written `ELSE` is left alone and its statements stay
-        read-only projection stages; the container note in the inspector says so.
+- The seven findings still open — no aggregate selector in the properties inspector, a dashboard
+  workflow that cannot skip cross-filters, paginated headers and footers that take text only, an
+  invisible selection inside the current line, the pipeline canvas rebuild as a teaching surface,
+  `PARALLEL` swimlanes, and the two authoring limits (`ELSE` cannot be added to a canvas-written
+  `IF`; the task editor can only rename most kinds) — are v0.20.0 work.
+
+**The open tail of this phase moved to v0.20.0.** Studio ships in v0.19.0 as an Alpha that does not replace `ReportBuilder` or `WorkstationEditor`; what is left is slice 4 of *Code Stability* in [`ROADMAP.md`](ROADMAP.md). The completed record above stays here to be checked against the code later.
+
 ### Phase 7 — Stabilization and Legacy Retirement
 
-**Outcome:** Studio becomes the supported flagship only after the new workbench has evidence that it
-can replace the old entry points.
-
-- [ ] Complete user acceptance, accessibility review, failure-recovery testing, and performance
-  benchmarking for the certified journeys.
-- [ ] Build a capability matrix against `ReportBuilder` and `WorkstationEditor`; resolve or document
-  every gap before changing defaults.
-- [ ] Deprecate legacy entry points with migration guidance, then retire them in a later release after
-  the deprecation window and rollback plan are verified.
+**Not scheduled, and deliberately so.** User acceptance, the capability matrix against
+`ReportBuilder` and `WorkstationEditor`, and deprecating the legacy entry points all wait until the
+Alpha evidence exists. Retiring an entry point on the strength of a feature list rather than a
+certified journey is how a replacement becomes a regression. See `ROADMAP.md`.
 
 ### Browser-side type safety — steps 1 to 3
 
@@ -1019,15 +902,8 @@ had not noticed because every test uses a single range.
       carry no run state at all, and telling done-today from failed-today needs the per-job history
       endpoint (which is why `failedToday` in `loadJobs` has always been zero). So the chips are
       disabled with a title that says what they are and why they do not filter, rather than throwing.
-  - [ ] Give the job list a run-state field, or the service a filtered jobs endpoint, and the four
-        chips become filters. That is the piece of work this is waiting on.
-
-**The reframe worth keeping.** The question was whether we have outgrown JavaScript. On the evidence
-we have outgrown **one 9,000-line file**: `designer.js` is 474KB and holds `createDesigner`,
-`createScriptEditorWorkbench` and `renderDag` together, and both live bugs found above are scope
-confusion inside it. Splitting it would pay off with no TypeScript at all. TypeScript makes the split
-safe; it does not remove the need for it, and adopting TypeScript instead of splitting would leave
-the actual problem in place.
+  - Giving the job list a run-state field, or the service a filtered jobs endpoint, turns the four
+    chips back into filters. That is v0.20.0 work; see `ROADMAP.md`.
 
 ## 2. v0.19.0 Release Evidence Gates
 
@@ -1051,61 +927,18 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 
 ## 3. Browser and Portal Test Reliability
 
-Not a TypeScript problem — none of this lives in the browser sources. It is test-harness lifetime,
-assertion technique, and shared state, and bundling it into the typing work would leave it unfixed.
-Ordered by leverage. The practice for anything not fixed here is the existing one: stabilize
-minimally to ship, then record it in `Docs/Operations/vX.Y.Z-flaky-tests.md` for a dedicated pass.
+**Moved to v0.20.0.** Not a TypeScript problem — none of it lives in the browser sources. It is
+test-harness lifetime, assertion technique, and shared state, and bundling it into the typing work
+would leave it unfixed. The four items and the evidence behind each are now slice 3 of *Code
+Stability* in [`ROADMAP.md`](ROADMAP.md): the contentless `PortalBrowserFixture` failure that has
+already produced a wrong root cause twice, the DAG assertions that wait on SVG *visibility* so an
+axis-aligned edge times out, the one shared Portal and admin account every test class runs against,
+and the nine `scripts/test-*.mjs` checks that are red because none of them runs in a gate.
 
-- [ ] **Nine `scripts/test-*.mjs` checks are red, and were red before the browser type-gate work.**
-      Verified against `HEAD` one assertion at a time on 2026-09-05, so none of them is a
-      regression from moving the pages' code into files — but a red check nobody runs is a check
-      that has stopped saying anything, and two of them are one line each.
-
-      | Check | Why it fails |
-      | :--- | :--- |
-      | `test-result-grid-ui.mjs`, `test-lineage-ui.mjs` | Copy `designer.js` to a temp directory and import it, without copying the `visual-preview.js` it imports. `ERR_MODULE_NOT_FOUND` before a single assertion runs. |
-      | `test-portal-studio.mjs` | Asserts `snapshotCache: new Map`, which is in no Studio source. |
-      | `test-orchestrator-run-overrides.mjs`, `test-orchestrator-checkpoint-resume.mjs` | Assert on a variable-name pattern and on the string `Only failed or cancelled runs`; neither is in the orchestrator page. |
-      | `test-data-quality-job-tracking.mjs` | Asserts `jobStatus: (jobId)` against `api.js`, which spells it differently. |
-      | `test-governance-production-boundary.mjs` | Asserts `index.html` does **not** carry `id="govNavOverview"`. It does. |
-      | `test-feedback-system.mjs` | Reports that `studio.js` references a native window dialog. |
-      | `test-service-capacity.mjs` | Needs a running Portal; environmental, not a code failure. |
-
-      None of these run in `Test-PrePush.ps1` or CI, which is how they got here. Fixing them and
-      putting the ones that do not need a live server into the pre-push gate is the actual remedy.
-
-- [ ] **Make `PortalBrowserFixture` say what is actually wrong. Highest leverage, cheapest fix.**
-      When `InitializeAsync` fails, all 231 tests in the lane report the same contentless message —
-      `"The server has not been started or no web application was configured"` — which names none of
-      the real conditions. Catch around the `Factory.CreateClient()` call and report the inner
-      exception, the port being bound, and any stray `chrome.exe` or test-host processes still
-      holding it. This turns a twenty-minute investigation into a five-second one.
-
-      **This also corrects a diagnosis we had recorded and were acting on.** The failing line is
-      `Factory.CreateClient().Dispose()`, which runs *before* Playwright installs or launches
-      anything — so a leftover `chrome.exe` cannot be what makes it fail. It is the ASP.NET host
-      failing to start, most likely a port still held by the previous run's test host. Killing chrome
-      appeared to fix it twice, which is exactly the coincidence that cements a wrong cause. Do not
-      trust "kill chrome" as the remedy until the fixture reports the real one.
-
-- [ ] **A latent flake class in the DAG assertions: zero-area SVG is "invisible".**
-      `Locator.WaitForAsync()` defaults to waiting for *visible*, and an SVG path that is a perfectly
-      straight horizontal or vertical line has a zero-area bounding box — Playwright treats that as
-      not visible. Every `[data-dag-source=…]` assertion is therefore layout-dependent: any change
-      that happens to make an edge axis-aligned turns a passing test into a 30-second timeout with a
-      misleading message. This is not hypothetical — it is what
-      `Studio_PipelineCanvasUsesEngineDagAndPreservesScriptBytes` did when the pipeline palette
-      became a sidebar. Wait on `State = Attached`, or assert the path's own geometry, wherever the
-      claim is "this edge is drawn" rather than "this edge is on screen".
-
-- [ ] **Audit the shared mutable state the lane runs on.** `RoleJourneyTests` fails intermittently in
-      the full 231-test parallel run and passes in isolation, which is the signature. The fixture
-      deliberately shares one Portal, one seeded admin account, a `signInGate` semaphore, and a
-      `passwordChanged` flag across every test class — the design is documented and defensible, but it
-      is shared state under parallelism, and `ConnectorRegistry.Instance` (already recorded as a
-      mutable global whose order-dependence breaks connector and dialect tests) sits alongside it.
-      Establish which of these actually collides rather than guessing; the answer decides whether the
-      fix is isolation, ordering, or per-class fixtures.
+Stability work that leaves these in place will be measured by a suite nobody trusts, which is why
+they sit beside the browser work rather than inside it. The practice for anything not fixed there is
+the existing one: stabilize minimally to ship, then record it in
+[`docs/releases/flaky-test-stability.md`](docs/releases/flaky-test-stability.md).
 
 ## 4. Chart Property Gaps
 
