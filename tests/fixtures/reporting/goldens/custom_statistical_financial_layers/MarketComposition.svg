@@ -12,8 +12,8 @@
 <line class='plot-grid-line' x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb' stroke-width='1'/>
 <defs><clipPath id='MarketComposition-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#MarketComposition-plot-clip)'>
-<rect x='144.5' y='-30710' width='44.5' height='31250' rx='1' fill='#94a3b8' data-extent-axis='y' data-extent-anchor='end' data-row-index='0'><title>1000</title></rect>
-<rect x='404.5' y='-43210' width='44.5' height='43750' rx='1' fill='#94a3b8' data-extent-axis='y' data-extent-anchor='end' data-row-index='1'><title>1400</title></rect>
+<rect x='144.5' y='111.429' width='44.5' height='178.571' rx='1' fill='#94a3b8' data-extent-axis='y' data-extent-anchor='end' data-row-index='0'><title>1000</title></rect>
+<rect x='404.5' y='40' width='44.5' height='250' rx='1' fill='#94a3b8' data-extent-axis='y' data-extent-anchor='end' data-row-index='1'><title>1400</title></rect>
 <g class='plot-candlestick' data-layer='candles'>
 <g data-row-index='0' data-extent-axis='y'><title>Mon: O 10, H 15, L 8, C 13</title><line x1='190' y1='71.25' x2='190' y2='290' stroke='#26a69a'/><rect x='136.375' y='133.75' width='107.25' height='93.75' fill='#26a69a' stroke='#26a69a'/></g>
 <g data-row-index='1' data-extent-axis='y'><title>Tue: O 13, H 16, L 9, C 11</title><line x1='450' y1='40' x2='450' y2='258.75' stroke='#ef5350'/><rect x='396.375' y='133.75' width='107.25' height='62.5' fill='#ef5350' stroke='#ef5350'/></g>

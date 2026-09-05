@@ -992,9 +992,8 @@
             publishExportState('error', { reason: 'root-missing' });
             return;
         }
-        destroyDetailSurfaces(root); // Close detail surfaces before their marks disappear.
-        root.replaceChildren(); // Clear without reparsing HTML.
-        renderHeader(root, manifest);
+        const frag = document.createDocumentFragment();
+        renderHeader(frag, manifest);
 
 
         // Cache baseline manifest (the first one with no parameters set)
@@ -1025,21 +1024,23 @@
         }
         updateBodyTheme(manifest, activePageName);
 
+        /** @type {Record<string, HTMLElement>} */
+        const pageSections = {};
+        let effectiveActivePage = null;
+
         if (manifest.pages && manifest.pages.length > 0) {
-            /** @type {Record<string, HTMLElement>} */
-            const pageSections = {};
             const firstVisible = manifest.pages.find(p => !p.isHidden);
             const defaultPageName = navDef
                 ? (navDef.defaultPage || (firstVisible && firstVisible.name))
                 : (firstVisible && firstVisible.name);
-            const effectiveActivePage = activePageName || defaultPageName;
+            effectiveActivePage = activePageName || defaultPageName;
 
             manifest.pages.forEach(page => {
                 const reportStyles = manifest.styles || {};
                 const pageStyles = page.styles || {};
                 const pageTheme = getStyle(pageStyles, 'THEME') || getStyle(reportStyles, 'THEME') || getDefaultTheme(manifest);
                 const section = renderPage(manifest, page, pageSections, pageTheme);
-                root.appendChild(section);
+                frag.appendChild(section);
 
                 // Hidden pages start invisible; active page starts visible with active class
                 const isPageActive = !page.isHidden && (page.name === effectiveActivePage);
@@ -1053,11 +1054,7 @@
             });
 
             if (navDef) {
-                renderNavBar(root, navDef, pageSections, manifest.pages, manifest);
-                const activeSection = effectiveActivePage ? pageSections[effectiveActivePage] : null;
-                if (activeSection) {
-                    resizeChartsIn(activeSection);
-                }
+                renderNavBar(frag, navDef, pageSections, manifest.pages, manifest);
             } else if (manifest.pages.length > 0) {
                 // No navigation — show the first page by default
                 const firstPage = manifest.pages.find(p => !p.isHidden) || manifest.pages[0];
@@ -1065,11 +1062,20 @@
                 if (section) {
                     section.style.display = 'block';
                     section.classList.add('active');
-                    resizeChartsIn(section);
                 }
             }
         } else {
-            (manifest.visuals || []).forEach(v => renderVisual(root, v, getDefaultTheme(manifest), manifest));
+            (manifest.visuals || []).forEach(v => renderVisual(frag, v, getDefaultTheme(manifest), manifest));
+        }
+
+        destroyDetailSurfaces(root); // Close detail surfaces before their marks disappear.
+        root.replaceChildren(frag); // Atomic swap to eliminate white flash!
+
+        if (manifest.pages && manifest.pages.length > 0) {
+            const activeSection = effectiveActivePage ? pageSections[effectiveActivePage] : null;
+            if (activeSection) {
+                resizeChartsIn(activeSection);
+            }
         }
 
         // Synchronize parameter values to any newly rendered controls
@@ -2213,7 +2219,7 @@
     }
 
     // Filter types that render without requiring rows
-    const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'HTML', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX']);
+    const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'HTML', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX', 'IMAGE']);
 
     function renderVisual(container, visual, pageTheme, manifest, embedDepth = 0) {
         const card = document.createElement('div');
@@ -3624,6 +3630,62 @@
         _nativeLayoutObservers.push(observer);
     }
 
+    function findVisualInManifest(m, name) {
+        if (!m || !name) return null;
+        const lower = name.toLowerCase();
+        const top = (m.visuals || []).find(v => (v.name || '').toLowerCase() === lower);
+        if (top) return top;
+        if (m.pages) {
+            for (const p of m.pages) {
+                const pv = (p.visuals || []).find(v => (v.name || '').toLowerCase() === lower);
+                if (pv) return pv;
+            }
+        }
+        return null;
+    }
+
+    function updateNativeVisualInPlace(card, visual) {
+        const wrapper = card.querySelector('.native-chart-wrapper');
+        if (!wrapper) return false;
+
+        const parsed = new DOMParser().parseFromString(String(visual.nativeSvg || ''), 'image/svg+xml');
+        const newSvg = parsed.documentElement;
+        if (!newSvg || newSvg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
+            return false;
+        }
+
+        const oldSvg = wrapper.querySelector('svg');
+        if (oldSvg) {
+            wrapper.replaceChild(document.importNode(newSvg, true), oldSvg);
+        } else {
+            wrapper.appendChild(document.importNode(newSvg, true));
+        }
+
+        if (visual.layout?.tier) {
+            /** @type {HTMLElement} */ (wrapper).dataset.layoutTier = String(visual.layout.tier).toUpperCase();
+        }
+
+        const interaction = resolveInteraction(visual);
+        applyNativeHighlight(/** @type {HTMLElement} */ (wrapper), visual, interaction);
+
+        const vopts = visual.options || {};
+        const crosshairOpt = (vopts['CROSSHAIR'] || '').toUpperCase();
+        const linkTooltipGroup = vopts['LINK_TOOLTIP'] ? vopts['LINK_TOOLTIP'].trim() : null;
+        const svgEl = wrapper.querySelector('svg');
+        if (svgEl && (crosshairOpt === 'ON' || crosshairOpt === 'TRUE' || vopts['CROSSHAIR_AXIS'] || linkTooltipGroup)) {
+            let crosshairG = svgEl.querySelector('.plot-crosshair-group');
+            if (!crosshairG) {
+                crosshairG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                crosshairG.setAttribute('class', 'plot-crosshair-group');
+                crosshairG.setAttribute('pointer-events', 'none');
+                /** @type {HTMLElement} */ (crosshairG).style.display = 'none';
+                svgEl.appendChild(crosshairG);
+            }
+        }
+
+        return true;
+    }
+
     async function requestNativeLayout(visualName, tier) {
         const previous = _nativeLayoutRequests.get(visualName);
         if (previous?.tier === tier) return;
@@ -3641,7 +3703,33 @@
             if (!response.ok) return;
             const manifest = await response.json();
             if (_nativeLayoutRequests.get(visualName)?.controller !== controller) return;
-            renderManifest(manifest);
+
+            const newVisual = findVisualInManifest(manifest, visualName);
+            const targetVisual = findVisualInManifest(_lastManifest, visualName);
+            const cards = document.querySelectorAll('.visual-card');
+            const card = Array.from(cards).find(c => (c.getAttribute('data-name') || '').toLowerCase() === visualName.toLowerCase());
+
+            let updatedInPlace = false;
+            if (newVisual && targetVisual && card) {
+                targetVisual.nativeSvg = newVisual.nativeSvg;
+                if (targetVisual.layout && newVisual.layout) {
+                    targetVisual.layout.tier = newVisual.layout.tier;
+                }
+                if (window.__CURRENT_MANIFEST__) {
+                    const currVisual = findVisualInManifest(window.__CURRENT_MANIFEST__, visualName);
+                    if (currVisual) {
+                        currVisual.nativeSvg = newVisual.nativeSvg;
+                        if (currVisual.layout && newVisual.layout) {
+                            currVisual.layout.tier = newVisual.layout.tier;
+                        }
+                    }
+                }
+                updatedInPlace = updateNativeVisualInPlace(/** @type {HTMLElement} */ (card), targetVisual);
+            }
+
+            if (!updatedInPlace) {
+                renderManifest(manifest);
+            }
         } catch (error) {
             if (error?.name !== 'AbortError') console.warn('Native chart layout refresh failed:', error);
         } finally {
@@ -5487,7 +5575,9 @@
             ? (visual.columns || []).findIndex(c => c.toLowerCase() === valueColName.toLowerCase())
             : 0;
         const row = visual.rows && visual.rows[0] ? visual.rows[0] : null;
-        const rawValue = row ? parseFloat(row[valIdx >= 0 ? valIdx : 0] ?? '0') : null;
+        const rawCell = row ? (row[valIdx >= 0 ? valIdx : 0] ?? null) : null;
+        const isNumeric = rawCell !== null && rawCell !== '' && !isNaN(Number(rawCell));
+        const rawValue = isNumeric ? parseFloat(String(rawCell)) : null;
 
         const formatOpt    = getOption(opts, 'format');
         const doAbbreviate = isOn(getOption(opts, 'abbreviate'));
@@ -5495,14 +5585,16 @@
         const suffix       = getOption(opts, 'suffix') || '';
 
         let displayValue;
-        if (rawValue === null) {
+        if (rawCell === null) {
             displayValue = 'No data';
-        } else if (doAbbreviate) {
+        } else if (!isNumeric) {
+            displayValue = prefix + String(rawCell) + suffix;
+        } else if (doAbbreviate && rawValue !== null) {
             displayValue = prefix + abbreviateNumber(rawValue, formatOpt) + suffix;
-        } else if (formatOpt) {
+        } else if (formatOpt && rawValue !== null) {
             displayValue = prefix + formatValue(rawValue, formatOpt) + suffix;
         } else {
-            displayValue = prefix + String(rawValue) + suffix;
+            displayValue = prefix + String(rawValue ?? rawCell) + suffix;
         }
 
         // ── Goal ───────────────────────────────────────────────────────────
@@ -6231,6 +6323,8 @@
                 if (overflowEl) wrapper.appendChild(overflowEl);
             }
         }
+
+        container.appendChild(wrapper);
     }
 
     // ── Text ────────────────────────────────────────────────────────────────

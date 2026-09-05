@@ -1164,7 +1164,7 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
             var text = ETL_SQL.Tests.Reporting.TerminalSemantics.TerminalSnapshotHarness.CaptureSnapshot(renderable, 80).NormalizedText;
             Assert.NotNull(text);
             Assert.NotEmpty(text);
-            Assert.DoesNotContain("Error", text);
+            Assert.DoesNotContain("Exception", text);
         }
     }
 

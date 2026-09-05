@@ -166,7 +166,7 @@ public sealed class AnalyticalOverlayTests
         var error = Assert.Throws<InvalidOperationException>(() =>
             new NamedVisualChartLowerer(new SystemExecutionContext()).Lower(statement,
                 Manifest("V", ["Period", "Amount"], [["A", "10"]])));
-        Assert.Contains("supported only on LINE and BAR", error.Message);
+        Assert.Contains("supported only on LINE, BAR, and HORIZONTALBAR", error.Message);
     }
 
     [Fact]

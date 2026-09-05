@@ -78,7 +78,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             if (errorBarStyleOption is not null)
             {
                 var upper = errorBarStyleOption.ToUpperInvariant();
-                if (upper is not ("CAPS" or "NO_CAPS"))
+                if (upper is not ("CAPS" or "CAP" or "NO_CAPS" or "NO_CAP"))
                     throw new InvalidOperationException($"Invalid ERROR_BAR_STYLE '{errorBarStyleOption}'. Valid values are CAPS or NO_CAPS.");
             }
         }
@@ -192,8 +192,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             }
             if (overlay.OverlayType is OverlayType.RunningTotal or OverlayType.PercentOfTotal)
             {
-                if (statement.VisualType is not (VisualType.Line or VisualType.Bar))
-                    throw new InvalidOperationException($"{OverlayName(overlay.OverlayType)} overlay is supported only on LINE and BAR visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+                if (statement.VisualType is not (VisualType.Line or VisualType.Bar or VisualType.HorizontalBar))
+                    throw new InvalidOperationException($"{OverlayName(overlay.OverlayType)} overlay is supported only on LINE, BAR, and HORIZONTALBAR visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
                 if (!HasPrimaryValueMapping(statement))
                     throw new InvalidOperationException($"{OverlayName(overlay.OverlayType)} overlay requires a primary quantitative Y mapping.");
                 if (string.IsNullOrWhiteSpace(overlay.TableCalculationField))
@@ -460,10 +460,10 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 VisualType.Radar => ResolveRadarLayerStyle(statement, manifest),
                 VisualType.Scatter when bindings.Any(b => b.Channel == FieldChannel.ErrorLow) && bindings.Any(b => b.Channel == FieldChannel.ErrorHigh) =>
                     ImmutableArray.Create(new StyleToken("errorBarStyle",
-                        (statement.Options.FirstOrDefault(o => o.Key.Equals("ERROR_BAR_STYLE", StringComparison.OrdinalIgnoreCase))?.Value ?? "CAPS").ToUpperInvariant())),
+                        NormalizeErrorBarStyle(statement.Options.FirstOrDefault(o => o.Key.Equals("ERROR_BAR_STYLE", StringComparison.OrdinalIgnoreCase))?.Value))),
                 VisualType.Scatter =>
                     statement.Options.FirstOrDefault(o => o.Key.Equals("ERROR_BAR_STYLE", StringComparison.OrdinalIgnoreCase)) is { } styleOpt
-                        ? ImmutableArray.Create(new StyleToken("errorBarStyle", styleOpt.Value.ToUpperInvariant()))
+                        ? ImmutableArray.Create(new StyleToken("errorBarStyle", NormalizeErrorBarStyle(styleOpt.Value)))
                         : ImmutableArray<StyleToken>.Empty,
                 VisualType.Map => ResolveMapLayerStyle(statement, manifest),
                 _ => ImmutableArray<StyleToken>.Empty
@@ -2153,6 +2153,12 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
     private static bool IsAreaLine(CreateVisualStatement statement) =>
         statement.Options.Any(o => o.Key.Equals("AREA", StringComparison.OrdinalIgnoreCase) &&
             (o.Value.Equals("ON", StringComparison.OrdinalIgnoreCase) || o.Value.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || o.Value == "1"));
+
+    private static string NormalizeErrorBarStyle(string? value)
+    {
+        var upper = value?.ToUpperInvariant();
+        return upper is "NO_CAP" or "NO_CAPS" ? "NO_CAPS" : "CAPS";
+    }
 
     private static string Sanitize(string value) => new(value.Select(character => char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : '-').ToArray());
 }

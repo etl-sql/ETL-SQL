@@ -2451,9 +2451,11 @@ internal sealed class PlotPlanSvgRenderer
 
         if (isHorizontal)
         {
-            var valueScale = plan.Scales.First(item => item.Channel == FieldChannel.X || item.Channel == FieldChannel.Y);
-            var catScale = plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.X && item != valueScale)
-                ?? plan.Scales.First(item => item.Categories.Length > 0);
+            var catScale = plan.Scales.FirstOrDefault(item => item.Categories.Length > 0)
+                ?? plan.Scales.First(item => item.Channel == FieldChannel.X);
+            var valueScale = plan.Scales.FirstOrDefault(item => item != catScale && item.Categories.Length == 0)
+                ?? plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y)
+                ?? plan.Scales.First();
             var categories = catScale.Categories;
             var slot = plotHeight / Math.Max(1, categories.Length);
 
