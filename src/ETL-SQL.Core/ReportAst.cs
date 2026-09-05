@@ -41,12 +41,21 @@ public enum DetailSurfaceKind
 /// A tooltip that can be plain text, a reference to an existing named container,
 /// or an inline anonymous container (optional markdown + visual list).
 /// </summary>
+/// <summary>One entry of a declarative <c>TOOLTIP (FIELDS = (...))</c> list.</summary>
+public record TooltipField(string Name, string? Format = null);
+
 public record TooltipDefinition
 {
     public Expression? PlainText { get; init; }
     public string? ContainerRef { get; init; }
     public string? InlineMarkdown { get; init; }
     public List<string>? InlineVisuals { get; init; }
+
+    /// <summary>
+    /// The middle tier between a static text tooltip and a full popover container: a formatted
+    /// field list drawn from the visual's SOURCE columns.
+    /// </summary>
+    public List<TooltipField>? Fields { get; init; }
 
     /// <summary>
     /// The detail surface this definition projects to. Text tooltips are transient; inline and
@@ -64,7 +73,8 @@ public record TooltipDefinition
     /// transient tooltip, but it must be validated as an inline surface so an empty block
     /// is rejected rather than silently treated as a text tooltip with no text.
     /// </summary>
-    public bool IsInline => ContainerRef == null && (InlineVisuals != null || InlineMarkdown != null);
+    public bool IsInline => ContainerRef == null &&
+        (InlineVisuals != null || InlineMarkdown != null || Fields is { Count: > 0 });
 
     public static TooltipDefinition Text(Expression text) =>
         new() { PlainText = text };
@@ -74,6 +84,9 @@ public record TooltipDefinition
 
     public static TooltipDefinition Inline(string? markdown, List<string> visuals) =>
         new() { InlineMarkdown = markdown, InlineVisuals = visuals };
+
+    public static TooltipDefinition FieldList(string? markdown, List<TooltipField> fields) =>
+        new() { InlineMarkdown = markdown, Fields = fields };
 }
 
 // ── Title & Subtitle Typography Definition ────────────────────────────────
@@ -363,6 +376,16 @@ public record OpenUrlAction : VisualAction
 {
     public required string Url { get; init; }
     public string Target { get; init; } = "_blank";
+
+    /// <summary>
+    /// True when the author wrote the <c>TEMPLATE = ...</c> form. <see cref="Url"/> then carries a
+    /// template whose <c>{Field}</c> placeholders are filled from the clicked row at run time.
+    /// </summary>
+    public bool IsTemplate { get; init; }
+
+    /// <summary>Column aliases the template may interpolate; empty means every placeholder is rejected.</summary>
+    public List<string> Params { get; init; } = new();
+
     public override string ToSql() => AstSerializer.Format(this);
 }
 

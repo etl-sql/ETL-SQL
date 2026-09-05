@@ -58,6 +58,13 @@ CREATE VISUAL VisualName AS HBAR (
 
 ## Options
 
+- **PLOT_BACKGROUND = '#rrggbb'|'transparent'** - fills the region bounded by the axes, independently of the visual card.
+- **PLOT_BORDER = 'width style #rrggbb'** - outlines that same plot region (e.g. `'1px dashed #94a3b8'`).
+- **AXIS_FONT_SIZE = n / AXIS_FONT_COLOR = '#rrggbb' / AXIS_TITLE_FONT_SIZE = n** - typography for axis tick labels and axis titles (defaults `9`, `#666`/`#444`, and `10`).
+- **SHOW_EXPORT = ON|OFF** - adds a per-chart PNG download button (default OFF).
+- **SHOW_DATA_VIEW = ON|OFF** - adds a per-chart toggle between the chart and a table of its SOURCE rows (default OFF).
+- **ZOOM_GROUP = 'groupName'** - links the range sliders of every chart naming the same group; implies `ZOOM_SLIDER = ON`.
+
 - **STACKED = ON|OFF|100PCT** - Uses grouped bars, cumulative stacking, or normalized 100% stacking. Default is `OFF`.
 - **SERIES_GAP = 0..1** - Sets the gap between bars in a grouped cluster as a fraction of bar width.
 - **OUTER_PADDING = 0..1** - Adds category-band padding before the first and after the last bar. Default is `0`.

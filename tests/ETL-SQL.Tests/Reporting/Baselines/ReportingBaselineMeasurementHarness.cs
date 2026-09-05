@@ -110,8 +110,17 @@ public class ReportingBaselineMeasurementHarness
         if (!Directory.Exists(runtimeDir))
             return Array.Empty<BundleAssetMeasurement>();
 
+        // What this measures is the payload a *report viewer* downloads, which is what both gates
+        // built on it claim: the phase-8 comparison against the ECharts-era bundle, and the
+        // reviewed payload budget. The `designer/` subtree is the Studio authoring workbench —
+        // CodeMirror, the pipeline canvas, the connection wizard — and is never served to a report
+        // viewer. It moved under Resources/Shared after those baselines were taken and swept itself
+        // into both measurements, which made the phase-8 assertion compare a runtime bundle against
+        // a runtime-plus-workbench total. Authoring payload belongs to its own gate, not this one.
+        var authoringPrefix = Path.Combine(runtimeDir, "designer") + Path.DirectorySeparatorChar;
         var assetFiles = Directory.GetFiles(runtimeDir, "*.*", SearchOption.AllDirectories)
             .Where(f => !f.EndsWith(".geojson", StringComparison.OrdinalIgnoreCase))
+            .Where(f => !f.StartsWith(authoringPrefix, StringComparison.OrdinalIgnoreCase))
             .OrderBy(f => f)
             .ToList();
 

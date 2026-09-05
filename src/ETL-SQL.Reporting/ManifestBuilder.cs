@@ -1289,7 +1289,9 @@ namespace ETL_SQL.Reporting
                     Type = "OPEN_URL",
                     Trigger = action.Trigger,
                     Url = ou.Url,
-                    Target = ou.Target
+                    Target = ou.Target,
+                    UrlTemplate = ou.IsTemplate ? true : null,
+                    UrlParams = ou.Params.Count > 0 ? ou.Params : null
                 },
                 ShowModalAction sm => new VisualActionManifest
                 {

@@ -180,9 +180,53 @@ CREATE VISUAL RankedBar AS BAR (
     OPTIONS (AXIS_SORT = VALUE_DESC)
 );
 
+-- REFERENCE_LINE and REFERENCE_BAND overlays on a bar chart
+CREATE VISUAL ReferenceBar AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    TITLE = 'Reference Line and Shaded Reference Band',
+    MAPPINGS (X = Month, Y = Revenue),
+    OVERLAYS (
+        REFERENCE_LINE (VALUE = 300, LABEL = 'Board Target', STYLE = DASHED, COLOR = '#dc2626'),
+        REFERENCE_BAND (LOW = 220, HIGH = 340, COLOR = '#e0e7ff', LABEL = 'Planning Range')
+    )
+);
+
+-- Plot-area panel styling and axis typography, independent of the visual card
+CREATE VISUAL PanelStyledBar AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    TITLE = 'PLOT_BACKGROUND / PLOT_BORDER with Axis Typography',
+    MAPPINGS (X = Month, Y = Revenue),
+    OPTIONS (
+        X_AXIS (LABEL = 'Month'),
+        Y_AXIS (LABEL = 'Revenue'),
+        PLOT_BACKGROUND     = '#f8fafc',
+        PLOT_BORDER         = '1px dashed #94a3b8',
+        AXIS_FONT_SIZE      = 11,
+        AXIS_FONT_COLOR     = '#334155',
+        AXIS_TITLE_FONT_SIZE = 13,
+        GRID_LINES          = ON
+    )
+);
+
+-- Interaction surface: a declarative field-list tooltip, a templated URL action, and
+-- EMIT_FILTER so a selection here only reaches the two visuals named below.
+CREATE VISUAL InteractiveBar AS BAR (
+    SOURCE = #sales,
+    TITLE = 'TOOLTIP FIELDS, OPEN_URL TEMPLATE, and targeted EMIT_FILTER',
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
+    TOOLTIP (FIELDS = (Month, Region, Revenue FORMAT 'C0', Target FORMAT 'N0')),
+    OPTIONS (LEGEND_POSITION = TOP),
+    ACTIONS (
+        ON_CLICK = OPEN_URL(
+            TEMPLATE = 'https://example.com/regions/{Region}?month={Month}',
+            PARAMS   = (Region, Month))
+    ),
+    EMIT_FILTER (TARGETS = (BasicBar, GroupedBar))
+);
+
 -- Page Layout
 CREATE PAGE BarKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C D / E F / G G / H I J / K L',
+    STRUCTURE = 'A B / C D / E F / G G / H I J / K L / M N / O O',
     MAP (
         'A' = BasicBar,
         'B' = GroupedBar,
@@ -195,7 +239,10 @@ CREATE PAGE BarKitchenSink AS DASHBOARD (
         'I' = DescBar,
         'J' = RankedBar,
         'K' = AdvancedGridBar,
-        'L' = FullLegendBar
+        'L' = FullLegendBar,
+        'M' = ReferenceBar,
+        'N' = PanelStyledBar,
+        'O' = InteractiveBar
     )
 );
 

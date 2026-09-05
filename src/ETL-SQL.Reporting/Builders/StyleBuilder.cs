@@ -207,6 +207,9 @@ namespace ETL_SQL.Reporting.Builders
                         : TooltipManifest.TooltipMode,
                     Markdown = tooltip.InlineMarkdown,
                     Visuals = tooltip.InlineVisuals,
+                    Fields = tooltip.Fields?
+                        .Select(field => new TooltipFieldManifest { Name = field.Name, Format = field.Format })
+                        .ToList(),
                     ResolvedVisuals = resolved.Visuals.ToList()
                 });
             }

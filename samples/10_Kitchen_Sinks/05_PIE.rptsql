@@ -92,16 +92,33 @@ CREATE VISUAL ExplodeAllLegendPie AS PIE (
     )
 );
 
+-- 8. Leader lines from each slice to its displaced outside label
+CREATE VISUAL LeaderLinePie AS PIE (
+    SOURCE = #channels,
+    TITLE = 'DATA_LABELS LEADER_LINE = ON (displaced outside labels)',
+    MAPPINGS (LABEL = Channel, VALUE = Users),
+    OPTIONS (
+        LEGEND      = OFF,
+        DATA_LABELS = ON WITH (
+            POSITION         = 'OUTSIDE',
+            LEADER_LINE      = ON WITH (COLOR = '#64748b', STYLE = DASHED),
+            LABEL_BACKGROUND = '#ffffff',
+            LABEL_BORDER     = '1px solid #cbd5e1'
+        )
+    )
+);
+
 -- Page Layout
 CREATE PAGE PieKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B C / D E F',
+    STRUCTURE = 'A B C / D E F / G . .',
     MAP (
         'A' = BasicPie,
         'B' = PercentPie,
         'C' = StyledPie,
         'D' = SortedBorderedPie,
         'E' = ExplodedThresholdPie,
-        'F' = ExplodeAllLegendPie
+        'F' = ExplodeAllLegendPie,
+        'G' = LeaderLinePie
     )
 );
 

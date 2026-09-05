@@ -174,7 +174,7 @@ namespace ETL_SQL.ReportHosting
         /// <summary>
         /// Updates multiple parameters atomically and re-evaluates only the affected visuals.
         /// </summary>
-        public async Task<ReportManifest> SetParametersAsync(IEnumerable<(string Name, string Value)> updates, bool isInteraction = false, string? pageName = null)
+        public async Task<ReportManifest> SetParametersAsync(IEnumerable<(string Name, string Value)> updates, bool isInteraction = false, string? pageName = null, string? sourceVisual = null)
         {
             var updateList = updates.ToList();
             // Warm the session on first access so interaction calls have a live evaluator to work with.
@@ -221,7 +221,7 @@ namespace ETL_SQL.ReportHosting
                     }
 
                     var refreshManifest = isInteraction ? _manifest : CloneManifest(_manifest);
-                    int refreshCount = await ReportInteractionRefresher.RefreshAffectedVisualsAsync(_evaluator, refreshManifest, updateList, isInteraction);
+                    int refreshCount = await ReportInteractionRefresher.RefreshAffectedVisualsAsync(_evaluator, refreshManifest, updateList, isInteraction, sourceVisual);
                     if (!isInteraction)
                     {
                         // One reference swap publishes the complete parameter/visual state.

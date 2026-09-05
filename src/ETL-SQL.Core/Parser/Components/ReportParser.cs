@@ -110,6 +110,29 @@ public class ReportParser : ParserComponent
                 interactions.AddRange(ParseInteractions());
                 Consume(TokenType.RPAREN, "Expected ')' to close INTERACTIONS");
             }
+            else if (IsCurrentValue("EMIT_FILTER"))
+            {
+                // The send side of cross-filtering. INTERACTIONS says how a visual *receives* a
+                // selection; EMIT_FILTER says which visuals a selection made *here* may reach.
+                Advance();
+                Consume(TokenType.LPAREN, "Expected '(' after EMIT_FILTER");
+                var emitKey = ConsumeIdentifier("Expected TARGETS in EMIT_FILTER").Value.ToUpperInvariant();
+                if (emitKey != "TARGETS")
+                    throw new SyntaxException($"Expected TARGETS option in EMIT_FILTER but got '{emitKey}'", _parser.Previous.Line, _parser.Previous.Column);
+                Consume(TokenType.EQUALS, "Expected '=' after TARGETS");
+                Consume(TokenType.LPAREN, "Expected '(' after TARGETS =");
+                var emitTargets = new List<string>();
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    emitTargets.Add(ConsumeAdvancedWord("Expected a visual name in EMIT_FILTER TARGETS"));
+                    if (!Match(TokenType.COMMA)) break;
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close TARGETS");
+                Consume(TokenType.RPAREN, "Expected ')' to close EMIT_FILTER");
+                if (emitTargets.Count == 0)
+                    throw new SyntaxException("EMIT_FILTER TARGETS requires at least one visual name", _parser.Previous.Line, _parser.Previous.Column);
+                options.Add(new VisualOption { Key = "EMIT_FILTER:TARGETS", Value = string.Join(",", emitTargets) });
+            }
             else if (Match(TokenType.STYLE))
             {
                 ParseStyleClause(styles, ref styleName, ref palette);
@@ -3630,8 +3653,39 @@ public class ReportParser : ParserComponent
                 Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP VISUALS");
             }
 
+            // FIELDS = (FieldA FORMAT 'C0', FieldB) — the declarative middle tier. Field names are
+            // column aliases from the visual's SOURCE; FORMAT follows the DATA_LABELS convention.
+            List<TooltipField>? fields = null;
+            if (_parser.Current.Value.Equals("FIELDS", StringComparison.OrdinalIgnoreCase))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                Consume(TokenType.LPAREN, "Expected '(' after FIELDS in TOOLTIP");
+                fields = new List<TooltipField>();
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    // Column aliases routinely collide with keywords (SHARE, VALUE, TOTAL), so any
+                    // word that is not punctuation is accepted as a field name here.
+                    var fieldName = ConsumeAdvancedWord("Expected a field name in TOOLTIP FIELDS");
+                    string? format = null;
+                    if (Match(TokenType.FORMAT) || IsCurrentValue("FORMAT"))
+                    {
+                        if (_parser.Previous.Type != TokenType.FORMAT) Advance();
+                        Match(TokenType.EQUALS);
+                        format = ConsumeIdentifierOrString("Expected a format string after FORMAT").Value;
+                    }
+                    fields.Add(new TooltipField(fieldName, format));
+                    if (!Match(TokenType.COMMA)) break;
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP FIELDS");
+                if (fields.Count == 0)
+                    throw new SyntaxException("TOOLTIP FIELDS requires at least one field", _parser.Previous.Line, _parser.Previous.Column);
+            }
+
             Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP inline block");
-            return TooltipDefinition.Inline(markdown, visuals);
+            return fields is null
+                ? TooltipDefinition.Inline(markdown, visuals)
+                : new TooltipDefinition { InlineMarkdown = markdown, InlineVisuals = visuals.Count > 0 ? visuals : null, Fields = fields };
         }
 
         if (ReportCheck(TokenType.STRING_LITERAL))
@@ -4758,18 +4812,62 @@ public class ReportParser : ParserComponent
         else if (Match(TokenType.OPEN_URL))
         {
             Consume(TokenType.LPAREN, "Expected '(' after OPEN_URL");
-            var url = ConsumeReportOptionValue();
+            string url;
             string target = "_blank";
-            if (Match(TokenType.COMMA))
+            var isTemplate = false;
+            var urlParams = new List<string>();
+
+            // Two forms share the clause: a positional literal URL, and the named TEMPLATE form
+            // whose {Field} placeholders are filled from the clicked row.
+            if (IsCurrentValue("TEMPLATE"))
             {
-                var optKey = ConsumeIdentifier("Expected TARGET in OPEN_URL").Value.ToUpperInvariant();
-                if (optKey != "TARGET")
-                    throw new SyntaxException($"Expected TARGET option in OPEN_URL but got '{optKey}'", _parser.Previous.Line, _parser.Previous.Column);
-                Consume(TokenType.EQUALS, "Expected '=' after TARGET");
-                target = ConsumeReportOptionValue();
+                Advance();
+                Consume(TokenType.EQUALS, "Expected '=' after TEMPLATE");
+                url = ConsumeReportOptionValue();
+                isTemplate = true;
+            }
+            else
+            {
+                url = ConsumeReportOptionValue();
+            }
+
+            while (Match(TokenType.COMMA))
+            {
+                var optKey = ConsumeIdentifier("Expected TARGET or PARAMS in OPEN_URL").Value.ToUpperInvariant();
+                if (optKey == "TARGET")
+                {
+                    Consume(TokenType.EQUALS, "Expected '=' after TARGET");
+                    target = ConsumeReportOptionValue();
+                }
+                else if (optKey == "PARAMS")
+                {
+                    if (!isTemplate)
+                        throw new SyntaxException("OPEN_URL PARAMS requires the TEMPLATE form", _parser.Previous.Line, _parser.Previous.Column);
+                    Consume(TokenType.EQUALS, "Expected '=' after PARAMS");
+                    Consume(TokenType.LPAREN, "Expected '(' after PARAMS =");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        // Column aliases collide with keywords (MONTH, VALUE, SHARE), so any
+                        // non-punctuation word is accepted here.
+                        urlParams.Add(ConsumeAdvancedWord("Expected a field name in OPEN_URL PARAMS"));
+                        if (!Match(TokenType.COMMA)) break;
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close PARAMS");
+                }
+                else
+                {
+                    throw new SyntaxException($"Expected TARGET or PARAMS option in OPEN_URL but got '{optKey}'", _parser.Previous.Line, _parser.Previous.Column);
+                }
             }
             Consume(TokenType.RPAREN, "Expected ')' to close OPEN_URL");
-            action = new OpenUrlAction { Trigger = trigger, Url = url, Target = target };
+            action = new OpenUrlAction
+            {
+                Trigger = trigger,
+                Url = url,
+                Target = target,
+                IsTemplate = isTemplate,
+                Params = urlParams
+            };
         }
         else if (Match(TokenType.SHOW_MODAL))
         {

@@ -12,6 +12,56 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+- **Charts close the last thirteen property gaps from the Power BI / Tableau / ggplot2 comparison.**
+  Line geometry gains `INTERPOLATION = LINEAR|SMOOTH|STEP_BEFORE|STEP_AFTER` and
+  `LINE_DASH = SOLID|DASHED|DOTTED` on `LINE`, `COMBO`, and `CUSTOM CHART` layers; `INTERPOLATION`
+  wins over `SMOOTH` when both are set, so `LINEAR` is how an author overrides an inherited curve.
+  The plot area can now be styled apart from the card it sits in, with `PLOT_BACKGROUND`,
+  `PLOT_BORDER`, and the axis typography trio `AXIS_FONT_SIZE`, `AXIS_FONT_COLOR`, and
+  `AXIS_TITLE_FONT_SIZE`. Their defaults reproduce the previous hard-coded attributes byte for byte,
+  which is asserted directly, so a chart that sets none of them renders exactly as before.
+- **Dense series stop being drawn point by point.** `SAMPLING = NONE|LTTB|AVERAGE|MAX|MIN` reduces
+  what a `LINE`, `SCATTER`, `BUBBLE`, or `COMBO` chart draws at render time, and `PROGRESSIVE = ON`
+  with `PROGRESSIVE_CHUNK = n` reveals those marks in batches across animation frames instead of one
+  layout pass. Sampling never invents a point: each bucket contributes a real row, so a sampled mark
+  keeps its own row index, tooltip, and selection identity, and `AVERAGE` means the row nearest the
+  bucket mean rather than a fabricated average. The resolved plan still carries every row — only the
+  drawing is reduced — so the plan hash continues to describe the data.
+- **Charts get their own toolbox and can share a zoom.** `SHOW_EXPORT = ON` adds a per-chart PNG
+  download (what saves is what is on screen, zoom included), `SHOW_DATA_VIEW = ON` toggles between
+  the chart and a table of its `SOURCE` rows, and `ZOOM_GROUP = 'name'` links the range sliders of
+  every chart naming the same group so zooming one scrolls them all.
+- **Tooltips gain a middle tier, and cross-filtering gains a send side.**
+  `TOOLTIP (FIELDS = (Col FORMAT 'C0', ...))` renders a formatted field list from the hovered row
+  with no server round-trip and no `CREATE CONTAINER`. `EMIT_FILTER (TARGETS = (Visual, ...))` says
+  which visuals a selection made *here* may reach, complementing the receive-side `INTERACTIONS`
+  clause; the interaction request now carries its source visual so the server can honour it. Without
+  the clause every receiving visual still responds, as before.
+- **`OPEN_URL` can build a URL from the clicked row.**
+  `OPEN_URL(TEMPLATE = 'https://…/{Region}', PARAMS = (Region))` interpolates only the columns the
+  author declared, and URL-encodes every value, so a row value cannot introduce a path segment, a
+  query parameter, or a scheme of its own. A placeholder naming an undeclared or missing column
+  resolves to empty rather than being left in the URL, and `PARAMS` without `TEMPLATE` is rejected.
+- **A displaced data label is connected to its mark again.** Adding `DATA_LABELS LEADER_LINE`
+  styling put the leader behind an opt-in gate on the *shared* smart-label path, which silently
+  dropped the connector whenever the renderer moved a label on its own to resolve a collision — the
+  guarantee that placement is supposed to provide, since a label moved without the author asking has
+  to stay attributable. The connector is drawn again on displacement, `LEADER_LINE` styles it, and an
+  explicit `OFF` suppresses it. `PIE` and `DONUT` outside labels are a separate surface and keep
+  their documented `OFF` default.
+- **The reporting payload gates were measuring the wrong bundle.** Both the phase-8 native-catalog
+  comparison and the reviewed payload budget summed `Resources/Shared/**` recursively, and the Studio
+  authoring workbench — CodeMirror, the pipeline canvas, the connection wizard, 1.79 MB of it — moved
+  under that directory after the baselines were taken. The phase-8 assertion was therefore comparing
+  a report-runtime bundle against a runtime-plus-workbench total, and had been failing on a
+  comparison that could no longer hold. Both gates now measure what a report viewer actually
+  downloads: 2,977,679 B → 1,188,724 B raw, in line with the budget's own long-standing default seed.
+- **The chart kitchen sinks cover every option they name.** `samples/10_Kitchen_Sinks/` gains visuals
+  for the reference-line and reference-band overlays, plot-panel styling, step interpolation, series
+  dash, null handling, sampling and progressive rendering, the chart toolbox and linked zoom, pie
+  leader lines, synchronized and mark-overridden combo axes, scatter and bubble marker sizing with
+  conditional colour, and the forecast overlay. All 41 files run clean.
+
 - **ETL-SQL Studio ships as an Alpha, and does not replace the Report Builder or the Workstation
   Editor.** Both remain the supported way to do the work Studio is still proving it can do; nothing
   is deprecated and no entry point is retired in this release. Studio is available, usable, and

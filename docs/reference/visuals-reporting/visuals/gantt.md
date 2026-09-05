@@ -18,7 +18,7 @@ CREATE VISUAL VisualName AS GANTT (
     COLOR = col_color
   ),
   OPTIONS (
-    TITLE = 'Project Roadmap',
+    TITLE = 'Project Timeline',
     TODAY_LINE = ON,
     TODAY_COLOR = '#ef4444',
     TODAY_DATE = '2026-03-15',
@@ -69,7 +69,7 @@ CREATE VISUAL ProjectRoadmap AS GANTT (
     DEPENDS_ON = Pred
   ),
   OPTIONS (
-    TITLE          = 'Product Delivery Roadmap',
+    TITLE          = 'Product Delivery Schedule',
     TODAY_LINE     = ON,
     TODAY_COLOR    = '#e11d48',
     LABEL_POSITION = LEFT

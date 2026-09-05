@@ -42,6 +42,9 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         }
         ValidatePointStrokeOptions(statement);
         ValidateLineWidthOption(statement);
+        ValidateLineGeometryOptions(statement);
+        ValidatePanelAndAxisTypographyOptions(statement);
+        ValidateLargeDataAndToolboxOptions(statement);
         ValidateLegendOptions(statement);
         ValidatePieDonutOptions(statement);
         ValidateScatterBubbleOptions(statement);
@@ -328,6 +331,10 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             option.Key.Equals("SYMBOL_STROKE_WIDTH", StringComparison.OrdinalIgnoreCase))?.Value;
         var lineWidth = statement.Options.FirstOrDefault(option =>
             option.Key.Equals("LINE_WIDTH", StringComparison.OrdinalIgnoreCase))?.Value;
+        var interpolation = NormalizeInterpolation(statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase))?.Value);
+        var lineDash = NormalizeLineDash(statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("LINE_DASH", StringComparison.OrdinalIgnoreCase))?.Value);
         var areaBaseline = statement.Options.FirstOrDefault(option =>
             option.Key.Equals("AREA_BASELINE", StringComparison.OrdinalIgnoreCase))?.Value;
         var hoverFocus = statement.Options.FirstOrDefault(option =>
@@ -364,6 +371,15 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             if (syncAxes is not null && IsOn(syncAxes)) st = st.Add(new StyleToken("SYNC_AXES", "ON"));
             return st;
         }
+
+        // INTERPOLATION and LINE_DASH only reach line-shaped marks; the validator has already
+        // rejected them on every visual type other than LINE and COMBO.
+        ImmutableArray<StyleToken> AppendLineGeometry(ImmutableArray<StyleToken> st)
+        {
+            if (interpolation is not null) st = st.Add(new StyleToken("INTERPOLATION", interpolation));
+            if (lineDash is not null) st = st.Add(new StyleToken("lineStyle", lineDash));
+            return st;
+        }
         if (statement.VisualType == VisualType.Combo && statement.TypedSeries.Count > 0)
         {
             var x = bindings.Where(binding => binding.Channel == FieldChannel.X).ToImmutableArray();
@@ -389,6 +405,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 var style = ImmutableArray.Create(new StyleToken("series", series.Column));
                 if (mark == MarkKind.Line && lineWidth is not null && LineSeriesWidth.TryNormalize(lineWidth, out var normalizedLineWidth))
                     style = style.Add(new StyleToken("LINE_WIDTH", normalizedLineWidth));
+                if (mark == MarkKind.Line) style = AppendLineGeometry(style);
                 style = AppendCommonStyles(style);
                 yield return new MarkLayerSpec(
                     $"series-{index:D2}-{Sanitize(series.Column)}",
@@ -414,6 +431,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 var style = ImmutableArray.Create(new StyleToken("series", yBinding.Field ?? "Primary"));
                 if (mark == MarkKind.Line && lineWidth is not null && LineSeriesWidth.TryNormalize(lineWidth, out var normalizedLineWidth))
                     style = style.Add(new StyleToken("LINE_WIDTH", normalizedLineWidth));
+                if (mark == MarkKind.Line) style = AppendLineGeometry(style);
                 style = AppendCommonStyles(style);
                 yield return new MarkLayerSpec(
                     "combo-primary",
@@ -433,6 +451,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 var style = ImmutableArray.Create(new StyleToken("series", y2Binding.Field ?? "Secondary"));
                 if (mark == MarkKind.Line && lineWidth is not null && LineSeriesWidth.TryNormalize(lineWidth, out var normalizedLineWidth))
                     style = style.Add(new StyleToken("LINE_WIDTH", normalizedLineWidth));
+                if (mark == MarkKind.Line) style = AppendLineGeometry(style);
                 style = AppendCommonStyles(style);
                 yield return new MarkLayerSpec(
                     "combo-secondary",
@@ -476,6 +495,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 style = style.Add(new StyleToken("SYMBOL_STROKE_WIDTH", normalizedWidth));
             if (lineWidth is not null && LineSeriesWidth.TryNormalize(lineWidth, out var normalizedLineWidth))
                 style = style.Add(new StyleToken("LINE_WIDTH", normalizedLineWidth));
+            style = AppendLineGeometry(style);
             style = AppendCommonStyles(style);
             var mark = statement.VisualType switch
             {
@@ -850,6 +870,143 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             throw new InvalidOperationException($"LINE_WIDTH is supported only on LINE and COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
         if (!LineSeriesWidth.TryNormalize(width, out _))
             throw new InvalidOperationException($"Invalid LINE_WIDTH '{width}'. Use a pixel width from {LineSeriesWidth.Minimum} through {LineSeriesWidth.Maximum}.");
+    }
+
+    /// <summary>Canonical spelling for the <c>INTERPOLATION</c> option, or <c>null</c> when unrecognized.</summary>
+    internal static string? NormalizeInterpolation(string? value) => value?.Trim().ToUpperInvariant() switch
+    {
+        "LINEAR" => "LINEAR",
+        "SMOOTH" => "SMOOTH",
+        "STEP_BEFORE" => "STEP_BEFORE",
+        "STEP_AFTER" => "STEP_AFTER",
+        _ => null
+    };
+
+    /// <summary>Canonical spelling for the <c>LINE_DASH</c> option, or <c>null</c> when unrecognized.</summary>
+    internal static string? NormalizeLineDash(string? value) => value?.Trim().ToUpperInvariant() switch
+    {
+        "SOLID" => "SOLID",
+        "DASHED" => "DASHED",
+        "DOTTED" => "DOTTED",
+        _ => null
+    };
+
+    private static void ValidateLineGeometryOptions(CreateVisualStatement statement)
+    {
+        var interpolation = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (interpolation is not null)
+        {
+            if (statement.VisualType is not (VisualType.Line or VisualType.Combo))
+                throw new InvalidOperationException($"INTERPOLATION is supported only on LINE and COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            if (NormalizeInterpolation(interpolation) is null)
+                throw new InvalidOperationException($"Invalid INTERPOLATION '{interpolation}'. Valid values are LINEAR, SMOOTH, STEP_BEFORE, or STEP_AFTER.");
+        }
+
+        var lineDash = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("LINE_DASH", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (lineDash is not null)
+        {
+            if (statement.VisualType is not (VisualType.Line or VisualType.Combo))
+                throw new InvalidOperationException($"LINE_DASH is supported only on LINE and COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            if (NormalizeLineDash(lineDash) is null)
+                throw new InvalidOperationException($"Invalid LINE_DASH '{lineDash}'. Valid values are SOLID, DASHED, or DOTTED.");
+        }
+    }
+
+    /// <summary>
+    /// Panel and axis-typography options. These are plan-level style tokens, so the renderer reads
+    /// them straight off <c>plan.Style</c>; validating here is what turns a typo into an authoring
+    /// error rather than a silently ignored option.
+    /// </summary>
+    private static void ValidatePanelAndAxisTypographyOptions(CreateVisualStatement statement)
+    {
+        string? Option(string key) => statement.Options.FirstOrDefault(option =>
+            option.Key.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value;
+
+        var background = Option("PLOT_BACKGROUND");
+        if (background is not null &&
+            !background.Trim().Equals("transparent", StringComparison.OrdinalIgnoreCase) &&
+            !PointMarkerStroke.IsPortableColor(background))
+        {
+            throw new InvalidOperationException($"Invalid PLOT_BACKGROUND '{background}'. Use a portable #RRGGBB color or 'transparent'.");
+        }
+
+        var border = Option("PLOT_BORDER");
+        if (border is not null && string.IsNullOrWhiteSpace(border))
+            throw new InvalidOperationException("PLOT_BORDER requires a CSS border shorthand, for example '1px solid #999999'.");
+
+        foreach (var key in new[] { "AXIS_FONT_SIZE", "AXIS_TITLE_FONT_SIZE" })
+        {
+            var value = Option(key);
+            if (value is null) continue;
+            var trimmed = value.Trim();
+            if (trimmed.EndsWith("px", StringComparison.OrdinalIgnoreCase)) trimmed = trimmed[..^2];
+            if (!decimal.TryParse(trimmed, NumberStyles.Number, CultureInfo.InvariantCulture, out var size) || size <= 0m)
+                throw new InvalidOperationException($"Invalid {key} '{value}'. Must be a positive point size.");
+        }
+
+        var axisColor = Option("AXIS_FONT_COLOR");
+        if (axisColor is not null && !PointMarkerStroke.IsPortableColor(axisColor))
+            throw new InvalidOperationException($"Invalid AXIS_FONT_COLOR '{axisColor}'. Use a portable #RRGGBB color.");
+    }
+
+    /// <summary>
+    /// Large-dataset and chart-toolbox options. <c>SAMPLING</c> and <c>PROGRESSIVE</c> only make
+    /// sense where a series can be dense enough to need them, so they are restricted to the
+    /// point- and line-shaped visuals; the toolbox toggles apply to any named chart.
+    /// </summary>
+    /// <summary>
+    /// An ON/OFF toggle as the parser hands it over. <c>ON</c> and <c>OFF</c> reach the option list
+    /// as <c>True</c>/<c>False</c> when the token is a recognized boolean, so both spellings count.
+    /// </summary>
+    private static bool IsToggleValue(string value) =>
+        value.Trim().ToUpperInvariant() is "ON" or "OFF" or "TRUE" or "FALSE";
+
+    private static void ValidateLargeDataAndToolboxOptions(CreateVisualStatement statement)
+    {
+        string? Option(string key) => statement.Options.FirstOrDefault(option =>
+            option.Key.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value;
+
+        var dense = statement.VisualType is VisualType.Line or VisualType.Scatter
+            or VisualType.Bubble or VisualType.Combo;
+
+        var sampling = Option("SAMPLING");
+        if (sampling is not null)
+        {
+            if (!dense)
+                throw new InvalidOperationException($"SAMPLING is supported only on LINE, SCATTER, BUBBLE, and COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            if (sampling.Trim().ToUpperInvariant() is not ("NONE" or "LTTB" or "AVERAGE" or "MAX" or "MIN"))
+                throw new InvalidOperationException($"Invalid SAMPLING '{sampling}'. Valid values are NONE, LTTB, AVERAGE, MAX, or MIN.");
+        }
+
+        var progressive = Option("PROGRESSIVE");
+        var progressiveChunk = Option("PROGRESSIVE_CHUNK");
+        if (progressive is not null || progressiveChunk is not null)
+        {
+            if (progressive is null)
+                throw new InvalidOperationException("PROGRESSIVE_CHUNK requires the PROGRESSIVE toggle.");
+            if (!dense)
+                throw new InvalidOperationException($"PROGRESSIVE is supported only on LINE, SCATTER, BUBBLE, and COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            if (!IsToggleValue(progressive))
+                throw new InvalidOperationException($"Invalid PROGRESSIVE value '{progressive}'. Valid values are ON or OFF.");
+            if (progressiveChunk is not null &&
+                (!int.TryParse(progressiveChunk, NumberStyles.Integer, CultureInfo.InvariantCulture, out var chunk) || chunk <= 0))
+            {
+                throw new InvalidOperationException($"Invalid PROGRESSIVE_CHUNK '{progressiveChunk}'. Must be a positive row count.");
+            }
+        }
+
+        foreach (var key in new[] { "SHOW_EXPORT", "SHOW_DATA_VIEW" })
+        {
+            var value = Option(key);
+            if (value is not null && !IsToggleValue(value))
+                throw new InvalidOperationException($"Invalid {key} value '{value}'. Valid values are ON or OFF.");
+        }
+
+        var zoomGroup = Option("ZOOM_GROUP");
+        if (zoomGroup is not null && string.IsNullOrWhiteSpace(zoomGroup))
+            throw new InvalidOperationException("ZOOM_GROUP requires a group name.");
     }
 
     private static void ValidatePieDonutOptions(CreateVisualStatement statement)

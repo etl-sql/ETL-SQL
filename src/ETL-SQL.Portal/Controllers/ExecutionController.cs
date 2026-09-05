@@ -447,7 +447,7 @@ public class ExecutionController(
         var updates = (req.Params ?? Enumerable.Empty<ParameterUpdateRequest>())
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name, p.Value));
-        var manifest = await svc.SetParametersAsync(updates, req.IsInteraction, req.PageName);
+        var manifest = await svc.SetParametersAsync(updates, req.IsInteraction, req.PageName, req.SourceVisual);
         await TryPersistAdHocLineageAsync(id, resolvedScriptPath, svc);
         return this.BrowserManifest(manifest);
     }

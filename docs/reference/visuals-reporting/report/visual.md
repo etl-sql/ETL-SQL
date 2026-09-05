@@ -12,7 +12,9 @@ CREATE VISUAL <name> AS <TYPE> (
   [FETCH   = AUTO | ON_LOAD | ON_RUN,]
   [MAPPINGS (column_alias = col, ...),]
   [OPTIONS  (KEY = value, ...),]
+  [TOOLTIP  = 'text' | <ContainerName> | (['markdown',] [FIELDS (col [FORMAT 'fmt'], ...)] [, VISUALS (v, ...)]),]
   [ACTIONS  (ON_CLICK = <action>, ON_CHANGE = <action>, ...),]
+  [EMIT_FILTER (TARGETS = (VisualName, ...)),]
   [PRINT_LAYOUT (
     [PAGE_BREAK_BEFORE = ON | OFF,]
     [PAGE_BREAK_AFTER = ON | OFF,]
@@ -88,6 +90,19 @@ Titles and subtitles support simple string assignment, inline markdown, or struc
 - **DATA_LABELS LABEL_BORDER = 'width style color'** — Border outline for data label badges (e.g. `'1px solid #e2e8f0'`). Style accepts `SOLID`, `DASHED`, or `DOTTED`.
 - **DATA_LABELS LEADER_LINE = ON|OFF WITH (COLOR = '#rrggbb', STYLE = SOLID|DASHED)** — Controls pointer lines from marks/arcs to displaced labels on `PIE`, `DONUT`, and `SCATTER`. Defaults `OFF`.
 - **SERIES_LABELS = ON|OFF WITH (POSITION = START|END)** — Places direct series name labels at line beginnings (`START`) or endpoints (`END`) on `LINE` and `COMBO` charts, reserving a deterministic label gutter and suppressing colliding data label endpoints.
+- **PLOT_BACKGROUND = '#rrggbb'|'transparent'** — Fills the region bounded by the axes, independently of the visual card that `STYLE (BACKGROUND = ...)` paints.
+- **PLOT_BORDER = 'width style color'** — Outlines that same plot region (e.g. `'1px dashed #94a3b8'`). Style accepts `SOLID`, `DASHED`, or `DOTTED`; `NONE` suppresses the border.
+- **AXIS_FONT_SIZE = n** — Point size for axis tick labels (default `9`).
+- **AXIS_FONT_COLOR = '#rrggbb'** — Text color for axis tick labels and axis titles.
+- **AXIS_TITLE_FONT_SIZE = n** — Point size for axis titles (default `10`).
+- **SAMPLING = NONE|LTTB|AVERAGE|MAX|MIN** — Render-time downsampling for dense series on `LINE`, `SCATTER`, `BUBBLE`, and `COMBO`. The plan keeps every row; only what is drawn is reduced, and each bucket contributes a real row, so a sampled mark keeps its own tooltip and selection identity. `LTTB` preserves visible shape; `AVERAGE`, `MAX`, and `MIN` keep the row nearest the bucket mean, its maximum, or its minimum. Default `NONE`.
+- **PROGRESSIVE = ON|OFF** and **PROGRESSIVE_CHUNK = n** — Reveals a dense chart's marks in `n`-sized batches across animation frames instead of one layout pass (default chunk `200`). Browser-only; static and print renderers are unaffected.
+- **SHOW_EXPORT = ON|OFF** — Adds a per-chart button that saves the chart as a PNG. Default `OFF`.
+- **SHOW_DATA_VIEW = ON|OFF** — Adds a per-chart toggle between the chart and a table of its `SOURCE` rows. Default `OFF`.
+- **ZOOM_GROUP = 'groupName'** — Links the range sliders of every chart naming the same group, so zooming one scrolls them all. Implies `ZOOM_SLIDER = ON`.
+- **TOOLTIP (FIELDS (col [FORMAT 'fmt'], ...))** — A declarative field list: the middle tier between `TOOLTIP = 'static text'` and a `CREATE CONTAINER` popover. Field names are column aliases from the visual's `SOURCE`, and `FORMAT` follows the `DATA_LABELS` format convention. Rendered from the hovered row with no server round-trip, so it stays a transient tooltip rather than a popover.
+- **EMIT_FILTER (TARGETS = (VisualName, ...))** — The send side of cross-filtering: a selection made on this visual only reaches the visuals named here. Complements the receive-side `INTERACTIONS (ON_SELECT = ...)` clause. Without the clause, every visual with an interaction mode responds, which is the default behaviour.
+- **DATA_LABELS leader lines** — When the renderer *displaces* a label to resolve a collision, it draws a connector to the mark so the label stays attributable. `DATA_LABELS LEADER_LINE` styles that connector, and an explicit `OFF` suppresses it; `PIE` and `DONUT` outside labels are a separate, opt-in surface that stays `OFF` by default.
 - **STYLE (COLOR:name = '#RRGGBB')** — Assigns a stable color to a named series or category. Use `PALETTE = (...)` for order-based colors.
 - **FORMATTING (WHEN predicate THEN color ...)** — Applies the first matching rule color to each mark in a named chart. `CUSTOM` charts use layer `CONDITIONS` instead.
 - **OVERLAYS (...)** — Adds goals, averages, moving averages, fitted trend lines, constant reference lines, reference bands, running totals, percent-of-total lines, or forecast overlays with optional confidence bands and anomaly markers.

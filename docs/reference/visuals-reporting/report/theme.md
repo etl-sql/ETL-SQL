@@ -16,9 +16,6 @@ Apply the theme just like any built-in theme:
 
 ```sql
 CREATE VISUAL RevenueChart AS BAR (
-
-```sql
-CREATE VISUAL RevenueChart AS BAR (
   SOURCE   = (SELECT Month, Revenue FROM #data),
   MAPPINGS (X = Month, Y = Revenue),
   STYLE    (THEME = corporate)

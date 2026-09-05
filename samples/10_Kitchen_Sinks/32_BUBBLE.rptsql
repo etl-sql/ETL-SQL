@@ -95,14 +95,35 @@ CREATE VISUAL LogBubble AS BUBBLE (
     )
 );
 
+-- 6. SYMBOL_SIZE floor: bubbles keep their SIZE ranking but never fall below a legible marker
+CREATE VISUAL SymbolSizeBubble AS BUBBLE (
+    SOURCE = #bubbles,
+    TITLE = 'SYMBOL_SIZE = 9 baseline marker with SIZE_RANGE',
+    MAPPINGS (
+        X      = GrowthRate,
+        Y      = MarginPct,
+        SIZE   = Revenue,
+        SERIES = Sector,
+        LABEL  = Segment
+    ),
+    OPTIONS (
+        SYMBOL_SIZE     = 9,
+        SIZE_RANGE      = (8, 30),
+        LEGEND          = ON,
+        LEGEND_POSITION = BOTTOM,
+        GRID_LINES      = ON
+    )
+);
+
 -- Page Layout
 CREATE PAGE BubbleKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C D',
+    STRUCTURE = 'A B / C D / E .',
     MAP (
         'A' = BasicBubble,
         'B' = MultiBubble,
         'C' = SizedBubble,
-        'D' = LogBubble
+        'D' = LogBubble,
+        'E' = SymbolSizeBubble
     )
 );
 

@@ -217,7 +217,7 @@ if (multiMode)
         var updates = (body.Params ?? new List<ParameterUpdateRequest>())
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name!, p.Value ?? ""));
-        return BrowserManifest(await svc.SetParametersAsync(updates, body.IsInteraction, body.PageName));
+        return BrowserManifest(await svc.SetParametersAsync(updates, body.IsInteraction, body.PageName, body.SourceVisual));
     });
 
     app.MapPost("/reports/{name}/api/layout",
@@ -339,7 +339,7 @@ else
         var updates = (body.Params ?? new List<ParameterUpdateRequest>())
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name!, p.Value ?? ""));
-        return BrowserManifest(await svc.SetParametersAsync(updates, body.IsInteraction, body.PageName));
+        return BrowserManifest(await svc.SetParametersAsync(updates, body.IsInteraction, body.PageName, body.SourceVisual));
     });
 
     app.MapPost("/api/layout", async (HttpContext ctx, DashboardService svc) =>
@@ -757,6 +757,9 @@ public class ParameterBatchRequest
     public List<ParameterUpdateRequest>? Params { get; set; }
     public bool IsInteraction { get; set; }
     public string? PageName { get; set; }
+
+    /// <summary>Visual the selection was made on; gates EMIT_FILTER targeting.</summary>
+    public string? SourceVisual { get; set; }
 }
 
 public class RunScriptRequest

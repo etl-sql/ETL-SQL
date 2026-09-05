@@ -99,16 +99,33 @@ CREATE VISUAL LogScaleScatter AS SCATTER (
     )
 );
 
+-- 8. Explicit marker size and value-driven conditional colour
+CREATE VISUAL SizedScatter AS SCATTER (
+    SOURCE = #stats,
+    TITLE = 'SYMBOL_SIZE with FORMATTING (conditional point colour)',
+    MAPPINGS (X = Score, Y = Rank),
+    OPTIONS (
+        SYMBOL_SIZE  = 11,
+        SYMBOL_SHAPE = DIAMOND,
+        GRID_LINES   = ON
+    ),
+    FORMATTING (
+        WHEN Rank >= 40 THEN '#dc2626',
+        WHEN Rank <= 22 THEN '#16a34a'
+    )
+);
+
 -- Page Layout
 CREATE PAGE ScatterKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C D / E F',
+    STRUCTURE = 'A B / C D / E F / G .',
     MAP (
         'A' = BasicScatter,
         'B' = MultiScatter,
         'C' = JitterScatter,
         'D' = ErrorBarScatter,
         'E' = RegressionScatter,
-        'F' = LogScaleScatter
+        'F' = LogScaleScatter,
+        'G' = SizedScatter
     )
 );
 

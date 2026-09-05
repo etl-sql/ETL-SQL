@@ -131,9 +131,118 @@ CREATE VISUAL TimeAxisLine AS LINE (
     )
 );
 
+-- 12. Step interpolation: the vertical jump lands before, or after, the point it belongs to
+CREATE VISUAL StepBeforeLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'INTERPOLATION = STEP_BEFORE',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (INTERPOLATION = STEP_BEFORE)
+);
+
+CREATE VISUAL StepAfterLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'INTERPOLATION = STEP_AFTER with LINE_DASH = DASHED',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (
+        INTERPOLATION = STEP_AFTER,
+        LINE_DASH     = DASHED,
+        LINE_WIDTH    = 3
+    )
+);
+
+CREATE VISUAL DottedSeriesLine AS LINE (
+    SOURCE = #trends,
+    TITLE = 'LINE_DASH = DOTTED on a multi-series line',
+    MAPPINGS (X = Date, Y = Val, SERIES = Category),
+    OPTIONS (LINE_DASH = DOTTED, LEGEND_POSITION = BOTTOM)
+);
+
+-- 13. NULL_HANDLING: the same gapped series read three ways
+SELECT '2026-01-01' AS Date, 100 AS Val INTO #gapped
+UNION ALL SELECT '2026-02-01', 150
+UNION ALL SELECT '2026-03-01', NULL
+UNION ALL SELECT '2026-04-01', 220
+UNION ALL SELECT '2026-05-01', 200;
+
+CREATE VISUAL NullConnectLine AS LINE (
+    SOURCE = #gapped,
+    TITLE = 'NULL_HANDLING = CONNECT (bridge the gap)',
+    MAPPINGS (X = Date, Y = Val),
+    OPTIONS (NULL_HANDLING = CONNECT, AXIS_SORT = SOURCE)
+);
+
+CREATE VISUAL NullGapLine AS LINE (
+    SOURCE = #gapped,
+    TITLE = 'NULL_HANDLING = GAP (break the line)',
+    MAPPINGS (X = Date, Y = Val),
+    OPTIONS (NULL_HANDLING = GAP, AXIS_SORT = SOURCE)
+);
+
+CREATE VISUAL NullZeroLine AS LINE (
+    SOURCE = #gapped,
+    TITLE = 'NULL_HANDLING = ZERO (treat the gap as zero)',
+    MAPPINGS (X = Date, Y = Val),
+    OPTIONS (NULL_HANDLING = ZERO, AXIS_SORT = SOURCE)
+);
+
+-- 14. Large-series rendering and the per-chart toolbox
+--     GENERATE_SERIES builds a dense series so SAMPLING and PROGRESSIVE have something to reduce.
+SELECT value AS Tick,
+       500 + (value % 97) * 4 - (value % 13) * 9 AS Reading
+INTO #dense
+FROM GENERATE_SERIES(1, 4000);
+
+CREATE VISUAL SampledLine AS LINE (
+    SOURCE = #dense,
+    TITLE = 'SAMPLING = LTTB over 4,000 readings',
+    MAPPINGS (X = Tick, Y = Reading),
+    OPTIONS (
+        SAMPLING   = LTTB,
+        GRID_LINES = ON,
+        X_AXIS (LABEL = 'Tick'),
+        Y_AXIS (LABEL = 'Reading')
+    )
+);
+
+CREATE VISUAL ProgressiveLine AS LINE (
+    SOURCE = #dense,
+    TITLE = 'PROGRESSIVE rendering with SAMPLING = AVERAGE',
+    MAPPINGS (X = Tick, Y = Reading),
+    OPTIONS (
+        SAMPLING          = AVERAGE,
+        PROGRESSIVE       = ON,
+        PROGRESSIVE_CHUNK = 250,
+        GRID_LINES        = ON
+    )
+);
+
+CREATE VISUAL ToolboxLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'SHOW_EXPORT / SHOW_DATA_VIEW toolbox with a linked ZOOM_GROUP',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (
+        SHOW_EXPORT    = ON,
+        SHOW_DATA_VIEW = ON,
+        ZOOM_GROUP     = 'trend-timeline',
+        GRID_LINES     = ON
+    ),
+    TOOLTIP (FIELDS = (Date, Total FORMAT 'N0'))
+);
+
+CREATE VISUAL ZoomPeerLine AS LINE (
+    SOURCE = #trends,
+    TITLE = 'Second chart in the same ZOOM_GROUP (zoom one, both scroll)',
+    MAPPINGS (X = Date, Y = Val, SERIES = Category),
+    OPTIONS (
+        ZOOM_GROUP      = 'trend-timeline',
+        LEGEND_POSITION = BOTTOM,
+        GRID_LINES      = ON
+    )
+);
+
 -- Page Layout
 CREATE PAGE LineKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B C / D E F / G H I / J . .',
+    STRUCTURE = 'A B C / D E F / G H I / J K L / M N O / P Q R / S T .',
     MAP (
         'A' = BasicLine,
         'B' = SmoothLine,
@@ -144,7 +253,17 @@ CREATE PAGE LineKitchenSink AS DASHBOARD (
         'G' = StyledGeometryLine,
         'H' = AreaBaselineLine,
         'I' = SegmentStyledLine,
-        'J' = TimeAxisLine
+        'J' = TimeAxisLine,
+        'K' = StepBeforeLine,
+        'L' = StepAfterLine,
+        'M' = DottedSeriesLine,
+        'N' = NullConnectLine,
+        'O' = NullGapLine,
+        'P' = NullZeroLine,
+        'Q' = SampledLine,
+        'R' = ProgressiveLine,
+        'S' = ToolboxLine,
+        'T' = ZoomPeerLine
     )
 );
 

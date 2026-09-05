@@ -202,6 +202,34 @@ public static class AdvancedChartSemanticValidator
                 }
             }
 
+            var interpolation = layer.Styles.FirstOrDefault(style =>
+                style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase));
+            if (interpolation is not null)
+            {
+                if (layer.Mark is not (AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area))
+                    Add(results, layerNode, $"Layer '{layer.Name}' may use INTERPOLATION only on LINE and AREA marks.");
+                if (ConstantKind(interpolation.Value) is { } interpolationKind)
+                {
+                    var text = interpolationKind == LiteralKind.Text ? LiteralText(interpolation.Value) : null;
+                    if (text is null || text.Trim().ToUpperInvariant() is not ("LINEAR" or "SMOOTH" or "STEP_BEFORE" or "STEP_AFTER"))
+                        Add(results, Anchor(interpolation, layerNode), $"Layer '{layer.Name}' INTERPOLATION accepts only LINEAR, SMOOTH, STEP_BEFORE, or STEP_AFTER.");
+                }
+            }
+
+            var layerLineDash = layer.Styles.FirstOrDefault(style =>
+                style.Name.Equals("LINE_DASH", StringComparison.OrdinalIgnoreCase));
+            if (layerLineDash is not null)
+            {
+                if (layer.Mark is not (AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area))
+                    Add(results, layerNode, $"Layer '{layer.Name}' may use LINE_DASH only on LINE and AREA marks.");
+                if (ConstantKind(layerLineDash.Value) is { } lineDashKind)
+                {
+                    var text = lineDashKind == LiteralKind.Text ? LiteralText(layerLineDash.Value) : null;
+                    if (text is null || text.Trim().ToUpperInvariant() is not ("SOLID" or "DASHED" or "DOTTED"))
+                        Add(results, Anchor(layerLineDash, layerNode), $"Layer '{layer.Name}' LINE_DASH accepts only SOLID, DASHED, or DOTTED.");
+                }
+            }
+
             if (layer.ZIndex < 0)
                 Add(results, layerNode, $"Layer '{layer.Name}' has a negative Z_INDEX.");
             if (layer.BandSize <= 0m || layer.BandSize > 1m)

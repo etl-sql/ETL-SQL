@@ -98,16 +98,52 @@ CREATE VISUAL OverlayCombo AS COMBO (
     )
 );
 
+-- 8. SYNC_AXES: Y and Y2 share one set of limits so the two series are comparable by eye
+CREATE VISUAL SyncedAxisCombo AS COMBO (
+    SOURCE = #data,
+    TITLE = 'SYNC_AXES = ON (Y and Y2 share matching limits)',
+    MAPPINGS (X = Month),
+    SERIES (BAR Revenue, LINE Orders),
+    OPTIONS (
+        SYNC_AXES  = ON,
+        GRID_LINES = ON,
+        Y_AXIS  (LABEL = 'Revenue ($)',  MIN = 0, MAX = 1600),
+        Y2_AXIS (LABEL = 'Order Volume', MIN = 0, MAX = 1600),
+        LEGEND          = ON,
+        LEGEND_POSITION = TOP
+    )
+);
+
+-- 9. Y_MARK / Y2_MARK: override the mark each axis draws, independent of the SERIES keyword
+CREATE VISUAL MarkOverrideCombo AS COMBO (
+    SOURCE = #data,
+    TITLE = 'Y_MARK = AREA, Y2_MARK = LINE (per-axis mark override)',
+    MAPPINGS (X = Month),
+    SERIES (BAR Revenue, LINE Orders),
+    OPTIONS (
+        Y_MARK     = AREA,
+        Y2_MARK    = LINE,
+        LINE_WIDTH = 3,
+        GRID_LINES = ON,
+        Y_AXIS  (LABEL = 'Revenue ($)'),
+        Y2_AXIS (LABEL = 'Order Volume'),
+        LEGEND          = ON,
+        LEGEND_POSITION = BOTTOM
+    )
+);
+
 -- Page Layout
 CREATE PAGE ComboKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C D / E F',
+    STRUCTURE = 'A B / C D / E F / G H',
     MAP (
         'A' = BasicCombo,
         'B' = MultiCombo,
         'C' = StyledCombo,
         'D' = DualAxisCombo,
         'E' = StackedCombo,
-        'F' = OverlayCombo
+        'F' = OverlayCombo,
+        'G' = SyncedAxisCombo,
+        'H' = MarkOverrideCombo
     )
 );
 

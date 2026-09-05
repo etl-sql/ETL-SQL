@@ -18,12 +18,12 @@ section as work in flight.
 | What | Where | Count |
 | :--- | :--- | ---: |
 | Release evidence gates | [§2](#2-v0190-release-evidence-gates) | 5 |
-| Failing reporting tests — 5 tests, 3 causes | [§4, open reds](#open-reds-in-this-area-tackle-after-the-power-bi-like-dashboard-journey) | 3 |
-| Chart property gaps | [§4](#4-chart-property-gaps) | 13 |
-| Kitchen sink coverage | [Inventory](#kitchen-sink-file-inventory) | 14 |
 
-The 14 kitchen-sink rows are not independent work: each names a chart gap above as its prerequisite,
-and the rule is unchanged — finish the feature first, then add it to the sink.
+Everything else that was open here is closed. The chart property gaps, the kitchen-sink rows that
+depended on them, and the failing reporting tests were finished on 2026-09-05; `dotnet test
+tests/ETL-SQL.Tests --filter "FullyQualifiedName~ETL_SQL.Tests.Reporting"` is 1505/1505 green and all
+41 files in `samples/10_Kitchen_Sinks/` run clean. The closed sections below are kept for the
+closed-item audit — do not read a `[x]` section as work in flight.
 
 **Deferred to v0.20.0, and why.** Studio's remaining scope, the browser and Portal test lanes, and
 the orchestrator's metric chips are all in *Code Stability* in [`ROADMAP.md`](ROADMAP.md). Studio
@@ -947,32 +947,61 @@ Intentional design choices (LOD expressions, table calculations, and groupings h
 excluded. Items marked `CUSTOM only` already work in `CUSTOM CHART` but are absent from the named
 chart surface (BAR, LINE, HBAR, COMBO, SCATTER, TRELLIS).
 
-### Open reds in this area (tackle after the Power BI-like dashboard journey)
+### Open reds in this area (closed 2026-09-05)
 
-Five tests in `ETL-SQL.Tests` fail on the current tree. They were found while certifying the Studio
-journeys and are recorded here rather than there because they are chart work, not Studio work:
-nothing in the Studio phase touches chart plans or SVG. Reproduce with
-`dotnet test tests/ETL-SQL.Tests --filter "FullyQualifiedName~ETL_SQL.Tests.Reporting"`.
+**The recorded count was wrong in both directions.** Re-measured against `HEAD` (`ab8257241`) in a
+clean worktree, the reporting suite was 2 red, not 5. The four golden failures listed here — the
+three moved plan hashes and the moved PIE/DONUT SVG — were already resolved before this work started;
+the goldens pass untouched. In their place sat a red this list never recorded.
 
-**Read the plan hash before blessing anything.** The golden harness draws the distinction itself: a
-moved *plan* hash is a semantic regression, while a moved *SVG* hash with the plan holding is a
-rendering change. Three of these moved the plan, so `-UpdateGolden` would bury the finding rather
-than record it.
-
-- [ ] **Plan hash moved — semantic, do not bless without understanding why**:
-  `ReportingGoldenTests.Fixture_PlanSvgTerminalAndFallback_MatchApprovedGoldens` for
-  `heatmap_native_plot_plan.rptsql` (`OrderHeatMap.plan`), `bubble_native_plot_plan.rptsql`
-  (`MarketPosition.plan`), and `waterfall_native_plot_plan.rptsql` (`ProfitBridge.plan`). Each also
-  moved its SVG, terminal, and fallback hashes, which is what a changed plan would do downstream.
-- [ ] **SVG hash moved with the plan holding — a rendering change to review, then bless**:
-  `pie_donut_proportions.rptsql` (`LeadSourcePie.svg`, `LeadSourceDonut.svg`). Compare the checked-in
-  artifacts under `tests/fixtures/reporting/goldens/pie_donut_proportions` and confirm the new
-  rendering is the intended one before running
-  `pwsh -File scripts/Test-ReportingGoldens.ps1 -UpdateGolden`.
-- [ ] **A smart-label leader line stopped being emitted**:
+- [x] **A smart-label leader line stopped being emitted** — real, and fixed.
   `AdvancedChartProductionTests.DenseMultiSeriesLabelsAndBandAxis_UseDeterministicBoundedPlacement`
-  no longer finds `class='plot-smart-label-leader'` in the SVG. This is the placement guarantee the
-  test is named for, so it is a behaviour question rather than a golden to re-approve.
+  was right to fail. `4605d3919` ("support series labels and styled data labels with leader lines")
+  set out to default `LEADER_LINE` to `OFF` for PIE and DONUT, but the gate it added landed on the
+  *shared* smart-label path, so a label the renderer displaced on its own silently lost its connector
+  everywhere. The connector is the placement guarantee, not a decoration: a label moved without the
+  author asking has to stay attributable to its mark. It is now drawn whenever the renderer displaces
+  a label, `DATA_LABELS LEADER_LINE` styles it, and an explicit `OFF` suppresses it. PIE and DONUT
+  outside labels are a separate, genuinely opt-in path in the arc renderer and keep their documented
+  `OFF` default. Three golden SVGs moved with their plans holding — reviewed (the diff is nothing but
+  added `plot-smart-label-leader` paths) and blessed.
+- [x] **`ReportingNativeCatalogBaselineTests` — a false comparison, not a payload regression.** This
+  was red at `HEAD` and is not in the list above. `MeasureBundleAssets` sweeps
+  `Resources/Shared/**` recursively, and the Studio authoring workbench (`designer/` — CodeMirror,
+  the pipeline canvas, the connection wizard, 1.79 MB of it) moved under that directory after the
+  phase-8 baseline was taken. The assertion `AfterBundleRawBytes < BeforeBundleRawBytes` was
+  therefore comparing a report-runtime bundle against a runtime-plus-workbench total. The sweep now
+  excludes the authoring subtree, which is never served to a report viewer: 2,977,679 B → 1,188,724 B,
+  matching the ~1.6 MB the payload budget's own default seed always assumed. The reviewed payload
+  budget was measuring the same wrong thing and has been re-blessed alongside it.
+- [x] **`ReportPayloadBudgetTests`** — re-blessed for the runtime growth this work added (the chart
+  toolbox, progressive reveal, linked zoom, the field-list tooltip, and the URL-template action).
+  `report-runtime.js` 432,261 → 468,489 B raw; `report-runtime.css` 64,884 → 68,895 B raw.
+
+**Still red at `HEAD`, outside this area and not caused by it.** Each was confirmed red in a clean
+worktree at `ab8257241` before any of this work landed. They are recorded here because nothing else
+records them; they are *not* v0.19.0 blockers and belong to *Code Stability* in `ROADMAP.md`.
+
+1. **Three retired-option guardrails have gone silent** — `ReportSqlParserTests`
+   `ParseCreateContainer_PinnableInOptions_ReportsSyntaxError`,
+   `ParseCreateContainer_CollapsibleOption_ReportsSyntaxError`, and
+   `ParseCreateVisual_PassiveVisualWithActions_ReportsSyntaxError` each expect a diagnostic and now
+   get an empty collection. These are `BREAKING_CHANGES.md` guardrails: `PINNABLE`, `COLLAPSIBLE`,
+   and `ACTIONS` on a passive visual are supposed to be *rejected*, so a script using a removed
+   option is now accepted in silence rather than corrected. This is the same shape as the recurring
+   silent-failure defect — the rejection code still exists in the parser, so the question is what
+   path stopped reaching it.
+2. **`EbnfConformanceTests.ParserAcceptedDocumentExamples_AreRecognizedByCompleteGrammar`** — 47 of
+   1,091 documentation examples parse but are not recognized by the complete EBNF grammar, so the
+   published grammar and the parser disagree. The count did not move with this work (47/1092 after
+   the examples added here, all of which are recognized).
+3. **`Portal.HtmlVisualDesignerRoundTripTests.HtmlVisualEdit_SurgicallyPatchesTemplateAndStyle_PreservingSurroundingSqlAndComments`**
+   — "An item with the same key has already been added" when the *patched* script is re-parsed, so
+   `DesignerScriptPatcher` is emitting a duplicate option key. Studio authoring work.
+4. **`samples/03_SQL_Engines/Docker_Orchestration.etlsql`** — the sample gate is 196 passed /
+   17 skipped / 1 failed, and the one failure is this script pushing
+   `CREATE TABLE Employee (id, employee_name)` to SQL Server, which requires column types. A sample
+   defect, unchanged since 2026-08-12.
 ### Axis Controls
 
 - [x] **Axis titles on named charts**: BAR, LINE, HBAR, and SCATTER have no axis label option. COMBO
@@ -1056,12 +1085,12 @@ than record it.
 - [x] **Line width**: No `LINE_WIDTH` option on LINE or COMBO. `THICKNESS` in `CUSTOM CHART` applies to
   TICK marks, not LINE layers. Add `LINE_WIDTH = n` to named LINE and COMBO charts, and clarify or add
   a thickness property for LINE layers in `CUSTOM CHART`.
-- [ ] **Step interpolation**: `SMOOTH = ON|OFF` exists but there is no step-before / step-after
-  interpolation. Add `INTERPOLATION = LINEAR|SMOOTH|STEP_BEFORE|STEP_AFTER` to LINE, COMBO, and
-  `CUSTOM CHART` LINE layers.
-- [ ] **Line dash style on series**: `OVERLAYS` accept `AS DASHED` but regular line series have no dash
-  option. Add `LINE_DASH = SOLID|DASHED|DOTTED` to LINE and COMBO options, and document the equivalent
-  STYLE token for `CUSTOM CHART` LINE layers.
+- [x] **Step interpolation**: `INTERPOLATION = LINEAR|SMOOTH|STEP_BEFORE|STEP_AFTER` on LINE, COMBO,
+  and `CUSTOM CHART` LINE/AREA layer styles. `INTERPOLATION` wins over `SMOOTH` when both are set, so
+  `INTERPOLATION = LINEAR` is how an author overrides an inherited `SMOOTH = ON`.
+- [x] **Line dash style on series**: `LINE_DASH = SOLID|DASHED|DOTTED` on LINE and COMBO, lowered onto
+  the same `lineStyle` layer token the overlay renderer already reads, so one dash implementation
+  serves both. `CUSTOM CHART` layers take it as `STYLE (LINE_DASH = '...')`.
 
 ### Legend Controls
 
@@ -1080,33 +1109,35 @@ than record it.
 
 ### Plot and Panel Styling
 
-- [ ] **Plot-area background**: `STYLE (BACKGROUND = ...)` targets the visual card, not the inner chart
-  canvas. Add `PLOT_BACKGROUND = '#RRGGBB'` (or `transparent`) to named chart OPTIONS and to
-  `CUSTOM CHART` to style the region bounded by the axes independently of the card.
-- [ ] **Plot-area border**: No `PANEL_BORDER` or equivalent. Add `PLOT_BORDER = 'css-border'` to named
-  chart OPTIONS alongside `PLOT_BACKGROUND`.
-- [ ] **Axis typography**: No axis-specific font controls. Global `STYLE (FONT, FONT_SIZE)` affects the
-  whole visual. Add `AXIS_FONT_SIZE`, `AXIS_FONT_COLOR`, and `AXIS_TITLE_FONT_SIZE` to named chart axis
-  option blocks.
+- [x] **Plot-area background**: `PLOT_BACKGROUND = '#RRGGBB'|'transparent'` paints the region bounded
+  by the axes, emitted as a `plot-panel` rect ahead of the gridlines. Absent the option nothing is
+  emitted at all, so no existing golden moved.
+- [x] **Plot-area border**: `PLOT_BORDER = 'css-border'` on the same `plot-panel` rect. The shorthand
+  is order-free — width, style, and colour are recognised by shape, and `NONE` suppresses the border.
+- [x] **Axis typography**: `AXIS_FONT_SIZE`, `AXIS_FONT_COLOR`, and `AXIS_TITLE_FONT_SIZE`. The
+  defaults reproduce the historical hard-coded attributes byte for byte (`font-size='9' fill='#666'`
+  and `font-size='10' fill='#444'`), which is asserted directly so the option cannot quietly move
+  every chart that never sets it.
 
 ### Tooltip
 
-- [ ] **Declarative field-list tooltip**: The gap between `TOOLTIP = 'static text'` and a full popover
-  container is wide. Add a middle tier: `TOOLTIP (FIELDS = (FieldA FORMAT 'C0', FieldB, FieldC FORMAT
-  'P1'))` that renders a lightweight, formatted field list without requiring a `CREATE CONTAINER`. Field
-  names are column aliases from the visual SOURCE; FORMAT strings follow the existing `DATA_LABELS`
-  format convention.
+- [x] **Declarative field-list tooltip**: `TOOLTIP (FIELDS = (FieldA FORMAT 'C0', FieldB))` renders a
+  formatted field list from the hovered row with no server round-trip, which is what keeps it a
+  transient tooltip rather than a popover. Field names are read with the permissive word consumer,
+  because column aliases routinely collide with keywords (`SHARE`, `VALUE`, `TOTAL`).
 
 ### Interactions and Actions
 
-- [ ] **URL action**: No `ON_CLICK = OPEN_URL(...)` action. Add `OPEN_URL(TEMPLATE = 'https://...',
-  PARAMS = (field1, field2))` as a supported `ON_CLICK` action, with field values interpolated into the
-  URL template. Reviewed against the Zero-Trust path policy — URL templates are author-declared and
-  field values are HTML-encoded; no path resolution applies.
-- [ ] **Source-visual interaction targeting**: `INTERACTIONS (ON_SELECT = FILTER)` on a receiving visual
-  responds to any selection on the page. There is no way to say "this bar chart only filters visuals A
-  and B when clicked." Add `EMIT_FILTER (TARGETS = (VisualName, ...))` as an action on the emitting
-  visual, complementing the existing receive-side `INTERACTIONS` clause.
+- [x] **URL action**: `OPEN_URL(TEMPLATE = '...{Field}...', PARAMS = (field1, field2))` joins the
+  existing literal form. Only the columns named in `PARAMS` may be interpolated and every value is
+  URL-encoded, so a row value cannot introduce a path segment, query parameter, or scheme of its own;
+  an undeclared or missing placeholder resolves to empty rather than being left in the URL. `PARAMS`
+  without `TEMPLATE` is a syntax error. Both forms round-trip through the formatter.
+- [x] **Source-visual interaction targeting**: `EMIT_FILTER (TARGETS = (VisualName, ...))` on the
+  emitting visual. The client already knew which visual was clicked but had no way to say so, so the
+  interaction post now carries `sourceVisual` through the Portal and Player request models, and
+  `ReportInteractionRefresher` narrows the refreshed receivers to the source's targets. No clause, or
+  no known source, means every receiver still responds — the pre-v0.19.0 behaviour.
 
 ### Dual-Axis
 
@@ -1790,34 +1821,33 @@ than record it.
 
 ### Large Dataset Rendering
 
-- [ ] **Time series downsampling**: ECharts `sampling: 'lttb'|'average'|'max'|'min'|'sum'`
-  renders a visual approximation of a large series without loading every point, using the
-  Largest Triangle Three Buckets algorithm or statistical aggregation. No equivalent in ETL-SQL
-  LINE or SCATTER. Add `SAMPLING = NONE|LTTB|AVERAGE|MAX|MIN` to LINE and SCATTER OPTIONS for
-  high-cardinality time series (e.g., sensor data at second granularity). The actual
-  downsampling occurs at render time, not in the SQL query.
-- [ ] **Progressive / chunked rendering**: ECharts `progressive` renders large series in chunks
-  to avoid blocking the browser main thread. No ETL-SQL equivalent. Add
-  `PROGRESSIVE = ON|OFF` with `PROGRESSIVE_CHUNK = n` (rows per frame) to named LINE and
-  SCATTER for datasets exceeding a configurable threshold.
+- [x] **Time series downsampling**: `SAMPLING = NONE|LTTB|AVERAGE|MAX|MIN` on LINE, SCATTER, BUBBLE,
+  and COMBO, applied at render time in `PlotPlanSvgRenderer` — the plan keeps every row, so the plan
+  hash still describes the data and only what is drawn is reduced. **Design call, not to
+  re-litigate:** every mode selects a *real* datum per bucket rather than synthesising one, so a
+  sampled mark keeps its own row index, tooltip, and selection identity; `AVERAGE` therefore means
+  "the row nearest the bucket mean", not a fabricated average point. Bucket count is one per pixel of
+  plot width, the standard LTTB target.
+- [x] **Progressive / chunked rendering**: `PROGRESSIVE = ON|OFF` with `PROGRESSIVE_CHUNK = n`. The
+  marks are already in the served SVG, so the runtime staggers *compositing* — it hides the marks and
+  reveals them in chunks across animation frames — which is the cost that actually blocks the main
+  thread on a high-cardinality series.
 
 ### Chart-Level Export and Toolbox
 
-- [ ] **Save-as-image button**: ECharts `toolbox.feature.saveAsImage` adds a camera icon that
-  downloads the current chart as a PNG. No per-chart export button in ETL-SQL — only
-  page-level export through the Portal. Add `SHOW_EXPORT = ON|OFF` to named chart OPTIONS to
-  render a small download icon on the chart's title bar, using the existing report-runtime
-  canvas-capture path.
-- [ ] **Data table view toggle**: ECharts `toolbox.feature.dataView` shows the underlying data
-  as a table when clicked. No equivalent in ETL-SQL. Add `SHOW_DATA_VIEW = ON|OFF` to display
-  a toggle that switches the visual between chart and tabular view of its SOURCE data.
+- [x] **Save-as-image button**: `SHOW_EXPORT = ON|OFF` adds a per-chart PNG download. There was no
+  existing canvas-capture path to reuse — that line in this item was wrong — so the runtime
+  serialises the live SVG through a canvas, which has the useful property that what downloads is what
+  is on screen, including any zoom the viewer applied.
+- [x] **Data table view toggle**: `SHOW_DATA_VIEW = ON|OFF` toggles between the chart and an
+  accessible table built from the visual's own columns and rows.
 
 ### Linked Zoom
 
-- [ ] **Synchronized zoom across charts**: ETL-SQL `ZOOM_SLIDER = ON|OFF` adds an independent
-  slider per chart. ECharts supports linking dataZoom across multiple charts in one group so
-  zooming one scrolls all. Add `ZOOM_GROUP = groupName` so charts sharing a group name
-  synchronize their X-axis zoom range.
+- [x] **Synchronized zoom across charts**: `ZOOM_GROUP = 'groupName'` links the sliders of every
+  chart naming the same group. Naming a group implies `ZOOM_SLIDER = ON`, since a chart cannot join a
+  linked zoom without one, and peers apply a broadcast range directly rather than through their own
+  input handler, so a group cannot echo.
 
 ### Axis Tick Label Formatter
 
@@ -1883,6 +1913,13 @@ before a gap can be added to the sink.
 The rule: **finish the feature first, then add it to the sink**. A `[ ]` gap with no prerequisite
 means the feature already exists in the engine and the sink just needs a new visual block.
 
+**Closed 2026-09-05.** Every row is covered. Several rows had gone stale in the same direction: they
+named a prerequisite that had already shipped (`SYMBOL_SIZE`, `SYNC_AXES`, `Y_MARK`, `NULL_HANDLING`,
+`FORECAST`, `REFERENCE_LINE`/`REFERENCE_BAND`, `LEADER_LINE`), or described the sink wrongly —
+`04_SCATTER` was recorded as still using `SHOW_REGRESSION` when it had already moved to `OVERLAYS`.
+The lesson is the one the file already states for the roadmap: verify a prerequisite against the code
+before treating it as blocking work. All 41 files run clean.
+
 ### 01_BAR.rptsql
 
 | Gap | Status |
@@ -1904,8 +1941,9 @@ means the feature already exists in the engine and the sink just needs a new vis
 | `PERCENT_OF_TOTAL` overlay | ✅ Covered in sink |
 | `BAR_MIN_HEIGHT = n` | ✅ Covered in sink |
 | `FORMATTING (WHEN … THEN color)` conditional | ✅ Covered in sink |
-| `REFERENCE_LINE`, `REFERENCE_BAND` overlays | [ ] Analytical Overlays (pending) |
-| `PLOT_BACKGROUND`, `PLOT_BORDER` | [ ] Plot and Panel Styling (pending) |
+| `REFERENCE_LINE`, `REFERENCE_BAND` overlays | ✅ Covered in sink (`ReferenceBar`) |
+| `PLOT_BACKGROUND`, `PLOT_BORDER`, axis typography | ✅ Covered in sink (`PanelStyledBar`) |
+| `TOOLTIP (FIELDS)`, `OPEN_URL(TEMPLATE)`, `EMIT_FILTER` | ✅ Covered in sink (`InteractiveBar`) |
 
 ### 02_HBAR.rptsql
 
@@ -1937,9 +1975,11 @@ means the feature already exists in the engine and the sink just needs a new vis
 | `RUNNING_TOTAL`, `PERCENT_OF_TOTAL` overlays | ✅ Covered in sink |
 | `AREA = ON` + `AREA_BASELINE` | ✅ Covered in sink |
 | `SEGMENT_STYLE` | ✅ Covered in sink |
-| `INTERPOLATION = STEP_BEFORE|STEP_AFTER` | [ ] Marker and Line Geometry (pending) |
-| `LINE_DASH = SOLID|DASHED|DOTTED` on series | [ ] Marker and Line Geometry (pending) |
-| `NULL_HANDLING = CONNECT|GAP|ZERO` | [ ] Missing Data / Gap Behavior (pending) |
+| `INTERPOLATION = STEP_BEFORE|STEP_AFTER` | ✅ Covered in sink (`StepBeforeLine`, `StepAfterLine`) |
+| `LINE_DASH = SOLID|DASHED|DOTTED` on series | ✅ Covered in sink (`StepAfterLine`, `DottedSeriesLine`) |
+| `NULL_HANDLING = CONNECT|GAP|ZERO` | ✅ Covered in sink (`NullConnectLine`, `NullGapLine`, `NullZeroLine`) |
+| `SAMPLING`, `PROGRESSIVE`, `PROGRESSIVE_CHUNK` | ✅ Covered in sink (`SampledLine`, `ProgressiveLine`) |
+| `SHOW_EXPORT`, `SHOW_DATA_VIEW`, `ZOOM_GROUP`, `TOOLTIP (FIELDS)` | ✅ Covered in sink (`ToolboxLine`, `ZoomPeerLine`) |
 
 ### 04_SCATTER.rptsql
 
@@ -1953,9 +1993,9 @@ means the feature already exists in the engine and the sink just needs a new vis
 | Full legend suite | ✅ Covered in sink |
 | `GRID_LINES`, `ZERO_LINE` | ✅ Covered in sink |
 | EXPONENTIAL, LOGARITHMIC, POWER overlays | ✅ Covered in sink |
-| `OVERLAYS` clause (currently uses `SHOW_REGRESSION`) | [ ] Cross-Cutting (pending: OVERLAYS on SCATTER) |
-| `FORMATTING (WHEN … THEN color)` | [ ] Cross-Cutting (pending) |
-| `SYMBOL_SIZE = n` | [ ] Named Chart Marks (pending) |
+| `OVERLAYS` clause | ✅ Covered in sink — the row claiming `SHOW_REGRESSION` was stale; the sink already used `OVERLAYS` |
+| `FORMATTING (WHEN … THEN color)` | ✅ Covered in sink (`SizedScatter`) |
+| `SYMBOL_SIZE = n` | ✅ Covered in sink (`SizedScatter`) |
 
 ### 05_PIE.rptsql
 
@@ -1968,7 +2008,7 @@ means the feature already exists in the engine and the sink just needs a new vis
 | `START_ANGLE = 90` | ✅ Covered in sink |
 | `SLICE_BORDER_COLOR`, `SLICE_BORDER_WIDTH` | ✅ Covered in sink |
 | Full legend suite (TITLE, COLUMNS, INSIDE anchor) | ✅ Covered in sink |
-| `DATA_LABELS` with position / leader line | ✅ Covered in sink / [ ] LEADER_LINE pending |
+| `DATA_LABELS` with position / leader line | ✅ Covered in sink (`LeaderLinePie`) |
 
 ### 06_DONUT.rptsql
 
@@ -1989,8 +2029,8 @@ means the feature already exists in the engine and the sink just needs a new vis
 | Overlays on COMBO | ✅ Covered in sink |
 | `DATA_LABELS` | ✅ Covered in sink |
 | `STACKED` bars in combo | ✅ Covered in sink |
-| `SYNC_AXES = ON` | [ ] Dual-Axis (pending) |
-| `Y_MARK = BAR|LINE|AREA` per axis | [ ] Named Chart Marks (pending) |
+| `SYNC_AXES = ON` | ✅ Covered in sink (`SyncedAxisCombo`) |
+| `Y_MARK = BAR|LINE|AREA` per axis | ✅ Covered in sink (`MarkOverrideCombo`) |
 
 ### 09_BOXPLOT.rptsql
 
@@ -2046,7 +2086,7 @@ means the feature already exists in the engine and the sink just needs a new vis
 | `PERCENT_OF_TOTAL` overlay | ✅ Covered in sink |
 | `REFERENCE_LINE (VALUE = n, LABEL = '...', STYLE = DASHED)` | ✅ Covered in sink |
 | `REFERENCE_BAND (LOW = n, HIGH = n, COLOR, LABEL)` | ✅ Covered in sink |
-| `FORECAST` overlay | [ ] Analytical Overlays (pending) |
+| `FORECAST` overlay | ✅ Covered in sink (`ForecastOverlay`) |
 
 ### 32_BUBBLE.rptsql
 
@@ -2057,7 +2097,7 @@ means the feature already exists in the engine and the sink just needs a new vis
 | `LOG = ON` (log scale) | ✅ Covered in sink |
 | Full legend suite | ✅ Covered in sink |
 | `GRID_LINES`, `ZERO_LINE` | ✅ Covered in sink |
-| `SYMBOL_SIZE = n` | [ ] Named Chart Marks (pending) |
+| `SYMBOL_SIZE = n` | ✅ Covered in sink (`SymbolSizeBubble`) |
 
 ### 14_RADAR.rptsql
 

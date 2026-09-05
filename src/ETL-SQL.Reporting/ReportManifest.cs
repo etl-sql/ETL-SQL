@@ -839,6 +839,16 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Target { get; set; }
 
+        /// <summary>Set when the URL is a <c>{Field}</c> template the runtime interpolates per row.</summary>
+        [JsonPropertyName("urlTemplate")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? UrlTemplate { get; set; }
+
+        /// <summary>Column aliases the template is allowed to interpolate.</summary>
+        [JsonPropertyName("urlParams")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? UrlParams { get; set; }
+
         // SHOW_MODAL / HIDE_MODAL fields
         [JsonPropertyName("modalName")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -1408,6 +1418,24 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("isMarkdown")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool IsMarkdown { get; set; }
+
+        /// <summary>
+        /// Declarative field list for the middle tier between a text tooltip and a container
+        /// popover. Each entry names a SOURCE column alias and an optional .NET format string.
+        /// </summary>
+        [JsonPropertyName("fields")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<TooltipFieldManifest>? Fields { get; set; }
+    }
+
+    /// <summary>One row of a declarative <c>TOOLTIP (FIELDS = (...))</c> list.</summary>
+    public class TooltipFieldManifest
+    {
+        [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("format")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Format { get; set; }
     }
 
     public class ButtonManifest

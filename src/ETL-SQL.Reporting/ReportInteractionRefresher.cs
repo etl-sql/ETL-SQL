@@ -19,7 +19,8 @@ namespace ETL_SQL.Reporting
             IExecutionContext context,
             ReportManifest manifest,
             IEnumerable<(string Name, string Value)> updates,
-            bool isInteraction = false)
+            bool isInteraction = false,
+            string? sourceVisual = null)
         {
             if (!isInteraction)
                 return await RefreshAtomicallyAsync(context, manifest, updates);
@@ -50,8 +51,18 @@ namespace ETL_SQL.Reporting
             var builder = new ManifestBuilder(context);
             int refreshCount = 0;
 
+            // EMIT_FILTER on the clicked visual narrows who may respond. Absent the clause — or
+            // absent a known source — every receiver responds, which is the pre-v0.19.0 behaviour.
+            var emitTargets = ResolveEmitFilterTargets(context, sourceVisual);
+
             foreach (var visualDef in context.ReportContext.VisualDefinitions.Values)
             {
+                if (emitTargets is not null &&
+                    !emitTargets.Contains(visualDef.Name) &&
+                    !string.Equals(visualDef.Name, sourceVisual, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
                 // Visual is affected if it directly uses the variable.
                 // For interactions (Highlight), we refresh all visuals that have an interaction mode enabled
                 // to ensure cross-filtering/ghosting is applied correctly across the page.
@@ -104,6 +115,30 @@ namespace ETL_SQL.Reporting
 
             logger.Debug($"[ReportInteractionRefresher] Refresh complete. {refreshCount} visuals updated.");
             return refreshCount;
+        }
+
+        /// <summary>
+        /// The visual names an <c>EMIT_FILTER (TARGETS = (...))</c> clause on <paramref name="sourceVisual"/>
+        /// allows a selection to reach, or <c>null</c> when the source declares no such clause and
+        /// every receiving visual should respond.
+        /// </summary>
+        internal static HashSet<string>? ResolveEmitFilterTargets(IExecutionContext context, string? sourceVisual)
+        {
+            if (string.IsNullOrWhiteSpace(sourceVisual)) return null;
+            if (!context.ReportContext.VisualDefinitions.TryGetValue(sourceVisual, out var source))
+            {
+                source = context.ReportContext.VisualDefinitions.Values.FirstOrDefault(definition =>
+                    string.Equals(definition.Name, sourceVisual, StringComparison.OrdinalIgnoreCase));
+                if (source is null) return null;
+            }
+
+            var declared = source.Options.FirstOrDefault(option =>
+                string.Equals(option.Key, "EMIT_FILTER:TARGETS", StringComparison.OrdinalIgnoreCase))?.Value;
+            if (string.IsNullOrWhiteSpace(declared)) return null;
+
+            return new HashSet<string>(
+                declared.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                StringComparer.OrdinalIgnoreCase);
         }
 
         private static async Task<int> RefreshAtomicallyAsync(

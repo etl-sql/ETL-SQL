@@ -422,9 +422,7 @@ public static class AstSerializer
         ResetParametersAction n => n.Parameters.Count > 0
             ? $"RESET_PARAMETERS({string.Join(", ", n.Parameters)})"
             : "RESET_PARAMETERS",
-        OpenUrlAction n => n.Target != "_blank" && !string.IsNullOrEmpty(n.Target)
-            ? $"OPEN_URL('{n.Url}', TARGET = '{n.Target}')"
-            : $"OPEN_URL('{n.Url}')",
+        OpenUrlAction n => FormatOpenUrl(n),
         ShowModalAction n => $"SHOW_MODAL({n.ModalName})",
         HideModalAction n => $"HIDE_MODAL({n.ModalName})",
         ContainerSlotDefinition n => n.Icon != null || n.Badge != null
@@ -452,6 +450,22 @@ public static class AstSerializer
     {
         if (parameters.Count == 0) return "";
         return ", " + string.Join(", ", parameters.Select(p => $"{p.Key} = {p.Value}"));
+    }
+
+    /// <summary>
+    /// Round-trips both OPEN_URL forms: the positional literal URL, and the
+    /// <c>TEMPLATE = ... , PARAMS = (...)</c> form that interpolates row fields.
+    /// </summary>
+    private static string FormatOpenUrl(OpenUrlAction action)
+    {
+        var parts = new List<string>
+        {
+            action.IsTemplate ? $"TEMPLATE = '{action.Url}'" : $"'{action.Url}'"
+        };
+        if (action.Params.Count > 0) parts.Add($"PARAMS = ({string.Join(", ", action.Params)})");
+        if (action.Target != "_blank" && !string.IsNullOrEmpty(action.Target))
+            parts.Add($"TARGET = '{action.Target}'");
+        return $"OPEN_URL({string.Join(", ", parts)})";
     }
 
     private static string FormatActionTargets(IReadOnlyCollection<string> targets)
@@ -1985,6 +1999,11 @@ public static class AstSerializer
             parts.Add(Quote(tooltip.InlineMarkdown));
         if (tooltip.InlineVisuals is { Count: > 0 })
             parts.Add("VISUALS (" + string.Join(", ", tooltip.InlineVisuals) + ")");
+        if (tooltip.Fields is { Count: > 0 })
+        {
+            parts.Add("FIELDS (" + string.Join(", ", tooltip.Fields.Select(field =>
+                field.Format is null ? field.Name : $"{field.Name} FORMAT {Quote(field.Format)}")) + ")");
+        }
         return "(" + string.Join(", ", parts) + ")";
     }
 

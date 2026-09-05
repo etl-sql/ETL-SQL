@@ -46,6 +46,32 @@
         return raw; // scheme-less (relative) URL
     }
 
+    /**
+     * Fills an `OPEN_URL(TEMPLATE = ...)` template from the clicked row. Only the fields the author
+     * declared in `PARAMS` may be interpolated, and every value is URL-encoded, so a row value can
+     * never introduce a query parameter, a path segment, or a scheme of its own. A placeholder that
+     * names an undeclared or missing field resolves to the empty string rather than being left in
+     * the URL.
+     * @param {{url?: string, urlParams?: string[]}} action
+     * @param {any[]} rowData
+     * @param {string[]} columns
+     * @returns {string}
+     */
+    function interpolateUrlTemplate(action, rowData, columns) {
+        const template = String(action.url || '');
+        const allowed = new Set((action.urlParams || []).map(name => String(name).toLowerCase()));
+        const cols = columns || [];
+        const row = rowData || [];
+        return template.replace(/\{([^{}]+)\}/g, (_match, name) => {
+            const field = String(name).trim();
+            if (!allowed.has(field.toLowerCase())) return '';
+            const index = cols.findIndex(col => String(col).toLowerCase() === field.toLowerCase());
+            if (index < 0) return '';
+            const value = row[index];
+            return value == null ? '' : encodeURIComponent(String(value));
+        });
+    }
+
     function getOption(options, key) {
         if (!options) return null;
         const lookup = key.toLowerCase();
@@ -2681,7 +2707,7 @@
             // Deselect: post an empty non-interaction batch to force the server to re-evaluate
             // without any interactionValues, returning a clean manifest with no highlightRows.
             state.lastBatch = {};
-            postParameters({}, false).then(m => { if (m) renderManifest(m); });
+            postParameters({}, false, null, sourceVisualName).then(m => { if (m) renderManifest(m); });
             return;
         }
 
@@ -2696,7 +2722,7 @@
         Object.keys(groups).forEach(k => { batch[k] = groups[k].join(','); });
         state.lastBatch = batch;
 
-        postParameters(batch, true).then(m => { if (m) renderManifest(m); });
+        postParameters(batch, true, null, sourceVisualName).then(m => { if (m) renderManifest(m); });
     }
 
     function reApplyCrossFilterStyling() {
@@ -3075,10 +3101,33 @@
             if (!state) return;
             const value = rowContext(mark);
             state.element.replaceChildren(contextElement(value));
-            const body = document.createElement('div');
-            body.className = 'report-chart-tooltip-text';
-            body.textContent = tooltip.text || tooltip.markdown || '';
-            state.element.appendChild(body);
+            if (tooltip.markdown || tooltip.text) {
+                const body = document.createElement('div');
+                body.className = 'report-chart-tooltip-text';
+                body.textContent = tooltip.text || tooltip.markdown || '';
+                state.element.appendChild(body);
+            }
+            // The declarative middle tier: a formatted field list read straight off the hovered
+            // row. No server round-trip, which is what keeps it lighter than a popover container.
+            const fields = tooltip.fields || [];
+            if (fields.length > 0) {
+                const rowIndex = Number(mark.dataset.rowIndex);
+                const row = Number.isInteger(rowIndex) ? (rows[rowIndex] || []) : [];
+                const list = document.createElement('dl');
+                list.className = 'report-chart-tooltip-fields';
+                fields.forEach(field => {
+                    const index = columns.findIndex(column =>
+                        String(column).toLowerCase() === String(field.name).toLowerCase());
+                    const term = document.createElement('dt');
+                    term.textContent = String(field.name);
+                    const detail = document.createElement('dd');
+                    const raw = index < 0 ? null : row[index];
+                    const formatted = formatValue(raw, field.format);
+                    detail.textContent = formatted == null ? '' : String(formatted);
+                    list.append(term, detail);
+                });
+                state.element.appendChild(list);
+            }
             reposition(state);
         }
 
@@ -3337,6 +3386,8 @@
         if (visual.layout?.tier) wrapper.dataset.layoutTier = String(visual.layout.tier).toUpperCase();
         container.appendChild(wrapper);
         attachNativeZoomSlider(container, wrapper, visual);
+        attachNativeChartToolbox(container, wrapper, visual);
+        attachProgressiveReveal(wrapper, visual);
         observeNativeLayout(wrapper, visual);
 
         const clickActions = actionsFor(visual, 'ON_CLICK');
@@ -3548,9 +3599,166 @@
         });
     }
 
+    /** @returns {boolean} whether an ON/TRUE/1 toggle is set on the visual. */
+    function nativeToggleOn(visual, key) {
+        const value = String(visual.options?.[key] || '').toUpperCase();
+        return value === 'ON' || value === 'TRUE' || value === '1';
+    }
+
+    /**
+     * Per-chart toolbox: `SHOW_EXPORT = ON` adds a PNG download, `SHOW_DATA_VIEW = ON` adds a
+     * toggle between the chart and a table of its SOURCE rows. Both are chart-local — neither
+     * touches page state, and the data view is built from the visual's own columns and rows.
+     */
+    function attachNativeChartToolbox(container, wrapper, visual) {
+        const wantsExport = nativeToggleOn(visual, 'SHOW_EXPORT');
+        const wantsDataView = nativeToggleOn(visual, 'SHOW_DATA_VIEW');
+        if (!wantsExport && !wantsDataView) return;
+
+        const bar = document.createElement('div');
+        bar.className = 'native-chart-toolbox';
+        bar.setAttribute('role', 'group');
+        bar.setAttribute('aria-label', 'Chart tools');
+
+        if (wantsExport) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'native-chart-toolbox-button';
+            button.dataset.tool = 'save-image';
+            button.title = 'Save chart as PNG';
+            button.setAttribute('aria-label', 'Save chart as PNG');
+            button.textContent = '⤓';
+            button.addEventListener('click', () => saveChartImage(wrapper, visual));
+            bar.appendChild(button);
+        }
+
+        if (wantsDataView) {
+            const table = buildDataViewTable(visual);
+            table.hidden = true;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'native-chart-toolbox-button';
+            button.dataset.tool = 'data-view';
+            button.title = 'Show data table';
+            button.setAttribute('aria-label', 'Show data table');
+            button.setAttribute('aria-pressed', 'false');
+            button.textContent = '▤';
+            button.addEventListener('click', () => {
+                const showing = table.hidden;
+                table.hidden = !showing;
+                wrapper.hidden = showing;
+                button.setAttribute('aria-pressed', showing ? 'true' : 'false');
+                button.title = showing ? 'Show chart' : 'Show data table';
+            });
+            bar.appendChild(button);
+            container.appendChild(bar);
+            container.appendChild(table);
+            return;
+        }
+
+        container.appendChild(bar);
+    }
+
+    /** Renders the visual's SOURCE rows as an accessible table for `SHOW_DATA_VIEW`. */
+    function buildDataViewTable(visual) {
+        const columns = visual.columns || [];
+        const rows = visual.rows || [];
+        const table = document.createElement('table');
+        table.className = 'native-chart-data-view';
+        table.setAttribute('aria-label', (visual.name || 'Chart') + ' data');
+        const head = document.createElement('tr');
+        columns.forEach(column => {
+            const cell = document.createElement('th');
+            cell.scope = 'col';
+            cell.textContent = String(column);
+            head.appendChild(cell);
+        });
+        const thead = document.createElement('thead');
+        thead.appendChild(head);
+        table.appendChild(thead);
+        const body = document.createElement('tbody');
+        rows.forEach(row => {
+            const tr = document.createElement('tr');
+            columns.forEach((_column, index) => {
+                const cell = document.createElement('td');
+                cell.textContent = row[index] == null ? '' : String(row[index]);
+                tr.appendChild(cell);
+            });
+            body.appendChild(tr);
+        });
+        table.appendChild(body);
+        return table;
+    }
+
+    /**
+     * Rasterises the chart's SVG through a canvas and hands the viewer a PNG. The SVG is serialized
+     * from the live DOM, so what downloads is what is on screen, including any zoom applied.
+     */
+    function saveChartImage(wrapper, visual) {
+        const svg = wrapper.querySelector('svg');
+        if (!svg) return;
+        const width = Number(svg.getAttribute('width')) || svg.clientWidth || 600;
+        const height = Number(svg.getAttribute('height')) || svg.clientHeight || 400;
+        const markup = new XMLSerializer().serializeToString(svg);
+        const source = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(markup);
+        const image = new Image();
+        image.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(image, 0, 0, width, height);
+            canvas.toBlob(blob => {
+                if (!blob) return;
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = (visual.name || 'chart') + '.png';
+                document.body.appendChild(anchor);
+                anchor.click();
+                document.body.removeChild(anchor);
+                URL.revokeObjectURL(url);
+            }, 'image/png');
+        };
+        image.onerror = () => console.warn('Chart image export failed for', visual.name);
+        image.src = source;
+    }
+
+    /**
+     * `PROGRESSIVE = ON` reveals a dense chart's marks in `PROGRESSIVE_CHUNK` sized batches across
+     * animation frames rather than painting every mark in one layout pass. The marks are already in
+     * the served SVG, so this staggers when the browser has to composite them, which is the cost
+     * that blocks the main thread on a high-cardinality series.
+     */
+    function attachProgressiveReveal(wrapper, visual) {
+        if (!nativeToggleOn(visual, 'PROGRESSIVE')) return;
+        if (typeof requestAnimationFrame !== 'function') return;
+        const svg = wrapper.querySelector('svg');
+        if (!svg) return;
+        const marks = Array.from(svg.querySelectorAll('[data-row-index]'));
+        const chunk = Math.max(1, Number(visual.options?.['PROGRESSIVE_CHUNK']) || 200);
+        if (marks.length <= chunk) return;
+
+        marks.forEach(mark => mark.setAttribute('visibility', 'hidden'));
+        wrapper.dataset.progressive = String(chunk);
+        let index = 0;
+        const step = () => {
+            const end = Math.min(marks.length, index + chunk);
+            for (; index < end; index++) marks[index].removeAttribute('visibility');
+            if (index < marks.length) requestAnimationFrame(step);
+            else delete wrapper.dataset.progressive;
+        };
+        requestAnimationFrame(step);
+    }
+
     function attachNativeZoomSlider(container, wrapper, visual) {
         const enabled = String(visual.options?.ZOOM_SLIDER || '').toUpperCase();
-        if (enabled !== 'ON' && enabled !== 'TRUE' && enabled !== '1') return;
+        const grouped = String(visual.options?.ZOOM_GROUP || '').trim() !== '';
+        // Naming a ZOOM_GROUP implies the slider: a chart cannot join a linked zoom without one.
+        if (!grouped && enabled !== 'ON' && enabled !== 'TRUE' && enabled !== '1') return;
         const svg = wrapper.querySelector('svg');
         const raw = String(svg?.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number);
         if (!svg || raw.length !== 4 || raw.some(value => !Number.isFinite(value)) || raw[2] <= 0) return;
@@ -3575,24 +3783,50 @@
         const value = document.createElement('output');
         value.textContent = '0–100%';
 
+        // ZOOM_GROUP links sliders: zooming one chart scrolls every chart naming the same group.
+        const group = String(visual.options?.ZOOM_GROUP || '').trim();
+
+        /** Applies a range to this chart without re-broadcasting, so linked charts cannot loop. */
+        const applyRange = (first, last) => {
+            start.value = String(first);
+            end.value = String(last);
+            const x = originX + fullWidth * first / 100;
+            const width = fullWidth * (last - first) / 100;
+            svg.setAttribute('viewBox', `${x} ${originY} ${width} ${fullHeight}`);
+            value.textContent = `${first}–${last}%`;
+        };
+
         const update = changed => {
             let first = Number(start.value);
             let last = Number(end.value);
             if (last - first < 5) {
                 if (changed === start) first = Math.max(0, last - 5);
                 else last = Math.min(100, first + 5);
-                start.value = String(first);
-                end.value = String(last);
             }
-            const x = originX + fullWidth * first / 100;
-            const width = fullWidth * (last - first) / 100;
-            svg.setAttribute('viewBox', `${x} ${originY} ${width} ${fullHeight}`);
-            value.textContent = `${first}–${last}%`;
+            applyRange(first, last);
+            if (group) broadcastZoomRange(group, controls, first, last);
         };
         start.addEventListener('input', () => update(start));
         end.addEventListener('input', () => update(end));
         controls.append(start, end, value);
+        if (group) {
+            controls.dataset.zoomGroup = group;
+            /** @type {any} */ (controls)._applyZoomRange = applyRange;
+        }
         container.appendChild(controls);
+    }
+
+    /**
+     * Pushes one chart's zoom range onto every other slider in its `ZOOM_GROUP`. Peers apply the
+     * range directly rather than through their own input handler, so a group never echoes.
+     */
+    function broadcastZoomRange(group, origin, first, last) {
+        document.querySelectorAll('.native-chart-zoom-slider').forEach(peer => {
+            if (peer === origin) return;
+            if (/** @type {HTMLElement} */ (peer).dataset.zoomGroup !== group) return;
+            const apply = /** @type {any} */ (peer)._applyZoomRange;
+            if (typeof apply === 'function') apply(first, last);
+        });
     }
 
     function nativeLayoutTier(layout, containerWidth) {
@@ -8554,7 +8788,9 @@
                 _postParametersInternal(resetBatch, false, getActivePageName()).then(m => { if (m) renderManifest(m); });
             }
         } else if (action.type === 'OPEN_URL') {
-            const rawUrl = action.url || resolveActionValue(action, rowData, columns);
+            const rawUrl = action.urlTemplate
+                ? interpolateUrlTemplate(action, rowData, columns)
+                : (action.url || resolveActionValue(action, rowData, columns));
             const url = safeUrl(rawUrl);
             if (url && url !== '#') {
                 const target = action.target || '_blank';
@@ -9288,7 +9524,7 @@
     // Batch-update multiple parameters in a single server round-trip.
     // Batch-update multiple parameters in a single server round-trip.
     // Batch-update multiple parameters in a single server round-trip.
-    async function postParameters(params, isInteraction = false, stage = null) {
+    async function postParameters(params, isInteraction = false, stage = null, sourceVisual = null) {
         const shouldStage = stage === null
             ? (!isInteraction && isActivePagePaginated())
             : !!stage;
@@ -9299,10 +9535,10 @@
             updateStagedUI();
             return Promise.resolve(null);
         }
-        return _postParametersInternal(params, isInteraction, getActivePageName());
+        return _postParametersInternal(params, isInteraction, getActivePageName(), sourceVisual);
     }
 
-    async function _postParametersInternal(params, isInteraction = false, pageName = null) {
+    async function _postParametersInternal(params, isInteraction = false, pageName = null, sourceVisual = null) {
         // Convert dictionary to required List<ParameterUpdateRequest> format
         const paramList = Object.entries(params).map(([name, value]) => ({
             name: name,
@@ -9327,7 +9563,8 @@
                 type: 'refreshReport',
                 parameters: params, // VS Code extension handles the dictionary
                 isInteraction: isInteraction,
-                pageName: pageName
+                pageName: pageName,
+                sourceVisual: sourceVisual
             });
             return null;
         }
@@ -9339,7 +9576,9 @@
                 body:    JSON.stringify({
                     params: paramList,
                     isInteraction: isInteraction,
-                    pageName: pageName
+                    pageName: pageName,
+                    // Gates EMIT_FILTER: the server narrows the receivers to the source's TARGETS.
+                    sourceVisual: sourceVisual
                 })
             });
             if (!res.ok) {

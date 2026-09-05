@@ -939,6 +939,16 @@ Common `OPTIONS` keys for report visuals:
 | `SYMBOL_SHAPE` | `LINE`, `SCATTER` | `CIRCLE`, `SQUARE`, `TRIANGLE`, `DIAMOND`, `CROSS`, `STAR` | Sets named-chart point-marker geometry; `CUSTOM` `POINT` layers use the same vocabulary through `SHAPE`. |
 | `SYMBOL_STROKE_COLOR`, `SYMBOL_STROKE_WIDTH` | `LINE`, `SCATTER`; `CUSTOM` `POINT` layer styles | `'#RRGGBB'`, non-negative decimal pixels | Sets point-marker outline color and width. A color alone uses a one-pixel stroke; a width without a color draws no stroke. |
 | `LINE_WIDTH` | `LINE`, line series in `COMBO`; `CUSTOM` `LINE` layer styles | Decimal from `0.1` through `10` pixels | Sets the rendered series stroke width without changing point-marker or overlay widths. |
+| `INTERPOLATION` | `LINE`, `COMBO`; `CUSTOM` `LINE` and `AREA` layer styles | `LINEAR`, `SMOOTH`, `STEP_BEFORE`, `STEP_AFTER` | Selects how a series connects its points. Wins over `SMOOTH` when both are present. |
+| `LINE_DASH` | `LINE`, `COMBO`; `CUSTOM` `LINE` and `AREA` layer styles | `SOLID`, `DASHED`, `DOTTED` | Stroke pattern for the series line. Distinct from `SEGMENT_STYLE`, which overrides individual segments by condition. |
+| `PLOT_BACKGROUND` | Cartesian charts | `'#RRGGBB'` or `'transparent'` | Fills the region bounded by the axes, independently of the visual card. |
+| `PLOT_BORDER` | Cartesian charts | CSS border shorthand such as `'1px dashed #94a3b8'` | Outlines the plot region. `NONE` suppresses the border. |
+| `AXIS_FONT_SIZE`, `AXIS_FONT_COLOR`, `AXIS_TITLE_FONT_SIZE` | Cartesian charts | Positive point size, `'#RRGGBB'`, positive point size | Axis tick-label and axis-title typography (defaults `9`, `#666`/`#444`, `10`). |
+| `SAMPLING` | `LINE`, `SCATTER`, `BUBBLE`, `COMBO` | `NONE`, `LTTB`, `AVERAGE`, `MAX`, `MIN` | Render-time downsampling for dense series. The plan keeps every row; each bucket contributes a real row, so a sampled mark keeps its tooltip and selection identity. |
+| `PROGRESSIVE`, `PROGRESSIVE_CHUNK` | `LINE`, `SCATTER`, `BUBBLE`, `COMBO` | `ON` / `OFF`, positive row count (default `200`) | Reveals marks in chunks across animation frames instead of one layout pass. Browser-only. |
+| `SHOW_EXPORT` | Browser-rendered native charts | `ON` / `OFF` | Adds a per-chart PNG download button. |
+| `SHOW_DATA_VIEW` | Browser-rendered native charts | `ON` / `OFF` | Adds a per-chart toggle between the chart and a table of its `SOURCE` rows. |
+| `ZOOM_GROUP` | Browser-rendered native charts | Group name string | Links range sliders across charts sharing the name; implies `ZOOM_SLIDER = ON`. |
 | `BAND_SIZE` | `BAR`, `HBAR`, bar layers in `COMBO` | Decimal greater than `0` and at most `1` | Controls bar width and therefore spacing. |
 | `AXIS_SORT` | `BAR`, `HBAR`, `LINE`, `AREA`, `COMBO` | `ASC`, `DESC`, `SOURCE`, `VALUE`, `VALUE_DESC` | Controls category-axis order. `ASC` type-sorts datetime, numeric, then text values; `SOURCE` preserves query order; `VALUE` and `VALUE_DESC` sort by the metric value. |
 | `SORT` | `PIE`, `DONUT` | `SOURCE`, `VALUE_DESC`, `VALUE_ASC`, `ALPHA` | Controls slice sort order. `SOURCE` keeps query order; `VALUE_DESC` leads with largest slice; `VALUE_ASC` leads with smallest; `ALPHA` sorts alphabetically. |

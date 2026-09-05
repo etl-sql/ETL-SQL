@@ -18,6 +18,8 @@ CREATE VISUAL VisualName AS LINE (
     [UPDATE_ANIMATION = ON|OFF],
     [HOVER_FOCUS = NONE|SELF|SERIES],
     [SMOOTH = ON|OFF],
+    [INTERPOLATION = LINEAR|SMOOTH|STEP_BEFORE|STEP_AFTER],
+    [LINE_DASH = SOLID|DASHED|DOTTED],
     [SYMBOLS = ON|OFF],
     [SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR],
     [SYMBOL_SIZE = n],
@@ -35,6 +37,17 @@ CREATE VISUAL VisualName AS LINE (
     [ZERO_LINE_DASH = SOLID|DASHED|DOTTED],
     [ZERO_LINE_WIDTH = n],
     [ZOOM_SLIDER = ON|OFF],
+    [PLOT_BACKGROUND = '#rrggbb'|'transparent'],
+    [PLOT_BORDER = 'width style #rrggbb'],
+    [AXIS_FONT_SIZE = n],
+    [AXIS_FONT_COLOR = '#rrggbb'],
+    [AXIS_TITLE_FONT_SIZE = n],
+    [SHOW_EXPORT = ON|OFF],
+    [SHOW_DATA_VIEW = ON|OFF],
+    [ZOOM_GROUP = 'groupName'],
+    [SAMPLING = NONE|LTTB|AVERAGE|MAX|MIN],
+    [PROGRESSIVE = ON|OFF],
+    [PROGRESSIVE_CHUNK = n],
     [SERIES_LABELS = ON|OFF WITH (POSITION = START|END)],
     [DATA_LABELS = ON|OFF WITH (
       [POSITION = OUTSIDE_TOP|OUTSIDE_BOTTOM],
@@ -90,6 +103,8 @@ CREATE VISUAL VisualName AS LINE (
 ## Options
 
 - **SMOOTH = ON|OFF** - Bezier-smoothed curves instead of straight segments (default OFF)
+- **INTERPOLATION = LINEAR|SMOOTH|STEP_BEFORE|STEP_AFTER** - how the series connects its points. `SMOOTH` is the same curve `SMOOTH = ON` produces; the two step modes put the vertical jump before, or after, the point it belongs to. When both are present `INTERPOLATION` wins, so `INTERPOLATION = LINEAR` overrides `SMOOTH = ON`.
+- **LINE_DASH = SOLID|DASHED|DOTTED** - stroke pattern for the series line itself (default SOLID). Distinct from `SEGMENT_STYLE`, which overrides individual segments by condition.
 - **SYMBOLS = ON|OFF** - show data-point markers on the line (default ON)
 - **SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR** - sets the marker geometry when `SYMBOLS = ON` (default `CIRCLE`)
 - **SYMBOL_SIZE = n** - sets the marker radius in pixels (default 4; must be positive)
@@ -106,6 +121,13 @@ CREATE VISUAL VisualName AS LINE (
 - **ZERO_LINE_DASH = SOLID|DASHED|DOTTED** - set the zero-line stroke pattern (default SOLID)
 - **ZERO_LINE_WIDTH = n** - set zero-line width in pixels; the value must be positive (default 1.5)
 - **ZOOM_SLIDER = ON|OFF** - show a browser range selector below the chart (default OFF)
+- **PLOT_BACKGROUND / PLOT_BORDER** - fill and outline the region bounded by the axes, independently of the visual card. `PLOT_BORDER` takes a CSS border shorthand such as `'1px dashed #94a3b8'`.
+- **AXIS_FONT_SIZE / AXIS_FONT_COLOR / AXIS_TITLE_FONT_SIZE** - typography for axis tick labels and axis titles (defaults `9`, `#666`/`#444`, and `10`).
+- **SHOW_EXPORT = ON|OFF** - adds a per-chart PNG download button (default OFF).
+- **SHOW_DATA_VIEW = ON|OFF** - adds a per-chart toggle between the chart and a table of its SOURCE rows (default OFF).
+- **ZOOM_GROUP = 'groupName'** - links the range sliders of every chart naming the same group; implies `ZOOM_SLIDER = ON`.
+- **SAMPLING = NONE|LTTB|AVERAGE|MAX|MIN** - render-time downsampling for dense series. The plan keeps every row and each bucket contributes a real row, so a sampled mark keeps its tooltip and selection identity (default NONE).
+- **PROGRESSIVE = ON|OFF / PROGRESSIVE_CHUNK = n** - reveals marks in `n`-sized batches across animation frames rather than one layout pass (default chunk 200). Browser-only.
 - **SERIES_LABELS = ON|OFF WITH (POSITION = START|END)** — render exactly one series title label per visible series at the first (`START`) or final (`END`) renderable point (default OFF). Gaps and null values are skipped. Deterministically suppresses the data label at that endpoint to prevent collision.
 - **DATA_LABELS = ON|OFF WITH (...)** — show and format point values (default OFF). Extended options include:
   - **POSITION = OUTSIDE_TOP|OUTSIDE_BOTTOM** — label placement relative to data points.

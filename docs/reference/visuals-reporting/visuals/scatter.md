@@ -62,6 +62,15 @@ CREATE VISUAL VisualName AS SCATTER (
 
 ## Options
 
+- **PLOT_BACKGROUND = '#rrggbb'|'transparent'** - fills the region bounded by the axes, independently of the visual card.
+- **PLOT_BORDER = 'width style #rrggbb'** - outlines that same plot region (e.g. `'1px dashed #94a3b8'`).
+- **AXIS_FONT_SIZE = n / AXIS_FONT_COLOR = '#rrggbb' / AXIS_TITLE_FONT_SIZE = n** - typography for axis tick labels and axis titles (defaults `9`, `#666`/`#444`, and `10`).
+- **SHOW_EXPORT = ON|OFF** - adds a per-chart PNG download button (default OFF).
+- **SHOW_DATA_VIEW = ON|OFF** - adds a per-chart toggle between the chart and a table of its SOURCE rows (default OFF).
+- **ZOOM_GROUP = 'groupName'** - links the range sliders of every chart naming the same group; implies `ZOOM_SLIDER = ON`.
+- **SAMPLING = NONE|LTTB|AVERAGE|MAX|MIN** - render-time downsampling for dense series. The plan keeps every row and each bucket contributes a real row, so a sampled mark keeps its tooltip and selection identity (default NONE).
+- **PROGRESSIVE = ON|OFF / PROGRESSIVE_CHUNK = n** - reveals marks in `n`-sized batches across animation frames rather than one layout pass (default chunk 200). Browser-only.
+
 - **SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR** — sets a single marker geometry for a named `SCATTER` visual (default `CIRCLE`). `BUBBLE` keeps circular area marks.
 - **SYMBOL_SIZE = n** — sets default point marker radius in pixels (default 4; must be positive). Overridden when `SIZE` mapping is provided.
 - **SYMBOL_STROKE_COLOR = '#rrggbb'** — outlines point markers with a portable hex color; without a color, markers have no stroke.

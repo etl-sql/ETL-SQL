@@ -1,6 +1,6 @@
 # RELDATEPICKER
 
-A filter control for selecting relative or absolute date values with preset quick-picks and validation. Supports past, future, and fiscal calendar expressions.
+A filter control for selecting relative or absolute date values with preset quick-picks and validation. Supports backward-looking, forward-looking, and fiscal calendar expressions.
 
 ## Syntax
 

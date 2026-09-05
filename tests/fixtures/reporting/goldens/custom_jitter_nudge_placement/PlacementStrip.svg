@@ -20,8 +20,10 @@
 </g>
 </g>
 <text class='plot-smart-label' data-row-index='0' data-priority='201' x='83.636' y='89.818' text-anchor='middle' font-size='10' fill='#5470c6'>r1</text>
+<path class='plot-smart-label-leader' data-row-index='1' d='M 398.788 -54.697 L 398.788 49' fill='none' stroke='#5470c6' stroke-width='.75'/>
 <text class='plot-smart-label' data-row-index='1' data-priority='201' x='398.788' y='54' text-anchor='middle' font-size='10' fill='#5470c6'>r2</text>
 <text class='plot-smart-label' data-row-index='2' data-priority='201' x='241.212' y='165.576' text-anchor='middle' font-size='10' fill='#5470c6'>r3</text>
+<path class='plot-smart-label-leader' data-row-index='3' d='M 556.364 21.061 L 556.364 49' fill='none' stroke='#5470c6' stroke-width='.75'/>
 <text class='plot-smart-label' data-row-index='3' data-priority='201' x='556.364' y='54' text-anchor='middle' font-size='10' fill='#5470c6'>r4</text>
 <line x1='60' y1='290' x2='60' y2='294' stroke='#bbb'/>
 <text class='plot-axis-label' data-axis-index='0' x='60' y='306' text-anchor='middle' font-size='9' fill='#666'>11.55</text>

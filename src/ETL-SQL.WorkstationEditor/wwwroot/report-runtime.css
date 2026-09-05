@@ -192,6 +192,36 @@ body.theme-dark, body.vscode-dark, .theme-dark {
   .native-chart-zoom-slider input[type="range"]::-webkit-slider-thumb { pointer-events: auto; }
   .native-chart-zoom-slider input[type="range"]::-moz-range-thumb { pointer-events: auto; }
   .native-chart-zoom-slider output { grid-column: 2; grid-row: 1; min-width: 48px; text-align: right; }
+  .native-chart-toolbox {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+    padding: 0 8px 4px;
+  }
+  .native-chart-toolbox-button {
+    border: 1px solid var(--report-border, #e2e8f0);
+    background: transparent;
+    color: var(--report-muted, #64748b);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1;
+    padding: 3px 6px;
+  }
+  .native-chart-toolbox-button:hover { background: var(--report-surface-muted, #f1f5f9); }
+  .native-chart-toolbox-button[aria-pressed="true"] { background: var(--report-surface-muted, #f1f5f9); }
+  .native-chart-data-view {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .native-chart-data-view th,
+  .native-chart-data-view td {
+    border: 1px solid var(--report-border, #e2e8f0);
+    padding: 3px 6px;
+    text-align: left;
+  }
+  .native-chart-data-view th { background: var(--report-surface-muted, #f1f5f9); }
   .native-chart-wrapper [data-row-index].cross-dimmed { opacity: 0.2; }
   .native-chart-wrapper [data-row-index].cross-highlighted { opacity: 1; }
   .native-chart-wrapper .cross-highlight-universe { opacity: 0.28; }
@@ -236,6 +266,16 @@ body.theme-dark, body.vscode-dark, .theme-dark {
   }
   .report-chart-tooltip-text,
   .report-chart-tooltip-loading { padding: 8px; font-size: 12px; }
+  .report-chart-tooltip-fields {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 2px 12px;
+    margin: 0;
+    padding: 8px;
+    font-size: 12px;
+  }
+  .report-chart-tooltip-fields dt { color: #64748b; margin: 0; }
+  .report-chart-tooltip-fields dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
   .report-chart-tooltip .visual-card {
     min-height: 0;
     margin: 0;

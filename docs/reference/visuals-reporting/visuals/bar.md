@@ -33,6 +33,17 @@ CREATE VISUAL VisualName AS BAR (
         [ZERO_LINE_DASH = SOLID|DASHED|DOTTED],
         [ZERO_LINE_WIDTH = n],
         [ZOOM_SLIDER = ON|OFF],
+        [PLOT_BACKGROUND = '#rrggbb'|'transparent'],
+        [PLOT_BORDER = 'width style #rrggbb'],
+        [AXIS_FONT_SIZE = n],
+        [AXIS_FONT_COLOR = '#rrggbb'],
+        [AXIS_TITLE_FONT_SIZE = n],
+        [SHOW_EXPORT = ON|OFF],
+        [SHOW_DATA_VIEW = ON|OFF],
+        [ZOOM_GROUP = 'groupName'],
+        [SAMPLING = NONE|LTTB|AVERAGE|MAX|MIN],
+        [PROGRESSIVE = ON|OFF],
+        [PROGRESSIVE_CHUNK = n],
         [LEGEND = ON|OFF],
         [LEGEND_POSITION = TOP|RIGHT|BOTTOM|LEFT],
         [DATA_LABELS = ON|OFF WITH (
@@ -71,6 +82,13 @@ CREATE VISUAL VisualName AS BAR (
 - **SERIES** - The column containing series breakdown for multi-series grouping or stacking (optional).
 
 ## Options
+
+- **PLOT_BACKGROUND = '#rrggbb'|'transparent'** - fills the region bounded by the axes, independently of the visual card.
+- **PLOT_BORDER = 'width style #rrggbb'** - outlines that same plot region (e.g. `'1px dashed #94a3b8'`).
+- **AXIS_FONT_SIZE = n / AXIS_FONT_COLOR = '#rrggbb' / AXIS_TITLE_FONT_SIZE = n** - typography for axis tick labels and axis titles (defaults `9`, `#666`/`#444`, and `10`).
+- **SHOW_EXPORT = ON|OFF** - adds a per-chart PNG download button (default OFF).
+- **SHOW_DATA_VIEW = ON|OFF** - adds a per-chart toggle between the chart and a table of its SOURCE rows (default OFF).
+- **ZOOM_GROUP = 'groupName'** - links the range sliders of every chart naming the same group; implies `ZOOM_SLIDER = ON`.
 - **BAR_MIN_HEIGHT = n** - Minimum bar height in pixels so very small non-zero values remain visible and hoverable. Default is `0`.
 - **ANIMATION = ON|OFF** - Controls entry animation when the chart first mounts. Default is `OFF` for server/PDF, `ON` for interactive dashboards.
 - **ANIMATION_DURATION = n** - Entry animation duration in milliseconds. Default is `600`.

@@ -57,14 +57,43 @@ CREATE VISUAL ReferenceOverlays AS LINE (
     )
 );
 
+-- 6. FORECAST overlay with confidence ribbon and anomaly markers
+SELECT 'Jan' AS Period, 100 AS Actual, CAST(NULL AS INT) AS Projected,
+       CAST(NULL AS INT) AS ConfLow, CAST(NULL AS INT) AS ConfHigh, CAST(NULL AS INT) AS Anomaly
+INTO #outlook
+UNION ALL SELECT 'Feb', 115, NULL, NULL, NULL, NULL
+UNION ALL SELECT 'Mar', 108, NULL, NULL, NULL, 108
+UNION ALL SELECT 'Apr', 125, NULL, NULL, NULL, NULL
+UNION ALL SELECT 'May', 140, 140, 130, 150, NULL
+UNION ALL SELECT 'Jun', NULL, 155, 142, 168, NULL
+UNION ALL SELECT 'Jul', NULL, 162, 148, 176, NULL
+UNION ALL SELECT 'Aug', NULL, 180, 160, 200, 180;
+
+CREATE VISUAL ForecastOverlay AS LINE (
+    SOURCE = #outlook,
+    TITLE = 'FORECAST Overlay with Confidence Ribbon and Anomalies',
+    MAPPINGS (X = Period, Y = Actual),
+    OPTIONS (AXIS_SORT = SOURCE),
+    OVERLAYS (
+        FORECAST(Projected) AS DASHED WITH (
+            CONFIDENCE_LOW  = ConfLow,
+            CONFIDENCE_HIGH = ConfHigh,
+            ANOMALY         = Anomaly,
+            COLOR           = '#2563eb',
+            LABEL           = 'Projected'
+        )
+    )
+);
+
 -- Page Layout
 CREATE PAGE OverlaySink AS DASHBOARD (
-    STRUCTURE = 'A B / C D',
+    STRUCTURE = 'A B / C D / E E',
     MAP (
         'A' = BasicOverlays,
         'B' = RegressionOverlays,
         'C' = AnalyticalOverlays,
-        'D' = ReferenceOverlays
+        'D' = ReferenceOverlays,
+        'E' = ForecastOverlay
     )
 );
 

@@ -227,6 +227,21 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
                         $"Layer '{layer.Name}' LINE_WIDTH must be from {LineSeriesWidth.Minimum} through {LineSeriesWidth.Maximum} pixels; found '{value}'.");
                 return new StyleToken(style.Name, width);
             }
+            if (style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase))
+            {
+                if (NamedVisualChartLowerer.NormalizeInterpolation(value) is not { } interpolation)
+                    throw AdvancedChartSemanticException.At(style,
+                        $"Layer '{layer.Name}' INTERPOLATION accepts only LINEAR, SMOOTH, STEP_BEFORE, or STEP_AFTER; found '{value}'.");
+                return new StyleToken(style.Name, interpolation);
+            }
+            if (style.Name.Equals("LINE_DASH", StringComparison.OrdinalIgnoreCase))
+            {
+                if (NamedVisualChartLowerer.NormalizeLineDash(value) is not { } dash)
+                    throw AdvancedChartSemanticException.At(style,
+                        $"Layer '{layer.Name}' LINE_DASH accepts only SOLID, DASHED, or DOTTED; found '{value}'.");
+                // The renderer reads dash geometry off the shared 'lineStyle' token.
+                return new StyleToken("lineStyle", dash);
+            }
             return new StyleToken(style.Name, value);
         });
         if (!string.IsNullOrEmpty(layer.NullHandling))

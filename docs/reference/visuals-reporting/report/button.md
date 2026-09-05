@@ -38,6 +38,7 @@ CREATE BUTTON <name> AS (
 
 - **ON_CLICK = RESET_PARAMETERS([@param, ...])** — Resets all or specified parameters to their default values.
 - **ON_CLICK = OPEN_URL('url' [, TARGET = '_blank|_self'])** — Opens an external web URL.
+- **ON_CLICK = OPEN_URL(TEMPLATE = 'url-with-{Field}-placeholders', PARAMS = (col, ...) [, TARGET = '_blank|_self'])** — Opens a URL built from the clicked row. Only the columns listed in `PARAMS` may be interpolated, and every value is URL-encoded, so a row value cannot introduce a path segment, query parameter, or scheme of its own. A placeholder naming an undeclared or missing column resolves to the empty string. URL templates are author-declared, so no path resolution policy applies.
 - **ON_CLICK = SHOW_MODAL('ModalName')** — Displays the specified MODAL container.
 - **ON_CLICK = HIDE_MODAL('ModalName')** — Dismisses and hides the specified MODAL container.
 - **ON_CLICK = BACK** — Navigates back to the previous report page.

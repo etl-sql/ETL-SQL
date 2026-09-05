@@ -40,6 +40,15 @@ CREATE VISUAL VisualName AS BUBBLE (
 
 ## Options
 
+- **PLOT_BACKGROUND = '#rrggbb'|'transparent'** - fills the region bounded by the axes, independently of the visual card.
+- **PLOT_BORDER = 'width style #rrggbb'** - outlines that same plot region (e.g. `'1px dashed #94a3b8'`).
+- **AXIS_FONT_SIZE = n / AXIS_FONT_COLOR = '#rrggbb' / AXIS_TITLE_FONT_SIZE = n** - typography for axis tick labels and axis titles (defaults `9`, `#666`/`#444`, and `10`).
+- **SHOW_EXPORT = ON|OFF** - adds a per-chart PNG download button (default OFF).
+- **SHOW_DATA_VIEW = ON|OFF** - adds a per-chart toggle between the chart and a table of its SOURCE rows (default OFF).
+- **ZOOM_GROUP = 'groupName'** - links the range sliders of every chart naming the same group; implies `ZOOM_SLIDER = ON`.
+- **SAMPLING = NONE|LTTB|AVERAGE|MAX|MIN** - render-time downsampling for dense series. The plan keeps every row and each bucket contributes a real row, so a sampled mark keeps its tooltip and selection identity (default NONE).
+- **PROGRESSIVE = ON|OFF / PROGRESSIVE_CHUNK = n** - reveals marks in `n`-sized batches across animation frames rather than one layout pass (default chunk 200). Browser-only.
+
 - **SIZE_RANGE = (min_px, max_px)** — sets explicit minimum and maximum bubble radius in pixels (defaults to `5` and `65`).
 - **MIN_BUBBLE_SIZE = n** — sets the minimum circle radius in pixels (default `5`).
 - **MAX_BUBBLE_SIZE = n** — sets the maximum circle radius in pixels (default `65`).
