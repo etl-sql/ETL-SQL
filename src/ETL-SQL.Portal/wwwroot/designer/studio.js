@@ -1,3 +1,4 @@
+// @ts-nocheck — generated copy; check the canonical source.
 /* GENERATED FILE - DO NOT EDIT.
  * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio.js
  * Edit the canonical source, then run: node .\scripts\sync-assets.js
@@ -1767,11 +1768,11 @@ export async function createStudioWorkbench(container, opts = {}) {
             `;
 
             tab.addEventListener('click', (e) => {
-                if (e.target.closest('.etlsql-tab-rename-input')) {
+                if (/** @type {Element} */ (e.target).closest('.etlsql-tab-rename-input')) {
                     e.stopPropagation();
                     return;
                 }
-                if (e.target.closest('.etlsql-tab-close')) {
+                if (/** @type {Element} */ (e.target).closest('.etlsql-tab-close')) {
                     e.stopPropagation();
                     closeDoc(doc.id);
                 } else if (doc.id !== state.activeDocId) {
@@ -1781,7 +1782,7 @@ export async function createStudioWorkbench(container, opts = {}) {
 
             const title = tab.querySelector('.etlsql-tab-title');
             if (opts.onRenameDocument && title) {
-                title.title = `Double-click to rename ${doc.path}`;
+                /** @type {HTMLElement} */ (title).title = `Double-click to rename ${doc.path}`;
                 title.addEventListener('dblclick', (event) => {
                     event.preventDefault();
                     event.stopPropagation();
@@ -1936,7 +1937,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                 <button type="button" class="etlsql-studio-tab-dropdown-close" title="Close Tab">${_studioIcon('close', 10)}</button>
             `;
             item.addEventListener('click', (e) => {
-                if (e.target.closest('.etlsql-studio-tab-dropdown-close')) {
+                if (/** @type {Element} */ (e.target).closest('.etlsql-studio-tab-dropdown-close')) {
                     e.stopPropagation();
                     closeDoc(doc.id);
                     renderTabDropdown();
@@ -2508,7 +2509,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         newMenuEl.querySelectorAll('[data-new-type]').forEach(btn => {
             btn.addEventListener('click', (ev) => {
                 ev.stopPropagation();
-                const type = btn.dataset.newType;
+                const type = /** @type {HTMLElement} */ (btn).dataset.newType;
                 closeNewTabMenu();
                 createNewFile(type);
             });

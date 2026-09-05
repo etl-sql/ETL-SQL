@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { readPortalPage, readPortalPageModule } from './lib/portal-page.mjs';
 
-const portal = await readFile(new URL('../src/ETL-SQL.Portal/wwwroot/orchestrator.html', import.meta.url), 'utf8');
+const portal = readPortalPage('orchestrator');
 const story = await readFile(new URL('../tools/ui-sandbox/stories/orchestrator-run-overrides.story.js', import.meta.url), 'utf8');
 
 assert.match(portal, /id="runJobModal"/);

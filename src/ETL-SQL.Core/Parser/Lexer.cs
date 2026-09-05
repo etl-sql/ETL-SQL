@@ -118,6 +118,7 @@ public class Lexer
         dict["DRILL_REPORT"] = TokenType.DRILL_REPORT;
         dict["SET_PARAMETER"] = TokenType.SET_PARAMETER;
         dict["ON_CHANGE"] = TokenType.ON_CHANGE;
+        dict["ON_SUBMIT"] = TokenType.ON_SUBMIT;
         dict["REFRESH"] = TokenType.REFRESH;
         // EVERY and COMPRESS are already registered via LanguageMetadata
         dict["TTL"] = TokenType.TTL;
@@ -159,6 +160,15 @@ public class Lexer
         dict["ICON"] = TokenType.ICON;
         dict["PINNABLE"] = TokenType.PINNABLE;
         dict["CONTENT"] = TokenType.CONTENT;
+        dict["ON_LOAD"] = TokenType.ON_LOAD;
+        dict["MOBILE_LAYOUT"] = TokenType.MOBILE_LAYOUT;
+        dict["BREAKPOINT"] = TokenType.BREAKPOINT;
+        dict["ANNOTATIONS"] = TokenType.ANNOTATIONS;
+        dict["POINT"] = TokenType.POINT;
+        dict["COORD"] = TokenType.COORD;
+        dict["ACTIVE_STYLE"] = TokenType.ACTIVE_STYLE;
+        dict["SEGMENT_STYLE"] = TokenType.SEGMENT_STYLE;
+        dict["LINE_DASH"] = TokenType.LINE_DASH;
 
 
         // ── Overlay keywords (Phase 9F) ────────────────────────────────
@@ -228,6 +238,12 @@ public class Lexer
         dict["NAVIGATE_PAGE"] = TokenType.NAVIGATE_PAGE;
         dict["REFRESH_VISUALS"] = TokenType.REFRESH_VISUALS;
         dict["APPLY_BOOKMARK"] = TokenType.APPLY_BOOKMARK;
+        dict["RESET_PARAMETERS"] = TokenType.RESET_PARAMETERS;
+        dict["OPEN_URL"] = TokenType.OPEN_URL;
+        dict["SHOW_MODAL"] = TokenType.SHOW_MODAL;
+        dict["HIDE_MODAL"] = TokenType.HIDE_MODAL;
+        dict["COLLAPSIBLE"] = TokenType.COLLAPSIBLE;
+        dict["BADGE"] = TokenType.BADGE;
         dict["BOOKMARK"] = TokenType.BOOKMARK;
 
         // ── Portal admin command keywords ──────────────────────

@@ -39,6 +39,7 @@ public class ReportParser : ParserComponent
         var styles = new Dictionary<string, string>();
         var typedSeries = new List<TypedSeries>();
         var formattingRules = new List<FormattingRule>();
+        var segmentStyles = new List<SegmentStyleRule>();
         var overlays = new List<VisualOverlay>();
         var summaries = new List<TableSummaryItem>();
         string? labelPosition = null;
@@ -94,7 +95,7 @@ public class ReportParser : ParserComponent
             else if (Match(TokenType.OPTIONS))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after OPTIONS");
-                ParseOptions(options, axisOptions);
+                ParseOptions(options, axisOptions, segmentStyles);
                 Consume(TokenType.RPAREN, "Expected ')' to close OPTIONS");
             }
             else if (Match(TokenType.ACTIONS))
@@ -125,11 +126,36 @@ public class ReportParser : ParserComponent
                 formattingRules.AddRange(ParseFormattingRules());
                 Consume(TokenType.RPAREN, "Expected ')' to close FORMATTING");
             }
+            else if (Match(TokenType.SEGMENT_STYLE) || IsCurrentValue("SEGMENT_STYLE"))
+            {
+                if (_parser.Previous.Type != TokenType.SEGMENT_STYLE) Advance();
+                Consume(TokenType.LPAREN, "Expected '(' after SEGMENT_STYLE");
+                segmentStyles.AddRange(ParseSegmentStyleRules());
+                Consume(TokenType.RPAREN, "Expected ')' to close SEGMENT_STYLE");
+            }
             else if (Match(TokenType.OVERLAYS))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after OVERLAYS");
                 overlays.AddRange(ParseOverlays());
                 Consume(TokenType.RPAREN, "Expected ')' to close OVERLAYS");
+            }
+            else if (Match(TokenType.ANNOTATIONS) || IsCurrentValue("ANNOTATIONS"))
+            {
+                if (_parser.Previous.Type != TokenType.ANNOTATIONS) Advance();
+                Consume(TokenType.LPAREN, "Expected '(' after ANNOTATIONS");
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    if (Match(TokenType.POINT) || IsCurrentValue("POINT"))
+                    {
+                        overlays.Add(ParseAnnotationPoint());
+                    }
+                    else
+                    {
+                        throw new SyntaxException($"Expected POINT in ANNOTATIONS but got '{_parser.Current.Value}'", _parser.Current.Line, _parser.Current.Column);
+                    }
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close ANNOTATIONS");
             }
             else if (Match(TokenType.CONTENT))
             {
@@ -147,17 +173,42 @@ public class ReportParser : ParserComponent
             else if (Match(TokenType.MIN))
             {
                 Match(TokenType.EQUALS);
-                if (double.TryParse(ConsumeReportOptionValue(), out var minVal)) min = minVal;
+                var minStr = ConsumeReportOptionValue();
+                if (double.TryParse(minStr, out var minVal)) min = minVal;
+                options.Add(new VisualOption { Key = "MIN", Value = minStr });
             }
             else if (Match(TokenType.MAX))
             {
                 Match(TokenType.EQUALS);
-                if (double.TryParse(ConsumeReportOptionValue(), out var maxVal)) max = maxVal;
+                var maxStr = ConsumeReportOptionValue();
+                if (double.TryParse(maxStr, out var maxVal)) max = maxVal;
+                options.Add(new VisualOption { Key = "MAX", Value = maxStr });
             }
             else if (Match(TokenType.DECIMALS))
             {
                 Match(TokenType.EQUALS);
                 if (int.TryParse(ConsumeReportOptionValue(), out var decVal)) decimals = decVal;
+            }
+            else if (IsCurrentValue("STEP"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                var stepStr = ConsumeReportOptionValue();
+                options.Add(new VisualOption { Key = "STEP", Value = stepStr });
+            }
+            else if (IsCurrentValue("LABEL"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                var labelStr = ConsumeReportOptionValue();
+                options.Add(new VisualOption { Key = "LABEL", Value = labelStr });
+            }
+            else if (IsCurrentValue("ROWS"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                var rowsStr = ConsumeReportOptionValue();
+                options.Add(new VisualOption { Key = "ROWS", Value = rowsStr });
             }
             else if (Match(TokenType.PLACEHOLDER))
             {
@@ -199,20 +250,83 @@ public class ReportParser : ParserComponent
                 Advance();
                 Match(TokenType.EQUALS);
                 var modeVal = ConsumeReportOptionValue().ToUpperInvariant();
-                htmlMode = modeVal switch
+                options.Add(new VisualOption { Key = "MODE", Value = modeVal });
+                if (visualType == VisualType.Html)
                 {
-                    "SINGLE" => HtmlVisualMode.Single,
-                    "REPEATER" => HtmlVisualMode.Repeater,
-                    _ => throw new SyntaxException(
-                        $"Unknown HTML visual MODE '{modeVal}'. Expected SINGLE or REPEATER.",
-                        _parser.Previous.Line, _parser.Previous.Column)
-                };
+                    htmlMode = modeVal switch
+                    {
+                        "SINGLE" => HtmlVisualMode.Single,
+                        "REPEATER" => HtmlVisualMode.Repeater,
+                        _ => throw new SyntaxException(
+                            $"Unknown HTML visual MODE '{modeVal}'. Expected SINGLE or REPEATER.",
+                            _parser.Previous.Line, _parser.Previous.Column)
+                    };
+                }
             }
             else if (IsCurrentValue("FALLBACK"))
             {
                 Advance();
                 Match(TokenType.EQUALS);
-                htmlFallback = Consume(TokenType.STRING_LITERAL, "Expected fallback string after FALLBACK =").Value;
+                var fb = ConsumeReportOptionValue();
+                htmlFallback = fb;
+                options.Add(new VisualOption { Key = "FALLBACK", Value = fb });
+            }
+            else if (IsCurrentValue("DEPENDS_ON"))
+            {
+                Advance();
+                Consume(TokenType.LPAREN, "Expected '(' after DEPENDS_ON");
+                var deps = new List<string>();
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    var p = ConsumeIdentifierOrVariable("Expected parameter name in DEPENDS_ON").Value;
+                    if (!p.StartsWith("@")) p = "@" + p;
+                    deps.Add(p);
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close DEPENDS_ON");
+                options.Add(new VisualOption { Key = "DEPENDS_ON", Value = string.Join(",", deps) });
+            }
+            else if (IsCurrentValue("DISABLED"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                options.Add(new VisualOption { Key = "DISABLED", Value = ConsumeReportOptionValue() });
+            }
+            else if (IsCurrentValue("READ_ONLY"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                options.Add(new VisualOption { Key = "READ_ONLY", Value = ConsumeReportOptionValue() });
+            }
+            else if (Match(TokenType.VISIBLE) || IsCurrentValue("VISIBLE"))
+            {
+                if (IsCurrentValue("VISIBLE")) Advance();
+                Match(TokenType.EQUALS);
+                options.Add(new VisualOption { Key = "VISIBLE", Value = ConsumeReportOptionValue() });
+            }
+            else if (IsCurrentValue("ALT"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                options.Add(new VisualOption { Key = "ALT", Value = ConsumeReportOptionValue() });
+            }
+            else if (IsCurrentValue("ASPECT_RATIO"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                options.Add(new VisualOption { Key = "ASPECT_RATIO", Value = ConsumeReportOptionValue() });
+            }
+            else if (IsCurrentValue("MAX_LINES"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                options.Add(new VisualOption { Key = "MAX_LINES", Value = ConsumeReportOptionValue() });
+            }
+            else if (Match(TokenType.OVERFLOW) || IsCurrentValue("OVERFLOW"))
+            {
+                if (IsCurrentValue("OVERFLOW")) Advance();
+                Match(TokenType.EQUALS);
+                options.Add(new VisualOption { Key = "OVERFLOW", Value = ConsumeReportOptionValue() });
             }
             else
             {
@@ -309,6 +423,7 @@ public class ReportParser : ParserComponent
             Interactions = interactions,
             TypedSeries = typedSeries,
             FormattingRules = formattingRules,
+            SegmentStyles = segmentStyles,
             Overlays = overlays,
             Summaries = summaries,
             SummaryOptions = summaryOptions,
@@ -433,6 +548,7 @@ public class ReportParser : ParserComponent
         var scales = new List<AdvancedChartScale>();
         var encodings = new List<AdvancedChartEncoding>();
         var layers = new List<AdvancedChartLayer>();
+        var annotations = new List<VisualOverlay>();
         AdvancedChartFacet? facet = null;
         var resolution = new AdvancedChartResolution();
 
@@ -457,6 +573,25 @@ public class ReportParser : ParserComponent
             {
                 Advance();
                 layers.AddRange(ParseAdvancedChartLayers());
+            }
+            else if (Match(TokenType.ANNOTATIONS) || IsCurrentValue("ANNOTATIONS"))
+            {
+                if (_parser.Previous.Type != TokenType.ANNOTATIONS) Advance();
+                Consume(TokenType.LPAREN, "Expected '(' after ANNOTATIONS");
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    if (Match(TokenType.POINT) || IsCurrentValue("POINT"))
+                    {
+                        annotations.Add(ParseAnnotationPoint());
+                    }
+                    else
+                    {
+                        throw new SyntaxException($"Expected POINT in ANNOTATIONS but got '{_parser.Current.Value}'.",
+                            _parser.Current.Line, _parser.Current.Column);
+                    }
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close ANNOTATIONS");
             }
             else if (IsCurrentValue("FACET"))
             {
@@ -489,6 +624,7 @@ public class ReportParser : ParserComponent
             Scales = scales.ToImmutableArray(),
             Encodings = encodings.ToImmutableArray(),
             Layers = layers.ToImmutableArray(),
+            Annotations = annotations.ToImmutableArray(),
             Facet = facet,
             Resolution = resolution,
             Line = chartStart.Line,
@@ -601,6 +737,8 @@ public class ReportParser : ParserComponent
             string? labelRotation = null;
             int? labelSkip = null;
             var outerPadding = 0m;
+            string? tickFormat = null;
+            string? timeUnit = null;
             var order = AdvancedChartSortDirection.Source;
             var explicitOrder = new List<Expression>();
             AdvancedChartColorRange? colorRange = null;
@@ -630,6 +768,12 @@ public class ReportParser : ParserComponent
                         labelSkip = skip == "AUTO" ? null : int.Parse(skip, CultureInfo.InvariantCulture);
                         break;
                     case "OUTER_PADDING": outerPadding = decimal.Parse(ParseSignedNumberText(), CultureInfo.InvariantCulture); break;
+                    case "TICK_FORMAT":
+                        tickFormat = Consume(TokenType.STRING_LITERAL, "Expected string TICK_FORMAT").Value;
+                        break;
+                    case "TIME_UNIT":
+                        timeUnit = ConsumeAdvancedWord("Expected AUTO, DAY, WEEK, MONTH, QUARTER, or YEAR for TIME_UNIT").ToUpperInvariant();
+                        break;
                     case "ORDER":
                         if (Match(TokenType.LPAREN))
                         {
@@ -668,6 +812,8 @@ public class ReportParser : ParserComponent
                 LabelRotation = labelRotation,
                 LabelSkip = labelSkip,
                 OuterPadding = outerPadding,
+                TickFormat = tickFormat,
+                TimeUnit = timeUnit,
                 Order = order,
                 ExplicitOrder = explicitOrder.ToImmutableArray(),
                 ColorRange = colorRange,
@@ -750,6 +896,9 @@ public class ReportParser : ParserComponent
             var encodings = new List<AdvancedChartEncoding>();
             var styles = new List<AdvancedChartStyle>();
             var conditions = new List<AdvancedChartCondition>();
+            string? nullHandling = null;
+            string? areaBaseline = null;
+            string? hoverFocus = null;
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
                 if (IsCurrentValue("Z_INDEX"))
@@ -788,6 +937,32 @@ public class ReportParser : ParserComponent
                     Consume(TokenType.EQUALS, "Expected '=' after ORIENTATION");
                     tickOrientation = ParseAdvancedTickOrientation(ConsumeAdvancedWord("Expected AUTO, HORIZONTAL, or VERTICAL"));
                 }
+                else if (IsCurrentValue("NULL_HANDLING"))
+                {
+                    Advance();
+                    Consume(TokenType.EQUALS, "Expected '=' after NULL_HANDLING");
+                    nullHandling = ConsumeAdvancedWord("Expected CONNECT, GAP, or ZERO after NULL_HANDLING =").ToUpperInvariant();
+                }
+                else if (IsCurrentValue("AREA_BASELINE"))
+                {
+                    Advance();
+                    Consume(TokenType.EQUALS, "Expected '=' after AREA_BASELINE");
+                    if (_parser.Current.Type == TokenType.IDENTIFIER || _parser.Current.Type == TokenType.STRING)
+                    {
+                        areaBaseline = _parser.Current.Value;
+                        Advance();
+                    }
+                    else
+                    {
+                        areaBaseline = ParseSignedNumberText();
+                    }
+                }
+                else if (IsCurrentValue("HOVER_FOCUS"))
+                {
+                    Advance();
+                    Consume(TokenType.EQUALS, "Expected '=' after HOVER_FOCUS");
+                    hoverFocus = ConsumeAdvancedWord("Expected NONE, SELF, or SERIES after HOVER_FOCUS =").ToUpperInvariant();
+                }
                 else if (IsCurrentValue("ENCODINGS"))
                 {
                     Advance();
@@ -824,6 +999,9 @@ public class ReportParser : ParserComponent
                 Encodings = encodings.ToImmutableArray(),
                 Styles = styles.ToImmutableArray(),
                 Conditions = conditions.ToImmutableArray(),
+                NullHandling = nullHandling,
+                AreaBaseline = areaBaseline,
+                HoverFocus = hoverFocus,
                 Line = start.Line,
                 Column = start.Column,
                 EndLine = layerEnd.EndLine,
@@ -1139,12 +1317,12 @@ public class ReportParser : ParserComponent
         var color = AdvancedChartResolutionMode.Shared;
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
-            var channel = ConsumeAdvancedWord("Expected X, Y, or COLOR in RESOLVE").ToUpperInvariant();
+            var channel = ConsumeAdvancedWord("Expected X, Y, COLOR, SHARED_X, SHARED_Y, or SHARED_COLOR in RESOLVE").ToUpperInvariant();
             Consume(TokenType.EQUALS, $"Expected '=' after RESOLVE {channel}");
-            var mode = ParseAdvancedResolution(ConsumeAdvancedWord("Expected SHARED or INDEPENDENT"));
-            if (channel == "X") x = mode;
-            else if (channel == "Y") y = mode;
-            else if (channel == "COLOR") color = mode;
+            var mode = ParseAdvancedResolution(ConsumeAdvancedWord("Expected SHARED, INDEPENDENT, ON, or OFF"));
+            if (channel is "X" or "SHARED_X") x = mode;
+            else if (channel is "Y" or "SHARED_Y" or "SHARED_AXIS") y = mode;
+            else if (channel is "COLOR" or "SHARED_COLOR") color = mode;
             else throw new SyntaxException($"Unknown RESOLVE channel '{channel}'.", _parser.Previous.Line, _parser.Previous.Column);
             Match(TokenType.COMMA);
         }
@@ -1226,6 +1404,7 @@ public class ReportParser : ParserComponent
         "MEDIAN" => AdvancedChartChannel.Median,
         "Q3" => AdvancedChartChannel.Q3,
         "HIGH" => AdvancedChartChannel.High,
+        "MEAN" => AdvancedChartChannel.Mean,
         "OPEN" => AdvancedChartChannel.Open,
         "CLOSE" => AdvancedChartChannel.Close,
         "ERROR_LOW" => AdvancedChartChannel.ErrorLow,
@@ -1282,9 +1461,9 @@ public class ReportParser : ParserComponent
 
     private AdvancedChartResolutionMode ParseAdvancedResolution(string value) => value.ToUpperInvariant() switch
     {
-        "SHARED" => AdvancedChartResolutionMode.Shared,
-        "INDEPENDENT" => AdvancedChartResolutionMode.Independent,
-        _ => throw new SyntaxException($"Unknown resolution mode '{value}'.", _parser.Previous.Line, _parser.Previous.Column)
+        "SHARED" or "ON" or "TRUE" => AdvancedChartResolutionMode.Shared,
+        "INDEPENDENT" or "OFF" or "FALSE" => AdvancedChartResolutionMode.Independent,
+        _ => throw new SyntaxException($"Unknown resolution mode '{value}'. Expected SHARED, INDEPENDENT, ON, or OFF.", _parser.Previous.Line, _parser.Previous.Column)
     };
 
     private AdvancedChartConditionChannel ParseAdvancedConditionChannel(string value) => value.ToUpperInvariant() switch
@@ -1479,6 +1658,7 @@ public class ReportParser : ParserComponent
         Consume(TokenType.LPAREN, "Expected '(' after page mode");
 
         string? visibility = "ON";
+        Expression? visibleExpr = null;
         string? structure = null;
         var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var pageStyles = new Dictionary<string, string>();
@@ -1490,6 +1670,9 @@ public class ReportParser : ParserComponent
         TooltipDefinition? tooltip = null;
         int refreshSecs = 0;
         PageLayoutDefinition? printLayout = null;
+        MobileLayoutDefinition? mobileLayout = null;
+        var pageActions = new List<VisualAction>();
+        var pageOptions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -1510,6 +1693,77 @@ public class ReportParser : ParserComponent
                     Match(TokenType.COMMA);
                 }
                 Consume(TokenType.RPAREN, "Expected ')' to close MAP");
+            }
+            else if (Match(TokenType.MOBILE_LAYOUT) || IsCurrentValue("MOBILE_LAYOUT"))
+            {
+                if (_parser.Previous.Type != TokenType.MOBILE_LAYOUT) Advance();
+                Consume(TokenType.LPAREN, "Expected '(' after MOBILE_LAYOUT");
+                string? mobStructure = null;
+                var mobSlotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                string? breakpoint = "768px";
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    if (Match(TokenType.STRUCTURE))
+                    {
+                        Consume(TokenType.EQUALS, "Expected '=' after STRUCTURE");
+                        mobStructure = Consume(TokenType.STRING_LITERAL, "Expected string literal for STRUCTURE in MOBILE_LAYOUT").Value;
+                    }
+                    else if (Match(TokenType.MAP))
+                    {
+                        Consume(TokenType.LPAREN, "Expected '(' after MAP in MOBILE_LAYOUT");
+                        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                        {
+                            var slot = Consume(TokenType.STRING_LITERAL, "Expected slot letter (e.g. 'A')").Value;
+                            Consume(TokenType.EQUALS, "Expected '=' in MAP entry");
+                            var visual = ConsumeIdentifier("Expected visual name after '='").Value;
+                            mobSlotMap[slot] = visual;
+                            Match(TokenType.COMMA);
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' to close MAP in MOBILE_LAYOUT");
+                    }
+                    else if (Match(TokenType.BREAKPOINT) || IsCurrentValue("BREAKPOINT"))
+                    {
+                        if (_parser.Previous.Type != TokenType.BREAKPOINT) Advance();
+                        Consume(TokenType.EQUALS, "Expected '=' after BREAKPOINT");
+                        breakpoint = ConsumeReportOptionValue();
+                    }
+                    else
+                    {
+                        throw new SyntaxException($"Unexpected option '{_parser.Current.Value}' in MOBILE_LAYOUT", _parser.Current.Line, _parser.Current.Column);
+                    }
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close MOBILE_LAYOUT");
+                if (mobStructure == null)
+                    throw new SyntaxException("MOBILE_LAYOUT requires STRUCTURE.", startToken.Line, startToken.Column);
+                mobileLayout = new MobileLayoutDefinition(mobStructure, mobSlotMap, breakpoint);
+            }
+            else if (Match(TokenType.ACTIONS))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after ACTIONS");
+                pageActions.AddRange(ParseActions());
+                Consume(TokenType.RPAREN, "Expected ')' to close ACTIONS");
+            }
+            else if (Match(TokenType.OPTIONS))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after OPTIONS");
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    var optKey = ConsumeIdentifier("Expected option name in PAGE OPTIONS").Value.ToUpperInvariant();
+                    Match(TokenType.EQUALS);
+                    var optVal = ConsumeReportOptionValue();
+                    pageOptions[optKey] = optVal;
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close OPTIONS");
+            }
+            else if (IsCurrentValue("MAX_WIDTH") || IsCurrentValue("ALIGN_CONTENT") || Match(TokenType.OVERFLOW) || IsCurrentValue("TRANSITION"))
+            {
+                string key;
+                if (_parser.Previous.Type == TokenType.OVERFLOW) key = "OVERFLOW";
+                else key = Advance().Value.ToUpperInvariant();
+                Consume(TokenType.EQUALS, $"Expected '=' after {key}");
+                pageOptions[key] = ConsumeReportOptionValue();
             }
             else if (Match(TokenType.STYLE))
             {
@@ -1536,7 +1790,15 @@ public class ReportParser : ParserComponent
             else if (Match(TokenType.VISIBLE))
             {
                 Match(TokenType.EQUALS);
-                visibility = ParseOnOffValue();
+                if (IsCurrentValue("ON") || IsCurrentValue("OFF"))
+                {
+                    visibility = ParseOnOffValue();
+                }
+                else
+                {
+                    visibleExpr = ParseExpression();
+                    visibility = visibleExpr.ToSql();
+                }
             }
             else if (Match(TokenType.REFRESH))
             {
@@ -1589,9 +1851,13 @@ public class ReportParser : ParserComponent
             SubtitleDefinition = subtitleDef,
             Tooltip = tooltip,
             Visibility = visibility,
+            VisibleExpression = visibleExpr,
             RefreshIntervalSeconds = refreshSecs,
             Mode = mode,
             PrintLayout = printLayout,
+            MobileLayout = mobileLayout,
+            Actions = pageActions,
+            Options = pageOptions,
             Line = startToken.Line,
             Column = startToken.Column
         };
@@ -1947,12 +2213,63 @@ public class ReportParser : ParserComponent
         Consume(TokenType.LPAREN, "Expected '(' after AS");
 
         var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var visualOverrides = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
-            var key = _parser.Advance().Value;
-            Match(TokenType.EQUALS);
-            var val = ConsumeReportOptionValue();
-            properties[key] = val;
+            bool isVisualOverride = Match(TokenType.LBRACKET);
+            string visualType;
+            if (isVisualOverride)
+            {
+                visualType = _parser.Advance().Value.ToUpperInvariant();
+                Consume(TokenType.RBRACKET, "Expected ']' after visual type in CREATE THEME override");
+            }
+            else
+            {
+                var rawText = _parser.SliceSource(_parser.Current, _parser.Current).Trim();
+                if (rawText.StartsWith('[') && rawText.EndsWith(']') && _parser.Peek.Type == TokenType.LPAREN)
+                {
+                    isVisualOverride = true;
+                    visualType = _parser.Advance().Value.Trim('[', ']').ToUpperInvariant();
+                }
+                else if (_parser.Peek.Type == TokenType.LPAREN && _parser.Current.Type != TokenType.RPAREN)
+                {
+                    isVisualOverride = true;
+                    visualType = _parser.Advance().Value.ToUpperInvariant();
+                }
+                else
+                {
+                    visualType = string.Empty;
+                }
+            }
+
+            if (isVisualOverride)
+            {
+                if (!visualOverrides.TryGetValue(visualType, out var vOverrides))
+                {
+                    vOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    visualOverrides[visualType] = vOverrides;
+                }
+
+                Consume(TokenType.LPAREN, "Expected '(' after visual type in CREATE THEME override");
+                do
+                {
+                    var optKey = _parser.Advance().Value;
+                    Match(TokenType.EQUALS);
+                    var optVal = ConsumeThemeOptionValue();
+                    vOverrides[optKey] = optVal;
+                    properties[$"{visualType}:{optKey}"] = optVal;
+                    Match(TokenType.COMMA);
+                } while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd());
+
+                Consume(TokenType.RPAREN, "Expected ')' to close visual override block");
+            }
+            else
+            {
+                var key = _parser.Advance().Value;
+                Match(TokenType.EQUALS);
+                var val = ConsumeThemeOptionValue();
+                properties[key] = val;
+            }
             Match(TokenType.COMMA);
         }
 
@@ -1963,10 +2280,27 @@ public class ReportParser : ParserComponent
         {
             Name = name,
             Properties = properties,
+            VisualOverrides = visualOverrides,
             Mode = mode,
             Line = startToken.Line,
             Column = startToken.Column
         };
+    }
+
+    private string ConsumeThemeOptionValue()
+    {
+        if (Match(TokenType.LPAREN))
+        {
+            var items = new List<string>();
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                items.Add(ConsumeReportOptionValue());
+                Match(TokenType.COMMA);
+            }
+            Consume(TokenType.RPAREN, "Expected ')' to close list");
+            return string.Join(", ", items);
+        }
+        return ConsumeReportOptionValue();
     }
 
     // ── CREATE CONTAINER ──────────────────────────────────────────────────
@@ -1999,6 +2333,8 @@ public class ReportParser : ParserComponent
         TooltipDefinition? tooltip = null;
         string? structure = null;
         var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var slotDefinitions = new Dictionary<string, ContainerSlotDefinition>(StringComparer.OrdinalIgnoreCase);
+        var containerOptions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var styles = new Dictionary<string, string>();
         var containerPalette = ImmutableArray<string>.Empty;
         bool isCollapsible = containerType == "DRAWER";
@@ -2035,16 +2371,22 @@ public class ReportParser : ParserComponent
                 Consume(TokenType.EQUALS, "Expected '=' after ICON");
                 icon = Consume(TokenType.STRING_LITERAL, "Expected string literal for ICON").Value;
             }
+            else if (Match(TokenType.COLLAPSIBLE) || IsCurrentValue("COLLAPSIBLE"))
+            {
+                if (IsCurrentValue("COLLAPSIBLE")) Advance();
+                Match(TokenType.EQUALS);
+                isCollapsible = ParseOnOffValue() == "ON";
+            }
             else if (Match(TokenType.LAYOUT))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after LAYOUT");
-                ParseContainerLayout(ref structure, slotMap, styles, ref isPinnable);
+                ParseContainerLayout(ref structure, slotMap, slotDefinitions, styles, ref isPinnable);
                 Consume(TokenType.RPAREN, "Expected ')' to close LAYOUT");
             }
             else if (Match(TokenType.OPTIONS))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after OPTIONS");
-                ParseContainerOptions(ref visibility, ref icon);
+                ParseContainerOptions(containerOptions, ref visibility, ref icon, ref isCollapsible);
                 Consume(TokenType.RPAREN, "Expected ')' to close OPTIONS");
             }
             else
@@ -2065,6 +2407,8 @@ public class ReportParser : ParserComponent
             ContainerType = containerType,
             Structure = structure,
             SlotMap = slotMap,
+            SlotDefinitions = slotDefinitions,
+            Options = containerOptions,
             Styles = styles,
             Palette = containerPalette,
             StyleName = containerStyleName,
@@ -2091,6 +2435,17 @@ public class ReportParser : ParserComponent
         Dictionary<string, string> styles,
         ref bool isPinnable)
     {
+        var dummy = new Dictionary<string, ContainerSlotDefinition>(StringComparer.OrdinalIgnoreCase);
+        ParseContainerLayout(ref structure, slotMap, dummy, styles, ref isPinnable);
+    }
+
+    private void ParseContainerLayout(
+        ref string? structure,
+        Dictionary<string, string> slotMap,
+        Dictionary<string, ContainerSlotDefinition> slotDefinitions,
+        Dictionary<string, string> styles,
+        ref bool isPinnable)
+    {
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
             if (Match(TokenType.STRUCTURE))
@@ -2106,7 +2461,37 @@ public class ReportParser : ParserComponent
                     var slot = Consume(TokenType.STRING_LITERAL, "Expected slot letter (e.g. 'A')").Value;
                     Consume(TokenType.EQUALS, "Expected '=' in MAP entry");
                     var visual = ConsumeIdentifier("Expected visual or container name after '='").Value;
+                    string? slotIcon = null;
+                    string? slotBadge = null;
+                    if (Match(TokenType.LPAREN))
+                    {
+                        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                        {
+                            if (Match(TokenType.ICON))
+                            {
+                                Match(TokenType.EQUALS);
+                                slotIcon = ConsumeReportOptionValue();
+                            }
+                            else if (Match(TokenType.BADGE) || IsCurrentValue("BADGE"))
+                            {
+                                if (IsCurrentValue("BADGE")) Advance();
+                                Match(TokenType.EQUALS);
+                                slotBadge = ConsumeReportOptionValue();
+                            }
+                            else
+                            {
+                                var optKey = ConsumeIdentifier("Expected slot option name (ICON or BADGE)").Value.ToUpperInvariant();
+                                Match(TokenType.EQUALS);
+                                var optVal = ConsumeReportOptionValue();
+                                if (optKey == "ICON") slotIcon = optVal;
+                                else if (optKey == "BADGE") slotBadge = optVal;
+                            }
+                            Match(TokenType.COMMA);
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' to close slot options");
+                    }
                     slotMap[slot] = visual;
+                    slotDefinitions[slot] = new ContainerSlotDefinition(visual, slotIcon, slotBadge);
                     Match(TokenType.COMMA);
                 }
                 Consume(TokenType.RPAREN, "Expected ')' to close MAP");
@@ -2126,7 +2511,7 @@ public class ReportParser : ParserComponent
         }
     }
 
-    private void ParseContainerOptions(ref string? visibility, ref string? icon)
+    private void ParseContainerOptions(Dictionary<string, string> options, ref string? visibility, ref string? icon, ref bool isCollapsible)
     {
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -2140,11 +2525,19 @@ public class ReportParser : ParserComponent
             }
             else
             {
-                throw new SyntaxException(
-                    $"Unexpected token '{_parser.Current.Value}' in CREATE CONTAINER OPTIONS",
-                    _parser.Current.Line,
-                    _parser.Current.Column);
+                if (_parser.Current.Type == TokenType.RPAREN || _parser.Current.Type == TokenType.EOF)
+                    break;
+                var keyToken = _parser.Advance();
+                var key = keyToken.Value.ToUpperInvariant();
+                Match(TokenType.EQUALS);
+                var val = ConsumeReportOptionValue();
+                options[key] = val;
+                if (key == "COLLAPSIBLE")
+                {
+                    isCollapsible = string.Equals(val, "ON", StringComparison.OrdinalIgnoreCase);
+                }
             }
+            Match(TokenType.COMMA);
         }
     }
 
@@ -2179,6 +2572,12 @@ public class ReportParser : ParserComponent
         var orientation = NavigationOrientation.Horizontal;
         string? defaultPage = null;
         var pages = new List<string>();
+        var navItems = new List<NavigationItemDefinition>();
+        var navGroups = new List<NavigationGroupDefinition>();
+        var navOptions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var navStyles = new Dictionary<string, string>();
+        var navActiveStyles = new Dictionary<string, string>();
+        bool hideInvisible = false;
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -2209,10 +2608,152 @@ public class ReportParser : ParserComponent
                 Consume(TokenType.LPAREN, "Expected '(' after PAGES");
                 while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
                 {
-                    pages.Add(ConsumeIdentifier("Expected page name").Value);
+                    if (Match(TokenType.LINK) || Match(TokenType.LINK_NAV) || IsCurrentValue("LINK"))
+                    {
+                        if (_parser.Previous.Type != TokenType.LINK_NAV && _parser.Previous.Type != TokenType.LINK) Advance();
+                        Consume(TokenType.LPAREN, "Expected '(' after LINK");
+                        var linkLabel = ConsumeReportOptionValue();
+                        Consume(TokenType.EQUALS, "Expected '=' after link label");
+                        string linkUrl = "";
+                        string linkTarget = "_blank";
+                        if (Match(TokenType.OPEN_URL) || IsCurrentValue("OPEN_URL"))
+                        {
+                            if (_parser.Previous.Type != TokenType.OPEN_URL) Advance();
+                            Consume(TokenType.LPAREN, "Expected '(' after OPEN_URL");
+                            linkUrl = ConsumeReportOptionValue();
+                            if (Match(TokenType.COMMA))
+                            {
+                                var optKey = ConsumeIdentifier("Expected TARGET in OPEN_URL").Value.ToUpperInvariant();
+                                Consume(TokenType.EQUALS, "Expected '=' after TARGET");
+                                linkTarget = ConsumeReportOptionValue();
+                            }
+                            Consume(TokenType.RPAREN, "Expected ')' to close OPEN_URL");
+                        }
+                        else
+                        {
+                            linkUrl = ConsumeReportOptionValue();
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' to close LINK");
+                        var item = new NavigationItemDefinition(linkLabel, Label: linkLabel, ExternalUrl: linkUrl, Target: linkTarget, IsExternalLink: true);
+                        navItems.Add(item);
+                        pages.Add(linkLabel);
+                    }
+                    else
+                    {
+                        var pageName = ConsumeIdentifier("Expected page name").Value;
+                        string? itemLabel = null;
+                        string? itemIcon = null;
+                        string? itemBadge = null;
+                        if (Match(TokenType.LPAREN))
+                        {
+                            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                            {
+                                var optKey = ConsumeIdentifier("Expected option name (ICON, LABEL, or BADGE)").Value.ToUpperInvariant();
+                                Consume(TokenType.EQUALS, $"Expected '=' after {optKey}");
+                                var optVal = ConsumeReportOptionValue();
+                                if (optKey == "LABEL") itemLabel = optVal;
+                                else if (optKey == "ICON") itemIcon = optVal;
+                                else if (optKey == "BADGE") itemBadge = optVal;
+                                Match(TokenType.COMMA);
+                            }
+                            Consume(TokenType.RPAREN, "Expected ')' to close item options");
+                        }
+                        var item = new NavigationItemDefinition(pageName, itemLabel, itemIcon, itemBadge);
+                        navItems.Add(item);
+                        pages.Add(pageName);
+                    }
                     Match(TokenType.COMMA);
                 }
                 Consume(TokenType.RPAREN, "Expected ')' to close PAGES");
+            }
+            else if (IsCurrentValue("GROUP"))
+            {
+                Advance();
+                Consume(TokenType.LPAREN, "Expected '(' after GROUP");
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    var groupTitle = ConsumeReportOptionValue();
+                    Consume(TokenType.EQUALS, "Expected '=' after group title");
+                    Consume(TokenType.LPAREN, "Expected '(' after '=' in GROUP");
+                    var groupItems = new List<NavigationItemDefinition>();
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        var pName = ConsumeIdentifier("Expected page name in group").Value;
+                        groupItems.Add(new NavigationItemDefinition(pName));
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close group item list");
+                    navGroups.Add(new NavigationGroupDefinition(groupTitle, groupItems));
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close GROUP");
+            }
+            else if (Match(TokenType.OPTIONS))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after OPTIONS");
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    var optKey = ConsumeIdentifier("Expected option name in NAVIGATION OPTIONS").Value.ToUpperInvariant();
+                    Match(TokenType.EQUALS);
+                    var optVal = ConsumeReportOptionValue();
+                    navOptions[optKey] = optVal;
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close OPTIONS");
+            }
+            else if (Match(TokenType.STYLE))
+            {
+                string? sName = null;
+                var palette = ImmutableArray<string>.Empty;
+                ParseStyleClause(navStyles, ref sName, ref palette);
+            }
+            else if (Match(TokenType.ACTIVE_STYLE) || IsCurrentValue("ACTIVE_STYLE"))
+            {
+                if (_parser.Previous.Type != TokenType.ACTIVE_STYLE) Advance();
+                string? sName = null;
+                var palette = ImmutableArray<string>.Empty;
+                ParseStyleClause(navActiveStyles, ref sName, ref palette);
+            }
+            else if (IsCurrentValue("HIDE_INVISIBLE"))
+            {
+                Advance();
+                Consume(TokenType.EQUALS, "Expected '=' after HIDE_INVISIBLE");
+                string hiVal;
+                if (Match(TokenType.ON)) hiVal = "ON";
+                else if (Match(TokenType.OFF)) hiVal = "OFF";
+                else hiVal = ConsumeIdentifier("Expected ON or OFF after HIDE_INVISIBLE =").Value.ToUpperInvariant();
+                hideInvisible = hiVal == "ON";
+                navOptions["HIDE_INVISIBLE"] = hiVal;
+            }
+            else if (Match(TokenType.LINK) || Match(TokenType.LINK_NAV) || IsCurrentValue("LINK"))
+            {
+                if (_parser.Previous.Type != TokenType.LINK_NAV && _parser.Previous.Type != TokenType.LINK) Advance();
+                Consume(TokenType.LPAREN, "Expected '(' after LINK");
+                var linkLabel = ConsumeReportOptionValue();
+                Consume(TokenType.EQUALS, "Expected '=' after link label");
+                string linkUrl = "";
+                string linkTarget = "_blank";
+                if (Match(TokenType.OPEN_URL) || IsCurrentValue("OPEN_URL"))
+                {
+                    if (_parser.Previous.Type != TokenType.OPEN_URL) Advance();
+                    Consume(TokenType.LPAREN, "Expected '(' after OPEN_URL");
+                    linkUrl = ConsumeReportOptionValue();
+                    if (Match(TokenType.COMMA))
+                    {
+                        var optKey = ConsumeIdentifier("Expected TARGET in OPEN_URL").Value.ToUpperInvariant();
+                        Consume(TokenType.EQUALS, "Expected '=' after TARGET");
+                        linkTarget = ConsumeReportOptionValue();
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close OPEN_URL");
+                }
+                else
+                {
+                    linkUrl = ConsumeReportOptionValue();
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close LINK");
+                var item = new NavigationItemDefinition(linkLabel, Label: linkLabel, ExternalUrl: linkUrl, Target: linkTarget, IsExternalLink: true);
+                navItems.Add(item);
+                pages.Add(linkLabel);
             }
             else
             {
@@ -2242,6 +2783,12 @@ public class ReportParser : ParserComponent
             Orientation = orientation,
             DefaultPage = defaultPage,
             Pages = pages,
+            Items = navItems,
+            Groups = navGroups,
+            HideInvisible = hideInvisible || (navOptions.TryGetValue("HIDE_INVISIBLE", out var hi) && hi.Equals("ON", StringComparison.OrdinalIgnoreCase)),
+            Options = navOptions,
+            Styles = navStyles,
+            ActiveStyles = navActiveStyles,
             Mode = mode,
             Line = startToken.Line,
             Column = startToken.Column
@@ -2806,6 +3353,22 @@ public class ReportParser : ParserComponent
                 startToken.Column);
         }
 
+        if (visualType is VisualType.Textbox or VisualType.Numberbox)
+        {
+            foreach (var action in actions)
+            {
+                if (!string.Equals(action.Trigger, "ON_CHANGE", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(action.Trigger, "ON_SUBMIT", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new SyntaxException(
+                        $"{visualType.ToString().ToUpperInvariant()} visuals only support ACTIONS (ON_CHANGE = ... or ON_SUBMIT = ...).",
+                        startToken.Line,
+                        startToken.Column);
+                }
+            }
+            return;
+        }
+
         var expectedTrigger = IsControlVisual(visualType) ? "ON_CHANGE" : "ON_CLICK";
         foreach (var action in actions)
         {
@@ -2844,9 +3407,7 @@ public class ReportParser : ParserComponent
         or VisualType.Textbox
         or VisualType.Numberbox;
 
-    private static bool IsPassiveVisual(VisualType visualType) => visualType is
-        VisualType.Text
-        or VisualType.Image;
+    private static bool IsPassiveVisual(VisualType visualType) => false;
 
     private VisualFetchMode ParseVisualFetchMode()
     {
@@ -2909,9 +3470,15 @@ public class ReportParser : ParserComponent
                     Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
                     return def;
                 }
-                var expr = _parser.ParseExpression();
+                var exprs = new List<Expression>();
+                exprs.Add(_parser.ParseExpression());
+                while (Match(TokenType.COMMA))
+                {
+                    exprs.Add(_parser.ParseExpression());
+                }
                 Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
-                return new TitleDefinition { Text = expr, IsMarkdown = true };
+                var expr = exprs.Count == 1 ? exprs[0] : new ListExpression(exprs);
+                return new TitleDefinition { Text = expr, IsMarkdown = exprs.Count == 1 };
             }
             var simpleExpr = _parser.ParseExpression();
             bool simpleMd = false;
@@ -2927,9 +3494,15 @@ public class ReportParser : ParserComponent
                 Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
                 return def;
             }
-            var expr = _parser.ParseExpression();
+            var exprs = new List<Expression>();
+            exprs.Add(_parser.ParseExpression());
+            while (Match(TokenType.COMMA))
+            {
+                exprs.Add(_parser.ParseExpression());
+            }
             Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
-            return new TitleDefinition { Text = expr, IsMarkdown = true };
+            var expr = exprs.Count == 1 ? exprs[0] : new ListExpression(exprs);
+            return new TitleDefinition { Text = expr, IsMarkdown = exprs.Count == 1 };
         }
 
         var bareExpr = _parser.ParseExpression();
@@ -3115,9 +3688,13 @@ public class ReportParser : ParserComponent
         Consume(TokenType.LPAREN, "Expected '(' after the CARD sparkline source");
         string? x = null, y = null;
         var type = "line";
+        string? color = null;
+        decimal? referenceLine = null;
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
-            var key = ConsumeIdentifier("Expected X, Y, or TYPE in CARD SPARKLINE").Value.ToUpperInvariant();
+            var keyToken = _parser.Current;
+            Advance();
+            var key = keyToken.Value.ToUpperInvariant();
             Consume(TokenType.EQUALS, $"Expected '=' after CARD SPARKLINE {key}");
             if (key == "TYPE")
             {
@@ -3125,12 +3702,31 @@ public class ReportParser : ParserComponent
                 if (type is not "line" and not "bar" and not "area")
                     throw new SyntaxException("CARD SPARKLINE TYPE must be LINE, BAR, or AREA", _parser.Previous.Line, _parser.Previous.Column);
             }
+            else if (key == "COLOR")
+            {
+                color = ConsumeReportOptionValue();
+            }
+            else if (key == "REFERENCE_LINE")
+            {
+                var sign = Match(TokenType.MINUS) ? "-" : Match(TokenType.PLUS) ? "+" : string.Empty;
+                var numToken = Consume(TokenType.NUMBER, "Expected numeric value after REFERENCE_LINE =");
+                var numStr = sign + numToken.Value;
+                if (decimal.TryParse(numStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var refVal))
+                    referenceLine = refVal;
+                else
+                    throw new SyntaxException($"Expected finite numeric value for REFERENCE_LINE but got '{numStr}'", numToken.Line, numToken.Column);
+            }
+            else if (key == "X")
+            {
+                x = ConsumeIdentifier("Expected a column name after X =").Value;
+            }
+            else if (key == "Y")
+            {
+                y = ConsumeIdentifier("Expected a column name after Y =").Value;
+            }
             else
             {
-                var column = ConsumeIdentifier($"Expected a column name after {key} =").Value;
-                if (key == "X") x = column;
-                else if (key == "Y") y = column;
-                else throw new SyntaxException($"Unsupported CARD SPARKLINE option '{key}'", _parser.Previous.Line, _parser.Previous.Column);
+                throw new SyntaxException($"Unsupported CARD SPARKLINE option '{key}'", keyToken.Line, keyToken.Column);
             }
             Match(TokenType.COMMA);
         }
@@ -3145,7 +3741,9 @@ public class ReportParser : ParserComponent
             SparklineSource = source,
             SparklineXColumn = x,
             SparklineYColumn = y,
-            SparklineType = type
+            SparklineType = type,
+            SparklineColor = color,
+            SparklineReferenceLine = referenceLine
         };
     }
 
@@ -3414,7 +4012,7 @@ public class ReportParser : ParserComponent
         return result;
     }
 
-    private void ParseOptions(List<VisualOption> options, List<AxisOptions> axisOptions)
+    private void ParseOptions(List<VisualOption> options, List<AxisOptions> axisOptions, List<SegmentStyleRule>? segmentStyles = null)
     {
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -3448,6 +4046,18 @@ public class ReportParser : ParserComponent
                 ParseAxisOptionBody(axisOpts.Options);
                 Consume(TokenType.RPAREN, "Expected ')' to close Y2_AXIS");
                 axisOptions.Add(axisOpts);
+            }
+            else if (Match(TokenType.SEGMENT_STYLE) || IsCurrentValue("SEGMENT_STYLE"))
+            {
+                if (_parser.Previous.Type != TokenType.SEGMENT_STYLE) Advance();
+                Consume(TokenType.LPAREN, "Expected '(' after SEGMENT_STYLE");
+                var rules = ParseSegmentStyleRules();
+                if (segmentStyles != null)
+                {
+                    segmentStyles.AddRange(rules);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close SEGMENT_STYLE");
+                Match(TokenType.COMMA);
             }
             else if (Match(TokenType.COLORS))
             {
@@ -3741,6 +4351,69 @@ public class ReportParser : ParserComponent
                     Match(TokenType.COMMA);
                     continue;
                 }
+                if (key == "CENTER" && Match(TokenType.LPAREN))
+                {
+                    var latExpr = ParseExpression();
+                    var latStr = latExpr is LiteralExpression litLat ? litLat.Value?.ToString() ?? "" : latExpr.ToSql();
+                    Consume(TokenType.COMMA, "Expected ',' between lat and lon in CENTER");
+                    var lonExpr = ParseExpression();
+                    var lonStr = lonExpr is LiteralExpression litLon ? litLon.Value?.ToString() ?? "" : lonExpr.ToSql();
+                    Consume(TokenType.RPAREN, "Expected ')' to close CENTER (lat, lon)");
+                    options.Add(new VisualOption { Key = key, Value = $"({latStr}, {lonStr})" });
+                    Match(TokenType.COMMA);
+                    continue;
+                }
+                if (key == "QUICK_PICKS" && Match(TokenType.LPAREN))
+                {
+                    var picks = new List<(string Label, string Value)>();
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        var lblToken = _parser.Current;
+                        var label = lblToken.Type == TokenType.STRING_LITERAL
+                            ? Advance().Value
+                            : ConsumeIdentifier("Expected label for quick pick").Value;
+                        Consume(TokenType.EQUALS, "Expected '=' after quick pick label");
+                        var valToken = _parser.Current;
+                        var exprVal = valToken.Type == TokenType.STRING_LITERAL
+                            ? Advance().Value
+                            : ConsumeIdentifierOrVariable("Expected expression for quick pick").Value;
+                        picks.Add((label, exprVal));
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close QUICK_PICKS");
+                    var json = System.Text.Json.JsonSerializer.Serialize(picks.Select(p => new { label = p.Label, value = p.Value }));
+                    options.Add(new VisualOption { Key = key, Value = json });
+                    Match(TokenType.COMMA);
+                    continue;
+                }
+                if (key == "DISABLED_DAYS" && Match(TokenType.LPAREN))
+                {
+                    var days = new List<string>();
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        var dayVal = ConsumeReportOptionValue().ToUpperInvariant();
+                        days.Add(dayVal);
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close DISABLED_DAYS");
+                    options.Add(new VisualOption { Key = key, Value = string.Join(",", days) });
+                    Match(TokenType.COMMA);
+                    continue;
+                }
+                if (key == "DISABLED_DATES" && Match(TokenType.LPAREN))
+                {
+                    var dates = new List<string>();
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        var dateVal = ConsumeReportOptionValue();
+                        dates.Add(dateVal);
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close DISABLED_DATES");
+                    options.Add(new VisualOption { Key = key, Value = string.Join(",", dates) });
+                    Match(TokenType.COMMA);
+                    continue;
+                }
                 var val = ParseExpression();
                 options.Add(new VisualOption { Key = key, Value = val is LiteralExpression lit ? lit.Value?.ToString() ?? "" : val.ToSql() });
             }
@@ -3864,8 +4537,10 @@ public class ReportParser : ParserComponent
             string trigger;
             if (Match(TokenType.ON_CLICK)) trigger = "ON_CLICK";
             else if (Match(TokenType.ON_CHANGE)) trigger = "ON_CHANGE";
+            else if (Match(TokenType.ON_SUBMIT)) trigger = "ON_SUBMIT";
+            else if (Match(TokenType.ON_LOAD) || IsCurrentValue("ON_LOAD")) { if (_parser.Previous.Type != TokenType.ON_LOAD) Advance(); trigger = "ON_LOAD"; }
             else throw new SyntaxException(
-                $"Expected ON_CLICK or ON_CHANGE in ACTIONS but got '{_parser.Current.Value}'",
+                $"Expected ON_CLICK, ON_CHANGE, ON_SUBMIT, or ON_LOAD in ACTIONS but got '{_parser.Current.Value}'",
                 _parser.Current.Line, _parser.Current.Column);
 
             Consume(TokenType.EQUALS, $"Expected '=' after {trigger}");
@@ -3940,10 +4615,18 @@ public class ReportParser : ParserComponent
             Consume(TokenType.LPAREN, "Expected '(' after SET_PARAMETER");
             var paramName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
             if (!paramName.StartsWith("@")) paramName = "@" + paramName;
+            string? secondaryParam = null;
             Match(TokenType.COMMA);
+            if (_parser.Peek.Type == TokenType.COMMA)
+            {
+                var p2 = ConsumeIdentifierOrVariable("Expected secondary parameter name").Value;
+                if (!p2.StartsWith("@")) p2 = "@" + p2;
+                secondaryParam = p2;
+                Match(TokenType.COMMA);
+            }
             var valueExpr = ConsumeValueExpr("Expected value expression").Value;
             Consume(TokenType.RPAREN, "Expected ')' to close SET_PARAMETER");
-            action = new SetParameterAction { Trigger = trigger, ParameterName = paramName, ValueExpression = valueExpr };
+            action = new SetParameterAction { Trigger = trigger, ParameterName = paramName, SecondaryParameterName = secondaryParam, ValueExpression = valueExpr };
         }
         else if (Match(TokenType.RUN_SCRIPT))
         {
@@ -4056,10 +4739,56 @@ public class ReportParser : ParserComponent
             Consume(TokenType.RPAREN, "Expected ')' to close APPLY_BOOKMARK");
             action = new ApplyBookmarkAction { Trigger = trigger, BookmarkName = bookmarkName };
         }
+        else if (Match(TokenType.RESET_PARAMETERS))
+        {
+            var parameters = new List<string>();
+            if (Match(TokenType.LPAREN))
+            {
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    var p = ConsumeIdentifierOrVariable("Expected parameter name in RESET_PARAMETERS").Value;
+                    if (!p.StartsWith("@")) p = "@" + p;
+                    parameters.Add(p);
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close RESET_PARAMETERS");
+            }
+            action = new ResetParametersAction { Trigger = trigger, Parameters = parameters };
+        }
+        else if (Match(TokenType.OPEN_URL))
+        {
+            Consume(TokenType.LPAREN, "Expected '(' after OPEN_URL");
+            var url = ConsumeReportOptionValue();
+            string target = "_blank";
+            if (Match(TokenType.COMMA))
+            {
+                var optKey = ConsumeIdentifier("Expected TARGET in OPEN_URL").Value.ToUpperInvariant();
+                if (optKey != "TARGET")
+                    throw new SyntaxException($"Expected TARGET option in OPEN_URL but got '{optKey}'", _parser.Previous.Line, _parser.Previous.Column);
+                Consume(TokenType.EQUALS, "Expected '=' after TARGET");
+                target = ConsumeReportOptionValue();
+            }
+            Consume(TokenType.RPAREN, "Expected ')' to close OPEN_URL");
+            action = new OpenUrlAction { Trigger = trigger, Url = url, Target = target };
+        }
+        else if (Match(TokenType.SHOW_MODAL))
+        {
+            Consume(TokenType.LPAREN, "Expected '(' after SHOW_MODAL");
+            var modalName = ConsumeIdentifierOrString("Expected modal name in SHOW_MODAL").Value;
+            Consume(TokenType.RPAREN, "Expected ')' to close SHOW_MODAL");
+            action = new ShowModalAction { Trigger = trigger, ModalName = modalName };
+        }
+        else if (Match(TokenType.HIDE_MODAL))
+        {
+            Consume(TokenType.LPAREN, "Expected '(' after HIDE_MODAL");
+            var modalName = ConsumeIdentifierOrString("Expected modal name in HIDE_MODAL").Value;
+            Consume(TokenType.RPAREN, "Expected ')' to close HIDE_MODAL");
+            action = new HideModalAction { Trigger = trigger, ModalName = modalName };
+        }
         else
         {
             throw new SyntaxException(
-                $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, CLEAR_FILTERS, APPLY_PARAMETERS, APPLY_BOOKMARK, BACK, REFRESH_REPORT, REFRESH_VISUALS, EXPORT_CSV, EXPORT_EXCEL, EXPORT_PDF, NAVIGATE_PAGE, or SET_UI_STATE after {trigger} =",
+                $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, CLEAR_FILTERS, APPLY_PARAMETERS, APPLY_BOOKMARK, RESET_PARAMETERS, OPEN_URL, SHOW_MODAL, HIDE_MODAL, BACK, REFRESH_REPORT, REFRESH_VISUALS, EXPORT_CSV, EXPORT_EXCEL, EXPORT_PDF, NAVIGATE_PAGE, or SET_UI_STATE after {trigger} =",
                 _parser.Current.Line, _parser.Current.Column);
         }
 
@@ -4134,6 +4863,54 @@ public class ReportParser : ParserComponent
         return result;
     }
 
+    private IEnumerable<SegmentStyleRule> ParseSegmentStyleRules()
+    {
+        var result = new List<SegmentStyleRule>();
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            Match(TokenType.WHEN);
+            var condition = _parser.ParseExpression();
+            Consume(TokenType.THEN, "Expected THEN after SEGMENT_STYLE condition");
+            string? lineDash = null;
+            string? color = null;
+            while (!ReportCheck(TokenType.RPAREN) && !ReportCheck(TokenType.WHEN) && !ReportAtEnd())
+            {
+                var keyToken = _parser.Advance();
+                var key = keyToken.Value.ToUpperInvariant();
+                Consume(TokenType.EQUALS, $"Expected '=' after {key}");
+                var val = ConsumeReportOptionValue();
+                if (key is "LINE_DASH" or "DASH" or "STYLE")
+                {
+                    lineDash = val.ToUpperInvariant();
+                }
+                else if (key is "COLOR")
+                {
+                    color = val;
+                }
+                else
+                {
+                    throw new SyntaxException($"Unknown SEGMENT_STYLE option '{key}'. Valid options are LINE_DASH and COLOR.", keyToken.Line, keyToken.Column);
+                }
+                if (ReportCheck(TokenType.COMMA))
+                {
+                    var next = _parser.Peek;
+                    if (next.Type == TokenType.WHEN || next.Type == TokenType.RPAREN)
+                    {
+                        break;
+                    }
+                    Advance();
+                }
+                else
+                {
+                    break;
+                }
+            }
+            result.Add(new SegmentStyleRule { Condition = condition, LineDash = lineDash, Color = color });
+            Match(TokenType.COMMA);
+        }
+        return result;
+    }
+
     private IEnumerable<VisualOverlay> ParseOverlays()
     {
         var result = new List<VisualOverlay>();
@@ -4199,6 +4976,32 @@ public class ReportParser : ParserComponent
                 Consume(TokenType.LPAREN, "Expected '(' after PERCENT_OF_TOTAL");
                 tableCalculationField = ConsumeIdentifier("Expected pre-computed percent-of-total field name").Value;
                 Consume(TokenType.RPAREN, "Expected ')' after percent-of-total field name");
+            }
+            else if (Match(TokenType.ANNOTATIONS) || IsCurrentValue("ANNOTATIONS"))
+            {
+                if (_parser.Previous.Type != TokenType.ANNOTATIONS) Advance();
+                Consume(TokenType.LPAREN, "Expected '(' after ANNOTATIONS");
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    if (Match(TokenType.POINT) || IsCurrentValue("POINT"))
+                    {
+                        result.Add(ParseAnnotationPoint());
+                    }
+                    else
+                    {
+                        throw new SyntaxException($"Expected POINT in ANNOTATIONS but got '{_parser.Current.Value}'", _parser.Current.Line, _parser.Current.Column);
+                    }
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close ANNOTATIONS");
+                Match(TokenType.COMMA);
+                continue;
+            }
+            else if (Match(TokenType.POINT) || IsCurrentValue("POINT"))
+            {
+                result.Add(ParseAnnotationPoint());
+                Match(TokenType.COMMA);
+                continue;
             }
             else if (IsCurrentValue("REFERENCE_BAND"))
             {
@@ -4469,6 +5272,77 @@ public class ReportParser : ParserComponent
             BandHigh = high,
             Color = color,
             Label = label
+        };
+    }
+
+    private VisualOverlay ParseAnnotationPoint()
+    {
+        if (_parser.Previous.Type != TokenType.POINT) Advance();
+        Consume(TokenType.LPAREN, "Expected '(' after POINT");
+        string? series = null;
+        string? pointType = null;
+        double? coordX = null;
+        double? coordY = null;
+        string? coordXString = null;
+        string? label = null;
+        string? symbol = "pin";
+
+        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+        {
+            var key = ConsumeIdentifier("Expected POINT option key").Value.ToUpperInvariant();
+            Consume(TokenType.EQUALS, $"Expected '=' after {key}");
+            switch (key)
+            {
+                case "SERIES":
+                    series = ConsumeReportOptionValue();
+                    break;
+                case "TYPE":
+                    if (Match(TokenType.COORD) || IsCurrentValue("COORD"))
+                    {
+                        if (_parser.Previous.Type != TokenType.COORD) Advance();
+                        pointType = "COORD";
+                        Consume(TokenType.LPAREN, "Expected '(' after COORD");
+                        var xToken = _parser.Current;
+                        if (xToken.Type == TokenType.STRING_LITERAL)
+                        {
+                            coordXString = Advance().Value;
+                        }
+                        else
+                        {
+                            coordX = double.Parse(Advance().Value, CultureInfo.InvariantCulture);
+                        }
+                        Consume(TokenType.COMMA, "Expected ',' between x and y in COORD(x, y)");
+                        coordY = double.Parse(Advance().Value, CultureInfo.InvariantCulture);
+                        Consume(TokenType.RPAREN, "Expected ')' to close COORD");
+                    }
+                    else
+                    {
+                        pointType = ConsumeIdentifier("Expected MAX, MIN, or COORD").Value.ToUpperInvariant();
+                    }
+                    break;
+                case "LABEL":
+                    label = ConsumeReportOptionValue();
+                    break;
+                case "SYMBOL":
+                    symbol = ConsumeReportOptionValue().ToLowerInvariant();
+                    break;
+                default:
+                    throw new SyntaxException($"Unexpected option '{key}' in POINT", _parser.Previous.Line, _parser.Previous.Column);
+            }
+            Match(TokenType.COMMA);
+        }
+        Consume(TokenType.RPAREN, "Expected ')' to close POINT");
+
+        return new VisualOverlay
+        {
+            OverlayType = OverlayType.AnnotationPoint,
+            SeriesName = series,
+            AnnotationPointType = pointType,
+            CoordX = coordX,
+            CoordY = coordY,
+            CoordXString = coordXString,
+            Label = label,
+            Symbol = symbol
         };
     }
 

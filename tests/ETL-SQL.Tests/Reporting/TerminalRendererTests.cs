@@ -581,6 +581,54 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
+        public void RenderVisual_Checkbox_Toggle_RendersToggleText()
+        {
+            var v = V("Chk", "CHECKBOX", new string[] { }, opts: new Dictionary<string, string>
+            {
+                ["DISPLAY_STYLE"] = "TOGGLE",
+                ["LABEL"] = "Active Only",
+                ["DEFAULT"] = "ON"
+            });
+            var result = TerminalRenderer.RenderVisual(v);
+            var text = RenderToText(result);
+            Assert.Contains("TOGGLE: ON", text);
+            Assert.Contains("Active Only", text);
+        }
+
+        [Fact]
+        public void RenderVisual_Textbox_Multiline_RendersTextareaTag()
+        {
+            var v = V("Txt", "TEXTBOX", new string[] { }, opts: new Dictionary<string, string>
+            {
+                ["MULTILINE"] = "ON",
+                ["ROWS"] = "5",
+                ["LABEL"] = "Feedback"
+            });
+            var result = TerminalRenderer.RenderVisual(v);
+            var text = RenderToText(result);
+            Assert.Contains("Feedback:", text);
+            Assert.Contains("(Textarea, Rows: 5)", text);
+        }
+
+        [Fact]
+        public void RenderVisual_Numberbox_StepperPrefixSuffix_RendersFormatted()
+        {
+            var v = V("Num", "NUMBERBOX", new string[] { }, opts: new Dictionary<string, string>
+            {
+                ["PREFIX"] = "$",
+                ["SUFFIX"] = " USD",
+                ["STEP"] = "5",
+                ["LABEL"] = "Cost"
+            });
+            var result = TerminalRenderer.RenderVisual(v);
+            var text = RenderToText(result);
+            Assert.Contains("Cost:", text);
+            Assert.Contains("$", text);
+            Assert.Contains(" USD", text);
+            Assert.Contains("Step: 5", text);
+        }
+
+        [Fact]
         public void RenderVisual_Map_ReturnsPremiumPlaceholder()
         {
             var v = V("M", "MAP", new[] { "Region", "Value" }, new[] { new[] { "US", "100" } });

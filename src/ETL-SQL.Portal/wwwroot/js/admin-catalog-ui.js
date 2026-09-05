@@ -18,18 +18,22 @@ export function selectedIds(root) {
   return [...root.querySelectorAll('[data-select-id]:checked')].map(input => Number(input.dataset.selectId));
 }
 
+/**
+ * @param {ParentNode} root
+ * @param {(selectedIds: Array<number>) => void} [onChange]
+ */
 export function bindSelection(root, onChange = () => {}) {
   const all = root.querySelector('[data-select-all]');
   const items = [...root.querySelectorAll('[data-select-id]')];
   const update = () => {
     if (all) {
-      all.checked = items.length > 0 && items.every(item => item.checked);
-      all.indeterminate = items.some(item => item.checked) && !all.checked;
+      /** @type {HTMLInputElement} */ (all).checked = items.length > 0 && items.every(item => /** @type {HTMLInputElement} */ (item).checked);
+      /** @type {HTMLInputElement} */ (all).indeterminate = items.some(item => /** @type {HTMLInputElement} */ (item).checked) && !/** @type {HTMLInputElement} */ (all).checked;
     }
     onChange(selectedIds(root));
   };
   all?.addEventListener('change', () => {
-    items.forEach(item => { item.checked = all.checked; });
+    items.forEach(item => { /** @type {HTMLInputElement} */ (item).checked = /** @type {HTMLInputElement} */ (all).checked; });
     update();
   });
   items.forEach(item => item.addEventListener('change', update));

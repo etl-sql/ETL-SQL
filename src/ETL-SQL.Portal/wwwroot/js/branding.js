@@ -22,7 +22,7 @@ export async function applyPortalBranding() {
       const existing = el.querySelector('.portal-brand-logo');
       if (logoUrl) {
         if (existing) {
-          existing.src = logoUrl;
+          /** @type {HTMLImageElement | HTMLIFrameElement | HTMLScriptElement | HTMLMediaElement} */ (existing).src = logoUrl;
         } else {
         const img = document.createElement('img');
         img.className = 'portal-brand-logo';
@@ -64,11 +64,11 @@ export function initTheme() {
       
       // If we are on index.html with a report loaded in iframe, notify it!
       const iframe = document.querySelector('.report-viewer iframe');
-      if (iframe && iframe.contentDocument) {
+      if (iframe && /** @type {HTMLIFrameElement} */ (iframe).contentDocument) {
         if (isDark) {
-          iframe.contentDocument.body.classList.add('theme-dark');
+          /** @type {HTMLIFrameElement} */ (iframe).contentDocument.body.classList.add('theme-dark');
         } else {
-          iframe.contentDocument.body.classList.remove('theme-dark');
+          /** @type {HTMLIFrameElement} */ (iframe).contentDocument.body.classList.remove('theme-dark');
         }
       }
 
@@ -120,9 +120,9 @@ function initResponsiveNavigation() {
   function refreshDrawer() {
     links.replaceChildren();
     document.querySelectorAll('.topbar-nav a').forEach(source => {
-      if (source.hidden || getComputedStyle(source).display === 'none') return;
+      if (/** @type {HTMLElement} */ (source).hidden || getComputedStyle(source).display === 'none') return;
       const link = document.createElement('a');
-      link.href = source.href;
+      link.href = /** @type {HTMLAnchorElement | HTMLLinkElement} */ (source).href;
       link.textContent = source.textContent;
       if (source.classList.contains('active')) link.classList.add('active');
       links.appendChild(link);
@@ -135,8 +135,8 @@ function initResponsiveNavigation() {
       .filter(element => !drawer.contains(element));
     if (value) {
       candidates.forEach(element => {
-        inerted.push([element, element.inert]);
-        element.inert = true;
+        inerted.push([element, /** @type {HTMLElement} */ (element).inert]);
+        /** @type {HTMLElement} */ (element).inert = true;
       });
       return;
     }
@@ -156,7 +156,7 @@ function initResponsiveNavigation() {
     document.body.classList.add('shell-drawer-open');
     menuBtn.setAttribute('aria-expanded', 'true');
     setBackgroundInert(true);
-    closeBtn.focus();
+    /** @type {HTMLElement} */ (closeBtn).focus();
   }
 
   function closeDrawer() {
@@ -182,7 +182,7 @@ function initResponsiveNavigation() {
   closeBtn.addEventListener('click', closeDrawer);
   overlay.addEventListener('click', closeDrawer);
   links.addEventListener('click', event => {
-    if (event.target.closest('a')) closeDrawer();
+    if (/** @type {Element} */ (event.target).closest('a')) closeDrawer();
   });
   mobilePanel.querySelector('.shell-nav-theme').addEventListener('click', () => {
     document.getElementById('themeToggleBtn')?.click();

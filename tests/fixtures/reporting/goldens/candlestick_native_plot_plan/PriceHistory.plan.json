@@ -139,7 +139,7 @@
     {
       "id": "primary",
       "mark": "rect",
-      "zIndex": 0,
+      "zIndex": 1,
       "seriesKey": "PriceHistory",
       "data": [
         {
@@ -292,6 +292,14 @@
         {
           "name": "preserveRows",
           "value": "true"
+        },
+        {
+          "name": "COLOR_UP",
+          "value": "#26a69a"
+        },
+        {
+          "name": "COLOR_DOWN",
+          "value": "#ef5350"
         }
       ],
       "stack": "none",

@@ -44,6 +44,10 @@ namespace ETL_SQL.Reporting.Builders
                 var subtitleIsMd = vStmt.SubtitleDefinition?.IsMarkdown ?? vStmt.SubtitleIsMarkdown;
                 (subtitle, subtitleMd) = await styleBuilder.ResolveMarkdownAsync(subtitleExpr, subtitleIsMd);
                 (defVal, _) = await styleBuilder.ResolveMarkdownAsync(vStmt.DefaultValue);
+                if (defVal == null && vStmt.Options.Any(o => o.Key.Equals("DEFAULT", StringComparison.OrdinalIgnoreCase)))
+                {
+                    defVal = vStmt.Options.First(o => o.Key.Equals("DEFAULT", StringComparison.OrdinalIgnoreCase)).Value;
+                }
                 (placeholder, _) = await styleBuilder.ResolveMarkdownAsync(vStmt.Placeholder);
             }
             finally
@@ -164,10 +168,19 @@ namespace ETL_SQL.Reporting.Builders
                 if (vStmt.SubtitleDefinition.Align != null) resolvedStyles["SUBTITLE_ALIGN"] = vStmt.SubtitleDefinition.Align;
             }
 
+            var visualExplicitTheme = vStmt.Options.FirstOrDefault(o => o.Key.Equals("THEME", StringComparison.OrdinalIgnoreCase))?.Value
+                ?? resolvedStyles.GetValueOrDefault("THEME");
+
+            if (!string.IsNullOrEmpty(visualExplicitTheme))
+                resolvedStyles["THEME"] = visualExplicitTheme;
+
+            var effectiveTheme = visualExplicitTheme
+                ?? (inheritedStyles != null && inheritedStyles.TryGetValue("THEME", out var inhTheme) ? inhTheme : null);
+
             if (resolvedStyles.Count > 0)
                 vm.Styles = resolvedStyles;
 
-            var resolvedPalette = styleBuilder.ResolvePalette(vStmt.StyleName, vStmt.Palette, inheritedPalette);
+            var resolvedPalette = styleBuilder.ResolvePalette(vStmt.StyleName, vStmt.Palette, inheritedPalette, vStmt.VisualType.ToString(), effectiveTheme);
 
             // Effective background resolution across visual and inherited styles
             var isDark = string.Equals(resolvedStyles.GetValueOrDefault("THEME"), "DARK", StringComparison.OrdinalIgnoreCase) ||
@@ -330,15 +343,22 @@ namespace ETL_SQL.Reporting.Builders
             // Conditional formatting rules
             if (vStmt.FormattingRules.Count > 0)
             {
-                vm.FormattingRules = vStmt.FormattingRules.Select(r => new FormattingRuleManifest
+                if (vStmt.VisualType != VisualType.Table)
                 {
-                    Condition = r.Condition.ToSql(),
-                    Color = r.Color,
-                    FontColor = r.FontColor
-                }).ToList();
+                    vm.FormattingRules = vStmt.FormattingRules.Select(r => new FormattingRuleManifest
+                    {
+                        Condition = r.Condition.ToSql(),
+                        Color = r.Color,
+                        FontColor = r.FontColor
+                    }).ToList();
+                }
                 vm.RowStyles = new List<string?>();
                 if (vStmt.FormattingRules.Any(r => r.FontColor != null))
                     vm.RowFontStyles = new List<string?>();
+            }
+            if (vStmt.SegmentStyles.Count > 0)
+            {
+                vm.SegmentRowStyles = new List<SegmentStyleManifest?>();
             }
 
             // Axis options
@@ -376,6 +396,7 @@ namespace ETL_SQL.Reporting.Builders
                         Type = "SET_PARAMETER",
                         Trigger = sp.Trigger,
                         ParameterName = sp.ParameterName,
+                        SecondaryParameterName = sp.SecondaryParameterName,
                         ValueExpression = sp.ValueExpression
                     },
                     RunScriptAction rs => new VisualActionManifest
@@ -414,6 +435,47 @@ namespace ETL_SQL.Reporting.Builders
                         Trigger = rv.Trigger,
                         Targets = rv.Targets
                     },
+                    ApplyParametersAction ap => new VisualActionManifest { Type = "APPLY_PARAMETERS", Trigger = action.Trigger },
+                    ApplyBookmarkAction ab => new VisualActionManifest { Type = "APPLY_BOOKMARK", Trigger = action.Trigger, BookmarkName = ab.BookmarkName },
+                    SetUiStateAction su => new VisualActionManifest
+                    {
+                        Type = "SET_UI_STATE",
+                        Trigger = action.Trigger,
+                        Targets = su.Targets,
+                        Key = su.Key,
+                        Value = su.Value
+                    },
+                    NavigatePageAction np => new VisualActionManifest
+                    {
+                        Type = "NAVIGATE_PAGE",
+                        Trigger = action.Trigger,
+                        TargetPage = np.TargetPage
+                    },
+                    ResetParametersAction rp => new VisualActionManifest
+                    {
+                        Type = "RESET_PARAMETERS",
+                        Trigger = action.Trigger,
+                        ResetParameters = rp.Parameters.Count > 0 ? rp.Parameters : null
+                    },
+                    OpenUrlAction ou => new VisualActionManifest
+                    {
+                        Type = "OPEN_URL",
+                        Trigger = action.Trigger,
+                        Url = ou.Url,
+                        Target = ou.Target
+                    },
+                    ShowModalAction sm => new VisualActionManifest
+                    {
+                        Type = "SHOW_MODAL",
+                        Trigger = action.Trigger,
+                        ModalName = sm.ModalName
+                    },
+                    HideModalAction hm => new VisualActionManifest
+                    {
+                        Type = "HIDE_MODAL",
+                        Trigger = action.Trigger,
+                        ModalName = hm.ModalName
+                    },
                     _ => throw new NotSupportedException($"Action type {action.GetType().Name} not supported in manifest.")
                 });
             }
@@ -445,6 +507,11 @@ namespace ETL_SQL.Reporting.Builders
                 try
                 {
                     await FetchDataAsync(vStmt, vm, interactionValues);
+                    ResolveDynamicMinMax(vm);
+                    if (vStmt.VisualType == VisualType.Slider)
+                    {
+                        ResolveSliderDataTicks(vm);
+                    }
                     var chartStatement = vStmt;
 
                     if (vm.Cascade is { Mode: "LOCAL" } cascade)
@@ -490,6 +557,8 @@ namespace ETL_SQL.Reporting.Builders
                     await BuildMicroChartsAsync(vStmt, vm);
                     if (vStmt.VisualType == VisualType.Html && vStmt.HtmlTemplate != null)
                         BuildHtmlVisual(vStmt, vm);
+                    if (vStmt.VisualType == VisualType.Text && vm.Rows.Count > 0 && vm.Columns.Count > 0)
+                        InterpolateTextVisualContent(vStmt, vm);
                     if (chartStatement.AdvancedChart is not null || NamedVisualChartLowerer.Supports(chartStatement.VisualType))
                     {
                         vm.ChartSpec = chartStatement.AdvancedChart is not null
@@ -505,6 +574,8 @@ namespace ETL_SQL.Reporting.Builders
                         vm.PlotPlan = new PlotPlanResolver().Resolve(vm.ChartSpec, vm.ChartData, geography: vm.GeographicGeometry);
                         if (chartStatement.AdvancedChart is null && vm.RowStyles is { Count: > 0 })
                             vm.PlotPlan = ApplyChartFormatting(vm.PlotPlan, vm.RowStyles);
+                        if (chartStatement.AdvancedChart is null && vm.SegmentRowStyles is { Count: > 0 })
+                            vm.PlotPlan = ApplySegmentStyles(vm.PlotPlan, vm.SegmentRowStyles);
                     }
                     if (vm.PlotPlan?.Series is { Length: > 0 } planSeries &&
                         (vm.ChartSpec?.Bindings.Any(b => b.Channel == FieldChannel.Color) == true ||
@@ -867,6 +938,20 @@ namespace ETL_SQL.Reporting.Builders
                     // Apply formatting rules row-by-row (only if styles list is provided)
                     if (targetStyles != null && vStmt.FormattingRules.Count > 0)
                     {
+                        if (vStmt.VisualType == VisualType.Card && row["VALUE"] == null)
+                        {
+                            var valueMapping = vStmt.Mappings.FirstOrDefault(m => string.Equals(m.Role, "VALUE", StringComparison.OrdinalIgnoreCase))
+                                ?? vStmt.Mappings.FirstOrDefault(m => string.Equals(m.Column, "VALUE", StringComparison.OrdinalIgnoreCase));
+                            var valueCol = valueMapping?.Column ?? valueMapping?.Role;
+                            if (valueCol != null && row[valueCol] != null)
+                            {
+                                row["VALUE"] = row[valueCol];
+                            }
+                            else if (vm.Columns.Count > 0)
+                            {
+                                row["VALUE"] = row[vm.Columns[0]];
+                            }
+                        }
                         string? matchedColor = null;
                         string? matchedFontColor = null;
                         foreach (var rule in vStmt.FormattingRules)
@@ -880,6 +965,24 @@ namespace ETL_SQL.Reporting.Builders
                         }
                         targetStyles.Add(matchedColor);
                         vm.RowFontStyles?.Add(matchedFontColor);
+                    }
+
+                    if (vm.SegmentRowStyles != null && vStmt.SegmentStyles.Count > 0)
+                    {
+                        SegmentStyleManifest? matchedSegment = null;
+                        foreach (var rule in vStmt.SegmentStyles)
+                        {
+                            if (await ctx.EvaluateCondition(rule.Condition, row))
+                            {
+                                matchedSegment = new SegmentStyleManifest
+                                {
+                                    LineDash = rule.LineDash,
+                                    Color = rule.Color
+                                };
+                                break;
+                            }
+                        }
+                        vm.SegmentRowStyles.Add(matchedSegment);
                     }
                 }
             }
@@ -1067,7 +1170,10 @@ namespace ETL_SQL.Reporting.Builders
                 }
             }
             var cardBundle = factory.CreateSparkline($"{manifest.Name}-sparkline", values,
-                sparkline.SparklineType ?? "line", labels: labels);
+                sparkline.SparklineType ?? "line",
+                color: sparkline.SparklineColor,
+                referenceLine: sparkline.SparklineReferenceLine,
+                labels: labels);
             manifest.MicroCharts ??= [];
             manifest.MicroCharts.Add(factory.ToManifest(cardBundle, "sparkline", "card.sparkline"));
         }
@@ -1254,6 +1360,93 @@ namespace ETL_SQL.Reporting.Builders
         {
             var sample = rows.Take(10).Select(r => r[colIndex]).FirstOrDefault(v => !string.IsNullOrEmpty(v));
             return decimal.TryParse(sample, out _);
+        }
+
+        private static void ResolveDynamicMinMax(VisualManifest vm)
+        {
+            if (vm.Rows == null || vm.Rows.Count == 0 || vm.Columns == null || vm.Columns.Count == 0) return;
+
+            foreach (var key in new[] { "MIN", "MAX" })
+            {
+                if (vm.Options.TryGetValue(key, out var expr) && !string.IsNullOrWhiteSpace(expr))
+                {
+                    var isMin = expr.IndexOf("SOURCE_MIN(", StringComparison.OrdinalIgnoreCase) >= 0;
+                    var isMax = expr.IndexOf("SOURCE_MAX(", StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (isMin || isMax)
+                    {
+                        var startParen = expr.IndexOf('(');
+                        var endParen = expr.IndexOf(')', startParen + 1);
+                        if (startParen >= 0 && endParen > startParen)
+                        {
+                            var colName = expr.Substring(startParen + 1, endParen - startParen - 1).Trim().Trim('\'', '"', '[', ']');
+                            var colIdx = vm.Columns.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
+                            if (colIdx >= 0)
+                            {
+                                var nonNullValues = vm.Rows
+                                    .Select(r => colIdx < r.Count ? r[colIdx] : null)
+                                    .Where(v => v != null && !string.IsNullOrWhiteSpace(v.ToString()))
+                                    .Select(v => v!.ToString()!)
+                                    .ToList();
+
+                                if (nonNullValues.Count > 0)
+                                {
+                                    if (DateTime.TryParse(nonNullValues[0], CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+                                    {
+                                        var dateVals = nonNullValues
+                                            .Select(v => DateTime.TryParse(v, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d) ? (DateTime?)d : null)
+                                            .Where(d => d.HasValue)
+                                            .Select(d => d!.Value)
+                                            .OrderBy(d => d)
+                                            .ToList();
+                                        if (dateVals.Count > 0)
+                                        {
+                                            var target = isMin ? dateVals.First() : dateVals.Last();
+                                            vm.Options[key] = target.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                                        }
+                                    }
+                                    else if (decimal.TryParse(nonNullValues[0], NumberStyles.Any, CultureInfo.InvariantCulture, out _))
+                                    {
+                                        var numVals = nonNullValues
+                                            .Select(v => decimal.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out var n) ? (decimal?)n : null)
+                                            .Where(n => n.HasValue)
+                                            .Select(n => n!.Value)
+                                            .OrderBy(n => n)
+                                            .ToList();
+                                        if (numVals.Count > 0)
+                                        {
+                                            var target = isMin ? numVals.First() : numVals.Last();
+                                            vm.Options[key] = target.ToString(CultureInfo.InvariantCulture);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private static void ResolveSliderDataTicks(VisualManifest vm)
+        {
+            if (vm.Rows == null || vm.Rows.Count == 0 || vm.Columns == null || vm.Columns.Count == 0) return;
+            var valCol = vm.Options.GetValueOrDefault("mapping:value") ?? vm.Columns[0];
+            var colIdx = vm.Columns.FindIndex(c => c.Equals(valCol, StringComparison.OrdinalIgnoreCase));
+            if (colIdx < 0) colIdx = 0;
+
+            var numericValues = vm.Rows
+                .Select(r => colIdx < r.Count ? r[colIdx] : null)
+                .Where(v => v != null && decimal.TryParse(v.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out _))
+                .Select(v => decimal.Parse(v!.ToString()!, NumberStyles.Any, CultureInfo.InvariantCulture))
+                .Distinct()
+                .OrderBy(n => n)
+                .ToList();
+
+            if (numericValues.Count > 0)
+            {
+                vm.Options["DATA_TICKS"] = JsonSerializer.Serialize(numericValues);
+                if (!vm.Options.ContainsKey("MIN")) vm.Options["MIN"] = numericValues.First().ToString(CultureInfo.InvariantCulture);
+                if (!vm.Options.ContainsKey("MAX")) vm.Options["MAX"] = numericValues.Last().ToString(CultureInfo.InvariantCulture);
+            }
         }
 
         private bool IsControlVisual(VisualType type)
@@ -1476,6 +1669,28 @@ namespace ETL_SQL.Reporting.Builders
             }).ToImmutableArray()
         };
 
+        internal static PlotPlan ApplySegmentStyles(PlotPlan plan, IReadOnlyList<SegmentStyleManifest?> segmentStyles) => plan with
+        {
+            Layers = plan.Layers.Select(layer =>
+            {
+                if (layer.Mark != MarkKind.Line) return layer;
+                return layer with
+                {
+                    Data = layer.Data.Select(datum =>
+                    {
+                        if (datum.RowIndex < 0 || datum.RowIndex >= segmentStyles.Count) return datum;
+                        var style = segmentStyles[datum.RowIndex];
+                        if (style == null) return datum;
+                        return datum with
+                        {
+                            SegmentLineDash = style.LineDash,
+                            SegmentColor = style.Color
+                        };
+                    }).ToImmutableArray()
+                };
+            }).ToImmutableArray()
+        };
+
         private static List<decimal?> ParseHtmlSparklineValues(object? source, string field)
         {
             var raw = Convert.ToString(source, CultureInfo.InvariantCulture);
@@ -1507,5 +1722,67 @@ namespace ETL_SQL.Reporting.Builders
             }
         }
 
+        private static void InterpolateTextVisualContent(CreateVisualStatement vStmt, VisualManifest vm)
+        {
+            var content = vm.DefaultValue;
+            if (string.IsNullOrEmpty(content) || !content.Contains('{')) return;
+
+            var result = System.Text.RegularExpressions.Regex.Replace(
+                content,
+                @"\{([a-zA-Z0-9_@#]+)(?:\s+FORMAT\s+[""']([^""']+)[""'])?\}",
+                match =>
+                {
+                    var colName = match.Groups[1].Value;
+                    var format = match.Groups[2].Success ? match.Groups[2].Value : null;
+
+                    object? raw = null;
+                    bool found = false;
+                    if (vm.RawRows.Count > 0)
+                    {
+                        var dict = vm.RawRows[0];
+                        foreach (var kv in dict)
+                        {
+                            if (string.Equals(kv.Key, colName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                raw = kv.Value;
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!found && vm.Rows.Count > 0)
+                    {
+                        for (int i = 0; i < vm.Columns.Count; i++)
+                        {
+                            if (string.Equals(vm.Columns[i], colName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (i < vm.Rows[0].Count)
+                                {
+                                    raw = vm.Rows[0][i];
+                                    found = true;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    if (!found) return match.Value;
+                    if (raw == null || raw is DBNull) return string.Empty;
+
+                    if (!string.IsNullOrEmpty(format))
+                    {
+                        if (raw is IFormattable formattable)
+                        {
+                            return formattable.ToString(format, CultureInfo.InvariantCulture);
+                        }
+                        if (decimal.TryParse(Convert.ToString(raw, CultureInfo.InvariantCulture), NumberStyles.Any, CultureInfo.InvariantCulture, out var num))
+                        {
+                            return num.ToString(format, CultureInfo.InvariantCulture);
+                        }
+                    }
+                    return Convert.ToString(raw, CultureInfo.InvariantCulture) ?? string.Empty;
+                });
+
+            vm.DefaultValue = result;
+        }
     }
 }

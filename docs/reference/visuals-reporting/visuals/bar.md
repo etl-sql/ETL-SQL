@@ -13,6 +13,12 @@ CREATE VISUAL VisualName AS BAR (
         [SERIES = seriesColumn]
     ),
     OPTIONS (
+        [BAR_MIN_HEIGHT = n],
+        [ANIMATION = ON|OFF],
+        [ANIMATION_DURATION = n],
+        [ANIMATION_EASING = LINEAR|EASE_IN|EASE_OUT|ELASTIC|BOUNCE],
+        [UPDATE_ANIMATION = ON|OFF],
+        [HOVER_FOCUS = NONE|SELF|SERIES],
         [STACKED = ON|OFF|100PCT],
         [BAND_SIZE = 0.1..1],
         [SERIES_GAP = 0..1],
@@ -39,6 +45,7 @@ CREATE VISUAL VisualName AS BAR (
         [AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC],
         [X_AXIS (LABEL = 'text', MIN = n, MAX = n, INCLUDE_ZERO = ON|OFF, REVERSE = ON|OFF,
           MAJOR_TICK_COUNT = n, TICK_INTERVAL = n, MINOR_TICKS = ON|OFF,
+          TIME_UNIT = AUTO|DAY|WEEK|MONTH|QUARTER|YEAR, TICK_FORMAT = 'format',
           LABEL_ROTATION = AUTO|0|45|90, LABEL_SKIP = AUTO|n, AXIS_LINE = ON|OFF)],
         [Y_AXIS (...same axis properties...)]
     ),
@@ -64,30 +71,36 @@ CREATE VISUAL VisualName AS BAR (
 - **SERIES** - The column containing series breakdown for multi-series grouping or stacking (optional).
 
 ## Options
-- **STACKED = ON\|OFF\|100PCT** - Uses grouped bars, cumulative stacking, or normalized 100% stacking. Default is `OFF`.
+- **BAR_MIN_HEIGHT = n** - Minimum bar height in pixels so very small non-zero values remain visible and hoverable. Default is `0`.
+- **ANIMATION = ON|OFF** - Controls entry animation when the chart first mounts. Default is `OFF` for server/PDF, `ON` for interactive dashboards.
+- **ANIMATION_DURATION = n** - Entry animation duration in milliseconds. Default is `600`.
+- **ANIMATION_EASING = LINEAR|EASE_IN|EASE_OUT|ELASTIC|BOUNCE** - Animation easing curve. Default is `EASE_OUT`.
+- **UPDATE_ANIMATION = ON|OFF** - Controls transition animations when data updates. Default is `OFF`.
+- **HOVER_FOCUS = NONE|SELF|SERIES** - Dimming and emphasis mode on pointer hover (`NONE`, `SELF` to dim other marks, or `SERIES` to highlight the hovered series across all categories). Default is `NONE`.
+- **STACKED = ON|OFF|100PCT** - Uses grouped bars, cumulative stacking, or normalized 100% stacking. Default is `OFF`.
 - **BAND_SIZE = 0.1..1** - Sets bar width as a fraction of its category band. Smaller values add more spacing. Default is `0.75`.
 - **SERIES_GAP = 0..1** - Sets the gap between bars in a grouped cluster as a fraction of bar width. Default is renderer spacing.
 - **OUTER_PADDING = 0..1** - Adds category-band padding before the first and after the last bar. Default is `0`.
-- **GRID_LINES = ON\|OFF** - Shows or hides background value-axis grid lines. Default is `ON`.
+- **GRID_LINES = ON|OFF** - Shows or hides background value-axis grid lines. Default is `ON`.
 - **GRID_LINE_COLOR = '#rrggbb'** - Sets the major and minor gridline color.
-- **GRID_LINE_DASH = SOLID\|DASHED\|DOTTED** - Sets the gridline stroke pattern. Default is `SOLID`.
+- **GRID_LINE_DASH = SOLID|DASHED|DOTTED** - Sets the gridline stroke pattern. Default is `SOLID`.
 - **GRID_LINE_WIDTH = n** - Sets gridline width in pixels. The value must be positive; default is `1`.
-- **MINOR_GRID_LINES = ON\|OFF** - Draws one lighter gridline between each pair of major ticks. Default is `OFF`.
-- **ZERO_LINE = ON\|OFF** - Emphasizes zero when the value-axis domain contains it. Default is `OFF`.
+- **MINOR_GRID_LINES = ON|OFF** - Draws one lighter gridline between each pair of major ticks. Default is `OFF`.
+- **ZERO_LINE = ON|OFF** - Emphasizes zero when the value-axis domain contains it. Default is `OFF`.
 - **ZERO_LINE_COLOR = '#rrggbb'** - Sets the zero-line color.
-- **ZERO_LINE_DASH = SOLID\|DASHED\|DOTTED** - Sets the zero-line stroke pattern. Default is `SOLID`.
+- **ZERO_LINE_DASH = SOLID|DASHED|DOTTED** - Sets the zero-line stroke pattern. Default is `SOLID`.
 - **ZERO_LINE_WIDTH = n** - Sets zero-line width in pixels. The value must be positive; default is `1.5`.
-- **ZOOM_SLIDER = ON\|OFF** - Shows a browser range selector below the chart. Default is `OFF`.
-- **LEGEND = ON\|OFF** - Toggles visual series legend. Default is `ON`.
-- **LEGEND_POSITION = TOP\|RIGHT\|BOTTOM\|LEFT** - Places the legend outside the plot. Default is `BOTTOM`.
-- **DATA_LABELS = ON\|OFF WITH (...)** - Shows value labels and configures their position, color, font, numeric format, background, and border. Default is `OFF`. Extended options:
-  - **POSITION = INSIDE_TOP\|...** - Placement relative to bars.
+- **ZOOM_SLIDER = ON|OFF** - Shows a browser range selector below the chart. Default is `OFF`.
+- **LEGEND = ON|OFF** - Toggles visual series legend. Default is `ON`.
+- **LEGEND_POSITION = TOP|RIGHT|BOTTOM|LEFT** - Places the legend outside the plot. Default is `BOTTOM`.
+- **DATA_LABELS = ON|OFF WITH (...)** - Shows value labels and configures their position, color, font, numeric format, background, and border. Default is `OFF`. Extended options:
+  - **POSITION = INSIDE_TOP|...** - Placement relative to bars.
   - **FONT_SIZE = n** - Label text size in pixels.
   - **COLOR = '#rrggbb'** - Label text fill color.
   - **LABEL_BACKGROUND = '#rrggbb'** - Padded background rectangle drawn behind the label text.
   - **LABEL_BORDER = 'width style #rrggbb'** - Border around the data label background (e.g., `'1px solid #334155'`; style is `solid`, `dashed`, or `dotted`).
-- **AXIS_SORT = ASC\|DESC\|SOURCE\|VALUE\|VALUE_DESC** - Category sorting logic. Use `SOURCE` to preserve the query order, or `VALUE_DESC` for ranked bars. Default is `ASC`.
-- **X_AXIS (...) / Y_AXIS (...)** - Configures the axis title (`LABEL`), explicit domain (`MIN`, `MAX`), zero inclusion, direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`). `MAJOR_TICK_COUNT` is 2–100; `TICK_INTERVAL` must be positive; `LABEL_SKIP = n` hides `n` labels between visible labels.
+- **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - Category sorting logic. Use `SOURCE` to preserve the query order, or `VALUE_DESC` for ranked bars. Default is `ASC`.
+- **X_AXIS (...) / Y_AXIS (...)** - Configures the axis title (`LABEL`), explicit domain (`MIN`, `MAX`), zero inclusion, direction, major tick count or interval, minor ticks, label rotation, label skipping, plot-area spine (`AXIS_LINE`), time unit truncation (`TIME_UNIT = AUTO|DAY|WEEK|MONTH|QUARTER|YEAR`), and custom tick format string (`TICK_FORMAT = 'format'`). `MAJOR_TICK_COUNT` is 2–100; `TICK_INTERVAL` must be positive; `LABEL_SKIP = n` hides `n` labels between visible labels.
 - **OVERLAYS (...)** - Adds plot-spanning `REFERENCE_LINE` and `REFERENCE_BAND` annotations plus line overlays bound to precomputed `RUNNING_TOTAL(field)` and `PERCENT_OF_TOTAL(field)` SQL result columns. All target the primary value axis.
 
 ## Actions

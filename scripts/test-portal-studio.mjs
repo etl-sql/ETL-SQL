@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { readPortalPage, readPortalPageModule } from './lib/portal-page.mjs';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 const [studio, designerHost, api, controller, designer, sharedStudio, designerCss, css, program, portalHeader, indexPage, adminPage] = await Promise.all([
-  read('src/ETL-SQL.Portal/wwwroot/studio.html'),
-  read('src/ETL-SQL.Portal/wwwroot/designer.html'),
+  Promise.resolve(readPortalPage('studio')),
+  Promise.resolve(readPortalPage('designer')),
   read('src/ETL-SQL.Portal/wwwroot/js/api.js'),
   read('src/ETL-SQL.Portal/Controllers/StudioController.cs'),
   read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js'),
@@ -14,11 +15,11 @@ const [studio, designerHost, api, controller, designer, sharedStudio, designerCs
   read('src/ETL-SQL.Portal/wwwroot/css/portal.css'),
   read('src/ETL-SQL.Portal/Program.cs'),
   read('src/ETL-SQL.Portal/wwwroot/js/portal-header.js'),
-  read('src/ETL-SQL.Portal/wwwroot/index.html'),
-  read('src/ETL-SQL.Portal/wwwroot/admin.html')
+  Promise.resolve(readPortalPage('index')),
+  Promise.resolve(readPortalPage('admin'))
 ]);
 
-const moduleSource = [...studio.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].at(-1)?.[1] || '';
+const moduleSource = readPortalPageModule('studio');
 assert.ok(moduleSource, 'Studio page module script was not found.');
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 new AsyncFunction(moduleSource.replace(/^import .*;$/gm, ''));

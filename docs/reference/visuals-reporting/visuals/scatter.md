@@ -17,6 +17,7 @@ CREATE VISUAL VisualName AS SCATTER (
   ),
   OPTIONS (
     [SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR],
+    [SYMBOL_SIZE = n],
     [SYMBOL_STROKE_COLOR = '#rrggbb'],
     [SYMBOL_STROKE_WIDTH = n],
     [JITTER = ON|OFF [WITH (WIDTH = n, HEIGHT = n)]],
@@ -62,6 +63,7 @@ CREATE VISUAL VisualName AS SCATTER (
 ## Options
 
 - **SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR** — sets a single marker geometry for a named `SCATTER` visual (default `CIRCLE`). `BUBBLE` keeps circular area marks.
+- **SYMBOL_SIZE = n** — sets default point marker radius in pixels (default 4; must be positive). Overridden when `SIZE` mapping is provided.
 - **SYMBOL_STROKE_COLOR = '#rrggbb'** — outlines point markers with a portable hex color; without a color, markers have no stroke.
 - **SYMBOL_STROKE_WIDTH = n** — sets a non-negative marker outline width in pixels; defaults to `1` when a stroke color is present.
 - **JITTER = ON|OFF [WITH (WIDTH = n, HEIGHT = n)]** — displaces overlapping points using deterministic pseudo-random jitter offsets. Width and height amplitudes are numbers between `0` and `1` (default `0.15`). Also accepts `JITTER (WIDTH = n, HEIGHT = n)`.
@@ -81,8 +83,10 @@ CREATE VISUAL VisualName AS SCATTER (
   - **LABEL_BACKGROUND = '#rrggbb'** — padded background rectangle drawn behind the label text.
   - **LABEL_BORDER = 'width style #rrggbb'** — border around the data label background (e.g., `'1px solid #334155'`; style is `solid`, `dashed`, or `dotted`).
   - **LEADER_LINE = ON|OFF WITH (COLOR = '#rrggbb', STYLE = SOLID|DASHED)** — renders a connecting leader line from mark to label when the label is displaced to avoid collisions (default OFF).
+- **ZOOM_SLIDER = ON|OFF** — show interactive axis zoom slider controls (default OFF)
 - **X_AXIS (...) / Y_AXIS (...)** — axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`).
 - **OVERLAYS (...)** — adds horizontal plot-spanning `REFERENCE_LINE` rules and shaded `REFERENCE_BAND(LOW = n, HIGH = n, ...)` intervals on the primary quantitative Y axis. Both participate in automatic domain resolution.
+- **FORMATTING (...)** — conditional mark coloring based on predicate conditions (e.g. `FORMATTING (WHEN Rev > 40 THEN '#16a34a')`).
 - **TITLE = 'text'** — visual title
 
 ## Examples

@@ -1,16 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { readPortalPage } from './lib/portal-page.mjs';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
-const pages = await Promise.all([
-  'src/ETL-SQL.Portal/wwwroot/index.html',
-  'src/ETL-SQL.Portal/wwwroot/admin.html',
-  'src/ETL-SQL.Portal/wwwroot/docs.html',
-  'src/ETL-SQL.Portal/wwwroot/orchestrator.html',
-  'src/ETL-SQL.Portal/wwwroot/studio.html',
-  'src/ETL-SQL.Portal/wwwroot/designer.html'
-].map(read));
+const pages = ['index', 'admin', 'docs', 'orchestrator', 'studio', 'designer'].map(readPortalPage);
 const branding = await read('src/ETL-SQL.Portal/wwwroot/js/branding.js');
 const dialogA11y = await read('src/ETL-SQL.Portal/wwwroot/js/dialog-a11y.js');
 const headerSource = await read('src/ETL-SQL.Portal/wwwroot/js/portal-header.js');

@@ -36,6 +36,32 @@ import { escapeHtml, noteMarkup } from './studio-authoring-ui.js';
  * finding out BREAK exists is the point of a palette — and they say so on the chip rather than
  * appearing to work and failing at run time.
  */
+/**
+ * One chip in the palette. `id` is a task kind the host can write, not a free string.
+ *
+ * `container` marks a kind that holds other tasks; `needsLoop` marks one the engine refuses
+ * outside a loop. Both mirror the predicates in PipelineTaskKinds.
+ *
+ * @typedef {{ id: PipelineTaskKind, label: string, glyph: string, hint: string, container?: boolean, needsLoop?: boolean }} PipelineTaskChip
+ */
+
+/**
+ * One drawer of the palette.
+ *
+ * @typedef {{ id: string, label: string, hint: string, kinds: ReadonlyArray<PipelineTaskChip> }} PipelineTaskGroup
+ */
+
+/**
+ * The palette, and the vocabulary the host can write, held to being the same list.
+ *
+ * `PipelineTaskKind` is generated from the C# enum (types/etlsql-contracts.generated.d.ts), so a
+ * chip naming a kind no host can write now fails the type gate on the line that wrote it rather
+ * than becoming a control that refuses every time an author uses it. The other direction — a kind
+ * the host can write with no chip to create it — is not something a type can state about an array,
+ * and stays a test: see PipelineTaskAuthoringService's palette contract tests.
+ *
+ * @type {ReadonlyArray<PipelineTaskGroup>}
+ */
 export const PIPELINE_TASK_GROUPS = Object.freeze([
     Object.freeze({
         id: 'work',
@@ -277,6 +303,13 @@ export function isContainerKind(kind) {
  * around the task that waits — which is why each one says what it does to the script rather than
  * only what it means on the diagram.
  */
+/**
+ * One edge condition offer.
+ *
+ * @typedef {{ id: PipelineEdgeCondition, label: string, summary: string, hint: string }} PipelineEdgeConditionOffer
+ */
+
+/** @type {ReadonlyArray<PipelineEdgeConditionOffer>} */
 export const PIPELINE_EDGE_CONDITIONS = Object.freeze([
     Object.freeze({
         id: 'always',
@@ -329,24 +362,33 @@ export function needsALoop(kind) {
  * Renders the task toolbar and inspector into `host`, and makes labelled cards inside `canvas`
  * draggable.
  *
- * @param host       Element that receives the toolbar and inspector markup.
- * @param canvas     Element containing the rendered DAG cards.
- * @param tasks      `[{ id, connection, body, line }]` as the host reported them.
- * @param selectedId Task to show as selected, or null.
- * @param onSelect   `(id | null) => void`
- * @param onAdd      `({ kind, after }) => Promise<void>`
- * @param onEdit     `({ id }) => Promise<void>`, opens the task editor.
- * @param onConnect  `({ from, to }) => Promise<void>`, declares that `to` runs after `from`.
- * @param onSetEdge  `({ from, to, edge, expression }) => Promise<void>`, changes one edge's condition.
- * @param onDisconnect `({ from, to }) => Promise<void>`, removes one declared edge.
- * @param onMove     `({ id, after }) => Promise<void>` — after null means "run first".
- * @param onNest     `({ id, container }) => Promise<void>` — container null means "move out".
- * @param onRemove   `({ id }) => Promise<void>`
- * @param onRunTo    `({ id }) => Promise<void>`, executes the pipeline through this task.
- * @param onOpenLine `(line) => void`, to reveal the task in the script.
- * @param scope      `{ resolved, error, variables, tempTables }` in scope where the task sits, or null.
- * @param runtime    `{ rows, durationMs, note }` the last run reported for it, or null.
- * @returns `{ dispose }`
+ * @param {HTMLElement} host   Element that receives the toolbar and inspector markup.
+ * @param {HTMLElement} canvas Element containing the rendered DAG cards.
+ * @param {Object} [options]
+ * @param {Array<{id: *, kind?: string, connection?: string, body?: string, line?: number}>} [options.tasks]
+ *   As the host reported them.
+ * @param {*} [options.selectedId] Task to show as selected, or null.
+ * @param {(id: *) => void} [options.onSelect]
+ * @param {(change: {kind: PipelineTaskKind, after: *, into?: *}) => Promise<void>} [options.onAdd]
+ *   `into` names the container the new task is dropped inside, when it is dropped into one.
+ * @param {(change: {id: *}) => Promise<void>} [options.onEdit] Opens the task editor.
+ * @param {(change: {from: *, to: *}) => Promise<void>} [options.onConnect]
+ *   Declares that `to` runs after `from`.
+ * @param {(change: {from: *, to: *, edge?: PipelineEdgeCondition, expression?: string}) => Promise<void>} [options.onSetEdge]
+ *   Changes one edge's condition.
+ * @param {(change: {from: *, to: *}) => Promise<void>} [options.onDisconnect] Removes one edge.
+ * @param {(change: {id: *, after: *}) => Promise<void>} [options.onMove]
+ *   `after` null means "run first".
+ * @param {(change: {id: *, container: *}) => Promise<void>} [options.onNest]
+ *   `container` null means "move out".
+ * @param {(change: {id: *, [key: string]: *}) => Promise<void>} [options.onUpdate]
+ * @param {(change: {id: *}) => Promise<void>} [options.onRemove]
+ * @param {((change: {id: *}) => Promise<void>)|null} [options.onRunTo]
+ *   Executes the pipeline through this task.
+ * @param {(line: number) => void} [options.onOpenLine] Reveals the task in the script.
+ * @param {*} [options.scope]   `{ resolved, error, variables, tempTables }` where the task sits.
+ * @param {*} [options.runtime] `{ rows, durationMs, note }` the last run reported for it.
+ * @returns {{dispose: () => void}}
  */
 export function attachPipelineTaskEditing(host, canvas, {
     tasks = [],
@@ -395,7 +437,8 @@ export function attachPipelineTaskEditing(host, canvas, {
     // A click adds beside the selection; a drag decides where from where it lands. Both are kept:
     // the drag is the gesture the canvas is for, and the click is the one that works from a keyboard.
     for (const chip of host.querySelectorAll('[data-task-kind]')) {
-        const kind = chip.dataset.taskKind;
+        const kind = taskKind(/** @type {HTMLElement} */ (chip).dataset.taskKind)?.id ?? null;
+        if (!kind) continue;
         on(chip, 'click', () => onAdd({ kind, after: selected?.id ?? null }));
         on(chip, 'dragstart', event => {
             dragging = kind;
@@ -421,7 +464,7 @@ export function attachPipelineTaskEditing(host, canvas, {
     if (selected) {
         inspector.insertAdjacentHTML('beforeend', scopeMarkup(scope, runtime));
         for (const link of inspector.querySelectorAll('[data-scope-line]')) {
-            on(link, 'click', () => onOpenLine(Number(link.dataset.scopeLine) || 0));
+            on(link, 'click', () => onOpenLine(Number(/** @type {HTMLElement} */ (link).dataset.scopeLine) || 0));
         }
     }
 
@@ -446,33 +489,34 @@ export function attachPipelineTaskEditing(host, canvas, {
     if (unnest) on(unnest, 'click', () => onNest({ id: selected.id, container: null }));
 
     for (const chip of inspector.querySelectorAll('[data-task-disconnect]')) {
-        on(chip, 'click', () => onDisconnect({ from: chip.dataset.taskDisconnect, to: selected.id }));
+        on(chip, 'click', () => onDisconnect({ from: /** @type {HTMLElement} */ (chip).dataset.taskDisconnect, to: selected.id }));
     }
 
     // ── Edge conditions ──────────────────────────────────────────────────────
     // Choosing `When…` does not send anything: the edge is not describable until the expression is
     // typed, and writing a gate on an empty condition would be a change the author did not make.
     for (const picker of inspector.querySelectorAll('[data-task-edge]')) {
-        const from = picker.dataset.taskEdge;
+        const from = /** @type {HTMLElement} */ (picker).dataset.taskEdge;
         const field = inspector.querySelector(`[data-task-expression="${cssEscape(from)}"]`);
         on(picker, 'change', () => {
-            if (picker.value !== 'expression') {
-                void onSetEdge({ from, to: selected.id, edge: picker.value });
+            const chosen = edgeCondition(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (picker).value).id;
+            if (chosen !== 'expression') {
+                void onSetEdge({ from, to: selected.id, edge: chosen });
                 return;
             }
             if (field) {
-                field.hidden = false;
-                field.focus();
-                field.select();
+                /** @type {HTMLElement} */ (field).hidden = false;
+                /** @type {HTMLElement} */ (field).focus();
+                /** @type {HTMLInputElement | HTMLTextAreaElement} */ (field).select();
             }
         });
     }
 
     for (const field of inspector.querySelectorAll('[data-task-expression]')) {
-        const from = field.dataset.taskExpression;
+        const from = /** @type {HTMLElement} */ (field).dataset.taskExpression;
         const commit = () => {
-            const expression = field.value.trim();
-            if (!expression || expression === field.dataset.taskExpressionValue) return;
+            const expression = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (field).value.trim();
+            if (!expression || expression === /** @type {HTMLElement} */ (field).dataset.taskExpressionValue) return;
             void onSetEdge({ from, to: selected.id, edge: 'expression', expression });
         };
         on(field, 'keydown', event => {
@@ -494,9 +538,9 @@ export function attachPipelineTaskEditing(host, canvas, {
 
     const cards = [...canvas.querySelectorAll('[data-task-key]')];
     for (const card of cards) {
-        const id = card.dataset.taskKey;
+        const id = /** @type {HTMLElement} */ (card).dataset.taskKey;
         card.classList.add('is-editable-task');
-        card.draggable = true;
+        /** @type {HTMLElement} */ (card).draggable = true;
         card.classList.toggle('is-selected-task', sameId(id, selectedId));
         card.classList.toggle('is-container-task', containers.has(String(id).toLowerCase()));
 
@@ -515,12 +559,12 @@ export function attachPipelineTaskEditing(host, canvas, {
             handle.classList.add('etlsql-dag-connector');
             // The map paints a port the colour of the node type. A control is not decoration, so it
             // drops the inline colour and takes the accent every other control on this surface uses.
-            handle.style.background = '';
-            handle.dataset.taskConnector = id;
-            handle.draggable = true;
-            handle.tabIndex = 0;
+            /** @type {HTMLElement} */ (handle).style.background = '';
+            /** @type {HTMLElement} */ (handle).dataset.taskConnector = id;
+            /** @type {HTMLElement} */ (handle).draggable = true;
+            /** @type {HTMLElement} */ (handle).tabIndex = 0;
             handle.setAttribute('role', 'button');
-            handle.title = `Drag onto another task to make it run after ${id}`;
+            /** @type {HTMLElement} */ (handle).title = `Drag onto another task to make it run after ${id}`;
             handle.setAttribute('aria-label', `Connect ${id} to another task`);
             if (!existing) card.appendChild(handle);
 
@@ -613,11 +657,11 @@ export function attachPipelineTaskEditing(host, canvas, {
     for (const card of canvas.querySelectorAll('.etlsql-dag-card:not([data-task-key])')) {
         for (const port of card.querySelectorAll('.card-port-left, .card-port-right')) {
             port.classList.add('is-anchor-port');
-            port.style.background = '';
+            /** @type {HTMLElement} */ (port).style.background = '';
         }
         card.classList.add('is-projection-stage');
-        if (!card.title) {
-            card.title = 'This statement is on the map because the script has it. The canvas cannot '
+        if (!/** @type {HTMLElement} */ (card).title) {
+            /** @type {HTMLElement} */ (card).title = 'This statement is on the map because the script has it. The canvas cannot '
                 + 'author this one yet, so it is shown rather than editable.';
         }
     }
@@ -629,7 +673,7 @@ export function attachPipelineTaskEditing(host, canvas, {
         const inbound = card.querySelector('.card-port-left');
         if (!inbound) continue;
         inbound.classList.add('is-anchor-port');
-        inbound.style.background = '';
+        /** @type {HTMLElement} */ (inbound).style.background = '';
     }
 
     // A chip dropped on empty canvas goes at the end of the script. That is the one place on the map

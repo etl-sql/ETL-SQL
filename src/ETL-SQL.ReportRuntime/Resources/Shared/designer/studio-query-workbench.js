@@ -20,20 +20,30 @@ import { escapeHtml, noteMarkup, sampleGridMarkup } from './studio-authoring-ui.
 /**
  * Mounts the workbench into `host`.
  *
- * @param connection      Alias the query runs against, or null. Used for the run and for the
- *                        `CREATE CONNECTION` preamble so an alias resolves as it will at run time.
- * @param value           Starting query text.
- * @param routes          Route table; never a literal path.
- * @param request         `(route, { body, fallbackError }) => Promise<json>`, the only network path.
- * @param editorTransport `{ url(route), authFetch }` handed to the embedded editor, which owns its
- *                        own transport. This module never calls it.
- * @param documentUri     `() => string`, so analysis and completion resolve the host document's
- *                        schema exactly as the main editor does.
- * @param scriptText      `() => string`, the current buffer, read only to find the connection's
- *                        declaration. The workbench never writes to it.
- * @param label           Toolbar caption, so a pipeline task can say what this query is for.
- * @param runLabel        Run button caption.
- * @returns `{ getValue, focus, dispose }`
+ * The untyped `@param connection`/`@param value`/… lines this block used to carry were bound by
+ * position, so they described `host` and then the whole options object, and every typed entry
+ * after them was ignored. They are folded into the typed ones below.
+ *
+ * @param {HTMLElement} host
+ * @param {Object} options
+ * @param {string|null} [options.connection] Alias the query runs against, or null. Used for the run
+ *   and for the `CREATE CONNECTION` preamble, so an alias resolves as it will at run time.
+ * @param {string} [options.value] Starting query text.
+ * @param {*} [options.routes] Route table; never a literal path.
+ * @param {Function} [options.request] `(route, { body, fallbackError }) => Promise<json>` — the only
+ *   network path.
+ * @param {*} [options.editorTransport] `{ url(route), authFetch }` handed to the embedded editor,
+ *   which owns its own transport. This module never calls it.
+ * @param {() => string} [options.documentUri] So analysis and completion resolve the host document's
+ *   schema exactly as the main editor does.
+ * @param {() => string} [options.scriptText] The current buffer, read only to find the connection's
+ *   declaration. The workbench never writes to it.
+ * @param {string|null} [options.label] Toolbar caption, so a pipeline task can say what this query
+ *   is for.
+ * @param {string} [options.runLabel] Run button caption.
+ * @param {Function|null} [options.onChange]
+ * @param {Function|null} [options.onSample]
+ * @returns {Promise<{getValue: () => string, focus: () => void, dispose: () => void}>}
  */
 export async function createQueryWorkbench(host, {
     connection = null,
@@ -62,7 +72,7 @@ export async function createQueryWorkbench(host, {
 
     let editor = null;
     try {
-        editor = await createScriptEditor(editorHostEl, {
+        editor = await createScriptEditor(/** @type {HTMLElement} */ (editorHostEl), {
             value,
             analyzeUrl: editorTransport.url(routes.analyze),
             completeUrl: editorTransport.url(routes.complete),
@@ -89,7 +99,7 @@ export async function createQueryWorkbench(host, {
     runButton.addEventListener('click', async () => {
         const query = editor.getValue().trim().replace(/;$/, '');
         if (!query) return setOutput(noteMarkup('Write a query first.', 'warning'));
-        runButton.disabled = true;
+        /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (runButton).disabled = true;
         setOutput('<div class="etlsql-studio-loading">Running…</div>');
         try {
             // The query runs in the document's own context: its CREATE CONNECTION statements come
@@ -106,7 +116,7 @@ export async function createQueryWorkbench(host, {
             onSample?.(null);
             setOutput(noteMarkup(error.message || 'The query failed.', 'error'));
         } finally {
-            runButton.disabled = false;
+            /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (runButton).disabled = false;
         }
     });
 
@@ -129,6 +139,13 @@ export async function createQueryWorkbench(host, {
  *
  * A script that does not parse throws rather than silently running without the preamble: the run
  * would fail anyway, and the parse error is the message that actually explains why.
+ */
+/**
+ * @param {string|null} connection
+ * @param {string} script
+ * @param {Object} [options]
+ * @param {Function} [options.request] Fetch wrapper.
+ * @param {{parse?: string, [key: string]: *}} [options.routes] Route table the host serves.
  */
 export async function connectionPreamble(connection, script, { request, routes } = {}) {
     if (!connection) return '';

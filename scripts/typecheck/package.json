@@ -1,0 +1,9 @@
+{
+  "name": "etlsql-browser-typecheck",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned toolchain for the browser-side type gate (tsconfig.json at the repository root). Kept out of the root so the repository has no root package.json: node would then treat every .js file in the tree as belonging to a package with no \"type\", and warn on each one it has to detect as ESM.",
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}

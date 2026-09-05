@@ -44,10 +44,23 @@ public class SecurityHeadersTests(PortalWebFactory factory) : IClassFixture<Port
         Assert.DoesNotContain(" onclick=", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(" onchange=", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains($"<script nonce=\"{nonce}\"", html, StringComparison.OrdinalIgnoreCase);
+
+        // The page's behaviour is a module of its own, and it is nonced like everything else.
+        // No trailing quote: AssetFingerprinter stamps a `?v=` onto the src at startup.
         Assert.Contains(
-            $"<script nonce=\"{nonce}\" src=\"/js/report-runtime.js",
+            $"<script nonce=\"{nonce}\" type=\"module\" src=\"/js/pages/index.js",
             html,
             StringComparison.OrdinalIgnoreCase);
+
+        // This assertion used to name `/js/report-runtime.js`, which reached the served HTML only
+        // because that tag sat inside a JavaScript template literal in an inline block and the
+        // middleware's blind `<script` rewrite edited it there. It builds the `srcdoc` for the
+        // report viewer iframe, which inherits this page's CSP, so it still needs the nonce — but
+        // now that the template lives in js/pages/index.js the nonce is read and written on
+        // purpose rather than arriving by accident. Assert that, since the HTML no longer shows it.
+        var pageModule = await client.GetStringAsync("/js/pages/index.js");
+        Assert.Contains("document.querySelector('script[nonce]')", pageModule, StringComparison.Ordinal);
+        Assert.Contains("<script nonce=\"${CSP_NONCE}\" src=\"/js/report-runtime.js", pageModule, StringComparison.Ordinal);
     }
 
     [Fact]

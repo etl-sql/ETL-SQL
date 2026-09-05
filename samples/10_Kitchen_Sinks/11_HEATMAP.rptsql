@@ -24,7 +24,11 @@ UNION ALL SELECT 'Thu', '20:00', 22
 UNION ALL SELECT 'Fri', '08:00', 20
 UNION ALL SELECT 'Fri', '12:00', 50
 UNION ALL SELECT 'Fri', '16:00', 40
-UNION ALL SELECT 'Fri', '20:00', 10;
+UNION ALL SELECT 'Fri', '20:00', 10
+UNION ALL SELECT 'Sat', '08:00', CAST(NULL AS INT)
+UNION ALL SELECT 'Sat', '12:00', 95
+UNION ALL SELECT 'Sat', '16:00', 80
+UNION ALL SELECT 'Sat', '20:00', CAST(NULL AS INT);
 
 -- 2. Basic Heatmap
 CREATE VISUAL BasicHeatmap AS HEATMAP (
@@ -57,14 +61,63 @@ CREATE VISUAL StyledHeatmap AS HEATMAP (
     )
 );
 
+-- 5. Diverging 3-Color Heatmap with NULL_COLOR
+CREATE VISUAL DivergingHeatmap AS HEATMAP (
+    SOURCE = #heat,
+    TITLE = 'Diverging Palette (Blue-White-Red) & NULL_COLOR',
+    MAPPINGS (X = Hour, Y = Day, VALUE = ActiveUsers),
+    OPTIONS (
+        COLOR_LOW   = '#2563eb',
+        COLOR_MID   = '#f8fafc',
+        COLOR_HIGH  = '#dc2626',
+        MIDPOINT    = 50,
+        NULL_COLOR  = '#cbd5e1',
+        DATA_LABELS = ON
+    )
+);
+
+-- 6. Cell Borders & Axis Sorting (X_SORT / Y_SORT)
+CREATE VISUAL BorderedSortedHeatmap AS HEATMAP (
+    SOURCE = #heat,
+    TITLE = 'Cell Borders & Sorting (X_SORT=VALUE_DESC, Y_SORT=ALPHA)',
+    MAPPINGS (X = Hour, Y = Day, VALUE = ActiveUsers),
+    OPTIONS (
+        CELL_BORDER       = ON,
+        CELL_BORDER_COLOR = '#1e293b',
+        CELL_BORDER_WIDTH = 2,
+        X_SORT            = VALUE_DESC,
+        Y_SORT            = ALPHA,
+        NULL_COLOR        = '#94a3b8'
+    )
+);
+
+-- 7. Full Legend Suite
+CREATE VISUAL LegendHeatmap AS HEATMAP (
+    SOURCE = #heat,
+    TITLE = 'Continuous Color Scale Legend',
+    MAPPINGS (X = Hour, Y = Day, VALUE = ActiveUsers),
+    OPTIONS (
+        LEGEND             = ON,
+        LEGEND_TITLE       = 'Activity Level',
+        LEGEND_POSITION    = TOP,
+        LEGEND_ORIENTATION = HORIZONTAL,
+        COLOR_LOW          = '#e0f2fe',
+        COLOR_HIGH         = '#0369a1'
+    )
+);
+
 -- Page Layout
 CREATE PAGE HeatmapKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C .',
+    STRUCTURE = 'A B / C D / E F',
     MAP (
         'A' = BasicHeatmap,
         'B' = LabeledHeatmap,
-        'C' = StyledHeatmap
+        'C' = StyledHeatmap,
+        'D' = DivergingHeatmap,
+        'E' = BorderedSortedHeatmap,
+        'F' = LegendHeatmap
     )
 );
 
 CREATE NAVIGATION MainNav AS TAB (DEFAULT = HeatmapKitchenSink, PAGES (HeatmapKitchenSink));
+

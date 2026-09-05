@@ -264,6 +264,13 @@ export const dataQualityApi = {
         params.set('limit', String(limit));
         return apiJson(`/api/data-quality/quarantine?${params.toString()}`);
     },
+    /**
+     * @param {Object} [options]
+     * @param {string} [options.quarantineTarget]
+     * @param {string} [options.jobName]
+     * @param {string} [options.status]
+     * @param {number} [options.limit]
+     */
     quarantineRows({ quarantineTarget, jobName = '', status = 'quarantined', limit = 50 } = {}) {
         const params = new URLSearchParams({ quarantineTarget, status, limit: String(limit) });
         if (jobName) params.set('jobName', jobName);
@@ -275,12 +282,26 @@ export const dataQualityApi = {
             body: { quarantineTarget, jobName }
         });
     },
+    /**
+     * @param {Object} [options]
+     * @param {string} [options.quarantineTarget]
+     * @param {string|null} [options.jobName]
+     * @param {Array<*>} [options.rowIds]
+     * @param {string} [options.disposition]
+     * @param {*} [options.changes]
+     * @param {string|null} [options.note]
+     */
     updateQuarantineDisposition({ quarantineTarget, jobName = null, rowIds = [], disposition, changes = null, note = null } = {}) {
         return apiJson('/api/data-quality/quarantine/disposition', {
             method: 'POST',
             body: { quarantineTarget, jobName, rowIds, disposition, changes, note }
         });
     },
+    /**
+     * @param {Object} [options]
+     * @param {string} [options.jobName]
+     * @param {number} [options.limit]
+     */
     qualityTrend({ jobName, limit = 30 } = {}) {
         const params = new URLSearchParams({ jobName, limit: String(limit) });
         return apiJson(`/api/data-quality/trend?${params.toString()}`);
@@ -314,7 +335,7 @@ export const datasetsApi = {
         apiJson(`/api/datasets/${id}/acl/user/${userId}`, { method: 'DELETE', headers: versionHeaders(version) }),
 
     data(id, { page = 1, pageSize = 50, sort = null, dir = null, search = null, filters = null } = {}) {
-        const p = new URLSearchParams({ page, pageSize });
+        const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         if (sort)    p.set('sort', sort);
         if (dir)     p.set('dir', dir);
         if (search)  p.set('search', search);
@@ -357,7 +378,7 @@ export const datasetsApi = {
         return apiJson(`/api/datasets/${id}/data/stats?${p}`);
     },
     columnValues(id, colName, { search = null, limit = 50 } = {}) {
-        const p = new URLSearchParams({ limit });
+        const p = new URLSearchParams({ limit: String(limit) });
         if (search) p.set('search', search);
         return apiJson(`/api/datasets/${id}/column/${encodeURIComponent(colName)}/values?${p}`);
     }
@@ -375,7 +396,7 @@ export const catalogApi = {
     favorites: (limit = 50) =>
         apiJson(`/api/catalog/favorites?limit=${limit}`),
     lineage(kind, { name = null, key = null, value = null, path = null, column = null, from = null, to = null, limit = 100 } = {}) {
-        const p = new URLSearchParams({ limit });
+        const p = new URLSearchParams({ limit: String(limit) });
         if (name)  p.set('name', name);
         if (key)   p.set('key', key);
         if (value) p.set('value', value);
@@ -386,7 +407,7 @@ export const catalogApi = {
         return apiJson(`/api/catalog/lineage/${kind}?${p}`);
     },
     stewardship({ view = 'all', q = null, steward = null, domain = null, staleAfterDays = 30, limit = 100 } = {}) {
-        const p = new URLSearchParams({ view, staleAfterDays, limit });
+        const p = new URLSearchParams({ view, staleAfterDays: String(staleAfterDays), limit: String(limit) });
         if (q) p.set('q', q);
         if (steward) p.set('steward', steward);
         if (domain) p.set('domain', domain);
@@ -398,8 +419,17 @@ export const catalogApi = {
     protectedDataSuggestions({ limit = 100 } = {}) {
         return apiJson(`/api/catalog/protected-data/suggestions?limit=${limit}`);
     },
+    /**
+     * @param {Object} [options]
+     * @param {string} [options.kind]
+     * @param {string} [options.name]
+     * @param {string|null} [options.column]
+     * @param {string} [options.direction]
+     * @param {number} [options.depth]
+     * @param {number} [options.limit]
+     */
     impact({ kind = 'table', name, column = null, direction = 'downstream', depth = 4, limit = 100 } = {}) {
-        const p = new URLSearchParams({ kind, name, direction, depth, limit });
+        const p = new URLSearchParams({ kind, name, direction, depth: String(depth), limit: String(limit) });
         if (column) p.set('column', column);
         return apiJson(`/api/catalog/impact?${p}`);
     }
@@ -579,7 +609,7 @@ export const adminApi = {
 
 const _origFetch = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
-    const url = typeof input === 'string' ? input : input.url;
+    const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : input.url);
     // Only intercept same-origin /api/ calls that have no auth header yet
     if (url.startsWith('/api/') || url.startsWith(window.location.origin + '/api/')) {
         const token = auth.getToken();

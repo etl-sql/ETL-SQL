@@ -196,6 +196,19 @@ export interface VisualManifest {
     summaryData?: TableSummaryData;
     gridStyle?: string;
     dataLabels?: DataLabelsManifest;
+    microCharts?: MicroChartManifest[];
+}
+
+export interface MicroChartManifest {
+    id: string;
+    kind: string;
+    role: string;
+    rowIndex?: number | null;
+    columnIndex?: number | null;
+    sourceValue?: string | null;
+    svg?: string;
+    plainText?: string;
+    accessibleLabel?: string;
 }
 
 export interface InteractionManifest {

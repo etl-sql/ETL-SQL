@@ -43,3 +43,5 @@
 | [Verified Viewer Context for Gateway PostgreSQL Resources](verified-viewer-context.md) | Separates asserted application context from delegated authentication and defines the signed envelope and PostgreSQL installation contract. |
 | [Provider-Neutral Fault Certification](provider-neutral-fault-certification.md) | Provider-neutral fault certification scenarios and observations across local, Docker, and cloud adapters. |
 | [ETL-SQL Studio (Report Studio, Script Editor, and Pipeline Studio Architecture)](etl-sql-studio.md) | Flagship visual authoring environment combining Report Studio (WYSIWYG dashboard builder), Script Editor, and Pipeline Studio with live data snapshots. |
+| [New Chart Types Architectural Evaluation](new-chart-types-evaluation.md) | Architectural evaluation of candidate chart types: Polar coordinate bar/line, Calendar heatmap, Streamgraph, and Parallel coordinates. |
+| [Geographic Density Map Architectural Evaluation](geographic-density-map-evaluation.md) | Architectural evaluation of geographic density maps (MAP MODE = DENSITY) evaluating hexbin, 2D KDE contour, and raster approaches. |

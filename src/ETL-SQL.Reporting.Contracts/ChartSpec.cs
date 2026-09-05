@@ -270,7 +270,9 @@ public sealed record ScaleSpec(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool MinorTicks = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? LabelRotation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? LabelSkip = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] decimal OuterPadding = 0m)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] decimal OuterPadding = 0m,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TickFormat = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TimeUnit = null)
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ColorRangeSpec? ColorRange { get; init; }

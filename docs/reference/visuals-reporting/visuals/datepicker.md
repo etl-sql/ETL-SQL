@@ -1,54 +1,69 @@
 # DATEPICKER
-An interactive date-selection control. No SOURCE or data query is required. The selected date is bound to a script variable via ACTIONS, which is then used to filter other visuals.
 
-Mappings: none
+An interactive date selection control supporting single-date and date-range modes. The selected date or date range is bound to script variables via ACTIONS.
 
 ## Syntax
 
 ```sql
 CREATE VISUAL VisualName AS DATEPICKER (
+  SOURCE = #dataset,
   OPTIONS (
-    ...
+    MODE           = SINGLE|RANGE,
+    DEFAULT        = 'YYYY-MM-DD',
+    MIN            = 'YYYY-MM-DD' | SOURCE_MIN(col),
+    MAX            = 'YYYY-MM-DD' | SOURCE_MAX(col) | 'TODAY',
+    FORMAT         = 'YYYY-MM-DD',
+    DISABLED_DATES = ('2026-12-25', '2026-01-01'),
+    DISABLED_DAYS  = (SAT, SUN),
+    WEEK_START     = SUN|MON,
+    DISPLAY        = INLINE|DROPDOWN
+  ),
+  ACTIONS (
+    ON_CHANGE = SET_PARAMETER(@start, @end, value)
   )
 );
 ```
 
 ## Mappings
 
-Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour using `OPTIONS` and `ACTIONS`.
+Filter controls do not use a `MAPPINGS` clause unless binding dynamic bounds from a `SOURCE` table.
 
 ## Options
 
-- **DEFAULT = 'YYYY-MM-DD'** - initial date (or omit for today)
-- **MIN = 'YYYY-MM-DD'** - earliest selectable date
-- **MAX = 'YYYY-MM-DD'** - latest selectable date (or 'TODAY')
+- **MODE = SINGLE|RANGE** — Selects single date or dual date range mode (default SINGLE).
+- **DEFAULT = 'YYYY-MM-DD'** — Initial date or date pair (default current date).
+- **MIN = 'YYYY-MM-DD' | SOURCE_MIN(col)** — Earliest selectable date, static string or dynamic column minimum.
+- **MAX = 'YYYY-MM-DD' | SOURCE_MAX(col) | 'TODAY'** — Latest selectable date, static string or dynamic column maximum.
+- **FORMAT = 'format-pattern'** — Display date formatting hint (e.g. `'YYYY-MM-DD'`).
+- **DISABLED_DATES = ('YYYY-MM-DD', ...)** — Explicit calendar dates that cannot be selected.
+- **DISABLED_DAYS = (SAT, SUN)** — Days of the week to disable (e.g. weekend blackout).
+- **WEEK_START = SUN|MON** — First day of the calendar week (default SUN).
+- **DISPLAY = INLINE|DROPDOWN** — Whether the date picker is embedded inline or opened as a dropdown (default DROPDOWN).
 
 ## Actions
 
-- **ON_CHANGE = SET_PARAMETER(@variable, value)** - fires when the user picks a date; passes ISO string to @variable
+- **ON_CHANGE = SET_PARAMETER(@variable, value)** — Fires when the date changes in SINGLE mode.
+- **ON_CHANGE = SET_PARAMETER(@start, @end, value)** — Fires when either date changes in RANGE mode, binding start and end values.
 
 ## Examples
 
 ```sql
--- Declare the variable the picker will drive
-DECLARE @from_date DATE = DATEADD(DAY, -30, GETDATE());
-DECLARE @to_date   DATE = GETDATE();
+DECLARE @start_date DATE = DATEADD(DAY, -30, GETDATE());
+DECLARE @end_date   DATE = GETDATE();
 
--- Date range pickers
-CREATE VISUAL StartPicker AS DATEPICKER (
-  OPTIONS (DEFAULT = DATEADD(DAY, -30, GETDATE()), MAX = 'TODAY'),
-  ACTIONS (ON_CHANGE = SET_PARAMETER(@from_date, value))
+CREATE VISUAL DateRangeFilter AS DATEPICKER (
+  OPTIONS (
+    MODE          = RANGE,
+    DISABLED_DAYS = (SAT, SUN),
+    WEEK_START    = MON,
+    DISPLAY       = DROPDOWN
+  ),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@start_date, @end_date, value))
 );
 
-CREATE VISUAL EndPicker AS DATEPICKER (
-  OPTIONS (DEFAULT = GETDATE(), MAX = 'TODAY'),
-  ACTIONS (ON_CHANGE = SET_PARAMETER(@to_date, value))
-);
-
--- Chart that responds to the pickers
 CREATE VISUAL SalesTrend AS LINE (
   SOURCE   = (SELECT sale_date, SUM(amount) AS total FROM #sales
-              WHERE sale_date BETWEEN @from_date AND @to_date
+              WHERE sale_date BETWEEN @start_date AND @end_date
               GROUP BY sale_date),
   MAPPINGS (X = sale_date, Y = total)
 );
@@ -56,4 +71,5 @@ CREATE VISUAL SalesTrend AS LINE (
 
 ## References
 
+- [RELDATEPICKER](reldatepicker.md)
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

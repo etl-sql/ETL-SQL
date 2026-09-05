@@ -1,5 +1,5 @@
 # TEXTBOX
-A single-line text input field. The typed value is bound to a STRING variable via ACTIONS.
+A single-line or multi-line text input field. The typed value is bound to a STRING variable via ACTIONS.
 
 Mappings: none
 
@@ -9,6 +9,10 @@ Mappings: none
 CREATE VISUAL VisualName AS TEXTBOX (
   OPTIONS (
     ...
+  ),
+  ACTIONS (
+    ON_CHANGE = SET_PARAMETER(@variable, value),
+    ON_SUBMIT = SET_PARAMETER(@variable, value)
   )
 );
 ```
@@ -17,34 +21,42 @@ CREATE VISUAL VisualName AS TEXTBOX (
 
 Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour using `OPTIONS` and `ACTIONS`.
 
-### Properties
-
-- **LABEL_POSITION = TOP|LEFT|HIDDEN** - position of the visual name label (default: TOP)
-
 ## Options
 
-- **PLACEHOLDER = 'hint text'** - greyed-out text shown when the input is empty
-- **DEFAULT = 'initial text'** - pre-populated value on load
-- **MAX_LENGTH = n** - positive integer limiting the number of characters the user can enter
+- **LABEL = 'text'** — label text shown next to or above the input
+- **LABEL_POSITION = TOP|LEFT|HIDDEN** — position of the visual label (default: TOP)
+- **PLACEHOLDER = 'hint text'** — greyed-out text shown when the input is empty
+- **DEFAULT = 'initial text'** — pre-populated value on load
+- **MAX_LENGTH = n** — positive integer limiting the number of characters the user can enter
+- **MULTILINE = ON|OFF** — render as a multiline textarea when ON (default: OFF)
+- **ROWS = n** — height in rows for multiline mode (implies MULTILINE = ON)
+- **PATTERN = 'regex'** — regular expression pattern for client-side input validation
+- **VALIDATION_MESSAGE = 'text'** — custom error message displayed when input fails pattern validation
 
 ## Actions
 
-- **ON_CHANGE = SET_PARAMETER(@variable, value)** - fires when the user types or clears the field
+- **ON_CHANGE = SET_PARAMETER(@variable, value)** — fires when the user types or clears the field
+- **ON_SUBMIT = SET_PARAMETER(@variable, value)** — fires when the user presses Enter or leaves the field (blur)
 
 ## Examples
 
 ```sql
-DECLARE @user_filter STRING = '';
+DECLARE @notes STRING = '';
 
-CREATE VISUAL UserInput AS TEXTBOX (
-  TITLE          = 'Username',
-  LABEL_POSITION = 'LEFT',
-  OPTIONS        (PLACEHOLDER = 'Enter username...', MAX_LENGTH = 40),
-  ACTIONS        (ON_CHANGE = SET_PARAMETER(@user_filter, value))
-);
-
-CREATE VISUAL UserList AS TABLE (
-  SOURCE = (SELECT * FROM #users WHERE @user_filter = '' OR username LIKE '%' + @user_filter + '%')
+CREATE VISUAL FeedbackInput AS TEXTBOX (
+  TITLE          = 'Customer Feedback',
+  OPTIONS        (
+    LABEL              = 'Comments',
+    MULTILINE          = ON,
+    ROWS               = 4,
+    MAX_LENGTH         = 500,
+    PLACEHOLDER        = 'Enter feedback here...',
+    PATTERN            = '^[A-Za-z0-9 .,!?\n\r]*$',
+    VALIDATION_MESSAGE = 'Special characters are not allowed'
+  ),
+  ACTIONS        (
+    ON_SUBMIT = SET_PARAMETER(@notes, value)
+  )
 );
 ```
 

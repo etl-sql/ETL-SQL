@@ -76,6 +76,27 @@ public sealed class ChartValueFormatter
         };
     }
 
+    /// <summary>Formats a value with an explicit format pattern.</summary>
+    public string FormatWithPattern(ChartValue value, string? format)
+    {
+        if (value.Kind == ChartValueKind.Null) return NullLabel;
+        if (format is null) return Format(value);
+        return value.Kind switch
+        {
+            ChartValueKind.Integer => Number(value.Integer!.Value, format),
+            ChartValueKind.FloatingPoint => value.FloatingPoint!.Value.ToString(format, _culture),
+            ChartValueKind.Decimal => Number(value.Decimal!.Value, format),
+            ChartValueKind.Text => value.Text ?? string.Empty,
+            ChartValueKind.Date => Temporal(value.Date!.Value.ToDateTime(TimeOnly.MinValue), format, DateShape.Date),
+            ChartValueKind.Time => value.Time!.Value.ToString(format, _culture),
+            ChartValueKind.LocalDateTime => Temporal(value.LocalDateTime!.Value, format, DateShape.DateTime),
+            ChartValueKind.OffsetDateTime => Temporal(
+                TimeZoneInfo.ConvertTime(value.OffsetDateTime!.Value, _zone).DateTime, format, DateShape.DateTime),
+            ChartValueKind.Boolean => value.Boolean == true ? "true" : "false",
+            _ => string.Empty
+        };
+    }
+
     /// <summary>Formats a computed number — an axis tick, a domain bound — in the report's locale.</summary>
     public string Number(decimal value, string? format = null) =>
         value.ToString(format ?? "0.##", _culture);

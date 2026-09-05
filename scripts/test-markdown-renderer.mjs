@@ -32,7 +32,9 @@ const [docs, connections] = await Promise.all([
   readFile(new URL('src/ETL-SQL.Portal/wwwroot/js/docs.js', root), 'utf8'),
   readFile(new URL('src/ETL-SQL.Portal/wwwroot/js/connections-admin.js', root), 'utf8'),
 ]);
-assert.match(docs, /from '\/js\/markdown-renderer\.js/);
+// Both importers now name the module the same relative way. A rooted `/js/…` specifier is a
+// path no type checker can resolve, and it carried a hand-edited `?v=` that nothing stamps.
+assert.match(docs, /from '\.\/markdown-renderer\.js'/);
 assert.match(connections, /from '\.\/markdown-renderer\.js'/);
 assert.doesNotMatch(connections, /function renderMarkdown/);
 

@@ -50,6 +50,7 @@ CREATE VISUAL VisualName AS BUBBLE (
   - **LEADER_LINE = ON|OFF WITH (COLOR = '#rrggbb', STYLE = SOLID|DASHED)** — shows leader lines connecting bubbles to displaced smart labels.
 - **TITLE = 'text'** — visual title
 - **OVERLAYS (...)** — adds horizontal primary-Y `REFERENCE_LINE` rules and shaded `REFERENCE_BAND(LOW = n, HIGH = n, ...)` intervals. Bounds must be finite and `LOW` must be less than `HIGH`. Both participate in automatic Y domain calculation; explicit axis `MIN`/`MAX` remain authoritative.
+- **FORMATTING (...)** — conditional mark coloring based on predicate conditions (e.g. `FORMATTING (WHEN margin_pct < 0 THEN '#ef4444')`).
 
 ## Examples
 

@@ -49,7 +49,6 @@ const _TYPE_COLOR = {
     outbound:    '#0f766e',
     destructive: '#dc2626',
     procedure:   '#a855f7',
-    connection:  '#0ea5e9',
 };
 
 function _nodeColor(type) {
@@ -981,6 +980,55 @@ function _getRptsqlHighlightStyle(cm) {
 }
 
 /**
+ * What a caller may hand `createScriptEditor`.
+ *
+ * Written out rather than inferred, because every option here is read on one branch and the shape
+ * TypeScript infers from a single call site does not carry the rest — so a caller passing a real
+ * option was reported as passing an unknown one, and a caller passing a misspelt one was not.
+ *
+ * @typedef {Object} ScriptEditorOptions
+ * @property {string}   [value='']          Initial script content.
+ * @property {boolean}  [readOnly=false]
+ * @property {Function} [onChange]          Called with the full new value on each change.
+ * @property {string}   [analyzeUrl]        Endpoint for real parser/linter diagnostics.
+ * @property {string}   [completeUrl]       Endpoint for context-aware completions.
+ * @property {string}   [hoverUrl]          Endpoint for hover documentation.
+ * @property {string}   [connectionRef]     Shared connection alias for schema completions.
+ * @property {Function} [authFetch]         Fetch wrapper used for the endpoints above.
+ * @property {Function} [onDiagnostics]     Called with returned diagnostics.
+ * @property {Function} [onCursorActivity]  Called with (position, text) as the caret moves.
+ * @property {string|(() => string)} [documentUri] Which document's registered connections to ask
+ *   about. A function when the host's answer changes over the editor's lifetime.
+ * @property {number}   [analyzeDebounceMs=450] How long to wait after a keystroke before analysing.
+ * @property {boolean}  [analyzeOnLoad=true]    Analyse the initial content as well as later edits.
+ * @property {boolean}  [diagnosticsPanel=true] Mount the diagnostics gutter and panel.
+ */
+
+/**
+ * The editor handle `createScriptEditor` hands back.
+ *
+ * @typedef {Object} ScriptEditorHandle
+ * @property {() => string} getValue
+ * @property {() => string} getSelection      Every non-empty range, joined by newlines. Plural on
+ *   purpose: a multi-range selection is one of the things the host runs.
+ * @property {() => *} getCurrentStatement    The statement under the caret.
+ * @property {boolean} hasCompletion          Whether a completion endpoint was configured.
+ * @property {() => boolean} triggerCompletion
+ * @property {(text: string) => void} setValue
+ * @property {(text: string) => ({from: number, to: number}|null)} replaceAll Dispatches only the
+ *   span that changed, so the caret and scroll position survive a GUI-generated edit.
+ * @property {(from: number, to: number) => void} revealRange
+ * @property {(fromLine: number, toLine?: number) => void} revealLines
+ * @property {(line: number, column?: number) => void} gotoLine
+ * @property {() => void} focus            Puts the caret back in the editor.
+ * @property {() => number} getCursorLine
+ * @property {() => Promise<*>} analyze
+ * @property {() => void} undo
+ * @property {() => void} redo
+ * @property {() => void} dispose
+ */
+
+/**
  * Mount a CodeMirror 6 rptsql editor into `container`.
  *
  * Dynamically loads designer/codemirror/codemirror-bundle.min.js the first
@@ -988,17 +1036,8 @@ function _getRptsqlHighlightStyle(cm) {
  * rptsql language mode.
  *
  * @param {HTMLElement} container
- * @param {Object}      [opts]
- * @param {string}      [opts.value='']       Initial script content.
- * @param {boolean}     [opts.readOnly=false]
- * @param {Function}    [opts.onChange]        Called with the full new value on each change.
- * @param {string}      [opts.analyzeUrl]      Optional endpoint for real parser/linter diagnostics.
- * @param {string}      [opts.completeUrl]     Optional endpoint for context-aware completions.
- * @param {string}      [opts.hoverUrl]        Optional endpoint for hover documentation.
- * @param {string}      [opts.connectionRef]   Optional shared connection alias for schema completions.
- * @param {Function}    [opts.authFetch]       Optional fetch wrapper used for analyzeUrl/completeUrl/hoverUrl.
- * @param {Function}    [opts.onDiagnostics]   Called with returned diagnostics.
- * @returns {Promise<{ getValue: Function, setValue: Function, dispose: Function }>}
+ * @param {ScriptEditorOptions} [opts]
+ * @returns {Promise<ScriptEditorHandle>}
  *   Returns a promise so callers can await the dynamic bundle load.
  */
 export async function createScriptEditor(container, opts = {}) {
@@ -1738,6 +1777,11 @@ export async function createScriptEditor(container, opts = {}) {
             const binding = historyKeys.find(entry => entry?.key === 'Mod-y' || entry?.key === 'Mod-Shift-z');
             return binding?.run ? binding.run(view) : false;
         },
+        /**
+         * The query workbench has always called this, as `editor.focus?.()` — an optional call, so
+         * it never threw and never focused anything either. It is a real member now.
+         */
+        focus: () => view.focus(),
         dispose: () => {
             clearTimeout(analyzeTimer);
             clearTimeout(hoverTimer);
@@ -1768,6 +1812,9 @@ export function normalizeRunTrace(result, script) {
     const elapsedMs = Number.isFinite(result?.elapsedMs) ? result.elapsedMs : 0;
     const message = redactSecrets(result?.message || (rows.length ? `Returned ${rows.length} rows.` : 'No rows returned.'));
 
+    // Annotated, not inferred: TypeScript would otherwise take the union of these three literals
+    // as the element type and report every later `push` of a different event shape as an error.
+    /** @type {Array<{type: string, [key: string]: *}>} */
     const trace = [
         { type: 'clear', resetHistory: true },
         { type: 'status', status: isSuccess ? 'running' : 'failed' },
@@ -2492,6 +2539,15 @@ function toolbarIcon(name) {
 
 // Icon-only by default; `label` is reserved for the primary action so the toolbar
 // still reads at a glance. Everything carries a title + aria-label for a11y.
+/**
+ * @param {Object} button
+ * @param {string} button.attr    The data-attribute the click handler binds to.
+ * @param {string} button.icon    A key into `_TOOLBAR_ICONS`.
+ * @param {string} button.title   Tooltip and aria-label.
+ * @param {string} [button.label] Visible text. Reserved for the primary action.
+ * @param {boolean} [button.primary]
+ * @param {string} [button.key]   Keyboard shortcut, appended to the tooltip.
+ */
 function toolbarButton({ attr, icon, title, label, primary, key }) {
     const hint = key ? `${title} (${key})` : title;
     return `<button type="button" class="etlsql-tool-btn${primary ? ' etlsql-tool-btn-primary' : ''}${label ? ' etlsql-tool-btn-labelled' : ''}"
@@ -2499,7 +2555,38 @@ function toolbarButton({ attr, icon, title, label, primary, key }) {
 }
 
 /**
- * @param {string} [opts.dataPreviewUrl] Governed source/temp-table row-preview endpoint.
+ * The script-editor workbench: editor, sidebar, run, preview and flow, in one container.
+ *
+ * The options are written out rather than left to inference. Every one of them is read on a
+ * single branch, so the shape TypeScript infers from one call site carries none of the others —
+ * a host passing a real option was reported as passing an unknown one, and a host passing a
+ * misspelt one was not reported at all. That is the wrong way round for a five-host asset.
+ *
+ * @param {HTMLElement} container
+ * @param {Object} [opts]
+ * @param {string}   [opts.title]           Document title shown in the toolbar.
+ * @param {ScriptEditorOptions} [opts.editor] Passed through to `createScriptEditor`.
+ * @param {Function} [opts.authFetch]        Fetch wrapper used for every endpoint below.
+ * @param {string}   [opts.connectionRef]    Shared connection alias for schema completions.
+ * @param {string|(() => string)} [opts.documentUri] Which document's connections to resolve against.
+ * @param {string}   [opts.runUrl]           Endpoint that executes the script.
+ * @param {string}   [opts.dagUrl]           Endpoint that parses the script into a flow graph.
+ * @param {string}   [opts.previewApiUrl]    Endpoint that builds a report manifest to preview.
+ * @param {string}   [opts.previewUrl]       Page the preview iframe loads.
+ * @param {string}   [opts.dataPreviewUrl]   Governed source/temp-table row-preview endpoint.
+ * @param {string}   [opts.workspaceUrl]     Endpoint listing the workspace's files.
+ * @param {string}   [opts.gitStatusUrl]     Endpoint returning working-tree status.
+ * @param {*}        [opts.gitStatus]        Pre-fetched status, when the host already has it.
+ * @param {{workspace?: boolean, schema?: boolean, session?: boolean, git?: boolean}|false} [opts.sidebar]
+ *   Which sidebar sections to mount, or false for none.
+ * @param {boolean}  [opts.showSidebar]      Start with the sidebar open.
+ * @param {Function} [opts.onRun]            Called after a run completes.
+ * @param {Function} [opts.onSave]           Called with the script when the author saves.
+ * @param {Function} [opts.onApply]          Called when the author applies without saving.
+ * @param {Function} [opts.onFormat]         Called to format the buffer.
+ * @param {Function} [opts.onFileSelect]     Called with a path from the sidebar's file tree.
+ * @param {Function} [opts.onClose]          Called when the workbench is dismissed.
+ * @param {Function} [opts.onExit]           Called when the author leaves for another surface.
  */
 export async function createScriptEditorWorkbench(container, opts = {}) {
     const savedTheme = localStorage.getItem('portal-theme') || 'light';
@@ -2513,7 +2600,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     // the Portal has neither (its catalog is folders/reports, and git write-back is a
     // separate roadmap item), so it enables only schema + session.
     // `showSidebar: true` remains shorthand for "everything".
-    const sidebarOpts = opts.sidebar ?? (opts.showSidebar ? { workspace: true, schema: true, session: true, git: true } : null);
+    /** @type {{workspace?: boolean, schema?: boolean, session?: boolean, git?: boolean}|null} */
+    const sidebarOpts = (opts.sidebar || null) ?? (opts.showSidebar ? { workspace: true, schema: true, session: true, git: true } : null);
     const hasSidebar = Boolean(sidebarOpts);
     const showWorkspace = Boolean(sidebarOpts?.workspace);
     const showSchema = Boolean(sidebarOpts?.schema);
@@ -2648,14 +2736,14 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             scheduleSidebarRefresh();
         },
     };
-    const editor = await createScriptEditor(editorHost, editorOpts);
+    const editor = await createScriptEditor(/** @type {HTMLElement} */ (editorHost), editorOpts);
     let runAbort = null;
 
     const content = hasSidebar ? root.querySelector('.etlsql-script-workbench-content') : root;
 
     splitter.addEventListener('pointerdown', (event) => {
         event.preventDefault();
-        splitter.setPointerCapture(event.pointerId);
+        splitter.setPointerCapture(/** @type {PointerEvent} */ (event).pointerId);
         const rect = content.getBoundingClientRect();
 
         const toolbar = root.querySelector('.etlsql-script-workbench-toolbar');
@@ -2674,9 +2762,9 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             const resultHeight = rect.bottom - y - (splitterHeight / 2);
 
             if (hasSidebar) {
-                content.style.gridTemplateRows = `${editorHeight}px ${splitterHeight}px ${resultHeight}px`;
+                /** @type {HTMLElement} */ (content).style.gridTemplateRows = `${editorHeight}px ${splitterHeight}px ${resultHeight}px`;
             } else {
-                content.style.gridTemplateRows = `auto ${editorHeight}px ${splitterHeight}px ${resultHeight}px`;
+                /** @type {HTMLElement} */ (content).style.gridTemplateRows = `auto ${editorHeight}px ${splitterHeight}px ${resultHeight}px`;
             }
         };
         const onUp = () => {
@@ -2842,6 +2930,16 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     }
 
     // Builds a collapsible node. `loadChildren` runs once, on first expand.
+    /**
+     * @param {Object} node
+     * @param {string} node.label
+     * @param {string} [node.icon]
+     * @param {string} [node.className]
+     * @param {string} [node.snippet]      Text dragged or inserted when the node is used.
+     * @param {Function} [node.loadChildren] Called on first expand, for a lazily-filled branch.
+     * @param {Function|{sourceKind: string, [key: string]: *}} [node.preview]
+     *   Either a callback that shows rows, or the descriptor of the source to preview.
+     */
     function makeTreeNode({ label, icon, className, snippet, loadChildren, preview }) {
         const node = document.createElement('div');
         node.className = 'etlsql-tree-node';
@@ -3110,16 +3208,16 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         try {
             const fetcher = opts.authFetch ?? fetch;
             const res = await fetcher(opts.gitStatusUrl || '/api/git/status');
-            if (!res.ok) { hideGitSection(); if (branchBadge) branchBadge.style.display = 'none'; return; }
+            if (!res.ok) { hideGitSection(); if (branchBadge) /** @type {HTMLElement} */ (branchBadge).style.display = 'none'; return; }
             const data = await res.json();
             if (data && (data.branch || data.isGitRepository !== false)) {
                 const branchName = data.branch || opts.gitStatus?.branch || '';
                 if (branchBadge) {
                     if (branchName) {
                         branchBadge.textContent = `🌿 ${branchName}`;
-                        branchBadge.style.display = 'inline-block';
+                        /** @type {HTMLElement} */ (branchBadge).style.display = 'inline-block';
                     } else {
-                        branchBadge.style.display = 'none';
+                        /** @type {HTMLElement} */ (branchBadge).style.display = 'none';
                     }
                 }
 
@@ -3145,9 +3243,9 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 const commitBtn = gitEl.querySelector('[data-git-commit]');
                 const commentInput = gitEl.querySelector('[data-git-comment]');
                 commitBtn?.addEventListener('click', async () => {
-                    const comment = commentInput.value || '';
-                    if (!comment.trim()) { _feedback.notify('Enter a commit message before committing.', { title: 'Commit message required', tone: 'warning' }); commentInput.focus(); return; }
-                    commitBtn.disabled = true;
+                    const comment = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (commentInput).value || '';
+                    if (!comment.trim()) { _feedback.notify('Enter a commit message before committing.', { title: 'Commit message required', tone: 'warning' }); /** @type {HTMLElement} */ (commentInput).focus(); return; }
+                    /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (commitBtn).disabled = true;
                     try {
                         const cRes = await fetcher('/api/git/commit', {
                             method: 'POST',
@@ -3165,16 +3263,16 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     } catch (e) {
                         _feedback.notify('Commit failed: ' + e.message, { title: 'Commit failed', tone: 'error' });
                     } finally {
-                        commitBtn.disabled = false;
+                        /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (commitBtn).disabled = false;
                     }
                 });
             } else {
                 hideGitSection();
-                if (branchBadge) branchBadge.style.display = 'none';
+                if (branchBadge) /** @type {HTMLElement} */ (branchBadge).style.display = 'none';
             }
         } catch {
             hideGitSection();
-            if (branchBadge) branchBadge.style.display = 'none';
+            if (branchBadge) /** @type {HTMLElement} */ (branchBadge).style.display = 'none';
         }
     }
 
@@ -3182,11 +3280,11 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     const sidebar = container.querySelector('[data-sidebar]');
     toggleBtn?.classList.add('active'); // sidebar starts visible
     toggleBtn?.addEventListener('click', () => {
-        if (sidebar.style.display === 'none') {
-            sidebar.style.display = 'flex';
+        if (/** @type {HTMLElement} */ (sidebar).style.display === 'none') {
+            /** @type {HTMLElement} */ (sidebar).style.display = 'flex';
             toggleBtn.classList.add('active');
         } else {
-            sidebar.style.display = 'none';
+            /** @type {HTMLElement} */ (sidebar).style.display = 'none';
             toggleBtn.classList.remove('active');
         }
     });
@@ -3195,7 +3293,24 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     toggleThemeBtn?.addEventListener('click', () => {
         const isDark = document.body.classList.toggle('theme-dark');
         localStorage.setItem('portal-theme', isDark ? 'dark' : 'light');
-        renderCanvas();
+
+        // Two surfaces in this workbench bake the theme in at render time rather than reading it
+        // from CSS: the flow DAG picks its palette when `renderDag` is called, and the preview
+        // iframe is handed a `dark` flag with its manifest. Both have to be told again, and only
+        // if they are actually open — neither redraw is free.
+        //
+        // This used to call `renderCanvas()`, which is declared inside `createDesigner` and was
+        // never in scope here. The class toggle and the `localStorage` write happen first, so the
+        // theme appeared to flip and the handler then threw a ReferenceError, leaving the DAG and
+        // the preview on the old palette with nothing in the UI to say why.
+        if (flowOverlay?.classList.contains('active')) refreshFlow();
+        if (_pendingManifest && /** @type {HTMLIFrameElement} */ (previewFrame)?.contentWindow) {
+            /** @type {HTMLIFrameElement} */ (previewFrame).contentWindow.postMessage({
+                type: 'reportManifest',
+                manifest: _pendingManifest,
+                dark: isDark,
+            }, '*');
+        }
     });
 
     const openDirBtn = container.querySelector('[data-open-directory]');
@@ -3225,8 +3340,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         root.classList.toggle('is-running', isRunning);
         const runBtn = container.querySelector('[data-run]');
         const runSelBtn = container.querySelector('[data-run-selected]');
-        if (runBtn) runBtn.disabled = isRunning;
-        if (runSelBtn) runSelBtn.disabled = isRunning;
+        if (runBtn) /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (runBtn).disabled = isRunning;
+        if (runSelBtn) /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (runSelBtn).disabled = isRunning;
     }
 
     async function run(scope = 'script', confirmDestructive = false) {
@@ -3384,16 +3499,16 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         if (!previewStatusEl) return;
         previewStatusEl.textContent = text || '';
         const colors = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
-        previewStatusEl.style.color = colors[kind] || colors.neutral;
+        /** @type {HTMLElement} */ (previewStatusEl).style.color = colors[kind] || colors.neutral;
     }
 
     if (previewFrame) {
         // The preview iframe posts 'previewReady' after each (re)load; hand it the latest manifest.
         _previewMessageHandler = (event) => {
-            if (event.source !== previewFrame.contentWindow) return;
+            if (event.source !== /** @type {HTMLIFrameElement} */ (previewFrame).contentWindow) return;
             if (event.data?.type !== 'previewReady') return;
             if (_pendingManifest) {
-                previewFrame.contentWindow.postMessage({
+                /** @type {HTMLIFrameElement} */ (previewFrame).contentWindow.postMessage({
                     type: 'reportManifest',
                     manifest: _pendingManifest,
                     dark: document.body.classList.contains('theme-dark'),
@@ -3418,7 +3533,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             const manifest = await res.json();
             _pendingManifest = manifest;
             // Reload the host page so report-runtime.js boots fresh with the new manifest.
-            previewFrame.src = previewUrl + (previewUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+            /** @type {HTMLImageElement | HTMLIFrameElement | HTMLScriptElement | HTMLMediaElement} */ (previewFrame).src = previewUrl + (previewUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
             const pages = manifest?.pages?.length ?? 0;
             const visuals = manifest?.visuals?.length ?? 0;
             setPreviewStatus(`Rendered ${pages} page${pages === 1 ? '' : 's'}, ${visuals} visual${visuals === 1 ? '' : 's'}.`, 'neutral');
@@ -3447,7 +3562,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         if (!flowStatusEl) return;
         flowStatusEl.textContent = text || '';
         const colors = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
-        flowStatusEl.style.color = colors[kind] || colors.neutral;
+        /** @type {HTMLElement} */ (flowStatusEl).style.color = colors[kind] || colors.neutral;
     }
 
     async function refreshFlow() {
@@ -3596,14 +3711,14 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     }
 
     function renderPalette() {
-        const filter = String(paletteFilter.value || '').toLowerCase();
+        const filter = String(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (paletteFilter).value || '').toLowerCase();
         const commands = commandItems().filter(c => !filter || c.label.toLowerCase().includes(filter));
         paletteList.innerHTML = commands.length
             ? commands.map((c, i) => `<button type="button" data-command="${escapeHtml(c.id)}" class="${i === 0 ? 'active' : ''}">${escapeHtml(c.label)}</button>`).join('')
             : '<div class="etlsql-script-results-empty">No commands</div>';
         paletteList.querySelectorAll('[data-command]').forEach(button => {
             button.addEventListener('click', async () => {
-                const cmd = commands.find(c => c.id === button.dataset.command);
+                const cmd = commands.find(c => c.id === /** @type {HTMLElement} */ (button).dataset.command);
                 closePalette();
                 await cmd?.action();
             });
@@ -3611,15 +3726,15 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     }
 
     function openPalette() {
-        palette.hidden = false;
-        paletteFilter.value = '';
+        /** @type {HTMLElement} */ (palette).hidden = false;
+        /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (paletteFilter).value = '';
         renderPalette();
-        paletteFilter.focus();
+        /** @type {HTMLElement} */ (paletteFilter).focus();
     }
 
     function closePalette() {
-        palette.hidden = true;
-        editorHost.querySelector('.cm-editor')?.focus();
+        /** @type {HTMLElement} */ (palette).hidden = true;
+        /** @type {HTMLElement} */ (editorHost.querySelector('.cm-editor'))?.focus();
     }
 
     async function formatScript() {
@@ -3710,8 +3825,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             </div>
         `;
 
-        modal.style.display = 'flex';
-        modal.querySelector('[data-fmt-close]').addEventListener('click', () => { modal.style.display = 'none'; });
+        /** @type {HTMLElement} */ (modal).style.display = 'flex';
+        modal.querySelector('[data-fmt-close]').addEventListener('click', () => { /** @type {HTMLElement} */ (modal).style.display = 'none'; });
 
         try {
             const fetcher = opts.authFetch ?? fetch;
@@ -3720,15 +3835,15 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             if (res.ok) {
                 const config = await res.json();
                 if (config) {
-                    if (config.keywordCasing) modal.querySelector('#fmt-casing').value = config.keywordCasing.toLowerCase();
-                    if (config.indentSize) modal.querySelector('#fmt-indent').value = String(config.indentSize);
-                    if (config.commaPlacement) modal.querySelector('#fmt-comma').value = config.commaPlacement.toLowerCase();
-                    if (config.lineWidth) modal.querySelector('#fmt-linewidth').value = config.lineWidth;
-                    modal.querySelector('#fmt-indentjoins').checked = Boolean(config.indentJoins);
-                    modal.querySelector('#fmt-onnewline').checked = Boolean(config.onClauseOnNewLine);
-                    modal.querySelector('#fmt-casenewline').checked = Boolean(config.caseWhenThenNewLine);
-                    modal.querySelector('#fmt-breakwindow').checked = Boolean(config.breakoutWindowFunctions);
-                    modal.querySelector('#fmt-rightalign').checked = Boolean(config.rightAlignKeywords);
+                    if (config.keywordCasing) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (modal.querySelector('#fmt-casing')).value = config.keywordCasing.toLowerCase();
+                    if (config.indentSize) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (modal.querySelector('#fmt-indent')).value = String(config.indentSize);
+                    if (config.commaPlacement) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (modal.querySelector('#fmt-comma')).value = config.commaPlacement.toLowerCase();
+                    if (config.lineWidth) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (modal.querySelector('#fmt-linewidth')).value = config.lineWidth;
+                    /** @type {HTMLInputElement} */ (modal.querySelector('#fmt-indentjoins')).checked = Boolean(config.indentJoins);
+                    /** @type {HTMLInputElement} */ (modal.querySelector('#fmt-onnewline')).checked = Boolean(config.onClauseOnNewLine);
+                    /** @type {HTMLInputElement} */ (modal.querySelector('#fmt-casenewline')).checked = Boolean(config.caseWhenThenNewLine);
+                    /** @type {HTMLInputElement} */ (modal.querySelector('#fmt-breakwindow')).checked = Boolean(config.breakoutWindowFunctions);
+                    /** @type {HTMLInputElement} */ (modal.querySelector('#fmt-rightalign')).checked = Boolean(config.rightAlignKeywords);
                 }
             }
         } catch (e) {
@@ -3739,15 +3854,15 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             const statusEl = modal.querySelector('#fmt-status');
             statusEl.textContent = 'Saving...';
             const payload = {
-                keywordCasing: modal.querySelector('#fmt-casing').value,
-                indentSize: parseInt(modal.querySelector('#fmt-indent').value, 10),
-                commaPlacement: modal.querySelector('#fmt-comma').value,
-                lineWidth: parseInt(modal.querySelector('#fmt-linewidth').value, 10) || 100,
-                indentJoins: modal.querySelector('#fmt-indentjoins').checked,
-                onClauseOnNewLine: modal.querySelector('#fmt-onnewline').checked,
-                caseWhenThenNewLine: modal.querySelector('#fmt-casenewline').checked,
-                breakoutWindowFunctions: modal.querySelector('#fmt-breakwindow').checked,
-                rightAlignKeywords: modal.querySelector('#fmt-rightalign').checked,
+                keywordCasing: /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (modal.querySelector('#fmt-casing')).value,
+                indentSize: parseInt(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (modal.querySelector('#fmt-indent')).value, 10),
+                commaPlacement: /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (modal.querySelector('#fmt-comma')).value,
+                lineWidth: parseInt(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (modal.querySelector('#fmt-linewidth')).value, 10) || 100,
+                indentJoins: /** @type {HTMLInputElement} */ (modal.querySelector('#fmt-indentjoins')).checked,
+                onClauseOnNewLine: /** @type {HTMLInputElement} */ (modal.querySelector('#fmt-onnewline')).checked,
+                caseWhenThenNewLine: /** @type {HTMLInputElement} */ (modal.querySelector('#fmt-casenewline')).checked,
+                breakoutWindowFunctions: /** @type {HTMLInputElement} */ (modal.querySelector('#fmt-breakwindow')).checked,
+                rightAlignKeywords: /** @type {HTMLInputElement} */ (modal.querySelector('#fmt-rightalign')).checked,
             };
 
             try {
@@ -3760,7 +3875,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
 
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 statusEl.textContent = '✓ Saved to .etlsql-formatter.json';
-                setTimeout(() => { modal.style.display = 'none'; }, 1000);
+                setTimeout(() => { /** @type {HTMLElement} */ (modal).style.display = 'none'; }, 1000);
 
                 await formatScript();
             } catch (err) {
@@ -3790,32 +3905,32 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     container.querySelector('[data-exit]')?.addEventListener('click', () => opts.onExit?.());
     paletteFilter.addEventListener('input', renderPalette);
     paletteFilter.addEventListener('keydown', async (event) => {
-        if (event.key === 'Escape') {
+        if (/** @type {KeyboardEvent} */ (event).key === 'Escape') {
             event.preventDefault();
             closePalette();
             return;
         }
-        if (event.key === 'Enter') {
+        if (/** @type {KeyboardEvent} */ (event).key === 'Enter') {
             event.preventDefault();
             const first = paletteList.querySelector('[data-command]');
-            first?.click();
+            /** @type {HTMLElement} */ (first)?.click();
         }
     });
     palette.addEventListener('mousedown', event => {
         if (event.target === palette) closePalette();
     });
     root.addEventListener('keydown', async (event) => {
-        const key = String(event.key || '').toLowerCase();
-        const mod = event.ctrlKey || event.metaKey;
+        const key = String(/** @type {KeyboardEvent} */ (event).key || '').toLowerCase();
+        const mod = /** @type {KeyboardEvent | MouseEvent} */ (event).ctrlKey || /** @type {KeyboardEvent | MouseEvent} */ (event).metaKey;
         if (key === 'escape' && root.classList.contains('is-running')) {
             event.preventDefault();
             cancelRun();
-        } else if (mod && event.shiftKey && key === 'p') {
+        } else if (mod && /** @type {KeyboardEvent | MouseEvent} */ (event).shiftKey && key === 'p') {
             event.preventDefault();
             openPalette();
         } else if (mod && key === 'enter') {
             event.preventDefault();
-            await run(event.shiftKey ? 'script' : 'selection');
+            await run(/** @type {KeyboardEvent | MouseEvent} */ (event).shiftKey ? 'script' : 'selection');
         } else if (mod && key === 's' && opts.onSave) {
             event.preventDefault();
             await save();
@@ -4177,8 +4292,8 @@ export function createDesigner(container, opts = {}) {
         ${toolbarButton({ attr: 'id="dsgn-cancel"', icon: 'close', title: 'Cancel editing', label: 'Cancel' })}
     `;
     root.appendChild(topbar);
-    topbar.querySelector('#dsgn-name').value = reportName;
-    topbar.querySelector('#dsgn-theme-select').value = localStorage.getItem('portal-theme') || 'light';
+    /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (topbar.querySelector('#dsgn-name')).value = reportName;
+    /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (topbar.querySelector('#dsgn-theme-select')).value = localStorage.getItem('portal-theme') || 'light';
     if (opts.hideTopbar) {
         topbar.style.display = 'none';
         root.classList.add('no-topbar');
@@ -4188,13 +4303,13 @@ export function createDesigner(container, opts = {}) {
         const el = topbar.querySelector('#dsgn-diagnostic-badge');
         if (!el) return;
         if (errorText) {
-            el.style.display = 'inline-flex';
+            /** @type {HTMLElement} */ (el).style.display = 'inline-flex';
             el.textContent = '⚠ Script syntax warning';
-            el.title = errorText;
+            /** @type {HTMLElement} */ (el).title = errorText;
         } else {
-            el.style.display = 'none';
+            /** @type {HTMLElement} */ (el).style.display = 'none';
             el.textContent = '';
-            el.title = '';
+            /** @type {HTMLElement} */ (el).title = '';
         }
     }
 
@@ -4203,9 +4318,9 @@ export function createDesigner(container, opts = {}) {
         if (!el) return;
         el.textContent = text || '';
         const colors = { success: '#16a34a', error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
-        el.style.color = colors[kind] || colors.neutral;
-        el.style.marginLeft = '8px';
-        el.style.fontSize = '12px';
+        /** @type {HTMLElement} */ (el).style.color = colors[kind] || colors.neutral;
+        /** @type {HTMLElement} */ (el).style.marginLeft = '8px';
+        /** @type {HTMLElement} */ (el).style.fontSize = '12px';
     }
     const shortRev = r => (r ? String(r).slice(0, 8) : '');
 
@@ -4213,8 +4328,8 @@ export function createDesigner(container, opts = {}) {
         const status = topbar.querySelector('#dsgn-lease-status');
         if (!status) return;
         status.textContent = text || '';
-        status.dataset.kind = kind || 'neutral';
-        status.title = title || text || '';
+        /** @type {HTMLElement} */ (status).dataset.kind = kind || 'neutral';
+        /** @type {HTMLElement} */ (status).title = title || text || '';
     }
 
     function scheduleLeaseAttempt(delayMs) {
@@ -4233,14 +4348,14 @@ export function createDesigner(container, opts = {}) {
             const expires = new Date(lease.expiresAt);
             setLeaseStatus('Editing session active', 'success',
                 `This edit session is held by ${lease.owner || 'you'} until ${expires.toLocaleTimeString()}. It renews automatically.`);
-            topbar.querySelector('#dsgn-save').disabled = false;
+            /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (topbar.querySelector('#dsgn-save')).disabled = false;
             // Renew with a wide safety margin. A successful renewal does not advance the report's
             // optimistic content version, so it cannot create a false save conflict.
             scheduleLeaseAttempt(120_000);
         } catch (error) {
             if (leaseDisposed) return;
             leaseState = error.status === 409 ? 'held-by-other' : 'disconnected';
-            topbar.querySelector('#dsgn-save').disabled = true;
+            /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (topbar.querySelector('#dsgn-save')).disabled = true;
             if (error.status === 409) {
                 const owner = error.payload?.owner || 'Another author';
                 const expires = error.payload?.expiresAt ? new Date(error.payload.expiresAt) : null;
@@ -4287,7 +4402,7 @@ export function createDesigner(container, opts = {}) {
     function setSaveButtonLoading(isLoading) {
         const btn = topbar.querySelector('#dsgn-save');
         if (!btn) return;
-        btn.disabled = Boolean(isLoading);
+        /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = Boolean(isLoading);
         btn.innerHTML = isLoading ? '<span class="etlsql-spinner" aria-hidden="true"></span> Saving…' : 'Save';
     }
 
@@ -4295,7 +4410,7 @@ export function createDesigner(container, opts = {}) {
         const t = themeName === 'midnight' ? 'midnight' : themeName === 'dark' ? 'dark' : 'light';
         canvasWrap.setAttribute('data-canvas-theme', t);
         localStorage.setItem('portal-theme', t);
-        topbar.querySelector('#dsgn-theme-select').value = t;
+        /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (topbar.querySelector('#dsgn-theme-select')).value = t;
     }
 
     // ── Sidebar (Palette + Tree + Datasets + Bookmarks) ─────────────────────────
@@ -4368,23 +4483,23 @@ export function createDesigner(container, opts = {}) {
     const paletteSearch = sidebar.querySelector('#dsgn-palette-search');
     const paletteCount = sidebar.querySelector('#dsgn-palette-count');
     function filterPalette() {
-        const query = paletteSearch.value.trim().toLowerCase();
+        const query = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (paletteSearch).value.trim().toLowerCase();
         let visible = 0;
         for (const section of sidebar.querySelectorAll('[data-palette-category]')) {
             let sectionVisible = 0;
             for (const button of section.querySelectorAll('[data-vtype]')) {
-                const matches = !query || button.dataset.search.toLowerCase().includes(query);
-                button.hidden = !matches;
+                const matches = !query || /** @type {HTMLElement} */ (button).dataset.search.toLowerCase().includes(query);
+                /** @type {HTMLElement} */ (button).hidden = !matches;
                 if (matches) { visible++; sectionVisible++; }
             }
-            section.hidden = sectionVisible === 0;
+            /** @type {HTMLElement} */ (section).hidden = sectionVisible === 0;
         }
         paletteCount.textContent = query ? `${visible} found` : String(VTYPES.length);
     }
     paletteSearch.addEventListener('input', filterPalette);
     paletteSearch.addEventListener('keydown', event => {
-        if (event.key === 'Escape' && paletteSearch.value) {
-            paletteSearch.value = '';
+        if (/** @type {KeyboardEvent} */ (event).key === 'Escape' && /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (paletteSearch).value) {
+            /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (paletteSearch).value = '';
             filterPalette();
         }
     });
@@ -4940,11 +5055,11 @@ export function createDesigner(container, opts = {}) {
             const titleButton = cardHdr.querySelector('.etlsql-dsgn-vcard-name');
             const titleFormatting = v.formatting?.title;
             if (titleButton && titleFormatting) {
-                if (titleFormatting.color) titleButton.style.color = titleFormatting.color;
-                if (titleFormatting.font) titleButton.style.fontFamily = titleFormatting.font;
-                if (titleFormatting.size) titleButton.style.fontSize = titleFormatting.size;
-                if (titleFormatting.weight) titleButton.style.fontWeight = titleFormatting.weight;
-                if (titleFormatting.align) titleButton.style.textAlign = titleFormatting.align.toLowerCase();
+                if (titleFormatting.color) /** @type {HTMLElement} */ (titleButton).style.color = titleFormatting.color;
+                if (titleFormatting.font) /** @type {HTMLElement} */ (titleButton).style.fontFamily = titleFormatting.font;
+                if (titleFormatting.size) /** @type {HTMLElement} */ (titleButton).style.fontSize = titleFormatting.size;
+                if (titleFormatting.weight) /** @type {HTMLElement} */ (titleButton).style.fontWeight = titleFormatting.weight;
+                if (titleFormatting.align) /** @type {HTMLElement} */ (titleButton).style.textAlign = titleFormatting.align.toLowerCase();
             }
             card.appendChild(cardHdr);
 
@@ -5063,9 +5178,14 @@ export function createDesigner(container, opts = {}) {
                 }
             }
         }
-        if (typeof editor !== 'undefined' && editor) {
-            const text = editor.getValue();
-            const matches = text.match(/@([a-zA-Z0-9_]+)/g);
+        // `editor` was a name nothing in this scope ever declared, so the `typeof` guard was
+        // permanently false and this step never ran: a variable declared only in the script text
+        // was missing from every list the designer offers. `currentScriptText()` is the accessor
+        // the rest of `createDesigner` uses, and it answers from the workbench when one is
+        // mounted and from the host's script otherwise.
+        const scriptText = currentScriptText();
+        if (scriptText) {
+            const matches = scriptText.match(/@([a-zA-Z0-9_]+)/g);
             if (matches) matches.forEach(m => vars.add(m));
         }
         return Array.from(vars).sort();
@@ -6530,10 +6650,10 @@ export function createDesigner(container, opts = {}) {
 
     propsPanel.addEventListener('toggle', event => {
         const details = event.target;
-        if (!details.matches?.('.etlsql-format-group')) return;
-        const heading = details.querySelector('summary')?.textContent.trim();
+        if (!/** @type {Element} */ (details).matches?.('.etlsql-format-group')) return;
+        const heading = /** @type {Element} */ (details).querySelector('summary')?.textContent.trim();
         if (!heading) return;
-        if (details.open) openInspectorGroups.add(heading);
+        if (/** @type {HTMLDetailsElement} */ (details).open) openInspectorGroups.add(heading);
         else openInspectorGroups.delete(heading);
     }, true);
 
@@ -6542,8 +6662,8 @@ export function createDesigner(container, opts = {}) {
             const heading = details.querySelector('summary')?.textContent.trim();
             if (!heading) continue;
             // A group the markup opens by default stays open and is recorded, so closing it sticks.
-            if (details.open) openInspectorGroups.add(heading);
-            else if (openInspectorGroups.has(heading)) details.open = true;
+            if (/** @type {HTMLDetailsElement} */ (details).open) openInspectorGroups.add(heading);
+            else if (openInspectorGroups.has(heading)) /** @type {HTMLDetailsElement} */ (details).open = true;
         }
     }
 
@@ -6610,7 +6730,7 @@ export function createDesigner(container, opts = {}) {
             on('#pp-report-title', e => {
                 reportName = e.target.value;
                 const titleEl = topbar.querySelector('#dsgn-title-input');
-                if (titleEl) titleEl.value = reportName;
+                if (titleEl) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (titleEl).value = reportName;
                 syncScriptFromGridDebounced();
             });
             on('#pp-report-theme', e => {
@@ -6621,7 +6741,7 @@ export function createDesigner(container, opts = {}) {
                 themesList.forEach(t => document.body.classList.remove('theme-' + t));
                 document.body.classList.add('theme-' + e.target.value);
                 const selectEl = topbar.querySelector('#dsgn-theme-select');
-                if (selectEl) selectEl.value = e.target.value;
+                if (selectEl) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (selectEl).value = e.target.value;
                 renderProps();
                 syncScriptFromGridDebounced();
             });
@@ -7180,7 +7300,7 @@ export function createDesigner(container, opts = {}) {
             const actionStr = `SET_PARAMETER(${selectedVar}, ${col})`;
             v.options['action:ON_CHANGE'] = actionStr;
             const input = propsPanel.querySelector('#pp-action-on-change');
-            if (input) input.value = actionStr;
+            if (input) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (input).value = actionStr;
             syncScriptFromGridDebounced();
         });
         // These three wrote to the in-memory visual and never to the script: an author could set an
@@ -7249,11 +7369,11 @@ export function createDesigner(container, opts = {}) {
             });
         }));
         propsPanel.querySelectorAll('[data-cascade-parameter]').forEach(select => select.addEventListener('change', () =>
-            editCascade(next => { next.parents[Number(select.dataset.cascadeParameter)].parameter = select.value; })));
+            editCascade(next => { next.parents[Number(/** @type {HTMLElement} */ (select).dataset.cascadeParameter)].parameter = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (select).value; })));
         propsPanel.querySelectorAll('[data-cascade-column]').forEach(select => select.addEventListener('change', () =>
-            editCascade(next => { next.parents[Number(select.dataset.cascadeColumn)].column = select.value; })));
+            editCascade(next => { next.parents[Number(/** @type {HTMLElement} */ (select).dataset.cascadeColumn)].column = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (select).value; })));
         propsPanel.querySelectorAll('[data-cascade-remove]').forEach(button => button.addEventListener('click', () =>
-            editCascade(next => { next.parents.splice(Number(button.dataset.cascadeRemove), 1); })));
+            editCascade(next => { next.parents.splice(Number(/** @type {HTMLElement} */ (button).dataset.cascadeRemove), 1); })));
         on('#pp-col',          e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
         on('#pp-row',          e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
         on('#pp-cspan',        e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
@@ -7264,7 +7384,7 @@ export function createDesigner(container, opts = {}) {
             if (chartInput) {
                 chartInput.addEventListener('input', ev => {
                     if (!v.options) v.options = {};
-                    v.options.advanced_chart = ev.target.value;
+                    v.options.advanced_chart = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value;
                     renderCanvas();
                     syncScriptFromGridDebounced();
                 });
@@ -7275,13 +7395,13 @@ export function createDesigner(container, opts = {}) {
                     if (!v.options) v.options = {};
                     let cur = v.options.advanced_chart || chartCode;
                     if (/COORDINATE\s*\(\s*TYPE\s*=\s*[A-Z_]+\s*\)/i.test(cur)) {
-                        const coordinate = ev.target.value === 'GEOGRAPHIC'
+                        const coordinate = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value === 'GEOGRAPHIC'
                             ? "COORDINATE (TYPE = GEOGRAPHIC, PROJECTION = EQUIRECTANGULAR, MAP_NAME = 'WORLD', FEATURE_KEY = 'name')"
-                            : `COORDINATE (TYPE = ${ev.target.value})`;
+                            : `COORDINATE (TYPE = ${/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value})`;
                         cur = cur.replace(/COORDINATE\s*\(\s*TYPE\s*=\s*[A-Z_]+\s*\)/i, coordinate);
                     }
                     v.options.advanced_chart = cur;
-                    if (chartInput) chartInput.value = cur;
+                    if (chartInput) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (chartInput).value = cur;
                     renderCanvas();
                     syncScriptFromGridDebounced();
                 });
@@ -7293,10 +7413,10 @@ export function createDesigner(container, opts = {}) {
                     let cur = v.options.advanced_chart || chartCode;
                     const markPattern = /\b(RECT|LINE|AREA|POINT|RULE|ARC|TEXT|TICK)\b/i;
                     if (markPattern.test(cur)) {
-                        cur = cur.replace(markPattern, ev.target.value);
+                        cur = cur.replace(markPattern, /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value);
                     }
                     v.options.advanced_chart = cur;
-                    if (chartInput) chartInput.value = cur;
+                    if (chartInput) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (chartInput).value = cur;
                     renderCanvas();
                     syncScriptFromGridDebounced();
                 });
@@ -7309,11 +7429,11 @@ export function createDesigner(container, opts = {}) {
                         'candlestick-volume': candlestickVolumeRecipe,
                         'layered-map': layeredMapRecipe
                     };
-                    const replacement = recipes[ev.target.value];
+                    const replacement = recipes[/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value];
                     if (!replacement) return;
                     if (!v.options) v.options = {};
                     v.options.advanced_chart = replacement;
-                    if (chartInput) chartInput.value = replacement;
+                    if (chartInput) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (chartInput).value = replacement;
                     renderCanvas();
                     syncScriptFromGridDebounced();
                 });
@@ -7350,7 +7470,7 @@ export function createDesigner(container, opts = {}) {
                 if (!input) continue;
                 input.addEventListener('change', ev => {
                     if (!v.mappings) v.mappings = {};
-                    if (ev.target.value) v.mappings[role] = ev.target.value;
+                    if (/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value) v.mappings[role] = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value;
                     else delete v.mappings[role];
                     renderProps();
                 });
@@ -7362,9 +7482,9 @@ export function createDesigner(container, opts = {}) {
                 input.addEventListener('drop', e => {
                     e.preventDefault();
                     input.classList.remove('drag-over');
-                    const col = e.dataTransfer.getData('text/plain');
+                    const col = /** @type {DragEvent} */ (e).dataTransfer.getData('text/plain');
                     if (col) {
-                        input.value = col;
+                        /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (input).value = col;
                         input.dispatchEvent(new Event('change'));
                     }
                 });
@@ -7404,7 +7524,7 @@ export function createDesigner(container, opts = {}) {
         selVisualId = selVisualIds.size === 1 ? Array.from(selVisualIds)[0] : null;
 
         for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card')) {
-            card.classList.toggle('selected', selVisualIds.has(card.dataset.vid));
+            card.classList.toggle('selected', selVisualIds.has(/** @type {HTMLElement} */ (card).dataset.vid));
         }
 
         renderTree();
@@ -7424,7 +7544,7 @@ export function createDesigner(container, opts = {}) {
     function renderAlignmentToolbar() {
         let bar = canvasWrap.querySelector('#dsgn-align-bar');
         if (selVisualIds.size < 2) {
-            if (bar) bar.style.display = 'none';
+            if (bar) /** @type {HTMLElement} */ (bar).style.display = 'none';
             return;
         }
 
@@ -7435,9 +7555,9 @@ export function createDesigner(container, opts = {}) {
             canvasWrap.appendChild(bar);
 
             bar.addEventListener('click', e => {
-                const btn = e.target.closest('[data-align]');
+                const btn = /** @type {Element} */ (e.target).closest('[data-align]');
                 if (!btn) return;
-                const mode = btn.dataset.align;
+                const mode = /** @type {HTMLElement} */ (btn).dataset.align;
                 const visuals = curVis().filter(v => selVisualIds.has(v.id));
                 if (visuals.length < 2) return;
 
@@ -7465,7 +7585,7 @@ export function createDesigner(container, opts = {}) {
             <button class="btn btn-xs" data-align="width" title="Equal Width">↔ Width</button>
             <button class="btn btn-xs" data-align="height" title="Equal Height">↕ Height</button>
         `;
-        bar.style.display = 'flex';
+        /** @type {HTMLElement} */ (bar).style.display = 'flex';
     }
 
     function deleteVisual(id) {
@@ -7668,24 +7788,24 @@ export function createDesigner(container, opts = {}) {
         const defaultSource = (state.datasets && state.datasets.length > 0)
             ? state.datasets[0].name.replace(/^[#&]/, '')
             : 'source_data';
-        sourceInput.value = defaultSource;
+        /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (sourceInput).value = defaultSource;
 
         function updatePreview() {
-            const recipeId = recipeSelect.value;
+            const recipeId = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (recipeSelect).value;
             const recipe = DATA_PREP_RECIPES.find(r => r.id === recipeId) || DATA_PREP_RECIPES[0];
             descEl.textContent = recipe.description;
-            const src = sourceInput.value.trim() || 'source_data';
-            if (!targetInput.dataset.userEdited) {
-                targetInput.value = `${src}_${recipe.targetSuffix}`;
+            const src = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (sourceInput).value.trim() || 'source_data';
+            if (!/** @type {HTMLElement} */ (targetInput).dataset.userEdited) {
+                /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (targetInput).value = `${src}_${recipe.targetSuffix}`;
             }
-            const tgt = targetInput.value.trim() || `${src}_${recipe.targetSuffix}`;
-            sqlPreview.value = recipe.template(tgt, src);
+            const tgt = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (targetInput).value.trim() || `${src}_${recipe.targetSuffix}`;
+            /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (sqlPreview).value = recipe.template(tgt, src);
         }
 
-        targetInput.dataset.userEdited = '';
-        targetInput.oninput = () => { targetInput.dataset.userEdited = 'true'; updatePreview(); };
-        sourceInput.oninput = () => { updatePreview(); };
-        recipeSelect.onchange = () => { targetInput.dataset.userEdited = ''; updatePreview(); };
+        /** @type {HTMLElement} */ (targetInput).dataset.userEdited = '';
+        /** @type {HTMLElement} */ (targetInput).oninput = () => { /** @type {HTMLElement} */ (targetInput).dataset.userEdited = 'true'; updatePreview(); };
+        /** @type {HTMLElement} */ (sourceInput).oninput = () => { updatePreview(); };
+        /** @type {HTMLElement} */ (recipeSelect).onchange = () => { /** @type {HTMLElement} */ (targetInput).dataset.userEdited = ''; updatePreview(); };
 
         updatePreview();
         dataPrepModal.style.display = 'flex';
@@ -7950,7 +8070,7 @@ export function createDesigner(container, opts = {}) {
         topbar.querySelector('#dsgn-code-mode')?.setAttribute('aria-selected', 'true');
         const host = scriptOverlay.querySelector('#dsgn-script-workbench-host');
         host.innerHTML = '';
-        scriptEditor = await createScriptEditorWorkbench(host, {
+        scriptEditor = await createScriptEditorWorkbench(/** @type {HTMLElement} */ (host), {
             title: 'Script',
             authFetch: _fetch,
             // The Portal has no file workspace (its catalog is folders/reports) and git
@@ -7998,15 +8118,15 @@ export function createDesigner(container, opts = {}) {
         if (!previewStatusEl) return;
         previewStatusEl.textContent = text || '';
         const colors = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
-        previewStatusEl.style.color = colors[kind] || colors.neutral;
+        /** @type {HTMLElement} */ (previewStatusEl).style.color = colors[kind] || colors.neutral;
     }
 
     // The preview iframe posts 'previewReady' after each (re)load; hand it the latest manifest.
     const previewMessageHandler = (event) => {
-        if (event.source !== previewFrame?.contentWindow) return;
+        if (event.source !== /** @type {HTMLIFrameElement} */ (previewFrame)?.contentWindow) return;
         if (event.data?.type !== 'previewReady') return;
         if (_pendingManifest) {
-            previewFrame.contentWindow.postMessage({
+            /** @type {HTMLIFrameElement} */ (previewFrame).contentWindow.postMessage({
                 type: 'reportManifest',
                 manifest: _pendingManifest,
                 dark: document.body.classList.contains('theme-dark'),
@@ -8025,7 +8145,7 @@ export function createDesigner(container, opts = {}) {
             const manifest = await apiJson('/api/designer/preview', 'POST', { script });
             _pendingManifest = manifest;
             // Reload the host page so report-runtime.js boots fresh with the new manifest.
-            previewFrame.src = previewUrl + (previewUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+            /** @type {HTMLImageElement | HTMLIFrameElement | HTMLScriptElement | HTMLMediaElement} */ (previewFrame).src = previewUrl + (previewUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
             const pages = manifest?.pages?.length ?? 0;
             const visuals = manifest?.visuals?.length ?? 0;
             setPreviewStatus(`Rendered ${pages} page${pages === 1 ? '' : 's'}, ${visuals} visual${visuals === 1 ? '' : 's'}.`, 'neutral');
@@ -8097,7 +8217,7 @@ export function createDesigner(container, opts = {}) {
                 { title: 'Edit session unavailable', tone: 'warning' });
             return;
         }
-        reportName = topbar.querySelector('#dsgn-name').value.trim() || reportName;
+        reportName = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (topbar.querySelector('#dsgn-name')).value.trim() || reportName;
         try {
             const currentScript = currentScriptText() || null;
             const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
@@ -8123,14 +8243,14 @@ export function createDesigner(container, opts = {}) {
                     // instead of navigating away.
                     setScmStatus(`Saved v${reportVersion} · not yet committed`, 'pending');
                     const commitBtn = topbar.querySelector('#dsgn-commit');
-                    if (commitBtn) commitBtn.disabled = false;
+                    if (commitBtn) /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (commitBtn).disabled = false;
                 } else {
                     opts.onSave?.();
                 }
             } else {
-                saveModal.querySelector('#dsgn-modal-name').value   = reportName;
-                saveModal.querySelector('#dsgn-modal-folder').value = folderId ?? '';
-                saveModal._script = script;
+                /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (saveModal.querySelector('#dsgn-modal-name')).value   = reportName;
+                /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (saveModal.querySelector('#dsgn-modal-folder')).value = folderId ?? '';
+                /** @type {HTMLElement & {_script?: string}} */ (saveModal)._script = script;
                 saveModal.style.display = 'flex';
             }
         } catch (e) { _feedback.notify('Save failed: ' + e.message, { title: 'Save failed', tone: 'error' }); }
@@ -8144,7 +8264,7 @@ export function createDesigner(container, opts = {}) {
         const commitBtn = topbar.querySelector('#dsgn-commit');
         const prevTitle = commitBtn?.getAttribute('title') || 'Commit saved script to source control';
         if (commitBtn) {
-            commitBtn.disabled = true;
+            /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (commitBtn).disabled = true;
             commitBtn.setAttribute('aria-busy', 'true');
             commitBtn.setAttribute('title', 'Committing to source control');
         }
@@ -8161,7 +8281,7 @@ export function createDesigner(container, opts = {}) {
             setScmStatus(`Commit failed: ${e.message}`, 'error');
         } finally {
             if (commitBtn) {
-                commitBtn.disabled = false;
+                /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (commitBtn).disabled = false;
                 commitBtn.removeAttribute('aria-busy');
                 commitBtn.setAttribute('title', prevTitle);
             }
@@ -8169,9 +8289,9 @@ export function createDesigner(container, opts = {}) {
     }
 
     async function saveAsNew() {
-        const name   = saveModal.querySelector('#dsgn-modal-name').value.trim() || 'New Report';
-        const folder = parseInt(saveModal.querySelector('#dsgn-modal-folder').value, 10) || null;
-        const script = saveModal._script;
+        const name   = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (saveModal.querySelector('#dsgn-modal-name')).value.trim() || 'New Report';
+        const folder = parseInt(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (saveModal.querySelector('#dsgn-modal-folder')).value, 10) || null;
+        const script = /** @type {HTMLElement & {_script?: string}} */ (saveModal)._script;
         try {
             const created = await apiJson('/api/studio/reports', 'POST', {
                 name, folderId: folder, scriptText: script,
@@ -8184,8 +8304,8 @@ export function createDesigner(container, opts = {}) {
     // ── Event wiring ──────────────────────────────────────────────────────────
 
     root.addEventListener('keydown', event => {
-        const tag = (event.target.tagName || '').toUpperCase();
-        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || event.target.isContentEditable || event.target.closest('.CodeMirror')) {
+        const tag = (/** @type {Element} */ (event.target).tagName || '').toUpperCase();
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || /** @type {HTMLElement} */ (event.target).isContentEditable || /** @type {Element} */ (event.target).closest('.CodeMirror')) {
             return;
         }
 
@@ -8263,22 +8383,22 @@ export function createDesigner(container, opts = {}) {
     });
 
     canvasGrid.addEventListener('click', e => {
-        const chooseData = e.target.closest('[data-empty-data]');
+        const chooseData = /** @type {Element} */ (e.target).closest('[data-empty-data]');
         if (chooseData) {
             e.stopPropagation();
             opts.onRequestData?.();
             return;
         }
-        const emptyAdd = e.target.closest('[data-empty-vtype]');
+        const emptyAdd = /** @type {Element} */ (e.target).closest('[data-empty-vtype]');
         if (emptyAdd) {
             e.stopPropagation();
-            addVisual(emptyAdd.dataset.emptyVtype);
+            addVisual(/** @type {HTMLElement} */ (emptyAdd).dataset.emptyVtype);
             return;
         }
-        const titleButton = e.target.closest('[data-edit-title]');
+        const titleButton = /** @type {Element} */ (e.target).closest('[data-edit-title]');
         if (titleButton) {
             e.stopPropagation();
-            const visual = findVis(titleButton.dataset.editTitle);
+            const visual = findVis(/** @type {HTMLElement} */ (titleButton).dataset.editTitle);
             if (!visual) return;
             const input = document.createElement('input');
             input.className = 'etlsql-dsgn-vcard-name-input';
@@ -8306,30 +8426,30 @@ export function createDesigner(container, opts = {}) {
             });
             return;
         }
-        const del = e.target.closest('[data-del]');
+        const del = /** @type {Element} */ (e.target).closest('[data-del]');
         if (del) {
             e.stopPropagation();
-            const locked = findVis(del.dataset.del);
+            const locked = findVis(/** @type {HTMLElement} */ (del).dataset.del);
             if (isLocked(locked)) { refuseLocked(locked); return; }
-            deleteVisual(del.dataset.del);
+            deleteVisual(/** @type {HTMLElement} */ (del).dataset.del);
             return;
         }
-        const fold = e.target.closest('[data-fold]');
+        const fold = /** @type {Element} */ (e.target).closest('[data-fold]');
         if (fold) {
-            const id = fold.dataset.fold;
+            const id = /** @type {HTMLElement} */ (fold).dataset.fold;
             if (collapsedContainers.has(id)) collapsedContainers.delete(id);
             else collapsedContainers.add(id);
             renderCanvas();
             return;
         }
-        const dup = e.target.closest('[data-dup]');
+        const dup = /** @type {Element} */ (e.target).closest('[data-dup]');
         if (dup) {
-            duplicateVisual(dup.dataset.dup);
+            duplicateVisual(/** @type {HTMLElement} */ (dup).dataset.dup);
             return;
         }
-        const detachBtn = e.target.closest('[data-detach]');
+        const detachBtn = /** @type {Element} */ (e.target).closest('[data-detach]');
         if (detachBtn) {
-            const v = findVis(detachBtn.dataset.detach);
+            const v = findVis(/** @type {HTMLElement} */ (detachBtn).dataset.detach);
             if (v) {
                 pushUndoState();
                 v.containerId = null;
@@ -8337,9 +8457,9 @@ export function createDesigner(container, opts = {}) {
             }
             return;
         }
-        const card = e.target.closest('.etlsql-dsgn-visual-card');
+        const card = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-visual-card');
         if (card) {
-            selectVisual(card.dataset.vid, { toggle: e.shiftKey || e.ctrlKey || e.metaKey });
+            selectVisual(/** @type {HTMLElement} */ (card).dataset.vid, { toggle: e.shiftKey || e.ctrlKey || e.metaKey });
         } else {
             selectVisual(null);
         }
@@ -8353,14 +8473,14 @@ export function createDesigner(container, opts = {}) {
     topbar.querySelector('#dsgn-tidy')?.addEventListener('click', tidyLayout);
     topbar.querySelector('#dsgn-theme-select')?.addEventListener('change', e => {
         const themes = ['light', 'dark', 'midnight', 'dracula', 'nord'];
-        const nextTheme = e.target.value;
+        const nextTheme = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
 
         themes.forEach(t => document.body.classList.remove('theme-' + t));
         document.body.classList.add('theme-' + nextTheme);
         localStorage.setItem('portal-theme', nextTheme);
         renderCanvas();
     });
-    topbar.querySelector('#dsgn-name').addEventListener('change',   e => { reportName = e.target.value; });
+    topbar.querySelector('#dsgn-name').addEventListener('change',   e => { reportName = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value; });
     topbar.querySelector('#dsgn-design-mode').addEventListener('click', closeScript);
     topbar.querySelector('#dsgn-code-mode').addEventListener('click', () => {
         if (!scriptOverlay.classList.contains('active')) openScript();
@@ -8383,22 +8503,22 @@ export function createDesigner(container, opts = {}) {
     previewOverlay.querySelector('#dsgn-preview-close')?.addEventListener('click', closePreview);
 
     topbar.querySelector('#dsgn-pages').addEventListener('click', e => {
-        const tab = e.target.closest('.etlsql-designer-page-tab');
-        if (tab) { pageIdx = +tab.dataset.idx; selVisualId = null; renderAll(); }
+        const tab = /** @type {Element} */ (e.target).closest('.etlsql-designer-page-tab');
+        if (tab) { pageIdx = +/** @type {HTMLElement} */ (tab).dataset.idx; selVisualId = null; renderAll(); }
     });
 
     sidebar.addEventListener('dragstart', e => {
-        const btn = e.target.closest('.etlsql-dsgn-palette-btn');
+        const btn = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-palette-btn');
         if (btn) {
-            e.dataTransfer.setData('text/plain', btn.dataset.vtype);
-            e.dataTransfer.setData('application/x-etlsql-visual', btn.dataset.vtype);
+            e.dataTransfer.setData('text/plain', /** @type {HTMLElement} */ (btn).dataset.vtype);
+            e.dataTransfer.setData('application/x-etlsql-visual', /** @type {HTMLElement} */ (btn).dataset.vtype);
             e.dataTransfer.effectAllowed = 'copy';
         }
     });
 
     sidebar.addEventListener('click', e => {
-        const btn = e.target.closest('.etlsql-dsgn-palette-btn');
-        if (btn) addVisual(btn.dataset.vtype);
+        const btn = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-palette-btn');
+        if (btn) addVisual(/** @type {HTMLElement} */ (btn).dataset.vtype);
     });
 
     // ── Drag, Resize & Marquee Interaction ─────────────────────────────────
@@ -8439,15 +8559,15 @@ export function createDesigner(container, opts = {}) {
             const cRect = card.getBoundingClientRect();
             const intersects = !(mRect.right < cRect.left || mRect.left > cRect.right || mRect.bottom < cRect.top || mRect.top > cRect.bottom);
             if (intersects) {
-                selVisualIds.add(card.dataset.vid);
+                selVisualIds.add(/** @type {HTMLElement} */ (card).dataset.vid);
             } else if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
-                selVisualIds.delete(card.dataset.vid);
+                selVisualIds.delete(/** @type {HTMLElement} */ (card).dataset.vid);
             }
         }
 
         selVisualId = selVisualIds.size === 1 ? Array.from(selVisualIds)[0] : null;
         for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card')) {
-            card.classList.toggle('selected', selVisualIds.has(card.dataset.vid));
+            card.classList.toggle('selected', selVisualIds.has(/** @type {HTMLElement} */ (card).dataset.vid));
         }
         renderAlignmentToolbar();
     }
@@ -8464,11 +8584,11 @@ export function createDesigner(container, opts = {}) {
     }
 
     canvasGrid.addEventListener('mousedown', e => {
-        const resizeHandle = e.target.closest('.etlsql-dsgn-vcard-resize');
-        const card = e.target.closest('.etlsql-dsgn-visual-card');
-        const delBtn = e.target.closest('[data-del]');
-        const emptyBtn = e.target.closest('[data-empty-vtype]');
-        const headerControl = e.target.closest('.etlsql-dsgn-vcard-actions, .etlsql-dsgn-vcard-name, .etlsql-dsgn-vcard-name-input');
+        const resizeHandle = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-vcard-resize');
+        const card = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-visual-card');
+        const delBtn = /** @type {Element} */ (e.target).closest('[data-del]');
+        const emptyBtn = /** @type {Element} */ (e.target).closest('[data-empty-vtype]');
+        const headerControl = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-vcard-actions, .etlsql-dsgn-vcard-name, .etlsql-dsgn-vcard-name-input');
 
         if (delBtn || emptyBtn || headerControl) return; // Managed by click handlers
 
@@ -8499,7 +8619,7 @@ export function createDesigner(container, opts = {}) {
         }
 
         if (card) {
-            const vid = card.dataset.vid;
+            const vid = /** @type {HTMLElement} */ (card).dataset.vid;
             const v = findVis(vid);
             if (!v) return;
 
@@ -8598,7 +8718,7 @@ export function createDesigner(container, opts = {}) {
             }
 
             for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card.is-container')) {
-                if (card.dataset.vid === hoverContainerId) {
+                if (/** @type {HTMLElement} */ (card).dataset.vid === hoverContainerId) {
                     card.classList.add('drop-zone-hover');
                 } else {
                     card.classList.remove('drop-zone-hover');
@@ -8687,10 +8807,10 @@ export function createDesigner(container, opts = {}) {
                 vGuideEl.className = 'etlsql-dsgn-guide-v';
                 canvasGrid.appendChild(vGuideEl);
             }
-            vGuideEl.style.gridColumnStart = `${vGuideCol}`;
-            vGuideEl.style.display = 'block';
+            /** @type {HTMLElement} */ (vGuideEl).style.gridColumnStart = `${vGuideCol}`;
+            /** @type {HTMLElement} */ (vGuideEl).style.display = 'block';
         } else if (vGuideEl) {
-            vGuideEl.style.display = 'none';
+            /** @type {HTMLElement} */ (vGuideEl).style.display = 'none';
         }
 
         let hGuideEl = canvasGrid.querySelector('.etlsql-dsgn-guide-h');
@@ -8700,10 +8820,10 @@ export function createDesigner(container, opts = {}) {
                 hGuideEl.className = 'etlsql-dsgn-guide-h';
                 canvasGrid.appendChild(hGuideEl);
             }
-            hGuideEl.style.gridRowStart = `${hGuideRow}`;
-            hGuideEl.style.display = 'block';
+            /** @type {HTMLElement} */ (hGuideEl).style.gridRowStart = `${hGuideRow}`;
+            /** @type {HTMLElement} */ (hGuideEl).style.display = 'block';
         } else if (hGuideEl) {
-            hGuideEl.style.display = 'none';
+            /** @type {HTMLElement} */ (hGuideEl).style.display = 'none';
         }
     }
 
@@ -8807,12 +8927,12 @@ export function createDesigner(container, opts = {}) {
             canvasGrid.appendChild(ghost);
         }
         const colSpan = Math.min(6, Math.max(1, 13 - col));
-        ghost.style.gridColumn = `${col} / span ${colSpan}`;
-        ghost.style.gridRow = `${row} / span 4`;
+        /** @type {HTMLElement} */ (ghost).style.gridColumn = `${col} / span ${colSpan}`;
+        /** @type {HTMLElement} */ (ghost).style.gridRow = `${row} / span 4`;
     });
 
     canvasGrid.addEventListener('dragleave', e => {
-        if (!canvasGrid.contains(e.relatedTarget)) {
+        if (!canvasGrid.contains(/** @type {Node} */ (e.relatedTarget))) {
             const ghost = canvasGrid.querySelector('.etlsql-dsgn-grid-ghost');
             if (ghost) ghost.remove();
         }
@@ -8841,37 +8961,37 @@ export function createDesigner(container, opts = {}) {
     });
 
     sidebar.querySelector('#dsgn-tree').addEventListener('click', e => {
-        const item = e.target.closest('.etlsql-dsgn-tree-item');
-        if (item) selectVisual(item.dataset.vid);
+        const item = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-tree-item');
+        if (item) selectVisual(/** @type {HTMLElement} */ (item).dataset.vid);
     });
 
     sidebar.querySelector('#dsgn-add-recipe')?.addEventListener('click', openDataPrepModal);
     sidebar.querySelector('#dsgn-add-ds').addEventListener('click', addDataset);
     sidebar.querySelector('#dsgn-ds-list').addEventListener('click', e => {
-        const del = e.target.closest('[data-dsid]');
-        if (del) { state.datasets = state.datasets.filter(d => d.id !== del.dataset.dsid); renderDatasets(); renderProps(); }
+        const del = /** @type {Element} */ (e.target).closest('[data-dsid]');
+        if (del) { state.datasets = state.datasets.filter(d => d.id !== /** @type {HTMLElement} */ (del).dataset.dsid); renderDatasets(); renderProps(); }
     });
 
     bookmarksSection.querySelector('#dsgn-add-bookmark').addEventListener('click', () =>
         addBookmark().catch(e => _feedback.notify(e.message, { title: 'Bookmark not added', tone: 'error' })));
     bookmarksSection.querySelector('#dsgn-bookmark-list').addEventListener('click', e => {
-        const edit = e.target.closest('[data-bmedit]');
+        const edit = /** @type {Element} */ (e.target).closest('[data-bmedit]');
         if (edit) {
-            editBookmarkTitle(edit.dataset.bmedit)
+            editBookmarkTitle(/** @type {HTMLElement} */ (edit).dataset.bmedit)
                 .catch(err => _feedback.notify(err.message, { title: 'Bookmark not updated', tone: 'error' }));
             return;
         }
-        const makeDefault = e.target.closest('[data-bmdefault]');
-        if (makeDefault) { toggleBookmarkDefault(makeDefault.dataset.bmdefault); return; }
-        const del = e.target.closest('[data-bmid]');
-        if (del) removeBookmark(del.dataset.bmid);
+        const makeDefault = /** @type {Element} */ (e.target).closest('[data-bmdefault]');
+        if (makeDefault) { toggleBookmarkDefault(/** @type {HTMLElement} */ (makeDefault).dataset.bmdefault); return; }
+        const del = /** @type {Element} */ (e.target).closest('[data-bmid]');
+        if (del) removeBookmark(/** @type {HTMLElement} */ (del).dataset.bmid);
     });
 
     dataPrepModal.querySelector('#dsgn-dp-cancel').addEventListener('click', () => { dataPrepModal.style.display = 'none'; });
     dataPrepModal.querySelector('#dsgn-dp-ok').addEventListener('click', () => {
         const targetInput = dataPrepModal.querySelector('#dsgn-dp-target');
         const sqlPreview = dataPrepModal.querySelector('#dsgn-dp-sql');
-        const name = (targetInput.value || '').trim();
+        const name = (/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (targetInput).value || '').trim();
         if (!name) {
             _feedback?.notify?.('Enter a target dataset name.', { title: 'Target name required', tone: 'warning' });
             return;
@@ -8879,7 +8999,7 @@ export function createDesigner(container, opts = {}) {
         state.datasets.push({
             id: 'ds_' + uid(),
             name: name,
-            query: sqlPreview.value
+            query: /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (sqlPreview).value
         });
         dataPrepModal.style.display = 'none';
         renderDatasets();

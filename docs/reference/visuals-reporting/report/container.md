@@ -1,59 +1,83 @@
 # CONTAINER
 
-Groups visuals within a page using its own nested layout grid. Useful for grouping related charts in a card region, a scrollable sub-panel, or a collapsible filter drawer.
+Groups visuals within a page using nested layout grids, tabs, accordions, modals, or collapsible drawers.
 
 ## Syntax
 
 ```sql
 CREATE CONTAINER <name> AS BOX | SCROLL | DRAWER | SIDEBAR | TABS | ACCORDION | MODAL | POPOVER | LAYER (
-  [TITLE       = '<string>',]
-  [VISIBLE     = ON | OFF,]
-  [ICON        = '<name>',]
+  [TITLE = '<string>',]
+  [VISIBLE = ON | OFF,]
+  [ICON = '<icon_name>',]
+  [COLLAPSIBLE = ON | OFF,]
   [STYLE (KEY = value, ...),]
   LAYOUT (
     STRUCTURE = '<grid-template-areas>',
-    MAP ('<slot>' = <visual_name>, ...),
+    MAP (
+      '<slot>' = <visual_name> [(ICON = '<icon_name>', BADGE = '<badge_text>')],
+      ...
+    ),
     [GAP = '<css-size>',]
     [PINNABLE = ON | OFF]
   ),
-  [OPTIONS (KEY = value, ...)]
+  [OPTIONS (
+    [TAB_POSITION = TOP|BOTTOM|LEFT|RIGHT,]
+    [DEFAULT_OPEN = '<slot_name>',]
+    [DEFAULT = OPEN|CLOSED,]
+    [SHOW_ACTIVE_COUNT = ON|OFF,]
+    [REFRESH = <seconds>,]
+    [POSITION = LEFT|RIGHT]
+  )]
 );
 ```
 
 ## Container Types
 
-- **`BOX`**, **`SCROLL`**, **`DRAWER`**, **`SIDEBAR`**, **`TABS`**, **`ACCORDION`**, **`MODAL`**, **`POPOVER`**, **`LAYER`**
+- **BOX** — Standard nested card layout box with optional collapsible header.
+- **SCROLL** — Scrollable sub-panel with maximum height/width boundary constraints.
+- **DRAWER** — Collapsible side drawer panel with slide-out animations.
+- **SIDEBAR** — Pinned vertical sidebar container for filters or navigation.
+- **TABS** — Tabbed navigation switcher displaying one active visual slot at a time.
+- **ACCORDION** — Vertically stacked collapsible panels with expand/collapse toggles.
+- **MODAL** — Center-screen overlay dialog presented via `SHOW_MODAL` actions.
+- **POPOVER** — Contextual popup container anchored relative to trigger elements.
+- **LAYER** — Stacks multiple visuals within the same grid cell using Z-index order.
 
-- `LAYER` stacks mapped visuals in the same region in map order. Use visual/container `STYLE (Z_INDEX = n)` when a specific stacking order needs to be explicit.
+## Options
 
-## Collapsible Drawer Options
+- **TAB_POSITION = TOP|BOTTOM|LEFT|RIGHT** — Position of tab switcher navigation buttons in `TABS` container (default `TOP`).
+- **DEFAULT_OPEN = 'slot'** — Identifies the slot or accordion item initially expanded on report load.
+- **DEFAULT = OPEN|CLOSED** — Initial open or collapsed state for `DRAWER` and collapsible `BOX` containers (default `CLOSED`).
+- **COLLAPSIBLE = ON|OFF** — Enables expand/collapse toggle button on card headers for `BOX` containers.
+- **SHOW_ACTIVE_COUNT = ON|OFF** — Displays badge indicator showing count of active non-default filter values in container.
+- **REFRESH = seconds** — Periodic refresh interval in seconds for re-evaluating visuals enclosed in the container.
+- **POSITION = LEFT|RIGHT** — Slide direction anchor for `DRAWER` containers (default `RIGHT`).
 
-Use a `DRAWER` container for filter panels that can float over the page or be pinned inline.
+## Per-Slot Decorations
 
-- **`PINNABLE`**: `ON`|`OFF` (default `ON`). Lets the user pin the drawer inline so it pushes the layout aside instead of floating over it.
-- **`ICON`**: Top-level icon name for the trigger button (e.g. `'filter'`, `'settings'`).
+Inside `LAYOUT (MAP (...))`, slot mappings can include:
+- **ICON = 'icon-name'** — Tab or accordion header icon.
+- **BADGE = 'text'** — Badge label rendered alongside tab or header text.
 
 ## Examples
 
 ```sql
--- Group two KPI cards in a horizontal box
-CREATE CONTAINER KpiGroup AS BOX (
+CREATE CONTAINER SalesTabs AS TABS (
   LAYOUT (
-    STRUCTURE = 'A B',
-    MAP ('A' = RevenueCard, 'B' = CustomerCard)
+    MAP (
+      'Overview' = SummaryCard (ICON = 'dashboard', BADGE = 'New'),
+      'Regional' = RegionalMap (ICON = 'globe')
+    )
+  ),
+  OPTIONS (
+    TAB_POSITION = LEFT,
+    SHOW_ACTIVE_COUNT = ON,
+    REFRESH = 60
   )
 );
+```
 
--- Scrollable table panel
-CREATE CONTAINER OrderScroll AS SCROLL (
-  LAYOUT (
-    STRUCTURE = 'A',
-    MAP ('A' = OrderTable)
-  ),
-  STYLE (MAX_HEIGHT = '400px')
-);
-
--- Collapsible filter drawer
+```sql
 CREATE CONTAINER FilterDrawer AS DRAWER (
   TITLE = 'Filters',
   ICON = 'filter',
@@ -61,21 +85,14 @@ CREATE CONTAINER FilterDrawer AS DRAWER (
     STRUCTURE = 'A / B',
     MAP ('A' = RegionSlicer, 'B' = YearSlider),
     PINNABLE = ON
+  ),
+  OPTIONS (
+    DEFAULT = OPEN,
+    SHOW_ACTIVE_COUNT = ON
   )
 );
 ```
 
-## Lifecycle
+## References
 
-```sql
-CREATE OR REPLACE CONTAINER FilterDrawer AS DRAWER (...);   -- redefine, including the layout
-ALTER CONTAINER FilterDrawer (TITLE = 'Filters', VISIBLE = OFF, ICON = 'filter');
-DROP CONTAINER IF EXISTS FilterDrawer;
-```
-
-`ALTER CONTAINER` patches `TITLE`, `SUBTITLE`, `TOOLTIP`, `STYLE`, `VISIBLE`, and `ICON`. An omitted
-clause keeps its current value. Changing `LAYOUT` is a re-layout rather than a patch — use
-`CREATE OR REPLACE CONTAINER`.
-
-References:
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

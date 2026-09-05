@@ -938,6 +938,10 @@ export function createConnectionWizard(options = {}) {
         state.diagnosticResult = null;
         render();
 
+        // `options` is the connector's own option bag — the keys vary by connector type, and the
+        // branches below add PASSWORD or TRUSTED_CONNECTION to it. Annotated so it stays open;
+        // inferred, it would be closed to whichever of the two branches TypeScript saw first.
+        /** @type {{alias: string, connectorType: string, target: string, options: Record<string, *>, probeTimeoutSeconds: number}} */
         const req = {
             alias: state.alias,
             connectorType: state.connectorType,
@@ -1639,7 +1643,7 @@ export function createConnectionWizard(options = {}) {
         // Category selection
         modalOverlay.querySelectorAll('.etlsql-cw-cat-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                const cat = btn.dataset.cat;
+                const cat = /** @type {HTMLElement} */ (btn).dataset.cat;
                 if (cat === 'shared') {
                     state.isSharedReference = true;
                 } else {
@@ -1656,7 +1660,7 @@ export function createConnectionWizard(options = {}) {
         const typeFilterInput = modalOverlay.querySelector('#etlsql-cw-type-filter');
         if (typeFilterInput) {
             typeFilterInput.addEventListener('input', e => {
-                state.typeFilter = e.target.value;
+                state.typeFilter = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
                 const typeList = modalOverlay.querySelector('.etlsql-cw-type-list');
                 if (typeList) {
                     typeList.innerHTML = renderConnectorTypeList();
@@ -1669,19 +1673,19 @@ export function createConnectionWizard(options = {}) {
 
         // Alias change
         modalOverlay.querySelector('#etlsql-cw-alias-input')?.addEventListener('input', e => {
-            state.alias = e.target.value;
+            state.alias = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
             updateSqlBox();
             checkAndAlertValidation();
         });
 
         // Env scope change
         modalOverlay.querySelector('#etlsql-cw-env-scope')?.addEventListener('change', e => {
-            state.environmentScope = e.target.value;
+            state.environmentScope = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
         });
 
         // Gateway select
         modalOverlay.querySelector('#etlsql-cw-gateway-select')?.addEventListener('change', e => {
-            state.gatewayCluster = e.target.value;
+            state.gatewayCluster = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
             state.selectedResourceId = '';
             state.selectedResource = null;
             loadGatewayResources(state.gatewayCluster);
@@ -1701,7 +1705,7 @@ export function createConnectionWizard(options = {}) {
         // Gateway Resource card selection
         modalOverlay.querySelectorAll('.etlsql-cw-resource-card').forEach(card => {
             const pick = () => {
-                const resId = card.dataset.resourceId;
+                const resId = /** @type {HTMLElement} */ (card).dataset.resourceId;
                 if (resId) {
                     state.selectedResourceId = resId;
                     const match = (state.gatewayResources || []).find(r => r.resourceId === resId);
@@ -1720,7 +1724,7 @@ export function createConnectionWizard(options = {}) {
             };
             card.addEventListener('click', pick);
             card.addEventListener('keydown', e => {
-                if (e.key === 'Enter' || e.key === ' ') {
+                if (/** @type {KeyboardEvent} */ (e).key === 'Enter' || /** @type {KeyboardEvent} */ (e).key === ' ') {
                     e.preventDefault();
                     pick();
                 }
@@ -1729,7 +1733,7 @@ export function createConnectionWizard(options = {}) {
 
         // Shared connection select
         modalOverlay.querySelector('#etlsql-cw-shared-select')?.addEventListener('change', e => {
-            state.sharedAlias = e.target.value;
+            state.sharedAlias = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
             const chosen = state.sharedConnections.find(c => c.alias === state.sharedAlias);
             if (chosen) state.connectorType = chosen.connectorType;
             updateSqlBox();
@@ -1748,7 +1752,7 @@ export function createConnectionWizard(options = {}) {
             dropzone.addEventListener('drop', e => {
                 e.preventDefault();
                 dropzone.classList.remove('is-dragover');
-                const file = e.dataTransfer?.files?.[0];
+                const file = /** @type {DragEvent} */ (e).dataTransfer?.files?.[0];
                 if (file) {
                     state.values['PATH'] = `data/${file.name}`;
                     render();
@@ -1757,7 +1761,7 @@ export function createConnectionWizard(options = {}) {
         }
 
         modalOverlay.querySelector('#etlsql-cw-file-input')?.addEventListener('change', e => {
-            const file = e.target.files?.[0];
+            const file = /** @type {HTMLInputElement} */ (e.target).files?.[0];
             if (file) {
                 state.values['PATH'] = `data/${file.name}`;
                 render();
@@ -1766,26 +1770,26 @@ export function createConnectionWizard(options = {}) {
 
         modalOverlay.querySelectorAll('[data-filepath]').forEach(btn => {
             btn.addEventListener('click', () => {
-                state.values['PATH'] = btn.dataset.filepath;
+                state.values['PATH'] = /** @type {HTMLElement} */ (btn).dataset.filepath;
                 render();
             });
         });
 
         // Dynamic form inputs
         modalOverlay.querySelectorAll('[data-opt]').forEach(input => {
-            const optName = input.dataset.opt;
-            if (input.type === 'checkbox') {
+            const optName = /** @type {HTMLElement} */ (input).dataset.opt;
+            if (/** @type {HTMLInputElement | HTMLButtonElement | HTMLSelectElement | HTMLTextAreaElement} */ (input).type === 'checkbox') {
                 input.addEventListener('change', e => {
-                    state.values[optName] = e.target.checked ? 'ON' : 'OFF';
+                    state.values[optName] = /** @type {HTMLInputElement} */ (e.target).checked ? 'ON' : 'OFF';
                     const card = input.closest('.etlsql-cw-checkbox-card');
                     if (card) {
-                        card.classList.toggle('is-checked', e.target.checked);
+                        card.classList.toggle('is-checked', /** @type {HTMLInputElement} */ (e.target).checked);
                     }
                     updateSqlBox();
                 });
             } else {
                 input.addEventListener('input', e => {
-                    state.values[optName] = e.target.value;
+                    state.values[optName] = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
                     updateSqlBox();
                     checkAndAlertValidation();
                 });
@@ -1795,36 +1799,36 @@ export function createConnectionWizard(options = {}) {
         // Auth Tabs
         modalOverlay.querySelectorAll('.etlsql-cw-auth-tab').forEach(tab => {
             tab.addEventListener('click', () => {
-                state.authType = tab.dataset.authtype;
+                state.authType = /** @type {HTMLElement} */ (tab).dataset.authtype;
                 render();
             });
         });
 
         // Auth Inputs
         modalOverlay.querySelector('#etlsql-cw-secret-key')?.addEventListener('input', e => {
-            state.secretKey = e.target.value;
+            state.secretKey = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
             updateSqlBox();
         });
         modalOverlay.querySelector('#etlsql-cw-env-key')?.addEventListener('input', e => {
-            state.envVarName = e.target.value;
+            state.envVarName = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
             updateSqlBox();
         });
         modalOverlay.querySelector('#etlsql-cw-raw-pw')?.addEventListener('input', async e => {
-            state.rawPassword = e.target.value;
+            state.rawPassword = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
             if (state.authType === 'enc' && state.encPassphrase) {
                 state.encryptedCipher = await encryptClientPassword(state.rawPassword, state.encPassphrase);
             }
             updateSqlBox();
         });
         modalOverlay.querySelector('#etlsql-cw-enc-passphrase')?.addEventListener('input', async e => {
-            state.encPassphrase = e.target.value;
+            state.encPassphrase = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
             if (state.authType === 'enc' && state.rawPassword) {
                 state.encryptedCipher = await encryptClientPassword(state.rawPassword, state.encPassphrase);
             }
             updateSqlBox();
         });
         modalOverlay.querySelector('#etlsql-cw-key-path')?.addEventListener('input', e => {
-            state.keyFilePath = e.target.value;
+            state.keyFilePath = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
             updateSqlBox();
             checkAndAlertValidation();
         });
@@ -1855,7 +1859,7 @@ export function createConnectionWizard(options = {}) {
             render();
         });
         modalOverlay.querySelector('#etlsql-cw-paste-apply')?.addEventListener('click', async () => {
-            const txt = (modalOverlay.querySelector('#etlsql-cw-paste-input')?.value || '').trim();
+            const txt = (/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (modalOverlay.querySelector('#etlsql-cw-paste-input'))?.value || '').trim();
             if (!txt) return;
 
             let parsed = null;
@@ -1897,10 +1901,10 @@ export function createConnectionWizard(options = {}) {
         // Passphrase Prompt Dialog Buttons
         modalOverlay.querySelector('#etlsql-cw-passphrase-encrypt')?.addEventListener('click', async () => {
             const passInput = modalOverlay.querySelector('#etlsql-cw-paste-passphrase');
-            const pass = (passInput?.value || '').trim();
+            const pass = (/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (passInput)?.value || '').trim();
             if (!pass) {
                 if (passInput) {
-                    passInput.focus();
+                    /** @type {HTMLElement} */ (passInput).focus();
                     passInput.classList.add('is-invalid');
                 }
                 return;
@@ -1981,7 +1985,7 @@ export function createConnectionWizard(options = {}) {
     function bindTypeListEvents() {
         modalOverlay.querySelectorAll('.etlsql-cw-type-item').forEach(btn => {
             btn.addEventListener('click', () => {
-                const type = btn.dataset.type;
+                const type = /** @type {HTMLElement} */ (btn).dataset.type;
                 if (type && type !== state.connectorType) {
                     selectConnectorType(type);
                     render();
@@ -2009,8 +2013,8 @@ export function createConnectionWizard(options = {}) {
         }
         const submitBtn = modalOverlay.querySelector('#etlsql-cw-submit-btn');
         if (submitBtn) {
-            submitBtn.disabled = Boolean(violation || aliasProblem);
-            submitBtn.title = violation || aliasProblem || '';
+            /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (submitBtn).disabled = Boolean(violation || aliasProblem);
+            /** @type {HTMLElement} */ (submitBtn).title = violation || aliasProblem || '';
         }
 
         const aliasInput = modalOverlay.querySelector('#etlsql-cw-alias-input');
@@ -2019,19 +2023,19 @@ export function createConnectionWizard(options = {}) {
         }
         const missingHint = modalOverlay.querySelector('.etlsql-cw-missing-hint');
         if (missingHint) {
-            missingHint.style.display = aliasProblem ? '' : 'none';
+            /** @type {HTMLElement} */ (missingHint).style.display = aliasProblem ? '' : 'none';
             // Say which problem it is; "required" is wrong when the name is present but malformed.
             missingHint.textContent = aliasProblem ? `⚠️ ${aliasProblem}` : '';
         }
         const validHint = modalOverlay.querySelector('.etlsql-cw-valid-hint');
         if (validHint) {
-            validHint.style.display = aliasProblem ? 'none' : '';
+            /** @type {HTMLElement} */ (validHint).style.display = aliasProblem ? 'none' : '';
             const code = validHint.querySelector('code');
             if (code) code.textContent = (state.alias || '').trim();
         }
         const reqTag = modalOverlay.querySelector('.etlsql-cw-required-tag');
         if (reqTag) {
-            reqTag.style.display = isAliasMissing ? '' : 'none';
+            /** @type {HTMLElement} */ (reqTag).style.display = isAliasMissing ? '' : 'none';
         }
     }
 

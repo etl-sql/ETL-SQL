@@ -1,6 +1,7 @@
 import { bindMarkdownActions, renderMarkdown } from './markdown-renderer.js';
 import { deniedState, failedState, installPortalStateStyles } from './portal-states.js';
 import { createConnectionWizard } from '../designer/connection-wizard.js';
+import { secretsApi } from './api.js';
 
 // Canonical "Shared Connections" admin surface (Admin → Connections) over api/admin/connections.
 //
@@ -484,7 +485,10 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
       },
       fetchSecrets: async () => {
         try {
-          const list = await (window.secretsApi ? window.secretsApi.list() : fetch('/api/admin/secrets').then(r => r.json()));
+          // `window.secretsApi` was never assigned by anything, so this used to be a permanently
+          // false test whose fallback re-spelt the endpoint by hand. The module's own client is
+          // the one that carries the auth header and the error handling.
+          const list = await secretsApi.list();
           return Array.isArray(list) ? list.map(s => s.name || s) : [];
         } catch {
           return [];

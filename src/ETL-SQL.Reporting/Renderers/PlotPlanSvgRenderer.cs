@@ -31,7 +31,37 @@ internal sealed class PlotPlanSvgRenderer
         var width = plan.Bounds.Width;
         var height = plan.Bounds.Height;
         var builder = new StringBuilder();
-        builder.AppendLine($"<svg xmlns='http://www.w3.org/2000/svg' width='{N(width)}' height='{N(height)}' viewBox='0 0 {N(width)} {N(height)}' role='img' aria-labelledby='{Esc(plan.SpecId)}-title {Esc(plan.SpecId)}-desc' font-family='sans-serif'>");
+        var animOpt = Style(plan, "ANIMATION");
+        var animDurationOpt = Style(plan, "ANIMATION_DURATION");
+        var animEasingOpt = Style(plan, "ANIMATION_EASING");
+        var updateAnimOpt = Style(plan, "UPDATE_ANIMATION");
+        var hoverFocusOpt = Style(plan, "HOVER_FOCUS");
+
+        var extraSvgAttrs = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(animOpt))
+        {
+            var normAnim = animOpt.Equals("True", StringComparison.OrdinalIgnoreCase) ? "on" : (animOpt.Equals("False", StringComparison.OrdinalIgnoreCase) ? "off" : animOpt.ToLowerInvariant());
+            extraSvgAttrs.Append($" data-animation='{Esc(normAnim)}'");
+        }
+        if (!string.IsNullOrWhiteSpace(animDurationOpt))
+            extraSvgAttrs.Append($" data-animation-duration='{Esc(animDurationOpt)}'");
+        if (!string.IsNullOrWhiteSpace(animEasingOpt))
+            extraSvgAttrs.Append($" data-animation-easing='{Esc(animEasingOpt.ToLowerInvariant())}'");
+        if (!string.IsNullOrWhiteSpace(updateAnimOpt))
+        {
+            var normUpdate = updateAnimOpt.Equals("True", StringComparison.OrdinalIgnoreCase) ? "on" : (updateAnimOpt.Equals("False", StringComparison.OrdinalIgnoreCase) ? "off" : updateAnimOpt.ToLowerInvariant());
+            extraSvgAttrs.Append($" data-update-animation='{Esc(normUpdate)}'");
+        }
+        if (!string.IsNullOrWhiteSpace(hoverFocusOpt) && !hoverFocusOpt.Equals("NONE", StringComparison.OrdinalIgnoreCase))
+            extraSvgAttrs.Append($" data-hover-focus='{Esc(hoverFocusOpt.ToLowerInvariant())}'");
+        var syncAxesOpt = Style(plan, "SYNC_AXES");
+        if (!string.IsNullOrWhiteSpace(syncAxesOpt))
+        {
+            var normSync = syncAxesOpt.Equals("True", StringComparison.OrdinalIgnoreCase) || syncAxesOpt.Equals("ON", StringComparison.OrdinalIgnoreCase) ? "on" : "off";
+            extraSvgAttrs.Append($" data-sync-axes='{Esc(normSync)}'");
+        }
+
+        builder.AppendLine($"<svg xmlns='http://www.w3.org/2000/svg' width='{N(width)}' height='{N(height)}' viewBox='0 0 {N(width)} {N(height)}' role='img' aria-labelledby='{Esc(plan.SpecId)}-title {Esc(plan.SpecId)}-desc' font-family='sans-serif'{extraSvgAttrs}>");
         builder.AppendLine($"<title id='{Esc(plan.SpecId)}-title'>{Esc(plan.Title ?? plan.SpecId)}</title>");
         builder.AppendLine($"<desc id='{Esc(plan.SpecId)}-desc'>{Esc(plan.AccessibleSummary)}</desc>");
         if (Style(plan, "MICRO_CHART") is { } micro)
@@ -297,7 +327,10 @@ internal sealed class PlotPlanSvgRenderer
                     else if (IsCandlestickLayer(layer))
                         RenderCandlestickLayer(builder, layer, categories, area, yScale);
                     else
-                        RenderRects(builder, plan, layer, rectLayers, layer.Stack != StackMode.None, categories.Length, area, xScale, yScale, color, showLabels);
+                    {
+                        var rectScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale;
+                        RenderRects(builder, plan, layer, rectLayers, layer.Stack != StackMode.None, categories.Length, area, xScale, rectScale, color, showLabels);
+                    }
                     break;
                 case MarkKind.Line:
                     var lineScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale;
@@ -307,9 +340,15 @@ internal sealed class PlotPlanSvgRenderer
                         RenderLine(builder, plan, layer, categories.Length, area, xScale, lineScale, color, showLabels, overlayLabels, smartLabels, seriesLabelPlacements);
                     break;
                 case MarkKind.Area:
-                    RenderArea(builder, layer, categories.Length, area, xScale, yScale, color);
+                    var areaScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale;
+                    RenderArea(builder, layer, categories.Length, area, xScale, areaScale, color);
                     break;
                 case MarkKind.Point:
+                    if (overlayType == "AnnotationPoint")
+                    {
+                        RenderAnnotationPoint(builder, plan, layer, area, xScale, yScale);
+                        break;
+                    }
                     var pointScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null)
                         ? y2Scale ?? yScale
                         : yScale;
@@ -556,15 +595,24 @@ internal sealed class PlotPlanSvgRenderer
                         top = Math.Min(firstY, secondY);
                         drawHeight = Math.Max(1m, Math.Abs(secondY - firstY));
                     }
-                    var barLeft = Math.Min(startX, endX);
-                    var barWidth = Math.Max(1m, Math.Abs(endX - startX));
+                    var barMinHeightOpt = Style(plan, "BAR_MIN_HEIGHT") ?? LayerStyle(layer, "bar_min_height") ?? LayerStyle(layer, "barMinHeight");
+                    var barMinHeight = 1m;
+                    if (barMinHeightOpt is not null && decimal.TryParse(barMinHeightOpt, NumberStyles.Any, CultureInfo.InvariantCulture, out var bmh) && bmh > 1m)
+                    {
+                        barMinHeight = bmh;
+                    }
+                    var rawWidth = Math.Abs(endX - startX);
+                    var barWidth = Math.Max(barMinHeight, rawWidth);
+                    var barLeft = (rangedY || rangedBand) ? Math.Min(startX, endX) : ((endX >= startX) ? startX : (startX - barWidth));
                     var rectLabel = FormatDataLabel(rangedY ? end : value.Value, DataFormat(plan));
                     var rectTitle = rangedY
                         ? $"{FormatDataLabel(start, DataFormat(plan))} to {FormatDataLabel(end, DataFormat(plan))}"
                         : rectLabel;
                     var rangedClass = rangedY || rangedBand ? " class='plot-range-rect'" : string.Empty;
                     var extent = rangedY || rangedBand ? string.Empty : ExtentAttributes(layer);
-                    builder.AppendLine($"<rect{rangedClass} x='{N(barLeft)}' y='{N(top)}' width='{N(barWidth)}' height='{N(drawHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(datumOpacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'{extent}><title>{Esc(rectTitle)}</title></rect>");
+                    var hoverFocus = LayerStyle(layer, "hoverFocus") ?? LayerStyle(layer, "hover_focus") ?? Style(plan, "HOVER_FOCUS");
+                    var seriesAttr = (hoverFocus?.Equals("SERIES", StringComparison.OrdinalIgnoreCase) == true && (layer.SeriesKey ?? layer.Id) is { } sk) ? $" data-series='{Esc(sk)}'" : string.Empty;
+                    builder.AppendLine($"<rect{rangedClass} x='{N(barLeft)}' y='{N(top)}' width='{N(barWidth)}' height='{N(drawHeight)}' fill='{Esc(datumColor)}' fill-opacity='{N(Math.Clamp(datumOpacity, 0m, 1m))}' data-row-index='{datum.RowIndex}'{extent}{seriesAttr}><title>{Esc(rectTitle)}</title></rect>");
                     var errorLow = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorLow) ?? ChartValue.Null());
                     var errorHigh = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorHigh) ?? ChartValue.Null());
                     if (errorLow.HasValue && errorHigh.HasValue)
@@ -679,8 +727,16 @@ internal sealed class PlotPlanSvgRenderer
                 }
                 else if (points.Count > 1)
                 {
-                    var baseline = MapHorizontal(0m, scale, plotWidth);
-                    builder.AppendLine($"<path d='M {N(baseline)} {N(pointCoordinates[0].Y)} L {string.Join(" L ", points)} L {N(baseline)} {N(pointCoordinates[^1].Y)} Z' fill='{Esc(color)}' fill-opacity='0.25' stroke='{Esc(color)}' stroke-width='2'/>");
+                    var baselineOpt = LayerStyle(layer, "areaBaseline") ?? LayerStyle(layer, "area_baseline") ?? Style(plan, "AREA_BASELINE");
+                    var baselineVal = 0m;
+                    if (baselineOpt is not null && decimal.TryParse(baselineOpt, NumberStyles.Any, CultureInfo.InvariantCulture, out var bVal))
+                    {
+                        baselineVal = bVal;
+                    }
+                    var baseline = MapHorizontal(baselineVal, scale, plotWidth);
+                    var hoverFocus = LayerStyle(layer, "hoverFocus") ?? LayerStyle(layer, "hover_focus") ?? Style(plan, "HOVER_FOCUS");
+                    var seriesAttr = (hoverFocus?.Equals("SERIES", StringComparison.OrdinalIgnoreCase) == true && (layer.SeriesKey ?? layer.Id) is { } sk) ? $" data-series='{Esc(sk)}'" : string.Empty;
+                    builder.AppendLine($"<path{seriesAttr} d='M {N(baseline)} {N(pointCoordinates[0].Y)} L {string.Join(" L ", points)} L {N(baseline)} {N(pointCoordinates[^1].Y)} Z' fill='{Esc(color)}' fill-opacity='0.25' stroke='{Esc(color)}' stroke-width='2'/>");
                 }
             }
         }
@@ -1060,18 +1116,45 @@ internal sealed class PlotPlanSvgRenderer
             var baseline = height - pad;
             foreach (var point in points)
                 builder.AppendLine($"<rect x='{N(point.X - slot * .35m)}' y='{N(point.Y)}' width='{N(Math.Max(1m, slot * .7m))}' height='{N(Math.Max(1m, baseline - point.Y))}' rx='1' fill='{Esc(color)}'/>");
-            return;
         }
-        foreach (var segment in segments.Where(segment => segment.Count > 0))
+        else
         {
-            var path = "M " + string.Join(" L ", segment.Select(point => $"{N(point.X)} {N(point.Y)}"));
-            if (layer.Mark == MarkKind.Area && segment.Count > 1)
-                builder.AppendLine($"<path d='{path} L {N(segment[^1].X)} {N(height - pad)} L {N(segment[0].X)} {N(height - pad)} Z' fill='{Esc(color)}' fill-opacity='.22'/>");
-            if (segment.Count > 1)
-                builder.AppendLine($"<path d='{path}' fill='none' stroke='{Esc(color)}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/>");
+            foreach (var segment in segments.Where(segment => segment.Count > 0))
+            {
+                var path = "M " + string.Join(" L ", segment.Select(point => $"{N(point.X)} {N(point.Y)}"));
+                if (layer.Mark == MarkKind.Area && segment.Count > 1)
+                    builder.AppendLine($"<path d='{path} L {N(segment[^1].X)} {N(height - pad)} L {N(segment[0].X)} {N(height - pad)} Z' fill='{Esc(color)}' fill-opacity='.22'/>");
+                if (segment.Count > 1)
+                    builder.AppendLine($"<path d='{path}' fill='none' stroke='{Esc(color)}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/>");
+            }
+            builder.AppendLine($"<circle cx='{N(points[0].X)}' cy='{N(points[0].Y)}' r='2' fill='{Esc(color)}'/>");
+            if (points.Count > 1) builder.AppendLine($"<circle cx='{N(points[^1].X)}' cy='{N(points[^1].Y)}' r='2' fill='{Esc(color)}'/>");
         }
-        builder.AppendLine($"<circle cx='{N(points[0].X)}' cy='{N(points[0].Y)}' r='2' fill='{Esc(color)}'/>");
-        if (points.Count > 1) builder.AppendLine($"<circle cx='{N(points[^1].X)}' cy='{N(points[^1].Y)}' r='2' fill='{Esc(color)}'/>");
+
+        var ruleLayer = plan.Layers.FirstOrDefault(l => l.Mark == MarkKind.Rule);
+        if (ruleLayer is not null)
+        {
+            var ruleParam = LayerStyle(ruleLayer, "parameter");
+            decimal? ruleVal = null;
+            if (decimal.TryParse(ruleParam, NumberStyles.Number, CultureInfo.InvariantCulture, out var rv))
+                ruleVal = rv;
+            else if (ruleLayer.Data.Length > 0)
+                ruleVal = PlotPlanResolver.Number(Channel(ruleLayer.Data[0], FieldChannel.Y) ?? ChartValue.Null());
+
+            if (ruleVal.HasValue)
+            {
+                var (minimum, maximum) = Domain(yScale);
+                if (maximum > minimum)
+                {
+                    var ry = pad + (height - 2m * pad) - (ruleVal.Value - minimum) / (maximum - minimum) * (height - 2m * pad);
+                    ry = Math.Clamp(ry, pad, height - pad);
+                    var ruleColor = SafePaint(LayerStyle(ruleLayer, "color"), "#ef4444");
+                    var ruleWidth = LayerStyle(ruleLayer, "stroke_width") ?? "1.5";
+                    var ruleDash = DashAttribute(LayerStyle(ruleLayer, "lineStyle")) ?? " stroke-dasharray='4 2'";
+                    builder.AppendLine($"<line class='plot-reference-line' x1='{N(pad)}' y1='{N(ry)}' x2='{N(width - pad)}' y2='{N(ry)}' stroke='{Esc(ruleColor)}' stroke-width='{Esc(ruleWidth)}'{ruleDash}/>");
+                }
+            }
+        }
     }
 
     private static void RenderMicroProgress(StringBuilder builder, PlotPlan plan)
@@ -1135,11 +1218,26 @@ internal sealed class PlotPlanSvgRenderer
             segments[^1].Add((CategoryX(index, categoryCount, area, xScale) + datum.DisplayOffsetX,
                 MapY(value.Value, scale, area.Height) + datum.DisplayOffsetY));
         }
+        var baselineOpt = LayerStyle(layer, "areaBaseline") ?? LayerStyle(layer, "area_baseline");
+        decimal baselineY = area.Bottom;
+        if (baselineOpt is not null)
+        {
+            if (baselineOpt.Equals("ZERO", StringComparison.OrdinalIgnoreCase))
+            {
+                baselineY = Math.Clamp(MapY(0m, scale, area.Height), area.Top, area.Bottom);
+            }
+            else if (decimal.TryParse(baselineOpt, NumberStyles.Any, CultureInfo.InvariantCulture, out var bVal))
+            {
+                baselineY = Math.Clamp(MapY(bVal, scale, area.Height), area.Top, area.Bottom);
+            }
+        }
+        var hoverFocus = LayerStyle(layer, "hoverFocus") ?? LayerStyle(layer, "hover_focus");
+        var seriesAttr = (hoverFocus?.Equals("SERIES", StringComparison.OrdinalIgnoreCase) == true && (layer.SeriesKey ?? layer.Id) is { } sk) ? $" data-series='{Esc(sk)}'" : string.Empty;
         foreach (var points in segments.Where(segment => segment.Count > 1))
         {
             var path = "M " + string.Join(" L ", points.Select(point => $"{N(point.X)} {N(point.Y)}"));
-            builder.AppendLine($"<path d='{path} L {N(points[^1].X)} {N(area.Bottom)} L {N(points[0].X)} {N(area.Bottom)} Z' fill='{Esc(color)}' fill-opacity='.2'/>");
-            builder.AppendLine($"<path d='{path}' fill='none' stroke='{Esc(color)}' stroke-width='2'/>");
+            builder.AppendLine($"<path class='plot-area'{seriesAttr} d='{path} L {N(points[^1].X)} {N(baselineY)} L {N(points[0].X)} {N(baselineY)} Z' fill='{Esc(color)}' fill-opacity='.2'/>");
+            builder.AppendLine($"<path class='plot-line'{seriesAttr} d='{path}' fill='none' stroke='{Esc(color)}' stroke-width='2'/>");
         }
     }
 
@@ -1221,8 +1319,15 @@ internal sealed class PlotPlanSvgRenderer
                 width = Math.Max(1m, Math.Abs(second - first));
             }
             var datumColor = ResolveDatumColor(colorScale, datum, color);
-            var top = Math.Min(startY, endY);
-            var barHeight = Math.Max(1m, Math.Abs(endY - startY));
+            var barMinHeightOpt = Style(plan, "BAR_MIN_HEIGHT") ?? LayerStyle(layer, "bar_min_height") ?? LayerStyle(layer, "barMinHeight");
+            var barMinHeight = 1m;
+            if (barMinHeightOpt is not null && decimal.TryParse(barMinHeightOpt, NumberStyles.Any, CultureInfo.InvariantCulture, out var bmh) && bmh > 1m)
+            {
+                barMinHeight = bmh;
+            }
+            var rawHeight = Math.Abs(endY - startY);
+            var barHeight = Math.Max(barMinHeight, rawHeight);
+            var top = rangedY ? Math.Min(startY, endY) : (endY <= startY ? (startY - barHeight) : startY);
             var errorLow = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorLow) ?? ChartValue.Null());
             var errorHigh = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorHigh) ?? ChartValue.Null());
             if (errorLow.HasValue && errorHigh.HasValue)
@@ -1245,7 +1350,9 @@ internal sealed class PlotPlanSvgRenderer
             var title = rangedY
                 ? $"{FormatDataLabel(start, dataFormat)} to {FormatDataLabel(end, dataFormat)}"
                 : FormatDataLabel(value ?? (end - start), dataFormat);
-            builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}'{rxAttr} fill='{Esc(datumColor)}'{extentAttributes} data-row-index='{datum.RowIndex}'><title>{Esc(title)}</title></rect>");
+            var hoverFocus = LayerStyle(layer, "hoverFocus") ?? LayerStyle(layer, "hover_focus") ?? Style(plan, "HOVER_FOCUS");
+            var seriesAttr = (hoverFocus?.Equals("SERIES", StringComparison.OrdinalIgnoreCase) == true && (layer.SeriesKey ?? layer.Id) is { } sk) ? $" data-series='{Esc(sk)}'" : string.Empty;
+            builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}'{rxAttr} fill='{Esc(datumColor)}'{extentAttributes} data-row-index='{datum.RowIndex}'{seriesAttr}><title>{Esc(title)}</title></rect>");
             if (showLabels)
             {
                 var label = FormatDataLabel(value ?? (end - start), dataFormat);
@@ -1321,16 +1428,27 @@ internal sealed class PlotPlanSvgRenderer
         var lineClass = overlayType == "Forecast" ? " class='plot-forecast-line'" : string.Empty;
         (decimal X, decimal Y)? firstPoint = null;
         (decimal X, decimal Y)? lastPoint = null;
-        var segment = new List<(decimal X, decimal Y)>();
+
+        var nullPolicy = plan.Nulls?.Default ?? NullValuePolicy.Gap;
+        var layerNullOpt = LayerStyle(layer, "nullHandling");
+        if (!string.IsNullOrEmpty(layerNullOpt))
+        {
+            nullPolicy = layerNullOpt.ToUpperInvariant() switch
+            {
+                "CONNECT" => NullValuePolicy.Skip,
+                "ZERO" => NullValuePolicy.Zero,
+                _ => NullValuePolicy.Gap
+            };
+        }
 
         var firstRenderableIndex = -1;
         var lastRenderableIndex = -1;
         for (var i = 0; i < layer.Data.Length; i++)
         {
             var d = layer.Data[i];
-            if (d.IsGap) continue;
+            if (d.IsGap && nullPolicy != NullValuePolicy.Zero) continue;
             var v = PlotPlanResolver.Number(Channel(d, FieldChannel.Y) ?? Channel(d, FieldChannel.Y2) ?? ChartValue.Null());
-            if (!v.HasValue) continue;
+            if (!v.HasValue && nullPolicy != NullValuePolicy.Zero) continue;
             if (xScale is not null && xScale.Kind is ScaleKind.Linear or ScaleKind.Logarithmic)
             {
                 var xv = PlotPlanResolver.Number(Channel(d, FieldChannel.X) ?? ChartValue.Null());
@@ -1345,16 +1463,87 @@ internal sealed class PlotPlanSvgRenderer
         var isStartPos = seriesLabelsPos == "START";
         var seriesLabelTargetIndex = isStartPos ? firstRenderableIndex : lastRenderableIndex;
 
+        var hoverFocus = LayerStyle(layer, "hoverFocus") ?? LayerStyle(layer, "hover_focus") ?? Style(plan, "HOVER_FOCUS");
+        var seriesAttr = (hoverFocus?.Equals("SERIES", StringComparison.OrdinalIgnoreCase) == true && (layer.SeriesKey ?? layer.Id) is { } sk) ? $" data-series='{Esc(sk)}'" : string.Empty;
+        var hasSegmentStyles = layer.Data.Any(d => !string.IsNullOrEmpty(d.SegmentLineDash) || !string.IsNullOrEmpty(d.SegmentColor));
+        var segmentPoints = hasSegmentStyles ? new List<((decimal X, decimal Y) Point, ResolvedDatum Datum)>() : null;
+        var segment = hasSegmentStyles ? null : new List<(decimal X, decimal Y)>();
+
         void Flush()
         {
-            if (segment.Count > 1) builder.AppendLine($"<path{lineClass} d='{PathData(segment, smooth)}' fill='none' stroke='{Esc(color)}' stroke-width='{strokeWidth}' stroke-linejoin='round' stroke-linecap='round'{dashAttributes}/>");
-            segment.Clear();
+            if (hasSegmentStyles)
+            {
+                if (segmentPoints != null && segmentPoints.Count > 1)
+                {
+                    var currentSubpath = new List<(decimal X, decimal Y)> { segmentPoints[0].Point };
+                    string? currentDashAttr = null;
+                    string? currentStrokeColor = null;
+
+                    for (var i = 1; i < segmentPoints.Count; i++)
+                    {
+                        var p0 = segmentPoints[i - 1];
+                        var p1 = segmentPoints[i];
+                        var segDash = p1.Datum.SegmentLineDash ?? p0.Datum.SegmentLineDash;
+                        var segCol = p1.Datum.SegmentColor ?? p0.Datum.SegmentColor ?? color;
+                        var segDashAttr = !string.IsNullOrEmpty(segDash) ? LineStyleAttributes(segDash) : dashAttributes;
+                        var segStroke = SafePaint(segCol, color);
+
+                        if (currentDashAttr == null)
+                        {
+                            currentDashAttr = segDashAttr;
+                            currentStrokeColor = segStroke;
+                            currentSubpath.Add(p1.Point);
+                        }
+                        else if (segDashAttr == currentDashAttr && segStroke == currentStrokeColor)
+                        {
+                            currentSubpath.Add(p1.Point);
+                        }
+                        else
+                        {
+                            if (currentSubpath.Count > 1)
+                            {
+                                builder.AppendLine($"<path{lineClass}{seriesAttr} d='{PathData(currentSubpath, smooth)}' fill='none' stroke='{Esc(currentStrokeColor ?? color)}' stroke-width='{strokeWidth}' stroke-linejoin='round' stroke-linecap='round'{currentDashAttr}/>");
+                            }
+                            currentSubpath = new List<(decimal X, decimal Y)> { p0.Point, p1.Point };
+                            currentDashAttr = segDashAttr;
+                            currentStrokeColor = segStroke;
+                        }
+                    }
+
+                    if (currentSubpath.Count > 1)
+                    {
+                        builder.AppendLine($"<path{lineClass}{seriesAttr} d='{PathData(currentSubpath, smooth)}' fill='none' stroke='{Esc(currentStrokeColor ?? color)}' stroke-width='{strokeWidth}' stroke-linejoin='round' stroke-linecap='round'{currentDashAttr ?? dashAttributes}/>");
+                    }
+                }
+                segmentPoints?.Clear();
+            }
+            else
+            {
+                if (segment != null && segment.Count > 1)
+                    builder.AppendLine($"<path{lineClass}{seriesAttr} d='{PathData(segment, smooth)}' fill='none' stroke='{Esc(color)}' stroke-width='{strokeWidth}' stroke-linejoin='round' stroke-linecap='round'{dashAttributes}/>");
+                segment?.Clear();
+            }
         }
         for (var index = 0; index < layer.Data.Length; index++)
         {
             var datum = layer.Data[index];
             var value = PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? ChartValue.Null());
-            if (datum.IsGap || !value.HasValue) { Flush(); continue; }
+            if (datum.IsGap || !value.HasValue)
+            {
+                if (nullPolicy == NullValuePolicy.Skip)
+                {
+                    continue;
+                }
+                if (nullPolicy == NullValuePolicy.Zero)
+                {
+                    value = 0m;
+                }
+                else
+                {
+                    Flush();
+                    continue;
+                }
+            }
             var xValue = PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
             var x = xScale is not null && xScale.Kind is ScaleKind.Linear or ScaleKind.Logarithmic && xValue.HasValue
                 ? MapX(xValue.Value, xScale, area)
@@ -1363,11 +1552,20 @@ internal sealed class PlotPlanSvgRenderer
             var y = MapY(value.Value, scale, area.Height) + datum.DisplayOffsetY;
             if (index == firstRenderableIndex) firstPoint = (x, y);
             if (index == lastRenderableIndex) lastPoint = (x, y);
-            segment.Add((x, y));
+            if (hasSegmentStyles)
+                segmentPoints!.Add(((x, y), datum));
+            else
+                segment!.Add((x, y));
+            var symbolColor = EncodingText(datum, ConditionalEncodingChannel.Color) is { } condColor
+                ? SafePaint(condColor, color) : color;
+            var symbolSizeStr = Style(plan, "SYMBOL_SIZE") ?? LayerStyle(layer, "SYMBOL_SIZE");
+            var symbolRadius = decimal.TryParse(symbolSizeStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedSz) && parsedSz > 0m
+                ? parsedSz
+                : (isOverlay ? 4m : 3m);
             if (((isOverlay && overlayType != "Forecast") || IsEnabledByDefault(plan.Style, "SYMBOLS")) &&
                 (!isOverlay || !plan.Layers.Any(candidate => candidate.Mark == MarkKind.Point && LayerStyle(candidate, "overlayType") is null)))
                 RenderPointSymbol(builder, isOverlay ? null : PointShape(plan, layer, datum),
-                    x, y, isOverlay ? 4m : 3m, color, isOverlay ? "plot-overlay-point" : "plot-line-symbol",
+                    x, y, symbolRadius, symbolColor, isOverlay ? "plot-overlay-point" : "plot-line-symbol",
                     datum.RowIndex, FormatDataLabel(value.Value, DataFormat(plan)),
                     isOverlay ? " stroke='white' stroke-width='1.5'" : PointStrokeAttributes(layer));
             if (showLabels && (!seriesLabelsEnabled || index != seriesLabelTargetIndex))
@@ -1457,9 +1655,11 @@ internal sealed class PlotPlanSvgRenderer
             if (index == lastRenderableIndex) lastPoint = (x, topY);
             topPoints.Add((x, topY));
             basePoints.Add((x, MapY(start, scale, area.Height) + datum.DisplayOffsetY));
+            var symbolColor = EncodingText(datum, ConditionalEncodingChannel.Color) is { } condColor
+                ? SafePaint(condColor, color) : color;
             if (IsEnabledByDefault(plan.Style, "SYMBOLS"))
                 RenderPointSymbol(builder, PointShape(plan, layer, datum), x, topY, 3m,
-                    color, "plot-line-symbol", datum.RowIndex, FormatDataLabel(value.Value, DataFormat(plan)),
+                    symbolColor, "plot-line-symbol", datum.RowIndex, FormatDataLabel(value.Value, DataFormat(plan)),
                     PointStrokeAttributes(layer));
             if (showLabels && (!seriesLabelsEnabled || index != seriesLabelTargetIndex))
             {
@@ -1569,6 +1769,12 @@ internal sealed class PlotPlanSvgRenderer
         {
             maxRadius = xb;
         }
+        var symbolSizeStr = Style(plan, "SYMBOL_SIZE") ?? LayerStyle(layer, "SYMBOL_SIZE");
+        if (!sawSize && decimal.TryParse(symbolSizeStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var ss) && ss > 0m)
+        {
+            minRadius = ss;
+            maxRadius = ss;
+        }
 
         var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
         var labelFormat = DataFormat(plan);
@@ -1657,6 +1863,121 @@ internal sealed class PlotPlanSvgRenderer
 
     private static string LineWidth(ResolvedMarkLayer layer, string fallback) =>
         LineSeriesWidth.TryNormalize(LayerStyle(layer, "LINE_WIDTH"), out var width) ? width : fallback;
+
+    private static void RenderAnnotationPoint(
+        StringBuilder builder,
+        PlotPlan plan,
+        ResolvedMarkLayer layer,
+        in CartesianPlotArea area,
+        ResolvedScale? xScale,
+        ResolvedScale? yScale)
+    {
+        var seriesName = LayerStyle(layer, "series");
+        var annotType = LayerStyle(layer, "annotationType") ?? "MAX";
+        var symbol = (LayerStyle(layer, "symbol") ?? "pin").ToLowerInvariant();
+        var color = SafePaint(LayerStyle(layer, "color"), "#2563eb");
+        var label = LayerStyle(layer, "label") ?? "";
+
+        decimal? targetX = null;
+        decimal? targetY = null;
+
+        if (annotType.Equals("COORD", StringComparison.OrdinalIgnoreCase))
+        {
+            var coordXStr = LayerStyle(layer, "coordX");
+            var coordXString = LayerStyle(layer, "coordXString");
+            var coordYStr = LayerStyle(layer, "coordY");
+            if (decimal.TryParse(coordYStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var cy) && yScale is not null)
+            {
+                targetY = MapY(cy, yScale, area.Height);
+            }
+            if (!string.IsNullOrEmpty(coordXString) && xScale is not null && !xScale.Categories.IsDefaultOrEmpty)
+            {
+                var idx = xScale.Categories.IndexOf(coordXString);
+                if (idx >= 0)
+                    targetX = CategoryX(idx, xScale.Categories.Length, area, xScale);
+            }
+            else if (decimal.TryParse(coordXStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var cx) && xScale is not null)
+            {
+                targetX = MapX(cx, xScale, area);
+            }
+        }
+        else
+        {
+            var targetLayer = plan.Layers.FirstOrDefault(l =>
+                (LayerStyle(l, "overlayType") is null) &&
+                (string.IsNullOrEmpty(seriesName) ||
+                 l.Id.Equals(seriesName, StringComparison.OrdinalIgnoreCase) ||
+                 (l.SeriesKey is not null && l.SeriesKey.Equals(seriesName, StringComparison.OrdinalIgnoreCase))))
+                ?? plan.Layers.FirstOrDefault(l => LayerStyle(l, "overlayType") is null);
+
+            if (targetLayer is not null && !targetLayer.Data.IsDefaultOrEmpty)
+            {
+                var isMax = annotType.Equals("MAX", StringComparison.OrdinalIgnoreCase);
+                decimal? extremeVal = null;
+                ResolvedDatum? extremeDatum = null;
+                var extremeIdx = -1;
+
+                for (var i = 0; i < targetLayer.Data.Length; i++)
+                {
+                    var d = targetLayer.Data[i];
+                    if (d.IsGap) continue;
+                    var val = PlotPlanResolver.Number(Channel(d, FieldChannel.Y) ?? Channel(d, FieldChannel.Y2) ?? ChartValue.Null());
+                    if (!val.HasValue) continue;
+                    if (!extremeVal.HasValue || (isMax ? val.Value > extremeVal.Value : val.Value < extremeVal.Value))
+                    {
+                        extremeVal = val.Value;
+                        extremeDatum = d;
+                        extremeIdx = i;
+                    }
+                }
+
+                if (extremeDatum is not null && extremeVal.HasValue && yScale is not null)
+                {
+                    targetY = MapY(extremeVal.Value, yScale, area.Height) + extremeDatum.DisplayOffsetY;
+                    if (xScale is not null && !xScale.Categories.IsDefaultOrEmpty)
+                    {
+                        targetX = CategoryX(extremeIdx, xScale.Categories.Length, area, xScale) + extremeDatum.DisplayOffsetX;
+                    }
+                    else if (xScale is not null)
+                    {
+                        var xv = PlotPlanResolver.Number(Channel(extremeDatum, FieldChannel.X) ?? ChartValue.Null());
+                        if (xv.HasValue)
+                            targetX = MapX(xv.Value, xScale, area) + extremeDatum.DisplayOffsetX;
+                    }
+                }
+            }
+        }
+
+        if (targetX.HasValue && targetY.HasValue)
+        {
+            var tx = targetX.Value;
+            var ty = targetY.Value;
+            builder.AppendLine($"<g class='plot-annotation-point' data-symbol='{Esc(symbol)}' data-annotation-symbol='{Esc(symbol)}'>");
+
+            switch (symbol)
+            {
+                case "arrow":
+                    builder.AppendLine($"<path d='M {N(tx)} {N(ty)} L {N(tx - 4)} {N(ty - 10)} L {N(tx + 4)} {N(ty - 10)} Z' fill='{Esc(color)}'/>");
+                    builder.AppendLine($"<line x1='{N(tx)}' y1='{N(ty - 10)}' x2='{N(tx)}' y2='{N(ty - 16)}' stroke='{Esc(color)}' stroke-width='2'/>");
+                    break;
+                case "circle":
+                    builder.AppendLine($"<circle cx='{N(tx)}' cy='{N(ty)}' r='5' fill='{Esc(color)}' stroke='white' stroke-width='1.5'/>");
+                    break;
+                case "pin":
+                default:
+                    builder.AppendLine($"<circle cx='{N(tx)}' cy='{N(ty - 8)}' r='4' fill='{Esc(color)}' stroke='white' stroke-width='1.2'/>");
+                    builder.AppendLine($"<path d='M {N(tx - 3.5m)} {N(ty - 6)} L {N(tx)} {N(ty)} L {N(tx + 3.5m)} {N(ty - 6)} Z' fill='{Esc(color)}'/>");
+                    break;
+            }
+
+            if (!string.IsNullOrWhiteSpace(label))
+            {
+                var labelY = symbol == "circle" ? ty - 9m : ty - 18m;
+                builder.AppendLine($"<text x='{N(tx)}' y='{N(labelY)}' text-anchor='middle' font-size='10' font-weight='600' fill='{Esc(color)}'>{Esc(label)}</text>");
+            }
+            builder.AppendLine("</g>");
+        }
+    }
 
     private static void RenderPointSymbol(
         StringBuilder builder,
@@ -1819,6 +2140,26 @@ internal sealed class PlotPlanSvgRenderer
         builder.AppendLine("</g>");
     }
 
+    private static string FormatGaugeValue(decimal value, PlotPlan plan)
+    {
+        var format = Style(plan, "FORMAT") ?? DataFormat(plan);
+        if (string.IsNullOrWhiteSpace(format)) return N(value);
+        var normalized = format.Trim().ToUpperInvariant();
+        if (normalized.Length >= 2 && normalized[0] is 'N' or 'C' or 'P' &&
+            int.TryParse(normalized[1..], NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+        {
+            return FormatDataLabel(value, format);
+        }
+        try
+        {
+            return value.ToString(format, CultureInfo.InvariantCulture);
+        }
+        catch
+        {
+            return FormatDataLabel(value, format);
+        }
+    }
+
     private static void RenderGauge(StringBuilder builder, PlotPlan plan)
     {
         var datum = plan.Layers.First().Data.FirstOrDefault(item => !item.IsGap);
@@ -1832,14 +2173,23 @@ internal sealed class PlotPlanSvgRenderer
         var color = SafePaint(Style(plan, "COLOR"), plan.Palette.FirstOrDefault()?.Color ?? "#5470c6");
         var label = DisplayChannel(datum, FieldChannel.Text);
         var goal = PlotPlanResolver.Number(Channel(datum, FieldChannel.Detail) ?? ChartValue.Null());
+        if (!goal.HasValue && decimal.TryParse(Style(plan, "GOAL"), NumberStyles.Number, CultureInfo.InvariantCulture, out var gVal))
+            goal = gVal;
+        var goalLabel = DisplayChannel(datum, FieldChannel.Low) ?? Style(plan, "GOAL_LABEL") ?? "Goal";
+
+        var goal2 = PlotPlanResolver.Number(Channel(datum, FieldChannel.High) ?? ChartValue.Null());
+        if (!goal2.HasValue && decimal.TryParse(Style(plan, "GOAL2"), NumberStyles.Number, CultureInfo.InvariantCulture, out var g2Val))
+            goal2 = g2Val;
+        var goal2Label = DisplayChannel(datum, FieldChannel.ConfidenceLow) ?? Style(plan, "GOAL2_LABEL") ?? "Goal 2";
+
         if (style == "BAR")
         {
-            RenderGaugeBar(builder, plan, value, ratio, color, label, minimum, maximum, goal);
+            RenderGaugeBar(builder, plan, value, ratio, color, label, minimum, maximum, goal, goalLabel, goal2, goal2Label);
             return;
         }
         if (style == "RING")
         {
-            RenderGaugeRing(builder, plan, value, ratio, color, label, minimum, maximum, goal);
+            RenderGaugeRing(builder, plan, value, ratio, color, label, minimum, maximum, goal, goalLabel, goal2, goal2Label);
             return;
         }
 
@@ -1865,10 +2215,25 @@ internal sealed class PlotPlanSvgRenderer
             var goalAngle = start + (end - start) * (double)goalRatio;
             var goalInner = PointCoordinates(cx, cy, radius - 18m, goalAngle);
             var goalOuter = PointCoordinates(cx, cy, radius + 18m, goalAngle);
-            builder.AppendLine($"<line class='plot-gauge-goal' x1='{N(goalInner.X)}' y1='{N(goalInner.Y)}' x2='{N(goalOuter.X)}' y2='{N(goalOuter.Y)}' stroke='#111827' stroke-width='3'><title>Goal: {N(goal.Value)}</title></line>");
+            builder.AppendLine($"<line class='plot-gauge-goal' x1='{N(goalInner.X)}' y1='{N(goalInner.Y)}' x2='{N(goalOuter.X)}' y2='{N(goalOuter.Y)}' stroke='#111827' stroke-width='3'><title>{Esc(goalLabel)}: {N(goal.Value)}</title></line>");
         }
-        var valueY = semiCircle ? cy - 18m : cy + 5m;
-        builder.AppendLine($"<text class='plot-gauge-value-label' x='{N(cx)}' y='{N(valueY)}' text-anchor='middle' font-size='18' font-weight='bold' fill='#333'>{N(value)}</text>");
+        if (goal2.HasValue)
+        {
+            var goal2Ratio = maximum <= minimum ? 0m : Math.Clamp((goal2.Value - minimum) / (maximum - minimum), 0m, 1m);
+            var goal2Angle = start + (end - start) * (double)goal2Ratio;
+            var goal2Inner = PointCoordinates(cx, cy, radius - 18m, goal2Angle);
+            var goal2Outer = PointCoordinates(cx, cy, radius + 18m, goal2Angle);
+            builder.AppendLine($"<line class='plot-gauge-goal plot-gauge-goal2' x1='{N(goal2Inner.X)}' y1='{N(goal2Inner.Y)}' x2='{N(goal2Outer.X)}' y2='{N(goal2Outer.Y)}' stroke='#dc2626' stroke-width='3' stroke-dasharray='4 2'><title>{Esc(goal2Label)}: {N(goal2.Value)}</title></line>");
+        }
+        var labelPos = (Style(plan, "LABEL_POSITION") ?? Style(plan, "DATA_LABELS:POSITION") ?? "CENTER").Trim().ToUpperInvariant();
+        var valueY = labelPos switch
+        {
+            "BOTTOM" => semiCircle ? cy + 18m : cy + 28m,
+            "INSIDE" => semiCircle ? cy - 32m : cy - 10m,
+            _ => semiCircle ? cy - 18m : cy + 5m
+        };
+        var formattedVal = FormatGaugeValue(value, plan);
+        builder.AppendLine($"<text class='plot-gauge-value-label' data-label-position='{Esc(labelPos)}' x='{N(cx)}' y='{N(valueY)}' text-anchor='middle' font-size='18' font-weight='bold' fill='#333'>{Esc(formattedVal)}</text>");
         if (!string.IsNullOrWhiteSpace(label)) builder.AppendLine($"<text x='{N(cx)}' y='{N(valueY + 18m)}' text-anchor='middle' font-size='10' fill='#666'>{Esc(label)}</text>");
         if (semiCircle)
         {
@@ -1878,7 +2243,7 @@ internal sealed class PlotPlanSvgRenderer
     }
 
     private static void RenderGaugeRing(StringBuilder builder, PlotPlan plan, decimal value, decimal ratio, string color,
-        string? label, decimal minimum, decimal maximum, decimal? goal)
+        string? label, decimal minimum, decimal maximum, decimal? goal, string? goalLabel = null, decimal? goal2 = null, string? goal2Label = null)
     {
         var cx = plan.Bounds.Width / 2m;
         var cy = plan.Bounds.Height * .53m;
@@ -1890,14 +2255,23 @@ internal sealed class PlotPlanSvgRenderer
         {
             var goalRatio = maximum <= minimum ? 0m : Math.Clamp((goal.Value - minimum) / (maximum - minimum), 0m, 1m);
             var goalPoint = PointCoordinates(cx, cy, radius, -Math.PI / 2d + 2d * Math.PI * (double)goalRatio);
-            builder.AppendLine($"<circle class='plot-gauge-goal' cx='{N(goalPoint.X)}' cy='{N(goalPoint.Y)}' r='4' fill='#111827'><title>Goal: {N(goal.Value)}</title></circle>");
+            builder.AppendLine($"<circle class='plot-gauge-goal' cx='{N(goalPoint.X)}' cy='{N(goalPoint.Y)}' r='4' fill='#111827'><title>{Esc(goalLabel ?? "Goal")}: {N(goal.Value)}</title></circle>");
         }
-        builder.AppendLine($"<text class='plot-gauge-value-label' x='{N(cx)}' y='{N(cy + 5m)}' text-anchor='middle' font-size='20' font-weight='bold' fill='#333'>{N(value)}</text>");
-        if (!string.IsNullOrWhiteSpace(label)) builder.AppendLine($"<text x='{N(cx)}' y='{N(cy + 23m)}' text-anchor='middle' font-size='10' fill='#666'>{Esc(label)}</text>");
+        if (goal2.HasValue)
+        {
+            var goal2Ratio = maximum <= minimum ? 0m : Math.Clamp((goal2.Value - minimum) / (maximum - minimum), 0m, 1m);
+            var goal2Point = PointCoordinates(cx, cy, radius, -Math.PI / 2d + 2d * Math.PI * (double)goal2Ratio);
+            builder.AppendLine($"<circle class='plot-gauge-goal plot-gauge-goal2' cx='{N(goal2Point.X)}' cy='{N(goal2Point.Y)}' r='4' fill='#dc2626'><title>{Esc(goal2Label ?? "Goal 2")}: {N(goal2.Value)}</title></circle>");
+        }
+        var labelPos = (Style(plan, "LABEL_POSITION") ?? Style(plan, "DATA_LABELS:POSITION") ?? "CENTER").Trim().ToUpperInvariant();
+        var valueY = labelPos == "BOTTOM" ? cy + radius + 18m : cy + 5m;
+        var formattedVal = FormatGaugeValue(value, plan);
+        builder.AppendLine($"<text class='plot-gauge-value-label' data-label-position='{Esc(labelPos)}' x='{N(cx)}' y='{N(valueY)}' text-anchor='middle' font-size='20' font-weight='bold' fill='#333'>{Esc(formattedVal)}</text>");
+        if (!string.IsNullOrWhiteSpace(label)) builder.AppendLine($"<text x='{N(cx)}' y='{N(valueY + 18m)}' text-anchor='middle' font-size='10' fill='#666'>{Esc(label)}</text>");
     }
 
     private static void RenderGaugeBar(StringBuilder builder, PlotPlan plan, decimal value, decimal ratio, string color,
-        string? label, decimal minimum, decimal maximum, decimal? goal)
+        string? label, decimal minimum, decimal maximum, decimal? goal, string? goalLabel = null, decimal? goal2 = null, string? goal2Label = null)
     {
         var x = 62m;
         var width = plan.Bounds.Width - 124m;
@@ -1908,9 +2282,24 @@ internal sealed class PlotPlanSvgRenderer
         {
             var goalRatio = maximum <= minimum ? 0m : Math.Clamp((goal.Value - minimum) / (maximum - minimum), 0m, 1m);
             var goalX = x + width * goalRatio;
-            builder.AppendLine($"<line class='plot-gauge-goal' x1='{N(goalX)}' y1='{N(y - 7m)}' x2='{N(goalX)}' y2='{N(y + 31m)}' stroke='#111827' stroke-width='3'><title>Goal: {N(goal.Value)}</title></line>");
+            builder.AppendLine($"<line class='plot-gauge-goal' x1='{N(goalX)}' y1='{N(y - 7m)}' x2='{N(goalX)}' y2='{N(y + 31m)}' stroke='#111827' stroke-width='3'><title>{Esc(goalLabel ?? "Goal")}: {N(goal.Value)}</title></line>");
         }
-        builder.AppendLine($"<text class='plot-gauge-value-label' x='{N(plan.Bounds.Width / 2m)}' y='{N(y - 18m)}' text-anchor='middle' font-size='20' font-weight='bold' fill='#333'>{N(value)}</text>");
+        if (goal2.HasValue)
+        {
+            var goal2Ratio = maximum <= minimum ? 0m : Math.Clamp((goal2.Value - minimum) / (maximum - minimum), 0m, 1m);
+            var goal2X = x + width * goal2Ratio;
+            builder.AppendLine($"<line class='plot-gauge-goal plot-gauge-goal2' x1='{N(goal2X)}' y1='{N(y - 7m)}' x2='{N(goal2X)}' y2='{N(y + 31m)}' stroke='#dc2626' stroke-width='3' stroke-dasharray='4 2'><title>{Esc(goal2Label ?? "Goal 2")}: {N(goal2.Value)}</title></line>");
+        }
+        var labelPos = (Style(plan, "LABEL_POSITION") ?? Style(plan, "DATA_LABELS:POSITION") ?? "CENTER").Trim().ToUpperInvariant();
+        var valueY = labelPos switch
+        {
+            "BOTTOM" => y + 46m,
+            "INSIDE" => y + 17m,
+            _ => y - 18m
+        };
+        var valueColor = labelPos == "INSIDE" ? "#ffffff" : "#333333";
+        var formattedVal = FormatGaugeValue(value, plan);
+        builder.AppendLine($"<text class='plot-gauge-value-label' data-label-position='{Esc(labelPos)}' x='{N(plan.Bounds.Width / 2m)}' y='{N(valueY)}' text-anchor='middle' font-size='20' font-weight='bold' fill='{valueColor}'>{Esc(formattedVal)}</text>");
         if (!string.IsNullOrWhiteSpace(label)) builder.AppendLine($"<text x='{N(plan.Bounds.Width / 2m)}' y='{N(y + 52m)}' text-anchor='middle' font-size='10' fill='#666'>{Esc(label)}</text>");
         builder.AppendLine($"<text x='{N(x)}' y='{N(y + 42m)}' text-anchor='start' font-size='8' fill='#6b7280'>{N(minimum)}</text>");
         builder.AppendLine($"<text x='{N(x + width)}' y='{N(y + 42m)}' text-anchor='end' font-size='8' fill='#6b7280'>{N(maximum)}</text>");
@@ -1956,7 +2345,7 @@ internal sealed class PlotPlanSvgRenderer
         var cellBorderWidthStr = Style(plan, "CELL_BORDER_WIDTH") ?? LayerStyle(layer, "CELL_BORDER_WIDTH");
         var borderWidth = decimal.TryParse(cellBorderWidthStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var bw) && bw >= 0m ? bw : 1m;
 
-        var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
+        var showLabels = IsEnabled(plan.Style, "DATA_LABELS") || IsEnabled(plan.Style, "SHOW_VALUES");
 
         string GetColor(decimal v)
         {
@@ -2012,7 +2401,7 @@ internal sealed class PlotPlanSvgRenderer
                         var valText = N(val);
                         RenderDataLabelBackground(builder, plan, datum.RowIndex, cellX + cellWidth / 2m, cellY + cellHeight / 2m + 4m, "middle", 9m, valText);
                         var ratio = maximum <= minimum ? 1m : Math.Clamp((val - minimum) / (maximum - minimum), 0m, 1m);
-                        builder.AppendLine($"<text x='{N(cellX + cellWidth / 2m)}' y='{N(cellY + cellHeight / 2m + 4m)}' text-anchor='middle' font-size='9' fill='{(ratio > .55m ? "white" : "#1f2937")}'>{valText}</text>");
+                        builder.AppendLine($"<text class='plot-data-label' x='{N(cellX + cellWidth / 2m)}' y='{N(cellY + cellHeight / 2m + 4m)}' text-anchor='middle' font-size='9' fill='{(ratio > .55m ? "white" : "#1f2937")}'>{valText}</text>");
                     }
                 }
                 else
@@ -2282,8 +2671,15 @@ internal sealed class PlotPlanSvgRenderer
                     builder.AppendLine($"<line x1='{N(previousEndX.Value)}' y1='{N(y - slot * .15m)}' x2='{N(previousEndX.Value)}' y2='{N(y)}' stroke='{Esc(connectorColor)}'{strokeWidthAttr} stroke-dasharray='3 2'/>");
                 }
 
-                var barX = Math.Min(startX, endX);
-                var barW = Math.Max(1m, Math.Abs(startX - endX));
+                var barMinHeightOpt = Style(plan, "BAR_MIN_HEIGHT") ?? LayerStyle(layer, "bar_min_height") ?? LayerStyle(layer, "barMinHeight");
+                var barMinHeight = 1m;
+                if (barMinHeightOpt is not null && decimal.TryParse(barMinHeightOpt, NumberStyles.Any, CultureInfo.InvariantCulture, out var bmh) && bmh > 1m)
+                {
+                    barMinHeight = bmh;
+                }
+                var rawWidth = Math.Abs(startX - endX);
+                var barW = Math.Max(barMinHeight, rawWidth);
+                var barX = (endX >= startX) ? startX : (startX - barW);
                 var catName = index < categories.Length ? categories[index] : $"Item {index + 1}";
 
                 builder.AppendLine($"<rect x='{N(barX)}' y='{N(y)}' width='{N(barW)}' height='{N(height)}' fill='{color}' data-row-index='{datum.RowIndex}'><title>{Esc(catName)}: {N(end.Value - start.Value)}</title></rect>");
@@ -2324,7 +2720,16 @@ internal sealed class PlotPlanSvgRenderer
                     builder.AppendLine($"<line x1='{N(x - slot * .15m)}' y1='{N(previousEndY.Value)}' x2='{N(x)}' y2='{N(previousEndY.Value)}' stroke='{Esc(connectorColor)}'{strokeWidthAttr} stroke-dasharray='3 2'/>");
                 }
 
-                builder.AppendLine($"<rect x='{N(x)}' y='{N(Math.Min(startY, endY))}' width='{N(width)}' height='{N(Math.Max(1m, Math.Abs(startY - endY)))}' fill='{color}' data-row-index='{datum.RowIndex}'><title>{Esc(categories[index])}: {N(end.Value - start.Value)}</title></rect>");
+                var barMinHeightOpt = Style(plan, "BAR_MIN_HEIGHT") ?? LayerStyle(layer, "bar_min_height") ?? LayerStyle(layer, "barMinHeight");
+                var barMinHeight = 1m;
+                if (barMinHeightOpt is not null && decimal.TryParse(barMinHeightOpt, NumberStyles.Any, CultureInfo.InvariantCulture, out var bmh) && bmh > 1m)
+                {
+                    barMinHeight = bmh;
+                }
+                var rawHeight = Math.Abs(startY - endY);
+                var barHeight = Math.Max(barMinHeight, rawHeight);
+                var barY = (endY <= startY) ? (startY - barHeight) : startY;
+                builder.AppendLine($"<rect x='{N(x)}' y='{N(barY)}' width='{N(width)}' height='{N(barHeight)}' fill='{color}' data-row-index='{datum.RowIndex}'><title>{Esc(categories[index])}: {N(end.Value - start.Value)}</title></rect>");
                 builder.AppendLine($"<text x='{N(x + width / 2m)}' y='{N(Top + plotHeight + 16m)}' text-anchor='middle' font-size='9' fill='#666'>{Esc(Truncate(categories[index], 10))}</text>");
                 previousEndY = endY;
             }
@@ -2587,13 +2992,9 @@ internal sealed class PlotPlanSvgRenderer
             }
         }
 
-        if (isTodayLine)
+        if (isTodayLine && !string.IsNullOrWhiteSpace(todayDateStr))
         {
-            decimal? todayVal = null;
-            if (!string.IsNullOrWhiteSpace(todayDateStr))
-                todayVal = TemporalNumber(ChartValue.From(todayDateStr));
-            else
-                todayVal = TemporalNumber(ChartValue.From(DateTime.UtcNow.ToString("yyyy-MM-dd")));
+            var todayVal = TemporalNumber(ChartValue.From(todayDateStr));
 
             if (todayVal.HasValue)
             {
@@ -2695,6 +3096,11 @@ internal sealed class PlotPlanSvgRenderer
             var axisRangeTitle = isIndependentAxes ? $" [{N(axisScales[index].Min)}..{N(axisScales[index].Max)}]" : "";
             builder.AppendLine($"<text x='{N(label.X)}' y='{N(label.Y + 3m)}' text-anchor='middle' font-size='9' fill='#4b5563'><title>{Esc(dimensions[index])}{axisRangeTitle}</title>{Esc(Truncate(dimensions[index], 13))}</text>");
         }
+        var showDataLabels = IsEnabled(plan.Style, "DATA_LABELS") || IsEnabled(plan.Style, "SHOW_VALUES");
+        var labelFormat = DataFormat(plan);
+        var labelColor = SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#333");
+        var labelFontSize = FontSize(Style(plan, "DATA_LABELS:FONT_SIZE"));
+
         foreach (var layer in plan.Layers)
         {
             var points = layer.Data.Select((datum, index) =>
@@ -2707,6 +3113,21 @@ internal sealed class PlotPlanSvgRenderer
             var color = plan.Palette.FirstOrDefault(item => item.SeriesKey == layer.SeriesKey)?.Color ?? "#5470c6";
             var fillAttr = isFillOff ? "fill='none'" : $"fill='{Esc(color)}' fill-opacity='{Esc(fillOpacity)}'";
             builder.AppendLine($"<polygon points='{string.Join(" ", points)}' {fillAttr} stroke='{Esc(color)}' stroke-width='{LineWidth(layer, "2")}' data-row-index='{layer.Data.FirstOrDefault()?.RowIndex ?? 0}'><title>{Esc(layer.SeriesKey ?? layer.Id)}</title></polygon>");
+
+            if (showDataLabels)
+            {
+                for (var index = 0; index < layer.Data.Length; index++)
+                {
+                    var datum = layer.Data[index];
+                    var (axisMin, axisMax) = index < axisScales.Length ? axisScales[index] : (minimum, maximum);
+                    var value = Numeric(datum, FieldChannel.Radius);
+                    if (!value.HasValue) continue;
+                    var ratio = axisMax <= axisMin ? 0m : Math.Clamp((value.Value - axisMin) / (axisMax - axisMin), 0m, 1m);
+                    var pt = PointCoordinates(cx, cy, outer * ratio, -Math.PI / 2d + 2d * Math.PI * index / dimensions.Length);
+                    var formattedText = FormatDataLabel(value.Value, labelFormat);
+                    builder.AppendLine($"<text class='plot-data-label plot-radar-data-label' x='{N(pt.X)}' y='{N(pt.Y - 5m)}' text-anchor='middle' font-size='{Esc(labelFontSize.ToString(CultureInfo.InvariantCulture))}' fill='{Esc(labelColor)}'>{Esc(formattedText)}</text>");
+                }
+            }
         }
         builder.AppendLine("</g>");
         RenderLegend(builder, plan);
@@ -3279,11 +3700,30 @@ internal sealed class PlotPlanSvgRenderer
         builder.AppendLine("</g>");
     }
 
+    private static bool TryParseMapCenter(string? text, out decimal lat, out decimal lon)
+    {
+        lat = 0m;
+        lon = 0m;
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var trimmed = text.Trim().Trim('(', ')', '[', ']');
+        var parts = trimmed.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 2) return false;
+        return decimal.TryParse(parts[0], NumberStyles.Number, CultureInfo.InvariantCulture, out lat) &&
+            decimal.TryParse(parts[1], NumberStyles.Number, CultureInfo.InvariantCulture, out lon);
+    }
+
     private static void RenderGeographic(StringBuilder builder, PlotPlan plan)
     {
         var geography = plan.Geography ?? throw new InvalidOperationException("Geographic PlotPlan has no resolved geometry.");
         var plotWidth = plan.Bounds.Width - Left - Right;
         var plotHeight = plan.Bounds.Height - Top - Bottom;
+
+        var zoom = 1m;
+        if (decimal.TryParse(Style(plan, "ZOOM"), NumberStyles.Number, CultureInfo.InvariantCulture, out var zVal) && zVal > 0m)
+            zoom = zVal;
+
+        TryParseMapCenter(Style(plan, "CENTER"), out var centerLat, out var centerLon);
+
         var regionRows = plan.Layers.Where(layer => layer.Mark == MarkKind.Rect)
             .SelectMany(layer => layer.Data.Select(datum => (Layer: layer, Datum: datum)))
             .Where(item => !item.Datum.IsGap && !string.IsNullOrWhiteSpace(DisplayChannel(item.Datum, FieldChannel.Region)))
@@ -3293,22 +3733,78 @@ internal sealed class PlotPlanSvgRenderer
             .Where(value => value.HasValue).Select(value => value!.Value).ToArray();
         var colorMin = colorValues.DefaultIfEmpty(0m).Min();
         var colorMax = colorValues.DefaultIfEmpty(1m).Max();
+        var sortedValues = colorValues.OrderBy(v => v).ToArray();
+
+        var colorScaleType = (Style(plan, "COLOR_SCALE") ?? "LINEAR").Trim().ToUpperInvariant();
+        var nullColor = Style(plan, "NULL_COLOR") ?? "#e5e7eb";
+        var colorLow = Style(plan, "COLOR_LOW") ?? "#dbeafe";
+        var colorHigh = Style(plan, "COLOR_HIGH") ?? "#1d4ed8";
+
+        string ResolveRegionColor(decimal val)
+        {
+            decimal t;
+            if (colorMax <= colorMin)
+            {
+                t = 1m;
+            }
+            else if (colorScaleType == "QUANTILE" && sortedValues.Length > 1)
+            {
+                int rank = Array.BinarySearch(sortedValues, val);
+                if (rank < 0) rank = ~rank;
+                rank = Math.Clamp(rank, 0, sortedValues.Length - 1);
+                int bucket = Math.Clamp((int)Math.Floor((decimal)rank / sortedValues.Length * 5m), 0, 4);
+                t = bucket / 4m;
+            }
+            else if (colorScaleType == "QUANTIZE")
+            {
+                decimal ratio = Math.Clamp((val - colorMin) / (colorMax - colorMin), 0m, 1m);
+                int bucket = Math.Clamp((int)Math.Floor(ratio * 5m), 0, 4);
+                t = bucket / 4m;
+            }
+            else if (colorScaleType == "THRESHOLD")
+            {
+                decimal ratio = Math.Clamp((val - colorMin) / (colorMax - colorMin), 0m, 1m);
+                t = ratio switch
+                {
+                    < 0.25m => 0.0m,
+                    < 0.50m => 0.33m,
+                    < 0.75m => 0.67m,
+                    _ => 1.0m
+                };
+            }
+            else // LINEAR
+            {
+                t = Math.Clamp((val - colorMin) / (colorMax - colorMin), 0m, 1m);
+            }
+            return InterpolateColor(colorLow, colorHigh, t);
+        }
+
+        var baseMap = Style(plan, "BASE_MAP");
+        if (!string.IsNullOrWhiteSpace(baseMap))
+        {
+            builder.AppendLine($"<g class='plot-geographic-basemap' data-base-map='{Esc(baseMap)}' data-base-map-url='{Esc(baseMap)}'>");
+            builder.AppendLine($"<rect class='plot-geographic-basemap-bg' width='{N(plotWidth)}' height='{N(plotHeight)}' fill='#f1f5f9'/>");
+            builder.AppendLine($"<text class='plot-geographic-basemap-attr' x='{N(plotWidth - 8)}' y='{N(plotHeight - 8)}' text-anchor='end' font-size='9' fill='#94a3b8'>Map data © OpenStreetMap contributors</text>");
+            builder.AppendLine("</g>");
+        }
 
         builder.AppendLine("<g class='plot-geographic-regions'>");
         foreach (var feature in geography.Features)
         {
             regionRows.TryGetValue(feature.Key, out var match);
             var numeric = match.Datum is null ? null : Number(Channel(match.Datum, FieldChannel.Color));
-            var fill = numeric.HasValue ? GeographicRamp(numeric.Value, colorMin, colorMax) : "#e5e7eb";
+            var fill = numeric.HasValue ? ResolveRegionColor(numeric.Value) : nullColor;
+            var customTooltip = match.Datum is null ? null : DisplayChannel(match.Datum, FieldChannel.Tooltip);
+            var titleText = !string.IsNullOrWhiteSpace(customTooltip) ? customTooltip : $"{feature.Key}{(numeric.HasValue ? $": {N(numeric.Value)}" : string.Empty)}";
             foreach (var ring in feature.Rings)
             {
                 var path = string.Join(" ", ring.Select((point, index) =>
                 {
-                    var projected = ProjectGeographic(point.Longitude, point.Latitude, geography.Projection, plotWidth, plotHeight);
+                    var projected = ProjectGeographic(point.Longitude, point.Latitude, geography.Projection, plotWidth, plotHeight, zoom, centerLat, centerLon);
                     return $"{(index == 0 ? "M" : "L")} {N(projected.X)} {N(projected.Y)}";
                 })) + " Z";
                 var row = match.Datum is null ? string.Empty : $" data-row-index='{match.Datum.RowIndex}'";
-                builder.AppendLine($"<path class='plot-geographic-region'{row} d='{path}' fill='{fill}' stroke='#94a3b8' stroke-width='.45'><title>{Esc(feature.Key)}{(numeric.HasValue ? $": {N(numeric.Value)}" : string.Empty)}</title></path>");
+                builder.AppendLine($"<path class='plot-geographic-region'{row} d='{path}' fill='{fill}' stroke='#94a3b8' stroke-width='.45'><title>{Esc(titleText)}</title></path>");
             }
         }
         builder.AppendLine("</g>");
@@ -3321,7 +3817,7 @@ internal sealed class PlotPlanSvgRenderer
             if (routes.Length > 500) throw new InvalidOperationException("Geographic chart exceeds the 500 route limit.");
             foreach (var route in routes)
             {
-                var points = route.Select(datum => GeographicDatum(datum, geography.Projection, plotWidth, plotHeight))
+                var points = route.Select(datum => GeographicDatum(datum, geography.Projection, plotWidth, plotHeight, zoom, centerLat, centerLon))
                     .Where(point => point.HasValue).Select(point => point!.Value).ToArray();
                 if (points.Length < 2) continue;
                 var path = string.Join(" ", points.Select((point, index) => $"{(index == 0 ? "M" : "L")} {N(point.X)} {N(point.Y)}"));
@@ -3335,12 +3831,21 @@ internal sealed class PlotPlanSvgRenderer
             foreach (var datum in layer.Data.Where(datum => !datum.IsGap))
             {
                 if (++pointCount > 20000) throw new InvalidOperationException("Geographic chart exceeds the 20,000 point/label limit.");
-                var point = GeographicDatum(datum, geography.Projection, plotWidth, plotHeight);
+                var point = GeographicDatum(datum, geography.Projection, plotWidth, plotHeight, zoom, centerLat, centerLon);
                 if (!point.HasValue) continue;
-                var text = DisplayChannel(datum, FieldChannel.Text) ?? DisplayChannel(datum, FieldChannel.Region) ?? $"Row {datum.RowIndex + 1}";
+                var customTooltip = DisplayChannel(datum, FieldChannel.Tooltip);
+                var text = customTooltip ?? DisplayChannel(datum, FieldChannel.Text) ?? DisplayChannel(datum, FieldChannel.Region) ?? $"Row {datum.RowIndex + 1}";
+                var pointColor = SafePaint(
+                    DisplayChannel(datum, FieldChannel.Color)
+                    ?? EncodingText(datum, ConditionalEncodingChannel.Color)
+                    ?? LayerStyle(layer, "fill")
+                    ?? LayerStyle(layer, "color"),
+                    "#dc2626");
+                var sizeVal = Numeric(datum, FieldChannel.Size);
+                var radius = sizeVal.HasValue ? Math.Clamp(sizeVal.Value, 2m, 30m) : 4m;
                 if (layer.Mark == MarkKind.Point)
-                    RenderPointSymbol(builder, PointShape(plan, layer, datum), point.Value.X, point.Value.Y, 4m,
-                        SafePaint(LayerStyle(layer, "fill") ?? LayerStyle(layer, "color"), "#dc2626"),
+                    RenderPointSymbol(builder, PointShape(plan, layer, datum), point.Value.X, point.Value.Y, radius,
+                        pointColor,
                         "plot-geographic-point", datum.RowIndex, text, PointStrokeAttributes(layer));
                 else labels.Add(new SmartLabel(datum.RowIndex, point.Value.X, point.Value.Y, text,
                     SafePaint(LayerStyle(layer, "color"), "#1f2937"), 200 + layer.ZIndex));
@@ -3348,26 +3853,37 @@ internal sealed class PlotPlanSvgRenderer
         RenderSmartLabels(builder, plan, labels, plotWidth, plotHeight);
     }
 
-    private static (decimal X, decimal Y)? GeographicDatum(ResolvedDatum datum, GeographicProjectionKind projection, decimal width, decimal height)
+    private static (decimal X, decimal Y)? GeographicDatum(ResolvedDatum datum, GeographicProjectionKind projection, decimal width, decimal height, decimal zoom = 1m, decimal centerLat = 0m, decimal centerLon = 0m)
     {
         var longitude = Number(Channel(datum, FieldChannel.Longitude));
         var latitude = Number(Channel(datum, FieldChannel.Latitude));
         if (!longitude.HasValue || !latitude.HasValue || longitude is < -180m or > 180m || latitude is < -90m or > 90m) return null;
-        return ProjectGeographic(longitude.Value, latitude.Value, projection, width, height);
+        return ProjectGeographic(longitude.Value, latitude.Value, projection, width, height, zoom, centerLat, centerLon);
     }
 
-    private static (decimal X, decimal Y) ProjectGeographic(decimal longitude, decimal latitude, GeographicProjectionKind projection, decimal width, decimal height)
+    private static (decimal X, decimal Y) ProjectGeographic(decimal longitude, decimal latitude, GeographicProjectionKind projection, decimal width, decimal height, decimal zoom = 1m, decimal centerLat = 0m, decimal centerLon = 0m)
     {
-        var x = Left + (longitude + 180m) / 360m * width;
+        var cx = Left + width / 2m;
+        var cy = Top + height / 2m;
+        var x = cx + ((longitude - centerLon) / 360m) * width * zoom;
         decimal normalizedY;
         if (projection == GeographicProjectionKind.Mercator)
         {
             var clamped = Math.Clamp((double)latitude, -85.05112878d, 85.05112878d);
             var radians = clamped * Math.PI / 180d;
-            normalizedY = (decimal)(.5d - Math.Log(Math.Tan(Math.PI / 4d + radians / 2d)) / (2d * Math.PI));
+            var mercY = (decimal)(.5d - Math.Log(Math.Tan(Math.PI / 4d + radians / 2d)) / (2d * Math.PI));
+
+            var clampedCenter = Math.Clamp((double)centerLat, -85.05112878d, 85.05112878d);
+            var radiansCenter = clampedCenter * Math.PI / 180d;
+            var mercCenterY = (decimal)(.5d - Math.Log(Math.Tan(Math.PI / 4d + radiansCenter / 2d)) / (2d * Math.PI));
+
+            normalizedY = mercY - mercCenterY;
         }
-        else normalizedY = (90m - latitude) / 180m;
-        return (x, Top + normalizedY * height);
+        else
+        {
+            normalizedY = (centerLat - latitude) / 180m;
+        }
+        return (x, cy + normalizedY * height * zoom);
     }
 
     private static string GeographicRamp(decimal value, decimal minimum, decimal maximum)

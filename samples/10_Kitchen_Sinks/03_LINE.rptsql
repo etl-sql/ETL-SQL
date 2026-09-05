@@ -58,27 +58,95 @@ CREATE VISUAL RegressionLine AS LINE (
     )
 );
 
--- 7. Line Chart with Moving Average
-CREATE VISUAL MovingAvgLine AS LINE (
+-- 7. Line Chart with Moving Average, Running Total & Percent of Total
+CREATE VISUAL AnalyticsLine AS LINE (
     SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
-    TITLE = 'Line Chart with 3-Period Moving Average',
+    TITLE = 'Moving Average, Running Total & Percent of Total Overlays',
     MAPPINGS (X = Date, Y = Total),
     OVERLAYS (
-        MOVING_AVG(3) AS SOLID WITH (COLOR = 'Cyan', LABEL = '3-Period MA')
+        MOVING_AVG(3) AS SOLID WITH (COLOR = 'Cyan', LABEL = '3-Period MA'),
+        RUNNING_TOTAL(Total) AS DASHED WITH (COLOR = '#10b981', LABEL = 'Running Total'),
+        PERCENT_OF_TOTAL(Total) AS DOTTED WITH (COLOR = '#f59e0b', LABEL = '% Total')
+    )
+);
+
+-- 8. Styled Symbols, Line Width & Gridlines
+CREATE VISUAL StyledGeometryLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Custom Line Width, Markers & Gridlines',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (
+        LINE_WIDTH          = 3,
+        SYMBOLS             = ON,
+        SYMBOL_SHAPE        = DIAMOND,
+        SYMBOL_STROKE_COLOR = '#0f172a',
+        SYMBOL_STROKE_WIDTH = 2,
+        GRID_LINES          = ON,
+        GRID_LINE_COLOR     = '#e2e8f0',
+        ZERO_LINE           = ON,
+        MINOR_GRID_LINES    = ON
+    )
+);
+
+-- 9. Area Fill with Baseline & Series Labels
+CREATE VISUAL AreaBaselineLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Area Fill (AREA_BASELINE = ZERO) & SERIES_LABELS',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (
+        AREA            = ON,
+        AREA_BASELINE   = ZERO,
+        DATA_LABELS     = ON,
+        SERIES_LABELS   = ON WITH (POSITION = END)
+    )
+);
+
+-- 10. Per-Segment Conditional Line Styling (SEGMENT_STYLE)
+CREATE VISUAL SegmentStyledLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Conditional Segment Styling (Forecast Dashed)',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (
+        SEGMENT_STYLE (
+            WHEN Date >= '2026-04-01' THEN LINE_DASH = DASHED, COLOR = '#64748b'
+        ),
+        DATA_LABELS = ON
+    )
+);
+
+-- 11. Explicit Time Axis Unit & Tick Format
+CREATE VISUAL TimeAxisLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Explicit TIME_UNIT (MONTH) & TICK_FORMAT (MMM yyyy)',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (
+        X_AXIS (
+            TIME_UNIT   = MONTH,
+            TICK_FORMAT = 'MMM yyyy'
+        ),
+        Y_AXIS (
+            TICK_FORMAT = 'C0'
+        ),
+        GRID_LINES = ON
     )
 );
 
 -- Page Layout
 CREATE PAGE LineKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C D / E F',
+    STRUCTURE = 'A B C / D E F / G H I / J . .',
     MAP (
         'A' = BasicLine,
         'B' = SmoothLine,
         'C' = MultiLine,
         'D' = StackedLine,
         'E' = RegressionLine,
-        'F' = MovingAvgLine
+        'F' = AnalyticsLine,
+        'G' = StyledGeometryLine,
+        'H' = AreaBaselineLine,
+        'I' = SegmentStyledLine,
+        'J' = TimeAxisLine
     )
 );
 
 CREATE NAVIGATION MainNav AS TAB (DEFAULT = LineKitchenSink, PAGES (LineKitchenSink));
+

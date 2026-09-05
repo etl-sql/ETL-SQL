@@ -43,6 +43,12 @@ export const loadingState = (message = 'Loading…') => `
  * Not permitted. Naming the roles that would grant access turns a dead end into a request someone
  * can actually make.
  */
+/**
+ * @param {Object} [options]
+ * @param {string} [options.title]
+ * @param {string} [options.body]
+ * @param {Array<string>} [options.roles] Roles that would grant access.
+ */
 export const deniedState = ({ title, body, roles = [] } = {}) => shell(
   'unauthorized', 'denied',
   esc(title ?? 'You do not have access to this view.'),
@@ -55,6 +61,12 @@ export const deniedState = ({ title, body, roles = [] } = {}) => shell(
  * We asked and could not find out. Nothing is shown in place of the real answer: invented content
  * on screen is indistinguishable from real content.
  */
+/**
+ * @param {Object} [options]
+ * @param {string} [options.title]
+ * @param {string} [options.body]
+ * @param {string} [options.retryId] Element id for the retry button, when the caller wants one.
+ */
 export const failedState = ({ title, body, retryId } = {}) => shell(
   'failed', 'error',
   esc(title ?? 'This data is unavailable.'),
@@ -64,6 +76,12 @@ export const failedState = ({ title, body, retryId } = {}) => shell(
   + (retryId ? `<button class="btn btn-outline btn-xs" id="${esc(retryId)}" type="button">Retry</button>` : ''));
 
 /** We asked, we know, and the answer is genuinely nothing. */
+/**
+ * @param {Object} [options]
+ * @param {string} [options.title]
+ * @param {string} [options.body]
+ * @param {string} [options.action] Markup for the call to action, when there is one.
+ */
 export const emptyState = ({ title, body, action = '' } = {}) => shell(
   'empty', 'empty', esc(title ?? 'Nothing here yet.'), body ? esc(body) : body, action);
 

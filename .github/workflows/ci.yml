@@ -41,6 +41,12 @@ jobs:
         shell: pwsh
         run: node .\scripts\sync-assets.js -Check
 
+      - name: Install browser type-gate toolchain
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Check browser-side types
+        run: node scripts/typecheck-browser.mjs
+
       - name: Check syntax index is up to date with LanguageMetadata.cs
         run: node scripts/generate-syntax-index.js --check
 

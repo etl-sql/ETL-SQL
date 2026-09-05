@@ -1,3 +1,4 @@
+// @ts-nocheck — generated copy; check the canonical source.
 /* GENERATED FILE - DO NOT EDIT.
  * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js
  * Edit the canonical source, then run: node .\scripts\sync-assets.js
@@ -1031,6 +1032,7 @@
         updateBodyTheme(manifest, activePageName);
 
         if (manifest.pages && manifest.pages.length > 0) {
+            /** @type {Record<string, HTMLElement>} */
             const pageSections = {};
             const firstVisible = manifest.pages.find(p => !p.isHidden);
             const defaultPageName = navDef
@@ -1051,7 +1053,7 @@
             });
 
             if (navDef) {
-                renderNavBar(root, navDef, pageSections, manifest.pages);
+                renderNavBar(root, navDef, pageSections, manifest.pages, manifest);
             } else if (manifest.pages.length > 0) {
                 // No navigation — show the first page by default
                 const firstPage = manifest.pages.find(p => !p.isHidden) || manifest.pages[0];
@@ -1325,9 +1327,26 @@
         container.appendChild(header);
     }
 
-    function renderNavBar(container, navDef, pageSections, pages) {
+    /**
+     * @param {HTMLElement} container
+     * @param {*} navDef
+     * @param {Record<string, HTMLElement>} pageSections
+     * @param {Array<*>} pages
+     * @param {*} manifest The manifest being rendered. A nav click re-themes the body from it, and
+     *   without it in scope that call threw into the surrounding catch on every page change — the
+     *   theme silently stayed on the previous page's.
+     */
+    function renderNavBar(container, navDef, pageSections, pages, manifest) {
         const nav = document.createElement('nav');
         nav.className = 'nav-bar';
+
+        // Apply nav styling
+        if (navDef.styles) {
+            for (const [k, v] of Object.entries(navDef.styles)) {
+                const key = k.toLowerCase().replace(/_/g, '-');
+                nav.style[key] = v;
+            }
+        }
 
         // Insert nav before the first page section
         const firstPage = pages.length > 0 ? pageSections[pages[0].name] : null;
@@ -1338,47 +1357,123 @@
         }
 
         const defaultPageName = navDef.defaultPage || (pages.length > 0 ? pages[0].name : null);
-        // Track the current page between refreshes/manifest updates.
-        // We prioritize _lastActivePage (dynamic) over window.__INITIAL_PAGE__ (set at load).
         const requestedPage  = (_lastActivePage || window.__INITIAL_PAGE__ || '').trim();
         const pageToShow     = (requestedPage && pageSections[requestedPage]) ? requestedPage : defaultPageName;
         const itemClass = navDef.navType === 'TAB' ? 'nav-tab' :
                           navDef.navType === 'BUTTON' ? 'nav-btn' : 'nav-link';
         const isLink = navDef.navType === 'LINK';
+        const hideInvisible = isOn(navDef.options?.['HIDE_INVISIBLE'] || navDef.options?.['hide_invisible']);
 
-        navDef.pages.forEach((pageName, idx) => {
+        function applyActiveStyles(element, isActive) {
+            if (!navDef.activeStyles) return;
+            for (const [k, v] of Object.entries(navDef.activeStyles)) {
+                const key = k.toLowerCase().replace(/_/g, '-');
+                if (isActive) element.style[key] = v;
+                else element.style.removeProperty(key);
+            }
+        }
+
+        function createNavItem(item, idx, parent) {
+            const pageName = item.pageName || item;
+            const targetPage = pages.find(p => p.name === pageName);
+            if (hideInvisible && targetPage && !isPageVisible(targetPage)) {
+                return;
+            }
+
             if (isLink && idx > 0) {
                 const sep = document.createElement('span');
                 sep.className = 'nav-sep';
                 sep.textContent = ' | ';
-                nav.appendChild(sep);
+                parent.appendChild(sep);
+            }
+
+            if (item.isExternalLink || item.externalUrl) {
+                const el = document.createElement('a');
+                el.className = itemClass + ' nav-link-external';
+                el.href = safeUrl(item.externalUrl);
+                el.target = item.target || '_blank';
+                el.rel = 'noopener noreferrer';
+                if (item.icon) {
+                    const iconSpan = document.createElement('span');
+                    iconSpan.className = 'nav-icon';
+                    iconSpan.textContent = item.icon;
+                    el.appendChild(iconSpan);
+                }
+                const textSpan = document.createElement('span');
+                textSpan.className = 'nav-text';
+                textSpan.textContent = item.label || 'Link';
+                el.appendChild(textSpan);
+                if (item.badge) {
+                    const badgeSpan = document.createElement('span');
+                    badgeSpan.className = 'nav-badge';
+                    badgeSpan.textContent = item.badge;
+                    el.appendChild(badgeSpan);
+                }
+                parent.appendChild(el);
+                return;
             }
 
             const el = document.createElement('span');
             el.className = itemClass;
-            el.textContent = pageName;
+            if (item.icon) {
+                const iconSpan = document.createElement('span');
+                iconSpan.className = 'nav-icon';
+                iconSpan.textContent = item.icon;
+                el.appendChild(iconSpan);
+            }
+            const textSpan = document.createElement('span');
+            textSpan.className = 'nav-text';
+            textSpan.textContent = item.label || pageName;
+            el.appendChild(textSpan);
+            if (item.badge) {
+                const badgeSpan = document.createElement('span');
+                badgeSpan.className = 'nav-badge';
+                badgeSpan.textContent = item.badge;
+                el.appendChild(badgeSpan);
+            }
 
-            if (pageName === pageToShow) el.classList.add('active');
+            const isActive = (pageName === pageToShow);
+            if (isActive) {
+                el.classList.add('active');
+                applyActiveStyles(el, true);
+            }
 
-            el.dataset.page = pageName; // allows programmatic navigation
+            el.dataset.page = pageName;
             el.addEventListener('click', () => {
                 try {
-                    // Hide all, show clicked
                     navDef.pages.forEach(n => {
                         const s = pageSections[n];
-                        if (s) s.style.display = (n === pageName) ? 'block' : 'none';
+                        if (s) {
+                            if (n === pageName) {
+                                s.style.display = 'block';
+                                const pgDef = pages.find(p => p.name === n);
+                                const trans = (pgDef?.options?.TRANSITION || navDef.options?.TRANSITION || '').toUpperCase();
+                                if (trans === 'FADE') {
+                                    s.style.opacity = '0';
+                                    safeRequestAnimationFrame(() => { s.style.opacity = '1'; });
+                                } else if (trans === 'SLIDE') {
+                                    s.style.transform = 'translateX(20px)';
+                                    s.style.opacity = '0';
+                                    safeRequestAnimationFrame(() => { s.style.transform = 'translateX(0)'; s.style.opacity = '1'; });
+                                }
+                            } else {
+                                s.style.display = 'none';
+                            }
+                        }
                     });
                 } catch (e) {
                     console.error('Error switching page visibility:', e);
                 }
 
-                // Set active state on all matching data-page elements
                 try {
-                    document.querySelectorAll('[data-page]').forEach(item => {
-                        if (item.dataset.page === pageName) {
-                            item.classList.add('active');
+                    document.querySelectorAll('[data-page]').forEach(it => {
+                        const match = (/** @type {HTMLElement} */ (it).dataset.page === pageName);
+                        if (match) {
+                            it.classList.add('active');
+                            applyActiveStyles(it, true);
                         } else {
-                            item.classList.remove('active');
+                            it.classList.remove('active');
+                            applyActiveStyles(it, false);
                         }
                     });
                 } catch (e) {
@@ -1387,7 +1482,6 @@
 
                 _lastActivePage = pageName;
 
-                // Defer resize to the next frame so the active class renders first.
                 try {
                     const target = pageSections[pageName];
                     if (target) safeRequestAnimationFrame(() => resizeChartsIn(target));
@@ -1401,7 +1495,13 @@
                     console.error('Error updating body theme:', e);
                 }
 
-                // Notify portal of user-driven tab change so it can push a history entry
+                try {
+                    const pDef = pages.find(p => p.name === pageName);
+                    executePageOnLoad(pDef);
+                } catch (e) {
+                    console.error('Error executing page actions:', e);
+                }
+
                 try {
                     if (window.parent && window.parent !== window) {
                         window.parent.postMessage({ type: 'etl-page-changed', page: pageName, userTriggered: true }, '*');
@@ -1411,25 +1511,34 @@
                 }
             });
 
-            nav.appendChild(el);
-        });
-
-        // Show the target page, hide others
-        pages.forEach(p => {
-            const s = pageSections[p.name];
-            if (!s) return;
-            if (p.name === pageToShow) {
-                s.style.display = 'block';
-                resizeChartsIn(s);
-            } else {
-                s.style.display = 'none';
-            }
-        });
-
-        // Announce initial page to portal (uses replaceState — no new history entry)
-        if (window.parent && window.parent !== window) {
-            window.parent.postMessage({ type: 'etl-page-changed', page: pageToShow }, '*');
+            parent.appendChild(el);
         }
+
+        if (navDef.groups && navDef.groups.length > 0) {
+            navDef.groups.forEach(group => {
+                const grpDiv = document.createElement('div');
+                grpDiv.className = 'nav-group';
+                if (group.title) {
+                    const t = document.createElement('span');
+                    t.className = 'nav-group-title';
+                    t.textContent = group.title;
+                    grpDiv.appendChild(t);
+                }
+                const grpItems = document.createElement('div');
+                grpItems.className = 'nav-group-items';
+                (group.items || []).forEach((item, idx) => createNavItem(item, idx, grpItems));
+                grpDiv.appendChild(grpItems);
+                nav.appendChild(grpDiv);
+            });
+        } else if (navDef.items && navDef.items.length > 0) {
+            navDef.items.forEach((item, idx) => createNavItem(item, idx, nav));
+        } else {
+            navDef.pages.forEach((pageName, idx) => createNavItem({ pageName: pageName }, idx, nav));
+        }
+
+        // Execute initial page onLoad
+        const initPg = pages.find(p => p.name === pageToShow);
+        executePageOnLoad(initPg);
     }
 
     function syncParameters(params) {
@@ -1444,13 +1553,13 @@
                                     ? [el]
                                     : Array.from(el.querySelectorAll('select, input'));
                     targets.forEach(t => {
-                        if (t.multiple && t.tagName === 'SELECT') {
+                        if (/** @type {HTMLInputElement | HTMLSelectElement} */ (t).multiple && t.tagName === 'SELECT') {
                             const csvValues = (String(val || '')).split(',').map(v => v.trim());
-                            Array.from(t.options).forEach(opt => {
+                            Array.from(/** @type {HTMLSelectElement} */ (t).options).forEach(opt => {
                                 opt.selected = csvValues.includes(opt.value);
                             });
-                        } else if (t.value !== val) {
-                            t.value = val;
+                        } else if (/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (t).value !== val) {
+                            /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (t).value = val;
                         }
                     });
                 }
@@ -1614,6 +1723,35 @@
         if (e.key === 'Escape') closeMaximizedVisual();
     });
 
+    
+    function isPageVisible(page, params) {
+        if (!page) return false;
+        if (page.isHidden) return false;
+        if (page.visibleExpression) {
+            return evaluateExpressionAgainstParameters(page.visibleExpression, params || parameters);
+        }
+        return true;
+    }
+
+    function executePageOnLoad(page) {
+        if (!page || !page.actions) return;
+        page.actions.forEach(action => {
+            const trigger = (action.trigger || 'ON_LOAD').toUpperCase();
+            if (trigger === 'ON_LOAD') {
+                if (action.type === 'SET_PARAMETER' && action.parameterName) {
+                    if (action.value !== undefined && action.value !== null) {
+                        // `setParameter` does not exist. An ON_LOAD SET_PARAMETER action threw
+                        // here instead of applying, so a page that sets its own parameter on load
+                        // rendered with the old value. This is the same call the drill-down and
+                        // SET_PARAMETER action branches make.
+                        postParameters({ [action.parameterName]: String(action.value ?? '') })
+                            .then(m => { if (m) renderManifest(m); });
+                    }
+                }
+            }
+        });
+    }
+
     function renderPage(manifest, page, pageSections, pageTheme) {
         console.debug(`[Layout] Rendering Page: ${page.name}`);
         const div = document.createElement('div');
@@ -1702,8 +1840,20 @@
     }
 
     function renderContainer(container, containerDef, manifest, pageTheme) {
-        const div = document.createElement('div');
         const containerTypeName = (containerDef.containerType || '').toUpperCase();
+        if (containerTypeName === 'MODAL') {
+            return; // Modal dialogs are rendered on-demand via SHOW_MODAL
+        }
+        if (containerTypeName === 'TABS') {
+            renderTabsContainer(container, containerDef, manifest, pageTheme);
+            return;
+        }
+        if (containerTypeName === 'ACCORDION') {
+            renderAccordionContainer(container, containerDef, manifest, pageTheme);
+            return;
+        }
+
+        const div = document.createElement('div');
         const isScroll = containerTypeName === 'SCROLL';
         const isLayer  = containerTypeName === 'LAYER';
         div.className = isScroll ? 'container-scroll' : isLayer ? 'container-layer' : 'container-box';
@@ -1739,8 +1889,28 @@
         const tag = getOption(containerDef.options, 'TAG') || getStyle(containerDef.styles, 'TAG');
         if (tag) div.setAttribute('data-tag', tag);
         const styles = containerDef.styles || {};
+        const opts = containerDef.options || {};
         const containerTheme = getStyle(styles, 'THEME') || pageTheme;
-        const isCollapsible = containerDef.isCollapsible;
+
+        const collapsibleOpt = getOption(opts, 'COLLAPSIBLE');
+        const isCollapsible = containerDef.isCollapsible || isOn(collapsibleOpt);
+        const defaultState = (getOption(opts, 'DEFAULT') || 'OPEN').toUpperCase();
+
+        if (containerDef.refresh && containerDef.refresh > 0) {
+            const rId = setInterval(() => {
+                const visualNames = [];
+                const slotMap = containerDef.slotMap || {};
+                Object.values(slotMap).forEach(target => {
+                    const v = (manifest?.visuals || []).find(x => x.name.toLowerCase() === target.toLowerCase());
+                    if (v) visualNames.push(v.name);
+                });
+                if (visualNames.length > 0) {
+                    if (vscode) vscode.postMessage({ type: 'refreshVisuals', visuals: visualNames });
+                    else postRefreshVisuals(visualNames).then(m => { if (m) renderManifest(m); });
+                }
+            }, containerDef.refresh * 1000);
+            _refreshTimers.push(rId);
+        }
 
         if (isScroll) {
             const height = getStyle(styles, 'HEIGHT') || '400px';
@@ -1773,6 +1943,17 @@
             if (ctAlign) title.style.textAlign = ctAlign.toLowerCase();
             header.appendChild(title);
 
+            const showActiveCount = isOn(getOption(opts, 'SHOW_ACTIVE_COUNT'));
+            if (showActiveCount) {
+                const count = calculateContainerActiveCount(containerDef, manifest);
+                if (count > 0) {
+                    const countBadge = document.createElement('span');
+                    countBadge.className = 'container-active-count-badge';
+                    countBadge.textContent = `${count} active`;
+                    header.appendChild(countBadge);
+                }
+            }
+
             const chevron = document.createElement('span');
             chevron.className = 'container-chevron';
             chevron.innerHTML = '&#x25B2;'; // UP
@@ -1780,7 +1961,8 @@
 
             const name = containerDef.name;
             const persisted = _uiStates[name];
-            if (persisted && persisted.collapsed) {
+            const startCollapsed = (persisted && persisted.collapsed) || (!persisted && defaultState === 'CLOSED');
+            if (startCollapsed) {
                 div.classList.add('collapsed');
                 chevron.innerHTML = '&#x25BC;'; // DOWN
             }
@@ -1927,6 +2109,11 @@
 
         page.appendChild(drawer);
 
+        const drawerDefault = (getOption(containerDef.options, 'DEFAULT') || 'CLOSED').toUpperCase();
+        if (drawerDefault === 'OPEN') {
+            drawer.classList.add('open');
+        }
+
         trigger.onclick = () => {
             drawer.classList.toggle('open');
             if (!drawer.classList.contains('open') && drawer.classList.contains('pinned')) {
@@ -2028,7 +2215,17 @@
         const tag = getOption(visual.options, 'TAG');
         if (tag) card.setAttribute('data-tag', tag);
 
-        card._visualData = visual;
+        const vopts = visual.options || {};
+        const visibleExpr = vopts['VISIBLE'] || vopts['visible'];
+        if (visibleExpr != null && !evaluateExpressionAgainstParameters(visibleExpr, parameters)) {
+            card.style.display = 'none';
+            card.setAttribute('aria-hidden', 'true');
+        }
+
+        const dependsOn = vopts['DEPENDS_ON'] || vopts['depends_on'];
+        if (dependsOn) card.setAttribute('data-depends-on', dependsOn);
+
+        /** @type {EtlSqlVisualHost} */ (card)._visualData = visual;
 
         // Apply WIDTH / HEIGHT / TOOLTIP from styles
         const vstyles = visual.styles || {};
@@ -2355,20 +2552,20 @@
         }
 
         wrapper.addEventListener('click', event => {
-            const trigger = event.target.closest('[data-action]');
+            const trigger = /** @type {Element} */ (event.target).closest('[data-action]');
             if (!trigger || !wrapper.contains(trigger)) return;
-            const actionType = String(trigger.dataset.action || '').toUpperCase();
+            const actionType = String(/** @type {HTMLElement} */ (trigger).dataset.action || '').toUpperCase();
             const declared = (visual.actions || []).find(action =>
                 String(action.type || '').toUpperCase() === actionType
                 && String(action.trigger || '').toUpperCase() === 'ON_CLICK');
             if (!declared) return;
             const action = Object.assign({}, declared);
-            if (trigger.dataset.param) action.parameterName = trigger.dataset.param;
-            if (trigger.dataset.value !== undefined) {
+            if (/** @type {HTMLElement} */ (trigger).dataset.param) action.parameterName = /** @type {HTMLElement} */ (trigger).dataset.param;
+            if (/** @type {HTMLElement} */ (trigger).dataset.value !== undefined) {
                 action.valueSource = 'LITERAL';
-                action.literalValue = trigger.dataset.value;
+                action.literalValue = /** @type {HTMLElement} */ (trigger).dataset.value;
             }
-            executeAction(action, [trigger.dataset.value ?? ''], ['VALUE'], visual.name, visual);
+            executeAction(action, [/** @type {HTMLElement} */ (trigger).dataset.value ?? ''], ['VALUE'], visual.name, visual);
         });
 
         container.appendChild(wrapper);
@@ -2492,7 +2689,7 @@
             if (!state || state.selections.length === 0) return;
             const activeVisuals = new Set(state.selections.map(s => s.visual));
             pageEl.querySelectorAll('.visual-card').forEach(card => {
-                const v = card._visualData;
+                const v = /** @type {EtlSqlVisualHost} */ (card)._visualData;
                 if (!v) return;
                 if (activeVisuals.has(v.name)) {
                     card.classList.add('cross-filter-source');
@@ -2719,9 +2916,9 @@
     function destroyDetailSurfaces(scope) {
         if (!scope || typeof scope.querySelectorAll !== 'function') return;
         scope.querySelectorAll('.chart-wrapper').forEach(wrapper => {
-            const handle = wrapper._detailSurface;
+            const handle = /** @type {EtlSqlVisualHost} */ (wrapper)._detailSurface;
             if (handle && typeof handle.destroy === 'function') handle.destroy();
-            wrapper._detailSurface = null;
+            /** @type {EtlSqlVisualHost} */ (wrapper)._detailSurface = null;
         });
     }
 
@@ -2763,8 +2960,8 @@
         // reachable by keyboard and carries an accessible name.
         function prepareMarks() {
             wrapper.querySelectorAll('[data-row-index]').forEach(mark => {
-                if (mark.dataset.detailReady === '1') return;
-                mark.dataset.detailReady = '1';
+                if (/** @type {HTMLElement} */ (mark).dataset.detailReady === '1') return;
+                /** @type {HTMLElement} */ (mark).dataset.detailReady = '1';
                 mark.setAttribute('tabindex', '0');
                 mark.setAttribute('role', 'button');
                 const context = rowContext(mark);
@@ -3137,17 +3334,184 @@
         // The wrapper owns its detail surface: re-rendering or unmounting the visual
         // tears it down, so a surface can never outlive the marks it is anchored to.
         const detailSurface = attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn);
-        wrapper._detailSurface = detailSurface;
+        /** @type {EtlSqlVisualHost} */ (wrapper)._detailSurface = detailSurface;
         appendDetailStaticNote(container, visual);
 
+        
+        const vopts = visual.options || {};
+        const crosshairOpt = (vopts['CROSSHAIR'] || '').toUpperCase();
+        const crosshairAxis = (vopts['CROSSHAIR_AXIS'] || 'BOTH').toUpperCase();
+        const crosshairColor = vopts['CROSSHAIR_COLOR'] || '#94a3b8';
+        const crosshairDash = vopts['CROSSHAIR_DASH'] || '4 4';
+        const linkTooltipGroup = vopts['LINK_TOOLTIP'] ? vopts['LINK_TOOLTIP'].trim() : null;
+
+        if (linkTooltipGroup) {
+            wrapper.dataset.linkTooltip = linkTooltipGroup;
+        }
+
+        const svgEl = wrapper.querySelector('svg');
+        if (svgEl && (crosshairOpt === 'ON' || crosshairOpt === 'TRUE' || vopts['CROSSHAIR_AXIS'] || linkTooltipGroup)) {
+            let crosshairG = svgEl.querySelector('.plot-crosshair-group');
+            if (!crosshairG) {
+                crosshairG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                crosshairG.setAttribute('class', 'plot-crosshair-group');
+                crosshairG.setAttribute('pointer-events', 'none');
+                /** @type {HTMLElement} */ (crosshairG).style.display = 'none';
+                svgEl.appendChild(crosshairG);
+            }
+
+            const lineX = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            lineX.setAttribute('class', 'plot-crosshair-x');
+            lineX.setAttribute('stroke', crosshairColor);
+            lineX.setAttribute('stroke-dasharray', crosshairDash);
+            lineX.setAttribute('stroke-width', '1');
+            if (crosshairAxis === 'X' || crosshairAxis === 'BOTH') crosshairG.appendChild(lineX);
+
+            const lineY = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            lineY.setAttribute('class', 'plot-crosshair-y');
+            lineY.setAttribute('stroke', crosshairColor);
+            lineY.setAttribute('stroke-dasharray', crosshairDash);
+            lineY.setAttribute('stroke-width', '1');
+            if (crosshairAxis === 'Y' || crosshairAxis === 'BOTH') crosshairG.appendChild(lineY);
+
+            function updateCrosshair(svgPoint) {
+                const bbox = svgEl.viewBox?.baseVal || { x: 0, y: 0, width: svgEl.clientWidth || 600, height: svgEl.clientHeight || 400 };
+                /** @type {HTMLElement} */ (crosshairG).style.display = '';
+                if (lineX) {
+                    lineX.setAttribute('x1', String(svgPoint.x));
+                    lineX.setAttribute('x2', String(svgPoint.x));
+                    lineX.setAttribute('y1', String(bbox.y || 0));
+                    lineX.setAttribute('y2', String((bbox.y || 0) + (bbox.height || 400)));
+                }
+                if (lineY) {
+                    lineY.setAttribute('y1', String(svgPoint.y));
+                    lineY.setAttribute('y2', String(svgPoint.y));
+                    lineY.setAttribute('x1', String(bbox.x || 0));
+                    lineY.setAttribute('x2', String((bbox.x || 0) + (bbox.width || 600)));
+                }
+            }
+
+            function hideCrosshair() {
+                /** @type {HTMLElement} */ (crosshairG).style.display = 'none';
+            }
+
+            /** @type {EtlSqlVisualHost} */ (wrapper)._updateCrosshair = updateCrosshair;
+            /** @type {EtlSqlVisualHost} */ (wrapper)._hideCrosshair = hideCrosshair;
+
+            svgEl.addEventListener('pointermove', event => {
+                const pt = svgEl.createSVGPoint();
+                pt.x = event.clientX;
+                pt.y = event.clientY;
+                const ctm = svgEl.getScreenCTM();
+                if (ctm) {
+                    const svgPt = pt.matrixTransform(ctm.inverse());
+                    updateCrosshair(svgPt);
+
+                    if (linkTooltipGroup) {
+                        const linkedWrappers = document.querySelectorAll(`[data-link-tooltip="${CSS.escape(linkTooltipGroup)}"]`);
+                        linkedWrappers.forEach(w => {
+                            if (w !== wrapper && typeof /** @type {EtlSqlVisualHost} */ (w)._updateCrosshair === 'function') {
+                                /** @type {EtlSqlVisualHost} */ (w)._updateCrosshair(svgPt);
+                            }
+                        });
+                    }
+                }
+            });
+
+            svgEl.addEventListener('pointerleave', () => {
+                hideCrosshair();
+                if (linkTooltipGroup) {
+                    const linkedWrappers = document.querySelectorAll(`[data-link-tooltip="${CSS.escape(linkTooltipGroup)}"]`);
+                    linkedWrappers.forEach(w => {
+                        if (w !== wrapper && typeof /** @type {EtlSqlVisualHost} */ (w)._hideCrosshair === 'function') {
+                            /** @type {EtlSqlVisualHost} */ (w)._hideCrosshair();
+                        }
+                    });
+                }
+            });
+        }
+
+        // Setup Hover Focus & Series Emphasis
+        const hoverFocusMode = (svgEl?.dataset?.hoverFocus || vopts['HOVER_FOCUS'] || 'NONE').toUpperCase();
+        if (svgEl && hoverFocusMode !== 'NONE') {
+            svgEl.addEventListener('pointerover', event => {
+                if (hoverFocusMode === 'SERIES') {
+                    const target = /** @type {Element} */ (event.target).closest('[data-series]');
+                    if (target) {
+                        const seriesKey = /** @type {HTMLElement} */ (target).dataset.series;
+                        const allSeriesMarks = svgEl.querySelectorAll('[data-series]');
+                        allSeriesMarks.forEach(m => {
+                            if (/** @type {HTMLElement} */ (m).dataset.series === seriesKey) {
+                                m.classList.add('plot-series-focused');
+                                m.classList.remove('plot-series-dimmed');
+                            } else {
+                                m.classList.add('plot-series-dimmed');
+                                m.classList.remove('plot-series-focused');
+                            }
+                        });
+                    }
+                } else if (hoverFocusMode === 'SELF') {
+                    const mark = /** @type {Element} */ (event.target).closest('[data-row-index]');
+                    if (mark) {
+                        const allMarks = svgEl.querySelectorAll('[data-row-index]');
+                        allMarks.forEach(m => {
+                            if (m === mark) {
+                                m.classList.add('plot-mark-focused');
+                                m.classList.remove('plot-mark-dimmed');
+                            } else {
+                                m.classList.add('plot-mark-dimmed');
+                                m.classList.remove('plot-mark-focused');
+                            }
+                        });
+                    }
+                }
+            });
+
+            svgEl.addEventListener('pointerleave', () => {
+                if (hoverFocusMode === 'SERIES') {
+                    svgEl.querySelectorAll('.plot-series-focused, .plot-series-dimmed').forEach(m => {
+                        m.classList.remove('plot-series-focused', 'plot-series-dimmed');
+                    });
+                } else if (hoverFocusMode === 'SELF') {
+                    svgEl.querySelectorAll('.plot-mark-focused, .plot-mark-dimmed').forEach(m => {
+                        m.classList.remove('plot-mark-focused', 'plot-mark-dimmed');
+                    });
+                }
+            });
+        }
+
+        // Setup Animation
+        const animOpt = (svgEl?.dataset?.animation || vopts['ANIMATION'] || 'ON').toUpperCase();
+        if (svgEl && animOpt !== 'OFF') {
+            const rawDuration = svgEl?.dataset?.animationDuration || vopts['ANIMATION_DURATION'] || '800';
+            const durationMs = parseInt(rawDuration, 10) || 800;
+            const easingOpt = (svgEl?.dataset?.animationEasing || vopts['ANIMATION_EASING'] || 'EASE_OUT').toUpperCase();
+            const easingMap = {
+                'LINEAR': 'linear',
+                'EASE_IN': 'cubic-bezier(0.4, 0, 1, 1)',
+                'EASE_OUT': 'cubic-bezier(0, 0, 0.2, 1)',
+                'ELASTIC': 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+                'BOUNCE': 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+            };
+            const easingCss = easingMap[easingOpt] || 'cubic-bezier(0, 0, 0.2, 1)';
+            wrapper.style.setProperty('--anim-duration', `${durationMs}ms`);
+            wrapper.style.setProperty('--anim-easing', easingCss);
+            wrapper.classList.add('chart-animated');
+
+            const updateAnimOpt = (svgEl?.dataset?.updateAnimation || vopts['UPDATE_ANIMATION'] || 'ON').toUpperCase();
+            if (updateAnimOpt !== 'OFF') {
+                wrapper.classList.add('update-animated');
+            }
+        }
+
         wrapper.addEventListener('pointerover', event => {
-            const mark = event.target.closest('[data-row-index]');
-            activeRow = mark ? (visual.rows || [])[Number(mark.dataset.rowIndex)] || null : null;
+            const mark = /** @type {Element} */ (event.target).closest('[data-row-index]');
+            activeRow = mark ? (visual.rows || [])[Number(/** @type {HTMLElement} */ (mark).dataset.rowIndex)] || null : null;
         });
         wrapper.addEventListener('click', event => {
-            const mark = event.target.closest('[data-row-index]');
+            const mark = /** @type {Element} */ (event.target).closest('[data-row-index]');
             if (!mark) return;
-            const index = Number(mark.dataset.rowIndex);
+            const index = Number(/** @type {HTMLElement} */ (mark).dataset.rowIndex);
             const row = (visual.rows || [])[index] || [];
             const columnIndex = crossFilter && mappingColumn
                 ? (visual.columns || []).findIndex(column => column.toLowerCase() === mappingColumn.toLowerCase())
@@ -3427,7 +3791,7 @@
 
     function findVisualData(targetName) {
         const el = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`);
-        return el ? el._visualData : null;
+        return el ? /** @type {EtlSqlVisualHost} */ (el)._visualData : null;
     }
 
     // Drill-through back-navigation stack
@@ -3529,6 +3893,371 @@
 
     function hideCtxMenu() {
         if (_ctxMenu) { _ctxMenu.remove(); _ctxMenu = null; }
+    }
+
+    function matchesCondition(cond, val, colName) {
+        let expr = (cond || '').trim();
+        while (expr.startsWith('(') && expr.endsWith(')')) {
+            expr = expr.slice(1, -1).trim();
+        }
+        const betweenMatch = expr.match(/(?:(?:[\w"[\]]+)\s+)?BETWEEN\s+(-?[\d.]+)\s+AND\s+(-?[\d.]+)/i);
+        if (betweenMatch) {
+            const low = parseFloat(betweenMatch[1]);
+            const high = parseFloat(betweenMatch[2]);
+            return val >= low && val <= high;
+        }
+
+        const andParts = expr.split(/\s+AND\s+/i);
+        if (andParts.length > 1) {
+            return andParts.every(part => matchesCondition(part, val, colName));
+        }
+        const orParts = expr.split(/\s+OR\s+/i);
+        if (orParts.length > 1) {
+            return orParts.some(part => matchesCondition(part, val, colName));
+        }
+
+        const bareMatch = expr.match(/^([<>!=]=?|<>)\s*(-?[\d.]+)$/);
+        if (bareMatch) {
+            return compareValues(val, bareMatch[1], parseFloat(bareMatch[2]));
+        }
+
+        const compMatch = expr.match(/^(.*?)\s*([<>!=]=?|<>)\s*(.*?)$/);
+        if (compMatch) {
+            const leftStr = compMatch[1].trim().replace(/^[(\["]+|[)\]"]+$/g, '');
+            const op = compMatch[2];
+            const rightStr = compMatch[3].trim().replace(/^[(\["]+|[)\]"]+$/g, '');
+            const rNum = parseFloat(rightStr);
+            const lNum = parseFloat(leftStr);
+            if (!isNaN(rNum)) return compareValues(val, op, rNum);
+            if (!isNaN(lNum)) return compareValues(lNum, op, val);
+        }
+        return false;
+    }
+
+    function compareValues(a, op, b) {
+        switch (op) {
+            case '>': return a > b;
+            case '>=': return a >= b;
+            case '<': return a < b;
+            case '<=': return a <= b;
+            case '=':
+            case '==': return Math.abs(a - b) < 1e-9;
+            case '!=':
+            case '<>': return Math.abs(a - b) >= 1e-9;
+            default: return false;
+        }
+    }
+
+    function evaluateExpressionAgainstParameters(expr, currentParams) {
+        if (!expr) return false;
+        const s = String(expr).trim();
+        if (/^(true|1|on)$/i.test(s)) return true;
+        if (/^(false|0|off)$/i.test(s)) return false;
+
+        function resolveToken(token) {
+            token = token.trim();
+            if (token.startsWith('@')) {
+                const pKey = token.toLowerCase();
+                for (const k in currentParams) {
+                    if (k.toLowerCase() === pKey) return String(currentParams[k] ?? '');
+                }
+                return '';
+            }
+            if ((token.startsWith("'") && token.endsWith("'")) || (token.startsWith('"') && token.endsWith('"'))) {
+                return token.slice(1, -1);
+            }
+            return token;
+        }
+
+        const m = s.match(/^(.*?)\s*([<>!=]=?|<>)\s*(.*?)$/);
+        if (m) {
+            const left = resolveToken(m[1]);
+            const op = m[2];
+            const right = resolveToken(m[3]);
+
+            const lNum = Number(left);
+            const rNum = Number(right);
+            const bothNum = !isNaN(lNum) && !isNaN(rNum) && left !== '' && right !== '';
+
+            switch (op) {
+                case '=':
+                case '==':
+                    return bothNum ? Math.abs(lNum - rNum) < 1e-9 : left.toLowerCase() === right.toLowerCase();
+                case '!=':
+                case '<>':
+                    return bothNum ? Math.abs(lNum - rNum) >= 1e-9 : left.toLowerCase() !== right.toLowerCase();
+                case '>':
+                    return bothNum ? lNum > rNum : left > right;
+                case '>=':
+                    return bothNum ? lNum >= rNum : left >= right;
+                case '<':
+                    return bothNum ? lNum < rNum : left < right;
+                case '<=':
+                    return bothNum ? lNum <= rNum : left <= right;
+            }
+        }
+
+        if (s.startsWith('@')) {
+            const val = resolveToken(s);
+            return !!val && !/^(false|0|off)$/i.test(val);
+        }
+
+        return false;
+    }
+
+    function applyControlState(input, visual, wrapper) {
+        const opts = visual?.options || {};
+        const disabledExpr = opts['DISABLED'] || opts['disabled'];
+        const readOnlyExpr = opts['READ_ONLY'] || opts['read_only'] || opts['READONLY'] || opts['readonly'];
+        const isDisabled = disabledExpr != null && evaluateExpressionAgainstParameters(disabledExpr, parameters);
+        const isReadOnly = readOnlyExpr != null && evaluateExpressionAgainstParameters(readOnlyExpr, parameters);
+
+        if (input) {
+            if (isDisabled) {
+                input.disabled = true;
+                input.setAttribute('aria-disabled', 'true');
+            }
+            if (isReadOnly) {
+                input.readOnly = true;
+                input.setAttribute('aria-readonly', 'true');
+            }
+        }
+        if (wrapper) {
+            if (isDisabled) wrapper.classList.add('is-disabled');
+            if (isReadOnly) wrapper.classList.add('is-readonly');
+        }
+    }
+
+    function calculateContainerActiveCount(containerDef, manifest) {
+        if (!containerDef || !baselineManifest || !baselineManifest.parameters) return 0;
+        const slotMap = containerDef.slotMap || {};
+        const items = Object.values(slotMap);
+        let activeCount = 0;
+        const countedParams = new Set();
+
+        items.forEach(itemName => {
+            const v = (manifest?.visuals || []).find(vis => vis.name.toLowerCase() === itemName.toLowerCase());
+            if (v) {
+                const changeActions = actionsFor(v, 'ON_CHANGE').concat(actionsFor(v, 'ON_SUBMIT')).filter(a => a.type === 'SET_PARAMETER');
+                changeActions.forEach(a => {
+                    const p = a.parameterName;
+                    if (p && !countedParams.has(p.toLowerCase())) {
+                        countedParams.add(p.toLowerCase());
+                        const curVal = String(getParam(parameters, p) ?? '');
+                        const baseVal = String(getParam(baselineManifest.parameters, p) ?? '');
+                        if (curVal !== baseVal) {
+                            activeCount++;
+                        }
+                    }
+                });
+            }
+        });
+        return activeCount;
+    }
+
+    function showModalDialog(modalName, manifest) {
+        if (!modalName) return;
+        hideModalDialog(modalName);
+
+        const containerDef = (manifest?.containers || []).find(c => c.name.toLowerCase() === modalName.toLowerCase());
+        if (!containerDef) {
+            console.warn('Modal container not found:', modalName);
+            return;
+        }
+
+        const overlay = document.createElement('div');
+        overlay.className = 'report-modal-overlay';
+        overlay.id = 'modal-overlay-' + modalName.toLowerCase();
+
+        const dialog = document.createElement('div');
+        dialog.className = 'report-modal-dialog';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+
+        const header = document.createElement('div');
+        header.className = 'report-modal-header';
+
+        const title = document.createElement('span');
+        title.textContent = containerDef.title || containerDef.name;
+        header.appendChild(title);
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'report-modal-close';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.setAttribute('aria-label', 'Close dialog');
+        closeBtn.onclick = () => hideModalDialog(modalName);
+        header.appendChild(closeBtn);
+
+        dialog.appendChild(header);
+
+        const body = document.createElement('div');
+        body.className = 'report-modal-body';
+        const styles = containerDef.styles || {};
+        const containerTheme = getStyle(styles, 'THEME');
+        renderLayout(body, containerDef, manifest, containerTheme);
+        dialog.appendChild(body);
+
+        overlay.appendChild(dialog);
+        overlay.addEventListener('click', e => {
+            if (e.target === overlay) hideModalDialog(modalName);
+        });
+
+        const onKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                hideModalDialog(modalName);
+                document.removeEventListener('keydown', onKeyDown);
+            }
+        };
+        document.addEventListener('keydown', onKeyDown);
+
+        document.body.appendChild(overlay);
+        setTimeout(() => resizeChartsIn(dialog), 50);
+    }
+
+    function hideModalDialog(modalName) {
+        if (!modalName) return;
+        const overlay = document.getElementById('modal-overlay-' + modalName.toLowerCase());
+        if (overlay) overlay.remove();
+    }
+
+    function renderTabsContainer(container, containerDef, manifest, pageTheme) {
+        const div = document.createElement('div');
+        div.setAttribute('data-name', containerDef.name);
+        applyDesignTokens(div, containerDef, false, manifest);
+        const styles = containerDef.styles || {};
+        const opts = containerDef.options || {};
+        const containerTheme = getStyle(styles, 'THEME') || pageTheme;
+
+        const tabPosition = (getOption(opts, 'TAB_POSITION') || getStyle(styles, 'TAB_POSITION') || 'TOP').toUpperCase();
+        div.className = `report-container container-tabs tabs-position-${tabPosition.toLowerCase()}`;
+
+        const slotMap = containerDef.slotMap || {};
+        const slotDetails = containerDef.slotDetails || {};
+        const slotKeys = Object.keys(slotMap);
+        if (slotKeys.length === 0) {
+            container.appendChild(div);
+            return;
+        }
+
+        const nav = document.createElement('div');
+        nav.className = 'tabs-nav';
+
+        const content = document.createElement('div');
+        content.className = 'tabs-content';
+
+        slotKeys.forEach((key, idx) => {
+            const itemName = slotMap[key];
+            const detail = slotDetails[key] || {};
+            const tabBtn = document.createElement('div');
+            tabBtn.className = 'tabs-tab' + (idx === 0 ? ' active' : '');
+            tabBtn.setAttribute('data-slot', key);
+
+            const iconVal = detail.icon;
+            if (iconVal) {
+                const iconEl = document.createElement('span');
+                iconEl.className = 'tab-icon';
+                if (iconVal.includes('.') || iconVal.includes('/')) {
+                    iconEl.innerHTML = `<img src="${escHtml(safeUrl(iconVal))}" style="width:16px;height:16px;vertical-align:middle;">`;
+                } else {
+                    iconEl.textContent = iconVal;
+                }
+                tabBtn.appendChild(iconEl);
+                tabBtn.appendChild(document.createTextNode(' '));
+            }
+
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'tab-label';
+            const targetVisual = (manifest?.visuals || []).find(v => v.name.toLowerCase() === itemName.toLowerCase());
+            labelSpan.textContent = (targetVisual && targetVisual.title) ? targetVisual.title : itemName;
+            tabBtn.appendChild(labelSpan);
+
+            const badgeVal = detail.badge;
+            if (badgeVal != null && badgeVal !== '') {
+                const badgeEl = document.createElement('span');
+                badgeEl.className = 'tab-badge';
+                badgeEl.textContent = badgeVal;
+                tabBtn.appendChild(badgeEl);
+            }
+
+            const panel = document.createElement('div');
+            panel.className = 'tabs-panel' + (idx === 0 ? ' active' : '');
+            panel.setAttribute('data-slot', key);
+
+            if (targetVisual) {
+                renderVisual(panel, targetVisual, containerTheme, manifest);
+            } else {
+                const nested = (manifest?.containers || []).find(c => c.name.toLowerCase() === itemName.toLowerCase());
+                if (nested) renderContainer(panel, nested, manifest, containerTheme);
+            }
+
+            tabBtn.addEventListener('click', () => {
+                nav.querySelectorAll('.tabs-tab').forEach(t => t.classList.remove('active'));
+                content.querySelectorAll('.tabs-panel').forEach(p => p.classList.remove('active'));
+                tabBtn.classList.add('active');
+                panel.classList.add('active');
+                setTimeout(() => resizeChartsIn(panel), 50);
+            });
+
+            nav.appendChild(tabBtn);
+            content.appendChild(panel);
+        });
+
+        div.appendChild(nav);
+        div.appendChild(content);
+        container.appendChild(div);
+        setTimeout(() => resizeChartsIn(content), 50);
+    }
+
+    function renderAccordionContainer(container, containerDef, manifest, pageTheme) {
+        const div = document.createElement('div');
+        div.setAttribute('data-name', containerDef.name);
+        applyDesignTokens(div, containerDef, false, manifest);
+        div.className = 'report-container container-accordion';
+
+        const styles = containerDef.styles || {};
+        const opts = containerDef.options || {};
+        const containerTheme = getStyle(styles, 'THEME') || pageTheme;
+        const defaultOpen = (getOption(opts, 'DEFAULT_OPEN') || '').toLowerCase();
+
+        const slotMap = containerDef.slotMap || {};
+        const slotKeys = Object.keys(slotMap);
+
+        slotKeys.forEach(key => {
+            const itemName = slotMap[key];
+            const targetVisual = (manifest?.visuals || []).find(v => v.name.toLowerCase() === itemName.toLowerCase());
+            const sectionTitle = (targetVisual && targetVisual.title) ? targetVisual.title : itemName;
+
+            const itemEl = document.createElement('div');
+            itemEl.className = 'accordion-item';
+            const isOpen = defaultOpen && (key.toLowerCase() === defaultOpen || itemName.toLowerCase() === defaultOpen);
+            if (isOpen) itemEl.classList.add('open');
+
+            const headerEl = document.createElement('div');
+            headerEl.className = 'accordion-header';
+            headerEl.innerHTML = `<span>${escHtml(sectionTitle)}</span><span class="accordion-chevron">&#x25BC;</span>`;
+
+            const contentEl = document.createElement('div');
+            contentEl.className = 'accordion-content';
+
+            if (targetVisual) {
+                renderVisual(contentEl, targetVisual, containerTheme, manifest);
+            } else {
+                const nested = (manifest?.containers || []).find(c => c.name.toLowerCase() === itemName.toLowerCase());
+                if (nested) renderContainer(contentEl, nested, manifest, containerTheme);
+            }
+
+            headerEl.addEventListener('click', () => {
+                const opened = itemEl.classList.toggle('open');
+                if (opened) setTimeout(() => resizeChartsIn(contentEl), 50);
+            });
+
+            itemEl.appendChild(headerEl);
+            itemEl.appendChild(contentEl);
+            div.appendChild(itemEl);
+        });
+
+        container.appendChild(div);
+        setTimeout(() => resizeChartsIn(div), 50);
     }
 
     // ── Table ───────────────────────────────────────────────────────────────
@@ -4049,7 +4778,7 @@
         // Right-click → Drill Down & Export
         wrapper.addEventListener('contextmenu', e => {
             e.preventDefault();
-            const tr  = e.target.closest('tr');
+            const tr  = /** @type {Element} */ (e.target).closest('tr');
             const idx = tr ? Array.from(tbody.rows).indexOf(tr) : -1;
             const filtered = getFilteredRows();
             const start = pageSize > 0 ? state.page * pageSize : 0;
@@ -4241,56 +4970,11 @@
         }
 
         function matchesMatrixCondition(cond, val, colName) {
-            let expr = cond.trim();
-            while (expr.startsWith('(') && expr.endsWith(')')) {
-                expr = expr.slice(1, -1).trim();
-            }
-            const betweenMatch = expr.match(/(?:(?:[\w"[\]]+)\s+)?BETWEEN\s+(-?[\d.]+)\s+AND\s+(-?[\d.]+)/i);
-            if (betweenMatch) {
-                const low = parseFloat(betweenMatch[1]);
-                const high = parseFloat(betweenMatch[2]);
-                return val >= low && val <= high;
-            }
-
-            const andParts = expr.split(/\s+AND\s+/i);
-            if (andParts.length > 1) {
-                return andParts.every(part => matchesMatrixCondition(part, val, colName));
-            }
-            const orParts = expr.split(/\s+OR\s+/i);
-            if (orParts.length > 1) {
-                return orParts.some(part => matchesMatrixCondition(part, val, colName));
-            }
-
-            const bareMatch = expr.match(/^([<>!=]=?|<>)\s*(-?[\d.]+)$/);
-            if (bareMatch) {
-                return compareMatrixValues(val, bareMatch[1], parseFloat(bareMatch[2]));
-            }
-
-            const compMatch = expr.match(/^(.*?)\s*([<>!=]=?|<>)\s*(.*?)$/);
-            if (compMatch) {
-                const leftStr = compMatch[1].trim().replace(/^[(\["]+|[)\]"]+$/g, '');
-                const op = compMatch[2];
-                const rightStr = compMatch[3].trim().replace(/^[(\["]+|[)\]"]+$/g, '');
-                const rNum = parseFloat(rightStr);
-                const lNum = parseFloat(leftStr);
-                if (!isNaN(rNum)) return compareMatrixValues(val, op, rNum);
-                if (!isNaN(lNum)) return compareMatrixValues(lNum, op, val);
-            }
-            return false;
+            return matchesCondition(cond, val, colName);
         }
 
         function compareMatrixValues(a, op, b) {
-            switch (op) {
-                case '>': return a > b;
-                case '>=': return a >= b;
-                case '<': return a < b;
-                case '<=': return a <= b;
-                case '=':
-                case '==': return Math.abs(a - b) < 1e-9;
-                case '!=':
-                case '<>': return Math.abs(a - b) >= 1e-9;
-                default: return false;
-            }
+            return compareValues(a, op, b);
         }
 
         function formatAndDecorateValueCell(td, rawVal, vi, isTotal) {
@@ -4861,7 +5545,29 @@
             if (dIdx >= 0 && rawValue !== null) deltaAmount = rawValue - parseFloat(row[dIdx] ?? '0');
         }
         const deltaFormat = getOption(opts, 'delta_format') || formatOpt;
-        const deltaLabel  = getOption(opts, 'delta_label')  || '';
+        let deltaLabel = '';
+        const deltaLabelMapping = getOption(opts, 'mapping:delta_label');
+        if (deltaLabelMapping && row) {
+            const dlIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === deltaLabelMapping.toLowerCase());
+            if (dlIdx >= 0 && row[dlIdx] !== undefined && row[dlIdx] !== null) {
+                deltaLabel = String(row[dlIdx]);
+            }
+        }
+        if (!deltaLabel) {
+            const deltaLabelOpt = getOption(opts, 'delta_label');
+            if (deltaLabelOpt) {
+                if (row) {
+                    const dlIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === deltaLabelOpt.toLowerCase());
+                    if (dlIdx >= 0 && row[dlIdx] !== undefined && row[dlIdx] !== null) {
+                        deltaLabel = String(row[dlIdx]);
+                    } else {
+                        deltaLabel = deltaLabelOpt;
+                    }
+                } else {
+                    deltaLabel = deltaLabelOpt;
+                }
+            }
+        }
         const trendDir    = (getOption(opts, 'trend_dir') || 'POSITIVE_UP').toUpperCase();
 
         // ── Status label override ──────────────────────────────────────────
@@ -4967,12 +5673,33 @@
         const titleInner = visual.titleIsMarkdown ? renderInlineMarkdown(cardTitle) : escHtml(cardTitle);
         const subInner = visual.subtitleIsMarkdown ? renderInlineMarkdown(subtitleText) : escHtml(subtitleText);
 
+        // ── Value Color ──────────────────────────────────────────────────
+        let valueColor = null;
+        if (visual.rowFontStyles && visual.rowFontStyles.length > 0 && visual.rowFontStyles[0]) {
+            valueColor = visual.rowFontStyles[0];
+        } else if (visual.rowStyles && visual.rowStyles.length > 0 && visual.rowStyles[0]) {
+            valueColor = visual.rowStyles[0];
+        } else if (visual.formattingRules && visual.formattingRules.length > 0 && rawValue !== null && !isNaN(rawValue)) {
+            for (let i = 0; i < visual.formattingRules.length; i++) {
+                const rule = visual.formattingRules[i];
+                const cond = (rule.condition || rule.Condition || '').trim();
+                if (!cond) continue;
+                if (matchesCondition(cond, rawValue, 'VALUE')) {
+                    valueColor = rule.fontColor || rule.FontColor || rule.color || rule.Color;
+                    break;
+                }
+            }
+        }
+        if (!valueColor) {
+            valueColor = getOption(opts, 'value_color') || getStyle(vstyles, 'VALUE_COLOR') || null;
+        }
+
         const cardEl = document.createElement('div');
         cardEl.className = 'card-value' + (status ? ` card-status-${status}` : '');
         cardEl.innerHTML =
             `<div class="card-header-row"${headerRowStyleAttr ? ` style="${headerRowStyleAttr}"` : ''}><div class="card-label"${titleStyleAttr ? ` style="${titleStyleAttr}"` : ''}>${titleInner}</div>${badgeHtml}</div>` +
             (subtitleText ? `<div class="card-subtitle"${subStyleAttr ? ` style="${subStyleAttr}"` : ''}>${subInner}</div>` : '') +
-            `<div class="card-number">${escHtml(String(displayValue))}</div>` +
+            `<div class="card-number"${valueColor ? ` style="color:${escHtml(valueColor)};"` : ''}>${escHtml(String(displayValue))}</div>` +
             goalLineHtml + goalPctHtml + deltaHtml + progressHtml;
         const sparkline = Array.isArray(visual.microCharts)
             ? visual.microCharts.find(micro => micro.role === 'card.sparkline')
@@ -5001,151 +5728,498 @@
         const wrapper = document.createElement('div');
         wrapper.className = 'slicer-wrapper';
 
+        const opts = visual.options || {};
+        const vstyles = visual.styles || {};
         const action = visual.actions.find(a => a.type === 'SET_PARAMETER');
         const paramName = action ? action.parameterName : null;
 
         const typeStr = visual.visualType.toLowerCase();
-        const isMulti = typeStr === 'multiselect' || isOn(visual.options['MULTIPLE'] || visual.options['multiple']);
+        const modeOpt = (getOption(opts, 'mode') || '').toUpperCase();
+        const isMulti = typeStr === 'multiselect' || modeOpt === 'MULTI' || isOn(opts['multiple'] || opts['MULTIPLE']);
 
         const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
         const isInteractive = (isWebMode || vscode) && changeActions.length > 0;
 
-        if (isMulti && isInteractive) {
-            renderMultiSelectCheckboxes(wrapper, visual, manifest, paramName, changeActions);
-        } else {
-            const select = document.createElement('select');
-            setParameterAccessibleName(select, visual, paramName);
-            if (paramName) select.setAttribute('data-parameter', paramName);
-            if (isMulti) select.multiple = true;
+        const valCol = (getOption(opts, 'mapping:value') || visual.columns[0] || 'value').toLowerCase();
+        const lblCol = (getOption(opts, 'mapping:label') || (visual.columns.length > 1 ? visual.columns[1] : visual.columns[0]) || 'label').toLowerCase();
+        const imgCol = (getOption(opts, 'mapping:image') || getOption(opts, 'image') || '').toLowerCase();
 
-            const valCol = (visual.options['mapping:value'] || visual.columns[0] || 'value').toLowerCase();
-            const lblCol = (visual.options['mapping:label'] || visual.columns[1] || visual.columns[0] || 'label').toLowerCase();
-            const valIdx = visual.columns.findIndex(c => c.toLowerCase() === valCol);
-            const lblIdx = visual.columns.findIndex(c => c.toLowerCase() === lblCol);
-            const finalValIdx = valIdx >= 0 ? valIdx : 0;
-            const finalLblIdx = lblIdx >= 0 ? lblIdx : (visual.columns.length > 1 ? 1 : 0);
-
-            visual.rows.forEach(row => {
-                const opt = document.createElement('option');
-                opt.value = row[finalValIdx];
-                opt.textContent = row[finalLblIdx];
-                select.appendChild(opt);
-            });
-
-            if (paramName && manifest && manifest.parameters) {
-                const current = getParam(manifest.parameters, paramName);
-                if (current !== undefined && select.multiple) {
-                    const selected = new Set(parseMultiParameter(current));
-                    Array.from(select.options).forEach(option => { option.selected = selected.has(option.value); });
-                } else if (current !== undefined) select.value = current;
-            }
-
-            if (isInteractive) {
-                select.addEventListener('change', () => {
-                    let val = select.value;
-                    if (select.multiple) {
-                        val = JSON.stringify(Array.from(select.selectedOptions).map(o => o.value));
-                    }
-                    const batch = {};
-                    changeActions.forEach(action => {
-                        batch[action.parameterName] = val;
-                    });
-                    postParameters(batch).then(m => { if (m) renderManifest(m); });
-                });
-                wrapper.appendChild(select);
-            } else {
-                const note = document.createElement('p');
-                note.className = 'slicer-note';
-                note.textContent = '[Slicer \u2014 interactive in ReportPlayer only]';
-                wrapper.appendChild(note);
-            }
-        }
-        container.appendChild(wrapper);
-    }
-
-    function renderMultiSelectCheckboxes(container, visual, manifest, paramName, changeActions) {
-        const isDropdown = (getStyle(visual.styles, 'LAYOUT') || '').toUpperCase() === 'DROPDOWN';
-
-        const list = document.createElement('div');
-        list.className = isDropdown ? 'multiselect-popup' : 'multiselect-list';
-        if (paramName) list.setAttribute('data-parameter', paramName);
-
-        const valCol = (visual.options['mapping:value'] || visual.columns[0] || 'value').toLowerCase();
         const valIdx = visual.columns.findIndex(c => c.toLowerCase() === valCol);
+        const lblIdx = visual.columns.findIndex(c => c.toLowerCase() === lblCol);
+        const imgIdx = imgCol ? visual.columns.findIndex(c => c.toLowerCase() === imgCol) : -1;
+
         const finalValIdx = valIdx >= 0 ? valIdx : 0;
+        const finalLblIdx = lblIdx >= 0 ? lblIdx : (visual.columns.length > 1 ? 1 : 0);
 
-        const currentVal = getParam(manifest.parameters, paramName) || '';
-        const selected = new Set(parseMultiParameter(currentVal));
-
-        let updateToggleText = null;
-
-        const uniqueOptions = [...new Set(visual.rows.map(r => String(r[finalValIdx])))].sort();
-
-        uniqueOptions.forEach(optVal => {
-            const item = document.createElement('label');
-            item.className = 'multiselect-item';
-
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.value = optVal;
-            cb.checked = selected.has(optVal);
-            setParameterAccessibleName(cb, visual, paramName, optVal);
-
-            cb.addEventListener('change', () => {
-                if (cb.checked) selected.add(optVal);
-                else selected.delete(optVal);
-
-                if (updateToggleText) updateToggleText();
-
-                const val = JSON.stringify(Array.from(selected));
-                changeActions.forEach(a => {
-                    postParameters({ [a.parameterName]: val }).then(m => { if (m) renderManifest(m); });
-                });
-            });
-
-            const span = document.createElement('span');
-            span.textContent = optVal;
-
-            item.appendChild(cb);
-            item.appendChild(span);
-            list.appendChild(item);
+        // Extract options
+        const rawItems = (visual.rows || []).map((row, idx) => {
+            const val = String(row[finalValIdx] ?? '');
+            const lbl = String(row[finalLblIdx] ?? val);
+            const img = imgIdx >= 0 && row[imgIdx] != null ? String(row[imgIdx]) : null;
+            return { value: val, label: lbl, image: img, origIndex: idx };
         });
 
-        if (isDropdown) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'multiselect-dropdown';
+        // Deduplicate by value
+        const seen = new Set();
+        const items = [];
+        rawItems.forEach(it => {
+            if (!seen.has(it.value)) {
+                seen.add(it.value);
+                items.push(it);
+            }
+        });
 
-            const toggle = document.createElement('button');
-            toggle.type = 'button';
-            toggle.className = 'multiselect-toggle';
+        // Sorting
+        const sortOpt = (getOption(opts, 'sort') || 'SOURCE').toUpperCase();
+        if (sortOpt === 'ALPHA' || sortOpt === 'LABEL') {
+            items.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+        } else if (sortOpt === 'VALUE') {
+            items.sort((a, b) => {
+                const an = parseFloat(a.value), bn = parseFloat(b.value);
+                return (!isNaN(an) && !isNaN(bn)) ? an - bn : a.value.localeCompare(b.value);
+            });
+        }
 
-            updateToggleText = () => {
-                if (selected.size === 0) toggle.innerHTML = '<span>All</span>';
-                else if (selected.size === 1) toggle.innerHTML = `<span>${escHtml(Array.from(selected)[0])}</span>`;
-                else toggle.innerHTML = `<span>${selected.size} selected</span>`;
-                toggle.innerHTML += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
-            };
-            updateToggleText();
+        // Option limit
+        const maxOptions = parseInt(getOption(opts, 'max_options') || '0', 10);
+        const totalOptions = items.length;
+        const hasOverflow = maxOptions > 0 && totalOptions > maxOptions;
+        const displayedItems = hasOverflow ? items.slice(0, maxOptions) : items;
 
-            toggle.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const isOpen = list.classList.contains('open');
-                document.querySelectorAll('.multiselect-popup.open').forEach(p => p.classList.remove('open'));
-                if (!isOpen) list.classList.add('open');
+        // Current parameter / default value
+        let currentVal = undefined;
+        if (paramName && manifest && manifest.parameters) {
+            currentVal = getParam(manifest.parameters, paramName);
+        }
+        if (currentVal === undefined || currentVal === null || currentVal === '') {
+            currentVal = visual.defaultValue || getOption(opts, 'default') || '';
+        }
+
+        const param = paramName;
+
+        let selected = isMulti
+            ? new Set(parseMultiParameter(currentVal))
+            : (currentVal !== undefined && currentVal !== '' ? String(currentVal) : (displayedItems[0]?.value ?? ''));
+
+        // Layout
+        let layout = (getStyle(vstyles, 'LAYOUT') || getOption(opts, 'layout') || '').toUpperCase();
+        if (!layout) {
+            layout = typeStr === 'multiselect' ? 'LIST' : 'DROPDOWN';
+        }
+
+        // Searchable
+        const isSearchable = isOn(getOption(opts, 'searchable'));
+
+        // Select All control
+        const showSelectAll = isMulti && (isOn(getOption(opts, 'show_select_all')) || isOn(getOption(opts, 'legend')));
+        const selectAllLabel = getOption(opts, 'select_all_label') || 'Select All';
+        const clearAllLabel = getOption(opts, 'clear_all_label') || 'Clear All';
+
+        // Image styling options
+        const imgSize = getOption(opts, 'image_size') || '24px';
+        const imgPos = (getOption(opts, 'image_position') || 'LEFT').toUpperCase();
+        const imgFit = getOption(opts, 'image_fit') || 'cover';
+
+        function postBatch(val) {
+            if (!isInteractive) return;
+            const batch = {};
+            changeActions.forEach(a => {
+                batch[a.parameterName] = val;
+            });
+            postParameters(batch).then(m => { if (m) renderManifest(m); });
+        }
+
+        function createOptionImage(src) {
+            if (!src) return null;
+            const img = document.createElement('img');
+            img.src = src;
+            img.className = 'slicer-option-image' + (imgPos === 'TOP' ? ' pos-top' : '');
+            img.style.width = imgSize;
+            img.style.height = imgSize;
+            img.style.objectFit = imgFit;
+            return img;
+        }
+
+        function createOverflowIndicator() {
+            if (!hasOverflow) return null;
+            const div = document.createElement('div');
+            div.className = isMulti ? 'multiselect-overflow' : 'slicer-overflow';
+            div.textContent = `Showing first ${maxOptions} of ${totalOptions} options`;
+            return div;
+        }
+
+        // Render based on layout
+        if (layout === 'TILE' || layout === 'BUTTON_BAR' || layout === 'CHIPS') {
+            if (isSearchable) {
+                const searchIn = document.createElement('input');
+                searchIn.type = 'search';
+                searchIn.className = isMulti ? 'multiselect-search' : 'slicer-search';
+                searchIn.placeholder = 'Type to filter…';
+                wrapper.appendChild(searchIn);
+            }
+
+            if (showSelectAll) {
+                const headerActions = document.createElement('div');
+                headerActions.className = 'multiselect-header-actions';
+                const selAllBtn = document.createElement('button');
+                selAllBtn.type = 'button';
+                selAllBtn.className = 'multiselect-link';
+                selAllBtn.textContent = selectAllLabel;
+                const clrAllBtn = document.createElement('button');
+                clrAllBtn.type = 'button';
+                clrAllBtn.className = 'multiselect-link';
+                clrAllBtn.textContent = clearAllLabel;
+                headerActions.appendChild(selAllBtn);
+                headerActions.appendChild(clrAllBtn);
+                wrapper.appendChild(headerActions);
+
+                selAllBtn.addEventListener('click', () => {
+                    displayedItems.forEach(it => selected.add(it.value));
+                    tileContainer.querySelectorAll('.slicer-tile, .multiselect-chip').forEach(t => t.classList.add('active'));
+                    postBatch(JSON.stringify(Array.from(selected)));
+                });
+                clrAllBtn.addEventListener('click', () => {
+                    selected.clear();
+                    tileContainer.querySelectorAll('.slicer-tile, .multiselect-chip').forEach(t => t.classList.remove('active'));
+                    postBatch(JSON.stringify([]));
+                });
+            }
+
+            const tileContainer = document.createElement('div');
+            tileContainer.className = layout === 'BUTTON_BAR' ? 'slicer-button-bar' : (layout === 'CHIPS' ? 'multiselect-chips' : 'slicer-tile-container');
+            if (paramName) tileContainer.setAttribute('data-parameter', paramName);
+
+            const tileEntries = [];
+            displayedItems.forEach(item => {
+                const tile = document.createElement('button');
+                tile.type = 'button';
+                tile.className = (layout === 'CHIPS' ? 'multiselect-chip' : 'slicer-tile') + (imgPos === 'TOP' ? ' pos-top' : '');
+                const isSelected = isMulti ? selected.has(item.value) : (selected === item.value);
+                if (isSelected) tile.classList.add('active');
+                setParameterAccessibleName(tile, visual, paramName, item.label);
+
+                const imgEl = createOptionImage(item.image);
+                const labelSpan = document.createElement('span');
+                labelSpan.textContent = item.label;
+
+                if (imgEl && imgPos === 'RIGHT') {
+                    tile.appendChild(labelSpan);
+                    tile.appendChild(imgEl);
+                } else {
+                    if (imgEl) tile.appendChild(imgEl);
+                    tile.appendChild(labelSpan);
+                }
+
+                tile.addEventListener('click', () => {
+                    if (isMulti) {
+                        if (selected.has(item.value)) {
+                            selected.delete(item.value);
+                            tile.classList.remove('active');
+                        } else {
+                            selected.add(item.value);
+                            tile.classList.add('active');
+                        }
+                        postBatch(JSON.stringify(Array.from(selected)));
+                    } else {
+                        tileContainer.querySelectorAll('.slicer-tile, .multiselect-chip').forEach(t => t.classList.remove('active'));
+                        tile.classList.add('active');
+                        selected = item.value;
+                        postBatch(item.value);
+                    }
+                });
+
+                tileContainer.appendChild(tile);
+                tileEntries.push({ el: tile, item });
             });
 
-            list.addEventListener('click', e => e.stopPropagation());
+            wrapper.appendChild(tileContainer);
 
-            // Add global click listener once per dropdown
-            document.addEventListener('click', () => {
-                list.classList.remove('open');
+            if (isSearchable) {
+                const searchIn = wrapper.querySelector('.slicer-search, .multiselect-search');
+                searchIn?.addEventListener('input', () => {
+                    const q = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (searchIn).value.toLowerCase().trim();
+                    tileEntries.forEach(({ el, item }) => {
+                        const m = !q || item.label.toLowerCase().includes(q) || item.value.toLowerCase().includes(q);
+                        el.style.display = m ? '' : 'none';
+                    });
+                });
+            }
+
+            const overflowEl = createOverflowIndicator();
+            if (overflowEl) wrapper.appendChild(overflowEl);
+
+        } else if (layout === 'LIST') {
+            if (isSearchable) {
+                const searchIn = document.createElement('input');
+                searchIn.type = 'search';
+                searchIn.className = isMulti ? 'multiselect-search' : 'slicer-search';
+                searchIn.placeholder = 'Type to filter…';
+                wrapper.appendChild(searchIn);
+            }
+
+            if (showSelectAll) {
+                const headerActions = document.createElement('div');
+                headerActions.className = 'multiselect-header-actions';
+                const selAllBtn = document.createElement('button');
+                selAllBtn.type = 'button';
+                selAllBtn.className = 'multiselect-link';
+                selAllBtn.textContent = selectAllLabel;
+                const clrAllBtn = document.createElement('button');
+                clrAllBtn.type = 'button';
+                clrAllBtn.className = 'multiselect-link';
+                clrAllBtn.textContent = clearAllLabel;
+                headerActions.appendChild(selAllBtn);
+                headerActions.appendChild(clrAllBtn);
+                wrapper.appendChild(headerActions);
+
+                selAllBtn.addEventListener('click', () => {
+                    displayedItems.forEach(it => selected.add(it.value));
+                    list.querySelectorAll('input[type="checkbox"]').forEach(cb => { /** @type {HTMLInputElement} */ (cb).checked = true; });
+                    postBatch(JSON.stringify(Array.from(selected)));
+                });
+                clrAllBtn.addEventListener('click', () => {
+                    selected.clear();
+                    list.querySelectorAll('input[type="checkbox"]').forEach(cb => { /** @type {HTMLInputElement} */ (cb).checked = false; });
+                    postBatch(JSON.stringify([]));
+                });
+            }
+
+            const list = document.createElement('div');
+            list.className = 'multiselect-list';
+            if (paramName) list.setAttribute('data-parameter', paramName);
+
+            const listEntries = [];
+            displayedItems.forEach(item => {
+                const itemEl = document.createElement('label');
+                itemEl.className = 'multiselect-item' + (imgPos === 'TOP' ? ' pos-top' : '');
+
+                const input = document.createElement('input');
+                input.type = isMulti ? 'checkbox' : 'radio';
+                if (!isMulti && paramName) input.name = paramName;
+                input.value = item.value;
+                input.checked = isMulti ? selected.has(item.value) : (selected === item.value);
+                setParameterAccessibleName(input, visual, paramName, item.label);
+
+                input.addEventListener('change', () => {
+                    if (isMulti) {
+                        if (input.checked) selected.add(item.value);
+                        else selected.delete(item.value);
+                        postBatch(JSON.stringify(Array.from(selected)));
+                    } else {
+                        selected = item.value;
+                        postBatch(item.value);
+                    }
+                });
+
+                const imgEl = createOptionImage(item.image);
+                const span = document.createElement('span');
+                span.textContent = item.label;
+
+                itemEl.appendChild(input);
+                if (imgEl && imgPos === 'RIGHT') {
+                    itemEl.appendChild(span);
+                    itemEl.appendChild(imgEl);
+                } else {
+                    if (imgEl) itemEl.appendChild(imgEl);
+                    itemEl.appendChild(span);
+                }
+
+                list.appendChild(itemEl);
+                listEntries.push({ el: itemEl, item });
             });
 
-            wrapper.appendChild(toggle);
             wrapper.appendChild(list);
-            container.appendChild(wrapper);
+
+            if (isSearchable) {
+                const searchIn = wrapper.querySelector('.slicer-search, .multiselect-search');
+                searchIn?.addEventListener('input', () => {
+                    const q = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (searchIn).value.toLowerCase().trim();
+                    listEntries.forEach(({ el, item }) => {
+                        const m = !q || item.label.toLowerCase().includes(q) || item.value.toLowerCase().includes(q);
+                        el.style.display = m ? '' : 'none';
+                    });
+                });
+            }
+
+            const overflowEl = createOverflowIndicator();
+            if (overflowEl) wrapper.appendChild(overflowEl);
+
         } else {
-            container.appendChild(list);
+            // DROPDOWN layout
+            if (isMulti) {
+                const dropWrapper = document.createElement('div');
+                dropWrapper.className = 'multiselect-dropdown';
+
+                const toggle = document.createElement('button');
+                toggle.type = 'button';
+                toggle.className = 'multiselect-toggle';
+
+                const updateToggleText = () => {
+                    if (selected.size === 0) toggle.innerHTML = '<span>All</span>';
+                    else if (selected.size === 1) toggle.innerHTML = `<span>${escHtml(Array.from(selected)[0])}</span>`;
+                    else toggle.innerHTML = `<span>${selected.size} selected</span>`;
+                    toggle.innerHTML += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+                };
+                updateToggleText();
+
+                const popup = document.createElement('div');
+                popup.className = 'multiselect-popup';
+                if (paramName) popup.setAttribute('data-parameter', paramName);
+
+                if (isSearchable) {
+                    const searchIn = document.createElement('input');
+                    searchIn.type = 'search';
+                    searchIn.className = 'multiselect-search';
+                    searchIn.placeholder = 'Type to filter…';
+                    searchIn.addEventListener('click', e => e.stopPropagation());
+                    popup.appendChild(searchIn);
+                }
+
+                if (showSelectAll) {
+                    const headerActions = document.createElement('div');
+                    headerActions.className = 'multiselect-header-actions';
+                    const selAllBtn = document.createElement('button');
+                    selAllBtn.type = 'button';
+                    selAllBtn.className = 'multiselect-link';
+                    selAllBtn.textContent = selectAllLabel;
+                    const clrAllBtn = document.createElement('button');
+                    clrAllBtn.type = 'button';
+                    clrAllBtn.className = 'multiselect-link';
+                    clrAllBtn.textContent = clearAllLabel;
+                    headerActions.appendChild(selAllBtn);
+                    headerActions.appendChild(clrAllBtn);
+                    popup.appendChild(headerActions);
+
+                    selAllBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        displayedItems.forEach(it => selected.add(it.value));
+                        popup.querySelectorAll('input[type="checkbox"]').forEach(cb => { /** @type {HTMLInputElement} */ (cb).checked = true; });
+                        updateToggleText();
+                        postBatch(JSON.stringify(Array.from(selected)));
+                    });
+                    clrAllBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        selected.clear();
+                        popup.querySelectorAll('input[type="checkbox"]').forEach(cb => { /** @type {HTMLInputElement} */ (cb).checked = false; });
+                        updateToggleText();
+                        postBatch(JSON.stringify([]));
+                    });
+                }
+
+                const popupEntries = [];
+                displayedItems.forEach(item => {
+                    const itemEl = document.createElement('label');
+                    itemEl.className = 'multiselect-item';
+
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.value = item.value;
+                    cb.checked = selected.has(item.value);
+                    const val = item.value;
+                    setParameterAccessibleName(cb, visual, param, val);
+
+                    cb.addEventListener('change', () => {
+                        if (cb.checked) selected.add(item.value);
+                        else selected.delete(item.value);
+                        updateToggleText();
+                        postBatch(JSON.stringify(Array.from(selected)));
+                    });
+
+                    const imgEl = createOptionImage(item.image);
+                    const span = document.createElement('span');
+                    span.textContent = item.label;
+
+                    itemEl.appendChild(cb);
+                    if (imgEl && imgPos === 'RIGHT') {
+                        itemEl.appendChild(span);
+                        itemEl.appendChild(imgEl);
+                    } else {
+                        if (imgEl) itemEl.appendChild(imgEl);
+                        itemEl.appendChild(span);
+                    }
+
+                    popup.appendChild(itemEl);
+                    popupEntries.push({ el: itemEl, item });
+                });
+
+                if (isSearchable) {
+                    const searchIn = popup.querySelector('.multiselect-search');
+                    searchIn?.addEventListener('input', () => {
+                        const q = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (searchIn).value.toLowerCase().trim();
+                        popupEntries.forEach(({ el, item }) => {
+                            const m = !q || item.label.toLowerCase().includes(q) || item.value.toLowerCase().includes(q);
+                            el.style.display = m ? '' : 'none';
+                        });
+                    });
+                }
+
+                const overflowEl = createOverflowIndicator();
+                if (overflowEl) popup.appendChild(overflowEl);
+
+                toggle.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isOpen = popup.classList.contains('open');
+                    document.querySelectorAll('.multiselect-popup.open').forEach(p => p.classList.remove('open'));
+                    if (!isOpen) popup.classList.add('open');
+                });
+                popup.addEventListener('click', e => e.stopPropagation());
+                document.addEventListener('click', () => { popup.classList.remove('open'); });
+
+                dropWrapper.appendChild(toggle);
+                dropWrapper.appendChild(popup);
+                wrapper.appendChild(dropWrapper);
+
+            } else {
+                // Single-select dropdown
+                if (isSearchable) {
+                    const searchIn = document.createElement('input');
+                    searchIn.type = 'search';
+                    searchIn.className = 'slicer-search';
+                    searchIn.placeholder = 'Type to filter…';
+                    wrapper.appendChild(searchIn);
+                }
+
+                const select = document.createElement('select');
+                setParameterAccessibleName(select, visual, paramName);
+                if (paramName) select.setAttribute('data-parameter', paramName);
+
+                displayedItems.forEach(item => {
+                    const opt = document.createElement('option');
+                    opt.value = item.value;
+                    opt.textContent = item.label;
+                    select.appendChild(opt);
+                });
+
+                if (selected !== undefined && selected !== '') {
+                    select.value = selected;
+                }
+
+                if (isInteractive) {
+                    select.addEventListener('change', () => {
+                        postBatch(select.value);
+                    });
+                    wrapper.appendChild(select);
+                } else {
+                    const note = document.createElement('p');
+                    note.className = 'slicer-note';
+                    note.textContent = '[Slicer — interactive in ReportPlayer only]';
+                    wrapper.appendChild(note);
+                }
+
+                if (isSearchable) {
+                    const searchIn = wrapper.querySelector('.slicer-search');
+                    searchIn?.addEventListener('input', () => {
+                        const q = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (searchIn).value.toLowerCase().trim();
+                        Array.from(select.options).forEach(opt => {
+                            const m = !q || opt.text.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q);
+                            opt.hidden = !m;
+                        });
+                    });
+                }
+
+                const overflowEl = createOverflowIndicator();
+                if (overflowEl) wrapper.appendChild(overflowEl);
+            }
         }
     }
 
@@ -5159,19 +6233,91 @@
             if (idx >= 0 && visual.rows[0][idx] != null) content = String(visual.rows[0][idx]);
         }
 
+        // Inline column interpolation: {column FORMAT '...'}
+        if (content && visual.columns && visual.rows && visual.rows.length > 0) {
+            const row = visual.rows[0];
+            content = content.replace(/\{([A-Za-z0-9_]+)(?:\s+FORMAT\s+['"]([^'"]+)['"])?\}/gi, (match, colName, fmt) => {
+                const colIdx = visual.columns.findIndex(c => c.toLowerCase() === colName.toLowerCase());
+                if (colIdx >= 0 && row[colIdx] != null) {
+                    const rawVal = row[colIdx];
+                    if (fmt) {
+                        return formatValue(rawVal, fmt);
+                    }
+                    return String(rawVal);
+                }
+                return match;
+            });
+        }
+
         const opts = visual.options || {};
         const align = (opts['ALIGN'] || opts['align'] || 'left').toLowerCase();
         const useMd = (opts['MARKDOWN'] || opts['markdown'] || 'ON').toUpperCase() !== 'OFF';
+        const maxLines = parseInt(opts['MAX_LINES'] || opts['max_lines'] || '0', 10);
+        const overflow = (opts['OVERFLOW'] || opts['overflow'] || '').toUpperCase();
+        const fontSize = opts['FONT_SIZE'] || opts['font_size'];
+        const fontColor = opts['FONT_COLOR'] || opts['font_color'];
+        const fontWeight = opts['FONT_WEIGHT'] || opts['font_weight'];
 
         const div = document.createElement('div');
         div.className = 'text-visual';
         div.style.textAlign = align;
+
+        if (maxLines > 0) {
+            div.style.display = '-webkit-box';
+            div.style.webkitLineClamp = String(maxLines);
+            div.style.webkitBoxOrient = 'vertical';
+            div.style.overflow = 'hidden';
+        }
+
+        if (overflow === 'CLIP') div.classList.add('overflow-clip');
+        else if (overflow === 'SCROLL') div.classList.add('overflow-scroll');
+        else if (overflow === 'ELLIPSIS') div.classList.add('overflow-ellipsis');
+
+        if (fontSize) div.style.fontSize = (fontSize.includes('px') || fontSize.includes('rem') || fontSize.includes('em') || fontSize.includes('pt')) ? fontSize : (fontSize + 'px');
+        if (fontColor) div.style.color = fontColor;
+        if (fontWeight) div.style.fontWeight = fontWeight;
+
         div.innerHTML = useMd ? simpleMarkdown(content) : escHtml(content).replace(/\n/g, '<br>');
+
+        const clickActions = actionsFor(visual, 'ON_CLICK');
+        if (clickActions.length > 0) {
+            div.style.cursor = 'pointer';
+            div.addEventListener('click', () => {
+                const row = visual.rows && visual.rows.length > 0 ? visual.rows[0] : [];
+                clickActions.forEach(a => executeAction(a, row, visual.columns || [], visual.name, visual));
+            });
+        }
+
         container.appendChild(div);
     }
 
     // Markdown → HTML renderer supporting: headers, bold, italic, inline code, links,
     // fenced code blocks, blockquotes, unordered/ordered lists, tables, horizontal rules.
+    /**
+     * Inline markdown only — bold, italic, code and safe links — with everything else escaped.
+     *
+     * Six call sites (card, chart and visual titles and subtitles) already called this by name and
+     * it existed only as a function nested inside `simpleMarkdown`, so every one of them threw a
+     * ReferenceError and took the rest of that render with it. A title wants inline formatting and
+     * nothing else: `simpleMarkdown` would wrap it in block elements. So this is the shared one and
+     * `simpleMarkdown` uses it for its own inline runs.
+     *
+     * @param {string} text
+     * @returns {string} HTML. The input is escaped first, so only the markup produced here is live.
+     */
+    function renderInlineMarkdown(text) {
+        return escHtml(text)
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g,     '<em>$1</em>')
+            .replace(/`(.+?)`/g,       '<code>$1</code>')
+            .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
+                // Only allow safe protocols
+                const safe = /^(https?:|mailto:|\/)/i.test(url.trim());
+                if (!safe) return escHtml(label);
+                return `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">${escHtml(label)}</a>`;
+            });
+    }
+
     function simpleMarkdown(src) {
         if (!src) return '';
 
@@ -5192,18 +6338,7 @@
         const out = [];
         let i = 0;
 
-        function inlineFormat(text) {
-            return escHtml(text)
-                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\*(.+?)\*/g,     '<em>$1</em>')
-                .replace(/`(.+?)`/g,       '<code>$1</code>')
-                .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-                    // Only allow safe protocols
-                    const safe = /^(https?:|mailto:|\/)/i.test(url.trim());
-                    if (!safe) return escHtml(label);
-                    return `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">${escHtml(label)}</a>`;
-                });
-        }
+        const inlineFormat = renderInlineMarkdown;
 
         while (i < lines.length) {
             const line = lines[i];
@@ -5305,69 +6440,285 @@
     function renderDatePicker(container, visual, manifest) {
         const opts          = visual.options || {};
         const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
-        const param         = changeActions.length > 0 ? changeActions[0].parameterName : null;
+        const startAction   = changeActions.length > 0 ? changeActions[0] : null;
+        const param         = startAction ? startAction.parameterName : null;
+        const secondaryParam = (startAction && startAction.secondaryParameterName) || (changeActions.length > 1 ? changeActions[1].parameterName : null);
         const min           = opts['MIN'] || opts['min'] || '';
         const max           = opts['MAX'] || opts['max'] || '';
+        const mode          = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
+        const isRange       = mode === 'RANGE';
+        const formatOpt     = getOption(opts, 'format') || '';
+        const weekStart     = (getOption(opts, 'week_start') || 'SUN').toUpperCase();
+        const displayOpt    = (getOption(opts, 'display') || 'DROPDOWN').toUpperCase();
+        const isInline      = displayOpt === 'INLINE';
 
-        let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
-        if (param && manifest && manifest.parameters) {
-            const current = getParam(manifest.parameters, param);
-            if (current !== undefined) def = current;
+        function parseArrayOption(opt) {
+            if (!opt) return [];
+            if (Array.isArray(opt)) return opt.map(s => String(s).trim().toUpperCase());
+            if (typeof opt === 'string' && opt.startsWith('[')) {
+                try {
+                    const parsed = JSON.parse(opt);
+                    if (Array.isArray(parsed)) return parsed.map(s => String(s).trim().toUpperCase());
+                } catch {}
+            }
+            return String(opt).split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+        }
+
+        const disabledDates = parseArrayOption(opts['DISABLED_DATES'] || opts['disabled_dates']);
+        const disabledDays  = parseArrayOption(opts['DISABLED_DAYS']  || opts['disabled_days']);
+
+        function isDateDisabled(dateStr) {
+            if (!dateStr) return false;
+            const norm = dateStr.trim().toUpperCase();
+            if (disabledDates.includes(norm)) return true;
+            if (disabledDays.length > 0) {
+                const dt = new Date(dateStr + 'T00:00:00Z');
+                if (!isNaN(dt.getTime())) {
+                    const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+                    const dName = dayNames[dt.getUTCDay()];
+                    if (disabledDays.includes(dName)) return true;
+                }
+            }
+            return false;
         }
 
         const wrapper = document.createElement('div');
-        wrapper.className = 'filter-wrapper reldate-wrapper';
+        wrapper.className = 'filter-wrapper' + (isInline ? ' datepicker-inline' : '');
+        if (weekStart) wrapper.setAttribute('data-week-start', weekStart);
 
-        const textInput = document.createElement('input');
-        textInput.type = 'text';
-        setParameterAccessibleName(textInput, visual, param, 'date');
-        textInput.placeholder = 'YYYY-MM-DD or T-1...';
-        textInput.value = def;
-        if (param) textInput.setAttribute('data-parameter', param);
+        const errorEl = document.createElement('div');
+        errorEl.className = 'filter-error';
+        errorEl.style.display = 'none';
 
-        const datePicker = document.createElement('input');
-        datePicker.type = 'date';
-        setParameterAccessibleName(datePicker, visual, param, 'native date picker');
-        datePicker.className = 'reldate-native-picker';
-        if (min) datePicker.min = min;
-        if (max) datePicker.max = max;
-        // Synchronize initial value and parameter name for tests/sync
-        if (def && /^\d{4}-\d{2}-\d{2}$/.test(def)) datePicker.value = def;
-        if (param) datePicker.setAttribute('data-parameter', param);
+        if (isRange) {
+            let startVal = '';
+            let endVal = '';
+            if (manifest && manifest.parameters) {
+                if (param) startVal = getParam(manifest.parameters, param) ?? '';
+                if (secondaryParam) endVal = getParam(manifest.parameters, secondaryParam) ?? '';
+            }
+            if (!startVal && !endVal) {
+                const def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+                const parts = parseMultiParameter(def);
+                if (parts.length > 0) startVal = parts[0];
+                if (parts.length > 1) endVal = parts[1];
+            }
 
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'reldate-btn';
-        btn.title = 'Pick a date';
-        btn.setAttribute('aria-label', 'Pick a date');
-        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
-        btn.addEventListener('click', () => {
-            if (typeof datePicker.showPicker === 'function') datePicker.showPicker();
-            else datePicker.focus();
-        });
+            const rangeWrapper = document.createElement('div');
+            rangeWrapper.className = 'datepicker-range-wrapper';
 
-        datePicker.addEventListener('change', () => {
-            textInput.value = datePicker.value;
-            textInput.dispatchEvent(new Event('change'));
-        });
+            function createDateBox(initialVal, pName, qualifier, onValChange) {
+                const box = document.createElement('div');
+                box.className = 'reldate-wrapper';
 
-        const actions = document.createElement('div');
-        actions.className = 'reldate-actions';
-        const pickerSlot = document.createElement('span');
-        pickerSlot.className = 'reldate-picker-slot';
-        pickerSlot.appendChild(btn);
-        pickerSlot.appendChild(datePicker);
-        actions.appendChild(pickerSlot);
+                const textInput = document.createElement('input');
+                textInput.type = 'text';
+                setParameterAccessibleName(textInput, visual, pName, qualifier);
+                textInput.placeholder = formatOpt || 'YYYY-MM-DD';
+                textInput.value = initialVal;
+                if (pName) textInput.setAttribute('data-parameter', pName);
 
-        wrapper.appendChild(textInput);
-        wrapper.appendChild(actions);
+                const datePicker = document.createElement('input');
+                datePicker.type = 'date';
+                setParameterAccessibleName(datePicker, visual, pName, `${qualifier} picker`);
+                datePicker.className = 'reldate-native-picker';
+                if (min) datePicker.min = min;
+                if (max) datePicker.max = max;
+                if (initialVal && /^\d{4}-\d{2}-\d{2}$/.test(initialVal)) datePicker.value = initialVal;
+                if (pName) datePicker.setAttribute('data-parameter', pName);
 
-        if (isWebMode && changeActions.length > 0) {
-            textInput.addEventListener('change', () => {
-                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = textInput.value; return o; }, {});
-                postParameters(batch).then(m => { if (m) renderManifest(m); });
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'reldate-btn';
+                btn.title = `Pick ${qualifier}`;
+                btn.setAttribute('aria-label', `Pick ${qualifier}`);
+                btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+                btn.addEventListener('click', () => {
+                    if (typeof datePicker.showPicker === 'function') datePicker.showPicker();
+                    else datePicker.focus();
+                });
+
+                datePicker.addEventListener('change', () => {
+                    textInput.value = datePicker.value;
+                    textInput.dispatchEvent(new Event('change'));
+                });
+
+                textInput.addEventListener('change', () => {
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(textInput.value)) {
+                        datePicker.value = textInput.value;
+                    }
+                    onValChange();
+                });
+
+                const actions = document.createElement('div');
+                actions.className = 'reldate-actions';
+                const pickerSlot = document.createElement('span');
+                pickerSlot.className = 'reldate-picker-slot';
+                pickerSlot.appendChild(btn);
+                pickerSlot.appendChild(datePicker);
+                actions.appendChild(pickerSlot);
+
+                box.appendChild(textInput);
+                box.appendChild(actions);
+                applyControlState(textInput, visual, box);
+                if (textInput.disabled) {
+                    datePicker.disabled = true;
+                    btn.disabled = true;
+                }
+                return { box, textInput, datePicker };
+            }
+
+            function validateAndPostRange() {
+                const sVal = startBox.textInput.value.trim();
+                const eVal = endBox.textInput.value.trim();
+                let errMsg = null;
+
+                if (isDateDisabled(sVal)) {
+                    errMsg = 'Start date is disabled';
+                    startBox.box.classList.add('is-invalid');
+                } else {
+                    startBox.box.classList.remove('is-invalid');
+                }
+
+                if (isDateDisabled(eVal)) {
+                    errMsg = errMsg ? (errMsg + '; End date is disabled') : 'End date is disabled';
+                    endBox.box.classList.add('is-invalid');
+                } else {
+                    endBox.box.classList.remove('is-invalid');
+                }
+
+                if (!errMsg && sVal && eVal && sVal > eVal) {
+                    errMsg = 'Start date cannot be after end date';
+                    startBox.box.classList.add('is-invalid');
+                    endBox.box.classList.add('is-invalid');
+                }
+
+                if (errMsg) {
+                    errorEl.textContent = errMsg;
+                    errorEl.style.display = 'block';
+                    return;
+                }
+
+                errorEl.style.display = 'none';
+                startBox.box.classList.remove('is-invalid');
+                endBox.box.classList.remove('is-invalid');
+
+                if (isWebMode && changeActions.length > 0) {
+                    const batch = {};
+                    if (param) batch[param] = sVal;
+                    if (secondaryParam) batch[secondaryParam] = eVal;
+                    if (Object.keys(batch).length > 0) {
+                        postParameters(batch).then(m => { if (m) renderManifest(m); });
+                    }
+                }
+            }
+
+            const startBox = createDateBox(startVal, param, 'start date', validateAndPostRange);
+            const sep = document.createElement('span');
+            sep.textContent = '–';
+            sep.style.fontWeight = 'bold';
+            const endBox = createDateBox(endVal, secondaryParam, 'end date', validateAndPostRange);
+
+            rangeWrapper.appendChild(startBox.box);
+            rangeWrapper.appendChild(sep);
+            rangeWrapper.appendChild(endBox.box);
+            wrapper.appendChild(rangeWrapper);
+            wrapper.appendChild(errorEl);
+
+        } else {
+            // SINGLE mode
+            let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+            if (param && manifest && manifest.parameters) {
+                const current = getParam(manifest.parameters, param);
+                if (current !== undefined) def = current;
+            }
+
+            const inputRow = document.createElement('div');
+            inputRow.className = 'reldate-wrapper';
+
+            const textInput = document.createElement('input');
+            textInput.type = 'text';
+            setParameterAccessibleName(textInput, visual, param, 'date');
+            textInput.placeholder = formatOpt || 'YYYY-MM-DD or T-1…';
+            textInput.value = def;
+            if (param) textInput.setAttribute('data-parameter', param);
+
+            const datePicker = document.createElement('input');
+            datePicker.type = 'date';
+            setParameterAccessibleName(datePicker, visual, param, 'native date picker');
+            datePicker.className = 'reldate-native-picker';
+            if (min) datePicker.min = min;
+            if (max) datePicker.max = max;
+            if (def && /^\d{4}-\d{2}-\d{2}$/.test(def)) datePicker.value = def;
+            if (param) datePicker.setAttribute('data-parameter', param);
+
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'reldate-btn';
+            btn.title = 'Pick a date';
+            btn.setAttribute('aria-label', 'Pick a date');
+            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+            btn.addEventListener('click', () => {
+                if (typeof datePicker.showPicker === 'function') datePicker.showPicker();
+                else datePicker.focus();
             });
+
+            datePicker.addEventListener('change', () => {
+                textInput.value = datePicker.value;
+                textInput.dispatchEvent(new Event('change'));
+            });
+
+            const actions = document.createElement('div');
+            actions.className = 'reldate-actions';
+            const pickerSlot = document.createElement('span');
+            pickerSlot.className = 'reldate-picker-slot';
+            pickerSlot.appendChild(btn);
+            pickerSlot.appendChild(datePicker);
+            actions.appendChild(pickerSlot);
+
+            inputRow.appendChild(textInput);
+            inputRow.appendChild(actions);
+            wrapper.appendChild(inputRow);
+            wrapper.appendChild(errorEl);
+
+            applyControlState(textInput, visual, inputRow);
+            if (textInput.disabled) {
+                datePicker.disabled = true;
+                btn.disabled = true;
+            }
+
+            if (isWebMode && changeActions.length > 0) {
+                const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
+                const onDateChange = () => {
+                    const val = textInput.value.trim();
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+                        datePicker.value = val;
+                    }
+                    if (isDateDisabled(val)) {
+                        inputRow.classList.add('is-invalid');
+                        errorEl.textContent = 'Selected date is disabled';
+                        errorEl.style.display = 'block';
+                        return;
+                    }
+                    inputRow.classList.remove('is-invalid');
+                    errorEl.style.display = 'none';
+
+                    const batch = changeActions.reduce((o, a) => { o[a.parameterName] = textInput.value; return o; }, {});
+                    postParameters(batch).then(m => { if (m) renderManifest(m); });
+                };
+
+                if (debounceOpt != null) {
+                    let dTimer = null;
+                    const dMs = parseInt(debounceOpt, 10) || 300;
+                    textInput.addEventListener('input', () => {
+                        clearTimeout(dTimer);
+                        dTimer = setTimeout(onDateChange, dMs);
+                    });
+                }
+                textInput.addEventListener('change', onDateChange);
+            }
         }
+
         container.appendChild(wrapper);
     }
 
@@ -5398,6 +6749,10 @@
                 <tr><td><strong>WE</strong></td><td>Last day of current week</td></tr>
                 <tr><td><strong>M</strong> / <strong>MS</strong></td><td>1st of current month at midnight</td></tr>
                 <tr><td><strong>ME</strong></td><td>Last day of current month at midnight</td></tr>
+                <tr><td><strong>FQ</strong> / <strong>FQS</strong></td><td>Start of current fiscal quarter</td></tr>
+                <tr><td><strong>FQE</strong></td><td>Last day of current fiscal quarter</td></tr>
+                <tr><td><strong>FY</strong> / <strong>FYS</strong></td><td>Start of current fiscal year</td></tr>
+                <tr><td><strong>FYE</strong></td><td>Last day of current fiscal year</td></tr>
                 <tr><td><strong>Y</strong> / <strong>YS</strong></td><td>Jan 1 of current year at midnight</td></tr>
                 <tr><td><strong>YE</strong></td><td>Dec 31 of current year at midnight</td></tr>
                 <tr><td><strong>N</strong></td><td>Exact current local datetime</td></tr>
@@ -5405,14 +6760,18 @@
             <p><strong>Arithmetic:</strong> Append <code>-n</code> or <code>+n</code> to shift by <em>n</em> periods.</p>
             <ul>
                 <li><code>D-1</code> = Yesterday</li>
+                <li><code>D+30</code> = 30 days in future</li>
+                <li><code>FQ-1</code> = Previous fiscal quarter</li>
+                <li><code>FY+1</code> = Next fiscal year</li>
                 <li><code>M-1</code> = First day of last month</li>
                 <li><code>ME-1</code> = Last day of last month</li>
             </ul>
             <p style="margin-top: 12px; margin-bottom: 8px;"><strong>Time Offsets (from N):</strong> Use <code>H</code> (hours), <code>I</code> (minutes), or <code>S</code> (seconds).</p>
             <ul style="margin-bottom: 0;">
                 <li><code>N-2H</code> = Exactly 2 hours ago</li>
-                <li><code>N-30I</code> = Exactly 30 minutes ago</li>
+                <li><code>N+30I</code> = Exactly 30 minutes from now</li>
             </ul>
+            <p style="margin-top: 12px; font-size: 12px; color: #667085;">Fiscal anchors evaluate with <code>FISCAL_YEAR_START = month</code> (default 1 = January).</p>
         `;
 
         const footer = document.createElement('div');
@@ -5437,81 +6796,23 @@
     function renderRelDatePicker(container, visual, manifest) {
         const opts          = visual.options || {};
         const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
-        const param         = changeActions.length > 0 ? changeActions[0].parameterName : null;
+        const startAction   = changeActions.length > 0 ? changeActions[0] : null;
+        const param         = startAction ? startAction.parameterName : null;
+        const secondaryParam = (startAction && startAction.secondaryParameterName) || (changeActions.length > 1 ? changeActions[1].parameterName : null);
         const min           = opts['MIN'] || opts['min'] || '';
         const max           = opts['MAX'] || opts['max'] || '';
+        const mode          = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
+        const isRange       = mode === 'RANGE';
 
-        let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
-        if (param && manifest && manifest.parameters) {
-            const current = getParam(manifest.parameters, param);
-            if (current !== undefined) def = current;
+        const relDateRegex = /^\s*(D|W|WS|WE|M|MS|ME|Y|YS|YE|FQ|FQS|FQE|FY|FYS|FYE|N)([-+]\d+[DHIMS]?)?\s*$/i;
+        const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        function isValidRelDate(expr) {
+            if (!expr || !expr.trim()) return false;
+            const s = expr.trim();
+            return relDateRegex.test(s) || isoDateRegex.test(s);
         }
 
-        const wrapper = document.createElement('div');
-        wrapper.className = 'filter-wrapper';
-
-        // ── Text input + calendar button row ──────────────────────────────
-        const inputRow = document.createElement('div');
-        inputRow.className = 'reldate-wrapper';
-
-        const textInput = document.createElement('input');
-        textInput.type = 'text';
-        setParameterAccessibleName(textInput, visual, param, 'relative date');
-        textInput.placeholder = 'D-7, M-1, Y-1 or YYYY-MM-DD';
-        textInput.value = def;
-        if (param) textInput.setAttribute('data-parameter', param);
-
-        const hiddenDate = document.createElement('input');
-        hiddenDate.type = 'date';
-        setParameterAccessibleName(hiddenDate, visual, param, 'native date picker');
-        hiddenDate.className = 'reldate-native-picker';
-        if (min) hiddenDate.min = min;
-        if (max) hiddenDate.max = max;
-        // Synchronize initial value and parameter name for tests/sync
-        if (def && /^\d{4}-\d{2}-\d{2}$/.test(def)) hiddenDate.value = def;
-        if (param) hiddenDate.setAttribute('data-parameter', param);
-
-        const calBtn = document.createElement('button');
-        calBtn.type = 'button';
-        calBtn.className = 'reldate-btn';
-        calBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
-        calBtn.title = 'Pick a date (writes ISO date)';
-        calBtn.setAttribute('aria-label', 'Pick a date');
-        calBtn.addEventListener('click', () => {
-            if (typeof hiddenDate.showPicker === 'function') hiddenDate.showPicker();
-            else hiddenDate.focus();
-        });
-
-        const infoBtn = document.createElement('button');
-        infoBtn.type = 'button';
-        infoBtn.className = 'reldate-btn';
-        infoBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
-        infoBtn.title = 'View Relative Date Syntax Help';
-        infoBtn.setAttribute('aria-label', 'View relative date syntax help');
-        infoBtn.addEventListener('click', showRelDateHelpModal);
-
-        hiddenDate.addEventListener('change', () => {
-            textInput.value = hiddenDate.value;
-            textInput.dispatchEvent(new Event('change'));
-        });
-
-        const actions = document.createElement('div');
-        actions.className = 'reldate-actions';
-        const pickerSlot = document.createElement('span');
-        pickerSlot.className = 'reldate-picker-slot';
-        pickerSlot.appendChild(calBtn);
-        pickerSlot.appendChild(hiddenDate);
-        actions.appendChild(pickerSlot);
-        actions.appendChild(infoBtn);
-
-        inputRow.appendChild(textInput);
-        inputRow.appendChild(actions);
-
-        // ── Quick-pick buttons ────────────────────────────────────────────
-        const quickRow = document.createElement('div');
-        quickRow.className = 'reldate-quick';
-
-        const quickPicks = [
+        let quickPicks = [
             { label: 'D',    value: 'D-0'  },
             { label: 'D-1',  value: 'D-1'  },
             { label: 'M',    value: 'M-0'  },
@@ -5519,31 +6820,217 @@
             { label: 'Y',    value: 'Y-0'  },
             { label: 'Y-1',  value: 'Y-1'  },
         ];
+        const qpOpt = opts['QUICK_PICKS'] || opts['quick_picks'];
+        if (qpOpt) {
+            try {
+                const customQp = typeof qpOpt === 'string' ? JSON.parse(qpOpt) : qpOpt;
+                if (Array.isArray(customQp) && customQp.length > 0) {
+                    quickPicks = customQp;
+                }
+            } catch {}
+        }
 
-        quickPicks.forEach(qp => {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'reldate-quick-btn' + (def === qp.value ? ' active' : '');
-            btn.textContent = qp.label;
-            btn.addEventListener('click', () => {
-                textInput.value = qp.value;
-                // update active state locally
-                Array.from(quickRow.children).forEach(c => c.classList.remove('active'));
-                btn.classList.add('active');
+        const wrapper = document.createElement('div');
+        wrapper.className = 'filter-wrapper';
+
+        const errorEl = document.createElement('div');
+        errorEl.className = 'filter-error';
+        errorEl.style.display = 'none';
+
+        function createRelDateRow(initialVal, pName, qualifier, onValChange) {
+            const rowWrapper = document.createElement('div');
+            rowWrapper.style.display = 'flex';
+            rowWrapper.style.flexDirection = 'column';
+            rowWrapper.style.gap = '6px';
+
+            const inputRow = document.createElement('div');
+            inputRow.className = 'reldate-wrapper';
+
+            const textInput = document.createElement('input');
+            textInput.type = 'text';
+            if (qualifier === 'relative date') {
+                setParameterAccessibleName(textInput, visual, param, 'relative date');
+            } else {
+                setParameterAccessibleName(textInput, visual, pName, qualifier);
+            }
+            textInput.placeholder = 'D-7, M-1, Y-1 or YYYY-MM-DD';
+            textInput.value = initialVal;
+            if (pName) textInput.setAttribute('data-parameter', pName);
+
+            const hiddenDate = document.createElement('input');
+            hiddenDate.type = 'date';
+            setParameterAccessibleName(hiddenDate, visual, pName, `${qualifier} native date picker`);
+            hiddenDate.className = 'reldate-native-picker';
+            if (min) hiddenDate.min = min;
+            if (max) hiddenDate.max = max;
+            if (initialVal && /^\d{4}-\d{2}-\d{2}$/.test(initialVal)) hiddenDate.value = initialVal;
+            if (pName) hiddenDate.setAttribute('data-parameter', pName);
+
+            const calBtn = document.createElement('button');
+            calBtn.type = 'button';
+            calBtn.className = 'reldate-btn';
+            calBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+            calBtn.title = 'Pick a date (writes ISO date)';
+            calBtn.setAttribute('aria-label', 'Pick a date');
+            calBtn.addEventListener('click', () => {
+                if (typeof hiddenDate.showPicker === 'function') hiddenDate.showPicker();
+                else hiddenDate.focus();
+            });
+
+            const infoBtn = document.createElement('button');
+            infoBtn.type = 'button';
+            infoBtn.className = 'reldate-btn';
+            infoBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+            infoBtn.title = 'View Relative Date Syntax Help';
+            infoBtn.setAttribute('aria-label', 'View relative date syntax help');
+            infoBtn.addEventListener('click', showRelDateHelpModal);
+
+            hiddenDate.addEventListener('change', () => {
+                textInput.value = hiddenDate.value;
                 textInput.dispatchEvent(new Event('change'));
             });
-            quickRow.appendChild(btn);
-        });
 
-        wrapper.appendChild(inputRow);
-        wrapper.appendChild(quickRow);
+            const actions = document.createElement('div');
+            actions.className = 'reldate-actions';
+            const pickerSlot = document.createElement('span');
+            pickerSlot.className = 'reldate-picker-slot';
+            pickerSlot.appendChild(calBtn);
+            pickerSlot.appendChild(hiddenDate);
+            actions.appendChild(pickerSlot);
+            actions.appendChild(infoBtn);
 
-        if (isWebMode && changeActions.length > 0) {
-            textInput.addEventListener('change', () => {
-                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = textInput.value; return o; }, {});
-                postParameters(batch).then(m => { if (m) renderManifest(m); });
+            inputRow.appendChild(textInput);
+            inputRow.appendChild(actions);
+
+            // Quick-pick buttons
+            const quickRow = document.createElement('div');
+            quickRow.className = 'reldate-quick';
+
+            quickPicks.forEach(qp => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'reldate-quick-btn' + (initialVal === qp.value ? ' active' : '');
+                btn.textContent = qp.label;
+                btn.addEventListener('click', () => {
+                    textInput.value = qp.value;
+                    Array.from(quickRow.children).forEach(c => c.classList.remove('active'));
+                    btn.classList.add('active');
+                    textInput.dispatchEvent(new Event('change'));
+                });
+                quickRow.appendChild(btn);
             });
+
+            textInput.addEventListener('change', () => {
+                if (/^\d{4}-\d{2}-\d{2}$/.test(textInput.value)) {
+                    hiddenDate.value = textInput.value;
+                }
+                onValChange();
+            });
+
+            rowWrapper.appendChild(inputRow);
+            rowWrapper.appendChild(quickRow);
+            return { rowWrapper, inputRow, textInput, quickRow };
         }
+
+        if (isRange) {
+            let startVal = '';
+            let endVal = '';
+            if (manifest && manifest.parameters) {
+                if (param) startVal = getParam(manifest.parameters, param) ?? '';
+                if (secondaryParam) endVal = getParam(manifest.parameters, secondaryParam) ?? '';
+            }
+            if (!startVal && !endVal) {
+                const def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+                const parts = parseMultiParameter(def);
+                if (parts.length > 0) startVal = parts[0];
+                if (parts.length > 1) endVal = parts[1];
+            }
+
+            function validateAndPostRange() {
+                const sVal = startRow.textInput.value.trim();
+                const eVal = endRow.textInput.value.trim();
+                let errMsg = null;
+
+                if (!isValidRelDate(sVal)) {
+                    errMsg = 'Invalid start relative date expression';
+                    startRow.inputRow.classList.add('is-invalid');
+                } else {
+                    startRow.inputRow.classList.remove('is-invalid');
+                }
+
+                if (!isValidRelDate(eVal)) {
+                    errMsg = errMsg ? (errMsg + '; Invalid end relative date expression') : 'Invalid end relative date expression';
+                    endRow.inputRow.classList.add('is-invalid');
+                } else {
+                    endRow.inputRow.classList.remove('is-invalid');
+                }
+
+                if (errMsg) {
+                    errorEl.textContent = errMsg;
+                    errorEl.style.display = 'block';
+                    return;
+                }
+
+                errorEl.style.display = 'none';
+                startRow.inputRow.classList.remove('is-invalid');
+                endRow.inputRow.classList.remove('is-invalid');
+
+                if (isWebMode && changeActions.length > 0) {
+                    const batch = {};
+                    if (param) batch[param] = sVal;
+                    if (secondaryParam) batch[secondaryParam] = eVal;
+                    if (Object.keys(batch).length > 0) {
+                        postParameters(batch).then(m => { if (m) renderManifest(m); });
+                    }
+                }
+            }
+
+            const rangeContainer = document.createElement('div');
+            rangeContainer.className = 'datepicker-range-wrapper';
+
+            const startRow = createRelDateRow(startVal, param, 'start date', validateAndPostRange);
+            const sep = document.createElement('span');
+            sep.textContent = '–';
+            sep.style.fontWeight = 'bold';
+            const endRow = createRelDateRow(endVal, secondaryParam, 'end date', validateAndPostRange);
+
+            rangeContainer.appendChild(startRow.rowWrapper);
+            rangeContainer.appendChild(sep);
+            rangeContainer.appendChild(endRow.rowWrapper);
+            wrapper.appendChild(rangeContainer);
+            wrapper.appendChild(errorEl);
+
+        } else {
+            // SINGLE mode
+            let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+            if (param && manifest && manifest.parameters) {
+                const current = getParam(manifest.parameters, param);
+                if (current !== undefined) def = current;
+            }
+
+            function validateAndPostSingle() {
+                const val = singleRow.textInput.value.trim();
+                if (!isValidRelDate(val)) {
+                    singleRow.inputRow.classList.add('is-invalid');
+                    errorEl.textContent = 'Invalid relative date expression';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+
+                singleRow.inputRow.classList.remove('is-invalid');
+                errorEl.style.display = 'none';
+
+                if (isWebMode && changeActions.length > 0) {
+                    const batch = changeActions.reduce((o, a) => { o[a.parameterName] = val; return o; }, {});
+                    postParameters(batch).then(m => { if (m) renderManifest(m); });
+                }
+            }
+
+            const singleRow = createRelDateRow(def, param, 'relative date', validateAndPostSingle);
+            wrapper.appendChild(singleRow.rowWrapper);
+            wrapper.appendChild(errorEl);
+        }
+
         container.appendChild(wrapper);
     }
 
@@ -5551,102 +7038,207 @@
 
     function renderSlider(container, visual, manifest) {
         const opts          = visual.options || {};
-        // Parameter binding comes from ACTIONS (ON_CHANGE = SET_PARAMETER), not from OPTIONS
         const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
-        const param         = changeActions.length > 0 ? changeActions[0].parameterName : null;
-        const min           = opts['MIN']  || opts['min']  || '0';
-        const max           = opts['MAX']  || opts['max']  || '100';
-        const step          = opts['STEP'] || opts['step'] || '1';
+        const startAction   = changeActions.length > 0 ? changeActions[0] : null;
+        const param         = startAction ? startAction.parameterName : null;
+        const secondaryParam = (startAction && startAction.secondaryParameterName) || (changeActions.length > 1 ? changeActions[1].parameterName : null);
+        const mode          = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
+        const isRange       = mode === 'RANGE';
+        const min           = parseFloat(opts['MIN']  || opts['min']  || '0');
+        const max           = parseFloat(opts['MAX']  || opts['max']  || '100');
+        const step          = parseFloat(opts['STEP'] || opts['step'] || '1');
+        const formatOpt     = getOption(opts, 'format');
+        const fireOn        = (getOption(opts, 'fire_on') || 'RELEASE').toUpperCase();
+        const showTicks     = isOn(getOption(opts, 'show_ticks'));
+        const showTickLabels = isOn(getOption(opts, 'tick_labels'));
 
-        // Initial value: current parameter value > DEFAULT clause > min
-        let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || min;
-        if (param && manifest && manifest.parameters) {
-            const current = getParam(manifest.parameters, param);
-            if (current !== undefined) def = current;
+        let dataTicks = null;
+        if (opts['DATA_TICKS']) {
+            try {
+                dataTicks = typeof opts['DATA_TICKS'] === 'string' ? JSON.parse(opts['DATA_TICKS']) : opts['DATA_TICKS'];
+            } catch {}
+        }
+
+        function snapValue(val) {
+            if (!Array.isArray(dataTicks) || dataTicks.length === 0) return val;
+            let closest = dataTicks[0];
+            let minDiff = Math.abs(val - closest);
+            for (let i = 1; i < dataTicks.length; i++) {
+                const diff = Math.abs(val - dataTicks[i]);
+                if (diff < minDiff) { minDiff = diff; closest = dataTicks[i]; }
+            }
+            return closest;
+        }
+
+        function formatDisplay(val) {
+            return formatOpt ? formatValue(val, formatOpt) : String(val);
         }
 
         const wrapper = document.createElement('div');
-        wrapper.className = 'filter-wrapper';
+        wrapper.className = 'filter-wrapper' + (isRange ? ' slider-range-wrapper' : '');
 
-        const input = document.createElement('input');
-        input.type  = 'range';
-        setParameterAccessibleName(input, visual, param);
-        input.min   = min;
-        input.max   = max;
-        input.step  = step;
-        input.value = def;
-        if (param) input.setAttribute('data-parameter', param);
-
-        const valueLabel = document.createElement('span');
-        valueLabel.className   = 'range-value';
-        valueLabel.textContent = def;
-
-        input.addEventListener('input', () => { valueLabel.textContent = input.value; });
-
-        if (isWebMode && changeActions.length > 0) {
-            input.addEventListener('change', () => {
-                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = input.value; return o; }, {});
-                postParameters(batch).then(m => { if (m) renderManifest(m); });
-            });
-        }
-
-        wrapper.appendChild(input);
-        wrapper.appendChild(valueLabel);
-        container.appendChild(wrapper);
-    }
-
-    // ── MultiSelect ─────────────────────────────────────────────────────────
-
-    // ── MultiSelect ─────────────────────────────────────────────────────────
-
-    function renderMultiSelect(container, visual, manifest) {
-        const opts  = visual.options || {};
-        const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
-        const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
-
-        const wrapper = document.createElement('div');
-        wrapper.className = 'filter-wrapper multiselect-wrapper';
-
-        const list = document.createElement('div');
-        list.className = 'checkbox-list';
-
-        let currentValues = [];
-        if (param && manifest && manifest.parameters) {
-            const current = getParam(manifest.parameters, param);
-            if (current) currentValues = parseMultiParameter(current);
-        }
-
-        (visual.rows || []).forEach(row => {
-            const val = String(row[0] ?? '');
-            const label = document.createElement('label');
-            label.className = 'checkbox-item';
-
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.value = val;
-            cb.checked = currentValues.includes(val);
-            cb.className = 'multiselect-cb';
-            setParameterAccessibleName(cb, visual, param, val);
-
-            label.appendChild(cb);
-            label.appendChild(document.createTextNode(' ' + val));
-            list.appendChild(label);
-        });
-
-        wrapper.appendChild(list);
-
-        if (isWebMode && param) {
-            const applyBtn = document.createElement('button');
-            applyBtn.className   = 'filter-apply';
-            applyBtn.textContent = 'Apply';
-            applyBtn.addEventListener('click', () => {
-                const selected = JSON.stringify(Array.from(list.querySelectorAll('.multiselect-cb:checked')).map(cb => cb.value));
-                changeActions.forEach(action => {
-                    postParameters({ [action.parameterName]: selected })
-                        .then(m => { if (m) renderManifest(m); });
+        const datalistId = 'ticks-' + (visual.name || Math.random().toString(36).slice(2));
+        if (showTicks) {
+            const dl = document.createElement('datalist');
+            dl.id = datalistId;
+            if (Array.isArray(dataTicks) && dataTicks.length > 0) {
+                dataTicks.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t;
+                    if (showTickLabels) opt.label = formatDisplay(t);
+                    dl.appendChild(opt);
                 });
-            });
-            wrapper.appendChild(applyBtn);
+            } else {
+                for (let v = min; v <= max; v += step) {
+                    const opt = document.createElement('option');
+                    opt.value = String(v);
+                    if (showTickLabels) opt.label = formatDisplay(v);
+                    dl.appendChild(opt);
+                }
+            }
+            wrapper.appendChild(dl);
+        }
+
+        if (isRange) {
+            let lowVal = min;
+            let highVal = max;
+            if (manifest && manifest.parameters) {
+                if (param) { const v = parseFloat(getParam(manifest.parameters, param)); if (!isNaN(v)) lowVal = v; }
+                if (secondaryParam) { const v = parseFloat(getParam(manifest.parameters, secondaryParam)); if (!isNaN(v)) highVal = v; }
+            } else {
+                const def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+                const parts = parseMultiParameter(def);
+                if (parts.length > 0 && !isNaN(parseFloat(parts[0]))) lowVal = parseFloat(parts[0]);
+                if (parts.length > 1 && !isNaN(parseFloat(parts[1]))) highVal = parseFloat(parts[1]);
+            }
+            lowVal = snapValue(lowVal);
+            highVal = snapValue(highVal);
+
+            const rangeInputs = document.createElement('div');
+            rangeInputs.className = 'slider-range-inputs';
+
+            const lowInput = document.createElement('input');
+            lowInput.type = 'range';
+            setParameterAccessibleName(lowInput, visual, param, 'minimum');
+            lowInput.min = String(min); lowInput.max = String(max); lowInput.step = String(step); lowInput.value = String(lowVal);
+            if (showTicks) lowInput.setAttribute('list', datalistId);
+            if (param) lowInput.setAttribute('data-parameter', param);
+
+            const highInput = document.createElement('input');
+            highInput.type = 'range';
+            setParameterAccessibleName(highInput, visual, secondaryParam, 'maximum');
+            highInput.min = String(min); highInput.max = String(max); highInput.step = String(step); highInput.value = String(highVal);
+            if (showTicks) highInput.setAttribute('list', datalistId);
+            if (secondaryParam) highInput.setAttribute('data-parameter', secondaryParam);
+
+            const valueLabel = document.createElement('span');
+            valueLabel.className = 'range-value';
+            valueLabel.textContent = `${formatDisplay(lowVal)} – ${formatDisplay(highVal)}`;
+
+            function updateRangeDisplay() {
+                let l = snapValue(parseFloat(lowInput.value));
+                let h = snapValue(parseFloat(highInput.value));
+                if (l > h) {
+                    l = h;
+                    lowInput.value = l;
+                }
+                valueLabel.textContent = `${formatDisplay(l)} – ${formatDisplay(h)}`;
+            }
+
+            function postRangeValues() {
+                let l = snapValue(parseFloat(lowInput.value));
+                let h = snapValue(parseFloat(highInput.value));
+                if (l > h) l = h;
+                if (isWebMode && changeActions.length > 0) {
+                    const batch = {};
+                    if (param) batch[param] = String(l);
+                    if (secondaryParam) batch[secondaryParam] = String(h);
+                    postParameters(batch).then(m => { if (m) renderManifest(m); });
+                }
+            }
+
+            lowInput.addEventListener('input', updateRangeDisplay);
+            highInput.addEventListener('input', updateRangeDisplay);
+
+            const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
+            const debounceMs = parseInt(debounceOpt || '200', 10);
+
+            if (fireOn === 'CHANGE') {
+                let timer = null;
+                const debounced = () => {
+                    clearTimeout(timer);
+                    timer = setTimeout(postRangeValues, debounceMs);
+                };
+                lowInput.addEventListener('input', debounced);
+                highInput.addEventListener('input', debounced);
+            } else {
+                lowInput.addEventListener('change', postRangeValues);
+                highInput.addEventListener('change', postRangeValues);
+            }
+
+            applyControlState(lowInput, visual, wrapper);
+            if (lowInput.disabled) highInput.disabled = true;
+
+            rangeInputs.appendChild(lowInput);
+            rangeInputs.appendChild(highInput);
+            wrapper.appendChild(rangeInputs);
+            wrapper.appendChild(valueLabel);
+
+        } else {
+            // SINGLE mode
+            let def = min;
+            if (param && manifest && manifest.parameters) {
+                const current = parseFloat(getParam(manifest.parameters, param));
+                if (!isNaN(current)) def = current;
+            } else {
+                const rawDef = parseFloat(visual.defaultValue || opts['DEFAULT'] || opts['default']);
+                if (!isNaN(rawDef)) def = rawDef;
+            }
+            def = snapValue(def);
+
+            const input = document.createElement('input');
+            input.type = 'range';
+            setParameterAccessibleName(input, visual, param);
+            input.min = String(min); input.max = String(max); input.step = String(step); input.value = String(def);
+            if (showTicks) input.setAttribute('list', datalistId);
+            if (param) input.setAttribute('data-parameter', param);
+
+            applyControlState(input, visual, wrapper);
+
+            const valueLabel = document.createElement('span');
+            valueLabel.className = 'range-value';
+            valueLabel.textContent = formatDisplay(def);
+
+            function updateDisplay() {
+                const snapped = snapValue(parseFloat(input.value));
+                valueLabel.textContent = formatDisplay(snapped);
+            }
+
+            function postSliderValue() {
+                const snapped = snapValue(parseFloat(input.value));
+                if (isWebMode && changeActions.length > 0) {
+                    const batch = changeActions.reduce((o, a) => { o[a.parameterName] = String(snapped); return o; }, {});
+                    postParameters(batch).then(m => { if (m) renderManifest(m); });
+                }
+            }
+
+            input.addEventListener('input', updateDisplay);
+
+            const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
+            const debounceMs = parseInt(debounceOpt || '200', 10);
+
+            if (fireOn === 'CHANGE') {
+                let timer = null;
+                input.addEventListener('input', () => {
+                    clearTimeout(timer);
+                    timer = setTimeout(postSliderValue, debounceMs);
+                });
+            } else {
+                input.addEventListener('change', postSliderValue);
+            }
+
+            wrapper.appendChild(input);
+            wrapper.appendChild(valueLabel);
         }
 
         container.appendChild(wrapper);
@@ -5656,11 +7248,21 @@
 
     function renderSearch(container, visual, manifest) {
         const opts          = visual.options || {};
-        // Parameter binding comes from ACTIONS (ON_CHANGE = SET_PARAMETER), not from OPTIONS
         const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
         const param         = changeActions.length > 0 ? changeActions[0].parameterName : null;
         const placeholder   = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || 'Search…';
         const showClear     = isOn(opts['SHOW_CLEAR'] ?? opts['show_clear']);
+        const matchMode     = (getOption(opts, 'match_mode') || 'EXACT').toUpperCase();
+        const minChars      = parseInt(getOption(opts, 'min_chars') || '0', 10);
+
+        function formatSearchValue(raw) {
+            if (!raw) return '';
+            switch (matchMode) {
+                case 'CONTAINS': return `%${raw}%`;
+                case 'STARTS_WITH': return `${raw}%`;
+                default: return raw;
+            }
+        }
 
         const wrapper = document.createElement('div');
         wrapper.className = 'filter-wrapper';
@@ -5705,14 +7307,23 @@
             if (clearButton) clearButton.hidden = input.value.length === 0;
         });
 
+        applyControlState(input, visual, wrapper);
+
         if (isWebMode && changeActions.length > 0) {
             let debounceTimer = null;
+            const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
+            const debounceMs = parseInt(debounceOpt || '350', 10);
             input.addEventListener('input', () => {
                 clearTimeout(debounceTimer);
                 debounceTimer = setTimeout(() => {
-                    const batch = changeActions.reduce((o, a) => { o[a.parameterName] = input.value; return o; }, {});
+                    const raw = input.value.trim();
+                    if (raw.length > 0 && raw.length < minChars) {
+                        return; // Suppress ON_CHANGE until minimum characters typed
+                    }
+                    const searchVal = raw.length === 0 ? '' : formatSearchValue(raw);
+                    const batch = changeActions.reduce((o, a) => { o[a.parameterName] = searchVal; return o; }, {});
                     postParameters(batch).then(m => { if (m) renderManifest(m); });
-                }, 350);
+                }, debounceMs);
             });
         }
 
@@ -5722,16 +7333,32 @@
     // ── Checkbox ────────────────────────────────────────────────────────────
 
     function renderCheckbox(container, visual, manifest) {
+        const opts = visual.options || {};
         const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
         const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
         const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
 
-        let def = visual.defaultValue || 'FALSE';
+        const labelText = opts['LABEL'] || opts['label'] || visual.title || visual.name;
+        const displayStyle = (opts['DISPLAY_STYLE'] || opts['display_style'] || 'CHECKBOX').toUpperCase();
+        const isToggle = displayStyle === 'TOGGLE';
+
+        const trueVal = opts['TRUE_VALUE'] ?? opts['true_value'] ?? '1';
+        const falseVal = opts['FALSE_VALUE'] ?? opts['false_value'] ?? '0';
+
+        let def = visual.defaultValue ?? opts['DEFAULT'] ?? opts['default'] ?? 'FALSE';
+        let currentVal = undefined;
         if (param && manifest && manifest.parameters) {
-            const current = getParam(manifest.parameters, param);
-            if (current !== undefined) def = current;
+            currentVal = getParam(manifest.parameters, param);
         }
-        const checked = isOn(def);
+
+        let checked = false;
+        if (currentVal !== undefined) {
+            const strVal = String(currentVal).trim();
+            checked = strVal === String(trueVal) || isOn(strVal);
+        } else {
+            const strDef = String(def).trim();
+            checked = strDef === String(trueVal) || isOn(strDef);
+        }
 
         const wrapper = document.createElement('div');
         wrapper.className = 'filter-wrapper checkbox-wrapper pos-' + labelPos.toLowerCase();
@@ -5743,20 +7370,45 @@
         if (param) input.setAttribute('data-parameter', param);
 
         const label = document.createElement('label');
-        label.textContent = visual.name;
+        label.textContent = labelText;
 
-        if (labelPos === 'TOP' || labelPos === 'LEFT') {
-             wrapper.appendChild(label);
+        if (isToggle) {
+            const toggleWrapper = document.createElement('label');
+            toggleWrapper.className = 'checkbox-toggle-wrapper';
+
+            const switchSpan = document.createElement('span');
+            switchSpan.className = 'checkbox-toggle-switch';
+            switchSpan.appendChild(input);
+
+            const sliderSpan = document.createElement('span');
+            sliderSpan.className = 'checkbox-toggle-slider';
+            switchSpan.appendChild(sliderSpan);
+
+            toggleWrapper.appendChild(switchSpan);
+            const toggleLabel = document.createElement('span');
+            toggleLabel.className = 'toggle-label';
+            toggleLabel.textContent = labelText;
+            toggleWrapper.appendChild(toggleLabel);
+
+            wrapper.appendChild(toggleWrapper);
+        } else {
+            if (labelPos === 'TOP' || labelPos === 'LEFT') {
+                wrapper.appendChild(label);
+            }
+            wrapper.appendChild(input);
+            if (labelPos !== 'TOP' && labelPos !== 'LEFT' && labelPos !== 'HIDDEN') {
+                wrapper.appendChild(label);
+            }
         }
-        wrapper.appendChild(input);
 
         if (isWebMode && changeActions.length > 0) {
             input.addEventListener('change', () => {
-                const val = input.checked ? 'TRUE' : 'FALSE';
-                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = val; return o; }, {});
+                const val = input.checked ? trueVal : falseVal;
+                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = String(val); return o; }, {});
                 postParameters(batch).then(m => { if (m) renderManifest(m); });
             });
         }
+        applyControlState(input, visual, wrapper);
         container.appendChild(wrapper);
     }
 
@@ -5764,26 +7416,42 @@
 
     function renderTextbox(container, visual, manifest) {
         const opts = visual.options || {};
+        const submitActions = actionsFor(visual, 'ON_SUBMIT').filter(a => a.type === 'SET_PARAMETER');
         const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
-        const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
+        const activeActions = submitActions.length > 0 ? submitActions : changeActions;
+        const param = activeActions.length > 0 ? activeActions[0].parameterName : null;
+
         const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
+        const labelText = opts['LABEL'] || opts['label'] || visual.title || visual.name;
         const placeholder = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || '';
         const maxLengthValue = opts['MAX_LENGTH'] ?? opts['max_length'];
         const maxLength = typeof maxLengthValue === 'number'
             ? maxLengthValue
             : Number(String(maxLengthValue ?? '').trim());
 
-        let def = visual.defaultValue || '';
+        const isMultiline = isOn(opts['MULTILINE'] ?? opts['multiline']) || opts['ROWS'] != null || opts['rows'] != null;
+        const rows = parseInt(opts['ROWS'] || opts['rows'] || '3', 10);
+
+        const pattern = opts['PATTERN'] || opts['pattern'] || null;
+        const validationMsg = opts['VALIDATION_MESSAGE'] || opts['validation_message'] || 'Invalid format';
+        let regex = null;
+        if (pattern) {
+            try { regex = new RegExp(pattern); } catch {}
+        }
+
+        let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
         if (param && manifest && manifest.parameters) {
             const current = getParam(manifest.parameters, param);
             if (current !== undefined) def = current;
         }
 
         const wrapper = document.createElement('div');
-        wrapper.className = 'filter-wrapper textbox-wrapper pos-' + labelPos.toLowerCase();
+        wrapper.className = 'filter-wrapper textbox-wrapper pos-' + labelPos.toLowerCase() + (isMultiline ? ' is-multiline' : '');
 
-        const input = document.createElement('input');
-        input.type = 'text';
+        const input = isMultiline ? document.createElement('textarea') : document.createElement('input');
+        if (!isMultiline) /** @type {HTMLInputElement} */ (input).type = 'text';
+        else /** @type {HTMLTextAreaElement} */ (input).rows = rows > 0 ? rows : 3;
+
         setParameterAccessibleName(input, visual, param);
         input.value = def;
         input.placeholder = placeholder;
@@ -5791,19 +7459,74 @@
         if (param) input.setAttribute('data-parameter', param);
 
         const label = document.createElement('label');
-        label.textContent = visual.name;
+        label.textContent = labelText;
 
         if (labelPos === 'TOP' || labelPos === 'LEFT') {
-             wrapper.appendChild(label);
+            wrapper.appendChild(label);
         }
         wrapper.appendChild(input);
 
-        if (isWebMode && changeActions.length > 0) {
-            input.addEventListener('change', () => {
-                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = input.value; return o; }, {});
-                postParameters(batch).then(m => { if (m) renderManifest(m); });
-            });
+        const errorEl = document.createElement('div');
+        errorEl.className = 'filter-error';
+        errorEl.textContent = validationMsg;
+        errorEl.style.display = 'none';
+        wrapper.appendChild(errorEl);
+
+        function validateInput() {
+            if (!regex) return true;
+            const val = input.value;
+            if (val === '') {
+                input.classList.remove('is-invalid');
+                errorEl.style.display = 'none';
+                return true;
+            }
+            const valid = regex.test(val);
+            if (!valid) {
+                input.classList.add('is-invalid');
+                errorEl.style.display = 'block';
+            } else {
+                input.classList.remove('is-invalid');
+                errorEl.style.display = 'none';
+            }
+            return valid;
         }
+
+        input.addEventListener('input', () => {
+            if (regex) validateInput();
+        });
+
+        function postValues(actionsList) {
+            if (!validateInput()) return;
+            if (isWebMode && actionsList.length > 0) {
+                const batch = actionsList.reduce((o, a) => { o[a.parameterName] = input.value; return o; }, {});
+                postParameters(batch).then(m => { if (m) renderManifest(m); });
+            }
+        }
+
+        applyControlState(input, visual, wrapper);
+
+        if (submitActions.length > 0) {
+            input.addEventListener('blur', () => postValues(submitActions));
+            input.addEventListener('keydown', (e) => {
+                if (/** @type {KeyboardEvent} */ (e).key === 'Enter' && (!isMultiline || /** @type {KeyboardEvent | MouseEvent} */ (e).ctrlKey || /** @type {KeyboardEvent | MouseEvent} */ (e).metaKey)) {
+                    if (!isMultiline) e.preventDefault();
+                    postValues(submitActions);
+                }
+            });
+        } else if (changeActions.length > 0) {
+            const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
+            if (debounceOpt != null) {
+                const debounceMs = parseInt(debounceOpt, 10) || 300;
+                let timer = null;
+                input.addEventListener('input', () => {
+                    clearTimeout(timer);
+                    timer = setTimeout(() => postValues(changeActions), debounceMs);
+                });
+            } else {
+                input.addEventListener('change', () => postValues(changeActions));
+            }
+        }
+
         container.appendChild(wrapper);
     }
 
@@ -5811,47 +7534,167 @@
 
     function renderNumberbox(container, visual, manifest) {
         const opts = visual.options || {};
+        const submitActions = actionsFor(visual, 'ON_SUBMIT').filter(a => a.type === 'SET_PARAMETER');
         const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
-        const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
-        const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
-        const min = visual.min;
-        const max = visual.max;
-        const decimals = visual.decimals || 0;
-        const step = decimals > 0 ? Math.pow(10, -decimals).toFixed(decimals) : '1';
+        const activeActions = submitActions.length > 0 ? submitActions : changeActions;
+        const param = activeActions.length > 0 ? activeActions[0].parameterName : null;
 
-        let def = visual.defaultValue || '0';
+        const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
+        const labelText = opts['LABEL'] || opts['label'] || visual.title || visual.name;
+        const min = visual.min != null ? visual.min : (opts['MIN'] != null ? parseFloat(opts['MIN']) : null);
+        const max = visual.max != null ? visual.max : (opts['MAX'] != null ? parseFloat(opts['MAX']) : null);
+        const decimals = visual.decimals != null ? visual.decimals : (opts['DECIMALS'] != null ? parseInt(opts['DECIMALS'], 10) : 0);
+
+        const stepOpt = opts['STEP'] || opts['step'];
+        const stepVal = stepOpt != null ? parseFloat(stepOpt) : (decimals > 0 ? Math.pow(10, -decimals) : 1);
+        const stepStr = stepOpt != null ? String(stepOpt) : (decimals > 0 ? Math.pow(10, -decimals).toFixed(decimals) : '1');
+
+        const showStepper = isOn(opts['SHOW_STEPPER'] ?? opts['show_stepper']);
+        const prefix = opts['PREFIX'] || opts['prefix'] || '';
+        const suffix = opts['SUFFIX'] || opts['suffix'] || '';
+        const formatOpt = opts['FORMAT'] || opts['format'] || null;
+
+        let def = visual.defaultValue ?? opts['DEFAULT'] ?? opts['default'] ?? '0';
+        let rawNum = parseFloat(def);
+        if (isNaN(rawNum)) rawNum = 0;
+
         if (param && manifest && manifest.parameters) {
             const current = getParam(manifest.parameters, param);
-            if (current !== undefined) def = current;
+            if (current !== undefined && !isNaN(parseFloat(current))) rawNum = parseFloat(current);
         }
 
         const wrapper = document.createElement('div');
         wrapper.className = 'filter-wrapper numberbox-wrapper pos-' + labelPos.toLowerCase();
 
         const input = document.createElement('input');
-        input.type = 'number';
+        input.type = formatOpt ? 'text' : 'number';
         setParameterAccessibleName(input, visual, param);
-        input.value = def;
         input.placeholder = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || '';
         if (min !== undefined && min !== null) input.min = min;
         if (max !== null && max !== undefined) input.max = max;
-        input.step = step;
+        input.step = stepStr;
         if (param) input.setAttribute('data-parameter', param);
 
-        const label = document.createElement('label');
-        label.textContent = visual.name;
-
-        if (labelPos === 'TOP' || labelPos === 'LEFT') {
-             wrapper.appendChild(label);
+        function displayVal(val) {
+            return formatOpt ? formatValue(val, formatOpt) : String(val);
         }
-        wrapper.appendChild(input);
 
-        if (isWebMode && changeActions.length > 0) {
-            input.addEventListener('change', () => {
-                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = input.value; return o; }, {});
-                postParameters(batch).then(m => { if (m) renderManifest(m); });
+        input.value = displayVal(rawNum);
+
+        if (formatOpt) {
+            input.addEventListener('focus', () => {
+                input.value = String(rawNum);
+            });
+            input.addEventListener('blur', () => {
+                const parsed = parseFloat(input.value);
+                if (!isNaN(parsed)) rawNum = parsed;
+                input.value = displayVal(rawNum);
             });
         }
+
+        const label = document.createElement('label');
+        label.textContent = labelText;
+
+        if (labelPos === 'TOP' || labelPos === 'LEFT') {
+            wrapper.appendChild(label);
+        }
+
+        function setNumericValue(val) {
+            let n = val;
+            if (min !== null && min !== undefined && n < min) n = min;
+            if (max !== null && max !== undefined && n > max) n = max;
+            rawNum = n;
+            input.value = (document.activeElement === input && formatOpt) ? String(rawNum) : displayVal(rawNum);
+        }
+
+        function postValues(actionsList) {
+            const parsed = parseFloat(input.value.replace(/[^0-9.-]+/g, ''));
+            if (!isNaN(parsed)) setNumericValue(parsed);
+            if (isWebMode && actionsList.length > 0) {
+                const batch = actionsList.reduce((o, a) => { o[a.parameterName] = String(rawNum); return o; }, {});
+                postParameters(batch).then(m => { if (m) renderManifest(m); });
+            }
+        }
+
+        const hasGroup = prefix || suffix || showStepper;
+        if (hasGroup) {
+            const group = document.createElement('div');
+            group.className = 'numberbox-group';
+
+            if (prefix) {
+                const preSpan = document.createElement('span');
+                preSpan.className = 'numberbox-prefix';
+                preSpan.textContent = prefix;
+                group.appendChild(preSpan);
+            }
+
+            if (showStepper) {
+                const decBtn = document.createElement('button');
+                decBtn.type = 'button';
+                decBtn.className = 'numberbox-stepper-btn stepper-dec';
+                decBtn.textContent = '−';
+                decBtn.setAttribute('aria-label', `Decrease ${labelText}`);
+                decBtn.addEventListener('click', () => {
+                    setNumericValue(rawNum - stepVal);
+                    postValues(activeActions);
+                });
+                group.appendChild(decBtn);
+            }
+
+            group.appendChild(input);
+
+            if (showStepper) {
+                const incBtn = document.createElement('button');
+                incBtn.type = 'button';
+                incBtn.className = 'numberbox-stepper-btn stepper-inc';
+                incBtn.textContent = '+';
+                incBtn.setAttribute('aria-label', `Increase ${labelText}`);
+                incBtn.addEventListener('click', () => {
+                    setNumericValue(rawNum + stepVal);
+                    postValues(activeActions);
+                });
+                group.appendChild(incBtn);
+            }
+
+            if (suffix) {
+                const sufSpan = document.createElement('span');
+                sufSpan.className = 'numberbox-suffix';
+                sufSpan.textContent = suffix;
+                group.appendChild(sufSpan);
+            }
+
+            wrapper.appendChild(group);
+        } else {
+            wrapper.appendChild(input);
+        }
+
+        applyControlState(input, visual, wrapper);
+        if (input.disabled) {
+            wrapper.querySelectorAll('.numberbox-stepper-btn').forEach(b => /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (b).disabled = true);
+        }
+
+        if (submitActions.length > 0) {
+            input.addEventListener('blur', () => postValues(submitActions));
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    postValues(submitActions);
+                }
+            });
+        } else if (changeActions.length > 0) {
+            const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
+            if (debounceOpt != null) {
+                const debounceMs = parseInt(debounceOpt, 10) || 300;
+                let timer = null;
+                input.addEventListener('input', () => {
+                    clearTimeout(timer);
+                    timer = setTimeout(() => postValues(changeActions), debounceMs);
+                });
+            } else {
+                input.addEventListener('change', () => postValues(changeActions));
+            }
+        }
+
         container.appendChild(wrapper);
     }
 
@@ -5862,6 +7705,43 @@
         const src  = opts['SRC'] || opts['src'] || '';
         const alt  = opts['ALT'] || opts['alt'] || '';
         const fit  = (opts['FIT'] || opts['fit'] || 'contain').toLowerCase();
+        const mode = (opts['MODE'] || opts['mode'] || 'SINGLE').toUpperCase();
+        const cols = parseInt(opts['COLUMNS'] || opts['columns'] || '3', 10);
+        const aspect = opts['ASPECT_RATIO'] || opts['aspect_ratio'];
+        const fallback = opts['FALLBACK'] || opts['fallback'];
+
+        const clickActions = actionsFor(visual, 'ON_CLICK');
+
+        if (mode === 'GALLERY' && visual.rows && visual.rows.length > 0) {
+            const gallery = document.createElement('div');
+            gallery.className = 'image-gallery';
+            gallery.style.gridTemplateColumns = `repeat(${cols > 0 ? cols : 3}, 1fr)`;
+            gallery.style.gap = '8px';
+
+            const srcIdx = visual.columns ? visual.columns.findIndex(c => c.toLowerCase() === 'src' || c.toLowerCase() === 'url' || c.toLowerCase() === 'image') : 0;
+            const useIdx = srcIdx >= 0 ? srcIdx : 0;
+
+            visual.rows.forEach(row => {
+                const rawUrl = String(row[useIdx] ?? '');
+                const img = document.createElement('img');
+                img.src = safeUrl(rawUrl || fallback || '');
+                img.alt = alt;
+                img.style.objectFit = fit;
+                if (aspect) img.style.aspectRatio = aspect.replace(':', '/');
+                if (fallback) {
+                    img.onerror = () => { img.src = safeUrl(fallback); img.onerror = null; };
+                }
+                if (clickActions.length > 0) {
+                    img.style.cursor = 'pointer';
+                    img.addEventListener('click', () => {
+                        clickActions.forEach(a => executeAction(a, row, visual.columns, visual.name, visual));
+                    });
+                }
+                gallery.appendChild(img);
+            });
+            container.appendChild(gallery);
+            return;
+        }
 
         const wrapper = document.createElement('div');
         wrapper.style.width  = '100%';
@@ -5870,12 +7750,25 @@
         wrapper.style.alignItems = 'center';
         wrapper.style.justifyContent = 'center';
 
+        const finalSrc = src || (visual.rows && visual.rows.length > 0 && visual.rows[0][0] != null ? String(visual.rows[0][0]) : '') || fallback || '';
         const img = document.createElement('img');
-        img.src   = safeUrl(src);
+        img.src   = safeUrl(finalSrc);
         img.alt   = alt;
         img.style.maxWidth  = '100%';
         img.style.maxHeight = '100%';
         img.style.objectFit = fit;
+        if (aspect) img.style.aspectRatio = aspect.replace(':', '/');
+        if (fallback) {
+            img.onerror = () => { img.src = safeUrl(fallback); img.onerror = null; };
+        }
+
+        if (clickActions.length > 0) {
+            wrapper.style.cursor = 'pointer';
+            wrapper.addEventListener('click', () => {
+                const row = visual.rows && visual.rows.length > 0 ? visual.rows[0] : [];
+                clickActions.forEach(a => executeAction(a, row, visual.columns || [], visual.name, visual));
+            });
+        }
 
         wrapper.appendChild(img);
         container.appendChild(wrapper);
@@ -5885,13 +7778,16 @@
 
     function renderButton(container, btn) {
         const styles = btn.styles || {};
+        const opts = btn.options || {};
         const btnEl = document.createElement('button');
         applyDesignTokens(btnEl, btn.styles, false);
         btnEl.className = 'report-btn';
-        btnEl.textContent = btn.title || btn.name;
         btnEl.setAttribute('data-name', btn.name);
 
-        const tag = getOption(btn.options, 'TAG') || getStyle(styles, 'TAG');
+        const variant = (getOption(opts, 'VARIANT') || 'secondary').toLowerCase();
+        btnEl.classList.add('btn-' + variant);
+
+        const tag = getOption(opts, 'TAG') || getStyle(styles, 'TAG');
         if (tag) btnEl.setAttribute('data-tag', tag);
         if (btn.tooltip && btn.tooltip.text) btnEl.title = btn.tooltip.text;
 
@@ -5914,21 +7810,120 @@
         if (brd)  btnEl.style.border       = brd;
         if (shd)  btnEl.style.boxShadow    = shd;
 
-        btnEl.style.cursor      = 'pointer';
-        if (!brd) btnEl.style.border = 'none';
+        btnEl.style.cursor = 'pointer';
+        if (!brd && !variant) btnEl.style.border = 'none';
         if (!fw)  btnEl.style.fontWeight = '600';
+
+        const icon = getOption(opts, 'ICON');
+        const iconPos = (getOption(opts, 'ICON_POSITION') || 'left').toLowerCase();
+        const baseTitle = btn.title || btn.name;
+
+        function updateButtonContent(titleText) {
+            btnEl.innerHTML = '';
+            const textSpan = document.createElement('span');
+            textSpan.className = 'btn-label';
+            textSpan.textContent = titleText;
+
+            let iconEl = null;
+            if (icon) {
+                iconEl = document.createElement('span');
+                iconEl.className = 'btn-icon';
+                if (icon.includes('.') || icon.includes('/')) {
+                    iconEl.innerHTML = `<img src="${escHtml(safeUrl(icon))}" style="width:16px;height:16px;vertical-align:middle;">`;
+                } else {
+                    iconEl.textContent = icon;
+                }
+            }
+
+            if (iconEl && iconPos === 'left') {
+                btnEl.appendChild(iconEl);
+                btnEl.appendChild(document.createTextNode(' '));
+            }
+            btnEl.appendChild(textSpan);
+            if (iconEl && iconPos === 'right') {
+                btnEl.appendChild(document.createTextNode(' '));
+                btnEl.appendChild(iconEl);
+            }
+        }
+
+        updateButtonContent(baseTitle);
+
+        // Disabled expression
+        const disabledExpr = getOption(opts, 'DISABLED') || getStyle(styles, 'DISABLED');
+        if (disabledExpr != null && evaluateExpressionAgainstParameters(disabledExpr, parameters)) {
+            btnEl.disabled = true;
+            btnEl.classList.add('is-disabled');
+            btnEl.setAttribute('aria-disabled', 'true');
+        }
+
+        // Toggle mode support
+        const mode = (getOption(opts, 'MODE') || '').toUpperCase();
+        const isToggle = mode === 'TOGGLE';
+        const onValue = getOption(opts, 'ON_VALUE') || '1';
+        const offValue = getOption(opts, 'OFF_VALUE') || '0';
+        const defaultState = (getOption(opts, 'DEFAULT') || 'OFF').toUpperCase();
+
+        let isToggledOn = _uiStates[btn.name]?.toggled ?? (defaultState === 'ON');
+        if (isToggle) {
+            btnEl.classList.add('mode-toggle');
+            if (isToggledOn) btnEl.classList.add('btn-active');
+        }
 
         // Mark RUN buttons so updateStagedUI can target them precisely
         if ((btn.actions || []).some(a => a.type === 'APPLY_PARAMETERS')) {
             btnEl.dataset.isRunBtn = 'true';
         }
-        btnEl.addEventListener('click', () => {
+
+        btnEl.addEventListener('click', async () => {
+            if (btnEl.disabled) return;
+
+            // Confirm prompt
+            const confirmMsg = getOption(opts, 'CONFIRM');
+            if (confirmMsg) {
+                if (!window.confirm(confirmMsg)) return;
+            }
+
+            // Toggle mode state flip
+            if (isToggle) {
+                isToggledOn = !isToggledOn;
+                _uiStates[btn.name] = Object.assign({}, _uiStates[btn.name], { toggled: isToggledOn });
+                if (isToggledOn) btnEl.classList.add('btn-active');
+                else btnEl.classList.remove('btn-active');
+
+                const toggleVal = isToggledOn ? onValue : offValue;
+                const setParams = (btn.actions || []).filter(a => a.type === 'SET_PARAMETER');
+                if (setParams.length > 0 && !setParams[0].valueExpression) {
+                    const batch = {};
+                    setParams.forEach(a => batch[a.parameterName] = toggleVal);
+                    if (vscode) vscode.postMessage({ type: 'refreshReport', parameters: batch });
+                    else postParameters(batch).then(m => { if (m) renderManifest(m); });
+                    return;
+                }
+            }
+
             const clickActions = actionsFor(btn, 'ON_CLICK');
             if (clickActions.length === 0) return;
 
-            clickActions.forEach(action => {
-                executeAction(action, [], [], btn.name, btn);
-            });
+            // Spinner feedback
+            const showSpinner = isOn(getOption(opts, 'SHOW_SPINNER'));
+            let spinnerEl = null;
+            if (showSpinner) {
+                btnEl.classList.add('btn-loading');
+                spinnerEl = document.createElement('span');
+                spinnerEl.className = 'btn-spinner';
+                btnEl.prepend(spinnerEl);
+            }
+
+            try {
+                for (const action of clickActions) {
+                    await executeAction(action, [], [], btn.name, btn);
+                }
+            } finally {
+                if (spinnerEl) {
+                    spinnerEl.remove();
+                    btnEl.classList.remove('btn-loading');
+                }
+            }
         });
 
         container.appendChild(btnEl);
@@ -6037,7 +8032,7 @@
                         e.stopPropagation();
                         const isHidden = childrenContainer.style.display === 'none';
                         childrenContainer.style.display = isHidden ? 'block' : 'none';
-                        e.target.innerHTML = isHidden ? '&#x25BC;' : '&#x25B6;';
+                        /** @type {Element} */ (e.target).innerHTML = isHidden ? '&#x25BC;' : '&#x25B6;';
                     });
                 }
                 container.appendChild(el);
@@ -6129,7 +8124,7 @@
         try {
             const navItem = document.querySelector(`[data-page="${CSS.escape(pageName)}"]`);
             if (navItem) {
-                navItem.click();
+                /** @type {HTMLElement} */ (navItem).click();
                 return;
             }
         } catch (e) { console.error(e); }
@@ -6139,13 +8134,13 @@
 
         try {
             document.querySelectorAll('.page').forEach(page => {
-                page.style.display = page === targetPage ? 'block' : 'none';
+                /** @type {HTMLElement} */ (page).style.display = page === targetPage ? 'block' : 'none';
             });
         } catch (e) { console.error(e); }
 
         try {
             document.querySelectorAll('[data-page]').forEach(item => {
-                if (item.dataset.page === pageName) item.classList.add('active');
+                if (/** @type {HTMLElement} */ (item).dataset.page === pageName) item.classList.add('active');
                 else item.classList.remove('active');
             });
         } catch (e) { console.error(e); }
@@ -6164,17 +8159,17 @@
 
     function getActivePage() {
         return Array.from(document.querySelectorAll('.page'))
-            .find(page => page.style.display !== 'none') || null;
+            .find(page => /** @type {HTMLElement} */ (page).style.display !== 'none') || null;
     }
 
     function getActivePageName() {
         const page = getActivePage();
-        return page ? (page.dataset.pageName || null) : null;
+        return page ? (/** @type {HTMLElement} */ (page).dataset.pageName || null) : null;
     }
 
     function isActivePagePaginated() {
         const page = getActivePage();
-        return !!page && (page.dataset.pageMode || '').toUpperCase() === 'PAGINATED';
+        return !!page && (/** @type {HTMLElement} */ (page).dataset.pageMode || '').toUpperCase() === 'PAGINATED';
     }
 
     function executeAction(action, rowData, columns, visualName, visualCtx) {
@@ -6217,7 +8212,7 @@
 
                     // If it's a page, navigate to it
                     const navBtn = document.querySelector(`.nav-tab[data-page="${CSS.escape(targetName)}"]`);
-                    if (navBtn) navBtn.click();
+                    if (navBtn) /** @type {HTMLElement} */ (navBtn).click();
                 }
             }
 
@@ -6243,7 +8238,12 @@
                 postRunScript(scriptPath, finalParams).then(res => {
                     if (res && res.message) feedback.notify(res.message, { title: 'Script action', tone: 'success', auditAction: 'report.script.run' });
                     if (res && res.refresh) {
-                        fetchManifest().then(m => { if (m) renderManifest(m); });
+                        // `fetchManifest` was never defined, so a RUN_SCRIPT action that asked for a
+                        // refresh threw instead of refreshing — after the script had already run.
+                        // Re-posting an empty parameter set is how the two branches above refresh;
+                        // `isInteraction` keeps a paginated page from staging the empty set and
+                        // handing back null, and keeps the report's parameter state untouched.
+                        postParameters({}, true).then(m => { if (m) renderManifest(m); });
                     }
                 });
             } else {
@@ -6408,6 +8408,53 @@
             });
         } else if (action.type === 'APPLY_BOOKMARK') {
             applyBookmark(action.bookmarkName);
+        } else if (action.type === 'RESET_PARAMETERS') {
+            const targets = action.resetParameters || [];
+            const resetBatch = {};
+            if (baselineManifest && baselineManifest.parameters) {
+                if (targets.length > 0) {
+                    targets.forEach(p => {
+                        const cleanP = p.startsWith('@') ? p : ('@' + p);
+                        let foundVal = '';
+                        for (const k in baselineManifest.parameters) {
+                            if (k.toLowerCase() === cleanP.toLowerCase()) {
+                                foundVal = baselineManifest.parameters[k];
+                                break;
+                            }
+                        }
+                        resetBatch[cleanP] = foundVal;
+                    });
+                } else {
+                    Object.keys(baselineManifest.parameters).forEach(k => {
+                        resetBatch[k] = baselineManifest.parameters[k];
+                    });
+                }
+            } else {
+                if (targets.length > 0) {
+                    targets.forEach(p => {
+                        const cleanP = p.startsWith('@') ? p : ('@' + p);
+                        resetBatch[cleanP] = '';
+                    });
+                }
+            }
+            for (let k in pendingParameters) delete pendingParameters[k];
+            updateStagedUI();
+            if (vscode) {
+                vscode.postMessage({ type: 'refreshReport', parameters: resetBatch });
+            } else {
+                _postParametersInternal(resetBatch, false, getActivePageName()).then(m => { if (m) renderManifest(m); });
+            }
+        } else if (action.type === 'OPEN_URL') {
+            const rawUrl = action.url || resolveActionValue(action, rowData, columns);
+            const url = safeUrl(rawUrl);
+            if (url && url !== '#') {
+                const target = action.target || '_blank';
+                window.open(url, target);
+            }
+        } else if (action.type === 'SHOW_MODAL') {
+            showModalDialog(action.modalName, _lastManifest);
+        } else if (action.type === 'HIDE_MODAL') {
+            hideModalDialog(action.modalName);
         }
     }
 
@@ -6884,7 +8931,7 @@
             menu.style.display = 'block';
             btn.setAttribute('aria-expanded', 'true');
             const all = items();
-            if (all.length) all[focusLast ? all.length - 1 : 0].focus();
+            if (all.length) /** @type {HTMLElement} */ (all[focusLast ? all.length - 1 : 0]).focus();
         }
 
         function isOpen() { return !menu.hidden; }
@@ -7063,17 +9110,17 @@
             const index = all.indexOf(document.activeElement);
             if (e.key === 'Escape') { e.preventDefault(); close(true); }
             else if (e.key === 'Tab') { close(false); }
-            else if (e.key === 'ArrowDown') { e.preventDefault(); all[(index + 1) % all.length]?.focus(); }
-            else if (e.key === 'ArrowUp') { e.preventDefault(); all[(index - 1 + all.length) % all.length]?.focus(); }
-            else if (e.key === 'Home') { e.preventDefault(); all[0]?.focus(); }
-            else if (e.key === 'End') { e.preventDefault(); all[all.length - 1]?.focus(); }
+            else if (e.key === 'ArrowDown') { e.preventDefault(); /** @type {HTMLElement} */ (all[(index + 1) % all.length])?.focus(); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); /** @type {HTMLElement} */ (all[(index - 1 + all.length) % all.length])?.focus(); }
+            else if (e.key === 'Home') { e.preventDefault(); /** @type {HTMLElement} */ (all[0])?.focus(); }
+            else if (e.key === 'End') { e.preventDefault(); /** @type {HTMLElement} */ (all[all.length - 1])?.focus(); }
         });
 
         // The header is rebuilt on every manifest render, so this listener must go inert once its
         // picker has been detached rather than accumulating one live handler per render.
         document.addEventListener('click', e => {
             if (!container.isConnected) return;
-            if (isOpen() && !container.contains(e.target)) close(false);
+            if (isOpen() && !container.contains(/** @type {Node} */ (e.target))) close(false);
         });
 
         container.appendChild(btn);
@@ -7346,12 +9393,12 @@
                     badge = document.createElement('div');
                     badge.className = 'pending-badge';
                     badge.innerHTML = '&#x26A0; Changes Pending';
-                    badge.style.background = '#fff3cd';
-                    badge.style.color = '#856404';
-                    badge.style.padding = '4px 8px';
-                    badge.style.borderRadius = '4px';
-                    badge.style.fontSize = '0.8em';
-                    badge.style.fontWeight = 'bold';
+                    /** @type {HTMLElement} */ (badge).style.background = '#fff3cd';
+                    /** @type {HTMLElement} */ (badge).style.color = '#856404';
+                    /** @type {HTMLElement} */ (badge).style.padding = '4px 8px';
+                    /** @type {HTMLElement} */ (badge).style.borderRadius = '4px';
+                    /** @type {HTMLElement} */ (badge).style.fontSize = '0.8em';
+                    /** @type {HTMLElement} */ (badge).style.fontWeight = 'bold';
                     header.appendChild(badge);
                 }
             } else if (badge) {

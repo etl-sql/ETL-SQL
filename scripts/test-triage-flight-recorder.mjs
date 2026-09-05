@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { renderRunEvidence, renderTriageBoard, quarantineUrl } from '../src/ETL-SQL.Portal/wwwroot/js/triage-ui.js';
+import { readPortalPage, readPortalPageModule } from './lib/portal-page.mjs';
 
 const detail = {
   run: {
@@ -62,7 +63,7 @@ assert.match(rendered, /Close evidence/);
 assert.match(renderRunEvidence({ status: 'loading' }), /Loading durable run evidence/);
 assert.match(renderRunEvidence({ status: 'error', message: '<offline>' }), /&lt;offline&gt;/);
 
-const host = await readFile(new URL('../src/ETL-SQL.Portal/wwwroot/orchestrator.html', import.meta.url), 'utf8');
+const host = readPortalPage('orchestrator');
 assert.match(host, /triageRun:\(runId\).*\/triage\/runs\//);
 assert.match(host, /triageState\.details\.set\(runId, \{ status: 'loading' \}\)/);
 

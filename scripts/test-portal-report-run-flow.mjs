@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readPortalPage, readPortalPageModule } from './lib/portal-page.mjs';
 
 const scriptRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptRoot, '..');
-const source = fs.readFileSync(path.join(repoRoot, 'src', 'ETL-SQL.Portal', 'wwwroot', 'index.html'), 'utf8');
+const source = readPortalPage('index');
 
 assert.match(source, /await reportsApi\.getParameters\(id\)/);
 assert.match(source, /validateParamFields\('runParameterFields', params\)/);

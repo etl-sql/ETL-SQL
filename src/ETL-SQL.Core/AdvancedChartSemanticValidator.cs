@@ -107,6 +107,12 @@ public static class AdvancedChartSemanticValidator
                 Add(results, node, $"Scale '{scale.Name}' OUTER_PADDING must be between zero and one.");
             if (scale.OuterPadding != 0m && scale.Kind != AdvancedChartScaleKind.Band)
                 Add(results, node, $"Scale '{scale.Name}' OUTER_PADDING is valid only for BAND scales.");
+            if (scale.TimeUnit is not null)
+            {
+                var tu = scale.TimeUnit.ToUpperInvariant();
+                if (tu is not ("AUTO" or "DAY" or "WEEK" or "MONTH" or "QUARTER" or "YEAR"))
+                    Add(results, node, $"Scale '{scale.Name}' TIME_UNIT accepts only AUTO, DAY, WEEK, MONTH, QUARTER, or YEAR; found '{scale.TimeUnit}'.");
+            }
             if (scale.ColorRange is not { } range) continue;
 
             var rangeNode = Anchor(range, node);
@@ -202,6 +208,20 @@ public static class AdvancedChartSemanticValidator
                 Add(results, layerNode, $"Layer '{layer.Name}' BAND_SIZE must be greater than zero and at most one.");
             if (layer.TickThickness <= 0m || layer.TickThickness > 1m)
                 Add(results, layerNode, $"Layer '{layer.Name}' THICKNESS must be greater than zero and at most one em.");
+            if (layer.AreaBaseline is not null)
+            {
+                if (layer.Mark != AdvancedChartMarkKind.Area)
+                    Add(results, layerNode, $"Layer '{layer.Name}' may declare AREA_BASELINE only for AREA marks.");
+                else if (!layer.AreaBaseline.Equals("ZERO", StringComparison.OrdinalIgnoreCase) &&
+                         !decimal.TryParse(layer.AreaBaseline, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _))
+                    Add(results, layerNode, $"Layer '{layer.Name}' AREA_BASELINE must be ZERO or a decimal number; found '{layer.AreaBaseline}'.");
+            }
+            if (layer.HoverFocus is not null)
+            {
+                var hf = layer.HoverFocus.ToUpperInvariant();
+                if (hf is not ("NONE" or "SELF" or "SERIES"))
+                    Add(results, layerNode, $"Layer '{layer.Name}' HOVER_FOCUS accepts only NONE, SELF, or SERIES; found '{layer.HoverFocus}'.");
+            }
 
             ValidatePosition(results, chart, layer, layerNode);
 

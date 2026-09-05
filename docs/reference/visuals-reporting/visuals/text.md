@@ -1,77 +1,72 @@
 # TEXT
-Renders a free-form Markdown or plain-text block. Ideal for report headers, narrative commentary, research-paper-style paragraphs, disclaimers, and dynamic text driven by query results.
 
-Use CONTENT to supply the markdown directly. DEFAULT is accepted as an alias for backward compatibility.
-For dynamic text built from a query, use SOURCE with MAPPINGS (CONTENT = col). The first row's value is rendered.
+Renders Markdown, plain text, or template-interpolated commentary with formatting and typography controls.
 
 ## Syntax
 
 ```sql
 CREATE VISUAL VisualName AS TEXT (
-  SOURCE = #tableName,
-  MAPPINGS (
-    ...
-  )
+  [SOURCE = #tableName,]
+  [MAPPINGS (
+    [CONTENT = <column_name>]
+  ),]
+  [CONTENT = '<template_text_or_markdown>',]
+  [OPTIONS (
+    [MARKDOWN = ON|OFF,]
+    [ALIGN = 'left'|'center'|'right',]
+    [MAX_LINES = <int_lines>,]
+    [OVERFLOW = CLIP|SCROLL|ELLIPSIS,]
+    [FONT_SIZE = '<css_size>',]
+    [FONT_COLOR = '<color_hex>',]
+    [FONT_WEIGHT = NORMAL|BOLD|<number>]
+  )]
+  [, ACTIONS (ON_CLICK = <action>)]
 );
 ```
 
 ## Mappings
 
-- **CONTENT** - Dynamic text column from `SOURCE` (renders the first row's value).
-
-Static text supplies markdown directly via `CONTENT = '...'` without `MAPPINGS`.
+- **CONTENT** — Column containing dynamic narrative text or Markdown.
 
 ## Options
 
-- **MARKDOWN = ON|OFF** - render CONTENT as Markdown (default ON; set OFF for plain escaped text)
-  ALIGN    = 'left'|'center'|'right'  (default 'left')
+- **MARKDOWN = ON|OFF** — Renders content as formatted Markdown (default `ON`; set `OFF` for escaped text).
+- **ALIGN = 'left'|'center'|'right'** — Text horizontal alignment (default `'left'`).
+- **MAX_LINES = n** — Limits visible text block to a maximum number of rendered lines.
+- **OVERFLOW = CLIP|SCROLL|ELLIPSIS** — Overflow handling when content exceeds visual area or `MAX_LINES` limit (default `CLIP`).
+- **FONT_SIZE = 'size'** — Typography font size string (e.g. `'14px'`, `'1.1rem'`).
+- **FONT_COLOR = 'color'** — Text typography foreground color hex code or CSS color string.
+- **FONT_WEIGHT = NORMAL|BOLD|number** — Font weight styling (e.g. `BOLD`, `600`).
 
-Markdown features supported: headers (#/##/###), **bold**, *italic*, `inline code`,
-fenced code blocks (```), `[links](http://example.com)`, unordered lists (- item), ordered lists (1. item),
-blockquotes (> text), tables (|col|col|), horizontal rules (---).
-
-Static (most common):
 ## Examples
 
 ```sql
-CREATE VISUAL Summary AS TEXT (
-  CONTENT = '## Q1 2026 Executive Summary
+SELECT 'Widget Pro' AS ProductName, 0.325 AS ProfitRate INTO #summary_stats;
 
-Revenue grew **12% YoY** driven by enterprise deals in the West region.
-
-Key themes:
-- Strong ARR expansion from existing customers
-- New logo wins up 18% vs Q4
-- EMEA pipeline rebuilt after restructure
-
-> All figures are preliminary and subject to audit.'
+CREATE VISUAL ProductSummary AS TEXT (
+  SOURCE = #summary_stats,
+  CONTENT = 'Top performing product **{ProductName}** earned margin **{ProfitRate FORMAT ''0.0%''}**.',
+  OPTIONS (
+    MAX_LINES = 2,
+    OVERFLOW = ELLIPSIS,
+    FONT_SIZE = '16px',
+    FONT_COLOR = '#1e3a8a',
+    FONT_WEIGHT = BOLD
+  ),
+  ACTIONS (
+    ON_CLICK = SHOW_MODAL('DetailModal')
+  )
 );
 ```
 
-Static with alignment:
 ```sql
-CREATE VISUAL Disclaimer AS TEXT (
-  CONTENT = '*Data as of last refresh. Figures are unaudited.*',
-  OPTIONS (ALIGN = 'center', MARKDOWN = ON)
-);
-```
-
-Plain HTML (MARKDOWN = OFF):
-```sql
-CREATE VISUAL RawHtml AS TEXT (
-  CONTENT = '<p style="color:#888;font-size:0.85em">Data as of last refresh.</p>',
-  OPTIONS (MARKDOWN = OFF)
-);
-```
-
-Dynamic (narrative driven by a query):
-```sql
-SELECT 'Revenue grew ' + CAST(ROUND(growth_pct, 1) AS VARCHAR) + '% vs prior year.' AS content
-INTO #narrative FROM #metrics;
-
-CREATE VISUAL Narrative AS TEXT (
-  SOURCE   = #narrative,
-  MAPPINGS (CONTENT = content)
+CREATE VISUAL ReportDisclaimer AS TEXT (
+  CONTENT = '*Financial figures shown are preliminary and subject to final audit reconciliations.*',
+  OPTIONS (
+    ALIGN = 'center',
+    MARKDOWN = ON,
+    FONT_COLOR = '#6b7280'
+  )
 );
 ```
 

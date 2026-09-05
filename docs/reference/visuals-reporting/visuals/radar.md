@@ -36,6 +36,7 @@ Alternatively, explicit mappings may be provided:
 - **FILL_OPACITY = 0.0..1.0** — Opacity for series polygon fills, making overlapping series distinguishable (default `0.18`).
 - **INDEPENDENT_AXES = ON|OFF** — When `ON`, each axis auto-scales independently based on its own dimension min and max instead of sharing a global scale (default `OFF`).
 - **FILL = ON|OFF** — Controls whether the radar series area is filled (default `ON`).
+- **DATA_LABELS = ON|OFF** — Renders data values at each radar vertex marker (default `OFF`).
 - **MIN = number** — Explicit minimum value for all shared axes (default `0`).
 - **MAX = number** — Explicit maximum value for all shared axes (auto-scaled to 110% of data maximum if omitted).
 - **TITLE = 'text'** — Visual title displayed above the chart.

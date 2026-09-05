@@ -64,7 +64,16 @@ namespace ETL_SQL.Reporting.Builders
                     MarginBottom = pStmt.PrintLayout.MarginBottom,
                     MarginLeft = pStmt.PrintLayout.MarginLeft,
                     Overflow = pStmt.PrintLayout.Overflow
-                }
+                },
+                MobileLayout = pStmt.MobileLayout == null ? null : new MobileLayoutManifest
+                {
+                    Structure = pStmt.MobileLayout.Structure,
+                    SlotMap = pStmt.MobileLayout.SlotMap.ToDictionary(kv => kv.Key, kv => kv.Value),
+                    Breakpoint = pStmt.MobileLayout.Breakpoint ?? "768px"
+                },
+                Actions = pStmt.Actions.Count > 0 ? pStmt.Actions.Select(ManifestBuilder.TranslateAction).ToList() : null,
+                Options = pStmt.Options.Count > 0 ? new Dictionary<string, string>(pStmt.Options) : null,
+                VisibleExpression = pStmt.VisibleExpression?.ToSql()
             };
 
 

@@ -1,3 +1,4 @@
+// @ts-nocheck — generated copy; check the canonical source.
 /* GENERATED FILE - DO NOT EDIT.
  * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-authoring.js
  * Edit the canonical source, then run: node .\scripts\sync-assets.js
@@ -183,6 +184,13 @@ export function createStudioAuthoringSurfaces({
                 // Every footer button is disabled while a request is in flight, so a slow schema read
                 // cannot be double-submitted into two datasets.
                 busy(flag) { actionHost.querySelectorAll('button').forEach(button => { button.disabled = flag; }); },
+                /**
+                 * @param {Object} [content]
+                 * @param {string} [content.lede]
+                 * @param {string} [content.body]
+                 * @param {Array<*>} [content.actions]
+                 * @param {Function} [content.wire] Called with the body once it is in the DOM.
+                 */
                 render({ lede = '', body = '', actions = [], wire } = {}) {
                     bodyHost.innerHTML = (lede ? `<p class="etlsql-studio-guided-lede">${lede}</p>` : '') + body;
                     currentActions = actions;

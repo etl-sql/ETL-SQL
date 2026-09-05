@@ -6,7 +6,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const scriptRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptRoot, '..');
 const generatedPath = path.join(repoRoot, 'src', 'ETL-SQL.Portal', 'wwwroot', 'js', 'api-contracts.generated.js');
-const adminPath = path.join(repoRoot, 'src', 'ETL-SQL.Portal', 'wwwroot', 'admin.html');
+// The admin page's behaviour used to live in an inline <script type="module"> block in
+// admin.html and now lives in a file of its own, so the casing assertions below read the file.
+const adminPath = path.join(repoRoot, 'src', 'ETL-SQL.Portal', 'wwwroot', 'js', 'pages', 'admin.js');
 const { assertApiContract } = await import(pathToFileURL(generatedPath));
 
 const user = {

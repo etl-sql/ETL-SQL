@@ -1,5 +1,5 @@
-import { auth } from '/js/api.js?v=0.17.0';
-import { bindMarkdownActions, renderMarkdown } from '/js/markdown-renderer.js?v=0.17.0';
+import { auth } from './api.js';
+import { bindMarkdownActions, renderMarkdown } from './markdown-renderer.js';
 
 (function () {
   const searchInput = document.getElementById('search');
@@ -11,6 +11,7 @@ import { bindMarkdownActions, renderMarkdown } from '/js/markdown-renderer.js?v=
   let activeSection = 'All';
 
   function getAuthHeaders() {
+    /** @type {Record<string, string>} */
     const headers = {};
     const token = auth.getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -71,7 +72,7 @@ import { bindMarkdownActions, renderMarkdown } from '/js/markdown-renderer.js?v=
 
     // Highlight active item in sidebar
     resultsContainer.querySelectorAll('.folder-item').forEach(el => {
-      el.classList.toggle('active', el.dataset.path === path);
+      el.classList.toggle('active', /** @type {HTMLElement} */ (el).dataset.path === path);
     });
 
     documentPane.innerHTML = '<div class="loading-state">Loading document…</div>';
@@ -109,28 +110,28 @@ import { bindMarkdownActions, renderMarkdown } from '/js/markdown-renderer.js?v=
     searchInput.addEventListener('input', () => {
       clearTimeout(timer);
       timer = setTimeout(() => {
-        loadResults(searchInput.value.trim(), activeSection);
+        loadResults(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (searchInput).value.trim(), activeSection);
       }, 150);
     });
   }
 
   if (categoryNav) {
     categoryNav.addEventListener('click', event => {
-      const btn = event.target.closest('[data-section]');
+      const btn = /** @type {Element} */ (event.target).closest('[data-section]');
       if (!btn) return;
 
       categoryNav.querySelectorAll('[data-section]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
 
-      activeSection = btn.dataset.section;
-      loadResults(searchInput.value.trim(), activeSection);
+      activeSection = /** @type {HTMLElement} */ (btn).dataset.section;
+      loadResults(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (searchInput).value.trim(), activeSection);
     });
   }
 
   if (resultsContainer) {
     resultsContainer.addEventListener('click', event => {
-      const item = event.target.closest('[data-path]');
-      if (item) openDocument(item.dataset.path);
+      const item = /** @type {Element} */ (event.target).closest('[data-path]');
+      if (item) openDocument(/** @type {HTMLElement} */ (item).dataset.path);
     });
   }
 

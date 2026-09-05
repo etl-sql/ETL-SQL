@@ -23,10 +23,10 @@ public static class RelDateResolver
     /// Resolves a RELDATE expression to a concrete DateTime.
     /// Backward-compatible wrapper calling ResolveToOffset.
     /// </summary>
-    public static DateTime Resolve(string expression, DayOfWeek weekStart, DateTime? now = null)
+    public static DateTime Resolve(string expression, DayOfWeek weekStart, DateTime? now = null, int fiscalYearStart = 1)
     {
         var refTime = now.HasValue ? new DateTimeOffset(now.Value) : DateTimeOffset.Now;
-        var dto = ResolveToOffset(expression, weekStart, refTime);
+        var dto = ResolveToOffset(expression, weekStart, refTime, fiscalYearStart);
         return dto.DateTime;
     }
 
@@ -34,10 +34,10 @@ public static class RelDateResolver
     /// Resolves to the legacy timezone-neutral <see cref="DateTime"/> when no timezone suffix is
     /// present, and to <see cref="DateTimeOffset"/> when the expression explicitly names a timezone.
     /// </summary>
-    public static object ResolveValue(string expression, DayOfWeek weekStart, DateTimeOffset? now = null)
+    public static object ResolveValue(string expression, DayOfWeek weekStart, DateTimeOffset? now = null, int fiscalYearStart = 1)
     {
         var hasZone = TrySplitTimeZone(expression, out _, out _);
-        var resolved = ResolveToOffset(expression, weekStart, now);
+        var resolved = ResolveToOffset(expression, weekStart, now, fiscalYearStart);
         if (hasZone) return resolved;
         return resolved.DateTime;
     }
@@ -46,8 +46,9 @@ public static class RelDateResolver
     /// Resolves a RELDATE expression to a concrete DateTimeOffset.
     /// Supports optional trailing timezone indicators (e.g. "D-1 EST").
     /// </summary>
-    public static DateTimeOffset ResolveToOffset(string expression, DayOfWeek weekStart, DateTimeOffset? now = null)
+    public static DateTimeOffset ResolveToOffset(string expression, DayOfWeek weekStart, DateTimeOffset? now = null, int fiscalYearStart = 1)
     {
+        if (fiscalYearStart < 1 || fiscalYearStart > 12) fiscalYearStart = 1;
         if (string.IsNullOrWhiteSpace(expression))
             throw new ExecutionException("RELDATE expression cannot be empty.");
 
@@ -94,6 +95,7 @@ public static class RelDateResolver
         char baseAnchor;
         bool isEnd = false;
         bool isUtc = false;
+        bool isQuarter = false;
 
         // Parse anchor
         if (upper.StartsWith("NU", StringComparison.Ordinal)) { baseAnchor = 'N'; isUtc = true; pos = 2; }
@@ -105,6 +107,12 @@ public static class RelDateResolver
         else if (upper.StartsWith("QS", StringComparison.Ordinal)) { baseAnchor = 'Q'; pos = 2; }
         else if (upper.StartsWith("YE", StringComparison.Ordinal)) { baseAnchor = 'Y'; isEnd = true; pos = 2; }
         else if (upper.StartsWith("YS", StringComparison.Ordinal)) { baseAnchor = 'Y'; pos = 2; }
+        else if (upper.StartsWith("FQE", StringComparison.Ordinal)) { baseAnchor = 'F'; isQuarter = true; isEnd = true; pos = 3; }
+        else if (upper.StartsWith("FQS", StringComparison.Ordinal)) { baseAnchor = 'F'; isQuarter = true; pos = 3; }
+        else if (upper.StartsWith("FQ", StringComparison.Ordinal)) { baseAnchor = 'F'; isQuarter = true; pos = 2; }
+        else if (upper.StartsWith("FYE", StringComparison.Ordinal)) { baseAnchor = 'F'; isQuarter = false; isEnd = true; pos = 3; }
+        else if (upper.StartsWith("FYS", StringComparison.Ordinal)) { baseAnchor = 'F'; isQuarter = false; pos = 3; }
+        else if (upper.StartsWith("FY", StringComparison.Ordinal)) { baseAnchor = 'F'; isQuarter = false; pos = 2; }
         else if (upper[0] == 'N') { baseAnchor = 'N'; pos = 1; }
         else if (upper[0] == 'W') { baseAnchor = 'W'; pos = 1; }
         else if (upper[0] == 'M') { baseAnchor = 'M'; pos = 1; }
@@ -112,7 +120,7 @@ public static class RelDateResolver
         else if (upper[0] == 'Y') { baseAnchor = 'Y'; pos = 1; }
         else if (upper[0] == 'D') { baseAnchor = 'D'; pos = 1; }
         else throw new ExecutionException(
-            $"Unknown RELDATE anchor in '{expression}'. Valid anchors: D, W/WS/WE, M/MS/ME, Q/QS/QE, Y/YS/YE, N, NU.");
+            $"Unknown RELDATE anchor in '{expression}'. Valid anchors: D, W/WS/WE, M/MS/ME, Q/QS/QE, Y/YS/YE, FQ/FQS/FQE, FY/FYS/FYE, N, NU.");
 
         // Parse optional +/- magnitude [unit]
         int shift = 0;
@@ -206,6 +214,25 @@ public static class RelDateResolver
                 {
                     var yearStart = new DateTime(today.Year, 1, 1).AddYears(shift);
                     resolvedLocalTime = isEnd ? new DateTime(yearStart.Year, 12, 31) : yearStart;
+                    break;
+                }
+
+            case 'F':
+                {
+                    int fy = (today.Month >= fiscalYearStart) ? today.Year : today.Year - 1;
+                    var fyStart = new DateTime(fy, fiscalYearStart, 1);
+                    if (isQuarter)
+                    {
+                        int monthsSinceFyStart = (today.Month - fiscalYearStart + 12) % 12;
+                        int fqIndex = monthsSinceFyStart / 3;
+                        var fqStart = fyStart.AddMonths(fqIndex * 3).AddMonths(shift * 3);
+                        resolvedLocalTime = isEnd ? fqStart.AddMonths(3).AddDays(-1) : fqStart;
+                    }
+                    else
+                    {
+                        var shiftedFyStart = fyStart.AddYears(shift);
+                        resolvedLocalTime = isEnd ? shiftedFyStart.AddYears(1).AddDays(-1) : shiftedFyStart;
+                    }
                     break;
                 }
 

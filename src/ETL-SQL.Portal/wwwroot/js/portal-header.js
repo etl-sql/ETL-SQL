@@ -12,9 +12,9 @@ const destinations = [
 ];
 
 export function renderPortalHeader(header = document.querySelector('[data-portal-header]')) {
-  if (!header || header.dataset.portalHeaderRendered === 'true') return header;
-  const active = header.dataset.active || '';
-  const hideLogout = header.dataset.logoutHidden === 'true';
+  if (!header || /** @type {HTMLElement} */ (header).dataset.portalHeaderRendered === 'true') return header;
+  const active = /** @type {HTMLElement} */ (header).dataset.active || '';
+  const hideLogout = /** @type {HTMLElement} */ (header).dataset.logoutHidden === 'true';
   const links = destinations.map(([key, id, href, label]) => {
     const isCurrent = key === active;
     const classes = isCurrent ? ' class="active"' : '';
@@ -34,6 +34,6 @@ export function renderPortalHeader(header = document.querySelector('[data-portal
     <span class="topbar-user" id="topbarUser"></span>
     <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle dark mode" type="button">🌓</button>
     <button class="topbar-btn" id="logoutBtn"${hideLogout ? ' style="display:none"' : ''}>Sign Out</button>`;
-  header.dataset.portalHeaderRendered = 'true';
+  /** @type {HTMLElement} */ (header).dataset.portalHeaderRendered = 'true';
   return header;
 }

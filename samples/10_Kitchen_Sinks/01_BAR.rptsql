@@ -1,4 +1,4 @@
-﻿-- Kitchen Sink: BAR Visual
+-- Kitchen Sink: BAR Visual
 -- This script demonstrates all features of the BAR visual type.
 
 SET REPORT TITLE = 'Kitchen Sink: BAR Visual';
@@ -74,22 +74,59 @@ CREATE VISUAL StyledBar AS BAR (
     )
 );
 
--- 7. 100% Stacked Bar (Manual Calculation)
--- Since 100% stacking isn't a native option, we calculate percentages in Tier 2/3.
+-- 7. 100% Normalized Stacked Bar (Native STACKED = 100PCT)
 CREATE VISUAL PercentBar AS BAR (
-    SOURCE = (
-        SELECT 
-            Month, 
-            Region, 
-            Revenue * 100.0 / SUM(Revenue) OVER(PARTITION BY Month) AS RevenuePct
-        FROM #sales
-    ),
-    TITLE = '100% Stacked Bar (Manual Calculation)',
-    MAPPINGS (X = Month, Y = RevenuePct, SERIES = Region),
+    SOURCE = #sales,
+    TITLE = '100% Normalized Stacked Bar (STACKED = 100PCT)',
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
     OPTIONS (
-        STACKED = ON,
-        Y_AXIS (MAX = 100, LABEL = 'Percentage (%)'),
-        FORMAT = 'P1'
+        STACKED        = 100PCT,
+        BAR_MIN_HEIGHT = 3,
+        DATA_LABELS    = ON WITH (POSITION = 'INSIDE', COLOR = '#FFFFFF', FORMAT = 'P0')
+    )
+);
+
+-- 7b. Advanced Gridlines, Zero Line & Formatting
+CREATE VISUAL AdvancedGridBar AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    TITLE = 'Gridlines, Zero Line & Conditional Formatting',
+    MAPPINGS (X = Month, Y = Revenue),
+    OPTIONS (
+        GRID_LINES        = ON,
+        GRID_LINE_COLOR   = '#cbd5e1',
+        GRID_LINE_DASH    = DASHED,
+        GRID_LINE_WIDTH   = 1.5,
+        ZERO_LINE         = ON,
+        ZERO_LINE_COLOR   = '#64748b',
+        MINOR_GRID_LINES  = ON,
+        BAND_SIZE         = 0.65,
+        DATA_LABELS       = ON WITH (
+            POSITION         = 'OUTSIDE',
+            LABEL_BACKGROUND = '#f8fafc',
+            LABEL_BORDER     = '1px solid #94a3b8'
+        )
+    ),
+    FORMATTING (
+        WHEN Revenue >= 350 THEN '#16a34a',
+        WHEN Revenue < 250  THEN '#dc2626'
+    )
+);
+
+-- 7c. Full Legend Suite & Analytical Overlays
+CREATE VISUAL FullLegendBar AS BAR (
+    SOURCE = #sales,
+    TITLE = 'Full Legend Suite & Running Total Overlay',
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
+    OPTIONS (
+        LEGEND             = ON,
+        LEGEND_TITLE       = 'Sales Territory',
+        LEGEND_POSITION    = INSIDE,
+        LEGEND_ANCHOR      = TOP_RIGHT,
+        LEGEND_ORIENTATION = HORIZONTAL,
+        SERIES_GAP         = 0.25
+    ),
+    OVERLAYS (
+        RUNNING_TOTAL(Revenue) AS DASHED WITH (COLOR = '#0284c7', LABEL = 'Cumulative')
     )
 );
 
@@ -145,7 +182,7 @@ CREATE VISUAL RankedBar AS BAR (
 
 -- Page Layout
 CREATE PAGE BarKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C D / E F / G G / H I J',
+    STRUCTURE = 'A B / C D / E F / G G / H I J / K L',
     MAP (
         'A' = BasicBar,
         'B' = GroupedBar,
@@ -156,7 +193,9 @@ CREATE PAGE BarKitchenSink AS DASHBOARD (
         'G' = BarWithTooltip,
         'H' = MonthOrderBar,
         'I' = DescBar,
-        'J' = RankedBar
+        'J' = RankedBar,
+        'K' = AdvancedGridBar,
+        'L' = FullLegendBar
     )
 );
 

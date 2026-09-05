@@ -1,4 +1,4 @@
-import { aclTableHtml } from './dataset-acl-ui.js?v=0.17.0';
+import { aclTableHtml } from './dataset-acl-ui.js';
 
 // Canonical "Shared Datasets" admin surface (Admin → Shared Datasets).
 //
@@ -160,7 +160,10 @@ const MODALS_HTML = `
  * @param {Element}  [opts.modalRoot]  Where modals are appended (default document.body).
  * @returns {{ load: Function, dispose: Function }}
  */
-export function createDatasetsAdmin(opts = {}) {
+// No `= {}` default: `host`, `datasetsApi`, `adminApi`, `catalogApi` and `renderDag` are all
+// required — the first thing this does is write into `host` — and the default said otherwise. Both
+// call sites pass a full object.
+export function createDatasetsAdmin(opts) {
   const {
     host,
     datasetsApi,
@@ -282,9 +285,9 @@ export function createDatasetsAdmin(opts = {}) {
     } else if (action === 'edit') {
       const d = allDatasets.find(x => x.id === id);
       if (!d) return;
-      document.getElementById('ds-accessLevel').value = d.accessLevel;
-      document.getElementById('ds-ttl').value = d.ttl || '';
-      document.getElementById('ds-id').value = d.id;
+      /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('ds-accessLevel')).value = d.accessLevel;
+      /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('ds-ttl')).value = d.ttl || '';
+      /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('ds-id')).value = d.id;
       document.getElementById('ds-error').classList.remove('show');
       document.getElementById('dsAclPanel').style.display = 'none';
       document.getElementById('editDatasetForm').style.display = '';
@@ -348,11 +351,11 @@ export function createDatasetsAdmin(opts = {}) {
       };
       $wrap.querySelectorAll('[data-gid]').forEach(btn => {
         btn.addEventListener('click', () =>
-          revoke(version => datasetsApi.revokeAcl(datasetId, +btn.dataset.gid, version)));
+          revoke(version => datasetsApi.revokeAcl(datasetId, +/** @type {HTMLElement} */ (btn).dataset.gid, version)));
       });
       $wrap.querySelectorAll('[data-uid]').forEach(btn => {
         btn.addEventListener('click', () =>
-          revoke(version => datasetsApi.revokeUserAcl(datasetId, +btn.dataset.uid, version)));
+          revoke(version => datasetsApi.revokeUserAcl(datasetId, +/** @type {HTMLElement} */ (btn).dataset.uid, version)));
       });
     } catch {}
   }
@@ -361,8 +364,8 @@ export function createDatasetsAdmin(opts = {}) {
   function dvOpen(id, name) {
     Object.assign(dv, { id, name, columns: [], stats: null, filters: [], sort: null, dir: 'asc', search: '', page: 1, pageSize: 50, pickerCol: null, pickerChecked: new Set() });
     document.getElementById('dv-title').textContent = name;
-    document.getElementById('dv-search').value = '';
-    document.getElementById('dv-pageSize').value = '50';
+    /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('dv-search')).value = '';
+    /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('dv-pageSize')).value = '50';
     document.getElementById('datasetViewerModal').style.display = 'flex';
     dvFetch();
     dvFetchStats();
@@ -379,8 +382,8 @@ export function createDatasetsAdmin(opts = {}) {
       document.getElementById('dv-filteredCount').textContent = (res.filteredCount ?? 0).toLocaleString();
       const totalPages = Math.max(1, Math.ceil((res.filteredCount ?? 0) / dv.pageSize));
       document.getElementById('dv-pageInfo').textContent = `Page ${dv.page} of ${totalPages}`;
-      document.getElementById('dv-prevBtn').disabled = dv.page <= 1;
-      document.getElementById('dv-nextBtn').disabled = dv.page >= totalPages;
+      /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('dv-prevBtn')).disabled = dv.page <= 1;
+      /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('dv-nextBtn')).disabled = dv.page >= totalPages;
       dvUpdateBadge();
     } catch (err) {
       $wrap.innerHTML = `<div class="error-msg show">${esc(err.message)}</div>`;
@@ -445,7 +448,7 @@ export function createDatasetsAdmin(opts = {}) {
 
     // Sort
     $wrap.querySelectorAll('.dv-col-header').forEach(th => th.addEventListener('click', () => {
-      const col = th.dataset.col;
+      const col = /** @type {HTMLElement} */ (th).dataset.col;
       dv.dir = (dv.sort === col && dv.dir === 'asc') ? 'desc' : 'asc';
       dv.sort = col; dv.page = 1; dvFetch();
     }));
@@ -459,24 +462,24 @@ export function createDatasetsAdmin(opts = {}) {
       const val2El= $wrap.querySelector(`.dv-filter-val2[data-col="${CSS.escape(col.name)}"]`);
 
       if (existing) {
-        if (opEl)  opEl.value  = existing.op;
-        if (valEl) valEl.value = existing.val  ?? '';
-        if (val2El) val2El.value = existing.val2 ?? '';
+        if (opEl)  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (opEl).value  = existing.op;
+        if (valEl) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (valEl).value = existing.val  ?? '';
+        if (val2El) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (val2El).value = existing.val2 ?? '';
       }
 
       // Show val2 for range ops
       function syncVal2() {
         if (!val2El) return;
-        const op = opEl ? opEl.value : 'between';
-        val2El.style.display = (op === 'between' || type === 'date') ? '' : 'none';
+        const op = opEl ? /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (opEl).value : 'between';
+        /** @type {HTMLElement} */ (val2El).style.display = (op === 'between' || type === 'date') ? '' : 'none';
       }
       if (opEl) { opEl.addEventListener('change', syncVal2); syncVal2(); }
 
       // Apply filter on blur/enter
       function applyFilter() {
-        const op  = opEl  ? opEl.value  : (type === 'date' ? 'between' : 'contains');
-        const val = valEl ? valEl.value : '';
-        const val2= val2El ? val2El.value : '';
+        const op  = opEl  ? /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (opEl).value  : (type === 'date' ? 'between' : 'contains');
+        const val = valEl ? /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (valEl).value : '';
+        const val2= val2El ? /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (val2El).value : '';
         dv.filters = dv.filters.filter(f => f.col !== col.name);
         if (op === 'is_null' || op === 'not_null' || val.trim()) {
           dv.filters.push({ col: col.name, op, val: val || null, val2: val2 || null });
@@ -485,15 +488,15 @@ export function createDatasetsAdmin(opts = {}) {
       }
 
       [valEl, val2El].filter(Boolean).forEach(el => {
-        el.addEventListener('keydown', e => { if (e.key === 'Enter') applyFilter(); });
+        el.addEventListener('keydown', e => { if (/** @type {KeyboardEvent} */ (e).key === 'Enter') applyFilter(); });
         el.addEventListener('blur', e => {
           // Skip if focus is moving to the sibling input for the same column (val1↔val2 tab)
-          if (e.relatedTarget === valEl || e.relatedTarget === val2El) return;
+          if (/** @type {FocusEvent | MouseEvent} */ (e).relatedTarget === valEl || /** @type {FocusEvent | MouseEvent} */ (e).relatedTarget === val2El) return;
           applyFilter();
         });
       });
       if (opEl) opEl.addEventListener('change', () => {
-        const op = opEl.value;
+        const op = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (opEl).value;
         if (op === 'is_null' || op === 'not_null') applyFilter();
       });
 
@@ -504,9 +507,9 @@ export function createDatasetsAdmin(opts = {}) {
 
     // Date filter val2 always shown for date type (handled by syncVal2 default)
     $wrap.querySelectorAll('.dv-filter-val2').forEach(el => {
-      const col = el.dataset.col;
+      const col = /** @type {HTMLElement} */ (el).dataset.col;
       const type = dvGuessType((cols.find(c => c.name === col) || {}).type || '');
-      if (type === 'date') el.style.display = '';
+      if (type === 'date') /** @type {HTMLElement} */ (el).style.display = '';
     });
   }
 
@@ -588,7 +591,7 @@ export function createDatasetsAdmin(opts = {}) {
     const existing = dv.filters.find(f => f.col === colName && f.op === 'in');
     dv.pickerChecked = existing ? new Set(JSON.parse(existing.val || '[]')) : new Set();
 
-    $search.value = '';
+    /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ ($search).value = '';
     $list.innerHTML = '<span style="color:var(--portal-muted);font-size:.84em">Loading…</span>';
     popover.style.display = '';
 
@@ -598,7 +601,7 @@ export function createDatasetsAdmin(opts = {}) {
 
     await dvLoadPickerValues('');
 
-    $search.oninput = () => dvLoadPickerValues($search.value);
+    $search.oninput = () => dvLoadPickerValues(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ ($search).value);
   }
 
   async function dvLoadPickerValues(search) {
@@ -623,8 +626,8 @@ export function createDatasetsAdmin(opts = {}) {
   };
   const onDocKeydownEsc = e => {
     if (e.key !== 'Escape') return;
-    const open = modalEls.filter(m => m.classList.contains('modal-overlay')).reverse().find(m => m.style.display !== 'none');
-    if (open) open.style.display = 'none';
+    const open = modalEls.filter(m => m.classList.contains('modal-overlay')).reverse().find(m => /** @type {HTMLElement} */ (m).style.display !== 'none');
+    if (open) /** @type {HTMLElement} */ (open).style.display = 'none';
     const pop = document.getElementById('dv-pickerPopover');
     if (pop) pop.style.display = 'none';
   };
@@ -641,9 +644,9 @@ export function createDatasetsAdmin(opts = {}) {
       document.getElementById('editDatasetForm').style.display = 'none';
     });
     document.getElementById('ds-saveBtn').addEventListener('click', async () => {
-      const id = +document.getElementById('ds-id').value;
-      const accessLevel = document.getElementById('ds-accessLevel').value;
-      const ttl = document.getElementById('ds-ttl').value.trim() || null;
+      const id = +/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('ds-id')).value;
+      const accessLevel = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('ds-accessLevel')).value;
+      const ttl = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('ds-ttl')).value.trim() || null;
       const $err = document.getElementById('ds-error');
       $err.classList.remove('show');
       try {
@@ -658,8 +661,8 @@ export function createDatasetsAdmin(opts = {}) {
       document.getElementById('dsAclPanel').style.display = 'none';
     });
     document.getElementById('ds-acl-grantBtn').addEventListener('click', async () => {
-      const groupId = +document.getElementById('ds-acl-group').value;
-      const permission = document.getElementById('ds-acl-perm').value;
+      const groupId = +/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('ds-acl-group')).value;
+      const permission = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('ds-acl-perm')).value;
       if (!groupId) return;
       const dataset = allDatasets.find(x => x.id === selectedDatasetId);
       await datasetsApi.grantAcl(selectedDatasetId, groupId, permission, dataset?.version).catch(alertErr);
@@ -668,9 +671,9 @@ export function createDatasetsAdmin(opts = {}) {
     });
 
     document.getElementById('dv-pickerList').addEventListener('change', e => {
-      if (e.target.type !== 'checkbox') return;
-      if (e.target.checked) dv.pickerChecked.add(e.target.value);
-      else dv.pickerChecked.delete(e.target.value);
+      if (/** @type {HTMLInputElement | HTMLButtonElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).type !== 'checkbox') return;
+      if (/** @type {HTMLInputElement} */ (e.target).checked) dv.pickerChecked.add(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value);
+      else dv.pickerChecked.delete(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value);
     });
     document.getElementById('dv-pickerApply').addEventListener('click', () => {
       const col = dv.pickerCol;
@@ -685,11 +688,11 @@ export function createDatasetsAdmin(opts = {}) {
 
     document.getElementById('dv-search').addEventListener('keydown', e => {
       if (e.key !== 'Enter') return;
-      dv.search = e.target.value.trim(); dv.page = 1; dvFetch();
+      dv.search = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value.trim(); dv.page = 1; dvFetch();
     });
     document.getElementById('dv-resetBtn').addEventListener('click', () => {
       dv.filters = []; dv.search = ''; dv.sort = null; dv.dir = 'asc'; dv.page = 1;
-      document.getElementById('dv-search').value = '';
+      /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('dv-search')).value = '';
       dvFetch(); dvFetchStats();
     });
     document.getElementById('dv-exportBtn').addEventListener('click', async () => {
@@ -707,12 +710,12 @@ export function createDatasetsAdmin(opts = {}) {
     document.getElementById('dv-prevBtn').addEventListener('click', () => { if (dv.page > 1) { dv.page--; dvFetch(); } });
     document.getElementById('dv-nextBtn').addEventListener('click', () => { dv.page++; dvFetch(); });
     document.getElementById('dv-pageSize').addEventListener('change', e => {
-      dv.pageSize = +e.target.value; dv.page = 1; dvFetch();
+      dv.pageSize = +/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value; dv.page = 1; dvFetch();
     });
 
     // Close modals on overlay backdrop click + Escape (the module owns its modals).
     modalEls.filter(m => m.classList.contains('modal-overlay')).forEach(modal => {
-      modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
+      modal.addEventListener('click', e => { if (e.target === modal) /** @type {HTMLElement} */ (modal).style.display = 'none'; });
     });
     document.addEventListener('keydown', onDocKeydownEsc);
   }

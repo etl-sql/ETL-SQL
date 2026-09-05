@@ -1,6 +1,6 @@
 // Canonical "Data Gateways" admin surface (Admin → Data Gateways) over api/admin/gateways.
 import { createConnectionWizard } from '../designer/connection-wizard.js';
-import { connectionsApi } from './api.js';
+import { connectionsApi, secretsApi } from './api.js';
 
 function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -294,7 +294,10 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
       },
       fetchSecrets: async () => {
         try {
-          const list = await (window.secretsApi ? window.secretsApi.list() : fetch('/api/admin/secrets').then(r => r.json()));
+          // `window.secretsApi` was never assigned by anything, so this used to be a permanently
+          // false test whose fallback re-spelt the endpoint by hand. The module's own client is
+          // the one that carries the auth header and the error handling.
+          const list = await secretsApi.list();
           return Array.isArray(list) ? list.map(s => s.name || s) : [];
         } catch {
           return [];

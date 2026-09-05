@@ -1,19 +1,22 @@
 # RELDATEPICKER
 
-A filter control for selecting relative or absolute date values. Combines a free-text input that accepts relative date expressions (e.g. `D-7`, `M-1`, `Y-1`) with a calendar picker that writes an ISO date, and quick-pick buttons for common offsets.
-
-Use `DATEPICKER` instead when the variable is typed `DATE` or `DATETIME` and only absolute dates are expected.
+A filter control for selecting relative or absolute date values with preset quick-picks and validation. Supports past, future, and fiscal calendar expressions.
 
 ## Syntax
 
 ```sql
-CREATE VISUAL MyPicker AS RELDATEPICKER (
-    OPTIONS (
-        DEFAULT = 'D-7'
-    ),
-    ACTIONS (
-        ON_CHANGE = SET_PARAMETER(@StartDate, VALUE)
-    )
+CREATE VISUAL VisualName AS RELDATEPICKER (
+  OPTIONS (
+    MODE              = SINGLE|RANGE,
+    DEFAULT           = 'D-7',
+    QUICK_PICKS       = ('Label' = 'Expr', ...),
+    FISCAL_YEAR_START = month_number,
+    MIN               = 'YYYY-MM-DD',
+    MAX               = 'YYYY-MM-DD'
+  ),
+  ACTIONS (
+    ON_CHANGE = SET_PARAMETER(@start, @end, value)
+  )
 );
 ```
 
@@ -23,59 +26,54 @@ Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour 
 
 ## Options
 
-| Option  | Description                          | Example         |
-|---------|--------------------------------------|-----------------|
-| DEFAULT | Initial value shown in the text box  | `'D-30'`        |
-| MIN     | Earliest selectable calendar date    | `'2020-01-01'`  |
-| MAX     | Latest selectable calendar date      | `'2030-12-31'`  |
+- **MODE = SINGLE|RANGE** — Single relative date or dual relative date range mode (default SINGLE).
+- **DEFAULT = 'expr'** — Initial relative expression or ISO date string (default `'D-7'`).
+- **QUICK_PICKS = ('Label' = 'Expr', ...)** — Custom quick-pick preset buttons.
+- **FISCAL_YEAR_START = month** — Calendar month (1-12) where the fiscal year begins (default 1).
+- **MIN = 'YYYY-MM-DD'** — Earliest selectable calendar date.
+- **MAX = 'YYYY-MM-DD'** — Latest selectable calendar date.
 
 ## Actions
 
-| Action                                         | Description                             |
-|------------------------------------------------|-----------------------------------------|
-| `ON_CHANGE = SET_PARAMETER(@Name, VALUE)`      | Updates parameter when the value changes |
+- **ON_CHANGE = SET_PARAMETER(@variable, value)** — Fires when the expression changes in SINGLE mode.
+- **ON_CHANGE = SET_PARAMETER(@start, @end, value)** — Fires in RANGE mode, binding start and end parameters. Suppresses emission if either expression is invalid.
 
 ## Relative Date Syntax
 
-The text box accepts any string your ETL-SQL script reads as a parameter. Relative date expressions follow this pattern:
+The control accepts relative date expressions and absolute ISO dates (`YYYY-MM-DD`):
 
-| Expression | Meaning              |
-|------------|----------------------|
-| `D-0`      | Today                |
-| `D-7`      | 7 days ago           |
-| `D-30`     | 30 days ago          |
-| `M-1`      | 1 month ago          |
-| `M-3`      | 3 months ago         |
-| `Y-1`      | 1 year ago           |
-| `2026-04-27` | Absolute ISO date  |
-
-The quick-pick buttons (Today, D-1, D-7, D-30, M-1, M-3, Y-1) write directly to the text box and trigger `ON_CHANGE`. Clicking the 📅 button opens the system date picker; selecting a date writes the ISO date (`YYYY-MM-DD`) to the text box.
+- **D / D-n / D+n** — Day anchor (e.g. `D-0` = today, `D-1` = yesterday, `D+30` = 30 days ahead).
+- **W / WS / WE** — Current week start and end.
+- **M / MS / ME** — Current month start and end (e.g. `M-1` = start of last month, `ME-1` = end of last month).
+- **FQ / FQS / FQE** — Fiscal quarter start and end (e.g. `FQ-1` = previous fiscal quarter).
+- **FY / FYS / FYE** — Fiscal year start and end (e.g. `FY-1` = previous fiscal year).
+- **Y / YS / YE** — Calendar year start and end.
+- **N / N-2H / N+30I** — Exact current timestamp with hour/minute offsets.
 
 ## Examples
 
 ```sql
-CREATE VISUAL StartPicker AS RELDATEPICKER (
-    OPTIONS ( DEFAULT = 'M-1' ),
-    ACTIONS (ON_CHANGE = SET_PARAMETER(@Start, VALUE))
+DECLARE @start_rel VARCHAR = 'M-1';
+DECLARE @end_rel   VARCHAR = 'D-0';
+
+CREATE VISUAL OrdersPeriod AS RELDATEPICKER (
+  OPTIONS (
+    MODE              = RANGE,
+    FISCAL_YEAR_START = 10,
+    QUICK_PICKS       = (
+      'This Quarter' = 'FQS',
+      'Last Quarter' = 'FQ-1',
+      'Year to Date' = 'FYS'
+    )
+  ),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@start_rel, @end_rel, value))
 );
 
-CREATE VISUAL EndPicker AS RELDATEPICKER (
-    OPTIONS ( DEFAULT = 'D-0' ),
-    ACTIONS (ON_CHANGE = SET_PARAMETER(@End, VALUE))
-);
-```
-
-Your script then resolves `@Start` and `@End` using `RELDATE()`:
-
-```sql
-DECLARE @StartDate DATE = RELDATE(@Start);
-DECLARE @EndDate   DATE = RELDATE(@End);
-
-SELECT * FROM orders WHERE order_date BETWEEN @StartDate AND @EndDate;
+SELECT * FROM orders
+WHERE order_date BETWEEN RELDATE(@start_rel, 10) AND RELDATE(@end_rel, 10);
 ```
 
 ## References
 
 - [DATEPICKER](datepicker.md)
-- [Report SQL Guide](../../../guides/feature-guides/report-sql.md)
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

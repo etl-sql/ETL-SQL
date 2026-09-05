@@ -180,6 +180,14 @@
                 "decimal": 8
               },
               "displayValue": "8"
+            },
+            {
+              "channel": "mean",
+              "value": {
+                "kind": "decimal",
+                "decimal": 5
+              },
+              "displayValue": "5"
             }
           ],
           "isGap": false,
@@ -235,6 +243,14 @@
                 "decimal": 5
               },
               "displayValue": "5"
+            },
+            {
+              "channel": "mean",
+              "value": {
+                "kind": "decimal",
+                "decimal": 3
+              },
+              "displayValue": "3"
             }
           ],
           "isGap": false,
@@ -249,6 +265,30 @@
         {
           "name": "preserveRows",
           "value": "true"
+        },
+        {
+          "name": "NOTCHED",
+          "value": "OFF"
+        },
+        {
+          "name": "SHOW_MEAN",
+          "value": "OFF"
+        },
+        {
+          "name": "SHOW_VIOLIN",
+          "value": "OFF"
+        },
+        {
+          "name": "VIOLIN",
+          "value": "OFF"
+        },
+        {
+          "name": "BOX_STYLE",
+          "value": "BOX"
+        },
+        {
+          "name": "ORIENTATION",
+          "value": "VERTICAL"
         }
       ],
       "stack": "none",

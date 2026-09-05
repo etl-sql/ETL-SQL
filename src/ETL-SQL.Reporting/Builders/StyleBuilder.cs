@@ -57,10 +57,26 @@ namespace ETL_SQL.Reporting.Builders
         public ImmutableArray<string> ResolvePalette(
             string? styleName,
             ImmutableArray<string> inlinePalette,
-            ImmutableArray<string> inheritedPalette = default)
+            ImmutableArray<string> inheritedPalette = default,
+            string? visualType = null,
+            string? themeName = null)
         {
             if (!inlinePalette.IsDefaultOrEmpty)
                 return inlinePalette;
+
+            // Check visual-specific palette from active theme
+            if (!string.IsNullOrEmpty(themeName) && !string.IsNullOrEmpty(visualType) &&
+                ctx.ReportContext.ThemeDefinitions.TryGetValue(themeName, out var themeDef) &&
+                themeDef.VisualOverrides.TryGetValue(visualType, out var vOverrides) &&
+                vOverrides.TryGetValue("COLORS", out var themeColors))
+            {
+                var colors = themeColors.Split(',')
+                    .Select(c => c.Trim().Trim('\'', '"', '(', ')'))
+                    .Where(c => !string.IsNullOrEmpty(c))
+                    .ToImmutableArray();
+                if (!colors.IsDefaultOrEmpty)
+                    return colors;
+            }
 
             if (!string.IsNullOrEmpty(styleName))
             {
@@ -274,6 +290,12 @@ namespace ETL_SQL.Reporting.Builders
 
             // Otherwise, evaluate the expression
             var result = await ctx.EvaluateValue(input, null!);
+            if (result is System.Collections.IEnumerable enumerable and not string)
+            {
+                var list = new List<string>();
+                foreach (var item in enumerable) list.Add(item?.ToString() ?? "");
+                return (System.Text.Json.JsonSerializer.Serialize(list), parserFlag);
+            }
             return (result?.ToString(), parserFlag);
         }
     }

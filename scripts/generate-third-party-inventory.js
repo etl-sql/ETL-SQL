@@ -269,7 +269,10 @@ function decodeXml(value) {
 function parseNpmPackages() {
   const packageJsonFiles = [
     'src/etl-sql-vscode/package.json',
-    'src/etl-sql-vscode/ui/package.json'
+    'src/etl-sql-vscode/ui/package.json',
+    // The browser type gate's pinned toolchain. Same TypeScript the extension uses, declared
+    // separately because it is installed at a different place and could drift from it.
+    'scripts/typecheck/package.json'
   ].map(file => path.join(repoRoot, file)).filter(fs.existsSync);
 
   const packages = new Map();
@@ -308,7 +311,8 @@ function addNpmDeps(packages, deps, usage, source) {
 function readNpmPackageMetadata(packageName) {
   const candidates = [
     path.join(repoRoot, 'src', 'etl-sql-vscode', 'node_modules', packageName, 'package.json'),
-    path.join(repoRoot, 'src', 'etl-sql-vscode', 'ui', 'node_modules', packageName, 'package.json')
+    path.join(repoRoot, 'src', 'etl-sql-vscode', 'ui', 'node_modules', packageName, 'package.json'),
+    path.join(repoRoot, 'scripts', 'typecheck', 'node_modules', packageName, 'package.json')
   ];
 
   for (const candidate of candidates) {

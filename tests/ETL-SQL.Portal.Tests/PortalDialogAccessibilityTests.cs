@@ -40,7 +40,10 @@ public sealed class PortalDialogAccessibilityTests
         var root = Path.Combine(RepoRoot(), "src", "ETL-SQL.Portal", "wwwroot");
         foreach (var file in Directory.EnumerateFiles(root, "*.html"))
             data.Add(Path.GetRelativePath(root, file));
-        foreach (var file in Directory.EnumerateFiles(Path.Combine(root, "js"), "*.js"))
+        // Recursive: the pages' own modules live under js/pages/, and they build most of the
+        // dialogs on the shell surfaces. A non-recursive enumeration would report this guard as
+        // covering them while seeing none of them.
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(root, "js"), "*.js", SearchOption.AllDirectories))
         {
             // Vendored bundles are not ours to annotate.
             if (Path.GetFileName(file).Contains(".min.", StringComparison.Ordinal)) continue;
@@ -130,7 +133,8 @@ public sealed class PortalDialogAccessibilityTests
 
         foreach (var file in Directory.EnumerateFiles(root, "*.html"))
         {
-            var source = File.ReadAllText(file);
+            // Markup plus the page's own module: a page presents its dialogs from both halves.
+            var source = PortalPageSource.WithModules(root, File.ReadAllText(file));
             if (!FindOverlayOpeningTags(source).Any() && !source.Contains("role=\"dialog\"")) continue;
 
             var hasOwnTrap = source.Contains("_trapFocus", StringComparison.Ordinal)
@@ -154,7 +158,7 @@ public sealed class PortalDialogAccessibilityTests
         var root = Path.Combine(RepoRoot(), "src", "ETL-SQL.Portal", "wwwroot");
         foreach (var page in new[] { "index.html", "admin.html", "orchestrator.html", "studio.html" })
         {
-            var source = File.ReadAllText(Path.Combine(root, page));
+            var source = PortalPageSource.Read(RepoRoot(), page);
             Assert.Contains("installDialogAccessibility()", source, StringComparison.Ordinal);
             Assert.DoesNotContain("initModalA11y", source, StringComparison.Ordinal);
             Assert.DoesNotContain("_trapFocus", source, StringComparison.Ordinal);

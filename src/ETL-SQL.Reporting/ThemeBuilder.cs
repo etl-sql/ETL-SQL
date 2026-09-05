@@ -9,7 +9,7 @@ namespace ETL_SQL.Reporting
         /// <summary>
         /// Translates Report-SQL theme properties to the native theme JSON structure.
         /// </summary>
-        public static JsonObject BuildNativeTheme(Dictionary<string, string> props) =>
-            ReportingThemeBuilder.BuildNativeTheme(props);
+        public static JsonObject BuildNativeTheme(Dictionary<string, string> props, Dictionary<string, Dictionary<string, string>>? visualOverrides = null) =>
+            ReportingThemeBuilder.BuildNativeTheme(props, visualOverrides);
     }
 }

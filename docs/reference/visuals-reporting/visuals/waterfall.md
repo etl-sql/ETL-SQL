@@ -14,6 +14,9 @@ CREATE VISUAL VisualName AS WATERFALL (
     SUBTOTAL = col_is_subtotal
   ),
   OPTIONS (
+    [BAR_MIN_HEIGHT = n],
+    [ANIMATION = ON|OFF],
+    [HOVER_FOCUS = NONE|SELF|SERIES],
     ORIENTATION = VERTICAL,
     CONNECTOR_LINES = ON,
     COLOR_TOTAL = '#2980b9',
@@ -35,6 +38,9 @@ CREATE VISUAL VisualName AS WATERFALL (
 
 ## Options
 
+- **BAR_MIN_HEIGHT = n** — Minimum bar height in pixels so very small non-zero steps remain visible (default 0).
+- **ANIMATION = ON|OFF** — Controls entry animation when the visual first mounts (default OFF).
+- **HOVER_FOCUS = NONE|SELF|SERIES** — Dimming and emphasis mode on pointer hover (default NONE).
 - **CONNECTOR_LINES = ON|OFF** — Toggle connector lines between adjacent bars (default ON).
 - **CONNECTOR_LINE_COLOR = '#rrggbb'** — Color of the connector line between bars (default `#9ca3af`).
 - **CONNECTOR_LINE_WIDTH = n** — Stroke width in pixels for connector lines (default 1).

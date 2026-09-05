@@ -106,17 +106,32 @@ CREATE VISUAL StyledFunnel AS FUNNEL (
     )
 );
 
+-- 10. Horizontal Funnel Orientation
+CREATE VISUAL HorizontalFunnel AS FUNNEL (
+    SOURCE = #sales,
+    TITLE = '7. Horizontal Funnel (ORIENTATION = HORIZONTAL)',
+    MAPPINGS (LABEL = Stage, VALUE = Count),
+    OPTIONS (
+        ORIENTATION  = HORIZONTAL,
+        SHOW_PERCENT = ON,
+        PERCENT_MODE = TOTAL,
+        DATA_LABELS  = ON
+    )
+);
+
 -- Dashboard Page Layout
 CREATE PAGE FunnelKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C D / E F',
+    STRUCTURE = 'A B / C D / E F / G .',
     MAP (
         'A' = BasicFunnel,
         'B' = StepPercentFunnel,
         'C' = TotalPercentFunnel,
         'D' = SourceOrderFunnel,
         'E' = HierarchyPyramid,
-        'F' = StyledFunnel
+        'F' = StyledFunnel,
+        'G' = HorizontalFunnel
     )
 );
 
 CREATE NAVIGATION MainNav AS TAB (DEFAULT = FunnelKitchenSink, PAGES (FunnelKitchenSink));
+

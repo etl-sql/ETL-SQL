@@ -1,14 +1,21 @@
 # SEARCH
-A free-text search input. The typed value is bound to a STRING variable via ACTIONS. Use with LIKE or a CONTAINS expression to filter other visuals.
 
-Mappings: none
+A free-text search input with configurable debouncing, match pattern formatting, minimum character threshold, and clear button.
 
 ## Syntax
 
 ```sql
 CREATE VISUAL VisualName AS SEARCH (
   OPTIONS (
-    ...
+    PLACEHOLDER = 'hint text',
+    DEFAULT     = 'initial text',
+    MATCH_MODE  = CONTAINS|STARTS_WITH|EXACT,
+    MIN_CHARS   = n,
+    DEBOUNCE    = milliseconds,
+    SHOW_CLEAR  = ON|OFF
+  ),
+  ACTIONS (
+    ON_CHANGE = SET_PARAMETER(@variable, value)
   )
 );
 ```
@@ -19,32 +26,39 @@ Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour 
 
 ## Options
 
-- **PLACEHOLDER = 'hint text'** - greyed-out text shown when the input is empty
-- **DEFAULT = 'initial text'** - pre-populated value on load
-- **DEBOUNCE = n** - milliseconds to wait after keypress before firing (default 300)
-- **SHOW_CLEAR = ON|OFF** - shows an accessible × button when the input contains text; activating it clears the value and fires `ON_CHANGE` (default OFF)
+- **PLACEHOLDER = 'hint text'** — Greyed-out placeholder text when input is empty.
+- **DEFAULT = 'initial text'** — Pre-populated value on load.
+- **MATCH_MODE = CONTAINS|STARTS_WITH|EXACT** — Wraps the emitted parameter value with wildcards (`%val%` for CONTAINS, `val%` for STARTS_WITH, raw for EXACT) (default EXACT).
+- **MIN_CHARS = n** — Suppresses parameter updates until at least n characters are typed (default 0).
+- **DEBOUNCE = n** — Milliseconds to wait after keypress before firing `ON_CHANGE` (default 350).
+- **SHOW_CLEAR = ON|OFF** — Shows an accessible × button that resets the field and fires parameter updates (default OFF).
 
 ## Actions
 
-- **ON_CHANGE = SET_PARAMETER(@variable, value)** - fires after the configured debounce when the user types or clears the field
+- **ON_CHANGE = SET_PARAMETER(@variable, value)** — Fires after the configured debounce interval when the user types or clears the field.
 
 ## Examples
 
 ```sql
-DECLARE @search STRING = '';
+DECLARE @pattern STRING = '';
 
 CREATE VISUAL CustomerSearch AS SEARCH (
-  OPTIONS (PLACEHOLDER = 'Search customers...', DEBOUNCE = 400, SHOW_CLEAR = ON),
-  ACTIONS (ON_CHANGE   = SET_PARAMETER(@search, value))
+  OPTIONS (
+    PLACEHOLDER = 'Search customer or email…',
+    MATCH_MODE  = CONTAINS,
+    MIN_CHARS   = 2,
+    SHOW_CLEAR  = ON
+  ),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@pattern, value))
 );
 
 CREATE VISUAL CustomerTable AS TABLE (
-  SOURCE = (SELECT customer_id, name, email, total_spend
+  SOURCE = (SELECT customer_id, name, email
             FROM #customers
-            WHERE @search = ''
-               OR name  LIKE '%' + @search + '%'
-               OR email LIKE '%' + @search + '%'),
-  MAPPINGS (customer_id, name, email, total_spend)
+            WHERE @pattern = ''
+               OR name LIKE @pattern
+               OR email LIKE @pattern),
+  MAPPINGS (customer_id, name, email)
 );
 ```
 

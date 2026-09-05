@@ -216,6 +216,18 @@
         {
           "name": "layout",
           "value": "funnel"
+        },
+        {
+          "name": "FUNNEL_SHAPE",
+          "value": "FUNNEL"
+        },
+        {
+          "name": "SORT",
+          "value": "VALUE_DESC"
+        },
+        {
+          "name": "PERCENT_MODE",
+          "value": "STEP"
         }
       ],
       "stack": "none",
@@ -267,6 +279,10 @@
     {
       "name": "mapping:value",
       "value": "StageValue"
+    },
+    {
+      "name": "SORT",
+      "value": "VALUE_DESC"
     },
     {
       "name": "TITLE",

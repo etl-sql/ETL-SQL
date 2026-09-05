@@ -849,12 +849,72 @@ const ReportCard: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
 
     const value = visual.rows[0]?.[valueIdx];
 
+    const valueColor = visual.rowFontStyles?.[0]
+        || visual.rowStyles?.[0]
+        || opts['value_color']
+        || visual.styles?.['VALUE_COLOR'];
+
+    // Dynamic delta label & delta
+    const deltaColName = opts['mapping:delta'];
+    let deltaAmount: number | null = null;
+    const row0 = visual.rows[0];
+    if (deltaColName && row0) {
+        const dIdx = visual.columns.indexOf(deltaColName);
+        if (dIdx >= 0 && value != null) {
+            const cur = Number(value);
+            const comp = Number(row0[dIdx]);
+            if (!Number.isNaN(cur) && !Number.isNaN(comp)) {
+                deltaAmount = cur - comp;
+            }
+        }
+    }
+
+    let deltaLabel = '';
+    const deltaLabelMapping = opts['mapping:delta_label'];
+    if (deltaLabelMapping && row0) {
+        const dlIdx = visual.columns.indexOf(deltaLabelMapping);
+        if (dlIdx >= 0 && row0[dlIdx] != null) {
+            deltaLabel = String(row0[dlIdx]);
+        }
+    }
+    if (!deltaLabel && opts['delta_label']) {
+        if (row0) {
+            const dlIdx = visual.columns.indexOf(opts['delta_label']);
+            if (dlIdx >= 0 && row0[dlIdx] != null) {
+                deltaLabel = String(row0[dlIdx]);
+            } else {
+                deltaLabel = opts['delta_label'];
+            }
+        } else {
+            deltaLabel = opts['delta_label'];
+        }
+    }
+
+    const sparkline = visual.microCharts?.find(m => m.role === 'card.sparkline');
+
     return (
         <div className="h-full flex flex-col justify-center py-3 px-2">
             <span className="text-[11px] text-[var(--muted)] mb-1">{label}</span>
-            <span className="text-3xl font-semibold text-[var(--text)]">
+            <span
+                className="text-3xl font-semibold text-[var(--text)]"
+                style={valueColor ? { color: valueColor } : undefined}
+            >
                 {value != null ? String(value) : 'No Data'}
             </span>
+            {deltaAmount !== null && (
+                <div className="flex items-center gap-1 text-xs mt-1" style={{ color: deltaAmount >= 0 ? '#10b981' : '#ef4444' }}>
+                    <span>{deltaAmount >= 0 ? '▲ +' : '▼ -'}{Math.abs(deltaAmount)}</span>
+                    {deltaLabel && <span className="text-[var(--muted)]">{deltaLabel}</span>}
+                </div>
+            )}
+            {sparkline?.svg && (
+                <div
+                    className="mt-2"
+                    role="img"
+                    aria-label={sparkline.accessibleLabel || sparkline.plainText || 'Trend'}
+                    dangerouslySetInnerHTML={{ __html: sparkline.svg }}
+                />
+            )}
         </div>
     );
 };

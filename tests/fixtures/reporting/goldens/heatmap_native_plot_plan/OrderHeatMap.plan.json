@@ -134,7 +134,51 @@
           "label": "42"
         }
       ],
-      "includesZero": true
+      "includesZero": true,
+      "colorRange": {
+        "kind": "gradient",
+        "low": "#dbeafe",
+        "high": "#1d4ed8",
+        "nullColor": "#f1f5f9",
+        "ticks": [
+          {
+            "value": {
+              "kind": "decimal",
+              "decimal": 0
+            },
+            "label": "0"
+          },
+          {
+            "value": {
+              "kind": "decimal",
+              "decimal": 10.5
+            },
+            "label": "10.5"
+          },
+          {
+            "value": {
+              "kind": "decimal",
+              "decimal": 21
+            },
+            "label": "21"
+          },
+          {
+            "value": {
+              "kind": "decimal",
+              "decimal": 31.5
+            },
+            "label": "31.5"
+          },
+          {
+            "value": {
+              "kind": "decimal",
+              "decimal": 42
+            },
+            "label": "42"
+          }
+        ],
+        "accessibleDescription": "Color ranges from 0 (#dbeafe) to 42 (#1d4ed8)."
+      }
     }
   ],
   "series": [
@@ -313,7 +357,7 @@
     "gapRows": [],
     "skippedRows": []
   },
-  "accessibleSummary": "Orders by Period: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.",
+  "accessibleSummary": "Orders by Period: 4 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows. Color ranges from 0 (#dbeafe) to 42 (#1d4ed8).",
   "fallback": {
     "kind": "rankedTable",
     "heading": "Orders by Period",

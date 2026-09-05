@@ -9,7 +9,7 @@ public static class ReportingThemeBuilder
     /// <summary>
     /// Translates Report-SQL theme properties to the native theme JSON structure.
     /// </summary>
-    public static JsonObject BuildNativeTheme(Dictionary<string, string> props)
+    public static JsonObject BuildNativeTheme(Dictionary<string, string> props, Dictionary<string, Dictionary<string, string>>? visualOverrides = null)
     {
         var theme = new JsonObject();
 
@@ -34,18 +34,36 @@ public static class ReportingThemeBuilder
         var textColor = props.TryGetValue("TEXT_COLOR", out var tc) ? tc : null;
         var axisColor = props.TryGetValue("AXIS_COLOR", out var ac) ? ac : textColor;
         var gridColor = props.TryGetValue("GRID_COLOR", out var gc) ? gc : null;
+        var fontFamily = props.TryGetValue("FONT_FAMILY", out var ff) ? ff
+            : (props.TryGetValue("FONT-FAMILY", out var ff2) ? ff2 : null);
 
-        if (textColor != null)
+        if (textColor != null || fontFamily != null)
         {
-            theme["textStyle"] = new JsonObject { ["color"] = textColor };
+            var ts = new JsonObject();
+            if (textColor != null) ts["color"] = textColor;
+            if (fontFamily != null) ts["fontFamily"] = fontFamily;
+            theme["textStyle"] = ts;
+
             theme["title"] = new JsonObject
             {
-                ["textStyle"] = new JsonObject { ["color"] = textColor },
-                ["subtextStyle"] = new JsonObject { ["color"] = textColor }
+                ["textStyle"] = new JsonObject
+                {
+                    ["color"] = textColor ?? "#333",
+                    ["fontFamily"] = fontFamily ?? "sans-serif"
+                },
+                ["subtextStyle"] = new JsonObject
+                {
+                    ["color"] = textColor ?? "#666",
+                    ["fontFamily"] = fontFamily ?? "sans-serif"
+                }
             };
             theme["legend"] = new JsonObject
             {
-                ["textStyle"] = new JsonObject { ["color"] = textColor }
+                ["textStyle"] = new JsonObject
+                {
+                    ["color"] = textColor ?? "#333",
+                    ["fontFamily"] = fontFamily ?? "sans-serif"
+                }
             };
         }
 
@@ -59,12 +77,37 @@ public static class ReportingThemeBuilder
         }
 
         var handled = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            { "COLORS", "ACCENT_COLOR", "BACKGROUND", "TEXT_COLOR", "AXIS_COLOR", "GRID_COLOR", "BORDER_COLOR" };
+            { "COLORS", "ACCENT_COLOR", "BACKGROUND", "TEXT_COLOR", "AXIS_COLOR", "GRID_COLOR", "BORDER_COLOR", "FONT_FAMILY", "FONT-FAMILY" };
 
         foreach (var kv in props)
         {
-            if (!handled.Contains(kv.Key))
+            if (!handled.Contains(kv.Key) && !kv.Key.Contains(':'))
                 theme[kv.Key.ToLowerInvariant()] = kv.Value;
+        }
+
+        if (visualOverrides is { Count: > 0 })
+        {
+            foreach (var (vType, overrides) in visualOverrides)
+            {
+                var vKey = vType.ToLowerInvariant();
+                var vObj = new JsonObject();
+                if (overrides.TryGetValue("COLORS", out var vColors))
+                {
+                    var arr = new JsonArray();
+                    foreach (var c in vColors.Split(','))
+                    {
+                        var hex = c.Trim().Trim('\'', '"', '(', ')');
+                        if (!string.IsNullOrEmpty(hex)) arr.Add(hex);
+                    }
+                    vObj["color"] = arr;
+                }
+                foreach (var (k, v) in overrides)
+                {
+                    if (!k.Equals("COLORS", StringComparison.OrdinalIgnoreCase))
+                        vObj[k.ToLowerInvariant()] = v;
+                }
+                theme[vKey] = vObj;
+            }
         }
 
         return theme;

@@ -48,7 +48,9 @@ public sealed record ResolvedScale(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool MinorTicks = false,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? LabelRotation = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? LabelSkip = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] decimal OuterPadding = 0m)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] decimal OuterPadding = 0m,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TickFormat = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? TimeUnit = null)
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ResolvedColorRange? ColorRange { get; init; }
@@ -74,6 +76,10 @@ public sealed record ResolvedDatum(
     public decimal DisplayOffsetX { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal DisplayOffsetY { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public string? SegmentLineDash { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public string? SegmentColor { get; init; }
 }
 
 /// <summary>

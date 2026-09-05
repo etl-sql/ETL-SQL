@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { readPortalPage } from './lib/portal-page.mjs';
 
-const portal = await readFile(
-  new URL('../src/ETL-SQL.Portal/wwwroot/orchestrator.html', import.meta.url),
-  'utf8');
+const portal = readPortalPage('orchestrator');
 const story = await readFile(
   new URL('../tools/ui-sandbox/stories/orchestrator-checkpoint-resume.story.js', import.meta.url),
   'utf8');

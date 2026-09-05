@@ -2,7 +2,7 @@
  * The /api/auth/oidc/callback page embeds the issued portal session in a JSON data-island; this
  * same-origin module stores it exactly like a password login (so the rest of the SPA is unchanged)
  * and forwards to the app. Tokens never appear in the URL/history. */
-import { auth } from '/js/api.js';
+import { auth } from './api.js';
 
 function fail() { window.location.replace('/login.html?error=sso_failed'); }
 

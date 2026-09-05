@@ -37,6 +37,7 @@ import { navigationApi } from './api.js';
  */
 export async function applyNavigation(doc = document) {
     const destinations = await navigationApi.destinations();
+    /** @type {Record<string, boolean>} */
     const applied = {};
 
     for (const { id, visible, reason } of destinations) {

@@ -63,6 +63,51 @@ Keep entries concise and link to detailed designs rather than copying them here.
 
 ## Foundation and Next Horizon
 
+### ETL-SQL Studio — Code Stability and Polish
+
+**Status:** Planned
+**Horizon:** v0.20.0
+
+v0.20.0 is about making the browser side of ETL-SQL something that can be changed safely, rather than
+adding to it. Studio, the Portal's reporting and stewardship surfaces, and the multi-tenant admin
+screens are carried by roughly 51,000 lines of untyped JavaScript, against ~10,800 lines that are
+already TypeScript in the VS Code extension and its React UI. The recurring defect in this codebase
+is not a wrong algorithm; it is a binding, a route name, or a DTO field that does not exist, hidden by
+a `catch` and rendered as something quietly wrong.
+
+**Outcome:** The browser sources are typed and checked in CI, the client contract is generated from
+the C# DTOs rather than restated by hand, and the largest modules are split along the seams the bugs
+already follow.
+
+**Scope:** This is step 4 of the plan recorded in `TODO.md` — moving the sources to `.ts` with a real
+module graph and a build step. Steps 1 to 3 (`checkJs` as a gate, generated `.d.ts` from the C#
+contracts, and lifting the inline `<script>` blocks out of the Portal's HTML) are additive and land
+before this, in v0.19.0 or beside it.
+
+**Boundaries:** The delivery model is the real cost, not the annotations. One canonical asset is
+copied verbatim to five mount points by `scripts/sync-assets.js`, pinned to LF by `.gitattributes`,
+and gated for drift by `Test-PrePush.ps1`; the ui-sandbox and the browser tests both rely on the file
+served being the file in the repo. A bundler changes that property, so the sync, the drift gate and
+the sandbox have to be redesigned together with it rather than after it.
+
+**Dependencies:** Steps 1 to 3 first — a `.ts` migration over sources that have never been
+type-checked converts one large diff into two.
+
+**Also in scope: the browser and Portal test lanes themselves.** These are a separate problem from
+typing and must not be folded into it — none of the failures live in the browser sources. The lane
+reports one fixture failure as 231 identical, contentless messages that name none of the real
+conditions, which has already produced a wrong root cause we acted on more than once; DAG assertions
+wait on SVG *visibility*, so an edge that happens to lay out axis-aligned has a zero-area box and
+times out; and the lane runs on one shared Portal, admin account and sign-in gate across every test
+class, alongside a mutable global connector registry. Stability work that leaves these in place will
+be measured by a suite nobody trusts. Detail in `TODO.md` §3.
+
+**Notable inclusion:** splitting `designer.js`. At 474KB and ~9,000 lines it holds `createDesigner`,
+`createScriptEditorWorkbench` and `renderDag` in one scope, and the live defects found while planning
+this work were scope confusion inside it. The split is worth doing on its own terms; typing it is what
+makes the split safe to attempt.
+
+
 ### Reporting & Presentation — Native Grammar-of-Graphics Spine
 
 **Status:** Shipped

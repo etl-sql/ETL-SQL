@@ -50,9 +50,13 @@ const IMPACT_DIRECTIONS = new Set(['upstream', 'downstream', 'both']);
  * @param {boolean}  [opts.allowAudit]          Whether the administrator-only audit mode is visible.
  * @param {Function} [opts.promptFn]            Async validated dialog used when naming a saved view.
  * @param {string}   [opts.viewKey]             Storage key for saved views.
- * @returns {{ render: Function, dispose: Function, state: Object }}
+ * @returns {{ render: Function, setMode: (mode: string) => void,
+ *   showImpact: (target?: {kind?: string, name?: string, column?: string, direction?: string,
+ *   depth?: number}) => boolean, dispose: Function, state: Object }}
  */
-export function createLineageCatalog(opts = {}) {
+// No `= {}` default: `host`, `catalogApi`, `renderDag`, `renderLineageRow` and `lineageRowsToCsv`
+// are all required, and the default claimed a call with no arguments would work.
+export function createLineageCatalog(opts) {
   const {
     host,
     catalogApi,
@@ -929,7 +933,7 @@ export function createLineageCatalog(opts = {}) {
 
     host.querySelectorAll('[data-lineage-mode]').forEach(btn => {
       btn.addEventListener('click', () => {
-        state.mode = btn.dataset.lineageMode;
+        state.mode = /** @type {HTMLElement} */ (btn).dataset.lineageMode;
         onModeChange(state.mode);
         render();
       });
@@ -1039,6 +1043,13 @@ export function createLineageCatalog(opts = {}) {
      *
      * Unknown or missing fields fall back to the current state rather than throwing, because the
      * caller is a URL and a URL is user-editable.
+     *
+     * @param {Object} [target]
+     * @param {string} [target.kind]
+     * @param {string} [target.name]
+     * @param {string} [target.column]
+     * @param {string} [target.direction]
+     * @param {number} [target.depth]
      */
     showImpact({ kind, name, column, direction, depth } = {}) {
       if (!name) return false;

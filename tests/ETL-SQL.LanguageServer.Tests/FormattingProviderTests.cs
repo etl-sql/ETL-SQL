@@ -124,5 +124,42 @@ namespace ETL_SQL.LanguageServer.Tests
             Assert.Equal(1m, progress.ProgressMaximum);
             Assert.Equal("#16A34A", progress.ProgressColor);
         }
+
+        [Fact]
+        public async Task FormatDocument_PreservesCardSparklineColorAndReferenceLine()
+        {
+            var store = new DocumentStateStore();
+            var config = new Mock<ILanguageServerConfiguration>();
+            config.Setup(item => item.GetSection(It.IsAny<string>()))
+                .Returns(new ConfigurationBuilder().AddInMemoryCollection().Build().GetSection("etlsql"));
+            var handler = new FormattingProvider(Mock.Of<ILogger<FormattingProvider>>(), store, config.Object);
+            var uri = DocumentUri.From("untitled:card_sparkline_options.rptsql");
+            const string script = """
+                CREATE VISUAL Kpi AS CARD (
+                  SOURCE = #kpi,
+                  MAPPINGS (VALUE = total, SPARKLINE = #daily (X = day, Y = amount, TYPE = LINE, COLOR = '#10B981', REFERENCE_LINE = 15.5))
+                );
+                """;
+            store.SetState(uri, script, null!, null!);
+
+            var result = await handler.Handle(new DocumentFormattingParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Options = new FormattingOptions()
+            }, CancellationToken.None);
+            var formatted = Assert.Single(result).NewText;
+
+            Assert.Contains("COLOR = '#10B981'", formatted);
+            Assert.Contains("REFERENCE_LINE = 15.5", formatted);
+
+            var ast = new ETL_SQL.Core.Parser.Parser(new ETL_SQL.Core.Parser.Lexer(formatted).Tokenize(), formatted).Parse();
+            var visuals = ast.Statements.OfType<ETL_SQL.Core.CreateVisualStatement>().ToList();
+            var cardMicro = Assert.Single(visuals[0].Mappings, mapping => mapping.SparklineSource is not null);
+            Assert.Equal("#daily", cardMicro.SparklineSource);
+            Assert.Equal("day", cardMicro.SparklineXColumn);
+            Assert.Equal("amount", cardMicro.SparklineYColumn);
+            Assert.Equal("#10B981", cardMicro.SparklineColor);
+            Assert.Equal(15.5m, cardMicro.SparklineReferenceLine);
+        }
     }
 }

@@ -48,7 +48,10 @@ UNION ALL SELECT 'Year Total',    0,            'TOTAL';
 CREATE VISUAL BasicWaterfall AS WATERFALL (
     SOURCE = #cashflow,
     TITLE  = '1. Basic Waterfall — Cash Flow Bridge',
-    MAPPINGS (NAME = Period, VALUE = Delta)
+    MAPPINGS (NAME = Period, VALUE = Delta),
+    OPTIONS (
+        BAR_MIN_HEIGHT = 4
+    )
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────

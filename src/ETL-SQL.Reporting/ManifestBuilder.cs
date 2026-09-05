@@ -190,18 +190,40 @@ namespace ETL_SQL.Reporting
                     }
                     var containerPaletteList = validContainerPalette.Count > 0 ? validContainerPalette : null;
 
+                    int? containerRefresh = null;
+                    if (cStmt.Options.TryGetValue("REFRESH", out var refStr) && int.TryParse(refStr, out var refSecs))
+                        containerRefresh = refSecs;
+
+                    Dictionary<string, ContainerSlotManifest>? slotDetails = null;
+                    if (cStmt.SlotDefinitions.Count > 0)
+                    {
+                        slotDetails = cStmt.SlotDefinitions.ToDictionary(
+                            kv => kv.Key,
+                            kv => new ContainerSlotManifest
+                            {
+                                Visual = kv.Value.Visual,
+                                Icon = kv.Value.Icon,
+                                Badge = kv.Value.Badge
+                            });
+                    }
+
+                    bool isCol = cStmt.IsCollapsible || (cStmt.Options.TryGetValue("COLLAPSIBLE", out var colVal) && string.Equals(colVal, "ON", StringComparison.OrdinalIgnoreCase));
+
                     manifest.Containers.Add(new ContainerManifest
                     {
                         Name = name,
                         ContainerType = cStmt.ContainerType,
                         Structure = cStmt.Structure,
                         SlotMap = cStmt.SlotMap.ToDictionary(kv => kv.Key, kv => kv.Value),
+                        SlotDetails = slotDetails,
+                        Options = cStmt.Options.Count > 0 ? cStmt.Options : null,
+                        Refresh = containerRefresh,
                         Title = title,
                         TitleIsMarkdown = titleMd,
                         Subtitle = subtitle,
                         SubtitleIsMarkdown = subtitleMd,
                         Tooltip = await _styleBuilder.BuildTooltipManifestAsync(cStmt.Tooltip, cStmt.Name),
-                        IsCollapsible = cStmt.IsCollapsible,
+                        IsCollapsible = isCol,
                         Icon = cStmt.Icon,
                         IsPinnable = cStmt.IsPinnable,
                         IsHidden = ResolveVisibility(cStmt.Visibility),
@@ -224,13 +246,48 @@ namespace ETL_SQL.Reporting
                         .Where(p => !(_ctx.ReportContext.PageDefinitions.TryGetValue(p, out var pd) && ResolveVisibility(pd.Visibility)))
                         .ToList();
 
+                    var navItems = nStmt.Items.Select(item => new NavigationItemManifest
+                    {
+                        PageName = item.PageName,
+                        Label = item.Label,
+                        Icon = item.Icon,
+                        Badge = item.Badge,
+                        ExternalUrl = item.ExternalUrl,
+                        Target = item.Target,
+                        IsExternalLink = item.IsExternalLink
+                    }).ToList();
+
+                    var navGroups = nStmt.Groups.Select(g => new NavigationGroupManifest
+                    {
+                        Title = g.Title,
+                        Items = g.Items.Select(item => new NavigationItemManifest
+                        {
+                            PageName = item.PageName,
+                            Label = item.Label,
+                            Icon = item.Icon,
+                            Badge = item.Badge,
+                            ExternalUrl = item.ExternalUrl,
+                            Target = item.Target,
+                            IsExternalLink = item.IsExternalLink
+                        }).ToList()
+                    }).ToList();
+
+                    var resolvedNavStyles = _styleBuilder.ResolveStyles(null, nStmt.Styles, reportStyles);
+                    var resolvedNavActiveStyles = _styleBuilder.ResolveStyles(null, nStmt.ActiveStyles, reportStyles);
+
                     manifest.Navigations.Add(new NavigationManifest
                     {
                         Name = name,
                         NavType = nStmt.NavType.ToString().ToUpperInvariant(),
                         Orientation = nStmt.Orientation.ToString().ToUpperInvariant(),
                         DefaultPage = nStmt.DefaultPage,
-                        Pages = visiblePages
+                        Pages = visiblePages,
+                        HideInvisible = nStmt.HideInvisible || (nStmt.Options.TryGetValue("HIDE_INVISIBLE", out var hi) && hi.Equals("ON", StringComparison.OrdinalIgnoreCase)),
+                        Items = navItems.Count > 0 ? navItems : null,
+                        Groups = navGroups.Count > 0 ? navGroups : null,
+                        Options = nStmt.Options.Count > 0 ? new Dictionary<string, string>(nStmt.Options) : null,
+                        Styles = resolvedNavStyles.Count > 0 ? resolvedNavStyles : null,
+                        ActiveStyles = resolvedNavActiveStyles.Count > 0 ? resolvedNavActiveStyles : null
                     });
                 }
             }
@@ -353,7 +410,7 @@ namespace ETL_SQL.Reporting
                 manifest.CustomThemes = new();
                 foreach (var (themeName, themeStmt) in _ctx.ReportContext.ThemeDefinitions)
                 {
-                    var themeJson = ThemeBuilder.BuildNativeTheme(themeStmt.Properties);
+                    var themeJson = ThemeBuilder.BuildNativeTheme(themeStmt.Properties, themeStmt.VisualOverrides);
                     using var doc = JsonDocument.Parse(themeJson.ToJsonString());
                     var themeTokens = ETL_SQL.Reporting.Semantics.DesignTokenResolver.ResolveScopedTokens(themeStmt.Properties, isPageOrReportLevel: true);
                     manifest.CustomThemes.Add(new ThemeManifest
@@ -1154,7 +1211,7 @@ namespace ETL_SQL.Reporting
             }
         }
 
-        private VisualActionManifest TranslateAction(VisualAction action)
+        internal static VisualActionManifest TranslateAction(VisualAction action)
         {
             return action switch
             {
@@ -1221,6 +1278,31 @@ namespace ETL_SQL.Reporting
                     Value = su.Value
                 },
                 ApplyBookmarkAction ab => new VisualActionManifest { Type = "APPLY_BOOKMARK", Trigger = action.Trigger, BookmarkName = ab.BookmarkName },
+                ResetParametersAction rp => new VisualActionManifest
+                {
+                    Type = "RESET_PARAMETERS",
+                    Trigger = action.Trigger,
+                    ResetParameters = rp.Parameters.Count > 0 ? rp.Parameters : null
+                },
+                OpenUrlAction ou => new VisualActionManifest
+                {
+                    Type = "OPEN_URL",
+                    Trigger = action.Trigger,
+                    Url = ou.Url,
+                    Target = ou.Target
+                },
+                ShowModalAction sm => new VisualActionManifest
+                {
+                    Type = "SHOW_MODAL",
+                    Trigger = action.Trigger,
+                    ModalName = sm.ModalName
+                },
+                HideModalAction hm => new VisualActionManifest
+                {
+                    Type = "HIDE_MODAL",
+                    Trigger = action.Trigger,
+                    ModalName = hm.ModalName
+                },
                 _ => new VisualActionManifest { Type = "UNKNOWN", Trigger = action.Trigger }
             };
         }

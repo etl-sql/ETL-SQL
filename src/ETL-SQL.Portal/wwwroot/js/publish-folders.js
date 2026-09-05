@@ -27,6 +27,14 @@ export function folderOptionsHtml(flatFolders, esc) {
  * "new folder" parent select. Returns the flat folder list. Always fetching fresh is what makes a
  * just-created folder appear without a page reload.
  */
+/**
+ * @param {Object} options
+ * @param {*} options.foldersApi
+ * @param {Function} options.esc
+ * @param {HTMLSelectElement|null} [options.select]       The folder picker to fill.
+ * @param {HTMLSelectElement|null} [options.parentSelect]  The "create under" picker, when shown.
+ * @param {*} [options.selectedId] Folder to pre-select, when the caller has one.
+ */
 export async function populateFolderSelects({ foldersApi, esc, select, parentSelect, selectedId }) {
     const tree = await foldersApi.list().catch(() => []);
     const flat = flattenFolders(tree);

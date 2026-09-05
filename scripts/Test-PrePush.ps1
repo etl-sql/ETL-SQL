@@ -17,7 +17,7 @@ Write-Host "=======================================================" -Foreground
 
 # 1. Code Formatting
 if (-not $SkipFormat) {
-    Write-Host "[1/9] Verifying code formatting..." -ForegroundColor White
+    Write-Host "[1/10] Verifying code formatting..." -ForegroundColor White
     & dotnet format (Join-Path $RepoRoot "ETL-SQL.slnx") --verify-no-changes --no-restore
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Formatting check failed. Run 'dotnet format' to fix."
@@ -26,64 +26,72 @@ if (-not $SkipFormat) {
 }
 
 # 2. Shared Report Assets
-Write-Host "[2/9] Checking shared report runtime assets..." -ForegroundColor White
+Write-Host "[2/10] Checking shared report runtime assets..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "sync-assets.js") -Check
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Shared report runtime assets are out of sync. Edit canonical files in 'src/ETL-SQL.ReportRuntime/Resources/Shared/' and run 'node .\scripts\sync-assets.js'."
     exit $LASTEXITCODE
 }
 
-# 3. Syntax Index Sync
-Write-Host "[3/9] Checking syntax index synchronization..." -ForegroundColor White
+# 3. Browser Type Gate
+Write-Host "[3/10] Checking browser-side types..." -ForegroundColor White
+& node (Join-Path $ScriptRoot "typecheck-browser.mjs")
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Browser type gate failed. See the findings above; run 'node scripts/typecheck-browser.mjs --summary' for the current picture. If the toolchain is missing, run 'npm ci --prefix scripts/typecheck'."
+    exit $LASTEXITCODE
+}
+
+# 4. Syntax Index Sync
+Write-Host "[4/10] Checking syntax index synchronization..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "generate-syntax-index.js") --check
 if ($LASTEXITCODE -ne 0) {
     Write-Error "docs/syntax-index.md is out of sync with LanguageMetadata.cs. Run 'node scripts/generate-syntax-index.js'."
     exit $LASTEXITCODE
 }
 
-# 4. Syntax Index Links & Doc Reference Coverage
-Write-Host "[4/9] Auditing syntax index links and reference page coverage..." -ForegroundColor White
+# 5. Syntax Index Links & Doc Reference Coverage
+Write-Host "[5/10] Auditing syntax index links and reference page coverage..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "audit-syntax-index.js") --strict
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Syntax index audit failed with broken links or unreferenced reference pages."
     exit $LASTEXITCODE
 }
 
-# 5. Broad Documentation Audit (links, filenames, hub membership, template conformance)
-Write-Host "[5/9] Auditing documentation links, filenames, hub membership, and template conformance..." -ForegroundColor White
+# 6. Broad Documentation Audit (links, filenames, hub membership, template conformance)
+Write-Host "[6/10] Auditing documentation links, filenames, hub membership, and template conformance..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "audit-docs.js") --strict
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Docs audit failed. Run 'node scripts/audit-docs.js' for details, or '--verbose' for the full file list."
     exit $LASTEXITCODE
 }
 
-# 6. Flaky Sleep Delays
-Write-Host "[6/9] Checking for flaky sleep-then-assert test patterns..." -ForegroundColor White
+# 7. Flaky Sleep Delays
+Write-Host "[7/10] Checking for flaky sleep-then-assert test patterns..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "check-flaky-test-delays.mjs")
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Found raw sleep delays in tests. Use LoadAwareWait.UntilAsync instead."
     exit $LASTEXITCODE
 }
 
-# 7. Shell Script Line Endings (LF enforcement)
-Write-Host "[7/9] Checking shell script line endings (LF)..." -ForegroundColor White
+# 8. Shell Script Line Endings (LF enforcement)
+Write-Host "[8/10] Checking shell script line endings (LF)..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "check-shell-line-endings.js")
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Shell scripts contain CRLF line endings. Run 'node scripts/check-shell-line-endings.js --fix' to normalize."
     exit $LASTEXITCODE
 }
 
-# 8. Test Lane Inventory & Categories
-Write-Host "[8/9] Auditing test lane inventory & category structure..." -ForegroundColor White
+# 9. Test Lane Inventory & Categories
+Write-Host "[9/10] Auditing test lane inventory & category structure..." -ForegroundColor White
 & (Join-Path $ScriptRoot "Get-TestLaneInventory.ps1") -FailOnIssues
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Test lane inventory audit failed."
     exit $LASTEXITCODE
 }
 
-# 9. Fast Contract & Smoke Suite
+# 10. Fast Contract & Smoke Suite
 if (-not $SkipSmoke) {
-    Write-Host "[9/9] Running fast contract, architecture, and smoke tests..." -ForegroundColor White
+    Write-Host "[10/10] Running fast contract, architecture, and smoke tests..." -ForegroundColor White
     $filter = "Category=Architecture|Category=Docs|Category=Smoke.Core|Category=Smoke.Reporting|Category=Smoke.Security"
     & dotnet test (Join-Path $RepoRoot "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj") `
         --filter $filter `

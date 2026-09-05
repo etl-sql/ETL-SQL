@@ -9,6 +9,10 @@ CREATE VISUAL VisualName AS MAP (
   SOURCE = #tableName,
   MAPPINGS (
     ...
+  ),
+  OPTIONS (
+    [BASE_MAP = 'https://tile.provider.org/{z}/{x}/{y}.png'],
+    ...
   )
 );
 ```
@@ -16,43 +20,49 @@ CREATE VISUAL VisualName AS MAP (
 ## Mappings
 
 Mappings (CHOROPLETH mode, default):
-- **REGION** - column containing region names or FIPS codes (required)
-- **VALUE** - numeric column controlling fill colour (optional)
+- **REGION** — Column containing region names or FIPS codes (required)
+- **VALUE** — Numeric column controlling fill color (optional)
+- **TOOLTIP** — Column shown in hover tooltip for each region (optional)
 
 Mappings (POINTS mode; set MODE = POINTS):
-- **LON** - longitude column (required)
-- **LAT** - latitude column (required)
-- **VALUE** - numeric column controlling dot size (optional)
-- **LABEL** - column shown in the tooltip
+- **LON** — Longitude column (required)
+- **LAT** — Latitude column (required)
+- **VALUE** — Numeric column controlling dot size (optional)
+- **COLOR** — Color column or series hex/category for point fills (optional)
+- **LABEL** — Label column shown in tooltip (optional)
+- **TOOLTIP** — Custom tooltip text expression or column (optional)
 
 ## Options
 
 Options (all modes):
-- **MAP_NAME = 'key'** - built-in map to use (see table below)
-- **MAP_FILE = 'path'** - path to a custom GeoJSON file (alternative to MAP_NAME)
-  MODE     = CHOROPLETH | POINTS   (default: CHOROPLETH)
-  TITLE    = 'text'
+- **BASE_MAP = 'provider-url-template'** — Tile server URL template (e.g. `'https://tile.openstreetmap.org/{z}/{x}/{y}.png'`). Must use HTTP/HTTPS, contain `{z}`, `{x}`, and `{y}` placeholders, and satisfy connector/host security allowlisting.
+- **MAP_NAME = 'key'** — Built-in map to use (see table below)
+- **MAP_FILE = 'path'** — Path to custom GeoJSON file (alternative to MAP_NAME)
+- **MODE = CHOROPLETH|POINTS** — Map rendering mode (default: CHOROPLETH)
+- **ZOOM = n** — Initial map zoom magnification (e.g., `ZOOM = 2`)
+- **CENTER = (lat, lon)** — Initial center coordinate tuple (e.g., `CENTER = (40.7128, -74.0060)`)
+- **TITLE = 'text'** — Visual title
 
 Options (CHOROPLETH only):
-- **COLOR_LOW = '#hex'** - fill colour for the lowest value (default: #e0f3f8)
-- **COLOR_HIGH = '#hex'** - fill colour for the highest value (default: #08306b)
-- **SHOW_LABELS = ON | OFF** - render region name labels on the map (default: OFF)
-- **MATCH_BY = NAME | FIPS** - how REGION values are matched to map features (default: NAME)
+- **COLOR_SCALE = LINEAR|QUANTILE|QUANTIZE|THRESHOLD** — Scale binning mode (default: LINEAR)
+- **NULL_COLOR = '#hex'** — Fill color for regions absent from data (e.g., `'#f3f4f6'`)
+- **COLOR_LOW = '#hex'** — Fill color for lowest value (default: #e0f3f8)
+- **COLOR_HIGH = '#hex'** — Fill color for highest value (default: #08306b)
+- **SHOW_LABELS = ON|OFF** — Render region name labels on map (default: OFF)
+- **MATCH_BY = NAME|FIPS** — How REGION values are matched to map features (default: NAME)
 
 Built-in map keys (MAP_NAME):
-- **WORLD** - 177 countries (Natural Earth 110m)
-- **US_STATES** - 50 states + DC
-- **US_COUNTIES** - 3,221 US counties (Census 20m simplified)
-- **MN_COUNTIES** - 87 Minnesota counties
-- **CANADA_PROVINCES** - 13 provinces and territories
-- **EUROPE** - 39 European countries
+- **WORLD** — 177 countries (Natural Earth 110m)
+- **US_STATES** — 50 states + DC
+- **US_COUNTIES** — 3,221 US counties (Census 20m simplified)
+- **MN_COUNTIES** — 87 Minnesota counties
+- **CANADA_PROVINCES** — 13 provinces and territories
+- **EUROPE** — 39 European countries
 
 Matching notes:
-  - By default regions match against the feature's 'name' property (e.g. "Minnesota", "Autauga").
-  - Set MATCH_BY = FIPS and supply 5-digit FIPS codes (e.g. "27001") to match US counties
-    by FIPS instead of name.
-  - City names and zip codes are not supported by the built-in maps. For zip-code choropleth,
-    download the Census ZCTA GeoJSON (see Report_Cookbook.md Recipe 11) and supply it via MAP_FILE.
+- By default regions match against the feature's 'name' property (e.g. "United States of America", "Minnesota").
+- Set MATCH_BY = FIPS and supply 5-digit FIPS codes (e.g. "27001") to match US counties by FIPS instead of name.
+- City names and zip codes are not supported by the built-in maps. For zip-code choropleth, supply custom GeoJSON via MAP_FILE.
 
 ## Examples
 

@@ -320,7 +320,16 @@
           "encodings": []
         }
       ],
-      "style": [],
+      "style": [
+        {
+          "name": "MIN_BUBBLE_SIZE",
+          "value": "5"
+        },
+        {
+          "name": "MAX_BUBBLE_SIZE",
+          "value": "65"
+        }
+      ],
       "stack": "none",
       "bandSize": 0.75,
       "tickThickness": 0.15,

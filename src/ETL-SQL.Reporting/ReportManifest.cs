@@ -363,6 +363,11 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<string?>? RowFontStyles { get; set; }
 
+        /// <summary>Row-level segment styles applied via SEGMENT_STYLE rules (LINE and COMBO visuals).</summary>
+        [JsonPropertyName("segmentStyles")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<SegmentStyleManifest?>? SegmentRowStyles { get; set; }
+
         /// <summary>Per-column format and alignment metadata (TABLE visual).</summary>
         [JsonPropertyName("columnMeta")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -760,6 +765,10 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("parameterName")]
         public string? ParameterName { get; set; }
 
+        [JsonPropertyName("secondaryParameterName")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? SecondaryParameterName { get; set; }
+
         [JsonPropertyName("valueExpression")]
         public string? ValueExpression { get; set; }
 
@@ -815,6 +824,25 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("bookmarkName")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? BookmarkName { get; set; }
+
+        // RESET_PARAMETERS fields
+        [JsonPropertyName("resetParameters")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? ResetParameters { get; set; }
+
+        // OPEN_URL fields
+        [JsonPropertyName("url")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Url { get; set; }
+
+        [JsonPropertyName("target")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Target { get; set; }
+
+        // SHOW_MODAL / HIDE_MODAL fields
+        [JsonPropertyName("modalName")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ModalName { get; set; }
     }
 
     /// <summary>
@@ -901,9 +929,32 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public PageLayoutDefinitionManifest? PrintLayout { get; set; }
 
+        [JsonPropertyName("mobileLayout")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public MobileLayoutManifest? MobileLayout { get; set; }
+
+        [JsonPropertyName("actions")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<VisualActionManifest>? Actions { get; set; }
+
+        [JsonPropertyName("options")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? Options { get; set; }
+
+        [JsonPropertyName("visibleExpression")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? VisibleExpression { get; set; }
+
         [JsonPropertyName("physicalPages")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<PhysicalPageModel>? PhysicalPages { get; set; }
+    }
+
+    public class MobileLayoutManifest
+    {
+        [JsonPropertyName("structure")] public string Structure { get; set; } = string.Empty;
+        [JsonPropertyName("slotMap")] public Dictionary<string, string>? SlotMap { get; set; }
+        [JsonPropertyName("breakpoint")] public string Breakpoint { get; set; } = "768px";
     }
 
     /// <summary>Metadata for a CREATE DATASET entry.</summary>
@@ -932,6 +983,17 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("fontColor")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? FontColor { get; set; }
+    }
+
+    public class SegmentStyleManifest
+    {
+        [JsonPropertyName("lineDash")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? LineDash { get; set; }
+
+        [JsonPropertyName("color")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Color { get; set; }
     }
 
     public class ColumnMetaManifest
@@ -1037,6 +1099,30 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("tableCalculationField")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? TableCalculationField { get; set; }
+
+        [JsonPropertyName("seriesName")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? SeriesName { get; set; }
+
+        [JsonPropertyName("annotationPointType")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? AnnotationPointType { get; set; }
+
+        [JsonPropertyName("coordX")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? CoordX { get; set; }
+
+        [JsonPropertyName("coordY")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? CoordY { get; set; }
+
+        [JsonPropertyName("coordXString")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? CoordXString { get; set; }
+
+        [JsonPropertyName("symbol")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Symbol { get; set; }
     }
 
     public class SeriesDefManifest
@@ -1067,6 +1153,17 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("alias")] public string? Alias { get; set; }
     }
 
+    public class ContainerSlotManifest
+    {
+        [JsonPropertyName("visual")] public string Visual { get; set; } = string.Empty;
+        [JsonPropertyName("icon")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Icon { get; set; }
+        [JsonPropertyName("badge")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Badge { get; set; }
+    }
+
     public class ContainerManifest
     {
         [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
@@ -1095,6 +1192,18 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("slotMap")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? SlotMap { get; set; }
+
+        [JsonPropertyName("slotDetails")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, ContainerSlotManifest>? SlotDetails { get; set; }
+
+        [JsonPropertyName("options")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? Options { get; set; }
+
+        [JsonPropertyName("refresh")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? Refresh { get; set; }
 
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -1130,6 +1239,35 @@ namespace ETL_SQL.Reporting
     }
 
 
+    public class NavigationItemManifest
+    {
+        [JsonPropertyName("pageName")] public string PageName { get; set; } = string.Empty;
+        [JsonPropertyName("label")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Label { get; set; }
+        [JsonPropertyName("icon")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Icon { get; set; }
+        [JsonPropertyName("badge")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Badge { get; set; }
+        [JsonPropertyName("externalUrl")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ExternalUrl { get; set; }
+        [JsonPropertyName("target")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Target { get; set; }
+        [JsonPropertyName("isExternalLink")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool IsExternalLink { get; set; }
+    }
+
+    public class NavigationGroupManifest
+    {
+        [JsonPropertyName("title")] public string Title { get; set; } = string.Empty;
+        [JsonPropertyName("items")] public List<NavigationItemManifest> Items { get; set; } = new();
+    }
+
     public class NavigationManifest
     {
         [JsonPropertyName("name")] public string Name { get; set; } = string.Empty;
@@ -1139,6 +1277,29 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? DefaultPage { get; set; }
         [JsonPropertyName("pages")] public List<string> Pages { get; set; } = new();
+        [JsonPropertyName("hideInvisible")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool HideInvisible { get; set; }
+
+        [JsonPropertyName("items")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<NavigationItemManifest>? Items { get; set; }
+
+        [JsonPropertyName("groups")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<NavigationGroupManifest>? Groups { get; set; }
+
+        [JsonPropertyName("options")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? Options { get; set; }
+
+        [JsonPropertyName("styles")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? Styles { get; set; }
+
+        [JsonPropertyName("activeStyles")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? ActiveStyles { get; set; }
     }
 
     /// <summary>

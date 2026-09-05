@@ -21,6 +21,8 @@ CREATE VISUAL name AS CUSTOM (
         MAJOR_TICK_COUNT = 2..100,
         TICK_INTERVAL = positive_number,
         MINOR_TICKS = ON|OFF,
+        TIME_UNIT = AUTO|DAY|WEEK|MONTH|QUARTER|YEAR,
+        TICK_FORMAT = 'format',
         LABEL_ROTATION = AUTO|0|45|90,
         LABEL_SKIP = AUTO|non_negative_integer,
         OUTER_PADDING = 0..1,
@@ -38,6 +40,9 @@ CREATE VISUAL name AS CUSTOM (
       layer_name = RECT | LINE | AREA | POINT | RULE | ARC | TEXT | TICK (
         Z_INDEX = number,
         INHERIT_ENCODINGS = ON | OFF,
+        NULL_HANDLING = CONNECT | GAP | ZERO,
+        AREA_BASELINE = ZERO | number,
+        HOVER_FOCUS = NONE | SELF | SERIES,
         BAND_SIZE = fraction,
         THICKNESS = fraction,
         ORIENTATION = AUTO | HORIZONTAL | VERTICAL,
@@ -63,6 +68,15 @@ CREATE VISUAL name AS CUSTOM (
         )
       )
     ),
+    [ANNOTATIONS (
+      POINT (
+        SERIES = 'series_name',
+        TYPE = MAX | MIN | COORD(x, y),
+        LABEL = 'label text',
+        SYMBOL = 'pin' | 'arrow' | 'circle'
+      ),
+      ...
+    )],
     FACET (ROW = field, COLUMN = field) | FACET (WRAP = field, COLUMNS = 3),
     RESOLVE (X = SHARED | INDEPENDENT, Y = SHARED | INDEPENDENT, COLOR = SHARED | INDEPENDENT)
   )
@@ -74,7 +88,7 @@ CREATE VISUAL name AS CUSTOM (
 - **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and currently requires quantitative primary Cartesian X/Y scales.
 - **SCALES** — Optionally declares named `LINEAR`, `LOGARITHMIC`, `TIME`, `BAND`, `POINT`, `ORDINAL`, or `IDENTITY` scales. Encoding `SCALE` references must name a declared scale; omission requests deterministic inference from the required `TYPE`, channel, mark, and coordinate.
 - **RANGE** — Adds a dependency-free sRGB sequential or diverging output range to a quantitative `COLOR` scale. Colors use portable `#RRGGBB`; values clamp at the domain, nulls use `NULL_COLOR`, and a diverging midpoint must lie inside the resolved domain.
-- **Scale axis controls** — `MIN`/`MAX` set the domain, `INCLUDE_ZERO` expands a quantitative domain to zero, `REVERSE` flips its display direction, `MAJOR_TICK_COUNT` or `TICK_INTERVAL` controls major ticks, `MINOR_TICKS` adds midpoint ticks, and `LABEL_ROTATION`/`LABEL_SKIP` control crowded tick labels. `OUTER_PADDING = 0..1` adds space before the first and after the last category on `BAND` scales only.
+- **Scale axis controls** — `MIN`/`MAX` set the domain, `INCLUDE_ZERO` expands a quantitative domain to zero, `REVERSE` flips its display direction, `MAJOR_TICK_COUNT` or `TICK_INTERVAL` controls major ticks, `MINOR_TICKS` adds midpoint ticks, `TIME_UNIT` truncates/bins temporal scales by calendar unit (`AUTO`, `DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`), `TICK_FORMAT` applies a custom date/time or numeric format pattern, and `LABEL_ROTATION`/`LABEL_SKIP` control crowded tick labels. `OUTER_PADDING = 0..1` adds space before the first and after the last category on `BAND` scales only.
 - **LAYERS** — Declares marks in deterministic `Z_INDEX` order. A layer consumes the visual's single `SOURCE`; stage differently prepared inputs into one visible `#temp` table before authoring the visual.
 - **ENCODINGS** — At `CHART` scope, declares bindings inherited by layers. At layer scope, overrides individual channels. A layer defaults to `INHERIT_ENCODINGS = ON`; `OFF` makes its bindings isolated. Duplicate channels within either scope are errors.
 - **SHAPE** — On `POINT` layers, accepts `CIRCLE`, `SQUARE`, `TRIANGLE`, `DIAMOND`, `CROSS`, or `STAR`. Bind a nominal/ordinal field containing those names, use `DATUM`/`VALUE` for one constant shape, or set the same vocabulary through a `SHAPE` condition. Values are case-insensitive. Unsupported runtime field values fall back to `CIRCLE`; invalid authored constants are rejected.
@@ -93,6 +107,10 @@ CREATE VISUAL name AS CUSTOM (
 - **Geographic composition** — `GEOGRAPHIC` requires an explicit `EQUIRECTANGULAR` or `MERCATOR` projection and exactly one geometry authority: a built-in `MAP_NAME` (`WORLD`, `US_STATES`, `US_COUNTIES`, `MN_COUNTIES`, `CANADA_PROVINCES`, or `EUROPE`) or a GeoJSON `MAP_FILE`. `MAP_FILE` is resolved through the engine path policy and is limited to 5 MiB, 10,000 features, 200,000 coordinates, and nesting depth 32. `FEATURE_KEY` names the GeoJSON property matched by `REGION`. Geographic `RECT` fills regions; `POINT` and `TEXT` require quantitative `LONGITUDE` and `LATITUDE`; `LINE` also requires nominal `ROUTE` and connects rows in source order. Rendering is bounded to 20,000 points/labels and 500 routes. Region and route fields are the default interaction keys. Terminal and assistive surfaces receive an ordered table/transition fallback, while browser and PDF use the same resolved SVG geometry. Resolved filesystem paths are never serialized.
 - **FACET** — Creates a row/column grid or a mutually exclusive one-dimensional `WRAP`. Wrap uses stable first-seen row-major ordering, 1–12 columns, at most 100 panels, render-work limits, and minimum panel dimensions.
 - **RESOLVE** — Selects shared or per-panel X, Y/Y2, and color scales. Independent resolution requires `FACET`.
+- **NULL_HANDLING = CONNECT|GAP|ZERO** — On `LINE` layers, controls how null or missing values along the series path are handled. `CONNECT` (default) interpolates across missing data points, `GAP` introduces a visible break in the line, and `ZERO` clamps null observations to 0.
+- **AREA_BASELINE = ZERO|n** — On `AREA` layers, sets the fill baseline level. Defaults to `ZERO` (fills to 0). An explicit numeric value fills to an arbitrary quantitative Y baseline.
+- **HOVER_FOCUS = NONE|SELF|SERIES** — On mark layers, controls pointer hover emphasis. `NONE` (default) applies standard hover effects, `SELF` dims other marks in the plot, and `SERIES` highlights the active series across all categories while dimming unrelated series.
+- **ANNOTATIONS (POINT (...))** — Attaches data point and coordinate callouts to chart series. `SERIES` specifies the target layer or series name, `TYPE` selects `MAX`, `MIN`, or `COORD(x, y)`, `LABEL` sets the callout text, and `SYMBOL` selects the marker style (`'pin'`, `'arrow'`, or `'circle'`).
 - **Visible transformations** — Aggregation, filtering, calculation, lookup, windowing, and statistical preparation belong in preceding ETL-SQL/`#temp` statements, not in `CHART`.
 
 ## Examples
@@ -208,6 +226,39 @@ CREATE VISUAL TrialIntervals AS CUSTOM (
           ERROR_HIGH = UpperBound (TYPE = QUANTITATIVE)
         ),
         STYLE (SYMBOL_STROKE_COLOR = '#1e3a8a', SYMBOL_STROKE_WIDTH = 1.5)
+      )
+    )
+  )
+);
+```
+
+```sql
+CREATE VISUAL TrendWithAnnotations AS CUSTOM (
+  SOURCE = #sensor_metrics,
+  CHART (
+    COORDINATE (TYPE = CARTESIAN),
+    LAYERS (
+      sensor_line = LINE (
+        Z_INDEX = 0,
+        NULL_HANDLING = GAP,
+        ENCODINGS (
+          X = Timestamp (TYPE = TEMPORAL),
+          Y = Temperature (TYPE = QUANTITATIVE)
+        )
+      )
+    ),
+    ANNOTATIONS (
+      POINT (
+        SERIES = 'sensor_line',
+        TYPE = MAX,
+        LABEL = 'Peak Temperature',
+        SYMBOL = 'pin'
+      ),
+      POINT (
+        SERIES = 'sensor_line',
+        TYPE = COORD(10, 85.5),
+        LABEL = 'Calibration Offset',
+        SYMBOL = 'circle'
       )
     )
   )

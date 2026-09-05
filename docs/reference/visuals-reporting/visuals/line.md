@@ -10,8 +10,17 @@ CREATE VISUAL VisualName AS LINE (
     ...
   ),
   OPTIONS (
+    [AREA = ON|OFF],
+    [AREA_BASELINE = ZERO|n],
+    [ANIMATION = ON|OFF],
+    [ANIMATION_DURATION = n],
+    [ANIMATION_EASING = LINEAR|EASE_IN|EASE_OUT|ELASTIC|BOUNCE],
+    [UPDATE_ANIMATION = ON|OFF],
+    [HOVER_FOCUS = NONE|SELF|SERIES],
+    [SMOOTH = ON|OFF],
     [SYMBOLS = ON|OFF],
     [SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR],
+    [SYMBOL_SIZE = n],
     [SYMBOL_STROKE_COLOR = '#rrggbb'],
     [SYMBOL_STROKE_WIDTH = n],
     [LINE_WIDTH = n],
@@ -34,8 +43,20 @@ CREATE VISUAL VisualName AS LINE (
       [LABEL_BACKGROUND = '#rrggbb'],
       [LABEL_BORDER = 'width style #rrggbb']
     )],
+    [NULL_HANDLING = CONNECT|GAP|ZERO],
+    [TOOLTIP_MODE = ITEM|SHARED],
+    [TOOLTIP_POSITION = AUTO|TOP|BOTTOM|LEFT|RIGHT|CURSOR],
+    [CROSSHAIR = ON|OFF],
+    [CROSSHAIR_AXIS = X|Y|BOTH],
+    [CROSSHAIR_COLOR = '#rrggbb'],
+    [CROSSHAIR_DASH = 'dash_array'],
+    [LINK_TOOLTIP = 'groupName'],
+    [SEGMENT_STYLE (
+      WHEN condition THEN LINE_DASH = DASHED|DOTTED|SOLID [, COLOR = '#rrggbb']
+    )],
     [X_AXIS (LABEL = 'text', MIN = n, MAX = n, INCLUDE_ZERO = ON|OFF, REVERSE = ON|OFF,
       MAJOR_TICK_COUNT = n, TICK_INTERVAL = n, MINOR_TICKS = ON|OFF,
+      TIME_UNIT = AUTO|DAY|WEEK|MONTH|QUARTER|YEAR, TICK_FORMAT = 'format',
       LABEL_ROTATION = AUTO|0|45|90, LABEL_SKIP = AUTO|n, AXIS_LINE = ON|OFF)],
     [Y_AXIS (...same axis properties...)]
   ),
@@ -52,6 +73,10 @@ CREATE VISUAL VisualName AS LINE (
       [LABEL = 'text']
     )],
     ...
+  )],
+  [ANNOTATIONS (
+    POINT (SERIES = 'seriesName', TYPE = MAX|MIN|COORD(x, y), LABEL = 'text' [, SYMBOL = 'pin|arrow|circle'] [, COLOR = '#rrggbb']),
+    ...
   )]
 );
 ```
@@ -67,6 +92,7 @@ CREATE VISUAL VisualName AS LINE (
 - **SMOOTH = ON|OFF** - Bezier-smoothed curves instead of straight segments (default OFF)
 - **SYMBOLS = ON|OFF** - show data-point markers on the line (default ON)
 - **SYMBOL_SHAPE = CIRCLE|SQUARE|TRIANGLE|DIAMOND|CROSS|STAR** - sets the marker geometry when `SYMBOLS = ON` (default `CIRCLE`)
+- **SYMBOL_SIZE = n** - sets the marker radius in pixels (default 4; must be positive)
 - **SYMBOL_STROKE_COLOR = '#rrggbb'** - outlines point markers with a portable hex color; without a color, markers have no stroke
 - **SYMBOL_STROKE_WIDTH = n** - sets a non-negative marker outline width in pixels; defaults to `1` when a stroke color is present
 - **LINE_WIDTH = n** - sets the series stroke width from `0.1` through `10` pixels (default `2`; stacked lines retain their `2.5` default)
@@ -88,11 +114,27 @@ CREATE VISUAL VisualName AS LINE (
   - **LABEL_BACKGROUND = '#rrggbb'** — padded background rectangle drawn behind the label text.
   - **LABEL_BORDER = 'width style #rrggbb'** — border around the data label background (e.g., `'1px solid #334155'`; style is `solid`, `dashed`, or `dotted`).
 - **AREA = ON|OFF** - fill the region below the line (default OFF)
+- **AREA_BASELINE = ZERO|n** - baseline for the area fill when `AREA = ON` (default is the bottom axis). Accepts `ZERO` or an arbitrary numeric Y-value.
+- **ANIMATION = ON|OFF** - controls entry animations (default OFF for server-rendered reports, ON for interactive dashboards).
+- **ANIMATION_DURATION = n** - entry animation duration in milliseconds (default 800).
+- **ANIMATION_EASING = LINEAR|EASE_IN|EASE_OUT|ELASTIC|BOUNCE** - animation easing function (default EASE_OUT).
+- **UPDATE_ANIMATION = ON|OFF** - enables smooth transitions when dataset values update (default ON in interactive mode).
+- **HOVER_FOCUS = NONE|SELF|SERIES** - hover emphasis mode (default NONE). Setting to `SERIES` emphasizes the hovered line while dimming other series. Setting to `SELF` emphasizes the hovered mark.
 - **STACKED = ON|OFF|100PCT** - draw independent series, cumulative stacks, or normalized 100% stacks (default OFF)
 - **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** - category-axis order; SOURCE preserves query order
-- **X_AXIS (...) / Y_AXIS (...)** - axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, label rotation, label skipping, and plot-area spine (`AXIS_LINE`). `MAJOR_TICK_COUNT` is 2–100 and `TICK_INTERVAL` must be positive.
-- **TITLE = 'text'** - visual title
+- **X_AXIS (...) / Y_AXIS (...)** - axis title, explicit MIN/MAX domain, zero inclusion, reverse direction, major tick count or interval, minor ticks, date/time grouping granularity (`TIME_UNIT = AUTO|DAY|WEEK|MONTH|QUARTER|YEAR`), tick formatting (`TICK_FORMAT = 'format'`), label rotation, label skipping, and plot-area spine (`AXIS_LINE`). `MAJOR_TICK_COUNT` is 2–100 and `TICK_INTERVAL` must be positive.
+- **NULL_HANDLING = CONNECT|GAP|ZERO** - missing data policy: `CONNECT` connects through null points, `GAP` splits the line into disconnected segments (default), and `ZERO` plots nulls as 0.
+- **TOOLTIP_MODE = ITEM|SHARED** - tooltip card mode: `ITEM` inspects the single hovered data point; `SHARED` presents values across all series for that X coordinate.
+- **TOOLTIP_POSITION = AUTO|TOP|BOTTOM|LEFT|RIGHT|CURSOR** - placement of the tooltip card relative to the target or cursor.
+- **CROSSHAIR = ON|OFF** - displays cursor-following guideline axes across the plot area (default OFF).
+- **CROSSHAIR_AXIS = X|Y|BOTH** - orientation of active crosshair guides (default BOTH).
+- **CROSSHAIR_COLOR = '#rrggbb'** - line color for crosshair guides (default '#6b7280').
+- **CROSSHAIR_DASH = 'dash_array'** - dash pattern for crosshair lines (e.g. '3,3').
+- **LINK_TOOLTIP = 'groupName'** - synchronizes tooltips and crosshairs across all charts with matching group names.
+- **SEGMENT_STYLE (WHEN condition THEN LINE_DASH = DASHED|DOTTED|SOLID [, COLOR = '#rrggbb'])** - conditional per-segment line styling applied to connecting segments between consecutive data points. Overrides the line dash pattern and stroke color for data segments matching the boolean predicate.
 - **OVERLAYS (...)** - Adds constant reference lines, `REFERENCE_BAND(LOW = n, HIGH = n, ...)`, `RUNNING_TOTAL(field)`, `PERCENT_OF_TOTAL(field)`, and forecast overlays. Calculate table-calculation fields in SQL; the overlay binds and annotates those visible result columns on the primary Y axis.
+- **ANNOTATIONS (...)** - Adds point annotations (`POINT (SERIES = '...', TYPE = MAX|MIN|COORD(x, y), LABEL = '...', SYMBOL = 'pin|arrow|circle')`) pointing to series extrema or specific plot coordinates with customizable marker shapes.
+- **FORMATTING (...)** - conditional mark coloring based on predicate conditions (e.g. `FORMATTING (WHEN Y < 0 THEN '#ef4444')`).
 
 ## Examples
 

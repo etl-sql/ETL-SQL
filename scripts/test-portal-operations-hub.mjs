@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { readPortalPage, readPortalPageModule } from './lib/portal-page.mjs';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 const [admin, module, api, css, reports, adminController, story] = await Promise.all([
-  read('src/ETL-SQL.Portal/wwwroot/admin.html'),
+  Promise.resolve(readPortalPage('admin')),
   read('src/ETL-SQL.Portal/wwwroot/js/operations-admin.js'),
   read('src/ETL-SQL.Portal/wwwroot/js/api.js'),
   read('src/ETL-SQL.Portal/wwwroot/css/portal.css'),

@@ -1,4 +1,4 @@
-﻿-- Kitchen Sink: HBAR Visual
+-- Kitchen Sink: HBAR Visual
 -- This script demonstrates all features of the HBAR (Horizontal Bar) visual type.
 
 SET REPORT TITLE = 'Kitchen Sink: HBAR Visual';
@@ -41,9 +41,15 @@ UNION ALL SELECT 'Feb', 'South', 130;
 
 CREATE VISUAL MultiHBar AS HBAR (
     SOURCE = #multi,
-    TITLE = 'Grouped Horizontal Bar',
+    TITLE = 'Grouped Horizontal Bar & Legend',
     MAPPINGS (X = Month, Y = Rev, SERIES = Region),
-    OPTIONS (STACKED = OFF)
+    OPTIONS (
+        STACKED         = OFF,
+        SERIES_GAP      = 0.2,
+        LEGEND          = ON,
+        LEGEND_TITLE    = 'Region',
+        LEGEND_POSITION = RIGHT
+    )
 );
 
 -- 5. Stacked HBAR
@@ -51,18 +57,62 @@ CREATE VISUAL StackedHBar AS HBAR (
     SOURCE = #multi,
     TITLE = 'Stacked Horizontal Bar',
     MAPPINGS (X = Month, Y = Rev, SERIES = Region),
-    OPTIONS (STACKED = ON)
+    OPTIONS (
+        STACKED        = ON,
+        BAR_MIN_HEIGHT = 3
+    )
+);
+
+-- 6. 100% Normalized Stacked HBAR
+CREATE VISUAL PercentHBar AS HBAR (
+    SOURCE = #multi,
+    TITLE = '100% Normalized Stacked HBAR (STACKED = 100PCT)',
+    MAPPINGS (X = Month, Y = Rev, SERIES = Region),
+    OPTIONS (
+        STACKED     = 100PCT,
+        DATA_LABELS = ON WITH (POSITION = 'INSIDE', FORMAT = 'P0')
+    )
+);
+
+-- 7. Sorted HBAR with Gridlines & Band Size
+CREATE VISUAL SortedGridHBar AS HBAR (
+    SOURCE = #data,
+    TITLE = 'Sorted (VALUE_DESC), Gridlines & BAND_SIZE',
+    MAPPINGS (X = Product, Y = Sales),
+    OPTIONS (
+        AXIS_SORT        = VALUE_DESC,
+        BAND_SIZE        = 0.7,
+        GRID_LINES       = ON,
+        GRID_LINE_COLOR  = '#cbd5e1',
+        ZERO_LINE        = ON,
+        MINOR_GRID_LINES = ON
+    )
+);
+
+-- 8. HBAR with Running Total & Average Overlays
+CREATE VISUAL AnalyticsHBar AS HBAR (
+    SOURCE = #data,
+    TITLE = 'Running Total & Mean Overlays',
+    MAPPINGS (X = Product, Y = Sales),
+    OVERLAYS (
+        RUNNING_TOTAL(Sales) AS SOLID WITH (COLOR = '#0284c7', LABEL = 'Cumulative Sales'),
+        AVERAGE AS DASHED WITH (COLOR = '#ea580c', LABEL = 'Mean Sales')
+    )
 );
 
 -- Page Layout
 CREATE PAGE HBarKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C D',
+    STRUCTURE = 'A B / C D / E F / G .',
     MAP (
         'A' = BasicHBar,
         'B' = StyledHBar,
         'C' = MultiHBar,
-        'D' = StackedHBar
+        'D' = StackedHBar,
+        'E' = PercentHBar,
+        'F' = SortedGridHBar,
+        'G' = AnalyticsHBar
     )
 );
 
 CREATE NAVIGATION MainNav AS TAB (DEFAULT = HBarKitchenSink, PAGES (HBarKitchenSink));
+

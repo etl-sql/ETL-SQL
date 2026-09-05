@@ -1,5 +1,5 @@
 # CHECKBOX
-A boolean toggle switch. The state (true/false) is bound to a BIT or BOOLEAN variable via ACTIONS.
+A boolean toggle control. The state is bound to a BIT, BOOLEAN, or domain-string variable via ACTIONS.
 
 Mappings: none
 
@@ -9,6 +9,9 @@ Mappings: none
 CREATE VISUAL VisualName AS CHECKBOX (
   OPTIONS (
     ...
+  ),
+  ACTIONS (
+    ON_CHANGE = SET_PARAMETER(@variable, value)
   )
 );
 ```
@@ -19,27 +22,36 @@ Filter controls do not use a `MAPPINGS` clause. Configure choices and behaviour 
 
 ## Options
 
-- **LABEL_POSITION = TOP|LEFT|HIDDEN** - position of the visual name label (default: TOP)
+- **LABEL = 'text'** — text appearing beside the checkbox or toggle switch element itself
+- **DISPLAY_STYLE = CHECKBOX|TOGGLE** — render as a standard checkbox or a modern toggle switch (default: CHECKBOX)
+- **TRUE_VALUE = 'value'** — value emitted when the control is checked/active (default: '1')
+- **FALSE_VALUE = 'value'** — value emitted when the control is unchecked/inactive (default: '0')
+- **DEFAULT = ON|OFF** — initial state of the control (default: OFF)
+- **LABEL_POSITION = TOP|LEFT|HIDDEN** — position of the visual label (default: TOP)
 
 ## Actions
 
-- **ON_CHANGE = SET_PARAMETER(@variable, value)** - fires when the checkbox is toggled; passes 1 (true) or 0 (false) to @variable
+- **ON_CHANGE = SET_PARAMETER(@variable, value)** — fires when toggled; passes TRUE_VALUE or FALSE_VALUE to @variable
 
 ## Examples
 
 ```sql
-DECLARE @show_details BIT = 0;
+DECLARE @active_filter STRING = 'N';
 
-CREATE VISUAL DetailsToggle AS CHECKBOX (
-  TITLE          = 'Show Details',
-  LABEL_POSITION = 'LEFT',
-  ACTIONS        (ON_CHANGE = SET_PARAMETER(@show_details, value))
+CREATE VISUAL ActiveToggle AS CHECKBOX (
+  TITLE          = 'Filter Status',
+  OPTIONS        (
+    LABEL         = 'Active Accounts Only',
+    DISPLAY_STYLE = TOGGLE,
+    TRUE_VALUE    = 'Y',
+    FALSE_VALUE   = 'N',
+    DEFAULT       = OFF
+  ),
+  ACTIONS        (ON_CHANGE = SET_PARAMETER(@active_filter, value))
 );
 
--- Visual responds to the toggle
-CREATE VISUAL SalesTable AS TABLE (
-  SOURCE = #sales,
-  STYLE  (DISPLAY = @show_details)
+CREATE VISUAL AccountsTable AS TABLE (
+  SOURCE = (SELECT * FROM #accounts WHERE @active_filter = 'N' OR is_active = @active_filter)
 );
 ```
 

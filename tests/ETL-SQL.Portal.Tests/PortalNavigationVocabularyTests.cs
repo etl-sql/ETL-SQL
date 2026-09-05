@@ -8,9 +8,17 @@ public sealed class PortalNavigationVocabularyTests
 {
     private static string WebRoot() => Path.Combine(RepoRoot(), "src", "ETL-SQL.Portal", "wwwroot");
 
+    /// <summary>
+    /// Every shell page, as its markup plus the page module it loads.
+    /// </summary>
+    /// <remarks>
+    /// The header is markup and the calls that populate it are code, and the code now lives in
+    /// <c>wwwroot/js/pages/</c> rather than in an inline block. Reading the .html alone would leave
+    /// half of what this test is about outside what it can see.
+    /// </remarks>
     private static IEnumerable<(string Name, string Html)> ShellPages() =>
         Directory.EnumerateFiles(WebRoot(), "*.html")
-            .Select(path => (Path.GetFileName(path), File.ReadAllText(path)))
+            .Select(path => (Path.GetFileName(path), PortalPageSource.WithModules(WebRoot(), File.ReadAllText(path))))
             .Where(page => page.Item2.Contains("data-portal-header", StringComparison.Ordinal));
 
     private static IReadOnlyList<string> ServerDestinations()

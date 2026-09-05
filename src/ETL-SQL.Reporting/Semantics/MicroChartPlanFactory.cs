@@ -19,6 +19,7 @@ internal sealed class MicroChartPlanFactory
         string type = "line",
         string? color = null,
         IReadOnlyList<string?>? labels = null,
+        decimal? referenceLine = null,
         decimal width = 160m,
         decimal height = 42m)
     {
@@ -44,8 +45,23 @@ internal sealed class MicroChartPlanFactory
             new StyleToken("MICRO_CHART", "SPARKLINE"),
             new StyleToken("COLOR", SafeColor(color, "#5470c6"))
         ]);
+        var layers = new List<MarkLayerSpec>
+        {
+            new("primary", mark, 0, bindings, EmptyStyle)
+        };
+        if (referenceLine.HasValue)
+        {
+            layers.Add(new MarkLayerSpec("rule-ref-line", MarkKind.Rule, 100, [],
+            [
+                new StyleToken("overlayType", "ReferenceLine"),
+                new StyleToken("parameter", referenceLine.Value.ToString(CultureInfo.InvariantCulture)),
+                new StyleToken("lineStyle", "dashed"),
+                new StyleToken("stroke_width", "1.5"),
+                new StyleToken("color", "#ef4444")
+            ]));
+        }
         var spec = ChartSpec.Create(id, data.Name, bindings,
-            [new MarkLayerSpec("primary", mark, 0, bindings, EmptyStyle)],
+            layers.ToImmutableArray(),
             new CoordinateSpec(CoordinateKind.Cartesian),
             [
                 new ScaleSpec("x", FieldChannel.X, ScaleKind.Point, false, []),
@@ -59,6 +75,10 @@ internal sealed class MicroChartPlanFactory
         var fallback = populated.Count == 0
             ? "Trend: no data"
             : $"Trend: first {populated[0]:0.##}, last {populated[^1]:0.##}, range {populated.Min():0.##}–{populated.Max():0.##}";
+        if (referenceLine.HasValue)
+        {
+            fallback += $", ref {referenceLine.Value.ToString("0.##", CultureInfo.InvariantCulture)}";
+        }
         return new MicroChartSemanticBundle(spec, data, plan, fallback);
     }
 
@@ -117,8 +137,9 @@ internal sealed class MicroChartPlanFactory
     private static string SafeColor(string? candidate, string fallback)
     {
         if (string.IsNullOrWhiteSpace(candidate)) return fallback;
-        var value = candidate.Trim();
-        if (value.Length is 4 or 7 && value[0] == '#' && value.Skip(1).All(Uri.IsHexDigit)) return value;
+        var value = candidate.Trim().Trim('\'', '"');
+        if (value.Length is 4 or 7 or 9 && value[0] == '#' && value.Skip(1).All(Uri.IsHexDigit)) return value;
+        if (value.Length > 0 && value.All(char.IsLetter)) return value;
         return fallback;
     }
 }

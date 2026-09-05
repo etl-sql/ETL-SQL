@@ -6,28 +6,28 @@
       "label": "Opening",
       "value": "50",
       "order": 0,
-      "detail": "range 0 to 50",
+      "detail": "x range 0 to 50, range 0 to 50",
       "group": "ProfitBridge"
     },
     {
       "label": "Revenue",
       "value": "30",
       "order": 1,
-      "detail": "range 50 to 80",
+      "detail": "x range 50 to 80, range 50 to 80",
       "group": "ProfitBridge"
     },
     {
       "label": "Costs",
       "value": "-20",
       "order": 2,
-      "detail": "range 80 to 60",
+      "detail": "x range 80 to 60, range 80 to 60",
       "group": "ProfitBridge"
     },
     {
       "label": "Closing",
       "value": "60",
       "order": 3,
-      "detail": "range 0 to 60",
+      "detail": "x range 0 to 60, range 0 to 60",
       "group": "ProfitBridge"
     }
   ],

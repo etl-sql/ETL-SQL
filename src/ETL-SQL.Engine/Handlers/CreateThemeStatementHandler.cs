@@ -63,7 +63,7 @@ public class CreateThemeStatementHandler(ILogger logger) : IStatementHandler
 
         context.IncrementOperationCount(OperationType.FileSystem, filePath);
 
-        var themeJson = ReportingThemeBuilder.BuildNativeTheme(stmt.Properties);
+        var themeJson = ReportingThemeBuilder.BuildNativeTheme(stmt.Properties, stmt.VisualOverrides);
         var options = new JsonSerializerOptions { WriteIndented = true };
         File.WriteAllText(filePath, themeJson.ToJsonString(options));
         _logger.Debug("Persisted theme '{ThemeName}' to {Path}", stmt.Name, filePath);
@@ -81,6 +81,6 @@ public class CreateThemeStatementHandler(ILogger logger) : IStatementHandler
     ///   BORDER_COLOR      → axis line colors
     /// All other keys are passed through as-is to the root of the theme object.
     /// </summary>
-    public static JsonObject BuildNativeTheme(Dictionary<string, string> props)
-        => ReportingThemeBuilder.BuildNativeTheme(props);
+    public static JsonObject BuildNativeTheme(Dictionary<string, string> props, Dictionary<string, Dictionary<string, string>>? visualOverrides = null)
+        => ReportingThemeBuilder.BuildNativeTheme(props, visualOverrides);
 }

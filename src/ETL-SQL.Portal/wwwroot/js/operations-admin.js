@@ -92,6 +92,16 @@ export function createOperationsAdmin({ host, adminApi }) {
     find('#ops-services').innerHTML = state.services.length ? `<div class="card ops-service-list">${state.services.map(s => { const next = s.enabled && s.lastRun?.completedAtUtc ? new Date(new Date(s.lastRun.completedAtUtc).getTime() + s.intervalHours * 3600000) : null; const delivery = [s.smtpAlias, ...(s.recipients || [])].filter(Boolean).join(' · '); return `<button data-action="service-history" data-name="${esc(s.name)}"><span class="ops-service-dot ${s.lastRun?.outcome === 'Failed' ? 'is-warning' : ''}"></span><strong>${esc(s.name)}</strong><span>${s.enabled ? `Every ${s.intervalHours}h` : 'Disabled'}${delivery ? ` · ${esc(delivery)}` : ''}</span><small>${s.lastRun ? `${esc(s.lastRun.outcome)} · ${date(s.lastRun.completedAtUtc)}` : 'No recorded run'}${next ? ` · next ${date(next)}` : ''}</small><span aria-hidden="true">›</span></button>`; }).join('')}</div>` : '<div class="empty-state">Administrative service status is unavailable.</div>';
   }
 
+  /**
+   * @param {Object} modal
+   * @param {string} modal.title
+   * @param {string} [modal.kicker]
+   * @param {string} modal.body
+   * @param {string} [modal.submit]
+   * @param {Function} [modal.onSubmit] Omitted for a modal that only shows something; the submit
+   *   button is hidden when there is nothing to submit.
+   * @param {boolean} [modal.destructive]
+   */
   function showModal({ title, kicker = 'Operations', body, submit = 'Continue', onSubmit, destructive = false }) {
     find('#ops-modal-title').textContent = title; find('#ops-modal-kicker').textContent = kicker;
     find('#ops-modal-body').innerHTML = body; find('#ops-modal-error').textContent = '';

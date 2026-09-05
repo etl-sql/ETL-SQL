@@ -34,7 +34,7 @@ export function formatOverdue(minutes) {
 
 function fmtDuration(start, end) {
   if (!start || !end) return '—';
-  const seconds = (new Date(end) - new Date(start)) / 1000;
+  const seconds = (new Date(end).getTime() - new Date(start).getTime()) / 1000;
   if (!Number.isFinite(seconds) || seconds < 0) return '—';
   if (seconds < 60) return `${seconds.toFixed(1)}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
@@ -163,6 +163,12 @@ export function renderRunEvidence(detailState) {
   </div>`;
 }
 
+/**
+ * @param {*} run
+ * @param {Object} [options]
+ * @param {boolean} [options.evidenceOpen] Whether the evidence panel starts expanded.
+ * @param {*} [options.evidence]           The fetched evidence, when it has been loaded.
+ */
 function renderRunRow(run, { evidenceOpen = false, evidence } = {}) {
   const qLink = (run.rowsQuarantined > 0 || run.dataQualityFailures)
     ? `<a class="triage-impact-link" href="${esc(quarantineUrl(run.jobName))}" title="Review quarantined rows in Quarantine Queue">Quarantine →</a>`

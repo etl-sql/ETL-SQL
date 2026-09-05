@@ -889,29 +889,141 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
 
     private static string Map(VisualManifest v, FocusedLayoutInputs inputs)
     {
-        var sb = Start(v, inputs); var mode = v.Options.GetValueOrDefault("MODE") ?? "CHOROPLETH";
+        var sb = Start(v, inputs);
+        var mode = v.Options.GetValueOrDefault("MODE") ?? "CHOROPLETH";
+        var zoom = 1.0;
+        if (v.Options.TryGetValue("ZOOM", out var zoomStr) && double.TryParse(zoomStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var zVal) && zVal > 0)
+            zoom = zVal;
+
+        var centerLat = 0.0;
+        var centerLon = 0.0;
+        if (v.Options.TryGetValue("CENTER", out var centerStr))
+        {
+            var trimmed = centerStr.Trim('(', ')', ' ', '\t');
+            var parts = trimmed.Split(',');
+            if (parts.Length == 2 &&
+                double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedLat) &&
+                double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedLon))
+            {
+                centerLat = parsedLat;
+                centerLon = parsedLon;
+            }
+        }
+
         if (mode.Equals("POINTS", StringComparison.OrdinalIgnoreCase))
         {
-            DrawMapOutline(sb, v, inputs);
-            var lon = Index(v, "lon", fallback: 0); var lat = Index(v, "lat", fallback: 1); var val = Index(v, "value", fallback: 2); var label = Index(v, "label", fallback: 3);
+            DrawMapOutline(sb, v, inputs, zoom, centerLat, centerLon);
+            var lon = Index(v, "lon", fallback: 0);
+            var lat = Index(v, "lat", fallback: 1);
+            var val = Index(v, "value", fallback: 2);
+            var label = Index(v, "label", fallback: 3);
+            var colorCol = Index(v, "color");
+            var tooltipCol = Index(v, "tooltip");
             var accent = inputs.Color(null, 0);
-            var max = v.Rows.Select(r => Number(r, val)).DefaultIfEmpty(1).Max(); if (max <= 0) max = 1;
-            foreach (var (row, i) in v.Rows.Select((r, i) => (r, i))) { var x = ProjectX(inputs, Number(row, lon)); var y = ProjectY(inputs, Number(row, lat)); sb.Append($"<circle data-row-index='{i}' cx='{F(x)}' cy='{F(y)}' r='{F(4 + 12 * Math.Sqrt(Math.Max(0, Number(row, val)) / max))}' fill='{accent}' fill-opacity='.7'><title>{Xml(Cell(row, label, $"Point {i + 1}"))}: {F(Number(row, val))}</title></circle>"); }
+            var max = v.Rows.Select(r => Number(r, val)).DefaultIfEmpty(1).Max();
+            if (max <= 0) max = 1;
+
+            foreach (var (row, i) in v.Rows.Select((r, i) => (r, i)))
+            {
+                var x = ProjectX(inputs, Number(row, lon), zoom, centerLon);
+                var y = ProjectY(inputs, Number(row, lat), zoom, centerLat);
+                var fill = accent;
+                if (colorCol >= 0)
+                {
+                    var colorVal = Cell(row, colorCol, "");
+                    if (!string.IsNullOrWhiteSpace(colorVal))
+                    {
+                        fill = colorVal.StartsWith('#') ? colorVal : inputs.Color(colorVal, i);
+                    }
+                }
+                var tip = tooltipCol >= 0 ? Cell(row, tooltipCol, "") : "";
+                var titleContent = !string.IsNullOrWhiteSpace(tip) ? tip : $"{Cell(row, label, $"Point {i + 1}")}: {F(Number(row, val))}";
+                var r = F(4 + 12 * Math.Sqrt(Math.Max(0, Number(row, val)) / max));
+                sb.Append($"<circle data-row-index='{i}' cx='{F(x)}' cy='{F(y)}' r='{r}' fill='{fill}' fill-opacity='.7'><title>{Xml(titleContent)}</title></circle>");
+            }
             return End(sb);
         }
-        var geo = LoadGeoJson(v); if (geo is null) { sb.Append($"<text x='{F(inputs.Width / 2)}' y='{F(inputs.Height / 2)}' text-anchor='middle' fill='{inputs.OnSurface}'>Map geometry unavailable</text>"); return End(sb); }
-        var regionIndex = Index(v, "region", fallback: 0); var valueIndex = Index(v, "value", fallback: 1);
-        var values = v.Rows.Select((row, index) => (Region: Cell(row, regionIndex, ""), Value: Number(row, valueIndex), Row: index))
+
+        var geo = LoadGeoJson(v);
+        if (geo is null) { sb.Append($"<text x='{F(inputs.Width / 2)}' y='{F(inputs.Height / 2)}' text-anchor='middle' fill='{inputs.OnSurface}'>Map geometry unavailable</text>"); return End(sb); }
+
+        var regionIndex = Index(v, "region", fallback: 0);
+        var valueIndex = Index(v, "value", fallback: 1);
+        var tooltipIndex = Index(v, "tooltip");
+
+        var values = v.Rows.Select((row, index) => (
+                Region: Cell(row, regionIndex, ""),
+                Value: Number(row, valueIndex),
+                Tooltip: tooltipIndex >= 0 ? Cell(row, tooltipIndex, "") : null,
+                Row: index))
             .Where(item => item.Region.Length > 0)
             .GroupBy(item => item.Region, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => (Value: group.Sum(item => item.Value), Row: group.First().Row), StringComparer.OrdinalIgnoreCase);
-        var maximum = values.Values.Select(item => item.Value).DefaultIfEmpty(1).Max(); if (maximum <= 0) maximum = 1;
+            .ToDictionary(
+                group => group.Key,
+                group => (Value: group.Sum(item => item.Value), Tooltip: group.First().Tooltip, Row: group.First().Row),
+                StringComparer.OrdinalIgnoreCase);
+
+        var colorScaleType = (v.Options.GetValueOrDefault("COLOR_SCALE") ?? "LINEAR").Trim().ToUpperInvariant();
+        var nullColor = v.Options.GetValueOrDefault("NULL_COLOR") ?? (inputs.IsDark ? "#2b3242" : "#e5e7eb");
+        var colorLow = v.Options.GetValueOrDefault("COLOR_LOW") ?? "#dbeafe";
+        var colorHigh = v.Options.GetValueOrDefault("COLOR_HIGH") ?? "#1d4ed8";
+
+        var numericValues = values.Values.Select(item => item.Value).ToArray();
+        var minimum = numericValues.DefaultIfEmpty(0).Min();
+        var maximum = numericValues.DefaultIfEmpty(1).Max();
+        if (maximum <= minimum) maximum = minimum + 1;
+        var sortedValues = numericValues.OrderBy(x => x).ToArray();
+
+        string ResolveChoroplethColor(double val)
+        {
+            double t;
+            if (colorScaleType == "QUANTILE" && sortedValues.Length > 1)
+            {
+                int rank = Array.BinarySearch(sortedValues, val);
+                if (rank < 0) rank = ~rank;
+                rank = Math.Clamp(rank, 0, sortedValues.Length - 1);
+                int bucket = Math.Clamp((int)Math.Floor((double)rank / sortedValues.Length * 5.0), 0, 4);
+                t = bucket / 4.0;
+            }
+            else if (colorScaleType == "QUANTIZE")
+            {
+                double ratio = Math.Clamp((val - minimum) / (maximum - minimum), 0.0, 1.0);
+                int bucket = Math.Clamp((int)Math.Floor(ratio * 5.0), 0, 4);
+                t = bucket / 4.0;
+            }
+            else if (colorScaleType == "THRESHOLD")
+            {
+                double ratio = Math.Clamp((val - minimum) / (maximum - minimum), 0.0, 1.0);
+                t = ratio switch
+                {
+                    < 0.25 => 0.0,
+                    < 0.50 => 0.33,
+                    < 0.75 => 0.67,
+                    _ => 1.0
+                };
+            }
+            else // LINEAR
+            {
+                t = Math.Clamp((val - minimum) / (maximum - minimum), 0.0, 1.0);
+            }
+            return InterpolateColorDouble(colorLow, colorHigh, t);
+        }
+
         foreach (var feature in geo.RootElement.GetProperty("features").EnumerateArray())
         {
-            var props = feature.GetProperty("properties"); var name = Property(props, "name") ?? Property(props, "NAME") ?? Property(props, "admin") ?? ""; var match = values.GetValueOrDefault(name); var amount = match.Value;
-            foreach (var polygon in Polygons(feature.GetProperty("geometry"))) sb.Append($"<path{(values.ContainsKey(name) ? $" data-row-index='{match.Row}'" : "")} d='{PolygonPath(inputs, polygon)}' fill='{Ramp(amount / maximum)}' stroke='{inputs.Divider}' stroke-width='.35'><title>{Xml(name)}: {F(amount)}</title></path>");
+            var props = feature.GetProperty("properties");
+            var name = Property(props, "name") ?? Property(props, "NAME") ?? Property(props, "admin") ?? "";
+            var hasMatch = values.TryGetValue(name, out var match);
+            var fill = hasMatch ? ResolveChoroplethColor(match.Value) : nullColor;
+            var tip = hasMatch && !string.IsNullOrWhiteSpace(match.Tooltip) ? match.Tooltip : (hasMatch ? $"{name}: {F(match.Value)}" : name);
+
+            foreach (var polygon in Polygons(feature.GetProperty("geometry")))
+            {
+                sb.Append($"<path{(hasMatch ? $" data-row-index='{match.Row}'" : "")} d='{PolygonPath(inputs, polygon, zoom, centerLat, centerLon)}' fill='{fill}' stroke='{inputs.Divider}' stroke-width='.35'><title>{Xml(tip)}</title></path>");
+            }
         }
-        geo.Dispose(); return End(sb);
+        geo.Dispose();
+        return End(sb);
     }
 
     // ── MATRIX ─────────────────────────────────────────────────────────────────
@@ -1051,10 +1163,10 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         catch { return null; }
     }
 
-    private static void DrawMapOutline(StringBuilder sb, VisualManifest v, FocusedLayoutInputs inputs)
+    private static void DrawMapOutline(StringBuilder sb, VisualManifest v, FocusedLayoutInputs inputs, double zoom = 1.0, double centerLat = 0.0, double centerLon = 0.0)
     {
         using var geo = LoadGeoJson(v); if (geo is null) return;
-        foreach (var feature in geo.RootElement.GetProperty("features").EnumerateArray()) foreach (var polygon in Polygons(feature.GetProperty("geometry"))) sb.Append($"<path d='{PolygonPath(inputs, polygon)}' fill='{(inputs.IsDark ? "#2b3242" : "#f1f5f9")}' stroke='{inputs.Muted}' stroke-width='.35'/>");
+        foreach (var feature in geo.RootElement.GetProperty("features").EnumerateArray()) foreach (var polygon in Polygons(feature.GetProperty("geometry"))) sb.Append($"<path d='{PolygonPath(inputs, polygon, zoom, centerLat, centerLon)}' fill='{(inputs.IsDark ? "#2b3242" : "#f1f5f9")}' stroke='{inputs.Muted}' stroke-width='.35'/>");
     }
 
     private static IEnumerable<JsonElement> Polygons(JsonElement geometry)
@@ -1064,9 +1176,34 @@ internal sealed class SpecializedNativeSvgRenderer : RendererBase
         else if (type == "MultiPolygon") foreach (var polygon in coordinates.EnumerateArray()) foreach (var ring in polygon.EnumerateArray().Take(1)) yield return ring;
     }
 
-    private static string PolygonPath(FocusedLayoutInputs inputs, JsonElement ring) => string.Join(" ", ring.EnumerateArray().Select((point, i) => $"{(i == 0 ? "M" : "L")} {F(ProjectX(inputs, point[0].GetDouble()))} {F(ProjectY(inputs, point[1].GetDouble()))}")) + " Z";
-    private static double ProjectX(FocusedLayoutInputs inputs, double lon) => 10 + (lon + 180) / 360 * (inputs.Width - 20);
-    private static double ProjectY(FocusedLayoutInputs inputs, double lat) => TitleBand + (90 - lat) / 180 * (inputs.Height - TitleBand - 8);
+    private static string PolygonPath(FocusedLayoutInputs inputs, JsonElement ring, double zoom = 1.0, double centerLat = 0.0, double centerLon = 0.0) => string.Join(" ", ring.EnumerateArray().Select((point, i) => $"{(i == 0 ? "M" : "L")} {F(ProjectX(inputs, point[0].GetDouble(), zoom, centerLon))} {F(ProjectY(inputs, point[1].GetDouble(), zoom, centerLat))}")) + " Z";
+    private static double ProjectX(FocusedLayoutInputs inputs, double lon, double zoom = 1.0, double centerLon = 0.0)
+    {
+        var cx = 10 + (inputs.Width - 20) / 2.0;
+        return cx + ((lon - centerLon) / 360.0) * (inputs.Width - 20) * zoom;
+    }
+    private static double ProjectY(FocusedLayoutInputs inputs, double lat, double zoom = 1.0, double centerLat = 0.0)
+    {
+        var cy = TitleBand + (inputs.Height - TitleBand - 8) / 2.0;
+        return cy + ((centerLat - lat) / 180.0) * (inputs.Height - TitleBand - 8) * zoom;
+    }
+    private static string InterpolateColorDouble(string low, string high, double ratio)
+    {
+        ratio = Math.Clamp(ratio, 0.0, 1.0);
+        if (low.Length != 7 || high.Length != 7 || low[0] != '#' || high[0] != '#') return high;
+        if (!int.TryParse(low.AsSpan(1, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var rLow) ||
+            !int.TryParse(low.AsSpan(3, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var gLow) ||
+            !int.TryParse(low.AsSpan(5, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var bLow) ||
+            !int.TryParse(high.AsSpan(1, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var rHigh) ||
+            !int.TryParse(high.AsSpan(3, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var gHigh) ||
+            !int.TryParse(high.AsSpan(5, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var bHigh))
+            return high;
+
+        static int Mix(int first, int second, double amount) =>
+            (int)Math.Round(first + (second - first) * amount, MidpointRounding.AwayFromZero);
+
+        return $"#{Mix(rLow, rHigh, ratio):X2}{Mix(gLow, gHigh, ratio):X2}{Mix(bLow, bHigh, ratio):X2}";
+    }
     private static string Ramp(double t) { t = Math.Clamp(t, 0, 1); return $"#{(int)(224 - 216 * t):X2}{(int)(243 - 195 * t):X2}{(int)(248 - 141 * t):X2}"; }
     private static string? Property(JsonElement properties, string name) => properties.TryGetProperty(name, out var value) ? value.ToString() : null;
     private static string[] Path(Node node, IReadOnlyList<Node> nodes) { var output = new List<string> { node.Id }; var parent = node.Parent; var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { node.Id }; while (!string.IsNullOrWhiteSpace(parent) && seen.Add(parent)) { output.Insert(0, parent); parent = nodes.FirstOrDefault(n => n.Id.Equals(parent, StringComparison.OrdinalIgnoreCase))?.Parent ?? ""; } return output.ToArray(); }

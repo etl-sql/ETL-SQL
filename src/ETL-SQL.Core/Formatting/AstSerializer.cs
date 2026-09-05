@@ -405,7 +405,9 @@ public static class AstSerializer
         MergeDeleteClause _ => "THEN DELETE",
         MergeInsertClause n => FormatMergeInsert(n),
         MergeActionClause n => FormatMergeAction(n),
-        SetParameterAction n => $"SET_PARAMETER({n.ParameterName}, {n.ValueExpression})",
+        SetParameterAction n => n.SecondaryParameterName != null
+            ? $"SET_PARAMETER({n.ParameterName}, {n.SecondaryParameterName}, {n.ValueExpression})"
+            : $"SET_PARAMETER({n.ParameterName}, {n.ValueExpression})",
         DrillDownAction n => $"DRILL_DOWN(Target = {n.TargetVisual}, Key = ({string.Join(", ", n.KeyColumns)}))",
         DrillInAction n => $"DRILL_IN(HIERARCHY = ({string.Join(", ", n.Hierarchy)}))",
         RunScriptAction n => $"RUN_SCRIPT('{n.ScriptPath}'{FormatActionParameters(n.Parameters)})",
@@ -417,6 +419,20 @@ public static class AstSerializer
         RefreshVisualsAction n => $"REFRESH_VISUALS({string.Join(", ", n.Targets)})",
         SetUiStateAction n => $"SET_UI_STATE({FormatActionTargets(n.Targets)}, {n.Key}, {n.Value})",
         ApplyBookmarkAction n => $"APPLY_BOOKMARK({n.BookmarkName})",
+        ResetParametersAction n => n.Parameters.Count > 0
+            ? $"RESET_PARAMETERS({string.Join(", ", n.Parameters)})"
+            : "RESET_PARAMETERS",
+        OpenUrlAction n => n.Target != "_blank" && !string.IsNullOrEmpty(n.Target)
+            ? $"OPEN_URL('{n.Url}', TARGET = '{n.Target}')"
+            : $"OPEN_URL('{n.Url}')",
+        ShowModalAction n => $"SHOW_MODAL({n.ModalName})",
+        HideModalAction n => $"HIDE_MODAL({n.ModalName})",
+        ContainerSlotDefinition n => n.Icon != null || n.Badge != null
+            ? $"{n.Visual} (" + string.Join(", ", new[] {
+                n.Icon != null ? $"ICON = {Quote(n.Icon)}" : null,
+                n.Badge != null ? $"BADGE = {Quote(n.Badge)}" : null
+              }.Where(x => x != null)) + ")"
+            : n.Visual,
         VisualMapping m => FormatMapping(m),
 
         _ => node is Statement ? "UNKNOWN STATEMENT" : node.GetType().Name
@@ -1423,8 +1439,12 @@ public static class AstSerializer
         if (s.Mappings.Count > 0)
             sb.AppendLine($"    MAPPINGS ( {string.Join(", ", s.Mappings.Select(m => FormatMapping(m)))} ),");
         var visualOptions = FormatVisualOptions(s.Options);
+        if (s.SegmentStyles.Count > 0)
+        {
+            visualOptions.Add($"SEGMENT_STYLE ( {string.Join(", ", s.SegmentStyles.Select(FormatSegmentStyleRule))} )");
+        }
         visualOptions.AddRange(s.AxisOptions.Select(axis =>
-            $"{axis.Axis}_AXIS ( {string.Join(", ", axis.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} )"));
+            $"{axis.Axis}_AXIS ( {string.Join(", ", axis.Options.Select(o => o.Key.Equals("TIME_UNIT", StringComparison.OrdinalIgnoreCase) ? $"{o.Key} = {o.Value.ToUpperInvariant()}" : $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} )"));
         if (visualOptions.Count > 0)
             sb.AppendLine($"    OPTIONS ( {string.Join(", ", visualOptions)} ),");
         if (s.StyleName != null)
@@ -1508,6 +1528,17 @@ public static class AstSerializer
                     return $"{option.Key} = {val}";
                 }
                 if (option.Key.Equals("TOTAL_POSITION", StringComparison.OrdinalIgnoreCase))
+                    return $"{option.Key} = {option.Value.ToUpperInvariant()}";
+                if (option.Key is "ANIMATION" or "UPDATE_ANIMATION")
+                {
+                    var boolVal = option.Value.Equals("True", StringComparison.OrdinalIgnoreCase) ? "ON" : (option.Value.Equals("False", StringComparison.OrdinalIgnoreCase) ? "OFF" : option.Value.ToUpperInvariant());
+                    return $"{option.Key} = {boolVal}";
+                }
+                if (option.Key is "ANIMATION_EASING" or "HOVER_FOCUS")
+                    return $"{option.Key} = {option.Value.ToUpperInvariant()}";
+                if (option.Key is "ANIMATION_DURATION" or "BAR_MIN_HEIGHT")
+                    return $"{option.Key} = {option.Value}";
+                if (option.Key is "AREA_BASELINE")
                     return $"{option.Key} = {option.Value.ToUpperInvariant()}";
                 return $"{option.Key} = '{option.Value.Replace("'", "''")}'";
             })
@@ -1605,6 +1636,10 @@ public static class AstSerializer
             if (chart.Facet.Columns.HasValue) facets.Add($"COLUMNS = {chart.Facet.Columns.Value}");
             sections.Add("FACET ( " + string.Join(", ", facets) + " )");
         }
+        if (!chart.Annotations.IsDefaultOrEmpty)
+        {
+            sections.Add("ANNOTATIONS (\n" + string.Join(",\n", chart.Annotations.Select(a => Indent(FormatOverlay(a), 4))) + "\n)");
+        }
         sections.Add($"RESOLVE ( X = {Upper(chart.Resolution.X)}, Y = {Upper(chart.Resolution.Y)}, COLOR = {Upper(chart.Resolution.Color)} )");
         return "CHART (\n" + string.Join(",\n", sections.Select(section => Indent(section, 4))) + "\n)";
     }
@@ -1638,6 +1673,8 @@ public static class AstSerializer
         if (scale.LabelRotation is not null) options.Add($"LABEL_ROTATION = {scale.LabelRotation}");
         if (scale.LabelSkip.HasValue) options.Add($"LABEL_SKIP = {scale.LabelSkip.Value}");
         if (scale.OuterPadding != 0m) options.Add($"OUTER_PADDING = {Number(scale.OuterPadding)}");
+        if (scale.TickFormat is not null) options.Add($"TICK_FORMAT = {Quote(scale.TickFormat)}");
+        if (scale.TimeUnit is not null) options.Add($"TIME_UNIT = {scale.TimeUnit}");
         options.Add(scale.ExplicitOrder.IsDefaultOrEmpty
             ? $"ORDER = {Upper(scale.Order)}"
             : "ORDER = (" + string.Join(", ", scale.ExplicitOrder.Select(Format)) + ")");
@@ -1662,6 +1699,9 @@ public static class AstSerializer
         if (layer.Mark == AdvancedChartMarkKind.Tick && layer.TickOrientation != AdvancedChartTickOrientation.Auto)
             sections.Add($"ORIENTATION = {Upper(layer.TickOrientation)}");
         if (layer.Position.Kind != AdvancedChartPositionKind.Identity) sections.Add(FormatAdvancedPosition(layer.Position));
+        if (!string.IsNullOrEmpty(layer.NullHandling)) sections.Add($"NULL_HANDLING = {layer.NullHandling.ToUpperInvariant()}");
+        if (!string.IsNullOrEmpty(layer.AreaBaseline)) sections.Add($"AREA_BASELINE = {layer.AreaBaseline.ToUpperInvariant()}");
+        if (!string.IsNullOrEmpty(layer.HoverFocus)) sections.Add($"HOVER_FOCUS = {layer.HoverFocus.ToUpperInvariant()}");
         sections.Add("ENCODINGS (\n" + string.Join(",\n",
             layer.Encodings.Select(encoding => Indent(FormatAdvancedEncoding(encoding), 4))) + "\n)");
         if (!layer.Styles.IsDefaultOrEmpty)
@@ -1740,6 +1780,20 @@ public static class AstSerializer
         parts.Add($"STRUCTURE = {Quote(s.Structure)}");
         if (s.SlotMap.Count > 0)
             parts.Add("MAP (" + string.Join(", ", s.SlotMap.Select(kv => $"{Quote(kv.Key)} = {kv.Value}")) + ")");
+        if (s.MobileLayout != null)
+        {
+            var mobParts = new List<string> { $"STRUCTURE = {Quote(s.MobileLayout.Structure)}" };
+            if (s.MobileLayout.SlotMap.Count > 0)
+                mobParts.Add("MAP (" + string.Join(", ", s.MobileLayout.SlotMap.Select(kv => $"{Quote(kv.Key)} = {kv.Value}")) + ")");
+            if (!string.IsNullOrEmpty(s.MobileLayout.Breakpoint))
+            {
+                if (int.TryParse(s.MobileLayout.Breakpoint, out _))
+                    mobParts.Add($"BREAKPOINT = {s.MobileLayout.Breakpoint}");
+                else
+                    mobParts.Add($"BREAKPOINT = {Quote(s.MobileLayout.Breakpoint)}");
+            }
+            parts.Add($"MOBILE_LAYOUT ({string.Join(", ", mobParts)})");
+        }
         if (s.StyleName != null)
             parts.Add($"STYLE = {s.StyleName}");
         if (s.Styles.Count > 0 || !s.Palette.IsDefaultOrEmpty)
@@ -1747,6 +1801,9 @@ public static class AstSerializer
         if (s.Visibility != null) parts.Add($"VISIBLE = {s.Visibility}");
         if (s.RefreshIntervalSeconds > 0) parts.Add($"REFRESH = {s.RefreshIntervalSeconds}");
         if (s.PrintLayout != null) parts.Add(FormatPageLayoutDefinition(s.PrintLayout));
+        if (s.Actions.Count > 0) parts.Add($"ACTIONS ({FormatActions(s.Actions)})");
+        if (s.Options.Count > 0)
+            parts.Add("OPTIONS (" + string.Join(", ", s.Options.Select(kv => $"{kv.Key} = {FormatNestedVisualOptionValue(kv.Value)}")) + ")");
 
         return $"{CreationVerb(s.Mode)} PAGE {s.Name} AS {s.PageMode.ToString().ToUpperInvariant()} ({string.Join(", ", parts)});";
     }
@@ -1790,11 +1847,16 @@ public static class AstSerializer
             parts.Add($"STYLE = {s.StyleName}");
         if (s.Styles.Count > 0 || !s.Palette.IsDefaultOrEmpty)
             parts.Add("STYLE (" + FormatStyleAssignments(s.Styles, s.Palette) + ")");
-        if (s.Structure != null || s.SlotMap.Count > 0 || !s.IsPinnable)
+        if (s.IsCollapsible && !s.Options.ContainsKey("COLLAPSIBLE")) parts.Add("COLLAPSIBLE = ON");
+        if (s.Options.Count > 0)
+            parts.Add("OPTIONS (" + string.Join(", ", s.Options.Select(kv => $"{kv.Key} = {Quote(kv.Value)}")) + ")");
+        if (s.Structure != null || s.SlotDefinitions.Count > 0 || s.SlotMap.Count > 0 || !s.IsPinnable)
         {
             var layout = new List<string>();
             if (s.Structure != null) layout.Add($"STRUCTURE = {Quote(s.Structure)}");
-            if (s.SlotMap.Count > 0)
+            if (s.SlotDefinitions.Count > 0)
+                layout.Add("MAP (" + string.Join(", ", s.SlotDefinitions.Select(kv => $"{Quote(kv.Key)} = {kv.Value.ToSql()}")) + ")");
+            else if (s.SlotMap.Count > 0)
                 layout.Add("MAP (" + string.Join(", ", s.SlotMap.Select(kv => $"{Quote(kv.Key)} = {kv.Value}")) + ")");
             if (!s.IsPinnable) layout.Add("PINNABLE = OFF");
             parts.Add("LAYOUT (" + string.Join(", ", layout) + ")");
@@ -1810,7 +1872,41 @@ public static class AstSerializer
             $"ORIENTATION = {s.Orientation.ToString().ToUpperInvariant()}"
         };
         if (s.DefaultPage != null) parts.Add($"DEFAULT = {s.DefaultPage}");
-        if (s.Pages.Count > 0) parts.Add($"PAGES ({string.Join(", ", s.Pages)})");
+        if (s.Items.Count > 0)
+        {
+            var itemStrings = s.Items.Select(item =>
+            {
+                if (item.IsExternalLink)
+                    return $"LINK ({Quote(item.Label ?? item.PageName)} = OPEN_URL({Quote(item.ExternalUrl ?? "")}))";
+                var itemOpts = new List<string>();
+                if (!string.IsNullOrEmpty(item.Icon)) itemOpts.Add($"ICON = {Quote(item.Icon)}");
+                if (!string.IsNullOrEmpty(item.Label)) itemOpts.Add($"LABEL = {Quote(item.Label)}");
+                if (!string.IsNullOrEmpty(item.Badge)) itemOpts.Add($"BADGE = {Quote(item.Badge)}");
+                return itemOpts.Count > 0
+                    ? $"{item.PageName} ({string.Join(", ", itemOpts)})"
+                    : item.PageName;
+            });
+            parts.Add($"PAGES ({string.Join(", ", itemStrings)})");
+        }
+        else if (s.Pages.Count > 0)
+        {
+            parts.Add($"PAGES ({string.Join(", ", s.Pages)})");
+        }
+        if (s.Groups.Count > 0)
+        {
+            var groupStrings = s.Groups.Select(g =>
+                $"{Quote(g.Title)} = ({string.Join(", ", g.Items.Select(i => i.PageName))})");
+            parts.Add($"GROUP ({string.Join(", ", groupStrings)})");
+        }
+        if (s.HideInvisible)
+            parts.Add("HIDE_INVISIBLE = ON");
+        var nonHiOptions = s.Options.Where(kv => !kv.Key.Equals("HIDE_INVISIBLE", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (nonHiOptions.Count > 0)
+            parts.Add("OPTIONS (" + string.Join(", ", nonHiOptions.Select(kv => $"{kv.Key} = {FormatNestedVisualOptionValue(kv.Value)}")) + ")");
+        if (s.Styles.Count > 0)
+            parts.Add("STYLE (" + FormatStyleAssignments(s.Styles, ImmutableArray<string>.Empty) + ")");
+        if (s.ActiveStyles.Count > 0)
+            parts.Add("ACTIVE_STYLE (" + FormatStyleAssignments(s.ActiveStyles, ImmutableArray<string>.Empty) + ")");
         return $"{CreationVerb(s.Mode)} NAVIGATION {s.Name} AS {s.NavType.ToString().ToUpperInvariant()} ({string.Join(", ", parts)});";
     }
 
@@ -1915,9 +2011,18 @@ public static class AstSerializer
 
     private static string FormatCreateTheme(CreateThemeStatement s)
     {
-        var props = string.Join(", ", s.Properties.Select(p => $"{p.Key} = '{p.Value.Replace("'", "''")}'"));
+        var parts = new List<string>();
+        foreach (var p in s.Properties.Where(kvp => !kvp.Key.Contains(':')))
+        {
+            parts.Add($"{p.Key} = '{p.Value.Replace("'", "''")}'");
+        }
+        foreach (var (vType, overrides) in s.VisualOverrides)
+        {
+            var vProps = string.Join(", ", overrides.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"));
+            parts.Add($"[{vType}] ({vProps})");
+        }
         var modeStr = CreationVerb(s.Mode);
-        return $"{modeStr} THEME {s.Name} AS ({props});";
+        return $"{modeStr} THEME {s.Name} AS ({string.Join(", ", parts)});";
     }
 
     private static string FormatStyleAssignments(IReadOnlyDictionary<string, string> values, ImmutableArray<string> palette)
@@ -2020,7 +2125,21 @@ public static class AstSerializer
             if (!string.IsNullOrWhiteSpace(m.SparklineSource))
             {
                 var cardSparklineType = (m.SparklineType ?? "line").ToUpperInvariant();
-                return $"SPARKLINE = {m.SparklineSource} (X = {m.SparklineXColumn}, Y = {m.SparklineYColumn}, TYPE = {cardSparklineType})";
+                var parts = new List<string>
+                {
+                    $"X = {m.SparklineXColumn}",
+                    $"Y = {m.SparklineYColumn}",
+                    $"TYPE = {cardSparklineType}"
+                };
+                if (!string.IsNullOrWhiteSpace(m.SparklineColor))
+                {
+                    parts.Add($"COLOR = '{m.SparklineColor.Replace("'", "''")}'");
+                }
+                if (m.SparklineReferenceLine.HasValue)
+                {
+                    parts.Add($"REFERENCE_LINE = {m.SparklineReferenceLine.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+                }
+                return $"SPARKLINE = {m.SparklineSource} ({string.Join(", ", parts)})";
             }
             var cols = m.SparklineColumns != null ? string.Join(", ", m.SparklineColumns) : "";
             var type = m.SparklineType != null ? m.SparklineType.ToUpperInvariant() : "LINE";
@@ -2094,6 +2213,16 @@ public static class AstSerializer
             ? string.Empty
             : $" FONT_COLOR '{rule.FontColor.Replace("'", "''")}'");
 
+    private static string FormatSegmentStyleRule(SegmentStyleRule rule)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(rule.LineDash))
+            parts.Add($"LINE_DASH = {rule.LineDash.ToUpperInvariant()}");
+        if (!string.IsNullOrEmpty(rule.Color))
+            parts.Add($"COLOR = '{rule.Color.Replace("'", "''")}'");
+        return $"WHEN {rule.Condition.ToSql()} THEN {string.Join(", ", parts)}";
+    }
+
     private static string FormatOverlay(VisualOverlay overlay)
     {
         if (overlay.OverlayType == OverlayType.ReferenceLine)
@@ -2118,6 +2247,25 @@ public static class AstSerializer
             if (!string.IsNullOrWhiteSpace(overlay.Color)) props.Add($"COLOR = {Quote(overlay.Color)}");
             if (!string.IsNullOrWhiteSpace(overlay.Label)) props.Add($"LABEL = {Quote(overlay.Label)}");
             return $"REFERENCE_BAND ({string.Join(", ", props)})";
+        }
+
+        if (overlay.OverlayType == OverlayType.AnnotationPoint)
+        {
+            var props = new List<string>();
+            if (!string.IsNullOrWhiteSpace(overlay.SeriesName)) props.Add($"SERIES = {Quote(overlay.SeriesName)}");
+            if (overlay.AnnotationPointType == "COORD")
+            {
+                var xStr = overlay.CoordXString != null ? Quote(overlay.CoordXString) : (overlay.CoordX?.ToString(CultureInfo.InvariantCulture) ?? "0");
+                var yStr = overlay.CoordY?.ToString(CultureInfo.InvariantCulture) ?? "0";
+                props.Add($"TYPE = COORD({xStr}, {yStr})");
+            }
+            else if (!string.IsNullOrWhiteSpace(overlay.AnnotationPointType))
+            {
+                props.Add($"TYPE = {overlay.AnnotationPointType}");
+            }
+            if (!string.IsNullOrWhiteSpace(overlay.Label)) props.Add($"LABEL = {Quote(overlay.Label)}");
+            if (!string.IsNullOrWhiteSpace(overlay.Symbol)) props.Add($"SYMBOL = {Quote(overlay.Symbol)}");
+            return $"ANNOTATIONS (POINT ({string.Join(", ", props)}))";
         }
 
         var type = overlay.OverlayType switch

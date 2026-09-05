@@ -20,7 +20,8 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         VisualType.Trellis,
         VisualType.Gantt,
         VisualType.Radar,
-        VisualType.Pie, VisualType.Donut, VisualType.Combo
+        VisualType.Pie, VisualType.Donut, VisualType.Combo,
+        VisualType.Map
     ];
 
     public static bool Supports(VisualType type) => Supported.Contains(type);
@@ -45,12 +46,16 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         ValidatePieDonutOptions(statement);
         ValidateScatterBubbleOptions(statement);
         ValidateHeatmapOptions(statement);
+        ValidateMapOptions(statement);
         ValidateWaterfallOptions(statement);
         ValidateGanttOptions(statement);
         ValidateCandlestickOptions(statement);
         ValidateRadarOptions(statement);
         ValidateFunnelOptions(statement);
         ValidateBoxPlotOptions(statement);
+        ValidateComboOptions(statement);
+        ValidateSymbolSizeOption(statement);
+        ValidateTrellisOptions(statement);
         foreach (var opt in statement.Options) manifest.Options.TryAdd(opt.Key, opt.Value);
         if (statement.VisualType == VisualType.Funnel)
         {
@@ -97,6 +102,20 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 var upperPos = positionOption.ToUpperInvariant();
                 if (upperPos is not ("START" or "END"))
                     throw new InvalidOperationException($"Invalid SERIES_LABELS POSITION '{positionOption}'. Valid values are START or END.");
+            }
+        }
+
+        if (statement.SegmentStyles.Count > 0)
+        {
+            if (statement.VisualType is not (VisualType.Line or VisualType.Combo))
+                throw new InvalidOperationException($"SEGMENT_STYLE is supported only on LINE and COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+
+            foreach (var rule in statement.SegmentStyles)
+            {
+                if (string.IsNullOrWhiteSpace(rule.LineDash) && string.IsNullOrWhiteSpace(rule.Color))
+                    throw new InvalidOperationException("SEGMENT_STYLE requires at least LINE_DASH or COLOR.");
+                if (!string.IsNullOrWhiteSpace(rule.LineDash) && rule.LineDash.ToUpperInvariant() is not ("SOLID" or "DASHED" or "DOTTED"))
+                    throw new InvalidOperationException($"Invalid LINE_DASH value '{rule.LineDash}'. Valid values are SOLID, DASHED, or DOTTED.");
             }
         }
 
@@ -202,22 +221,35 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             dataReference: statement.Source.TempTableName ?? $"inline:{manifest.Name}",
             bindings: bindings,
             layers: layers,
-            coordinate: new CoordinateSpec(IsPolar(statement.VisualType)
-                ? CoordinateKind.Polar
-                : statement.VisualType is VisualType.HorizontalBar or VisualType.Gantt ||
-                  (statement.VisualType is VisualType.Waterfall or VisualType.BoxPlot or VisualType.Funnel && IsHorizontal(statement, manifest))
-                    ? CoordinateKind.TransposedCartesian
-                    : CoordinateKind.Cartesian,
-                StartAngle: ResolveStartAngle(statement, manifest),
-                InnerRadius: statement.VisualType == VisualType.Donut ? ResolveInnerRadius(statement, manifest) : null),
+            coordinate: statement.VisualType == VisualType.Map
+                ? new CoordinateSpec(CoordinateKind.Geographic)
+                {
+                    Geography = new GeographicCoordinateSpec(
+                        (statement.Options.FirstOrDefault(o => o.Key.Equals("PROJECTION", StringComparison.OrdinalIgnoreCase))?.Value?.ToUpperInvariant() == "MERCATOR"
+                            ? GeographicProjectionKind.Mercator
+                            : GeographicProjectionKind.Equirectangular),
+                        statement.Options.FirstOrDefault(o => o.Key.Equals("MAP_FILE", StringComparison.OrdinalIgnoreCase)) is { } mf && !string.IsNullOrWhiteSpace(mf.Value)
+                            ? GeographicMapSourceKind.File
+                            : GeographicMapSourceKind.BuiltIn,
+                        statement.Options.FirstOrDefault(o => o.Key.Equals("MAP_FILE", StringComparison.OrdinalIgnoreCase))?.Value
+                            ?? statement.Options.FirstOrDefault(o => o.Key.Equals("MAP_NAME", StringComparison.OrdinalIgnoreCase))?.Value
+                            ?? "WORLD",
+                        statement.Options.FirstOrDefault(o => o.Key.Equals("FEATURE_KEY", StringComparison.OrdinalIgnoreCase))?.Value
+                            ?? "name")
+                }
+                : new CoordinateSpec(IsPolar(statement.VisualType)
+                    ? CoordinateKind.Polar
+                    : statement.VisualType is VisualType.HorizontalBar or VisualType.Gantt ||
+                      (statement.VisualType is VisualType.Waterfall or VisualType.BoxPlot or VisualType.Funnel && IsHorizontal(statement, manifest))
+                        ? CoordinateKind.TransposedCartesian
+                        : CoordinateKind.Cartesian,
+                    StartAngle: ResolveStartAngle(statement, manifest),
+                    InnerRadius: statement.VisualType == VisualType.Donut ? ResolveInnerRadius(statement, manifest) : null),
             scales: scales,
             formatting: ChartStyleTokens.Formatting(context, manifest,
                 statement.Mappings.Select(mapping => new FieldFormat(mapping.Column, mapping.Format)).ToImmutableArray()),
             nullHandling: new NullHandlingSpec(
-                statement.VisualType == VisualType.Line || statement.VisualType == VisualType.Combo ||
-                    statement.VisualType == VisualType.Trellis && TrellisMark(statement) == MarkKind.Line
-                    ? NullValuePolicy.Gap
-                    : NullValuePolicy.Skip,
+                ResolveNullPolicy(statement),
                 []),
             theme: ChartStyleTokens.Theme(manifest),
             accessibility: new AccessibilitySpec(
@@ -245,6 +277,11 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         foreach (var mapping in statement.Mappings)
         {
             var channel = MapChannel(statement.VisualType, mapping.Role);
+            if (statement.VisualType == VisualType.Map && mapping.Role.Equals("VALUE", StringComparison.OrdinalIgnoreCase) &&
+                statement.Options.Any(o => o.Key.Equals("MODE", StringComparison.OrdinalIgnoreCase) && o.Value.Equals("POINTS", StringComparison.OrdinalIgnoreCase)))
+            {
+                channel = FieldChannel.Size;
+            }
             if (channel is null)
             {
                 var valid = ValidRolesFor(statement.VisualType);
@@ -291,6 +328,42 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             option.Key.Equals("SYMBOL_STROKE_WIDTH", StringComparison.OrdinalIgnoreCase))?.Value;
         var lineWidth = statement.Options.FirstOrDefault(option =>
             option.Key.Equals("LINE_WIDTH", StringComparison.OrdinalIgnoreCase))?.Value;
+        var areaBaseline = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("AREA_BASELINE", StringComparison.OrdinalIgnoreCase))?.Value;
+        var hoverFocus = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("HOVER_FOCUS", StringComparison.OrdinalIgnoreCase))?.Value;
+        var barMinHeight = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("BAR_MIN_HEIGHT", StringComparison.OrdinalIgnoreCase))?.Value;
+        var anim = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("ANIMATION", StringComparison.OrdinalIgnoreCase))?.Value;
+        var animDur = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("ANIMATION_DURATION", StringComparison.OrdinalIgnoreCase))?.Value;
+        var animEasing = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("ANIMATION_EASING", StringComparison.OrdinalIgnoreCase))?.Value;
+        var updateAnim = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("UPDATE_ANIMATION", StringComparison.OrdinalIgnoreCase))?.Value;
+        var symbolSize = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("SYMBOL_SIZE", StringComparison.OrdinalIgnoreCase))?.Value;
+        var syncAxes = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("SYNC_AXES", StringComparison.OrdinalIgnoreCase))?.Value;
+        var yMarkOpt = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("Y_MARK", StringComparison.OrdinalIgnoreCase))?.Value?.ToUpperInvariant();
+        var y2MarkOpt = statement.Options.FirstOrDefault(option =>
+            option.Key.Equals("Y2_MARK", StringComparison.OrdinalIgnoreCase))?.Value?.ToUpperInvariant();
+
+        ImmutableArray<StyleToken> AppendCommonStyles(ImmutableArray<StyleToken> st)
+        {
+            if (areaBaseline is not null) st = st.Add(new StyleToken("areaBaseline", areaBaseline));
+            if (hoverFocus is not null) st = st.Add(new StyleToken("hoverFocus", hoverFocus.ToUpperInvariant()));
+            if (barMinHeight is not null) st = st.Add(new StyleToken("barMinHeight", barMinHeight));
+            if (anim is not null) st = st.Add(new StyleToken("animation", anim.ToUpperInvariant()));
+            if (animDur is not null) st = st.Add(new StyleToken("animationDuration", animDur));
+            if (animEasing is not null) st = st.Add(new StyleToken("animationEasing", animEasing.ToUpperInvariant()));
+            if (updateAnim is not null) st = st.Add(new StyleToken("updateAnimation", updateAnim.ToUpperInvariant()));
+            if (symbolSize is not null) st = st.Add(new StyleToken("SYMBOL_SIZE", symbolSize));
+            if (syncAxes is not null && IsOn(syncAxes)) st = st.Add(new StyleToken("SYNC_AXES", "ON"));
+            return st;
+        }
         if (statement.VisualType == VisualType.Combo && statement.TypedSeries.Count > 0)
         {
             var x = bindings.Where(binding => binding.Channel == FieldChannel.X).ToImmutableArray();
@@ -301,12 +374,22 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 var secondary = !series.SeriesType.Equals(firstType, StringComparison.OrdinalIgnoreCase);
                 var channel = secondary ? FieldChannel.Y2 : FieldChannel.Y;
                 var y = bindings.First(binding => binding.Field!.Equals(series.Column, StringComparison.OrdinalIgnoreCase));
-                var mark = series.SeriesType.Equals("bar", StringComparison.OrdinalIgnoreCase)
-                    ? MarkKind.Rect
-                    : MarkKind.Line;
+                var markOverride = secondary ? y2MarkOpt : yMarkOpt;
+                var mark = markOverride switch
+                {
+                    "BAR" => MarkKind.Rect,
+                    "LINE" => MarkKind.Line,
+                    "AREA" => MarkKind.Area,
+                    _ => series.SeriesType.Equals("bar", StringComparison.OrdinalIgnoreCase)
+                        ? MarkKind.Rect
+                        : series.SeriesType.Equals("area", StringComparison.OrdinalIgnoreCase)
+                            ? MarkKind.Area
+                            : MarkKind.Line
+                };
                 var style = ImmutableArray.Create(new StyleToken("series", series.Column));
                 if (mark == MarkKind.Line && lineWidth is not null && LineSeriesWidth.TryNormalize(lineWidth, out var normalizedLineWidth))
                     style = style.Add(new StyleToken("LINE_WIDTH", normalizedLineWidth));
+                style = AppendCommonStyles(style);
                 yield return new MarkLayerSpec(
                     $"series-{index:D2}-{Sanitize(series.Column)}",
                     mark,
@@ -314,6 +397,50 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                     x.Add(y with { Channel = channel, Axis = secondary ? AxisRole.Secondary : AxisRole.Primary }),
                     style,
                     series.Column)
+                {
+                    BandSize = mark == MarkKind.Rect ? bandSize : .75m
+                };
+            }
+        }
+        else if (statement.VisualType == VisualType.Combo && bindings.Any(b => b.Channel == FieldChannel.Y2))
+        {
+            var x = bindings.Where(binding => binding.Channel == FieldChannel.X).ToImmutableArray();
+            var yBinding = bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y);
+            var y2Binding = bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Y2);
+
+            if (yBinding is not null)
+            {
+                var mark = yMarkOpt switch { "LINE" => MarkKind.Line, "AREA" => MarkKind.Area, _ => MarkKind.Rect };
+                var style = ImmutableArray.Create(new StyleToken("series", yBinding.Field ?? "Primary"));
+                if (mark == MarkKind.Line && lineWidth is not null && LineSeriesWidth.TryNormalize(lineWidth, out var normalizedLineWidth))
+                    style = style.Add(new StyleToken("LINE_WIDTH", normalizedLineWidth));
+                style = AppendCommonStyles(style);
+                yield return new MarkLayerSpec(
+                    "combo-primary",
+                    mark,
+                    0,
+                    x.Add(yBinding with { Axis = AxisRole.Primary }),
+                    style,
+                    yBinding.Field)
+                {
+                    BandSize = mark == MarkKind.Rect ? bandSize : .75m
+                };
+            }
+
+            if (y2Binding is not null)
+            {
+                var mark = y2MarkOpt switch { "BAR" => MarkKind.Rect, "AREA" => MarkKind.Area, _ => MarkKind.Line };
+                var style = ImmutableArray.Create(new StyleToken("series", y2Binding.Field ?? "Secondary"));
+                if (mark == MarkKind.Line && lineWidth is not null && LineSeriesWidth.TryNormalize(lineWidth, out var normalizedLineWidth))
+                    style = style.Add(new StyleToken("LINE_WIDTH", normalizedLineWidth));
+                style = AppendCommonStyles(style);
+                yield return new MarkLayerSpec(
+                    "combo-secondary",
+                    mark,
+                    1,
+                    x.Add(y2Binding with { Axis = AxisRole.Secondary }),
+                    style,
+                    y2Binding.Field)
                 {
                     BandSize = mark == MarkKind.Rect ? bandSize : .75m
                 };
@@ -338,6 +465,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                     statement.Options.FirstOrDefault(o => o.Key.Equals("ERROR_BAR_STYLE", StringComparison.OrdinalIgnoreCase)) is { } styleOpt
                         ? ImmutableArray.Create(new StyleToken("errorBarStyle", styleOpt.Value.ToUpperInvariant()))
                         : ImmutableArray<StyleToken>.Empty,
+                VisualType.Map => ResolveMapLayerStyle(statement, manifest),
                 _ => ImmutableArray<StyleToken>.Empty
             };
             if (symbolShapeOption is not null)
@@ -348,10 +476,11 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 style = style.Add(new StyleToken("SYMBOL_STROKE_WIDTH", normalizedWidth));
             if (lineWidth is not null && LineSeriesWidth.TryNormalize(lineWidth, out var normalizedLineWidth))
                 style = style.Add(new StyleToken("LINE_WIDTH", normalizedLineWidth));
+            style = AppendCommonStyles(style);
             var mark = statement.VisualType switch
             {
                 VisualType.Bar or VisualType.HorizontalBar => MarkKind.Rect,
-                VisualType.Line => MarkKind.Line,
+                VisualType.Line => IsAreaLine(statement) ? MarkKind.Area : MarkKind.Line,
                 VisualType.Scatter or VisualType.Bubble => MarkKind.Point,
                 VisualType.HeatMap or VisualType.Funnel => MarkKind.Rect,
                 VisualType.BoxPlot or VisualType.Waterfall or VisualType.Candlestick => MarkKind.Rect,
@@ -361,6 +490,7 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 VisualType.Gauge => MarkKind.Arc,
                 VisualType.Pie or VisualType.Donut => MarkKind.Arc,
                 VisualType.Combo => MarkKind.Line,
+                VisualType.Map => (statement.Options.FirstOrDefault(o => o.Key.Equals("MODE", StringComparison.OrdinalIgnoreCase))?.Value?.ToUpperInvariant() == "POINTS") ? MarkKind.Point : MarkKind.Rect,
                 _ => throw new InvalidOperationException()
             };
             var position = ResolvePositionAdjustment(statement, manifest, bindings);
@@ -535,6 +665,30 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 continue;
             }
 
+            if (overlay.OverlayType == OverlayType.AnnotationPoint)
+            {
+                var annotTokens = new List<StyleToken>
+                {
+                    new("overlayType", "AnnotationPoint"),
+                    new("series", overlay.SeriesName ?? ""),
+                    new("annotationType", overlay.AnnotationPointType ?? "MAX"),
+                    new("coordX", overlay.CoordX?.ToString(CultureInfo.InvariantCulture) ?? ""),
+                    new("coordY", overlay.CoordY?.ToString(CultureInfo.InvariantCulture) ?? ""),
+                    new("coordXString", overlay.CoordXString ?? ""),
+                    new("symbol", overlay.Symbol ?? "pin"),
+                    new("color", overlay.Color ?? "#2563eb"),
+                    new("label", overlay.Label ?? "")
+                };
+                yield return new MarkLayerSpec(
+                    $"annotation-point-{index:D2}",
+                    MarkKind.Point,
+                    150 + index,
+                    [],
+                    annotTokens.ToImmutableArray(),
+                    overlay.Label);
+                continue;
+            }
+
             var hasAuthoredLabel = !string.IsNullOrWhiteSpace(overlay.Label);
             var styleTokens = new List<StyleToken>
             {
@@ -625,9 +779,13 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             var includeZero = explicitIncludeZero ??
                 (!isLog && (scaleChannel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or FieldChannel.Size)
                     && statement.VisualType is not VisualType.Scatter and not VisualType.Bubble);
+            var isMapPoints = statement.VisualType == VisualType.Map &&
+                statement.Options.Any(o => o.Key.Equals("MODE", StringComparison.OrdinalIgnoreCase) && o.Value.Equals("POINTS", StringComparison.OrdinalIgnoreCase));
             var colorRange = statement.VisualType == VisualType.HeatMap && scaleChannel == FieldChannel.Size
                 ? ResolveHeatMapColorRange(statement, manifest)
-                : null;
+                : statement.VisualType == VisualType.Map && scaleChannel == FieldChannel.Color && !isMapPoints && binding.SemanticKind == DataSemanticKind.Quantitative
+                    ? ResolveMapColorRange(statement, manifest)
+                    : null;
             yield return new ScaleSpec(group.Key, scaleChannel, kind,
                 IncludeZero: includeZero,
                 CategoryOrder: [],
@@ -643,7 +801,9 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 LabelSkip: ParseAxisInt(statement, manifest, axis, "label_skip"),
                 OuterPadding: kind == ScaleKind.Band && scaleChannel == FieldChannel.X
                     ? ResolveUnitInterval(manifest.Options.GetValueOrDefault("OUTER_PADDING"), "OUTER_PADDING")
-                    : 0m)
+                    : 0m,
+                TickFormat: ParseAxisText(statement, manifest, axis, "tick_format"),
+                TimeUnit: ParseAxisText(statement, manifest, axis, "time_unit"))
             {
                 ColorRange = colorRange
             };
@@ -889,6 +1049,17 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         "MIN" when type == VisualType.Gauge => FieldChannel.Y,
         "MAX" when type == VisualType.Gauge => FieldChannel.Y2,
         "GOAL" when type == VisualType.Gauge => FieldChannel.Detail,
+        "GOAL2" when type == VisualType.Gauge => FieldChannel.High,
+        "GOAL_LABEL" when type == VisualType.Gauge => FieldChannel.Low,
+        "GOAL2_LABEL" when type == VisualType.Gauge => FieldChannel.ConfidenceLow,
+        "REGION" when type == VisualType.Map => FieldChannel.Region,
+        "LON" or "LONGITUDE" when type == VisualType.Map => FieldChannel.Longitude,
+        "LAT" or "LATITUDE" when type == VisualType.Map => FieldChannel.Latitude,
+        "VALUE" when type == VisualType.Map => FieldChannel.Color,
+        "COLOR" when type == VisualType.Map => FieldChannel.Color,
+        "SIZE" when type == VisualType.Map => FieldChannel.Size,
+        "LABEL" when type == VisualType.Map => FieldChannel.Text,
+        "TOOLTIP" when type == VisualType.Map => FieldChannel.Tooltip,
         "FACET" when type == VisualType.Trellis => FieldChannel.Column,
         "VALUE" when type == VisualType.HeatMap => FieldChannel.Size,
         "NAME" when type == VisualType.Waterfall => FieldChannel.X,
@@ -931,7 +1102,9 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         VisualType.Funnel
             => ["NAME", "LABEL", "CATEGORY", "VALUE", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.Gauge
-            => ["VALUE", "LABEL", "MIN", "MAX", "GOAL", "SERIES", "COLOR", "TOOLTIP"],
+            => ["VALUE", "LABEL", "MIN", "MAX", "GOAL", "GOAL2", "GOAL_LABEL", "GOAL2_LABEL", "SERIES", "COLOR", "TOOLTIP"],
+        VisualType.Map
+            => ["REGION", "VALUE", "LON", "LONGITUDE", "LAT", "LATITUDE", "LABEL", "COLOR", "SIZE", "TOOLTIP"],
         VisualType.HeatMap
             => ["X", "Y", "VALUE", "SERIES", "COLOR", "TOOLTIP"],
         VisualType.Waterfall
@@ -959,6 +1132,9 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
     {
         if (type is VisualType.HeatMap or VisualType.Gantt && channel == FieldChannel.Y)
             return DataSemanticKind.Nominal;
+        if (channel is FieldChannel.Longitude or FieldChannel.Latitude ||
+            (type == VisualType.Map && channel == FieldChannel.Color && mapping.Role.Equals("VALUE", StringComparison.OrdinalIgnoreCase)))
+            return DataSemanticKind.Quantitative;
         if (channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.YStart or FieldChannel.YEnd or
             FieldChannel.Low or FieldChannel.Q1 or FieldChannel.Median or FieldChannel.Q3 or FieldChannel.High or FieldChannel.Mean or
             FieldChannel.Open or FieldChannel.Close or FieldChannel.ErrorLow or FieldChannel.ErrorHigh or
@@ -1008,9 +1184,22 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         if (statement.VisualType != VisualType.Trellis) return null;
         var facet = bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Column);
         if (facet is null) return null;
-        var shared = !statement.Options.Any(option => option.Key.Equals("SHARED_AXIS", StringComparison.OrdinalIgnoreCase) &&
-            option.Value.Equals("OFF", StringComparison.OrdinalIgnoreCase));
-        return new FacetSpec(null, facet.Field, new ScaleResolutionSpec(Y: shared ? ScaleResolutionMode.Shared : ScaleResolutionMode.Independent));
+
+        var sharedAxis = statement.Options.FirstOrDefault(option => option.Key.Equals("SHARED_AXIS", StringComparison.OrdinalIgnoreCase))?.Value;
+        var sharedY = statement.Options.FirstOrDefault(option => option.Key.Equals("SHARED_Y", StringComparison.OrdinalIgnoreCase))?.Value;
+        var sharedX = statement.Options.FirstOrDefault(option => option.Key.Equals("SHARED_X", StringComparison.OrdinalIgnoreCase))?.Value;
+        var sharedColor = statement.Options.FirstOrDefault(option => option.Key.Equals("SHARED_COLOR", StringComparison.OrdinalIgnoreCase))?.Value;
+
+        var isScatter = TrellisChartTypeFromOptions(statement.Options) == "SCATTER";
+
+        var yShared = sharedY is not null ? IsOn(sharedY) : (sharedAxis is null || IsOn(sharedAxis));
+        var xShared = sharedX is not null ? IsOn(sharedX) : !isScatter;
+        var colorShared = sharedColor is null || IsOn(sharedColor);
+
+        return new FacetSpec(null, facet.Field, new ScaleResolutionSpec(
+            X: xShared ? ScaleResolutionMode.Shared : ScaleResolutionMode.Independent,
+            Y: yShared ? ScaleResolutionMode.Shared : ScaleResolutionMode.Independent,
+            Color: colorShared ? ScaleResolutionMode.Shared : ScaleResolutionMode.Independent));
     }
     private static MarkKind TrellisMark(CreateVisualStatement statement) =>
         TrellisChartTypeFromOptions(statement.Options) switch
@@ -1301,10 +1490,15 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
         foreach (var opt in statement.Options)
         {
             var key = opt.Key.ToUpperInvariant();
-            if (key is "MIDPOINT" or "COLOR_MID" or "COLOR_LOW" or "COLOR_HIGH" or "CELL_BORDER" or "CELL_BORDER_COLOR" or "CELL_BORDER_WIDTH" or "NULL_COLOR")
+            if (key is "MIDPOINT" or "COLOR_MID" or "CELL_BORDER" or "CELL_BORDER_COLOR" or "CELL_BORDER_WIDTH")
             {
                 if (!isHeatmap)
                     throw new InvalidOperationException($"{key} option is supported only on HEATMAP visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            }
+            else if (key is "COLOR_LOW" or "COLOR_HIGH" or "NULL_COLOR")
+            {
+                if (!isHeatmap && statement.VisualType != VisualType.Map)
+                    throw new InvalidOperationException($"{key} option is supported only on HEATMAP and MAP visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
             }
 
             if (isHeatmap)
@@ -1333,6 +1527,81 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
                 }
             }
         }
+    }
+
+    private void ValidateMapOptions(CreateVisualStatement statement)
+    {
+        if (statement.VisualType != VisualType.Map)
+        {
+            if (statement.Options.Any(o => o.Key.Equals("BASE_MAP", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException($"BASE_MAP option is supported only on MAP visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+            return;
+        }
+        foreach (var opt in statement.Options)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            if (key == "COLOR_SCALE")
+            {
+                var upper = opt.Value?.ToUpperInvariant();
+                if (upper is not ("LINEAR" or "QUANTILE" or "QUANTIZE" or "THRESHOLD"))
+                    throw new InvalidOperationException($"Invalid COLOR_SCALE '{opt.Value}'. Valid values are LINEAR, QUANTILE, QUANTIZE, or THRESHOLD.");
+            }
+            else if (key == "ZOOM")
+            {
+                if (!decimal.TryParse(opt.Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var z) || z <= 0m)
+                    throw new InvalidOperationException($"Invalid ZOOM '{opt.Value}'. Must be a positive number.");
+            }
+            else if (key == "MODE")
+            {
+                var upper = opt.Value?.ToUpperInvariant();
+                if (upper is not ("CHOROPLETH" or "POINTS"))
+                    throw new InvalidOperationException($"Invalid MODE '{opt.Value}'. Valid values are CHOROPLETH or POINTS.");
+            }
+            else if (key == "BASE_MAP")
+            {
+                var val = opt.Value?.Trim('\'', '"') ?? string.Empty;
+                var testUrl = val.Replace("{z}", "0").Replace("{x}", "0").Replace("{y}", "0").Replace("{s}", "a");
+                if (!Uri.TryCreate(testUrl, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                    throw new InvalidOperationException($"Invalid BASE_MAP '{opt.Value}'. Must be a valid HTTP or HTTPS URL template.");
+                if (!val.Contains("{z}") || !val.Contains("{x}") || !val.Contains("{y}"))
+                    throw new InvalidOperationException($"Invalid BASE_MAP URL template '{opt.Value}'. Must contain '{{z}}', '{{x}}', and '{{y}}' placeholders.");
+                context?.SecurityService?.ValidateHost(uri.Host);
+            }
+        }
+    }
+
+    private static ImmutableArray<StyleToken> ResolveMapLayerStyle(CreateVisualStatement statement, VisualManifest manifest)
+    {
+        var builder = ImmutableArray.CreateBuilder<StyleToken>();
+        void Forward(string key)
+        {
+            var val = statement.Options.FirstOrDefault(o => o.Key.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value
+                ?? manifest.Options.GetValueOrDefault(key);
+            if (!string.IsNullOrWhiteSpace(val)) builder.Add(new StyleToken(key, val));
+        }
+        Forward("COLOR_SCALE");
+        Forward("COLOR_LOW");
+        Forward("COLOR_HIGH");
+        Forward("NULL_COLOR");
+        Forward("ZOOM");
+        Forward("CENTER");
+        Forward("MODE");
+        Forward("BASE_MAP");
+        return builder.ToImmutable();
+    }
+
+    private static ColorRangeSpec? ResolveMapColorRange(CreateVisualStatement statement, VisualManifest manifest)
+    {
+        var lowColor = statement.Options.FirstOrDefault(o => o.Key.Equals("COLOR_LOW", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("COLOR_LOW")
+            ?? "#dbeafe";
+        var highColor = statement.Options.FirstOrDefault(o => o.Key.Equals("COLOR_HIGH", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("COLOR_HIGH")
+            ?? "#1d4ed8";
+        var nullColor = statement.Options.FirstOrDefault(o => o.Key.Equals("NULL_COLOR", StringComparison.OrdinalIgnoreCase))?.Value
+            ?? manifest.Options.GetValueOrDefault("NULL_COLOR")
+            ?? "#e5e7eb";
+        return new ColorRangeSpec(ColorRangeKind.Gradient, lowColor, highColor, null, null, nullColor);
     }
 
     private static ColorRangeSpec? ResolveHeatMapColorRange(CreateVisualStatement statement, VisualManifest manifest)
@@ -1782,6 +2051,108 @@ public sealed class NamedVisualChartLowerer(IExecutionContext? context = null)
             }
         }
     }
+
+    private static void ValidateComboOptions(CreateVisualStatement statement)
+    {
+        var hasComboOpts = statement.Options.Any(o =>
+            o.Key.Equals("SYNC_AXES", StringComparison.OrdinalIgnoreCase) ||
+            o.Key.Equals("Y_MARK", StringComparison.OrdinalIgnoreCase) ||
+            o.Key.Equals("Y2_MARK", StringComparison.OrdinalIgnoreCase));
+
+        if (!hasComboOpts) return;
+
+        if (statement.VisualType != VisualType.Combo)
+        {
+            var firstOpt = statement.Options.First(o =>
+                o.Key.Equals("SYNC_AXES", StringComparison.OrdinalIgnoreCase) ||
+                o.Key.Equals("Y_MARK", StringComparison.OrdinalIgnoreCase) ||
+                o.Key.Equals("Y2_MARK", StringComparison.OrdinalIgnoreCase));
+            throw new InvalidOperationException($"{firstOpt.Key.ToUpperInvariant()} option is supported only on COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+        }
+
+        foreach (var opt in statement.Options)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            if (key == "SYNC_AXES")
+            {
+                var upper = opt.Value.ToUpperInvariant();
+                if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE"))
+                    throw new InvalidOperationException($"Invalid SYNC_AXES '{opt.Value}'. Valid values are ON or OFF.");
+            }
+            else if (key is "Y_MARK" or "Y2_MARK")
+            {
+                var upper = opt.Value.ToUpperInvariant();
+                if (upper is not ("BAR" or "LINE" or "AREA"))
+                    throw new InvalidOperationException($"Invalid {key} '{opt.Value}'. Valid values are BAR, LINE, or AREA.");
+            }
+        }
+    }
+
+    private static void ValidateSymbolSizeOption(CreateVisualStatement statement)
+    {
+        var opt = statement.Options.FirstOrDefault(o => o.Key.Equals("SYMBOL_SIZE", StringComparison.OrdinalIgnoreCase));
+        if (opt is null) return;
+
+        if (statement.VisualType is not (VisualType.Line or VisualType.Scatter or VisualType.Bubble or VisualType.Combo))
+            throw new InvalidOperationException($"SYMBOL_SIZE option is supported only on LINE, SCATTER, BUBBLE, and COMBO visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+
+        if (!decimal.TryParse(opt.Value, NumberStyles.Number, CultureInfo.InvariantCulture, out var size) || size <= 0m)
+            throw new InvalidOperationException($"Invalid SYMBOL_SIZE '{opt.Value}'. Must be a positive number.");
+    }
+
+    private static void ValidateTrellisOptions(CreateVisualStatement statement)
+    {
+        var hasTrellisOpts = statement.Options.Any(o =>
+            o.Key.Equals("SHARED_X", StringComparison.OrdinalIgnoreCase) ||
+            o.Key.Equals("SHARED_Y", StringComparison.OrdinalIgnoreCase) ||
+            o.Key.Equals("SHARED_COLOR", StringComparison.OrdinalIgnoreCase) ||
+            o.Key.Equals("SHARED_AXIS", StringComparison.OrdinalIgnoreCase));
+
+        if (!hasTrellisOpts) return;
+
+        if (statement.VisualType != VisualType.Trellis)
+        {
+            var firstOpt = statement.Options.First(o =>
+                o.Key.Equals("SHARED_X", StringComparison.OrdinalIgnoreCase) ||
+                o.Key.Equals("SHARED_Y", StringComparison.OrdinalIgnoreCase) ||
+                o.Key.Equals("SHARED_COLOR", StringComparison.OrdinalIgnoreCase) ||
+                o.Key.Equals("SHARED_AXIS", StringComparison.OrdinalIgnoreCase));
+            throw new InvalidOperationException($"{firstOpt.Key.ToUpperInvariant()} option is supported only on TRELLIS visuals; found {statement.VisualType.ToString().ToUpperInvariant()}.");
+        }
+
+        foreach (var opt in statement.Options)
+        {
+            var key = opt.Key.ToUpperInvariant();
+            if (key is "SHARED_X" or "SHARED_Y" or "SHARED_COLOR" or "SHARED_AXIS")
+            {
+                var upper = opt.Value.ToUpperInvariant();
+                if (upper is not ("ON" or "OFF" or "TRUE" or "FALSE"))
+                    throw new InvalidOperationException($"Invalid {key} '{opt.Value}'. Valid values are ON or OFF.");
+            }
+        }
+    }
+
+    private static NullValuePolicy ResolveNullPolicy(CreateVisualStatement statement)
+    {
+        var nullOpt = statement.Options.FirstOrDefault(o => o.Key.Equals("NULL_HANDLING", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (!string.IsNullOrEmpty(nullOpt))
+        {
+            return nullOpt.ToUpperInvariant() switch
+            {
+                "CONNECT" => NullValuePolicy.Skip,
+                "ZERO" => NullValuePolicy.Zero,
+                _ => NullValuePolicy.Gap
+            };
+        }
+        return statement.VisualType == VisualType.Line || statement.VisualType == VisualType.Combo ||
+               statement.VisualType == VisualType.Trellis && TrellisMark(statement) == MarkKind.Line
+            ? NullValuePolicy.Gap
+            : NullValuePolicy.Skip;
+    }
+
+    private static bool IsAreaLine(CreateVisualStatement statement) =>
+        statement.Options.Any(o => o.Key.Equals("AREA", StringComparison.OrdinalIgnoreCase) &&
+            (o.Value.Equals("ON", StringComparison.OrdinalIgnoreCase) || o.Value.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || o.Value == "1"));
 
     private static string Sanitize(string value) => new(value.Select(character => char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : '-').ToArray());
 }

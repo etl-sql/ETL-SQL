@@ -98,7 +98,7 @@
             if (promptOptions) {
                 const field = doc.createElement('label'); field.className = 'etlsql-feedback-field'; field.textContent = promptOptions.label || 'Value';
                 input = doc.createElement(promptOptions.multiline ? 'textarea' : 'input');
-                if (!promptOptions.multiline) input.type = promptOptions.secret ? 'password' : 'text';
+                if (!promptOptions.multiline) /** @type {HTMLInputElement} */ (input).type = promptOptions.secret ? 'password' : 'text';
                 input.value = promptOptions.value || ''; input.autocomplete = promptOptions.autocomplete || 'off';
                 field.appendChild(input); body.appendChild(field);
                 error = doc.createElement('div'); error.className = 'etlsql-feedback-error'; error.setAttribute('role', 'alert'); body.appendChild(error);
@@ -107,7 +107,7 @@
             const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.className = 'etlsql-feedback-btn'; cancel.textContent = options.cancelLabel || 'Cancel';
             const accept = doc.createElement('button'); accept.type = 'button'; accept.className = `etlsql-feedback-btn ${options.danger ? 'etlsql-feedback-btn-danger' : 'etlsql-feedback-btn-primary'}`; accept.textContent = options.confirmLabel || 'Continue';
             actions.append(cancel, accept); dialog.append(header, body, actions); backdrop.appendChild(dialog); doc.body.appendChild(backdrop);
-            const finish = value => { backdrop.remove(); previousFocus?.focus?.(); emit(promptOptions ? 'prompt' : 'confirmation', { accepted: value !== false && value !== null, action: options.auditAction || null }); resolve(value); };
+            const finish = value => { backdrop.remove(); /** @type {HTMLElement} */ (previousFocus)?.focus?.(); emit(promptOptions ? 'prompt' : 'confirmation', { accepted: value !== false && value !== null, action: options.auditAction || null }); resolve(value); };
             cancel.addEventListener('click', () => finish(promptOptions ? null : false));
             accept.addEventListener('click', () => {
                 if (!promptOptions) { finish(true); return; }
@@ -121,10 +121,10 @@
             backdrop.addEventListener('keydown', event => {
                 if (event.key === 'Escape') { event.preventDefault(); finish(promptOptions ? null : false); return; }
                 if (event.key !== 'Tab') return;
-                const focusable = [...dialog.querySelectorAll('button,input,textarea')].filter(element => !element.disabled);
+                const focusable = [...dialog.querySelectorAll('button,input,textarea')].filter(element => !/** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (element).disabled);
                 const first = focusable[0], last = focusable[focusable.length - 1];
-                if (event.shiftKey && doc.activeElement === first) { event.preventDefault(); last.focus(); }
-                else if (!event.shiftKey && doc.activeElement === last) { event.preventDefault(); first.focus(); }
+                if (event.shiftKey && doc.activeElement === first) { event.preventDefault(); /** @type {HTMLElement} */ (last).focus(); }
+                else if (!event.shiftKey && doc.activeElement === last) { event.preventDefault(); /** @type {HTMLElement} */ (first).focus(); }
             });
             global.setTimeout(() => (input || (options.danger ? cancel : accept)).focus(), 0);
         });

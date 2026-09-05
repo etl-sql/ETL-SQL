@@ -10,6 +10,16 @@ CREATE VISUAL VisualName AS COMBO (
     ...
   ),
   OPTIONS (
+    [BAR_MIN_HEIGHT = n],
+    [SYNC_AXES = ON|OFF],
+    [Y_MARK = BAR|LINE|AREA],
+    [Y2_MARK = BAR|LINE|AREA],
+    [SYMBOL_SIZE = n],
+    [ANIMATION = ON|OFF],
+    [ANIMATION_DURATION = n],
+    [ANIMATION_EASING = LINEAR|EASE_IN|EASE_OUT|ELASTIC|BOUNCE],
+    [UPDATE_ANIMATION = ON|OFF],
+    [HOVER_FOCUS = NONE|SELF|SERIES],
     [LINE_WIDTH = n],
     [GRID_LINES = ON|OFF],
     [GRID_LINE_COLOR = '#rrggbb'],
@@ -29,7 +39,18 @@ CREATE VISUAL VisualName AS COMBO (
       [LABEL_BACKGROUND = '#rrggbb'],
       [LABEL_BORDER = 'width style #rrggbb']
     )],
-    [X_AXIS (...)], [Y_AXIS (...)], [Y2_AXIS (...)]
+    [NULL_HANDLING = CONNECT|GAP|ZERO],
+    [TOOLTIP_MODE = ITEM|SHARED],
+    [TOOLTIP_POSITION = AUTO|TOP|BOTTOM|LEFT|RIGHT|CURSOR],
+    [CROSSHAIR = ON|OFF],
+    [CROSSHAIR_AXIS = X|Y|BOTH],
+    [CROSSHAIR_COLOR = '#rrggbb'],
+    [CROSSHAIR_DASH = 'dash_array'],
+    [LINK_TOOLTIP = 'groupName'],
+    [SEGMENT_STYLE (
+      WHEN condition THEN LINE_DASH = DASHED|DOTTED|SOLID [, COLOR = '#rrggbb']
+    )],
+    [X_AXIS (TIME_UNIT = AUTO|DAY|WEEK|MONTH|QUARTER|YEAR, TICK_FORMAT = 'format', ...)], [Y_AXIS (...)], [Y2_AXIS (...)]
   ),
   [OVERLAYS (
     REFERENCE_LINE (VALUE = n [, LABEL = 'text'] [, STYLE = SOLID|DASHED|DOTTED] [, COLOR = '#rrggbb']),
@@ -41,6 +62,10 @@ CREATE VISUAL VisualName AS COMBO (
       [COLOR = '#rrggbb',]
       [LABEL = 'text']
     )],
+    ...
+  )],
+  [ANNOTATIONS (
+    POINT (SERIES = 'seriesName', TYPE = MAX|MIN|COORD(x, y), LABEL = 'text' [, SYMBOL = 'pin|arrow|circle'] [, COLOR = '#rrggbb']),
     ...
   )]
 );
@@ -55,6 +80,16 @@ CREATE VISUAL VisualName AS COMBO (
 
 ## Options
 
+- **BAR_MIN_HEIGHT = n** - Minimum bar height in pixels so very small non-zero bar values remain visible and hoverable (default 0).
+- **SYNC_AXES = ON|OFF** - Synchronizes primary and secondary Y axis domains (`Y` and `Y2`) to share identical min/max scales and matching grid intervals (default OFF).
+- **Y_MARK = BAR|LINE|AREA** - Mark type rendered for the primary `Y` axis series (default BAR).
+- **Y2_MARK = BAR|LINE|AREA** - Mark type rendered for the secondary `Y2` axis series (default LINE).
+- **SYMBOL_SIZE = n** - Size / radius of symbols on line or area series in pixels (default 4).
+- **ANIMATION = ON|OFF** - Controls entry animation when the chart first mounts (default OFF for server/PDF, ON for interactive dashboards).
+- **ANIMATION_DURATION = n** - Entry animation duration in milliseconds (default 600).
+- **ANIMATION_EASING = LINEAR|EASE_IN|EASE_OUT|ELASTIC|BOUNCE** - Animation easing curve (default EASE_OUT).
+- **UPDATE_ANIMATION = ON|OFF** - Controls transition animations when data updates (default OFF).
+- **HOVER_FOCUS = NONE|SELF|SERIES** - Dimming and emphasis mode on pointer hover (`NONE`, `SELF` to dim other marks, or `SERIES` to highlight the hovered series across all categories). Default is `NONE`.
 - **STACKED = ON|OFF** - stack the bars (default OFF)
 - **SMOOTH = ON|OFF** - smooth the line (default OFF)
 - **LINE_WIDTH = n** - set each line series width from `0.1` through `10` pixels (default `2`)
@@ -76,9 +111,21 @@ CREATE VISUAL VisualName AS COMBO (
   - **COLOR = '#rrggbb'** — label text fill color.
   - **LABEL_BACKGROUND = '#rrggbb'** — padded background rectangle drawn behind the label text.
   - **LABEL_BORDER = 'width style #rrggbb'** — border around the data label background (e.g., `'1px solid #334155'`; style is `solid`, `dashed`, or `dotted`).
-- **X_AXIS (...) / Y_AXIS (...) / Y2_AXIS (...)** - each accepts `LABEL`, `MIN`, `MAX`, `INCLUDE_ZERO`, `REVERSE`, `MAJOR_TICK_COUNT`, `TICK_INTERVAL`, `MINOR_TICKS`, `LABEL_ROTATION`, `LABEL_SKIP`, and `AXIS_LINE`. Rotation accepts `AUTO`, `0`, `45`, or `90`; skip accepts `AUTO` or a non-negative integer.
+- **X_AXIS (...) / Y_AXIS (...) / Y2_AXIS (...)** - each accepts `LABEL`, `MIN`, `MAX`, `INCLUDE_ZERO`, `REVERSE`, `MAJOR_TICK_COUNT`, `TICK_INTERVAL`, `MINOR_TICKS`, `LABEL_ROTATION`, `LABEL_SKIP`, `AXIS_LINE`, `TIME_UNIT = AUTO|DAY|WEEK|MONTH|QUARTER|YEAR`, and `TICK_FORMAT = 'format'`. Rotation accepts `AUTO`, `0`, `45`, or `90`; skip accepts `AUTO` or a non-negative integer.
+- **ZOOM_SLIDER = ON|OFF** - show interactive axis zoom slider controls (default OFF)
 - **LEGEND = ON|OFF** - shows or hides the series legend
+- **NULL_HANDLING = CONNECT|GAP|ZERO** - missing data policy for the line series: `CONNECT` connects through null points, `GAP` splits into disconnected segments (default), and `ZERO` plots nulls as 0.
+- **TOOLTIP_MODE = ITEM|SHARED** - tooltip card mode: `ITEM` inspects the single hovered data point; `SHARED` presents values across all series for that X coordinate.
+- **TOOLTIP_POSITION = AUTO|TOP|BOTTOM|LEFT|RIGHT|CURSOR** - placement of the tooltip card relative to the target or cursor.
+- **CROSSHAIR = ON|OFF** - displays cursor-following guideline axes across the plot area (default OFF).
+- **CROSSHAIR_AXIS = X|Y|BOTH** - orientation of active crosshair guides (default BOTH).
+- **CROSSHAIR_COLOR = '#rrggbb'** - line color for crosshair guides (default '#6b7280').
+- **CROSSHAIR_DASH = 'dash_array'** - dash pattern for crosshair lines (e.g. '3,3').
+- **LINK_TOOLTIP = 'groupName'** - synchronizes tooltips and crosshairs across all charts with matching group names.
+- **SEGMENT_STYLE (WHEN condition THEN LINE_DASH = DASHED|DOTTED|SOLID [, COLOR = '#rrggbb'])** - conditional per-segment line styling applied to connecting segments between consecutive data points of line series in the combo chart. Overrides line dash pattern and stroke color for segments matching the boolean predicate.
 - **OVERLAYS (...)** - Adds `REFERENCE_LINE`, shaded `REFERENCE_BAND(LOW = n, HIGH = n, ...)`, and forecast overlays on the primary Y axis, never Y2. Reference bounds and forecast values participate in primary Y domain resolution.
+- **ANNOTATIONS (...)** - Adds point annotations (`POINT (SERIES = '...', TYPE = MAX|MIN|COORD(x, y), LABEL = '...', SYMBOL = 'pin|arrow|circle')`) pointing to series extrema or specific plot coordinates with customizable marker shapes.
+- **FORMATTING (...)** - conditional mark coloring based on predicate conditions (e.g. `FORMATTING (WHEN Y >= 1000 THEN '#10b981')`).
 
 ## Examples
 

@@ -35,13 +35,38 @@ CREATE VISUAL RegressionOverlays AS SCATTER (
     )
 );
 
+-- 4. Analytical Overlays (Running Total & Percent of Total)
+CREATE VISUAL AnalyticalOverlays AS LINE (
+    SOURCE = #data,
+    TITLE = 'Running Total & Percent of Total Overlays',
+    MAPPINGS (X = X, Y = Y),
+    OVERLAYS (
+        RUNNING_TOTAL(Y) AS SOLID WITH (COLOR = '#059669', LABEL = 'Cumulative Growth'),
+        PERCENT_OF_TOTAL(Y) AS DASHED WITH (COLOR = '#d97706', LABEL = '% of Total')
+    )
+);
+
+-- 5. Reference Line & Reference Band Overlays
+CREATE VISUAL ReferenceOverlays AS LINE (
+    SOURCE = #data,
+    TITLE = 'Reference Line & Shaded Reference Band',
+    MAPPINGS (X = X, Y = Y),
+    OVERLAYS (
+        REFERENCE_LINE (VALUE = 30, LABEL = 'Target Threshold', STYLE = DASHED, COLOR = '#dc2626'),
+        REFERENCE_BAND (LOW = 10, HIGH = 25, COLOR = '#e0e7ff', LABEL = 'Normal Operating Range')
+    )
+);
+
 -- Page Layout
 CREATE PAGE OverlaySink AS DASHBOARD (
-    STRUCTURE = 'A / B',
+    STRUCTURE = 'A B / C D',
     MAP (
         'A' = BasicOverlays,
-        'B' = RegressionOverlays
+        'B' = RegressionOverlays,
+        'C' = AnalyticalOverlays,
+        'D' = ReferenceOverlays
     )
 );
 
 CREATE NAVIGATION MainNav AS TAB (DEFAULT = OverlaySink, PAGES (OverlaySink));
+

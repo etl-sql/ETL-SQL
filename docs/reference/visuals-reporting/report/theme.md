@@ -16,6 +16,9 @@ Apply the theme just like any built-in theme:
 
 ```sql
 CREATE VISUAL RevenueChart AS BAR (
+
+```sql
+CREATE VISUAL RevenueChart AS BAR (
   SOURCE   = (SELECT Month, Revenue FROM #data),
   MAPPINGS (X = Month, Y = Revenue),
   STYLE    (THEME = corporate)
@@ -29,10 +32,25 @@ CREATE VISUAL RevenueChart AS BAR (
 | `BACKGROUND` | Chart and card background fill. |
 | `TEXT_COLOR` | Default title, legend, axis-label, and narrative text color. |
 | `ACCENT_COLOR` | First or primary series color when `COLORS` is omitted. |
-| `COLORS` | Comma-separated palette used for ordered series. |
+| `COLORS` | Comma-separated palette or parenthesized list used for ordered series. |
+| `FONT_FAMILY` | Typography font stack (e.g. `'Inter, sans-serif'`) applied across text styles. |
 | `AXIS_COLOR` | Axis line, tick, and label color; inherits `TEXT_COLOR` when omitted. |
 | `GRID_COLOR` | Axis grid-line color. |
+| `[VISUAL] (...)` | Per-visual-type overrides (e.g., `[BAR] (COLORS = ('#e11d48', '#f59e0b'))`). |
 | Any other key | Retained as a lower-case extension token for report surfaces that explicitly support it. |
+
+### Per-visual theme overrides
+
+You can declare visual-specific color overrides within a theme:
+
+```sql
+CREATE THEME BrandTheme AS (
+  PRIMARY     = '#1e40af',
+  FONT_FAMILY = 'Inter, sans-serif',
+  [BAR]  (COLORS = ('#e11d48', '#f59e0b')),
+  [LINE] (COLORS = ('#2563eb', '#10b981'))
+);
+```
 
 ### DROP THEME
 

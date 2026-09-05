@@ -54,13 +54,57 @@ CREATE VISUAL MultiBubble AS BUBBLE (
     )
 );
 
+-- 4. Size Range & Min/Max Bubble Size Controls
+CREATE VISUAL SizedBubble AS BUBBLE (
+    SOURCE = #bubbles,
+    TITLE = 'Custom Size Range (SIZE_RANGE = (6, 30)) & Gridlines',
+    MAPPINGS (
+        X      = GrowthRate,
+        Y      = MarginPct,
+        SIZE   = Revenue,
+        SERIES = Sector,
+        LABEL  = Segment
+    ),
+    OPTIONS (
+        SIZE_RANGE = (6, 30),
+        GRID_LINES = ON,
+        ZERO_LINE  = ON
+    )
+);
+
+-- 5. Logarithmic Bubble Chart with Bottom Legend
+CREATE VISUAL LogBubble AS BUBBLE (
+    SOURCE = #bubbles,
+    TITLE = 'Logarithmic Scales & Centered Legend',
+    MAPPINGS (
+        X      = GrowthRate,
+        Y      = MarginPct,
+        SIZE   = Revenue,
+        SERIES = Sector,
+        LABEL  = Segment
+    ),
+    OPTIONS (
+        MIN_BUBBLE_SIZE = 5,
+        MAX_BUBBLE_SIZE = 25,
+        X_AXIS (SCALE = LOG, LABEL = 'Growth Rate (Log)'),
+        Y_AXIS (SCALE = LOG, LABEL = 'Margin (Log)'),
+        LEGEND          = ON,
+        LEGEND_TITLE    = 'Sectors',
+        LEGEND_POSITION = BOTTOM,
+        GRID_LINES      = ON
+    )
+);
+
 -- Page Layout
 CREATE PAGE BubbleKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A / B',
+    STRUCTURE = 'A B / C D',
     MAP (
         'A' = BasicBubble,
-        'B' = MultiBubble
+        'B' = MultiBubble,
+        'C' = SizedBubble,
+        'D' = LogBubble
     )
 );
 
 CREATE NAVIGATION MainNav AS TAB (DEFAULT = BubbleKitchenSink, PAGES (BubbleKitchenSink));
+

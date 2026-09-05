@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { readPortalPage, readPortalPageModule } from './lib/portal-page.mjs';
 
 const root = new URL('../', import.meta.url);
-const index = await readFile(new URL('src/ETL-SQL.Portal/wwwroot/index.html', root), 'utf8');
+const index = readPortalPage('index');
 const api = await readFile(new URL('src/ETL-SQL.Portal/wwwroot/js/api.js', root), 'utf8');
 const css = await readFile(new URL('src/ETL-SQL.Portal/wwwroot/css/portal.css', root), 'utf8');
 
-const moduleSource = [...index.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].at(-1)?.[1] || '';
+const moduleSource = readPortalPageModule('index');
 assert.ok(moduleSource, 'Portal page module script was not found.');
 new Function(moduleSource.replace(/^import .*;$/gm, ''));
 

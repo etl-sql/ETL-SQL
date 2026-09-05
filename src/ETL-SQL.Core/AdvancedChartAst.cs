@@ -8,7 +8,7 @@ public enum AdvancedChartChannel
 {
     X, X2, XStart, XEnd, XOffset,
     Y, Y2, YStart, YEnd, YOffset,
-    Low, Q1, Median, Q3, High, Open, Close,
+    Low, Q1, Median, Q3, High, Mean, Open, Close,
     ErrorLow, ErrorHigh,
     ConfidenceLow, ConfidenceHigh,
     Color, Size, Shape, Theta, Radius, Longitude, Latitude, Region, Route, Text, Tooltip, Detail
@@ -35,7 +35,7 @@ public static class AdvancedChartScaleInference
             AdvancedChartChannel.X or AdvancedChartChannel.X2 or AdvancedChartChannel.XStart or AdvancedChartChannel.XEnd or
             AdvancedChartChannel.Y or AdvancedChartChannel.Y2 or AdvancedChartChannel.YStart or AdvancedChartChannel.YEnd or
             AdvancedChartChannel.Low or AdvancedChartChannel.Q1 or AdvancedChartChannel.Median or AdvancedChartChannel.Q3 or
-            AdvancedChartChannel.High or AdvancedChartChannel.Open or AdvancedChartChannel.Close or
+            AdvancedChartChannel.High or AdvancedChartChannel.Mean or AdvancedChartChannel.Open or AdvancedChartChannel.Close or
             AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh or
             AdvancedChartChannel.ConfidenceLow or AdvancedChartChannel.ConfidenceHigh => dataKind switch
             {
@@ -114,6 +114,9 @@ public sealed record AdvancedChartLayer : AstNode
     public decimal TickThickness { get; init; } = .15m;
     public AdvancedChartTickOrientation TickOrientation { get; init; }
     public AdvancedChartPosition Position { get; init; } = new();
+    public string? NullHandling { get; init; }
+    public string? AreaBaseline { get; init; }
+    public string? HoverFocus { get; init; }
     public ImmutableArray<AdvancedChartEncoding> Encodings { get; init; } = [];
     public ImmutableArray<AdvancedChartStyle> Styles { get; init; } = [];
     public ImmutableArray<AdvancedChartCondition> Conditions { get; init; } = [];
@@ -134,6 +137,8 @@ public sealed record AdvancedChartScale : AstNode
     public string? LabelRotation { get; init; }
     public int? LabelSkip { get; init; }
     public decimal OuterPadding { get; init; }
+    public string? TickFormat { get; init; }
+    public string? TimeUnit { get; init; }
     public AdvancedChartSortDirection Order { get; init; }
     public ImmutableArray<Expression> ExplicitOrder { get; init; } = [];
     public AdvancedChartColorRange? ColorRange { get; init; }
@@ -173,6 +178,7 @@ public sealed record AdvancedChartDefinition : AstNode
     public ImmutableArray<AdvancedChartScale> Scales { get; init; } = [];
     public ImmutableArray<AdvancedChartEncoding> Encodings { get; init; } = [];
     public ImmutableArray<AdvancedChartLayer> Layers { get; init; } = [];
+    public ImmutableArray<VisualOverlay> Annotations { get; init; } = [];
     public AdvancedChartFacet? Facet { get; init; }
     public AdvancedChartResolution Resolution { get; init; } = new();
     public override string ToSql() => Formatting.AstSerializer.Format(this);

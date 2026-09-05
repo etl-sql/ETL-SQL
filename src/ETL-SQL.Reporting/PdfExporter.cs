@@ -527,6 +527,15 @@ namespace ETL_SQL.Reporting
                 var valuePara = section.AddParagraph(value);
                 valuePara.Format.Font.Size = Unit.FromPoint(22);
                 valuePara.Format.Font.Bold = true;
+                var valueColor = v.RowFontStyles?.FirstOrDefault()
+                    ?? v.RowStyles?.FirstOrDefault()
+                    ?? (v.Options.TryGetValue("value_color", out var vc) ? vc : null)
+                    ?? (v.Styles != null && v.Styles.TryGetValue("VALUE_COLOR", out var sc) ? sc : null);
+                var parsedColor = TryParseColor(valueColor);
+                if (parsedColor.HasValue)
+                {
+                    valuePara.Format.Font.Color = parsedColor.Value;
+                }
                 var micro = v.MicroCharts?.FirstOrDefault(item => item.Role == "card.sparkline");
                 if (micro is not null)
                 {
@@ -691,6 +700,24 @@ namespace ETL_SQL.Reporting
             using var image = surface.Snapshot();
             using var data = image.Encode(SKEncodedImageFormat.Png, 100);
             return data?.ToArray() ?? Array.Empty<byte>();
+        }
+
+        private static Color? TryParseColor(string? hex)
+        {
+            if (string.IsNullOrWhiteSpace(hex)) return null;
+            var clean = hex.Trim().Trim('\'', '"').TrimStart('#');
+            if (clean.Length == 6 && uint.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var rgb))
+            {
+                return Color.FromRgb((byte)((rgb >> 16) & 0xFF), (byte)((rgb >> 8) & 0xFF), (byte)(rgb & 0xFF));
+            }
+            if (clean.Length == 3 && uint.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out _))
+            {
+                byte r = (byte)(Convert.ToByte(clean[0].ToString(), 16) * 17);
+                byte g = (byte)(Convert.ToByte(clean[1].ToString(), 16) * 17);
+                byte b = (byte)(Convert.ToByte(clean[2].ToString(), 16) * 17);
+                return Color.FromRgb(r, g, b);
+            }
+            return null;
         }
     }
 }

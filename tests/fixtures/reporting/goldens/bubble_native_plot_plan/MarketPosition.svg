@@ -13,9 +13,9 @@
 <defs><clipPath id='MarketPosition-plot-clip'><rect x='60' y='40' width='520' height='250'/></clipPath></defs>
 <g clip-path='url(#MarketPosition-plot-clip)'>
 <g class='plot-points' data-layer='primary'>
-<circle class='plot-point' fill='#5470c6' data-row-index='0' cx='320' cy='278.636' r='10'><title>Market A</title></circle>
-<circle class='plot-point' fill='#5470c6' data-row-index='1' cx='556.364' cy='165' r='4'><title>Market B</title></circle>
-<circle class='plot-point' fill='#5470c6' data-row-index='2' cx='83.636' cy='51.364' r='22'><title>Market C</title></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='0' cx='320' cy='278.636' r='25'><title>Market A</title></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='1' cx='556.364' cy='165' r='5'><title>Market B</title></circle>
+<circle class='plot-point' fill='#5470c6' data-row-index='2' cx='83.636' cy='51.364' r='65'><title>Market C</title></circle>
 </g>
 </g>
 <line x1='60' y1='290' x2='60' y2='294' stroke='#bbb'/>

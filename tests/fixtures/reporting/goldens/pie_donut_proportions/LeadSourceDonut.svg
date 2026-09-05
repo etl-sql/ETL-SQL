@@ -3,10 +3,10 @@
 <desc id='LeadSourceDonut-desc'>Lead Source Breakdown (Donut): 4 rows, 1 ordered layers, 4 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
 <rect width='600' height='350' fill='white'/>
 <text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Lead Source Breakdown (Donut)</text>
-<path d='M 300 40 A 134 134 0 0 1 354.995 296.195 L 327.498 235.097 A 67 67 0 0 0 300 107 Z' fill='#ee6666' stroke='white' stroke-width='2' data-row-index='0'><title>Search: 4500</title></path>
-<path d='M 354.995 296.195 A 134 134 0 0 1 172.067 213.865 L 236.034 193.933 A 67 67 0 0 0 327.498 235.097 Z' fill='#5470c6' stroke='white' stroke-width='2' data-row-index='1'><title>Direct: 2800</title></path>
-<path d='M 172.067 213.865 A 134 134 0 0 1 211.142 73.7 L 255.571 123.85 A 67 67 0 0 0 236.034 193.933 Z' fill='#fac858' stroke='white' stroke-width='2' data-row-index='2'><title>Referral: 1900</title></path>
-<path d='M 211.142 73.7 A 134 134 0 0 1 300 40 L 300 107 A 67 67 0 0 0 255.571 123.85 Z' fill='#91cc75' stroke='white' stroke-width='2' data-row-index='3'><title>Organic Social: 1200</title></path>
+<path class='plot-arc-slice' d='M 300 40 A 134 134 0 0 1 354.995 296.195 L 327.498 235.097 A 67 67 0 0 0 300 107 Z' fill='#ee6666' stroke='white' stroke-width='2' data-row-index='0'><title>Search: 4500</title></path>
+<path class='plot-arc-slice' d='M 354.995 296.195 A 134 134 0 0 1 172.067 213.865 L 236.034 193.933 A 67 67 0 0 0 327.498 235.097 Z' fill='#5470c6' stroke='white' stroke-width='2' data-row-index='1'><title>Direct: 2800</title></path>
+<path class='plot-arc-slice' d='M 172.067 213.865 A 134 134 0 0 1 211.142 73.7 L 255.571 123.85 A 67 67 0 0 0 236.034 193.933 Z' fill='#fac858' stroke='white' stroke-width='2' data-row-index='2'><title>Referral: 1900</title></path>
+<path class='plot-arc-slice' d='M 211.142 73.7 A 134 134 0 0 1 300 40 L 300 107 A 67 67 0 0 0 255.571 123.85 Z' fill='#91cc75' stroke='white' stroke-width='2' data-row-index='3'><title>Organic Social: 1200</title></path>
 <rect x='60' y='330' width='9' height='9' fill='#5470c6'/>
 <text x='73' y='338' font-size='9' fill='#444'>Direct</text>
 <rect x='125' y='330' width='9' height='9' fill='#91cc75'/>

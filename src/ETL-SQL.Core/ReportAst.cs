@@ -112,7 +112,7 @@ public enum ReportObjectType
 public enum OverlayType
 {
     Goal, Average, MovingAvg, Linear, Exponential, Logarithmic, Polynomial, Power, Forecast,
-    ReferenceLine, ReferenceBand, RunningTotal, PercentOfTotal
+    ReferenceLine, ReferenceBand, RunningTotal, PercentOfTotal, AnnotationPoint
 }
 
 public enum OverlayLineStyle { Solid, Dashed, Dotted }
@@ -131,6 +131,12 @@ public record VisualOverlay : AstNode
     public double? BandLow { get; init; }
     public double? BandHigh { get; init; }
     public string? TableCalculationField { get; init; }
+    public string? SeriesName { get; init; }
+    public string? AnnotationPointType { get; init; }  // "MAX", "MIN", "COORD"
+    public double? CoordX { get; init; }
+    public double? CoordY { get; init; }
+    public string? CoordXString { get; init; }
+    public string? Symbol { get; init; }  // "pin", "arrow", "circle"
 }
 
 public enum VisualType
@@ -231,6 +237,8 @@ public record VisualMapping : AstNode
     public string? SparklineSource { get; init; }
     public string? SparklineXColumn { get; init; }
     public string? SparklineYColumn { get; init; }
+    public string? SparklineColor { get; init; }
+    public decimal? SparklineReferenceLine { get; init; }
     public bool ProgressBar { get; init; }
     public decimal? ProgressMinimum { get; init; }
     public decimal? ProgressMaximum { get; init; }
@@ -271,6 +279,7 @@ public abstract record VisualAction : AstNode
 public record SetParameterAction : VisualAction
 {
     public required string ParameterName { get; init; }
+    public string? SecondaryParameterName { get; init; }
     public required string ValueExpression { get; init; }
     public override string ToSql() => AstSerializer.Format(this);
 }
@@ -344,6 +353,36 @@ public record ApplyBookmarkAction : VisualAction
     public override string ToSql() => AstSerializer.Format(this);
 }
 
+public record ResetParametersAction : VisualAction
+{
+    public List<string> Parameters { get; init; } = new();
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+public record OpenUrlAction : VisualAction
+{
+    public required string Url { get; init; }
+    public string Target { get; init; } = "_blank";
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+public record ShowModalAction : VisualAction
+{
+    public required string ModalName { get; init; }
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+public record HideModalAction : VisualAction
+{
+    public required string ModalName { get; init; }
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+public record ContainerSlotDefinition(string Visual, string? Icon = null, string? Badge = null) : AstNode
+{
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
 // ── Bookmark ─────────────────────────────────────────────────────────────
 
 /// <summary>A single presentation-state property a bookmark may set. Constrained to the v1 contract.</summary>
@@ -396,6 +435,13 @@ public record FormattingRule : AstNode
     public required Expression Condition { get; init; }
     public required string Color { get; init; }
     public string? FontColor { get; init; }
+}
+
+public record SegmentStyleRule : AstNode
+{
+    public required Expression Condition { get; init; }
+    public string? LineDash { get; init; }
+    public string? Color { get; init; }
 }
 
 public record TypedSeries : AstNode
@@ -468,6 +514,7 @@ public record CreateVisualStatement : Statement
     public List<VisualInteraction> Interactions { get; init; } = new();
     public List<TypedSeries> TypedSeries { get; init; } = new();
     public List<FormattingRule> FormattingRules { get; init; } = new();
+    public List<SegmentStyleRule> SegmentStyles { get; init; } = new();
     public List<VisualOverlay> Overlays { get; init; } = new();
     public List<TableSummaryItem> Summaries { get; init; } = new();
     public TableSummaryOptions? SummaryOptions { get; init; }
@@ -482,6 +529,11 @@ public record CreateVisualStatement : Statement
     public CascadeDefinition? Cascade { get; init; }
     public AdvancedChartDefinition? AdvancedChart { get; init; }
     public HtmlTemplateDefinition? HtmlTemplate { get; init; }
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+public record MobileLayoutDefinition(string Structure, Dictionary<string, string> SlotMap, string? Breakpoint = "768px") : AstNode
+{
     public override string ToSql() => AstSerializer.Format(this);
 }
 
@@ -504,10 +556,15 @@ public record CreatePageStatement : Statement
     public TitleDefinition? SubtitleDefinition { get; init; }
     public TooltipDefinition? Tooltip { get; init; }
     public string? Visibility { get; init; }
+    public Expression? VisibleExpression { get; init; }
     /// <summary>Auto-refresh interval in seconds (0 = disabled).</summary>
     public int RefreshIntervalSeconds { get; init; }
     public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
     public PageLayoutDefinition? PrintLayout { get; init; }
+    public MobileLayoutDefinition? MobileLayout { get; init; }
+    public List<VisualAction> Actions { get; init; } = new();
+    public Dictionary<string, string> Options { get; init; } = new();
+    public override string ToSql() => AstSerializer.Format(this);
 }
 
 public record PageLayoutDefinition
@@ -567,12 +624,35 @@ public record CreateContainerStatement : Statement
     public string? Visibility { get; init; }
     public string? Icon { get; init; }
     public bool IsPinnable { get; init; } = true;
+    public Dictionary<string, string> Options { get; init; } = new();
+    public Dictionary<string, ContainerSlotDefinition> SlotDefinitions { get; init; } = new();
     public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
 
 }
 
 public enum NavigationType { Tab, Button, Link }
 public enum NavigationOrientation { Horizontal, Vertical }
+
+public record NavigationItemDefinition(
+    string PageName,
+    string? Label = null,
+    string? Icon = null,
+    string? Badge = null,
+    string? ExternalUrl = null,
+    string? Target = null,
+    bool IsExternalLink = false
+) : AstNode
+{
+    public override string ToSql() => AstSerializer.Format(this);
+}
+
+public record NavigationGroupDefinition(
+    string Title,
+    List<NavigationItemDefinition> Items
+) : AstNode
+{
+    public override string ToSql() => AstSerializer.Format(this);
+}
 
 public record CreateNavigationStatement : Statement
 {
@@ -581,7 +661,14 @@ public record CreateNavigationStatement : Statement
     public NavigationOrientation Orientation { get; init; }
     public string? DefaultPage { get; init; }
     public List<string> Pages { get; init; } = new();
+    public List<NavigationItemDefinition> Items { get; init; } = new();
+    public List<NavigationGroupDefinition> Groups { get; init; } = new();
+    public bool HideInvisible { get; init; }
+    public Dictionary<string, string> Options { get; init; } = new();
+    public Dictionary<string, string> Styles { get; init; } = new();
+    public Dictionary<string, string> ActiveStyles { get; init; } = new();
     public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
+    public override string ToSql() => AstSerializer.Format(this);
 }
 
 public record CreateDatasetStatement : Statement
@@ -715,6 +802,7 @@ public record CreateThemeStatement : Statement
 {
     public required string Name { get; init; }
     public Dictionary<string, string> Properties { get; init; } = new();
+    public Dictionary<string, Dictionary<string, string>> VisualOverrides { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
     public override string ToSql() => AstSerializer.Format(this);
 }

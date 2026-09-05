@@ -5,16 +5,16 @@ SET REPORT TITLE = 'Kitchen Sink: SCATTER Visual';
 SET REPORT DESCRIPTION = 'Demonstration of SCATTER plot capabilities, including regression fits and multiple series.';
 
 -- 1. Mock Data Generation
-SELECT 10 AS Score, 20 AS Rank, 'Group A' AS Grp INTO #stats
-UNION ALL SELECT 15, 25, 'Group A'
-UNION ALL SELECT 20, 30, 'Group A'
-UNION ALL SELECT 25, 35, 'Group A'
-UNION ALL SELECT 30, 45, 'Group A'
-UNION ALL SELECT 12, 18, 'Group B'
-UNION ALL SELECT 18, 22, 'Group B'
-UNION ALL SELECT 22, 28, 'Group B'
-UNION ALL SELECT 28, 32, 'Group B'
-UNION ALL SELECT 35, 40, 'Group B';
+SELECT 10 AS Score, 20 AS Rank, 17 AS ErrLow, 23 AS ErrHigh, 'Group A' AS Grp INTO #stats
+UNION ALL SELECT 15, 25, 22, 28, 'Group A'
+UNION ALL SELECT 20, 30, 27, 33, 'Group A'
+UNION ALL SELECT 25, 35, 31, 39, 'Group A'
+UNION ALL SELECT 30, 45, 40, 50, 'Group A'
+UNION ALL SELECT 12, 18, 15, 21, 'Group B'
+UNION ALL SELECT 18, 22, 19, 25, 'Group B'
+UNION ALL SELECT 22, 28, 24, 32, 'Group B'
+UNION ALL SELECT 28, 32, 29, 35, 'Group B'
+UNION ALL SELECT 35, 40, 36, 44, 'Group B';
 
 -- 2. Basic Scatter Plot
 CREATE VISUAL BasicScatter AS SCATTER (
@@ -23,17 +23,57 @@ CREATE VISUAL BasicScatter AS SCATTER (
     MAPPINGS (X = Score, Y = Rank)
 );
 
--- 3. Multi-Series Scatter
+-- 3. Multi-Series Scatter with Symbols & Stroke
 CREATE VISUAL MultiScatter AS SCATTER (
     SOURCE = #stats,
-    TITLE = 'Multi-Series Scatter',
-    MAPPINGS (X = Score, Y = Rank, SERIES = Grp)
+    TITLE = 'Multi-Series Scatter (Diamond/Square & Outline)',
+    MAPPINGS (X = Score, Y = Rank, SERIES = Grp),
+    OPTIONS (
+        SYMBOL_SHAPE        = DIAMOND,
+        SYMBOL_STROKE_COLOR = '#1e293b',
+        SYMBOL_STROKE_WIDTH = 1.5,
+        LEGEND              = ON,
+        LEGEND_TITLE        = 'Cohort',
+        LEGEND_POSITION     = RIGHT,
+        GRID_LINES          = ON,
+        ZERO_LINE           = ON
+    )
 );
 
--- 4. Scatter with Regression Overlays
+-- 4. Jitter Scatter
+CREATE VISUAL JitterScatter AS SCATTER (
+    SOURCE = #stats,
+    TITLE = 'Jitter Enabled (JITTER_WIDTH & HEIGHT)',
+    MAPPINGS (X = Score, Y = Rank, SERIES = Grp),
+    OPTIONS (
+        JITTER        = ON,
+        JITTER_WIDTH  = 0.5,
+        JITTER_HEIGHT = 0.5,
+        SYMBOL_SHAPE  = CIRCLE
+    )
+);
+
+-- 5. Error Bars Scatter
+CREATE VISUAL ErrorBarScatter AS SCATTER (
+    SOURCE = #stats,
+    TITLE = 'Error Bars (ERROR_LOW & ERROR_HIGH)',
+    MAPPINGS (
+        X          = Score,
+        Y          = Rank,
+        ERROR_LOW  = ErrLow,
+        ERROR_HIGH = ErrHigh,
+        SERIES     = Grp
+    ),
+    OPTIONS (
+        ERROR_BAR_STYLE = 'CAP',
+        GRID_LINES      = ON
+    )
+);
+
+-- 6. Scatter with Regression & Exponential Overlays
 CREATE VISUAL RegressionScatter AS SCATTER (
     SOURCE = (SELECT Score, Rank FROM #stats WHERE Grp = 'Group A'),
-    TITLE = 'Scatter with Regression Fits',
+    TITLE = 'Scatter with Linear & Polynomial Overlays',
     MAPPINGS (X = Score, Y = Rank),
     OVERLAYS (
         LINEAR AS DASHED WITH (COLOR = 'Blue', LABEL = 'Linear Fit'),
@@ -41,11 +81,18 @@ CREATE VISUAL RegressionScatter AS SCATTER (
     )
 );
 
--- 5. Scatter with Goal/Average
-CREATE VISUAL ThresholdScatter AS SCATTER (
+-- 7. Scatter with Log Scale & Overlays
+CREATE VISUAL LogScaleScatter AS SCATTER (
     SOURCE = #stats,
-    TITLE = 'Scatter with Thresholds',
+    TITLE = 'Logarithmic Scale (Y_AXIS SCALE=LOG) & Thresholds',
     MAPPINGS (X = Score, Y = Rank),
+    OPTIONS (
+        Y_AXIS (
+            SCALE = LOG,
+            LABEL = 'Rank (Log Scale)'
+        ),
+        GRID_LINES = ON
+    ),
     OVERLAYS (
         GOAL(30) AS DASHED WITH (COLOR = 'Green', LABEL = 'Rank Threshold'),
         AVERAGE AS DOTTED WITH (COLOR = 'Orange', LABEL = 'Mean Rank')
@@ -54,13 +101,16 @@ CREATE VISUAL ThresholdScatter AS SCATTER (
 
 -- Page Layout
 CREATE PAGE ScatterKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C D',
+    STRUCTURE = 'A B / C D / E F',
     MAP (
         'A' = BasicScatter,
         'B' = MultiScatter,
-        'C' = RegressionScatter,
-        'D' = ThresholdScatter
+        'C' = JitterScatter,
+        'D' = ErrorBarScatter,
+        'E' = RegressionScatter,
+        'F' = LogScaleScatter
     )
 );
 
 CREATE NAVIGATION MainNav AS TAB (DEFAULT = ScatterKitchenSink, PAGES (ScatterKitchenSink));
+

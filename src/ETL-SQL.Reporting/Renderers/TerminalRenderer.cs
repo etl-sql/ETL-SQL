@@ -679,10 +679,16 @@ namespace ETL_SQL.Reporting.Renderers
             var value = string.IsNullOrEmpty(raw) ? "N/A" : FormatNumericCell(raw);
             var label = GetVisualTitle(visual);
 
+            var valueColor = visual.RowFontStyles?.FirstOrDefault()
+                ?? visual.RowStyles?.FirstOrDefault()
+                ?? (visual.Options.TryGetValue("value_color", out var vc) ? vc : null)
+                ?? (visual.Styles != null && visual.Styles.TryGetValue("VALUE_COLOR", out var sc) ? sc : null);
+            var colorTag = !string.IsNullOrWhiteSpace(valueColor) ? valueColor.Trim().Trim('\'', '"') : "yellow";
+
             var micro = visual.MicroCharts?.FirstOrDefault(item => item.Role == "card.sparkline");
             var content = micro is null
-                ? $"[bold yellow]{Markup.Escape(value)}[/]"
-                : $"[bold yellow]{Markup.Escape(value)}[/]\n[grey]{Markup.Escape(micro.PlainText)}[/]";
+                ? $"[bold {colorTag}]{Markup.Escape(value)}[/]"
+                : $"[bold {colorTag}]{Markup.Escape(value)}[/]\n[grey]{Markup.Escape(micro.PlainText)}[/]";
             var panel = new Panel(Align.Center(new Markup(content), VerticalAlignment.Middle))
             {
                 Header = new PanelHeader(Markup.Escape(label)),
@@ -1203,6 +1209,10 @@ namespace ETL_SQL.Reporting.Renderers
         private static IRenderable RenderCheckbox(VisualManifest visual, ReportManifest? manifest)
         {
             var title = GetVisualTitle(visual);
+            var labelText = visual.Options.GetValueOrDefault("LABEL") ?? title;
+            var trueVal = visual.Options.GetValueOrDefault("TRUE_VALUE") ?? "1";
+            var falseVal = visual.Options.GetValueOrDefault("FALSE_VALUE") ?? "0";
+            var isToggle = string.Equals(visual.Options.GetValueOrDefault("DISPLAY_STYLE"), "TOGGLE", StringComparison.OrdinalIgnoreCase);
             bool isChecked = false;
 
             var pName = visual.Actions.FirstOrDefault(a => a.Type == "SET_PARAMETER")?.ParameterName ?? "none";
@@ -1211,12 +1221,36 @@ namespace ETL_SQL.Reporting.Renderers
                 if (manifest.Parameters.TryGetValue(pName, out var pVal) ||
                     manifest.Parameters.TryGetValue(pName.StartsWith("@") ? pName.Substring(1) : "@" + pName, out pVal))
                 {
-                    isChecked = pVal.Trim().Equals("TRUE", StringComparison.OrdinalIgnoreCase) || pVal.Trim().Equals("1");
+                    var trimmed = pVal.Trim();
+                    isChecked = string.Equals(trimmed, trueVal, StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(trimmed, "TRUE", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(trimmed, "1", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(trimmed, "ON", StringComparison.OrdinalIgnoreCase);
+                }
+                else
+                {
+                    var def = visual.DefaultValue ?? visual.Options.GetValueOrDefault("DEFAULT") ?? "";
+                    var trimmed = def.Trim();
+                    isChecked = string.Equals(trimmed, trueVal, StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(trimmed, "TRUE", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(trimmed, "1", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(trimmed, "ON", StringComparison.OrdinalIgnoreCase);
                 }
             }
+            else
+            {
+                var def = visual.DefaultValue ?? visual.Options.GetValueOrDefault("DEFAULT") ?? "";
+                var trimmed = def.Trim();
+                isChecked = string.Equals(trimmed, trueVal, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(trimmed, "TRUE", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(trimmed, "1", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(trimmed, "ON", StringComparison.OrdinalIgnoreCase);
+            }
 
-            var checkMarkup = isChecked ? "[bold green][[X]][/]" : "[grey][[ ]][/]";
-            var content = new Markup($"{checkMarkup} [white]{Markup.Escape(title)}[/]");
+            var checkMarkup = isToggle
+                ? (isChecked ? "[bold cyan][[TOGGLE: ON]][/]" : "[grey][[TOGGLE: OFF]][/]")
+                : (isChecked ? "[bold green][[X]][/]" : "[grey][[ ]][/]");
+            var content = new Markup($"{checkMarkup} [white]{Markup.Escape(labelText)}[/]");
 
             return new Panel(content)
             {
@@ -1229,7 +1263,8 @@ namespace ETL_SQL.Reporting.Renderers
         private static IRenderable RenderTextbox(VisualManifest visual, ReportManifest? manifest)
         {
             var title = GetVisualTitle(visual);
-            string currentVal = visual.DefaultValue ?? "";
+            var labelText = visual.Options.GetValueOrDefault("LABEL") ?? title;
+            string currentVal = visual.DefaultValue ?? visual.Options.GetValueOrDefault("DEFAULT") ?? "";
 
             var pName = visual.Actions.FirstOrDefault(a => a.Type == "SET_PARAMETER")?.ParameterName ?? "none";
             if (manifest != null && !string.IsNullOrEmpty(pName))
@@ -1241,7 +1276,13 @@ namespace ETL_SQL.Reporting.Renderers
                 }
             }
 
-            var content = new Markup($"[blue]{Markup.Escape(title)}:[/] [grey][[[/] {Markup.Escape(currentVal.PadRight(20))} [grey]]][/]");
+            var isMultiline = string.Equals(visual.Options.GetValueOrDefault("MULTILINE"), "ON", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(visual.Options.GetValueOrDefault("MULTILINE"), "TRUE", StringComparison.OrdinalIgnoreCase) ||
+                              visual.Options.ContainsKey("ROWS");
+            var rows = visual.Options.GetValueOrDefault("ROWS") ?? "3";
+            var typeTag = isMultiline ? $" [grey](Textarea, Rows: {rows})[/]" : "";
+
+            var content = new Markup($"[blue]{Markup.Escape(labelText)}:[/] [grey][[[/] {Markup.Escape(currentVal.PadRight(20))} [grey]]][/]{typeTag}");
             return new Panel(content)
             {
                 Border = BoxBorder.Rounded,
@@ -1253,7 +1294,8 @@ namespace ETL_SQL.Reporting.Renderers
         private static IRenderable RenderNumberbox(VisualManifest visual, ReportManifest? manifest)
         {
             var title = GetVisualTitle(visual);
-            string currentVal = visual.DefaultValue ?? "0";
+            var labelText = visual.Options.GetValueOrDefault("LABEL") ?? title;
+            string currentVal = visual.DefaultValue ?? visual.Options.GetValueOrDefault("DEFAULT") ?? "0";
 
             var pName = visual.Actions.FirstOrDefault(a => a.Type == "SET_PARAMETER")?.ParameterName ?? "none";
             if (manifest != null && !string.IsNullOrEmpty(pName))
@@ -1265,10 +1307,14 @@ namespace ETL_SQL.Reporting.Renderers
                 }
             }
 
+            var prefix = visual.Options.GetValueOrDefault("PREFIX") ?? "";
+            var suffix = visual.Options.GetValueOrDefault("SUFFIX") ?? "";
+            var step = visual.Options.GetValueOrDefault("STEP");
+            var stepTag = step != null ? $", Step: {step}" : "";
             double min = visual.Min ?? 0;
             double max = visual.Max ?? 100;
 
-            var content = new Markup($"[blue]{Markup.Escape(title)}:[/] [grey][[[/] {currentVal.PadRight(10)} [grey]]][/] [grey](Min: {min}, Max: {max})[/]");
+            var content = new Markup($"[blue]{Markup.Escape(labelText)}:[/] [grey][[[/] {Markup.Escape(prefix)}{currentVal.PadRight(10)}{Markup.Escape(suffix)} [grey]]][/] [grey](Min: {min}, Max: {max}{stepTag})[/]");
             return new Panel(content)
             {
                 Border = BoxBorder.Rounded,

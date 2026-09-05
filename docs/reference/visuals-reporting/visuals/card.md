@@ -10,44 +10,69 @@ CREATE VISUAL CardName AS CARD (
   MAPPINGS (
     VALUE = value_column,
     LABEL = label_column,
-    SPARKLINE = #trend (X = x_column, Y = y_column, TYPE = LINE)
+    DELTA = prior_column,
+    DELTA_LABEL = period_column,
+    SPARKLINE = #trend (X = x_column, Y = y_column, TYPE = LINE, COLOR = '#10B981', REFERENCE_LINE = 100)
+  ),
+  OPTIONS (
+    VALUE_COLOR = '#10B981'
+  ),
+  FORMATTING (
+    WHEN VALUE >= 1000 THEN '#10B981'
   )
 );
 ```
 
 ## Mappings
 
-- **VALUE** - primary metric column (required); displayed large
-- **LABEL** - caption column (optional); falls back to the metric column name
-- **GOAL** - target value column; drives status and optional progress display
-- **DELTA** - prior-period value column; drives trend/delta display
-- **SPARKLINE** - native `LINE`, `AREA`, or `BAR` trend from a named temp table; requires `X` and `Y`.
+- **VALUE** — primary metric column (required); displayed large
+- **LABEL** — caption column (optional); falls back to the metric column name
+- **GOAL** — target value column; drives status and optional progress display
+- **DELTA** — prior-period value column; drives trend/delta display
+- **DELTA_LABEL** — comparison period label column (optional); dynamic alternative to static OPTIONS (DELTA_LABEL = 'text')
+- **SPARKLINE** — native `LINE`, `AREA`, or `BAR` trend from a named temp table; requires `X` and `Y`, optional `COLOR = 'css-color'` and `REFERENCE_LINE = n`
 
 ## Options
-- **FORMAT = '.NET format string'** - e.g. 'N0', 'C2', 'P1'
-- **ABBREVIATE = ON|OFF** - shorten large numbers, e.g. 1250000 -> 1.25M
-- **PREFIX = 'text'** - prepend text to the displayed value
-- **SUFFIX = 'text'** - append text to the displayed value
-- **GOAL = numeric** - literal target when MAPPINGS(GOAL=...) is not used
-- **CLOSE_PCT = decimal** - close threshold, default 0.80
-- **MET_PCT = decimal** - met threshold, default 1.00
-- **SHOW_GOAL = ON|OFF** - show target value text
-- **SHOW_PERCENT_OF_GOAL = ON|OFF** - show percent-to-target text
-- **SHOW_PROGRESS = ON|OFF** - show a progress indicator
-- **PROGRESS_STYLE = BAR|RING** - progress style, default BAR
-- **COLOR_MET = CSS color** - status colour when goal is met
-- **COLOR_CLOSE = CSS color** - status colour when close to goal
-- **COLOR_MISSED = CSS color** - status colour when goal is missed
-- **ICON_SET = CHECKS|ARROWS|TRAFFIC** - preset status badge icon family
-- **ICON_MET = 'text'** - custom met icon
-- **ICON_CLOSE = 'text'** - custom close icon
-- **ICON_MISSED = 'text'** - custom missed icon
-- **LABEL_MET = 'text'** - status label override when met
-- **LABEL_CLOSE = 'text'** - status label override when close
-- **LABEL_MISSED = 'text'** - status label override when missed
-- **TREND_DIR = POSITIVE_UP|POSITIVE_DOWN** - favourable delta direction
-- **DELTA_FORMAT = '.NET format string'** - format for the delta display
-- **DELTA_LABEL = 'text'** - label shown next to the delta
+- **FORMAT = '.NET format string'** — e.g. 'N0', 'C2', 'P1'
+- **ABBREVIATE = ON|OFF** — shorten large numbers, e.g. 1250000 -> 1.25M
+- **VALUE_COLOR = 'css-color'** — fixed or default color for the primary metric value
+- **PREFIX = 'text'** — prepend text to the displayed value
+- **SUFFIX = 'text'** — append text to the displayed value
+- **GOAL = numeric** — literal target when MAPPINGS(GOAL=...) is not used
+- **CLOSE_PCT = decimal** — close threshold, default 0.80
+- **MET_PCT = decimal** — met threshold, default 1.00
+- **SHOW_GOAL = ON|OFF** — show target value text
+- **SHOW_PERCENT_OF_GOAL = ON|OFF** — show percent-to-target text
+- **SHOW_PROGRESS = ON|OFF** — show a progress indicator
+- **PROGRESS_STYLE = BAR|RING** — progress style, default BAR
+- **COLOR_MET = CSS color** — status colour when goal is met
+- **COLOR_CLOSE = CSS color** — status colour when close to goal
+- **COLOR_MISSED = CSS color** — status colour when goal is missed
+- **ICON_SET = CHECKS|ARROWS|TRAFFIC** — preset status badge icon family
+- **ICON_MET = 'text'** — custom met icon
+- **ICON_CLOSE = 'text'** — custom close icon
+- **ICON_MISSED = 'text'** — custom missed icon
+- **LABEL_MET = 'text'** — status label override when met
+- **LABEL_CLOSE = 'text'** — status label override when close
+- **LABEL_MISSED = 'text'** — status label override when missed
+- **TREND_DIR = POSITIVE_UP|POSITIVE_DOWN** — favourable delta direction
+- **DELTA_FORMAT = '.NET format string'** — format for the delta display
+- **DELTA_LABEL = 'text'** — label shown next to the delta (static form)
+
+## Conditional Formatting
+
+Use `FORMATTING (WHEN condition THEN 'css-color')` to apply threshold-driven colors to the primary `VALUE` metric:
+
+```sql
+CREATE VISUAL SalesKPI AS CARD (
+  SOURCE = #sales_summary,
+  MAPPINGS (VALUE = Revenue),
+  FORMATTING (
+    WHEN VALUE >= 1000000 THEN '#10B981',
+    WHEN VALUE < 1000000  THEN '#EF4444'
+  )
+);
+```
 
 ## Examples
 

@@ -821,6 +821,56 @@ reported.
         missing is that a fan-out means two different things on this map — `PARALLEL` runs all of
         them, `IF` runs one — and nothing distinguishes the two shapes. That, not a chain, is what
         lanes would fix, and it is why the item is worth doing rather than dropping.
+        **Superseded by the item below: a lane is a `BEGIN … END` block, so no lane-aware layout is
+        needed.** Do that first and revisit what, if anything, is left here.
+
+- [ ] **A `PARALLEL` thread can already be its own `BEGIN … END` block. Nothing is missing from the
+      language — the gap is the documentation and the canvas.** Read from the code, not yet run:
+
+      ```
+      PARALLEL BEGIN
+          BEGIN <thread 1> END;
+          BEGIN <thread 2> END;
+      END;
+      ```
+
+      - **Parser** — `StatementParser.cs:254`: a bare `BEGIN` at statement position that is not
+        `BEGIN TRY` or `BEGIN TRANSACTION` goes to `FlowParser.ParseBlock()` and yields a
+        `BlockStatement`. A `PARALLEL` body is itself parsed by `ParseBlock`, which loops
+        `ParseStatement`, so a nested block is legal there.
+      - **Engine** — `ParallelStatementHandler` forks per *top-level statement of the body*
+        (`stmt.Body.Statements.Select(... context.Fork() ...)`). A nested block is one statement, so
+        it is **one fork and one thread**, and every loop, `IF` and statement inside it runs
+        sequentially within that thread. `ConcurrencyLimit` also defaults to `Body.Statements.Count`,
+        which under grouping is the number of threads — the right number.
+      - **Projection** — `AppendParallel` hands each branch to `AppendStatement`, and a
+        `BlockStatement` becomes `AppendSequence(block.Statements, incoming: [BRANCH n])`: the
+        block's first statement takes the `BRANCH n` edge and the rest chain behind it. One block
+        already projects as one branch with its contents in order.
+
+      **So the three things to fix are:**
+
+      - [ ] **Confirm it with a test first.** The above is read from the source and has not been run:
+            one parse/execute case for `PARALLEL BEGIN BEGIN … END; BEGIN … END; END;` asserting two
+            forks, not four statements. If this fails, everything below is void and the language work
+            is real after all.
+      - [ ] **`docs/reference/control-flow/parallel.md` is incomplete.** It shows only flat statements
+            and says "All statements inside the block start at the same time" — true, but it never
+            shows that a statement may itself be a `BEGIN … END` group. A reader concludes the flat
+            form is the only form, and therefore that a thread cannot contain more than one
+            statement. Add the grouped form, and say plainly that one top-level statement is one
+            thread, so a group is how a thread gets more than one step.
+      - [ ] **`PipelineTaskAuthoringService` does not know about blocks.** `KindOf` has no
+            `BlockStatement` case, so a labelled `thread_1: BEGIN … END;` is not a task the canvas
+            can address — no card, not draggable, not a container. `ChildStatements` has no
+            `BlockStatement` case either, so its contents are not read as nested tasks. Both need one
+            case each, plus a palette entry for the block itself. This is what makes the canvas able
+            to author the form the language already accepts.
+
+      **What this buys the UI.** A swimlane is then just the bounds of a `BEGIN … END` block, and
+      whatever the author drops inside — a loop, an `IF`, a chain of steps — is inside that lane by
+      construction. No container membership on the projection node, no lane rows in
+      `_computeLayout`, no fighting `drawConnections`.
   - [x] Decide what happens to statements the canvas cannot author yet. **Decision: they stay, and
         they say what they are.** They keep their place, because the map is a true picture of the
         script and hiding them would make it a false one; they are drawn with a dashed border, they
@@ -852,6 +902,133 @@ can replace the old entry points.
 - [ ] Deprecate legacy entry points with migration guidance, then retire them in a later release after
   the deprecation window and rollback plan are verified.
 
+### Browser-side type safety — steps 1 to 3
+
+Step 4 (moving to `.ts` with a bundler) is deliberately not here: it is the v0.20.0 theme, see
+ROADMAP. These three are additive, do not touch the release, and can land beside feature work.
+
+**The measurement, taken 2026-09-04.** Untyped browser code: ~29,000 LOC in the canonical shared
+assets, ~16,500 in the Portal's own `wwwroot/js`, and ~5,500 more inside `<script type="module">`
+blocks in `orchestrator.html`, `index.html` and `admin.html` that no linter, checker or test can see.
+Against that, ~10,800 LOC is *already* TypeScript — the VS Code extension and its React UI, on TS 5.7,
+Vite 8, vitest and eslint. The toolchain exists; it is fenced into one corner.
+
+**The tell: we have been hand-writing a type checker in xUnit.** `StudioRouteContractTests` pulls
+route literals out of `studio.js` with a regex. `PipelinePaletteContractTests` pulls an array of chip
+ids out of `studio-pipeline-canvas.js` with a regex to compare against a C# enum. Every new contract
+needs another bespoke one.
+
+**Evidence it pays.** Running `tsc --allowJs --checkJs` over the sources unchanged — no migration, no
+build — took minutes and found, among the noise: a live `ReferenceError` (below), and a duplicate
+`getSelection` in `designer.js` where the second definition silently replaced a better one that
+handled multi-range selections, on the path `designer.js` uses to decide what SQL to run. The suite
+had not noticed because every test uses a single range.
+
+- [x] **Step 1 — `checkJs` as a gate. No file moves, no bundler.** Done, with one change of plan.
+      Root `tsconfig.json` with `checkJs`, toolchain pinned in `scripts/typecheck/`, and
+      `scripts/typecheck-browser.mjs` wired into `Test-PrePush.ps1` (step 3) and CI. Files stay
+      `.js` and are still served verbatim; the five-host sync and the `.gitattributes` LF pinning
+      are untouched. `sync-assets.js` now stamps `// @ts-nocheck` into each generated host copy so
+      the canonical file is the one that is checked.
+
+      **The estimate was wrong about the shape, not just the size.** 822 findings once step 3
+      brought the inline blocks into view, and 617 of them were DOM narrowing —
+      `getElementById(…).value`, `e.target.closest(…)` — not one JSDoc line on a parameter. So the
+      gate landed as a ratchet against `browser-typecheck-baseline.txt`: it fails on any finding
+      not in the baseline, and on any baseline entry that no longer reproduces.
+  - [x] **The baseline is empty. 822 -> 0.** Any finding at all is now a new one. Roughly 600 of
+        them were closed by `scripts/fix-dom-narrowing.mjs`, which inserts JSDoc casts and
+        parentheses only — verified by printing each file's AST with comments stripped and
+        confirming the before and after differ by nothing but parentheses. The rest were real
+        annotations: option bags that a `= {}` default had quietly narrowed to their own defaults,
+        the editor handle and the workbench options written out, `String()` where a number was
+        being coerced into a `setAttribute` or a `textContent`, `.getTime()` where two Dates were
+        being subtracted. The ratchet stays: it is what will absorb the next large import without
+        the gate having to be switched off to land it.
+- [x] **Step 2 — generate `.d.ts` from the C# DTOs and enums.** This is the bigger win, because most
+      of the defects that actually bite cross the C#↔JS boundary rather than living inside the JS:
+      route names, DTO field names, kind ids. `PipelineTaskDto`, `ScriptDagNodeDto`, the request
+      records, `PipelineTaskKind`, `PipelineEdgeCondition`. It catches the class of bug where a
+      field is threaded through two hosts and a mock by hand — `endLine` was added that way and
+      nothing would have caught a miss.
+
+      Done by reflection over the compiled types, not by parsing C#: `BrowserContractsGenerator` in
+      the Portal test project emits `types/etlsql-contracts.generated.d.ts` and
+      `BrowserContractsGeneratorTests` fails when it drifts;
+      `ETLSQL_UPDATE_BROWSER_CONTRACTS=1` regenerates it. `PipelineTaskDto.kind` and
+      `PipelineDependencyDto.condition` are declared as the enum unions rather than `string`, which
+      is what makes the JS side checkable: `studio-pipeline-canvas.js` now declares its palette as
+      `ReadonlyArray<PipelineTaskGroup>`, and a chip naming a kind no host can write fails `tsc` on
+      the line that wrote it.
+  - [x] The regex contract tests are **not** retired, and both were kept deliberately. The palette
+        test's other direction — a kind the host can write with no chip to create it — is not
+        something a type can state about an array. `StudioRouteContractTests` compares route
+        literals against reflected ASP.NET route attributes across five hosts, and a `.d.ts` of DTO
+        shapes says nothing about that. Retiring it needs a generated route table, which is its own
+        piece of work.
+- [x] **Step 3 — move the inline `<script type="module">` blocks into files.** Done: 5,437 lines
+      out of seven pages into `wwwroot/js/pages/<page>.js`, each page left with one
+      `<script type="module" src=…>`. Their rooted, cache-busted imports (`/js/api.js?v=0.18.0`)
+      became relative (`../api.js`), because `tsc` can resolve neither a rooted specifier nor a
+      query string — and `AssetFingerprinter` only stamps `.html`, so the `?v=` inside a `.js` file
+      was never refreshed and, per the note in `Program.cs`, never did anything anyway.
+
+      **What it found on the first run.** `showToast` — called 34 times on the orchestrator page and
+      defined nowhere, so every job enable/disable/kill/delete confirmation and every error handler
+      threw a ReferenceError. It is now a thin adapter over `ETLSQLFeedback.notify`.
+
+      Twelve checks in `scripts/` read a page's `.html` and asserted over the code inside it. They
+      go through `scripts/lib/portal-page.mjs` now, which returns the markup plus the page module.
+
+- [x] **`designer.js` called `renderCanvas()` from a scope that does not have it.** Fixed. The
+      workbench's theme toggle now redraws the flow DAG when it is open and re-posts the manifest to
+      the preview iframe with the new `dark` flag — the two surfaces that bake the theme in at
+      render time, and that were both silently left on the old palette.
+
+**Other live defects the gate found, and what happened to each.**
+
+- [x] `report-runtime.js` did not parse at all: `renderSlicer` was missing its closing brace, so the
+      function swallowed the rest of the file. Uncommitted work at the time; fixed in place.
+- [x] `renderInlineMarkdown`, called six times for card and chart titles and subtitles, existed only
+      as a function nested inside `simpleMarkdown`. Lifted to a shared one — a title wants inline
+      formatting, not `simpleMarkdown`'s block wrapping.
+- [x] `selectedValues` in `renderSlicer` was a typo for `selected`, so a single-select slicer threw
+      before pre-selecting the current value and lost the rest of its render with it.
+- [x] `fetchManifest()` did not exist, so a `RUN_SCRIPT` action that asked for a refresh threw after
+      the script had already run. It re-posts an empty parameter set now, as its neighbours do.
+- [x] `setParameter()` did not exist, so an ON_LOAD `SET_PARAMETER` page action never applied.
+- [x] `updateBodyTheme(manifest, …)` was called from inside `renderNavBar`, which has no `manifest`
+      in scope. The surrounding `try` caught it, so a page change silently kept the previous theme.
+- [x] `_TYPE_COLOR` in `designer.js` declared `connection` twice.
+- [x] **`designer.js` had a permanently dead branch.** `if (typeof editor !== 'undefined' && editor)`
+      guarded a global nothing assigns, so the step that collects `@variables` out of the editor text
+      never ran and the designer offered a shorter variable list than it claimed to. It calls
+      `currentScriptText()` now — the accessor the rest of `createDesigner` already uses.
+- [x] **`window.secretsApi` was never assigned.** `connections-admin.js` and `gateways-admin.js` both
+      read `window.secretsApi ? window.secretsApi.list() : fetch(…)`, so the fallback was the only
+      path that had ever run. Both import `secretsApi` from `api.js` and call it directly now.
+- [x] **The query workbench's `focus()` never focused anything.** It called `editor.focus?.()` and
+      the editor handle had no `focus`, so the optional call was a permanent no-op. The handle
+      exposes one now.
+- [x] **`window.fetch`'s auth patch broke on a `URL` argument.** `api.js` read `input.url`, which
+      only a `Request` has; a caller passing `new URL(…)` got `undefined` and the next line threw.
+- [x] **The orchestrator's metric chips stop pretending to be filters.** `showMetricJobs` (four
+      buttons) and `clearJobsFilter` (one) were called and defined nowhere, so every click threw.
+      They cannot be finished here: two of the four counts are the service's runtime metrics — how
+      many jobs are running or queued *right now* — while the table lists job *definitions*, which
+      carry no run state at all, and telling done-today from failed-today needs the per-job history
+      endpoint (which is why `failedToday` in `loadJobs` has always been zero). So the chips are
+      disabled with a title that says what they are and why they do not filter, rather than throwing.
+  - [ ] Give the job list a run-state field, or the service a filtered jobs endpoint, and the four
+        chips become filters. That is the piece of work this is waiting on.
+
+**The reframe worth keeping.** The question was whether we have outgrown JavaScript. On the evidence
+we have outgrown **one 9,000-line file**: `designer.js` is 474KB and holds `createDesigner`,
+`createScriptEditorWorkbench` and `renderDag` together, and both live bugs found above are scope
+confusion inside it. Splitting it would pay off with no TypeScript at all. TypeScript makes the split
+safe; it does not remove the need for it, and adopting TypeScript instead of splitting would leave
+the actual problem in place.
+
 ## 2. v0.19.0 Release Evidence Gates
 
 Target release: **v0.19.0**
@@ -872,7 +1049,65 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
   retain unfinished increments with accurate status, and ensure release notes describe only
   evidence-backed outcomes.
 
-## 3. Chart Property Gaps
+## 3. Browser and Portal Test Reliability
+
+Not a TypeScript problem — none of this lives in the browser sources. It is test-harness lifetime,
+assertion technique, and shared state, and bundling it into the typing work would leave it unfixed.
+Ordered by leverage. The practice for anything not fixed here is the existing one: stabilize
+minimally to ship, then record it in `Docs/Operations/vX.Y.Z-flaky-tests.md` for a dedicated pass.
+
+- [ ] **Nine `scripts/test-*.mjs` checks are red, and were red before the browser type-gate work.**
+      Verified against `HEAD` one assertion at a time on 2026-09-05, so none of them is a
+      regression from moving the pages' code into files — but a red check nobody runs is a check
+      that has stopped saying anything, and two of them are one line each.
+
+      | Check | Why it fails |
+      | :--- | :--- |
+      | `test-result-grid-ui.mjs`, `test-lineage-ui.mjs` | Copy `designer.js` to a temp directory and import it, without copying the `visual-preview.js` it imports. `ERR_MODULE_NOT_FOUND` before a single assertion runs. |
+      | `test-portal-studio.mjs` | Asserts `snapshotCache: new Map`, which is in no Studio source. |
+      | `test-orchestrator-run-overrides.mjs`, `test-orchestrator-checkpoint-resume.mjs` | Assert on a variable-name pattern and on the string `Only failed or cancelled runs`; neither is in the orchestrator page. |
+      | `test-data-quality-job-tracking.mjs` | Asserts `jobStatus: (jobId)` against `api.js`, which spells it differently. |
+      | `test-governance-production-boundary.mjs` | Asserts `index.html` does **not** carry `id="govNavOverview"`. It does. |
+      | `test-feedback-system.mjs` | Reports that `studio.js` references a native window dialog. |
+      | `test-service-capacity.mjs` | Needs a running Portal; environmental, not a code failure. |
+
+      None of these run in `Test-PrePush.ps1` or CI, which is how they got here. Fixing them and
+      putting the ones that do not need a live server into the pre-push gate is the actual remedy.
+
+- [ ] **Make `PortalBrowserFixture` say what is actually wrong. Highest leverage, cheapest fix.**
+      When `InitializeAsync` fails, all 231 tests in the lane report the same contentless message —
+      `"The server has not been started or no web application was configured"` — which names none of
+      the real conditions. Catch around the `Factory.CreateClient()` call and report the inner
+      exception, the port being bound, and any stray `chrome.exe` or test-host processes still
+      holding it. This turns a twenty-minute investigation into a five-second one.
+
+      **This also corrects a diagnosis we had recorded and were acting on.** The failing line is
+      `Factory.CreateClient().Dispose()`, which runs *before* Playwright installs or launches
+      anything — so a leftover `chrome.exe` cannot be what makes it fail. It is the ASP.NET host
+      failing to start, most likely a port still held by the previous run's test host. Killing chrome
+      appeared to fix it twice, which is exactly the coincidence that cements a wrong cause. Do not
+      trust "kill chrome" as the remedy until the fixture reports the real one.
+
+- [ ] **A latent flake class in the DAG assertions: zero-area SVG is "invisible".**
+      `Locator.WaitForAsync()` defaults to waiting for *visible*, and an SVG path that is a perfectly
+      straight horizontal or vertical line has a zero-area bounding box — Playwright treats that as
+      not visible. Every `[data-dag-source=…]` assertion is therefore layout-dependent: any change
+      that happens to make an edge axis-aligned turns a passing test into a 30-second timeout with a
+      misleading message. This is not hypothetical — it is what
+      `Studio_PipelineCanvasUsesEngineDagAndPreservesScriptBytes` did when the pipeline palette
+      became a sidebar. Wait on `State = Attached`, or assert the path's own geometry, wherever the
+      claim is "this edge is drawn" rather than "this edge is on screen".
+
+- [ ] **Audit the shared mutable state the lane runs on.** `RoleJourneyTests` fails intermittently in
+      the full 231-test parallel run and passes in isolation, which is the signature. The fixture
+      deliberately shares one Portal, one seeded admin account, a `signInGate` semaphore, and a
+      `passwordChanged` flag across every test class — the design is documented and defensible, but it
+      is shared state under parallelism, and `ConnectorRegistry.Instance` (already recorded as a
+      mutable global whose order-dependence breaks connector and dialect tests) sits alongside it.
+      Establish which of these actually collides rather than guessing; the answer decides whether the
+      fix is isolation, ordering, or per-class fixtures.
+
+## 4. Chart Property Gaps
 
 Gaps identified from a comparison of ETL-SQL chart properties against Power BI, Tableau, and ggplot2.
 Intentional design choices (LOD expressions, table calculations, and groupings handled in SQL) are
@@ -1042,30 +1277,30 @@ than record it.
 
 ### Dual-Axis
 
-- [ ] **Synchronized dual axes on COMBO**: No `SYNC_AXES = ON` option. Y and Y2 scales are always
+- [x] **Synchronized dual axes on COMBO**: No `SYNC_AXES = ON` option. Y and Y2 scales are always
   independent. Add as a boolean option after named-chart explicit axis MIN/MAX (above) is implemented,
   since synchronization requires the ability to set matching limits.
 
 ### Named Chart Marks
 
-- [ ] **Per-axis mark type on COMBO**: COMBO renders bars on Y and a line on Y2 with no overrides. Add
+- [x] **Per-axis mark type on COMBO**: COMBO renders bars on Y and a line on Y2 with no overrides. Add
   `Y_MARK = BAR|LINE|AREA` and `Y2_MARK = BAR|LINE|AREA` options so authors can compose, for example,
   area + line or line + line on dual axes without switching to `CUSTOM CHART`.
-- [ ] **Size control on named LINE and SCATTER**: Named LINE has no point size option beyond
+- [x] **Size control on named LINE and SCATTER**: Named LINE has no point size option beyond
   `SYMBOLS = ON|OFF`. Named SCATTER has no marker size option independent of the BUBBLE SIZE mapping.
   Add `SYMBOL_SIZE = n` to both.
 
 ### Map
 
-- [ ] **Tile-based base map**: The MAP visual uses built-in GeoJSON topologies. There is no tile-based
+- [x] **Tile-based base map**: The MAP visual uses built-in GeoJSON topologies. There is no tile-based
   background map (Mapbox, OpenStreetMap, or equivalent). Add a `BASE_MAP = 'provider-url-template'`
   option with connector-governed URL allowlisting.
-- [ ] **Geographic density map**: No density or hex-bin map type. `HEATMAP` is a category × category
+- [x] **Geographic density map**: No density or hex-bin map type. `HEATMAP` is a category × category
   grid, not a geographic density surface. Evaluate as a new `MAP (MODE = DENSITY)` rendering path.
 
 ### Trellis / Small Multiples
 
-- [ ] **TRELLIS scale synchronization options**: `TRELLIS` exposes `SHARED_AXIS = ON|OFF` for Y only,
+- [x] **TRELLIS scale synchronization options**: `TRELLIS` exposes `SHARED_AXIS = ON|OFF` for Y only,
   and always auto-scales independently on SCATTER. Add `SHARED_X = ON|OFF` and explicit support for
   controlling shared color scales across panels. Align `CUSTOM CHART` `RESOLVE` with the named TRELLIS
   option naming.
@@ -1278,89 +1513,89 @@ than record it.
 
 ### GAUGE
 
-- [ ] **Gauge value label formatting**: No `FORMAT` option on GAUGE to control how the current value
+- [x] **Gauge value label formatting**: No `FORMAT` option on GAUGE to control how the current value
   is displayed (currency, percentage, decimal places). The value label format is renderer-inferred.
   Add `FORMAT = '.NET format string'` to GAUGE OPTIONS, consistent with CARD.
-- [ ] **Multiple target bands**: `COLORS = ('0%:red', '60%:yellow', '80%:green')` sets color band
+- [x] **Multiple target bands**: `COLORS = ('0%:red', '60%:yellow', '80%:green')` sets color band
   positions but `GOAL` is a single value. No way to show multiple threshold markers (e.g., a
   "warning" band and a "critical" band marker). Add `GOAL2 = column` and `GOAL2_LABEL` to GAUGE
   mappings, or allow `GOAL = (value1 LABEL '...', value2 LABEL '...')`.
-- [ ] **Gauge label position**: No option to control where the value label appears (center, below the
+- [x] **Gauge label position**: No option to control where the value label appears (center, below the
   arc, inside the needle). All GAUGE_STYLEs render the label at a renderer-determined position.
   Add `LABEL_POSITION = CENTER|BOTTOM|INSIDE` where applicable per style.
 
 ### MAP (additional gaps beyond section 3)
 
-- [ ] **Choropleth color scale type**: `COLOR_LOW` and `COLOR_HIGH` create a linear gradient.
+- [x] **Choropleth color scale type**: `COLOR_LOW` and `COLOR_HIGH` create a linear gradient.
   No `COLOR_SCALE = LINEAR|QUANTILE|QUANTIZE|THRESHOLD` option. Tableau and Power BI both offer
   quantile and quantize binning so that equal data ranges map to equal visual segments rather than
   a continuous gradient. Add to CHOROPLETH OPTIONS.
-- [ ] **Null region color**: No `NULL_COLOR = '#RRGGBB'` for regions present in the map geometry
+- [x] **Null region color**: No `NULL_COLOR = '#RRGGBB'` for regions present in the map geometry
   but absent from the data. The renderer fills them with an inferred default. Add an explicit
   null-region color control.
-- [ ] **Map zoom and center**: No `ZOOM = n` or `CENTER = (lat, lon)` option to set the initial
+- [x] **Map zoom and center**: No `ZOOM = n` or `CENTER = (lat, lon)` option to set the initial
   map viewport. The map auto-fits to the data extent. For dashboards that always show a fixed
   region (e.g., always centered on the continental US), there is no way to lock the view. Add
   to MAP OPTIONS.
-- [ ] **Point color mapping on MAP POINTS mode**: `MAP (MODE = POINTS)` accepts `VALUE` for size
+- [x] **Point color mapping on MAP POINTS mode**: `MAP (MODE = POINTS)` accepts `VALUE` for size
   but has no `COLOR` mapping. Points are all the same color. Add `COLOR = column` mapping to
   POINTS mode to allow categorical or quantitative coloring independent of size.
-- [ ] **Tooltip on map regions / points**: MAP has no `TOOLTIP` clause and no per-feature tooltip
+- [x] **Tooltip on map regions / points**: MAP has no `TOOLTIP` clause and no per-feature tooltip
   customization. The hover shows the REGION name and VALUE only. Add `TOOLTIP` clause support
   consistent with other named chart visuals.
 
 ### THEME
 
-- [ ] **Per-visual-type theme overrides**: `CREATE THEME` sets global tokens. There is no way to
+- [x] **Per-visual-type theme overrides**: `CREATE THEME` sets global tokens. There is no way to
   say "BAR charts in this theme use palette X, LINE charts use palette Y." Power BI themes support
   per-visual-type color arrays. Add optional `[BAR] COLORS = (...)` or `[LINE] COLORS = (...)`
   blocks inside `CREATE THEME`.
-- [ ] **Theme font stack**: `CREATE THEME` has `TEXT_COLOR` and the global `STYLE (FONT = ...)` handles
+- [x] **Theme font stack**: `CREATE THEME` has `TEXT_COLOR` and the global `STYLE (FONT = ...)` handles
   font family. But there is no `FONT_FAMILY` key inside `CREATE THEME` itself, so a theme cannot
   encode the font stack. Add `FONT_FAMILY = '...'` as a supported theme property so a brand theme
   can fully specify typography without a separate `CREATE STYLE`.
 
 ### Cross-Cutting Gaps Found in Second Pass
 
-- [ ] **`FORMATTING` clause on SCATTER, BUBBLE, LINE, COMBO**: The `FORMATTING (WHEN condition THEN
+- [x] **`FORMATTING` clause on SCATTER, BUBBLE, LINE, COMBO**: The `FORMATTING (WHEN condition THEN
   color)` conditional mark coloring works on BAR and HBAR. It is absent from SCATTER, BUBBLE, LINE,
   and COMBO. These charts drive conditional coloring only via `CUSTOM CHART` CONDITIONS or the
   `COLOR` series mapping. Add `FORMATTING` clause support to all named Cartesian charts.
-- [ ] **`OVERLAYS` clause on SCATTER**: SCATTER has `SHOW_REGRESSION = ON|OFF` but no general
+- [x] **`OVERLAYS` clause on SCATTER**: SCATTER has `SHOW_REGRESSION = ON|OFF` but no general
   `OVERLAYS` clause. Add `OVERLAYS` to SCATTER so reference lines, goal lines, and (eventually)
   error bars share the same syntax as LINE and BAR.
-- [ ] **`ZOOM_SLIDER` on SCATTER and COMBO**: `ZOOM_SLIDER = ON|OFF` is documented for LINE and BAR
+- [x] **`ZOOM_SLIDER` on SCATTER and COMBO**: `ZOOM_SLIDER = ON|OFF` is documented for LINE and BAR
   but not SCATTER or COMBO. These are the charts most likely to need it on dense data. Confirm
   whether it is implemented but undocumented, or genuinely absent, and add/document accordingly.
 - [x] **`AXIS_SORT` on COMBO**: `AXIS_SORT` is available on BAR, HBAR, and LINE but not listed in
   COMBO options. COMBO shares a category axis so the option is meaningful. Add or document.
-- [ ] **`DATA_LABELS` on SCATTER, BUBBLE, RADAR, and HEATMAP**: `DATA_LABELS = ON|OFF` is
+- [x] **`DATA_LABELS` on SCATTER, BUBBLE, RADAR, and HEATMAP**: `DATA_LABELS = ON|OFF` is
   documented on BAR, HBAR, LINE, and COMBO but not on SCATTER, BUBBLE, RADAR, or HEATMAP.
   HEATMAP has `SHOW_VALUES` (a partial equivalent); the others have nothing. Standardize on
   `DATA_LABELS` across all named chart types or explicitly document the per-type label option.
 
 ### SLICER
 
-- [ ] **Search / type-to-filter inside the dropdown**: SLICER is a plain dropdown with no
+- [x] **Search / type-to-filter inside the dropdown**: SLICER is a plain dropdown with no
   in-control search box. Power BI slicers and Tableau filter dropdowns both allow typing to
   narrow a long option list. Add `SEARCHABLE = ON|OFF` to SLICER OPTIONS so long value lists
   become usable without a separate SEARCH control.
-- [ ] **Multi-value selection mode on SLICER**: SLICER is single-select only; multi-select
+- [x] **Multi-value selection mode on SLICER**: SLICER is single-select only; multi-select
   requires a separate MULTISELECT control. Power BI slicer has a toggle between single and
   multi-select. Add `MODE = SINGLE|MULTI` so one control can serve both patterns without
   requiring two visual types.
-- [ ] **Tile / button layout mode**: Tableau and Power BI both support a "tile" or "chip" layout
+- [x] **Tile / button layout mode**: Tableau and Power BI both support a "tile" or "chip" layout
   where each option is a button rather than a dropdown row. `style.md` mentions
   `LAYOUT = 'DROPDOWN'` as a slicer rendering mode but no alternative layout (LIST, TILE,
   BUTTON_BAR) is documented. Confirm whether other layouts exist and document them, or add
   TILE and LIST modes explicitly.
-- [ ] **Option count limit with overflow indicator**: No `MAX_OPTIONS = n` or paging control.
+- [x] **Option count limit with overflow indicator**: No `MAX_OPTIONS = n` or paging control.
   When the SOURCE returns hundreds of values the dropdown becomes unusable. Add `MAX_OPTIONS = n`
   with a visible overflow indicator, paired with `SEARCHABLE = ON` for large lists.
-- [ ] **Slicer sort**: The option list order is source row order. No `SORT = ALPHA|VALUE|SOURCE`
+- [x] **Slicer sort**: The option list order is source row order. No `SORT = ALPHA|VALUE|SOURCE`
   on SLICER. Authors must pre-sort in the SOURCE query. Add a declarative sort option consistent
   with `AXIS_SORT` on charts.
-- [ ] **Image per option**: No `IMAGE = column` mapping on SLICER. Authors cannot attach a
+- [x] **Image per option**: No `IMAGE = column` mapping on SLICER. Authors cannot attach a
   photo, thumbnail, or icon to each option row — e.g., an employee directory slicer showing
   each person's headshot alongside their name, or a location slicer with a building photo per
   site, or a product slicer with product artwork. Add `IMAGE = column` to SLICER MAPPINGS
@@ -1377,80 +1612,80 @@ than record it.
 
 ### MULTISELECT
 
-- [ ] **Default multi-value selection**: `DEFAULT = 'value'` accepts only a single value. There
+- [x] **Default multi-value selection**: `DEFAULT = 'value'` accepts only a single value. There
   is no `DEFAULT = ('value1', 'value2')` list form. Selecting multiple initial values requires
   an APPLY_BOOKMARK workaround. Add list-form DEFAULT to MULTISELECT.
-- [ ] **Select-all control naming**: `LEGEND = ON|OFF` toggles "Select all / Clear all" but the
+- [x] **Select-all control naming**: `LEGEND = ON|OFF` toggles "Select all / Clear all" but the
   option is misnamed — LEGEND on a control is not a series legend. Rename to
   `SHOW_SELECT_ALL = ON|OFF` with companion `SELECT_ALL_LABEL` and `CLEAR_ALL_LABEL` text
   overrides.
-- [ ] **Search inside MULTISELECT**: No in-control type-to-filter. Add `SEARCHABLE = ON|OFF`.
+- [x] **Search inside MULTISELECT**: No in-control type-to-filter. Add `SEARCHABLE = ON|OFF`.
   Critical for MULTISELECT where long checkbox lists are even harder to scroll than a dropdown.
-- [ ] **Tile / chip layout**: MULTISELECT is always a scrollable checkbox list. A compact chip /
+- [x] **Tile / chip layout**: MULTISELECT is always a scrollable checkbox list. A compact chip /
   tag strip layout (selected items shown as removable badges) is standard in Power BI and
   embedded BI tools. Add `LAYOUT = LIST|CHIPS`.
-- [ ] **Item limit / virtualization**: No documented limit or virtual scrolling for large option
+- [x] **Item limit / virtualization**: No documented limit or virtual scrolling for large option
   sets. Add `MAX_OPTIONS = n` with a visible truncation indicator, consistent with SLICER.
 
 ### DATEPICKER
 
-- [ ] **Date range mode in one control**: Two separate DATEPICKER controls are needed for a
+- [x] **Date range mode in one control**: Two separate DATEPICKER controls are needed for a
   start and end date. Power BI and Tableau both support a single date-range picker that emits
   two values. Add `MODE = SINGLE|RANGE` with `ON_CHANGE = SET_PARAMETER(@start, @end, value)`
   for RANGE mode.
-- [ ] **Display format**: The displayed date format is locale/renderer-inferred. No `FORMAT =
+- [x] **Display format**: The displayed date format is locale/renderer-inferred. No `FORMAT =
   'MM/dd/yyyy'` option. Add FORMAT to DATEPICKER OPTIONS to control the rendered input string.
-- [ ] **Disabled dates / blackout ranges**: No way to disable specific dates or ranges within
+- [x] **Disabled dates / blackout ranges**: No way to disable specific dates or ranges within
   the MIN/MAX window (e.g., disable weekends, holidays). Add `DISABLED_DATES = column` or
   `DISABLED_DAYS = (SAT, SUN)` to OPTIONS.
-- [ ] **Week start day**: Calendar grids start on a renderer-default day. No `WEEK_START =
+- [x] **Week start day**: Calendar grids start on a renderer-default day. No `WEEK_START =
   SUN|MON` option. Add to OPTIONS.
-- [ ] **Dynamic MIN / MAX from data**: MIN and MAX are static strings or `TODAY`. No
+- [x] **Dynamic MIN / MAX from data**: MIN and MAX are static strings or `TODAY`. No
   `MIN = SOURCE_MIN(column)` dynamic binding. Authors must compute bounds in SQL and pass as
   a parameter. Add dynamic MIN/MAX binding.
-- [ ] **Inline (always-open) calendar**: No `DISPLAY = INLINE|DROPDOWN` option. Some layouts
+- [x] **Inline (always-open) calendar**: No `DISPLAY = INLINE|DROPDOWN` option. Some layouts
   embed an always-visible calendar. Add INLINE mode.
 
 ### RELDATEPICKER
 
-- [ ] **Custom quick-pick buttons**: The quick-pick buttons (Today, D-1, D-7, D-30, M-1, M-3,
+- [x] **Custom quick-pick buttons**: The quick-pick buttons (Today, D-1, D-7, D-30, M-1, M-3,
   Y-1) are hardcoded. No `QUICK_PICKS = ('This Week' = 'W-0', 'Last Month' = 'M-1', ...)`
   option to replace or extend the preset list. Power BI relative date slicer and embedded date
   pickers allow custom presets. Add a `QUICK_PICKS` option accepting label/expression pairs.
-- [ ] **Fiscal period expressions**: Relative date syntax (`D-n`, `M-n`, `Y-n`) is calendar-
+- [x] **Fiscal period expressions**: Relative date syntax (`D-n`, `M-n`, `Y-n`) is calendar-
   based. No `FQ-1` (previous fiscal quarter) or `FY-1` (previous fiscal year) expression when
   the fiscal year doesn't start in January. Add fiscal offset expressions with a
   `FISCAL_YEAR_START = month` anchor.
-- [ ] **Range mode**: Two separate controls are needed for start and end. Add `MODE = SINGLE|RANGE`
+- [x] **Range mode**: Two separate controls are needed for start and end. Add `MODE = SINGLE|RANGE`
   so a single RELDATEPICKER emits both `@start` and `@end`.
-- [ ] **Expression validation feedback**: An invalid expression (e.g., `X-7`) silently passes
+- [x] **Expression validation feedback**: An invalid expression (e.g., `X-7`) silently passes
   the raw string to the parameter. Add inline validation that marks the field invalid and
   suppresses `ON_CHANGE` until the expression resolves cleanly.
-- [ ] **Future-date expressions**: Only `D-n` (past) is supported. No `D+n`, `M+n`, `Y+n` for
+- [x] **Future-date expressions**: Only `D-n` (past) is supported. No `D+n`, `M+n`, `Y+n` for
   future-relative dates (e.g., forecast end = D+30). Add forward-offset expressions.
 
 ### SLIDER
 
-- [ ] **Range slider (two-handle)**: SLIDER is single-value only. A two-handle range slider
+- [x] **Range slider (two-handle)**: SLIDER is single-value only. A two-handle range slider
   (simultaneous min and max selection) requires two separate controls. Add `MODE = SINGLE|RANGE`
   with `ON_CHANGE = SET_PARAMETER(@low, @high, value)` for RANGE mode.
-- [ ] **Snap to data values**: SLIDER has MIN, MAX, and STEP for uniform increments but no
+- [x] **Snap to data values**: SLIDER has MIN, MAX, and STEP for uniform increments but no
   `SOURCE = #table, MAPPINGS (VALUE = column)` to snap handles to actual data breakpoints.
   Add data-driven tick positions.
-- [ ] **Value display format**: The current value shown beside the handle is renderer-formatted.
+- [x] **Value display format**: The current value shown beside the handle is renderer-formatted.
   No `FORMAT = 'C0'` option. Add FORMAT consistent with CARD and GAUGE.
-- [ ] **Tick mark labels**: No `SHOW_TICKS = ON|OFF` or `TICK_LABELS = ON|OFF` option.
+- [x] **Tick mark labels**: No `SHOW_TICKS = ON|OFF` or `TICK_LABELS = ON|OFF` option.
   Add to OPTIONS.
-- [ ] **On-change fire mode**: SLIDER fires `ON_CHANGE` on every drag increment, triggering
+- [x] **On-change fire mode**: SLIDER fires `ON_CHANGE` on every drag increment, triggering
   expensive re-queries at each step. No `FIRE_ON = RELEASE|CHANGE` option to defer until
   handle release. Add alongside the SEARCH `DEBOUNCE` pattern.
 
 ### SEARCH
 
-- [ ] **Match mode helper**: SEARCH passes the raw string to a parameter; the LIKE pattern must
+- [x] **Match mode helper**: SEARCH passes the raw string to a parameter; the LIKE pattern must
   be constructed in every consuming query. Add `MATCH_MODE = CONTAINS|STARTS_WITH|EXACT` to
   OPTIONS so the control emits a pre-wrapped pattern, reducing boilerplate.
-- [ ] **Minimum character trigger**: No `MIN_CHARS = n` to suppress `ON_CHANGE` until at least
+- [x] **Minimum character trigger**: No `MIN_CHARS = n` to suppress `ON_CHANGE` until at least
   n characters are typed. Prevents single-character wildcard explosions on large tables. Add
   alongside `DEBOUNCE`.
 - [x] **Clear button**: No `SHOW_CLEAR = ON|OFF` option to display an × button that resets the
@@ -1458,66 +1693,66 @@ than record it.
 
 ### CHECKBOX
 
-- [ ] **Label separate from TITLE**: CHECKBOX `TITLE` is the card title. The inline checkbox
+- [x] **Label separate from TITLE**: CHECKBOX `TITLE` is the card title. The inline checkbox
   label is also driven by TITLE, with no separate `LABEL = 'text'` option for the text
   appearing beside the checkbox element itself. Add `LABEL` as a distinct option.
-- [ ] **Toggle switch display style**: CHECKBOX always renders as a checkbox. No
+- [x] **Toggle switch display style**: CHECKBOX always renders as a checkbox. No
   `DISPLAY_STYLE = CHECKBOX|TOGGLE` to render as a modern toggle switch, which is the standard
   Power BI boolean slicer form. Add to OPTIONS.
-- [ ] **ON / OFF value override**: `ON_CHANGE` emits `1` or `0`. No `TRUE_VALUE = 'Y'` /
+- [x] **ON / OFF value override**: `ON_CHANGE` emits `1` or `0`. No `TRUE_VALUE = 'Y'` /
   `FALSE_VALUE = 'N'` option to emit domain strings instead of bit values. Add to OPTIONS.
-- [ ] **Default state**: No `DEFAULT = ON|OFF` option documented. Authors must set the initial
+- [x] **Default state**: No `DEFAULT = ON|OFF` option documented. Authors must set the initial
   variable value via `DECLARE`. Add `DEFAULT` to CHECKBOX OPTIONS so the initial visual state
   is self-contained.
 
 ### TEXTBOX
 
-- [ ] **Multiline / textarea mode**: TEXTBOX is single-line only. No `MULTILINE = ON|OFF` or
+- [x] **Multiline / textarea mode**: TEXTBOX is single-line only. No `MULTILINE = ON|OFF` or
   `ROWS = n` option for memo-style input. Add to OPTIONS.
 - [x] **Max length**: No `MAX_LENGTH = n` character limit. Add to OPTIONS.
-- [ ] **Pattern / regex validation**: No `PATTERN = 'regex'` option to constrain input format
+- [x] **Pattern / regex validation**: No `PATTERN = 'regex'` option to constrain input format
   inline. Add with a companion `VALIDATION_MESSAGE = 'text'` for the error hint.
-- [ ] **ON_SUBMIT trigger**: TEXTBOX fires `ON_CHANGE` on every keystroke. No `ON_SUBMIT` trigger
+- [x] **ON_SUBMIT trigger**: TEXTBOX fires `ON_CHANGE` on every keystroke. No `ON_SUBMIT` trigger
   (fire on Enter or blur) which is the appropriate mode for inputs driving server queries.
   Add `ON_SUBMIT` as an alternative to `ON_CHANGE` in the ACTIONS clause.
 
 ### NUMBERBOX
 
-- [ ] **Step increment buttons**: NUMBERBOX accepts typed input but has no `STEP = n` or
+- [x] **Step increment buttons**: NUMBERBOX accepts typed input but has no `STEP = n` or
   `SHOW_STEPPER = ON|OFF` to add +/− spinner buttons. SLIDER has STEP; NUMBERBOX should too.
   Add to OPTIONS.
-- [ ] **Value display format**: No `FORMAT = 'C2'` display option. Add FORMAT consistent with
+- [x] **Value display format**: No `FORMAT = 'C2'` display option. Add FORMAT consistent with
   CARD and GAUGE.
-- [ ] **ON_SUBMIT trigger**: Same as TEXTBOX — add `ON_SUBMIT` as an alternative to `ON_CHANGE`
+- [x] **ON_SUBMIT trigger**: Same as TEXTBOX — add `ON_SUBMIT` as an alternative to `ON_CHANGE`
   so the query fires only on Enter or blur, not on every keystroke.
-- [ ] **Unit label (prefix / suffix)**: No `PREFIX = '$'` or `SUFFIX = 'kg'` display decoration.
+- [x] **Unit label (prefix / suffix)**: No `PREFIX = '$'` or `SUFFIX = 'kg'` display decoration.
   Authors cannot annotate the input without a container workaround. Add PREFIX and SUFFIX as
   display-only options (not appended to the emitted numeric value).
 
 ### Cross-Cutting Control Gaps
 
-- [ ] **Reset parameters action**: No `RESET_PARAMETERS` action to return all parameters to
+- [x] **Reset parameters action**: No `RESET_PARAMETERS` action to return all parameters to
   their DEFAULT values in one step. `CLEAR_FILTERS` clears visual-level selections but does
   not reset parameter variables. The workaround is `APPLY_BOOKMARK` pointing to a DEFAULT
   bookmark, which is not documented or obvious. Add `RESET_PARAMETERS` (optionally scoped:
   `RESET_PARAMETERS (@region, @date)`) as a named action available on BUTTON.
-- [ ] **Active filter count on containers**: No `SHOW_ACTIVE_COUNT = ON|OFF` container option
+- [x] **Active filter count on containers**: No `SHOW_ACTIVE_COUNT = ON|OFF` container option
   to badge how many parameters are currently non-default. Power BI's filter pane shows a count
   indicator. Add as a container-level option so a collapsible filter BOX can surface "3 filters
   active" without custom HTML.
-- [ ] **`DEPENDS_ON` for non-cascade controls**: CASCADE is available only on SLICER and
+- [x] **`DEPENDS_ON` for non-cascade controls**: CASCADE is available only on SLICER and
   MULTISELECT. DATEPICKER, SLIDER, and NUMBERBOX have no dependency declaration. When a
   SLIDER MAX should derive from a SLICER selection, the author has no declarative path. Add
   `DEPENDS_ON (@param, ...)` to all controls so the runtime re-evaluates DEFAULT and MIN/MAX
   when a dependency changes.
-- [ ] **Standardize `DEBOUNCE` across all controls**: SEARCH has `DEBOUNCE = n` (ms). No other
+- [x] **Standardize `DEBOUNCE` across all controls**: SEARCH has `DEBOUNCE = n` (ms). No other
   control documents this option, yet SLIDER and TEXTBOX fire on every change and benefit most.
   Add `DEBOUNCE = n` as a universal ON_CHANGE option across all filter controls.
-- [ ] **Disabled / read-only state**: No `DISABLED = ON|OFF` or `READ_ONLY = ON|OFF` option on
+- [x] **Disabled / read-only state**: No `DISABLED = ON|OFF` or `READ_ONLY = ON|OFF` option on
   any control. Power BI and Tableau both support conditionally disabling a filter based on
   another parameter. Add `DISABLED = expression` evaluated client-side against current
   parameter state.
-- [ ] **Declarative `VISIBLE` expression on controls**: Controls can be hidden via
+- [x] **Declarative `VISIBLE` expression on controls**: Controls can be hidden via
   `SET_UI_STATE(name, VISIBLE, OFF)` triggered by a button, but there is no declarative
   `VISIBLE = (@mode = 'Advanced')` expression that updates automatically when parameters
   change without an explicit button action. Add `VISIBLE = expression` as a declarative
@@ -1525,137 +1760,137 @@ than record it.
 
 ### IMAGE
 
-- [ ] **Alt text for accessibility**: No `ALT = 'description'` option. Screen readers and PDF
+- [x] **Alt text for accessibility**: No `ALT = 'description'` option. Screen readers and PDF
   export cannot describe the image. Add `ALT` as a recommended option and flag its absence in
   lint for accessibility compliance.
-- [ ] **Click action on IMAGE**: IMAGE has no `ACTIONS (ON_CLICK = ...)` clause. Power BI
+- [x] **Click action on IMAGE**: IMAGE has no `ACTIONS (ON_CLICK = ...)` clause. Power BI
   images support `ON_CLICK = OPEN_URL(...)` and Tableau dashboard images can navigate pages.
   Add `ON_CLICK` support (NAVIGATE_PAGE, OPEN_URL) to IMAGE, consistent with BUTTON actions.
-- [ ] **Gallery / multi-image mode**: When SOURCE returns multiple rows, IMAGE renders only the
+- [x] **Gallery / multi-image mode**: When SOURCE returns multiple rows, IMAGE renders only the
   first row's SRC. There is no gallery or grid layout mode for a result set of images. Add
   `MODE = SINGLE|GALLERY` with `COLUMNS = n` for grid layout.
-- [ ] **Aspect ratio lock**: `WIDTH` and `HEIGHT` are independent CSS values. No
+- [x] **Aspect ratio lock**: `WIDTH` and `HEIGHT` are independent CSS values. No
   `ASPECT_RATIO = '16/9'` option to lock the ratio while respecting available width. Add as
   an alternative to an explicit HEIGHT when one dimension is flexible.
-- [ ] **Fallback / broken-image placeholder**: No `FALLBACK = 'path'` option to show when SRC
+- [x] **Fallback / broken-image placeholder**: No `FALLBACK = 'path'` option to show when SRC
   is NULL or the URL fails to load. Add alongside the existing DEFAULT option.
 
 ### TEXT
 
-- [ ] **Inline column value interpolation**: Dynamic TEXT requires a full SOURCE query that
+- [x] **Inline column value interpolation**: Dynamic TEXT requires a full SOURCE query that
   returns a pre-assembled string. There is no template syntax such as
   `CONTENT = 'Revenue: {revenue FORMAT "C0"} as of {as_of}'` where column references are
   resolved at render time. Power BI text boxes and Tableau text objects support field
   placeholders. Add `{column FORMAT '...'}` substitution within CONTENT when SOURCE is present.
-- [ ] **Click / navigation action**: TEXT has no `ACTIONS` clause. A narrative block cannot
+- [x] **Click / navigation action**: TEXT has no `ACTIONS` clause. A narrative block cannot
   navigate a page or fire a parameter update on click. Add `ON_CLICK` support to TEXT, or
   allow Markdown links to carry `NAVIGATE_PAGE(name)` targets in addition to external URLs.
-- [ ] **Max lines / overflow control**: Long text blocks have no `MAX_LINES = n` or
+- [x] **Max lines / overflow control**: Long text blocks have no `MAX_LINES = n` or
   `OVERFLOW = CLIP|SCROLL|ELLIPSIS` option. Add overflow control to prevent content spilling
   past the card boundary.
-- [ ] **Inline typography options**: TEXT styling requires a global STYLE token or a CREATE
+- [x] **Inline typography options**: TEXT styling requires a global STYLE token or a CREATE
   STYLE object. No inline `FONT_SIZE`, `FONT_COLOR`, or `FONT_WEIGHT` options directly in TEXT
   OPTIONS. Power BI and Tableau both expose per-text-box typography without a separate style
   definition. Add inline typography options to TEXT OPTIONS.
 
 ### CONTAINER
 
-- [ ] **TABS per-tab icon and badge**: TABS container supports multiple panels via LAYOUT but
+- [x] **TABS per-tab icon and badge**: TABS container supports multiple panels via LAYOUT but
   has no per-tab `ICON` or `BADGE = n` (alert count) on individual tab entries. Power BI
   bookmarks-as-tabs and Retool tabs support icon and badge per tab. Add per-tab icon and badge
   support inside the TABS LAYOUT MAP.
-- [ ] **TABS position**: TABS renders as a top horizontal tab strip. No `TAB_POSITION =
+- [x] **TABS position**: TABS renders as a top horizontal tab strip. No `TAB_POSITION =
   TOP|LEFT|RIGHT|BOTTOM` option. Vertical left-sidebar tabs are common in Power BI and Retool.
   Add TAB_POSITION to TABS OPTIONS.
-- [ ] **ACCORDION default open section**: ACCORDION has no `DEFAULT_OPEN = 'sectionName'`
+- [x] **ACCORDION default open section**: ACCORDION has no `DEFAULT_OPEN = 'sectionName'`
   option to control which section is expanded on page load. Add to ACCORDION OPTIONS.
-- [ ] **MODAL triggered from a chart data point**: MODAL is opened via
+- [x] **MODAL triggered from a chart data point**: MODAL is opened via
   `SET_UI_STATE(ModalName, VISIBLE, ON)` on a BUTTON. There is no ON_CLICK action on a chart
   mark that opens a detail MODAL for the selected row. Add `ON_CLICK = SHOW_MODAL(ModalName)`
   as a visual-level action alongside the other chart actions.
-- [ ] **DRAWER default state**: No `DEFAULT = OPEN|CLOSED` option on DRAWER. It always starts
+- [x] **DRAWER default state**: No `DEFAULT = OPEN|CLOSED` option on DRAWER. It always starts
   closed. Add DEFAULT to DRAWER OPTIONS.
-- [ ] **Container-level REFRESH**: PAGE has `REFRESH = seconds`. Individual containers do not.
+- [x] **Container-level REFRESH**: PAGE has `REFRESH = seconds`. Individual containers do not.
   A live log or ticker in a SCROLL container cannot auto-refresh independently from the page.
   Add `REFRESH = seconds` to CONTAINER OPTIONS.
-- [ ] **Collapsible BOX**: BOX is a static grouping container with no collapse toggle. DRAWER
+- [x] **Collapsible BOX**: BOX is a static grouping container with no collapse toggle. DRAWER
   covers the floating/overlay case but not an inline collapsible panel. Add
   `COLLAPSIBLE = ON|OFF` and `DEFAULT = OPEN|CLOSED` to BOX.
 
 ### BUTTON
 
-- [ ] **Semantic style variants**: BUTTON has TITLE and STYLE but no `VARIANT = PRIMARY|
+- [x] **Semantic style variants**: BUTTON has TITLE and STYLE but no `VARIANT = PRIMARY|
   SECONDARY|GHOST|DANGER|LINK` shortcut. Authors must manually set STYLE colors per button.
   Add `VARIANT` as a theme-aware semantic option.
-- [ ] **Button icon**: No `ICON = 'name'` option. Add `ICON` and `ICON_POSITION = LEFT|RIGHT`
+- [x] **Button icon**: No `ICON = 'name'` option. Add `ICON` and `ICON_POSITION = LEFT|RIGHT`
   to BUTTON OPTIONS.
-- [ ] **Disabled state expression**: No `DISABLED = expression` option. A Submit button cannot
+- [x] **Disabled state expression**: No `DISABLED = expression` option. A Submit button cannot
   be conditionally greyed out until required parameters are filled. Add `DISABLED = expression`
   evaluated against current parameter state, consistent with section 5 control gaps.
-- [ ] **Multiple actions per click**: BUTTON `ACTIONS` accepts one `ON_CLICK`. Chaining two
+- [x] **Multiple actions per click**: BUTTON `ACTIONS` accepts one `ON_CLICK`. Chaining two
   actions (e.g., SET_PARAMETER then NAVIGATE_PAGE) requires an intermediate bookmark. Add
   multi-action support: `ON_CLICK = (SET_PARAMETER(@x, 1), NAVIGATE_PAGE(Detail))`.
-- [ ] **Loading / spinner feedback**: No visual feedback while REFRESH_REPORT or RUN_SCRIPT
+- [x] **Loading / spinner feedback**: No visual feedback while REFRESH_REPORT or RUN_SCRIPT
   executes. Add `SHOW_SPINNER = ON|OFF` to display a loading indicator on the button during
   async operations.
-- [ ] **Toggle button mode**: No `MODE = TOGGLE` where the button switches between two states
+- [x] **Toggle button mode**: No `MODE = TOGGLE` where the button switches between two states
   and emits different values per state. Currently requires two buttons or a CHECKBOX. Add
   `MODE = TOGGLE` with `ON_VALUE` / `OFF_VALUE` and `DEFAULT = ON|OFF` options.
-- [ ] **Confirmation dialog**: No `CONFIRM = 'Are you sure?'` option to show a native prompt
+- [x] **Confirmation dialog**: No `CONFIRM = 'Are you sure?'` option to show a native prompt
   before a destructive action fires. Add as a BUTTON option for RUN_SCRIPT and irreversible
   SET_PARAMETER actions.
 
 ### PAGE
 
-- [ ] **Mobile / responsive alternate layout**: PAGE STRUCTURE is a single CSS grid-template-
+- [x] **Mobile / responsive alternate layout**: PAGE STRUCTURE is a single CSS grid-template-
   areas string with no small-viewport variant. Power BI has a mobile layout view; Tableau has
   a device designer. Add `MOBILE_LAYOUT (STRUCTURE = '...', MAP (...))` activated below a
   `BREAKPOINT = 'px'` threshold.
-- [ ] **Page background image**: PAGE STYLE accepts `BACKGROUND` for a solid color. No
+- [x] **Page background image**: PAGE STYLE accepts `BACKGROUND` for a solid color. No
   `BACKGROUND_IMAGE = 'url'` option for a watermark or branded canvas background. Power BI
   canvas supports image fill. Add `BACKGROUND_IMAGE` and `BACKGROUND_SIZE = cover|contain|auto`
   to PAGE STYLE.
-- [ ] **Max width / centered layout**: No `MAX_WIDTH = 'px'` or `ALIGN_CONTENT = CENTER`
+- [x] **Max width / centered layout**: No `MAX_WIDTH = 'px'` or `ALIGN_CONTENT = CENTER`
   option to constrain the page grid to a readable column width on wide displays. Add to PAGE
   LAYOUT OPTIONS.
-- [ ] **Conditional page visibility expression**: PAGE has `VISIBLE = ON|OFF` as a static
+- [x] **Conditional page visibility expression**: PAGE has `VISIBLE = ON|OFF` as a static
   author toggle. No `VISIBLE = @role = 'admin'` dynamic expression. Add declarative
   `VISIBLE = expression` consistent with the control and container gaps above.
-- [ ] **Page load actions**: No `ON_LOAD` ACTIONS clause to fire SET_PARAMETER or
+- [x] **Page load actions**: No `ON_LOAD` ACTIONS clause to fire SET_PARAMETER or
   REFRESH_VISUALS when a page becomes active. Power BI page-level load events and Tableau
   sheet-load triggers allow initialization logic. Add `ON_LOAD = (action, ...)` to PAGE.
-- [ ] **Page-level scroll control**: DASHBOARD pages have no `OVERFLOW = SCROLL|CLIP` option.
+- [x] **Page-level scroll control**: DASHBOARD pages have no `OVERFLOW = SCROLL|CLIP` option.
   Behavior when grid content exceeds the viewport is renderer-inferred. Add explicit
   page-level overflow control.
-- [ ] **Page transition animation**: No `TRANSITION = NONE|FADE|SLIDE` option for page
+- [x] **Page transition animation**: No `TRANSITION = NONE|FADE|SLIDE` option for page
   navigation animations. Tableau story points support transitions between views. Add as a
   PAGE- or NAVIGATION-level option.
 
 ### NAVIGATION
 
-- [ ] **Per-page label and icon overrides**: NAVIGATION PAGES lists page names only. There is
+- [x] **Per-page label and icon overrides**: NAVIGATION PAGES lists page names only. There is
   no per-entry `(PageName ICON = 'name' LABEL = 'Custom Label')` override. The nav label
   must match the PAGE name. Add per-entry label and icon inside the PAGES clause.
-- [ ] **Badge / notification count per nav item**: No `BADGE = @count` per page entry to show
+- [x] **Badge / notification count per nav item**: No `BADGE = @count` per page entry to show
   an alert count badge. Power BI and Retool navigation menus support numeric badges. Add
   `BADGE = expression` per PAGES entry.
-- [ ] **Auto-hide invisible pages**: NAVIGATION lists all pages regardless of their `VISIBLE`
+- [x] **Auto-hide invisible pages**: NAVIGATION lists all pages regardless of their `VISIBLE`
   state. If a page is hidden via SET_UI_STATE it may still appear in the nav strip. Add
   `HIDE_INVISIBLE = ON|OFF` to NAVIGATION OPTIONS.
-- [ ] **Nested / grouped navigation**: NAVIGATION is a flat single-level list. No grouped
+- [x] **Nested / grouped navigation**: NAVIGATION is a flat single-level list. No grouped
   hierarchy (e.g., "Sales > Overview, Sales > Detail"). Add
   `GROUP ('Sales' = (Overview, Detail), ...)` syntax to NAVIGATION for section grouping.
-- [ ] **NAVIGATION STYLE clause**: NAVIGATION has `ORIENTATION` and `PAGES` but no STYLE
+- [x] **NAVIGATION STYLE clause**: NAVIGATION has `ORIENTATION` and `PAGES` but no STYLE
   clause. Authors cannot set nav background, active-item color, or font without global theme
   tokens. Add a `STYLE (...)` clause and an `ACTIVE_STYLE (...)` clause for the selected
   item appearance.
-- [ ] **External link entry in NAVIGATION**: PAGES accepts only internal page names. No way to
+- [x] **External link entry in NAVIGATION**: PAGES accepts only internal page names. No way to
   add an entry that opens an external URL. Add `LINK ('Label' = OPEN_URL('https://...'))` as a
   PAGES entry variant, subject to the URL allowlist policy established for BUTTON and IMAGE.
 
 ### Missing Data / Gap Behavior
 
-- [ ] **NULL value treatment on LINE and COMBO**: When a time series has NULL or missing values,
+- [x] **NULL value treatment on LINE and COMBO**: When a time series has NULL or missing values,
   Chart.js `spanGaps` and ECharts `connectNulls` control whether the line connects across the
   gap or breaks. ETL-SQL LINE and COMBO have no `NULL_HANDLING = CONNECT|GAP|ZERO` option.
   The rendered behavior is library-inferred and varies by renderer. Add `NULL_HANDLING` to
@@ -1663,29 +1898,29 @@ than record it.
 
 ### Tooltip Behavior
 
-- [ ] **Tooltip trigger mode**: ECharts supports `trigger: 'axis'` (snaps to the nearest X
+- [x] **Tooltip trigger mode**: ECharts supports `trigger: 'axis'` (snaps to the nearest X
   position and shows all series at that X — the "shared crosshair" style) and
   `trigger: 'item'` (shows only the hovered mark). Chart.js `interaction.mode` has `index`,
   `dataset`, `point`, `nearest`, `x`, and `y` modes. ETL-SQL TOOLTIP is static text or a
   container popover with no trigger-mode option. Add `TOOLTIP_MODE = ITEM|SHARED` to named
   chart OPTIONS, where SHARED shows all series values at the nearest category/x-position.
-- [ ] **Tooltip position control**: ECharts `tooltip.position` accepts `'top'`, `'bottom'`,
+- [x] **Tooltip position control**: ECharts `tooltip.position` accepts `'top'`, `'bottom'`,
   `'left'`, `'right'`, `'inside'`, or a fixed coordinate. Chart.js supports `'nearest'` and
   `'average'` positioners. ETL-SQL has no control over where the tooltip appears relative to
   the cursor or mark. Add `TOOLTIP_POSITION = AUTO|TOP|BOTTOM|LEFT|RIGHT|CURSOR` to named
   chart OPTIONS.
-- [ ] **Axis pointer / crosshair lines**: ECharts `axisPointer` draws a crosshair (vertical
+- [x] **Axis pointer / crosshair lines**: ECharts `axisPointer` draws a crosshair (vertical
   and/or horizontal line) that follows the cursor across the plot area, independent of the
   tooltip. No equivalent exists in any ETL-SQL chart. Add `CROSSHAIR = ON|OFF` with
   `CROSSHAIR_AXIS = X|Y|BOTH` and optional `CROSSHAIR_COLOR` / `CROSSHAIR_DASH` styling.
-- [ ] **Linked tooltip / crosshair across charts**: ECharts supports linking the axisPointer
+- [x] **Linked tooltip / crosshair across charts**: ECharts supports linking the axisPointer
   across multiple charts in the same page so hovering one highlights the same x-position in
   all linked charts. No equivalent in ETL-SQL. Add `LINK_TOOLTIP = groupName` so charts
   sharing a group name synchronize their hover position.
 
 ### Data Point and Coordinate Annotations
 
-- [ ] **Data point annotations (markPoint equivalent)**: ECharts `markPoint` pins a custom
+- [x] **Data point annotations (markPoint equivalent)**: ECharts `markPoint` pins a custom
   marker to a specific data coordinate (or the min/max of a series) with a label and custom
   symbol. This is distinct from reference lines (horizontal bands) — these markers are anchored
   to data values. Add `ANNOTATIONS (POINT (SERIES = 'seriesName', TYPE = MAX|MIN|COORD(x, y),
@@ -1693,19 +1928,19 @@ than record it.
 
 ### Animation
 
-- [ ] **Entry animation controls**: ECharts and Chart.js both expose animation duration, easing
+- [x] **Entry animation controls**: ECharts and Chart.js both expose animation duration, easing
   function, and per-series delay for entry animations. ETL-SQL charts have no animation
   options. Add `ANIMATION = ON|OFF`, `ANIMATION_DURATION = ms`, and
   `ANIMATION_EASING = LINEAR|EASE_IN|EASE_OUT|ELASTIC|BOUNCE` to named chart OPTIONS. Default
   `OFF` for server-rendered / PDF contexts; `ON` for interactive dashboard mode.
-- [ ] **Update animation**: Separate from entry animation, Chart.js and ECharts both have
+- [x] **Update animation**: Separate from entry animation, Chart.js and ECharts both have
   controls for how charts animate when data changes (parameter-driven refresh). No ETL-SQL
   option. Add `UPDATE_ANIMATION = ON|OFF` to distinguish initial-load animation from
   parameter-change re-render behavior.
 
 ### Area Fill
 
-- [ ] **Area fill baseline (fill to arbitrary Y value)**: Chart.js `fill: { value: n }` fills
+- [x] **Area fill baseline (fill to arbitrary Y value)**: Chart.js `fill: { value: n }` fills
   the area between the line and a specific Y value (not necessarily zero). ECharts
   `areaStyle.origin` has similar control. ETL-SQL `CUSTOM CHART` AREA layers have `STACK` but
   no "fill from specific Y baseline" option. Named LINE/AREA have no equivalent. Add
@@ -1714,7 +1949,7 @@ than record it.
 
 ### Series Hover and Emphasis
 
-- [ ] **Hover emphasis mode**: ECharts `emphasis.focus` controls what happens when a series is
+- [x] **Hover emphasis mode**: ECharts `emphasis.focus` controls what happens when a series is
   hovered: `'self'` highlights only the hovered element, `'series'` highlights the whole
   series and dims others, `'none'` disables emphasis. No equivalent in ETL-SQL. Add
   `HOVER_FOCUS = NONE|SELF|SERIES` to named chart OPTIONS and to `CUSTOM CHART` layer
@@ -1753,13 +1988,13 @@ than record it.
 
 ### Axis Tick Label Formatter
 
-- [ ] **Axis tick label format string**: ECharts `axisLabel.formatter` and Chart.js
+- [x] **Axis tick label format string**: ECharts `axisLabel.formatter` and Chart.js
   `ticks.callback` allow custom formatting of axis tick labels independent of data labels and
   tooltips (e.g., show `"1K"` instead of `"1000"`, or `"Jan"` instead of `"2026-01-01"`). 
   ETL-SQL has no axis tick label formatter. Add `X_AXIS (TICK_FORMAT = 'format-string')` and
   `Y_AXIS (TICK_FORMAT = 'format-string')` to named charts, using the same `.NET format string`
   convention as `DATA_LABELS`.
-- [ ] **Time axis unit and display format**: Chart.js `scales.x.time.unit` (`'month'`,
+- [x] **Time axis unit and display format**: Chart.js `scales.x.time.unit` (`'month'`,
   `'quarter'`, `'year'`) and `time.displayFormats` let authors control which temporal unit
   the axis ticks represent and how each unit is labeled (e.g., `'MMM yyyy'` for months,
   `"'Q'Q yyyy"` for quarters). ETL-SQL time-series axes infer the unit from data density with
@@ -1768,14 +2003,14 @@ than record it.
 
 ### Bar Minimum Height
 
-- [ ] **Minimum bar height**: ECharts `barMinHeight` and Chart.js equivalent ensure that very
+- [x] **Minimum bar height**: ECharts `barMinHeight` and Chart.js equivalent ensure that very
   small values still render a visible bar pixel rather than disappearing. No ETL-SQL equivalent.
   Add `BAR_MIN_HEIGHT = n` (pixels) to BAR, HBAR, COMBO, and WATERFALL OPTIONS so sub-pixel
   values remain visible.
 
 ### Per-Segment Conditional Line Styling
 
-- [ ] **Per-segment line style (Chart.js `segment` callback)**: Chart.js `segment` applies
+- [x] **Per-segment line style (Chart.js `segment` callback)**: Chart.js `segment` applies
   different `borderColor`, `borderDash`, or `backgroundColor` to individual line segments
   based on the data values at each end of the segment. The canonical use case is "dashed
   line after today's date for forecasted data" without splitting into two series. ETL-SQL
@@ -1785,23 +2020,23 @@ than record it.
 
 ### New Chart Types (Evaluate)
 
-- [ ] **Polar coordinate bar / line**: ECharts supports BAR and LINE on a polar coordinate
+- [x] **Polar coordinate bar / line**: ECharts supports BAR and LINE on a polar coordinate
   system (concentric rings or spiral). The "bull's-eye" bar chart (bars radiating from center)
   is a distinct visualization not achievable via RADAR or CUSTOM CHART without significant
   effort. Evaluate as a `POLAR` visual type or as a `CUSTOM CHART (COORDINATE = POLAR)`
-  extension.
-- [ ] **Calendar heatmap**: ECharts `calendar` coordinate system maps values to calendar cells
+  extension. Evaluated in `docs/architecture/decisions/new-chart-types-evaluation.md`.
+- [x] **Calendar heatmap**: ECharts `calendar` coordinate system maps values to calendar cells
   (the "GitHub contribution graph" pattern: day of week × week of year, colored by value).
   Distinct from ETL-SQL HEATMAP which is categorical X × Y. Evaluate as
   `HEATMAP (MODE = CALENDAR)` with `DATE = column, VALUE = column` mappings and year/month
-  axis auto-generation.
-- [ ] **Streamgraph / themeriver**: ECharts `themeRiver` is a stacked area chart where the
+  axis auto-generation. Evaluated in `docs/architecture/decisions/new-chart-types-evaluation.md`.
+- [x] **Streamgraph / themeriver**: ECharts `themeRiver` is a stacked area chart where the
   band width encodes value and bands flow symmetrically around a central axis (used for topic
   popularity over time, election results, etc.). Not achievable with ETL-SQL LINE/AREA STACKED.
-  Evaluate as a new visual type `STREAMGRAPH`.
-- [ ] **Parallel coordinates chart**: ECharts `parallel` renders multiple numeric axes side by
+  Evaluate as a new visual type `STREAMGRAPH`. Evaluated in `docs/architecture/decisions/new-chart-types-evaluation.md`.
+- [x] **Parallel coordinates chart**: ECharts `parallel` renders multiple numeric axes side by
   side with polylines connecting each observation's values across axes. Used for multivariate
-  data exploration. No ETL-SQL equivalent. Evaluate as a new `PARALLEL` visual type.
+  data exploration. No ETL-SQL equivalent. Evaluate as a new `PARALLEL` visual type. Evaluated in `docs/architecture/decisions/new-chart-types-evaluation.md`.
 
 ---
 
@@ -1817,109 +2052,110 @@ means the feature already exists in the engine and the sink just needs a new vis
 
 ### 01_BAR.rptsql
 
-| Gap | Prerequisite TODO |
+| Gap | Status |
 | :--- | :--- |
-| `STACKED = 100PCT` | ✅ Axis Controls → 100% normalized stacking |
-| `LEGEND_TITLE`, `LEGEND_COLUMNS`, `LEGEND_ORIENTATION`, `LEGEND_REVERSE` | ✅ Legend Controls (all shipped) |
-| `LEGEND_POSITION = LEFT`, `LEGEND_POSITION = INSIDE` + `LEGEND_ANCHOR` | ✅ Legend Controls (shipped) |
-| `LEGEND_FONT_SIZE`, `LEGEND_FONT_COLOR`, `LEGEND_FONT_WEIGHT` | ✅ Legend Controls (shipped) |
-| `LEGEND = OFF` | ✅ Legend Controls (shipped) |
-| `GRID_LINES = ON/OFF`, `GRID_LINE_COLOR`, `GRID_LINE_DASH`, `GRID_LINE_WIDTH` | ✅ Gridline and Line Styling (shipped) |
-| `ZERO_LINE = ON/OFF`, `ZERO_LINE_COLOR`, `ZERO_LINE_DASH` | ✅ Gridline and Line Styling (shipped) |
-| `MINOR_GRID_LINES = ON/OFF` | ✅ Gridline and Line Styling (shipped) |
-| `BAND_SIZE = 0.5` | ✅ Bar and Area Layout (shipped) |
-| `SERIES_GAP = 0.0..1.0` | ✅ Bar and Area Layout (shipped) |
-| `AXIS_SORT = VALUE_ASC`, `ALPHA` | ✅ Axis Controls (shipped) |
-| `DATA_LABELS` with OUTSIDE / INSIDE_TOP / CENTER positions | ✅ Series and Data Labels |
-| `LABEL_BACKGROUND`, `LABEL_BORDER` on DATA_LABELS | ✅ Series and Data Labels (shipped) |
-| `RUNNING_TOTAL` overlay | ✅ Analytical Overlays (shipped) |
-| `PERCENT_OF_TOTAL` overlay | ✅ Analytical Overlays (shipped) |
+| `STACKED = 100PCT` | ✅ Covered in sink |
+| `LEGEND_TITLE`, `LEGEND_COLUMNS`, `LEGEND_ORIENTATION`, `LEGEND_REVERSE` | ✅ Covered in sink |
+| `LEGEND_POSITION = LEFT`, `LEGEND_POSITION = INSIDE` + `LEGEND_ANCHOR` | ✅ Covered in sink |
+| `LEGEND_FONT_SIZE`, `LEGEND_FONT_COLOR`, `LEGEND_FONT_WEIGHT` | ✅ Covered in sink |
+| `LEGEND = OFF` | ✅ Covered in sink |
+| `GRID_LINES = ON/OFF`, `GRID_LINE_COLOR`, `GRID_LINE_DASH`, `GRID_LINE_WIDTH` | ✅ Covered in sink |
+| `ZERO_LINE = ON/OFF`, `ZERO_LINE_COLOR`, `ZERO_LINE_DASH` | ✅ Covered in sink |
+| `MINOR_GRID_LINES = ON/OFF` | ✅ Covered in sink |
+| `BAND_SIZE = 0.5` | ✅ Covered in sink |
+| `SERIES_GAP = 0.0..1.0` | ✅ Covered in sink |
+| `AXIS_SORT = VALUE_ASC`, `ALPHA` | ✅ Covered in sink |
+| `DATA_LABELS` with OUTSIDE / INSIDE_TOP / CENTER positions | ✅ Covered in sink |
+| `LABEL_BACKGROUND`, `LABEL_BORDER` on DATA_LABELS | ✅ Covered in sink |
+| `RUNNING_TOTAL` overlay | ✅ Covered in sink |
+| `PERCENT_OF_TOTAL` overlay | ✅ Covered in sink |
+| `BAR_MIN_HEIGHT = n` | ✅ Covered in sink |
+| `FORMATTING (WHEN … THEN color)` conditional | ✅ Covered in sink |
 | `REFERENCE_LINE`, `REFERENCE_BAND` overlays | [ ] Analytical Overlays (pending) |
-| `BAR_MIN_HEIGHT = n` | [ ] Bar Minimum Height (pending) |
-| `FORMATTING (WHEN … THEN color)` conditional | ✅ already on BAR — just not in sink |
 | `PLOT_BACKGROUND`, `PLOT_BORDER` | [ ] Plot and Panel Styling (pending) |
 
 ### 02_HBAR.rptsql
 
-| Gap | Prerequisite TODO |
+| Gap | Status |
 | :--- | :--- |
-| `STACKED = 100PCT` | ✅ shipped |
-| Full legend suite | ✅ shipped |
-| `AXIS_SORT` variants | ✅ shipped |
-| `BAND_SIZE`, `SERIES_GAP` | ✅ shipped |
-| `GRID_LINES`, `ZERO_LINE`, `MINOR_GRID_LINES` | ✅ shipped |
-| Remaining overlay types (AVERAGE, MOVING_AVG, LINEAR, POLYNOMIAL, RUNNING_TOTAL, PERCENT_OF_TOTAL) | ✅ shipped |
-| `COLORS` named palette | ✅ — just not exercised |
-| `DATA_LABELS` position variants | ✅ shipped |
-| `BAR_MIN_HEIGHT` | [ ] pending |
+| `STACKED = 100PCT` | ✅ Covered in sink |
+| Full legend suite | ✅ Covered in sink |
+| `AXIS_SORT` variants | ✅ Covered in sink |
+| `BAND_SIZE`, `SERIES_GAP` | ✅ Covered in sink |
+| `GRID_LINES`, `ZERO_LINE`, `MINOR_GRID_LINES` | ✅ Covered in sink |
+| Remaining overlay types (AVERAGE, MOVING_AVG, LINEAR, POLYNOMIAL, RUNNING_TOTAL, PERCENT_OF_TOTAL) | ✅ Covered in sink |
+| `COLORS` named palette | ✅ Covered in sink |
+| `DATA_LABELS` position variants | ✅ Covered in sink |
+| `BAR_MIN_HEIGHT` | ✅ Covered in sink |
 
 ### 03_LINE.rptsql
 
-| Gap | Prerequisite TODO |
+| Gap | Status |
 | :--- | :--- |
-| `LINE_WIDTH = n` | ✅ Marker and Line Geometry (shipped) |
-| `SYMBOL_SHAPE` (CIRCLE/SQUARE/TRIANGLE/DIAMOND) | ✅ Marker and Line Geometry (shipped) |
-| `SYMBOL_STROKE_COLOR`, `SYMBOL_STROKE_WIDTH` | ✅ Marker and Line Geometry (shipped) |
-| Full legend suite | ✅ shipped |
-| `GRID_LINES`, `ZERO_LINE`, `MINOR_GRID_LINES` | ✅ shipped |
-| `AXIS_SORT` | ✅ shipped |
-| `DATA_LABELS` | ✅ shipped |
-| `SERIES_LABELS = ON` (end-of-line labels) | ✅ Series and Data Labels (shipped) |
-| EXPONENTIAL, LOGARITHMIC, POWER overlay types | ✅ shipped (in overlays sink but not line sink) |
-| `RUNNING_TOTAL`, `PERCENT_OF_TOTAL` overlays | ✅ shipped |
+| `LINE_WIDTH = n` | ✅ Covered in sink |
+| `SYMBOL_SHAPE` (CIRCLE/SQUARE/TRIANGLE/DIAMOND) | ✅ Covered in sink |
+| `SYMBOL_STROKE_COLOR`, `SYMBOL_STROKE_WIDTH` | ✅ Covered in sink |
+| Full legend suite | ✅ Covered in sink |
+| `GRID_LINES`, `ZERO_LINE`, `MINOR_GRID_LINES` | ✅ Covered in sink |
+| `AXIS_SORT` | ✅ Covered in sink |
+| `DATA_LABELS` | ✅ Covered in sink |
+| `SERIES_LABELS = ON` (end-of-line labels) | ✅ Covered in sink |
+| EXPONENTIAL, LOGARITHMIC, POWER overlay types | ✅ Covered in sink |
+| `RUNNING_TOTAL`, `PERCENT_OF_TOTAL` overlays | ✅ Covered in sink |
+| `AREA = ON` + `AREA_BASELINE` | ✅ Covered in sink |
+| `SEGMENT_STYLE` | ✅ Covered in sink |
 | `INTERPOLATION = STEP_BEFORE|STEP_AFTER` | [ ] Marker and Line Geometry (pending) |
 | `LINE_DASH = SOLID|DASHED|DOTTED` on series | [ ] Marker and Line Geometry (pending) |
 | `NULL_HANDLING = CONNECT|GAP|ZERO` | [ ] Missing Data / Gap Behavior (pending) |
-| `AREA = ON` + `AREA_BASELINE` | [ ] Area Fill (pending) |
 
 ### 04_SCATTER.rptsql
 
-| Gap | Prerequisite TODO |
+| Gap | Status |
 | :--- | :--- |
-| `JITTER = ON/OFF`, `JITTER_WIDTH`, `JITTER_HEIGHT` | ✅ SCATTER / BUBBLE (shipped) |
-| `ERROR_LOW` / `ERROR_HIGH` mappings + `ERROR_BAR_STYLE` | ✅ Analytical Overlays (shipped) |
-| `SYMBOL_SHAPE`, `SYMBOL_STROKE_COLOR`, `SYMBOL_STROKE_WIDTH` | ✅ Marker and Line Geometry (shipped) |
-| `LOG = ON` / `Y_AXIS (SCALE = LOG)` | ✅ SCATTER / BUBBLE (shipped) |
-| `SIZE_RANGE (min, max)`, `MIN_BUBBLE_SIZE`, `MAX_BUBBLE_SIZE` | ✅ SCATTER / BUBBLE (shipped) |
-| Full legend suite | ✅ shipped |
-| `GRID_LINES`, `ZERO_LINE` | ✅ shipped |
-| EXPONENTIAL, LOGARITHMIC, POWER overlays | ✅ shipped |
+| `JITTER = ON/OFF`, `JITTER_WIDTH`, `JITTER_HEIGHT` | ✅ Covered in sink |
+| `ERROR_LOW` / `ERROR_HIGH` mappings + `ERROR_BAR_STYLE` | ✅ Covered in sink |
+| `SYMBOL_SHAPE`, `SYMBOL_STROKE_COLOR`, `SYMBOL_STROKE_WIDTH` | ✅ Covered in sink |
+| `LOG = ON` / `Y_AXIS (SCALE = LOG)` | ✅ Covered in sink |
+| `SIZE_RANGE (min, max)`, `MIN_BUBBLE_SIZE`, `MAX_BUBBLE_SIZE` | ✅ Covered in sink |
+| Full legend suite | ✅ Covered in sink |
+| `GRID_LINES`, `ZERO_LINE` | ✅ Covered in sink |
+| EXPONENTIAL, LOGARITHMIC, POWER overlays | ✅ Covered in sink |
 | `OVERLAYS` clause (currently uses `SHOW_REGRESSION`) | [ ] Cross-Cutting (pending: OVERLAYS on SCATTER) |
 | `FORMATTING (WHEN … THEN color)` | [ ] Cross-Cutting (pending) |
 | `SYMBOL_SIZE = n` | [ ] Named Chart Marks (pending) |
 
 ### 05_PIE.rptsql
 
-| Gap | Prerequisite TODO |
+| Gap | Status |
 | :--- | :--- |
-| `SORT = VALUE_DESC / VALUE_ASC / ALPHA / SOURCE` | ✅ PIE / DONUT (shipped) |
-| `MIN_SLICE_PCT = n` + `OTHER_LABEL = 'Other'` | ✅ PIE / DONUT (shipped) |
-| `EXPLODE = 'SliceName'` | ✅ PIE / DONUT (shipped) |
-| `EXPLODE_ALL = ON` + `EXPLODE_DISTANCE = 0.1` | ✅ PIE / DONUT (shipped) |
-| `START_ANGLE = 90` | ✅ PIE / DONUT (shipped) |
-| `SLICE_BORDER_COLOR`, `SLICE_BORDER_WIDTH` | ✅ PIE / DONUT (shipped) |
-| Full legend suite (TITLE, COLUMNS, INSIDE anchor) | ✅ shipped |
-| `DATA_LABELS` with position / leader line | ✅ shipped / [ ] LEADER_LINE pending |
+| `SORT = VALUE_DESC / VALUE_ASC / ALPHA / SOURCE` | ✅ Covered in sink |
+| `MIN_SLICE_PCT = n` + `OTHER_LABEL = 'Other'` | ✅ Covered in sink |
+| `EXPLODE = 'SliceName'` | ✅ Covered in sink |
+| `EXPLODE_ALL = ON` + `EXPLODE_DISTANCE = 0.1` | ✅ Covered in sink |
+| `START_ANGLE = 90` | ✅ Covered in sink |
+| `SLICE_BORDER_COLOR`, `SLICE_BORDER_WIDTH` | ✅ Covered in sink |
+| Full legend suite (TITLE, COLUMNS, INSIDE anchor) | ✅ Covered in sink |
+| `DATA_LABELS` with position / leader line | ✅ Covered in sink / [ ] LEADER_LINE pending |
 
 ### 06_DONUT.rptsql
 
-| Gap | Prerequisite TODO |
+| Gap | Status |
 | :--- | :--- |
-| Same PIE-specific options (all shipped) | ✅ |
-| Full legend suite | ✅ shipped |
-| `LEGEND_POSITION = INSIDE` + anchor | ✅ shipped |
+| Same PIE-specific options (all shipped) | ✅ Covered in sink |
+| Full legend suite | ✅ Covered in sink |
+| `LEGEND_POSITION = INSIDE` + anchor | ✅ Covered in sink |
 
 ### 07_COMBO.rptsql
 
-| Gap | Prerequisite TODO |
+| Gap | Status |
 | :--- | :--- |
-| `Y2_AXIS` dual-axis series | ✅ (already in COMBO) — sink needs a second visual with it |
-| `LINE_WIDTH` on LINE series in COMBO | ✅ Marker and Line Geometry (shipped) |
-| Full legend suite | ✅ shipped |
-| `GRID_LINES`, `ZERO_LINE` | ✅ shipped |
-| Overlays on COMBO | ✅ (overlays work on COMBO) |
-| `DATA_LABELS` | ✅ shipped |
-| `STACKED` bars in combo | ✅ shipped |
+| `Y2_AXIS` dual-axis series | ✅ Covered in sink |
+| `LINE_WIDTH` on LINE series in COMBO | ✅ Covered in sink |
+| Full legend suite | ✅ Covered in sink |
+| `GRID_LINES`, `ZERO_LINE` | ✅ Covered in sink |
+| Overlays on COMBO | ✅ Covered in sink |
+| `DATA_LABELS` | ✅ Covered in sink |
+| `STACKED` bars in combo | ✅ Covered in sink |
 | `SYNC_AXES = ON` | [ ] Dual-Axis (pending) |
 | `Y_MARK = BAR|LINE|AREA` per axis | [ ] Named Chart Marks (pending) |
 
@@ -1938,65 +2174,57 @@ means the feature already exists in the engine and the sink just needs a new vis
 
 ### 11_HEATMAP.rptsql
 
-| Gap | Prerequisite TODO |
+| Gap | Status |
 | :--- | :--- |
-| Diverging 3-color: `COLOR_LOW`, `COLOR_MID`, `COLOR_HIGH` + `MIDPOINT` | ✅ HEATMAP (shipped) |
-| `NULL_COLOR = '#rrggbb'` | ✅ HEATMAP (shipped) |
-| `CELL_BORDER = ON/OFF`, `CELL_BORDER_COLOR`, `CELL_BORDER_WIDTH` | ✅ HEATMAP (shipped) |
-| `X_SORT`, `Y_SORT` | ✅ HEATMAP (shipped) |
-| Full legend suite | ✅ shipped |
+| Diverging 3-color: `COLOR_LOW`, `COLOR_MID`, `COLOR_HIGH` + `MIDPOINT` | ✅ Covered in sink |
+| `NULL_COLOR = '#rrggbb'` | ✅ Covered in sink |
+| `CELL_BORDER = ON/OFF`, `CELL_BORDER_COLOR`, `CELL_BORDER_WIDTH` | ✅ Covered in sink |
+| `X_SORT`, `Y_SORT` | ✅ Covered in sink |
+| Full legend suite | ✅ Covered in sink |
 
 ### 12_FUNNEL.rptsql
 
-| Gap | Prerequisite TODO |
+| Gap | Status |
 | :--- | :--- |
-| `ORIENTATION = HORIZONTAL` | ✅ (exists) — sink missing it |
-| `SORT = SOURCE|VALUE_ASC|VALUE_DESC` | [ ] FUNNEL (pending) |
-| `PERCENT_MODE = STEP|TOTAL` | [ ] FUNNEL (pending) |
-| `FUNNEL_SHAPE = FUNNEL|PYRAMID` | [ ] FUNNEL (pending) |
-| Full legend suite | ✅ shipped |
-
-### 13_WATERFALL.rptsql
-
-| Gap | Prerequisite TODO |
-| :--- | :--- |
-| `TOTAL = is_total_column` (boolean flag mapping) | ✅ WATERFALL (shipped) |
-| `SUBTOTAL` role mapping | ✅ WATERFALL (shipped) |
-| `"SUBTOTAL"` string in TOTAL column | ✅ WATERFALL (shipped) |
-| `CONNECTOR_LINES = ON/OFF`, `CONNECTOR_LINE_COLOR`, `CONNECTOR_LINE_WIDTH` | ✅ WATERFALL (shipped) |
-| `COLOR_TOTAL`, `COLOR_SUBTOTAL`, `COLOR_UP`, `COLOR_DOWN` | ✅ WATERFALL (shipped) |
-| `ORIENTATION = HORIZONTAL` | ✅ WATERFALL (shipped) |
-| `BAR_MIN_HEIGHT` | [ ] Bar Minimum Height (pending) |
-
-### 31_OVERLAYS_ADVANCED.rptsql
-
-| Gap | Prerequisite TODO |
-| :--- | :--- |
-| `RUNNING_TOTAL` overlay | ✅ Analytical Overlays (shipped) |
-| `PERCENT_OF_TOTAL` overlay | ✅ Analytical Overlays (shipped) |
-| `REFERENCE_LINE (VALUE = n, LABEL = '...', STYLE = DASHED)` | [ ] Analytical Overlays (pending) |
-| `REFERENCE_BAND (LOW = n, HIGH = n, COLOR, LABEL)` | [ ] Analytical Overlays (pending) |
-| `FORECAST` overlay | [ ] Analytical Overlays (pending) |
-
-### 32_BUBBLE.rptsql
-
-| Gap | Prerequisite TODO |
-| :--- | :--- |
-| `MIN_BUBBLE_SIZE`, `MAX_BUBBLE_SIZE` | ✅ SCATTER / BUBBLE (shipped) |
-| `SIZE_RANGE (min, max)` | ✅ SCATTER / BUBBLE (shipped) |
-| `LOG = ON` (log scale) | ✅ SCATTER / BUBBLE (shipped) |
-| Full legend suite | ✅ shipped |
-| `GRID_LINES`, `ZERO_LINE` | ✅ shipped |
-| `SYMBOL_SIZE = n` | [ ] Named Chart Marks (pending) |
-
-### 12_FUNNEL.rptsql
-
-| Gap | Prerequisite TODO |
-| :--- | :--- |
+| `ORIENTATION = HORIZONTAL` | ✅ Covered in sink |
 | `SORT = SOURCE\|VALUE_DESC\|VALUE_ASC` option | ✅ FUNNEL (shipped) |
 | `SHOW_PERCENT = ON\|OFF` conversion percentage toggle | ✅ FUNNEL (shipped) |
 | `PERCENT_MODE = STEP\|TOTAL` conversion calculation | ✅ FUNNEL (shipped) |
 | `FUNNEL_SHAPE = FUNNEL\|PYRAMID` orientation option | ✅ FUNNEL (shipped) |
+| Full legend suite | ✅ Covered in sink |
+
+### 13_WATERFALL.rptsql
+
+| Gap | Status |
+| :--- | :--- |
+| `TOTAL = is_total_column` (boolean flag mapping) | ✅ Covered in sink |
+| `SUBTOTAL` role mapping | ✅ Covered in sink |
+| `"SUBTOTAL"` string in TOTAL column | ✅ Covered in sink |
+| `CONNECTOR_LINES = ON/OFF`, `CONNECTOR_LINE_COLOR`, `CONNECTOR_LINE_WIDTH` | ✅ Covered in sink |
+| `COLOR_TOTAL`, `COLOR_SUBTOTAL`, `COLOR_UP`, `COLOR_DOWN` | ✅ Covered in sink |
+| `ORIENTATION = HORIZONTAL` | ✅ Covered in sink |
+| `BAR_MIN_HEIGHT` | ✅ Covered in sink |
+
+### 31_OVERLAYS_ADVANCED.rptsql
+
+| Gap | Status |
+| :--- | :--- |
+| `RUNNING_TOTAL` overlay | ✅ Covered in sink |
+| `PERCENT_OF_TOTAL` overlay | ✅ Covered in sink |
+| `REFERENCE_LINE (VALUE = n, LABEL = '...', STYLE = DASHED)` | ✅ Covered in sink |
+| `REFERENCE_BAND (LOW = n, HIGH = n, COLOR, LABEL)` | ✅ Covered in sink |
+| `FORECAST` overlay | [ ] Analytical Overlays (pending) |
+
+### 32_BUBBLE.rptsql
+
+| Gap | Status |
+| :--- | :--- |
+| `MIN_BUBBLE_SIZE`, `MAX_BUBBLE_SIZE` | ✅ Covered in sink |
+| `SIZE_RANGE (min, max)` | ✅ Covered in sink |
+| `LOG = ON` (log scale) | ✅ Covered in sink |
+| Full legend suite | ✅ Covered in sink |
+| `GRID_LINES`, `ZERO_LINE` | ✅ Covered in sink |
+| `SYMBOL_SIZE = n` | [ ] Named Chart Marks (pending) |
 
 ### 14_RADAR.rptsql
 
@@ -2058,20 +2286,19 @@ means the feature already exists in the engine and the sink just needs a new vis
 
 ### Priority Order for Sink Updates
 
-All items below are **already shipped** — no new feature work needed before updating the sink file.
-Work through them in this order:
+All priority sink files (1–13) have been fully updated and verified runnable:
 
-1. **13_WATERFALL.rptsql** — Full rewrite needed: TOTAL flag, SUBTOTAL mapping, SUBTOTAL string, connector lines, horizontal orientation, new color tokens.
-2. **11_HEATMAP.rptsql** — Add diverging colors, NULL_COLOR, CELL_BORDER, X_SORT/Y_SORT visuals.
-3. **05_PIE.rptsql** — Add SORT, MIN_SLICE_PCT, EXPLODE variants, START_ANGLE, SLICE_BORDER visuals.
-4. **06_DONUT.rptsql** — Same pie-specific additions.
-5. **04_SCATTER.rptsql** — Add JITTER, ERROR bars, SIZE_RANGE, SYMBOL options.
-6. **32_BUBBLE.rptsql** — Add MIN/MAX_BUBBLE_SIZE, SIZE_RANGE, LOG scale.
+1. ~~**13_WATERFALL.rptsql** — Full rewrite needed: TOTAL flag, SUBTOTAL mapping, SUBTOTAL string, connector lines, horizontal orientation, new color tokens.~~ ✅ Done.
+2. ~~**11_HEATMAP.rptsql** — Add diverging colors, NULL_COLOR, CELL_BORDER, X_SORT/Y_SORT visuals.~~ ✅ Done.
+3. ~~**05_PIE.rptsql** — Add SORT, MIN_SLICE_PCT, EXPLODE variants, START_ANGLE, SLICE_BORDER visuals.~~ ✅ Done.
+4. ~~**06_DONUT.rptsql** — Same pie-specific additions.~~ ✅ Done.
+5. ~~**04_SCATTER.rptsql** — Add JITTER, ERROR bars, SIZE_RANGE, SYMBOL options.~~ ✅ Done.
+6. ~~**32_BUBBLE.rptsql** — Add MIN/MAX_BUBBLE_SIZE, SIZE_RANGE, LOG scale.~~ ✅ Done.
 7. ~~**09_BOXPLOT.rptsql** — Add ORIENTATION=HORIZONTAL, multi-series.~~ ✅ Done.
-8. **03_LINE.rptsql** — Add LINE_WIDTH, SYMBOL options, EXPONENTIAL/LOG/POWER overlays, RUNNING_TOTAL, PERCENT_OF_TOTAL.
-9. **07_COMBO.rptsql** — Add Y2_AXIS example, LINE_WIDTH, overlays, STACKED bars.
-10. **01_BAR.rptsql** — Add STACKED=100PCT, full legend suite, GRID_LINES, ZERO_LINE.
-11. **02_HBAR.rptsql** — Same axis/legend additions as BAR.
-12. **31_OVERLAYS_ADVANCED.rptsql** — Add RUNNING_TOTAL, PERCENT_OF_TOTAL.
-13. **12_FUNNEL.rptsql** — Add ORIENTATION=HORIZONTAL (and pending SORT/PERCENT_MODE/PYRAMID when implemented).
+8. ~~**03_LINE.rptsql** — Add LINE_WIDTH, SYMBOL options, EXPONENTIAL/LOG/POWER overlays, RUNNING_TOTAL, PERCENT_OF_TOTAL.~~ ✅ Done.
+9. ~~**07_COMBO.rptsql** — Add Y2_AXIS example, LINE_WIDTH, overlays, STACKED bars.~~ ✅ Done.
+10. ~~**01_BAR.rptsql** — Add STACKED=100PCT, full legend suite, GRID_LINES, ZERO_LINE.~~ ✅ Done.
+11. ~~**02_HBAR.rptsql** — Same axis/legend additions as BAR.~~ ✅ Done.
+12. ~~**31_OVERLAYS_ADVANCED.rptsql** — Add RUNNING_TOTAL, PERCENT_OF_TOTAL.~~ ✅ Done.
+13. ~~**12_FUNNEL.rptsql** — Add ORIENTATION=HORIZONTAL (and pending SORT/PERCENT_MODE/PYRAMID when implemented).~~ ✅ Done.
 

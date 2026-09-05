@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { readPortalPage, readPortalPageModule } from './lib/portal-page.mjs';
 
 const scriptRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptRoot, '..');
@@ -35,11 +36,11 @@ assert.equal(element.title, 'Ada Lovelace — ada@example.test');
 assert.equal(element.dataset.subject, '41');
 
 for (const page of ['index.html', 'admin.html', 'docs.html', 'orchestrator.html']) {
-  const source = fs.readFileSync(path.join(repoRoot, 'src', 'ETL-SQL.Portal', 'wwwroot', page), 'utf8');
+  const source = readPortalPage(page);
   assert.match(source, /session-identity\.js/);
   assert.doesNotMatch(source, /payload\.sub\s*\|\|\s*payload\.unique_name/);
 }
-const admin = fs.readFileSync(path.join(repoRoot, 'src', 'ETL-SQL.Portal', 'wwwroot', 'admin.html'), 'utf8');
+const admin = readPortalPage('admin');
 assert.match(admin, /e\.username/);
 assert.doesNotMatch(admin, /e\.userName/);
 console.log('Portal shared session identity and audit identity rendering passed.');

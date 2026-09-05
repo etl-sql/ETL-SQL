@@ -46,14 +46,70 @@ CREATE VISUAL StyledCombo AS COMBO (
     )
 );
 
+-- 5. Dual-Axis Combo (Y_AXIS for Bar, Y2_AXIS for Line)
+CREATE VISUAL DualAxisCombo AS COMBO (
+    SOURCE = #data,
+    TITLE = 'Dual-Axis Combo (Primary Y = Revenue, Secondary Y2 = Orders)',
+    MAPPINGS (X = Month),
+    SERIES (BAR Revenue, LINE Orders),
+    OPTIONS (
+        LINE_WIDTH      = 3,
+        GRID_LINES      = ON,
+        ZERO_LINE       = ON,
+        Y_AXIS (
+            LABEL       = 'Revenue ($)',
+            TICK_FORMAT = 'C0'
+        ),
+        Y2_AXIS (
+            LABEL       = 'Order Volume',
+            TICK_FORMAT = 'N0'
+        ),
+        LEGEND          = ON,
+        LEGEND_TITLE    = 'Metrics',
+        LEGEND_POSITION = TOP
+    )
+);
+
+-- 6. Stacked Bars in Combo Chart
+CREATE VISUAL StackedCombo AS COMBO (
+    SOURCE = #multi,
+    TITLE = 'Stacked Bars with Line Overlay',
+    MAPPINGS (X = Month),
+    SERIES (BAR RevA, BAR RevB, LINE OrdA),
+    OPTIONS (
+        STACKED        = ON,
+        BAR_MIN_HEIGHT = 3,
+        DATA_LABELS    = ON,
+        LINE_WIDTH     = 2.5
+    )
+);
+
+-- 7. Combo with Reference Line Overlay
+CREATE VISUAL OverlayCombo AS COMBO (
+    SOURCE = #data,
+    TITLE = 'Combo Chart with Target Reference Line',
+    MAPPINGS (X = Month),
+    SERIES (BAR Revenue, LINE Orders),
+    OPTIONS (
+        GRID_LINES = ON
+    ),
+    OVERLAYS (
+        REFERENCE_LINE (VALUE = 1100, LABEL = 'Budget Baseline', STYLE = DASHED, COLOR = '#16a34a')
+    )
+);
+
 -- Page Layout
 CREATE PAGE ComboKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C .',
+    STRUCTURE = 'A B / C D / E F',
     MAP (
         'A' = BasicCombo,
         'B' = MultiCombo,
-        'C' = StyledCombo
+        'C' = StyledCombo,
+        'D' = DualAxisCombo,
+        'E' = StackedCombo,
+        'F' = OverlayCombo
     )
 );
 
 CREATE NAVIGATION MainNav AS TAB (DEFAULT = ComboKitchenSink, PAGES (ComboKitchenSink));
+

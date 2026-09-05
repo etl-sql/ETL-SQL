@@ -9,7 +9,10 @@ SELECT 'Direct' AS Channel, 450 AS Users INTO #channels
 UNION ALL SELECT 'Social', 300
 UNION ALL SELECT 'Search', 600
 UNION ALL SELECT 'Referral', 150
-UNION ALL SELECT 'Email', 200;
+UNION ALL SELECT 'Email', 200
+UNION ALL SELECT 'Affiliate', 20
+UNION ALL SELECT 'Display', 15
+UNION ALL SELECT 'Partner', 10;
 
 -- 2. Basic Pie Chart
 CREATE VISUAL BasicPie AS PIE (
@@ -47,14 +50,60 @@ CREATE VISUAL StyledPie AS PIE (
     )
 );
 
+-- 5. Sorted Pie with Slice Borders & START_ANGLE
+CREATE VISUAL SortedBorderedPie AS PIE (
+    SOURCE = #channels,
+    TITLE = 'Sorted (VALUE_DESC), START_ANGLE=90 & Slice Borders',
+    MAPPINGS (LABEL = Channel, VALUE = Users),
+    OPTIONS (
+        SORT               = VALUE_DESC,
+        START_ANGLE        = 90,
+        SLICE_BORDER_COLOR = '#ffffff',
+        SLICE_BORDER_WIDTH = 2,
+        DATA_LABELS        = ON
+    )
+);
+
+-- 6. Exploded Slice & MIN_SLICE_PCT Threshold
+CREATE VISUAL ExplodedThresholdPie AS PIE (
+    SOURCE = #channels,
+    TITLE = 'EXPLODE Single Slice & MIN_SLICE_PCT Threshold',
+    MAPPINGS (LABEL = Channel, VALUE = Users),
+    OPTIONS (
+        EXPLODE       = 'Search',
+        MIN_SLICE_PCT = 5,
+        OTHER_LABEL   = 'Other Channels',
+        DATA_LABELS   = ON
+    )
+);
+
+-- 7. EXPLODE_ALL with Distance & Multi-Column Legend
+CREATE VISUAL ExplodeAllLegendPie AS PIE (
+    SOURCE = #channels,
+    TITLE = 'EXPLODE_ALL & Multi-Column Legend',
+    MAPPINGS (LABEL = Channel, VALUE = Users),
+    OPTIONS (
+        EXPLODE_ALL      = ON,
+        EXPLODE_DISTANCE = 0.08,
+        LEGEND           = ON,
+        LEGEND_TITLE     = 'Channels',
+        LEGEND_COLUMNS   = 2,
+        LEGEND_POSITION  = BOTTOM
+    )
+);
+
 -- Page Layout
 CREATE PAGE PieKitchenSink AS DASHBOARD (
-    STRUCTURE = 'A B / C',
+    STRUCTURE = 'A B C / D E F',
     MAP (
         'A' = BasicPie,
         'B' = PercentPie,
-        'C' = StyledPie
+        'C' = StyledPie,
+        'D' = SortedBorderedPie,
+        'E' = ExplodedThresholdPie,
+        'F' = ExplodeAllLegendPie
     )
 );
 
 CREATE NAVIGATION MainNav AS TAB (DEFAULT = PieKitchenSink, PAGES (PieKitchenSink));
+

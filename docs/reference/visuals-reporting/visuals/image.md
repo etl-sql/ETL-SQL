@@ -1,46 +1,76 @@
 # IMAGE
-Embeds a static or dynamic image such as a logo, product photo, map snapshot, or QR code. The source can be a file path, URL, or base-64 data URI from a query.
+
+Embeds static images, query-driven dynamic photos, or multi-item image galleries with accessibility and fallback support.
 
 ## Syntax
 
 ```sql
 CREATE VISUAL VisualName AS IMAGE (
-  SOURCE = #tableName,
-  MAPPINGS (
-    ...
+  [SOURCE = #tableName,]
+  [MAPPINGS (
+    [SRC|URL = <column_name>]
+  ),]
+  [CONTENT = '<image_url_or_path>',]
+  OPTIONS (
+    ALT = '<accessibility_description>',
+    [MODE = SINGLE|GALLERY,]
+    [COLUMNS = <int_columns>,]
+    [ASPECT_RATIO = '<ratio>',]
+    [FALLBACK = '<fallback_image_url>',]
+    [FIT = 'contain'|'cover'|'fill'|'none',]
+    [WIDTH = '<css_size>',]
+    [HEIGHT = '<css_size>']
   )
+  [, ACTIONS (ON_CLICK = <action>)]
 );
 ```
 
 ## Mappings
 
-- **SRC** - column containing the image path/URL/data-URI (use with SOURCE query) or omit SOURCE and use DEFAULT = 'path/url' for a static image
+- **SRC** — Column containing the image URL, file path, or base64 data URI (URL is also accepted).
 
 ## Options
 
-- **FIT = 'contain'|'cover'|'fill'|'none'** - CSS object-fit behaviour (default 'contain')
-- **WIDTH = 'css-value'** - e.g. '100%', '300px'
-  HEIGHT  = 'css-value'
+- **ALT = 'description'** — Accessible alternative text description for assistive technologies and screen readers (linter rule RPT4001).
+- **MODE = SINGLE|GALLERY** — Display single image or a multi-image gallery grid from source rows (default `SINGLE`).
+- **COLUMNS = n** — Number of grid columns when `MODE = GALLERY` (default `3`).
+- **ASPECT_RATIO = 'ratio'** — CSS aspect ratio constraint (e.g. `'16:9'`, `'4:3'`, `'1:1'`).
+- **FALLBACK = 'url'** — Fallback image URL loaded automatically if primary image resource fails.
+- **FIT = 'contain'|'cover'|'fill'|'none'** — CSS object-fit behavior for container boundaries (default `'contain'`).
+- **WIDTH = 'size'** — CSS width rule (e.g. `'100%'`, `'300px'`).
+- **HEIGHT = 'size'** — CSS height rule (e.g. `'200px'`, `'auto'`).
 
-Static image (no query needed):
 ## Examples
 
 ```sql
-CREATE VISUAL Logo AS IMAGE (
-  DEFAULT = '/assets/company-logo.png',
-  OPTIONS (FIT = 'contain', WIDTH = '200px', HEIGHT = '80px')
+CREATE VISUAL CompanyLogo AS IMAGE (
+  CONTENT = '/assets/brand-logo.svg',
+  OPTIONS (
+    ALT = 'Company Brand Logo',
+    WIDTH = '180px',
+    HEIGHT = '60px',
+    FIT = 'contain'
+  ),
+  ACTIONS (
+    ON_CLICK = OPEN_URL('https://portal.example.com', TARGET = '_blank')
+  )
 );
 ```
 
-Dynamic image from data:
 ```sql
-SELECT product_id, image_url INTO #hero
-FROM #products WHERE featured = 1;
+SELECT photo_url, product_name INTO #catalog_images FROM #products;
 
-CREATE VISUAL ProductHero AS IMAGE (
-  SOURCE   = #hero,
-  MAPPINGS (SRC = image_url),
-  OPTIONS  (FIT = 'cover', WIDTH = '100%', HEIGHT = '300px')
+CREATE VISUAL ProductGallery AS IMAGE (
+  SOURCE = #catalog_images,
+  MAPPINGS (URL = photo_url),
+  OPTIONS (
+    ALT = 'Product Catalog Gallery',
+    MODE = GALLERY,
+    COLUMNS = 4,
+    ASPECT_RATIO = '16:9',
+    FALLBACK = '/assets/placeholder.png',
+    FIT = 'cover'
+  )
 );
 ```
 

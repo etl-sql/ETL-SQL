@@ -57,7 +57,13 @@ function getExpectedContent(filePath, relativePath, content) {
  * Source: ${sourcePath}
  * Edit the canonical source, then run: node .\\scripts\\sync-assets.js
  */\n\n`;
-        return banner + content;
+        // A host copy is byte-identical to the canonical file, so the browser type gate must not
+        // check it a second time under a second path — every finding would be reported twice and
+        // the copy is not where anyone would fix it. `@ts-nocheck` has to be its own `//` comment
+        // (TypeScript does not read the pragma out of a block comment) and has to come before the
+        // first statement, so it leads the banner. JS only; CSS has no pragma.
+        const pragma = ext === '.js' ? '// @ts-nocheck — generated copy; check the canonical source.\n' : '';
+        return pragma + banner + content;
     }
     return content;
 }

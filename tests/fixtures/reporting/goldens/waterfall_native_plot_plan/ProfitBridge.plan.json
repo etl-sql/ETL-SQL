@@ -196,6 +196,30 @@
                 "decimal": 50
               },
               "displayValue": "50"
+            },
+            {
+              "channel": "xStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "xEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            },
+            {
+              "channel": "text",
+              "value": {
+                "kind": "text",
+                "text": "TOTAL"
+              },
+              "displayValue": "TOTAL"
             }
           ],
           "isGap": false,
@@ -243,6 +267,30 @@
                 "decimal": 80
               },
               "displayValue": "80"
+            },
+            {
+              "channel": "xStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 50
+              },
+              "displayValue": "50"
+            },
+            {
+              "channel": "xEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 80
+              },
+              "displayValue": "80"
+            },
+            {
+              "channel": "text",
+              "value": {
+                "kind": "text",
+                "text": "INCREASE"
+              },
+              "displayValue": "INCREASE"
             }
           ],
           "isGap": false,
@@ -290,6 +338,30 @@
                 "decimal": 60
               },
               "displayValue": "60"
+            },
+            {
+              "channel": "xStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 80
+              },
+              "displayValue": "80"
+            },
+            {
+              "channel": "xEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 60
+              },
+              "displayValue": "60"
+            },
+            {
+              "channel": "text",
+              "value": {
+                "kind": "text",
+                "text": "DECREASE"
+              },
+              "displayValue": "DECREASE"
             }
           ],
           "isGap": false,
@@ -337,6 +409,30 @@
                 "decimal": 60
               },
               "displayValue": "60"
+            },
+            {
+              "channel": "xStart",
+              "value": {
+                "kind": "decimal",
+                "decimal": 0
+              },
+              "displayValue": "0"
+            },
+            {
+              "channel": "xEnd",
+              "value": {
+                "kind": "decimal",
+                "decimal": 60
+              },
+              "displayValue": "60"
+            },
+            {
+              "channel": "text",
+              "value": {
+                "kind": "text",
+                "text": "TOTAL"
+              },
+              "displayValue": "TOTAL"
             }
           ],
           "isGap": false,
@@ -374,28 +470,28 @@
         "label": "Opening",
         "value": "50",
         "order": 0,
-        "detail": "range 0 to 50",
+        "detail": "x range 0 to 50, range 0 to 50",
         "group": "ProfitBridge"
       },
       {
         "label": "Revenue",
         "value": "30",
         "order": 1,
-        "detail": "range 50 to 80",
+        "detail": "x range 50 to 80, range 50 to 80",
         "group": "ProfitBridge"
       },
       {
         "label": "Costs",
         "value": "-20",
         "order": 2,
-        "detail": "range 80 to 60",
+        "detail": "x range 80 to 60, range 80 to 60",
         "group": "ProfitBridge"
       },
       {
         "label": "Closing",
         "value": "60",
         "order": 3,
-        "detail": "range 0 to 60",
+        "detail": "x range 0 to 60, range 0 to 60",
         "group": "ProfitBridge"
       }
     ],

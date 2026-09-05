@@ -97,30 +97,7 @@
   <a class="portal-legal-link" href="/third-party-notices" target="_blank" rel="noopener">Third-party notices</a>
 </div>
 
-<script type="module">
-  import { auth } from '/js/api.js?v=0.18.0';
-  import { applyPortalBranding, initTheme } from '/js/branding.js?v=0.18.0';
-  import { getSessionIdentity, renderSessionIdentity } from '/js/session-identity.js?v=0.18.0';
-  import { applyNavigationSafely } from '/js/portal-nav.js?v=0.18.0';
-  import { renderPortalHeader } from '/js/portal-header.js?v=0.18.0';
-
-  renderPortalHeader();
-  initTheme();
-  applyPortalBranding();
-
-  if (auth.isLoggedIn()) {
-    const identity = getSessionIdentity(auth.getToken());
-    renderSessionIdentity(identity, document.getElementById('topbarUser'));
-
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-      logoutBtn.style.display = 'inline-block';
-      logoutBtn.addEventListener('click', () => auth.logout());
-    }
-
-    applyNavigationSafely();
-  }
-</script>
+<script type="module" src="/js/pages/docs.js?v=0.18.0"></script>
 <script type="module" src="/js/docs.js?v=0.18.0"></script>
 </body>
 </html>

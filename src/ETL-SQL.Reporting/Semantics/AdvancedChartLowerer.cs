@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -40,6 +40,39 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         if (chart.Facet?.WrapField is { } wrap)
             bindings.Add(new FieldBinding(FieldChannel.Wrap, wrap, DataSemanticKind.Nominal));
 
+        if (chart.Annotations.Length > 0)
+        {
+            var annotLayers = new List<MarkLayerSpec>();
+            for (var index = 0; index < chart.Annotations.Length; index++)
+            {
+                var overlay = chart.Annotations[index];
+                if (overlay.OverlayType == OverlayType.AnnotationPoint)
+                {
+                    var annotTokens = new List<StyleToken>
+                    {
+                        new("overlayType", "AnnotationPoint"),
+                        new("series", overlay.SeriesName ?? ""),
+                        new("annotationType", overlay.AnnotationPointType ?? "MAX"),
+                        new("coordX", overlay.CoordX?.ToString(CultureInfo.InvariantCulture) ?? ""),
+                        new("coordY", overlay.CoordY?.ToString(CultureInfo.InvariantCulture) ?? ""),
+                        new("coordXString", overlay.CoordXString ?? ""),
+                        new("symbol", overlay.Symbol ?? "pin"),
+                        new("color", overlay.Color ?? "#2563eb"),
+                        new("label", overlay.Label ?? "")
+                    };
+                    annotLayers.Add(new MarkLayerSpec(
+                        $"annotation-point-{index:D2}",
+                        MarkKind.Point,
+                        150 + index,
+                        [],
+                        annotTokens.ToImmutableArray(),
+                        overlay.Label));
+                }
+            }
+            if (annotLayers.Count > 0)
+                layers = layers.AddRange(annotLayers);
+        }
+
         var resolution = new ScaleResolutionSpec(
             Resolution(chart.Resolution.X), Resolution(chart.Resolution.Y), Resolution(chart.Resolution.Color));
         var title = manifest.Options.GetValueOrDefault("title") ?? manifest.Name;
@@ -66,7 +99,7 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
                     .Where(binding => binding.SourceKind == BindingSourceKind.Field && binding.Field is not null && binding.Format is not null)
                     .Select(binding => new FieldFormat(binding.Field!, binding.Format))
                     .Distinct().ToImmutableArray()),
-            new NullHandlingSpec(NullValuePolicy.Gap, []),
+            new NullHandlingSpec(ResolveCustomNullPolicy(chart, statement), []),
             ChartStyleTokens.Theme(manifest),
             new AccessibilitySpec(title, manifest.Options.GetValueOrDefault("subtitle"), null, true),
             title,
@@ -87,6 +120,22 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
             throw AdvancedChartSemanticException.At(_chartNode ?? statement, ex.Message);
         }
         return spec;
+    }
+
+    private static NullValuePolicy ResolveCustomNullPolicy(AdvancedChartDefinition chart, CreateVisualStatement statement)
+    {
+        var nullOpt = chart.Layers.FirstOrDefault(l => !string.IsNullOrEmpty(l.NullHandling))?.NullHandling
+            ?? statement.Options.FirstOrDefault(o => o.Key.Equals("NULL_HANDLING", StringComparison.OrdinalIgnoreCase))?.Value;
+        if (!string.IsNullOrEmpty(nullOpt))
+        {
+            return nullOpt.ToUpperInvariant() switch
+            {
+                "CONNECT" => NullValuePolicy.Skip,
+                "ZERO" => NullValuePolicy.Zero,
+                _ => NullValuePolicy.Gap
+            };
+        }
+        return NullValuePolicy.Gap;
     }
 
     private static (ImmutableArray<MarkLayerSpec> Layers, ImmutableArray<ScaleSpec> Scales) InferScales(
@@ -144,10 +193,7 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         var effective = layer.InheritEncodings
             ? global.Where(inherited => local.All(binding => binding.Channel != inherited.Channel)).Concat(local).ToImmutableArray()
             : local;
-        return new(
-        layer.Name, Mark(layer.Mark), layer.ZIndex,
-        effective,
-        layer.Styles.Select(style =>
+        var styles = layer.Styles.Select(style =>
         {
             var value = Display(EvaluateLiteral(style.Value, style));
             if (style.Name.Equals("ERROR_BAR_STYLE", StringComparison.OrdinalIgnoreCase))
@@ -182,8 +228,24 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
                 return new StyleToken(style.Name, width);
             }
             return new StyleToken(style.Name, value);
-        }).ToImmutableArray(),
-        layer.Name)
+        });
+        if (!string.IsNullOrEmpty(layer.NullHandling))
+        {
+            styles = styles.Append(new StyleToken("nullHandling", layer.NullHandling.ToUpperInvariant()));
+        }
+        if (!string.IsNullOrEmpty(layer.AreaBaseline))
+        {
+            styles = styles.Append(new StyleToken("areaBaseline", layer.AreaBaseline.ToUpperInvariant()));
+        }
+        if (!string.IsNullOrEmpty(layer.HoverFocus))
+        {
+            styles = styles.Append(new StyleToken("hoverFocus", layer.HoverFocus.ToUpperInvariant()));
+        }
+        return new(
+            layer.Name, Mark(layer.Mark), layer.ZIndex,
+            effective,
+            styles.ToImmutableArray(),
+            layer.Name)
         {
             Conditions = layer.Conditions.Select(Condition).ToImmutableArray(),
             BandSize = layer.BandSize,
@@ -273,7 +335,9 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
         scale.MinorTicks,
         scale.LabelRotation,
         scale.LabelSkip,
-        scale.OuterPadding)
+        scale.OuterPadding,
+        scale.TickFormat,
+        scale.TimeUnit)
     {
         ColorRange = scale.ColorRange is null ? null : new ColorRangeSpec(
             AdvancedChartEnumBridge.ColorRange(scale.ColorRange.Kind),

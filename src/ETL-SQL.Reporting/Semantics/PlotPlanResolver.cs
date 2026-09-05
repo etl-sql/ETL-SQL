@@ -67,6 +67,66 @@ public sealed class PlotPlanResolver
         var legend = series.Select(item => new LegendEntry(item.Key, item.Label, item.Order, item.Color)).ToImmutableArray();
         var layers = ResolveStacking(ResolveLayers(spec, data, columns, categories, series, formatter).ToImmutableArray());
         var scales = ResolveScales(spec, columns, categories, layers, formatter).ToImmutableArray();
+        var syncAxes = spec.Theme.Tokens.Any(token =>
+            token.Name.Equals("SYNC_AXES", StringComparison.OrdinalIgnoreCase) &&
+            (token.Value.Equals("ON", StringComparison.OrdinalIgnoreCase) || token.Value.Equals("TRUE", StringComparison.OrdinalIgnoreCase))) ||
+            layers.Any(l => l.Style.Any(t =>
+                t.Name.Equals("SYNC_AXES", StringComparison.OrdinalIgnoreCase) &&
+                (t.Value.Equals("ON", StringComparison.OrdinalIgnoreCase) || t.Value.Equals("TRUE", StringComparison.OrdinalIgnoreCase))));
+
+        if (syncAxes)
+        {
+            int yIdx = -1, y2Idx = -1;
+            for (int i = 0; i < scales.Length; i++)
+            {
+                if (scales[i].Channel == FieldChannel.Y) yIdx = i;
+                else if (scales[i].Channel == FieldChannel.Y2) y2Idx = i;
+            }
+            if (yIdx >= 0 && y2Idx >= 0)
+            {
+                var y1 = scales[yIdx];
+                var y2 = scales[y2Idx];
+                if (y1.Domain.Length >= 2 && y2.Domain.Length >= 2 &&
+                    y1.Kind is ScaleKind.Linear or ScaleKind.Logarithmic &&
+                    y2.Kind is ScaleKind.Linear or ScaleKind.Logarithmic)
+                {
+                    var minY1 = Number(y1.Domain[0]) ?? 0m;
+                    var maxY1 = Number(y1.Domain[^1]) ?? 1m;
+                    var minY2 = Number(y2.Domain[0]) ?? 0m;
+                    var maxY2 = Number(y2.Domain[^1]) ?? 1m;
+
+                    var minDomain = Math.Min(minY1, minY2);
+                    var maxDomain = Math.Max(maxY1, maxY2);
+                    if (minDomain == maxDomain) maxDomain = minDomain + 1m;
+
+                    var tickCount = Math.Max(y1.Ticks.Length, y2.Ticks.Length);
+                    if (tickCount < 2) tickCount = 5;
+
+                    var tickVals = Enumerable.Range(0, tickCount)
+                        .Select(i => minDomain + ((maxDomain - minDomain) * i / (tickCount - 1m)))
+                        .ToList();
+
+                    var newY1Ticks = tickVals.Select(v => new PlotTick(ChartValue.From(v), y1.TickFormat is not null ? formatter.Number(v, y1.TickFormat) : formatter.Number(v))).ToImmutableArray();
+                    var newY2Ticks = tickVals.Select(v => new PlotTick(ChartValue.From(v), y2.TickFormat is not null ? formatter.Number(v, y2.TickFormat) : formatter.Number(v))).ToImmutableArray();
+
+                    var updatedY1 = y1 with
+                    {
+                        Domain = [ChartValue.From(minDomain), ChartValue.From(maxDomain)],
+                        Ticks = newY1Ticks
+                    };
+                    var updatedY2 = y2 with
+                    {
+                        Domain = [ChartValue.From(minDomain), ChartValue.From(maxDomain)],
+                        Ticks = newY2Ticks
+                    };
+
+                    var builder = scales.ToBuilder();
+                    builder[yIdx] = updatedY1;
+                    builder[y2Idx] = updatedY2;
+                    scales = builder.ToImmutable();
+                }
+            }
+        }
         layers = ResolveMarkExtents(spec, layers);
         // One pass over the source layers. `sourceLayers` was a lazy query enumerated twice, and
         // `gapRows.Contains` on an ImmutableArray made the skipped-row scan O(rows x gap rows).
@@ -236,7 +296,11 @@ public sealed class PlotPlanResolver
             return colorColumn.Values.Select(ValueKey).Where(value => value is not null).Cast<string>().Distinct(StringComparer.Ordinal).ToImmutableArray();
 
         var namedLayers = spec.Layers.Where(layer => layer.Mark is not MarkKind.Rule &&
-            layer.Style.Any(token => token.Name == "series")).Select(layer => layer.Style.First(token => token.Name == "series").Value).ToImmutableArray();
+            !layer.Style.Any(token => token.Name == "overlayType") &&
+            layer.Style.Any(token => token.Name == "series"))
+            .Select(layer => layer.Style.First(token => token.Name == "series").Value)
+            .Distinct(StringComparer.Ordinal)
+            .ToImmutableArray();
         if (!namedLayers.IsDefaultOrEmpty) return namedLayers;
         var measure = spec.Bindings.FirstOrDefault(binding => binding.Channel is FieldChannel.Y or FieldChannel.Radius);
         return [measure?.Field ?? spec.Id];
@@ -324,8 +388,11 @@ public sealed class PlotPlanResolver
 
                 yield return new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                     values.Select(ChartValue.From).ToImmutableArray(), values,
-                    values.Select(value => new PlotTick(ChartValue.From(value), value)).ToImmutableArray(), scale.IncludeZero,
-                    scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding);
+                    values.Select(value => new PlotTick(ChartValue.From(value),
+                        scale.TickFormat is not null ? (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var nv) ? formatter.Number(nv, scale.TickFormat) : value) : value)).ToImmutableArray(),
+                    scale.IncludeZero,
+                    scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding,
+                    scale.TickFormat, scale.TimeUnit);
                 continue;
             }
 
@@ -358,16 +425,26 @@ public sealed class PlotPlanResolver
             }
             if (scale.Kind == ScaleKind.Time)
             {
+                var timeUnitFormat = scale.TimeUnit?.ToUpperInvariant() switch
+                {
+                    "DAY" => "yyyy-MM-dd",
+                    "WEEK" => "yyyy-MM-dd",
+                    "MONTH" => "yyyy-MM",
+                    "QUARTER" => "yyyy-Q",
+                    "YEAR" => "yyyy",
+                    _ => null
+                };
+                var effectiveTimeFormat = scale.TickFormat ?? timeUnitFormat;
                 var temporalValues = bindings.SelectMany(binding =>
                 {
                     if (binding.Field is null || !columns.TryGetValue(binding.Field, out var column))
-                        return BindingValues(binding, columns).Select(value => new { Value = value, Display = formatter.Format(value, binding.Field) });
+                        return BindingValues(binding, columns).Select(value => new { Value = value, Display = effectiveTimeFormat != null ? formatter.FormatWithPattern(value, effectiveTimeFormat) : formatter.Format(value, binding.Field) });
                     return column.Values.Select((value, index) => new
                     {
                         Value = value,
-                        Display = column.DisplayValues.IsDefaultOrEmpty
-                            ? formatter.Format(value, binding.Field)
-                            : column.DisplayValues[index] ?? formatter.Format(value, binding.Field)
+                        Display = effectiveTimeFormat != null
+                            ? formatter.FormatWithPattern(value, effectiveTimeFormat)
+                            : (column.DisplayValues.IsDefaultOrEmpty ? formatter.Format(value, binding.Field) : column.DisplayValues[index] ?? formatter.Format(value, binding.Field))
                     });
                 })
                     .Where(item => item.Value.Kind != ChartValueKind.Null)
@@ -379,7 +456,8 @@ public sealed class PlotPlanResolver
                     temporalValues.Select(item => item.Value).ToImmutableArray(),
                     temporalValues.Select(item => item.Display).ToImmutableArray(),
                     temporalValues.Select(item => new PlotTick(item.Value, item.Display)).ToImmutableArray(), scale.IncludeZero,
-                    scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding);
+                    scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding,
+                    scale.TickFormat, scale.TimeUnit);
                 continue;
             }
 
@@ -440,8 +518,10 @@ public sealed class PlotPlanResolver
                 : Enumerable.Range(0, tickCount).Select(index => minimum + ((maximum - minimum) * index / (tickCount - 1m))).ToList();
             var resolved = new ResolvedScale(scale.Id, scale.Channel, scale.Kind,
                 [ChartValue.From(minimum), ChartValue.From(maximum)], [],
-                ticks.Select(value => new PlotTick(ChartValue.From(value), formatter.Number(value))).ToImmutableArray(),
-                scale.IncludeZero, scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding);
+                ticks.Select(value => new PlotTick(ChartValue.From(value),
+                    scale.TickFormat is not null ? formatter.Number(value, scale.TickFormat) : formatter.Number(value))).ToImmutableArray(),
+                scale.IncludeZero, scale.Reverse, scale.MinorTicks, scale.LabelRotation, scale.LabelSkip, scale.OuterPadding,
+                scale.TickFormat, scale.TimeUnit);
             if (scale.ColorRange is { } colorRange)
             {
                 if (colorRange.Midpoint is { } midpoint && (midpoint < minimum || midpoint > maximum))
@@ -1362,7 +1442,8 @@ public sealed class PlotPlanResolver
                 throw new InvalidOperationException($"Diverging midpoint {midpoint} for independent scale '{scale.Id}' must fall inside panel domain [{minimum}, {maximum}].");
             colorRange = colorRange with
             {
-                Ticks = ticks.Select(value => new PlotTick(ChartValue.From(value), formatter.Number(value))).ToImmutableArray(),
+                Ticks = ticks.Select(value => new PlotTick(ChartValue.From(value),
+                scale.TickFormat is not null ? formatter.Number(value, scale.TickFormat) : formatter.Number(value))).ToImmutableArray(),
                 AccessibleDescription = colorRange.Kind == ColorRangeKind.Diverging
                     ? $"Color ranges from {minimum:0.##} ({colorRange.Low}) through {colorRange.Midpoint:0.##} ({colorRange.Mid}) to {maximum:0.##} ({colorRange.High})."
                     : $"Color ranges from {minimum:0.##} ({colorRange.Low}) to {maximum:0.##} ({colorRange.High})."

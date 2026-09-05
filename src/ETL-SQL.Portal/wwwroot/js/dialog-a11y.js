@@ -114,7 +114,7 @@ export function installDialogAccessibility(root = document) {
     for (const mutation of mutations) {
       if (mutation.type === 'attributes') {
         const target = mutation.target;
-        if (target.matches?.('[role="dialog"], [role="alertdialog"]')) sync(target);
+        if (/** @type {Element} */ (target).matches?.('[role="dialog"], [role="alertdialog"]')) sync(target);
       } else {
         syncAll();
       }

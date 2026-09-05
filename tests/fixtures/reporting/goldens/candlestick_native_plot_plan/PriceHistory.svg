@@ -3,10 +3,17 @@
 <desc id='PriceHistory-desc'>Price History: 3 rows, 1 ordered layers, 1 series, 1 facet panels, 0 gaps, 0 skipped rows.</desc>
 <rect width='600' height='350' fill='white'/>
 <text x='300' y='17' text-anchor='middle' font-size='13' font-weight='bold' fill='#333'>Price History</text>
+<line x1='60' y1='290' x2='580' y2='290' stroke='#e5e7eb'/><text x='54' y='294' text-anchor='end' font-size='9' fill='#666'>0</text>
+<line x1='60' y1='227.5' x2='580' y2='227.5' stroke='#e5e7eb'/><text x='54' y='231.5' text-anchor='end' font-size='9' fill='#666'>4</text>
+<line x1='60' y1='165' x2='580' y2='165' stroke='#e5e7eb'/><text x='54' y='169' text-anchor='end' font-size='9' fill='#666'>8</text>
+<line x1='60' y1='102.5' x2='580' y2='102.5' stroke='#e5e7eb'/><text x='54' y='106.5' text-anchor='end' font-size='9' fill='#666'>12</text>
+<line x1='60' y1='40' x2='580' y2='40' stroke='#e5e7eb'/><text x='54' y='44' text-anchor='end' font-size='9' fill='#666'>16</text>
+<g class='plot-candlestick'>
 <g data-row-index='0'><title>D1: O 10, H 14, L 8, C 12</title><line x1='146.667' y1='71.25' x2='146.667' y2='165' stroke='#26a69a'/><rect x='99' y='102.5' width='95.333' height='31.25' fill='#26a69a' stroke='#26a69a'/></g>
 <text x='146.667' y='306' text-anchor='middle' font-size='9' fill='#666'>D1</text>
 <g data-row-index='1'><title>D2: O 12, H 15, L 9, C 10</title><line x1='320' y1='55.625' x2='320' y2='149.375' stroke='#ef5350'/><rect x='272.333' y='102.5' width='95.333' height='31.25' fill='#ef5350' stroke='#ef5350'/></g>
 <text x='320' y='306' text-anchor='middle' font-size='9' fill='#666'>D2</text>
 <g data-row-index='2'><title>D3: O 10, H 16, L 10, C 15</title><line x1='493.333' y1='40' x2='493.333' y2='133.75' stroke='#26a69a'/><rect x='445.667' y='55.625' width='95.333' height='78.125' fill='#26a69a' stroke='#26a69a'/></g>
 <text x='493.333' y='306' text-anchor='middle' font-size='9' fill='#666'>D3</text>
+</g>
 </svg>
