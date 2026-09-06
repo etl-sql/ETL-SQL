@@ -568,6 +568,6 @@ security detail.
 
 ---
 
-**Policy Version**: 0.18.0
+**Policy Version**: 0.19.0
 **Last Review Date**: 2026-08-29
 **Reference Standards**: NIST SP 800-132 for PBKDF2 parameter guidance, OWASP secure logging principles, and least-privilege service deployment practices.

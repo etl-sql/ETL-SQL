@@ -157,6 +157,16 @@ cross-platform and operator-run certifications below.
       Set-Location .worktrees\release-gate-x.y.z
       .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
       ```
+- [ ] **A hung phase now fails instead of stalling the run.** Every phase is guarded by a watchdog
+      (`scripts/lib/Watch-PhaseTimeout.ps1`) that kills its process subtree and records why when the
+      phase produces no output for `-PhaseStallMinutes` (default 20) or exceeds `-PhaseTimeoutMinutes`
+      (default 240). Phase logs stream as output arrives, so a running phase can be watched with
+      `Get-Content release-validation\<run>\<Phase>.log -Wait`, and a `<Phase>.running` marker names
+      whichever phase is live. The **Phase watchdog self-test** phase proves the watchdog both fires
+      on a hang and leaves a working phase alone, and runs before the long lanes it protects.
+      `-NoWatchdog` disables it; do not use it for release evidence.
+      If a phase is killed, the report's note names the stall or the cap rather than a bare exit code
+      — treat that as a real failure to diagnose, not as a watchdog to widen.
 - [ ] Confirm the **Engine lane** and **Coverage gate** phases passed with line coverage **>= 70%**.
       `Test-PreRelease.ps1` runs engine tests across 8 deterministic shards with timeout protection, then invokes `Test-CoverageGate.ps1` to enforce the fail-closed 70% line-coverage threshold. Retain `coverage/report/Summary.txt`, `Cobertura.xml`, and
       `coverage-gate.json` beneath the timestamped release-validation run.
@@ -187,8 +197,8 @@ cross-platform and operator-run certifications below.
       outside, which is why this is asserted rather than observed.
 
       Advisory, not yet blocking: the lane cannot gate until the corpus is batch-size-agnostic and
-      the release-branch baseline failures are resolved (both tracked in `TODO.md`). Record the run
-      and its diff in the release-validation evidence either way.
+      the release-branch baseline failures are resolved (both tracked as *Code Stability* in
+      `ROADMAP.md`). Record the run and its diff in the release-validation evidence either way.
 - [ ] Final report shows **Status: Passed** — `release-validation/latest/state.json` and the run's
       `pre-release-report.md`.
 

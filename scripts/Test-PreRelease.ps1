@@ -46,7 +46,29 @@ param(
 
     [string[]]$Platforms = @("win-x64"),
 
-    [string]$OutDir = "release-validation"
+    [string]$OutDir = "release-validation",
+
+    # Watchdog. A phase that stops producing output for this long is treated as hung and killed.
+    # This is the rule that actually catches wedged phases: work prints, hangs go quiet.
+    #
+    # 20 minutes was measured, not guessed. The engine lane is the phase with the longest legitimate
+    # silences — it streams one block per test shard — and those gaps run 2 to 4 minutes across an
+    # 18-minute phase. The longest phase overall, the Docker integration lane, has historically run
+    # about 26 minutes end to end while printing pull and container progress throughout. 20 minutes
+    # therefore clears the worst observed silence by roughly 5x.
+    #
+    # If a legitimately silent phase is ever killed, make that phase report progress rather than
+    # widening this window: a stall limit tuned above the longest hang it might see stops being a
+    # gate at all.
+    [int]$PhaseStallMinutes = 20,
+
+    # Absolute per-phase ceiling regardless of output, for the live-lock that keeps printing while
+    # making no progress. Generous by design — roughly 9x the longest phase ever recorded — because
+    # this is the backstop, not the primary rule.
+    [int]$PhaseTimeoutMinutes = 240,
+
+    # Escape hatch for debugging the gate itself under a breakpoint or an attached profiler.
+    [switch]$NoWatchdog
 )
 
 $ErrorActionPreference = "Stop"
@@ -94,6 +116,7 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Changelog compilation"; Command = ".\scripts\Compile-Changelog.ps1"; Reason = "Any feature-branch changelog fragments are compiled into CHANGELOG.md." })
     $phases.Add([ordered]@{ Phase = "Secret scan"; Command = "node scripts/scan-secrets.js"; Reason = "No real credentials (keys/provider tokens) reach the public repo — early local tripwire ahead of GitGuardian." })
     $phases.Add([ordered]@{ Phase = "Dotnet restore"; Command = "dotnet restore ETL-SQL.slnx; dotnet tool restore"; Reason = "Package graph and repository-local release tools resolve before build, tests, and coverage reporting." })
+    $phases.Add([ordered]@{ Phase = "Phase watchdog self-test"; Command = ".\scripts\Test-PhaseWatchdog.ps1"; Reason = "The per-phase hang watchdog kills a stalled phase and leaves a working one alone — proven before the long lanes it protects run." })
     $phases.Add([ordered]@{ Phase = "Dependency-audit self-test"; Command = ".\scripts\Test-DependencyAudit.ps1"; Reason = "The dependency-audit helpers behave correctly (reliable fallback + hard failure)." })
     $phases.Add([ordered]@{ Phase = "NuGet dependency audit"; Command = "dotnet list package --outdated/--deprecated/--vulnerable"; Reason = "Release should not ship known vulnerable or deprecated packages." })
     $phases.Add([ordered]@{ Phase = "SBOM generation"; Command = "node scripts/generate-sbom.js"; Reason = "The released SBOM generates and its component version matches Directory.Build.props." })
@@ -471,6 +494,73 @@ function Write-PreReleaseFailureSummary {
     }
 }
 
+function Start-PhaseWatchdog {
+    param(
+        [string]$Name,
+        [string]$LogPath,
+        [string]$LogBase
+    )
+
+    if ($NoWatchdog) { return $null }
+
+    $watchScript = Join-Path $ScriptRoot "lib/Watch-PhaseTimeout.ps1"
+    if (-not (Test-Path -LiteralPath $watchScript)) {
+        Write-Host "    (watchdog script missing at $watchScript; phase runs unbounded)" -ForegroundColor DarkYellow
+        return $null
+    }
+
+    $markerPath = $LogBase + ".running"
+    $reasonPath = $LogBase + ".timeout"
+    Remove-Item -LiteralPath $reasonPath -Force -ErrorAction SilentlyContinue
+    # The marker is the watchdog's liveness signal for the phase: while it exists the phase is
+    # still running, and removing it is how the parent says "stand down" without a kill.
+    (Get-Date).ToString("o") | Set-Content -LiteralPath $markerPath -Encoding UTF8
+
+    try {
+        $process = Start-Process -FilePath $PowerShellExe -PassThru -WindowStyle Hidden -ArgumentList @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $watchScript,
+            "-OwnerPid", $PID,
+            "-LogPath", $LogPath,
+            "-MarkerPath", $markerPath,
+            "-ReasonPath", $reasonPath,
+            "-PhaseName", $Name,
+            "-StallSeconds", ($PhaseStallMinutes * 60),
+            "-HardSeconds", ($PhaseTimeoutMinutes * 60)
+        )
+    }
+    catch {
+        Write-Host "    (could not start phase watchdog: $($_.Exception.Message))" -ForegroundColor DarkYellow
+        Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue
+        return $null
+    }
+
+    return [ordered]@{ Process = $process; MarkerPath = $markerPath; ReasonPath = $reasonPath }
+}
+
+function Stop-PhaseWatchdog {
+    param($Watchdog)
+
+    if (-not $Watchdog) { return $null }
+
+    # Drop the marker first: a watchdog mid-poll sees the phase is over and exits on its own rather
+    # than racing us into killing a subtree that has already finished.
+    Remove-Item -LiteralPath $Watchdog.MarkerPath -Force -ErrorAction SilentlyContinue
+
+    $reason = $null
+    if (Test-Path -LiteralPath $Watchdog.ReasonPath) {
+        $reason = (Get-Content -LiteralPath $Watchdog.ReasonPath -Raw).Trim()
+    }
+
+    try {
+        if (-not $Watchdog.Process.HasExited) {
+            $Watchdog.Process.Kill()
+        }
+    }
+    catch { }
+
+    return $reason
+}
+
 function Invoke-LoggedPhase {
     param(
         [string]$Name,
@@ -527,10 +617,17 @@ function Invoke-LoggedPhase {
     Write-Host "==> $Name" -ForegroundColor Cyan
     Write-Host "    $Command" -ForegroundColor DarkGray
 
-    $phaseLog = Join-Path $RunDir (($Name -replace '[^A-Za-z0-9_.-]', '_') + ".log")
+    $phaseLogBase = Join-Path $RunDir (($Name -replace '[^A-Za-z0-9_.-]', '_'))
+    $phaseLog = $phaseLogBase + ".log"
     $timer = [System.Diagnostics.Stopwatch]::StartNew()
     $status = "Passed"
     $note = ""
+
+    # Start clean: the streamed writes below append, and a re-run of a failed phase under -Resume
+    # would otherwise read as one log with two interleaved attempts in it.
+    Remove-Item -LiteralPath $phaseLog -Force -ErrorAction SilentlyContinue
+
+    $watchdog = Start-PhaseWatchdog -Name $Name -LogPath $phaseLog -LogBase $phaseLogBase
 
     try {
         Push-Location $RepoRoot
@@ -538,13 +635,16 @@ function Invoke-LoggedPhase {
             $oldPreference = $ErrorActionPreference
             $ErrorActionPreference = "Continue"
             try {
-                $output = & $Action 2>&1
+                # Streamed, not collected. The old form was `$output = & $Action 2>&1` followed by a
+                # single Tee-Object once the phase returned, so a phase that hung wrote nothing at
+                # all: no log to read, no way to tell a wedged phase from a slow one. Streaming also
+                # gives the watchdog its heartbeat — the log's last-write time is what it watches.
+                & $Action 2>&1 | Tee-Object -FilePath $phaseLog -Append
             }
             finally {
                 $ErrorActionPreference = $oldPreference
             }
             $exitCode = if ($LASTEXITCODE -ne $null) { $LASTEXITCODE } else { 0 }
-            $output | Tee-Object -FilePath $phaseLog
             if ($exitCode -ne 0) {
                 throw "Command exited with code $exitCode"
             }
@@ -562,6 +662,15 @@ function Invoke-LoggedPhase {
     }
     finally {
         $timer.Stop()
+        # A watchdog trip surfaces as a non-zero exit from the killed child, which the catch above
+        # already turned into a failure. Replace that generic note with the reason the phase was
+        # killed, so the report says "no output for 22 minutes" rather than "exited with code 1".
+        $timeoutReason = Stop-PhaseWatchdog -Watchdog $watchdog
+        if ($timeoutReason) {
+            $status = "Failed"
+            $note = $timeoutReason
+            Add-Content -Path $phaseLog -Value "`n$timeoutReason" -Encoding UTF8
+        }
     }
 
     $result = [ordered]@{
@@ -680,6 +789,91 @@ try {
 }
 catch { }
 
+# ── Fail-fast preflight ─────────────────────────────────────────────────────
+#
+# Three things reliably turn an error into an unbounded hang rather than a failure. Each is cheap to
+# rule out here, and doing so costs seconds against hours of a stalled gate.
+function Invoke-HangPreflight {
+    Write-Host "Preflight: making failures fail rather than hang..." -ForegroundColor Cyan
+
+    # 1. A crashed test host must not raise the Windows Error Reporting dialog. WER's default is to
+    #    show UI, and a modal dialog on an unattended machine blocks the process forever — the crash
+    #    is never reported as a failure because the crashing process never exits. Scoped to this
+    #    process tree via the environment, so nothing on the machine is reconfigured.
+    $env:DOTNET_DbgEnableMiniDump = "0"
+    $env:COMPlus_DbgEnableMiniDump = "0"
+    # A managed crash should terminate the process rather than wait for a debugger to attach.
+    $env:DOTNET_DbgWaitForDebuggerAttach = "0"
+    $env:COMPlus_DbgWaitForDebuggerAttach = "0"
+
+    # 2. Any tool that decides to prompt must hit EOF instead of an operator who is not there.
+    $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+    $env:DOTNET_NOLOGO = "1"
+    $env:DOTNET_SKIP_FIRST_TIME_EXPERIENCE = "1"
+    $env:POWERSHELL_UPDATECHECK = "Off"
+    $env:CI = "true"
+
+    # 3. Leftovers from an interrupted earlier run. A killed browser lane leaves chrome.exe holding
+    #    the fixture's port, and the next run then fails every fixture test in about a millisecond
+    #    with "server has not been started" — a misleading error that has already cost a wrong root
+    #    cause more than once. Orphaned test hosts hold file locks that make a build hang instead.
+    $stale = @()
+    foreach ($name in @("chrome", "chromedriver", "testhost", "vstest.console", "msedgedriver")) {
+        foreach ($proc in @(Get-Process -Name $name -ErrorAction SilentlyContinue)) {
+            # Only processes older than this run, and never an ancestor of it.
+            if ($proc.Id -eq $PID) { continue }
+            $stale += $proc
+        }
+    }
+    if ($stale.Count -gt 0) {
+        Write-Host "  Clearing $($stale.Count) leftover process(es) from an earlier run: $(($stale | ForEach-Object { $_.ProcessName } | Sort-Object -Unique) -join ', ')" -ForegroundColor Yellow
+        foreach ($proc in $stale) {
+            try { Stop-Process -Id $proc.Id -Force -ErrorAction Stop } catch { }
+        }
+    }
+
+    # An interrupted lane leaves MSBuild and compiler server nodes behind — one abandoned run left 43
+    # of them — and they hold file locks that make the next build wait rather than fail. Shutting
+    # them down is the supported, targeted way to reclaim those: killing every `dotnet` process by
+    # name would take this gate's own tooling with it.
+    try {
+        & dotnet build-server shutdown 2>&1 | Out-Null
+        Write-Host "  Build servers shut down." -ForegroundColor DarkGray
+    }
+    catch {
+        Write-Host "  (could not shut down build servers: $($_.Exception.Message))" -ForegroundColor DarkYellow
+    }
+
+    # 4. If Docker phases are requested, prove the daemon answers *now*. An unresponsive Docker
+    #    Desktop makes the CLI wait rather than error, so the Docker phase hangs instead of failing,
+    #    and it sits deep in the run where the cost of discovering it is highest.
+    if ($EffectiveIncludeDockerIntegration) {
+        $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+        if (-not $dockerCmd) {
+            throw "-IncludeDockerIntegration was requested but 'docker' is not on PATH. Install/start Docker or drop the switch."
+        }
+        $probe = Start-Process -FilePath $dockerCmd.Source -ArgumentList @("version", "--format", "{{.Server.Os}}") `
+            -NoNewWindow -PassThru -RedirectStandardOutput "NUL" -RedirectStandardError "NUL"
+        if (-not $probe.WaitForExit(60000)) {
+            try { $probe.Kill() } catch { }
+            throw "-IncludeDockerIntegration was requested but 'docker version' did not answer within 60s. The daemon is unresponsive; start Docker Desktop and retry rather than letting the Docker phase hang."
+        }
+        if ($probe.ExitCode -ne 0) {
+            throw "-IncludeDockerIntegration was requested but 'docker version' failed with exit code $($probe.ExitCode). Start the Docker daemon and retry."
+        }
+        Write-Host "  Docker daemon responded." -ForegroundColor DarkGray
+    }
+
+    if ($NoWatchdog) {
+        Write-Host "  Watchdog DISABLED (-NoWatchdog): phases run unbounded." -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "  Watchdog armed: stall $PhaseStallMinutes min, hard cap $PhaseTimeoutMinutes min per phase." -ForegroundColor DarkGray
+    }
+}
+
+Invoke-HangPreflight
+
 $startedAt = Get-Date
 $fingerprint = Get-SourceFingerprint
 $previousState = Read-State
@@ -747,6 +941,11 @@ try {
             & dotnet tool restore
             if ($LASTEXITCODE -ne 0) { throw "Local tool restore failed with exit code $LASTEXITCODE." }
         } `
+        $previousPhaseMap $fingerprint $results
+
+    Invoke-LoggedPhase "Phase watchdog self-test" `
+        ".\scripts\Test-PhaseWatchdog.ps1" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-PhaseWatchdog.ps1" } `
         $previousPhaseMap $fingerprint $results
 
     Invoke-LoggedPhase "Dependency-audit self-test" `
