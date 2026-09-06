@@ -242,3 +242,7 @@ docs/architecture/implementation-tasks/gemini/
 # Browser type-gate toolchain. The lock file is committed so `npm ci` is reproducible; the
 # installed tree is not.
 scripts/typecheck/node_modules/
+
+# Temp ES-module copies made by scripts/lib/import-source-module.mjs; a check that throws
+# mid-run leaves one beside its source, and it must never reach a commit or the asset sync.
+*.__test-*.mjs

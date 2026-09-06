@@ -14,9 +14,28 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+// Every temp module this process has created and not yet cleaned up. A check that throws part-way
+// — which is what every one of these does when it finds a real defect — would otherwise leave its
+// copy sitting in the canonical asset directory, where sync-assets.js would spread it to five hosts
+// and the next `git add -A` would commit it. Two of them reached a commit before this existed.
+const outstanding = new Set();
+let exitHookInstalled = false;
+
+function ensureExitHook() {
+    if (exitHookInstalled) return;
+    exitHookInstalled = true;
+    // 'exit' only tolerates synchronous work, hence rmSync.
+    process.on('exit', () => {
+        for (const file of outstanding) {
+            try { rmSync(file, { force: true }); } catch { /* best effort on the way out */ }
+        }
+    });
+}
 
 /**
  * Copies `sourcePath` to a uniquely named `.mjs` sibling and imports it.
@@ -33,9 +52,15 @@ export async function importSourceModule(sourcePath) {
     // would have one of them importing the other's copy.
     const temporary = path.join(directory, `${base}.__test-${randomBytes(6).toString('hex')}.mjs`);
 
+    ensureExitHook();
     await fs.writeFile(temporary, await fs.readFile(resolved, 'utf8'), 'utf8');
+    outstanding.add(temporary);
 
-    const cleanup = () => fs.rm(temporary, { force: true });
+    const cleanup = async () => {
+        outstanding.delete(temporary);
+        await fs.rm(temporary, { force: true });
+    };
+
     try {
         return { module: await import(pathToFileURL(temporary).href), cleanup };
     } catch (error) {
