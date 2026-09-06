@@ -221,18 +221,35 @@ public class ProcessJobExecutorChaosTests
         // the apphost copied next to the test assembly is a framework-dependent stub missing
         // transitive deps (e.g. Microsoft.Extensions.DependencyInjection.Abstractions). Spawning
         // that stub crashes the child at startup, so skip incomplete deployments.
+        // Only this platform's apphost name. Trying both names meant that on Windows, a linux-x64
+        // publish left by the release lane offered an extensionless `ETL-SQL` that exists, carries
+        // its dependencies, and is not a Windows executable — Process.Start then failed with
+        // "not a valid application for this OS platform", which reads as a product defect.
+        var appHostName = AppHostFileName;
         foreach (var dir in CandidateAppHostDirectories())
         {
-            foreach (var name in new[] { "ETL-SQL.exe", "ETL-SQL" })
-            {
-                var candidate = Path.Combine(dir, name);
-                if (File.Exists(candidate) && HasRuntimeDependencies(dir))
-                    return candidate;
-            }
+            var candidate = Path.Combine(dir, appHostName);
+            if (File.Exists(candidate) && HasRuntimeDependencies(dir))
+                return candidate;
         }
 
-        return Path.Combine(AppContext.BaseDirectory,
-            RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ETL-SQL.exe" : "ETL-SQL");
+        return Path.Combine(AppContext.BaseDirectory, appHostName);
+    }
+
+    private static string AppHostFileName =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ETL-SQL.exe" : "ETL-SQL";
+
+    // Runtime identifiers this OS can actually execute. A RID-specific publish for another OS is a
+    // complete deployment sitting in the same bin tree, so directory shape alone cannot rule it out.
+    private static bool IsRunnableRid(string ridDirectoryName)
+    {
+        var rid = Path.GetFileName(ridDirectoryName);
+        if (string.IsNullOrEmpty(rid)) return false;
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return rid.StartsWith("win", StringComparison.OrdinalIgnoreCase);
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return rid.StartsWith("osx", StringComparison.OrdinalIgnoreCase);
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return rid.StartsWith("linux", StringComparison.OrdinalIgnoreCase);
+        return false;
     }
 
     // A spawnable apphost must have its transitive framework deps sitting beside it.
@@ -265,8 +282,13 @@ public class ProcessJobExecutorChaosTests
                     current.FullName, "src", "ETL-SQL.App", "bin", cfg, "net10.0");
                 if (Directory.Exists(appOutput))
                 {
+                    // RID subdirectories only for RIDs this OS can run. The release publish lane
+                    // leaves linux-x64/ and osx-arm64/ in this same tree.
                     foreach (var ridDir in Directory.GetDirectories(appOutput))
-                        yield return ridDir;
+                    {
+                        if (IsRunnableRid(ridDir))
+                            yield return ridDir;
+                    }
                     yield return appOutput;
                 }
             }

@@ -3,6 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { importSourceModule } from './lib/import-source-module.mjs';
+import { readPortalPage } from './lib/portal-page.mjs';
+
 class ClassList {
   constructor(el) { this.el = el; }
   _set() { return new Set((this.el.className || '').split(/\s+/).filter(Boolean)); }
@@ -93,21 +96,17 @@ globalThis.setTimeout = setTimeout;
 globalThis.requestAnimationFrame = () => 0;
 globalThis.cancelAnimationFrame = () => {};
 
+// The temp module is written beside its source rather than in os.tmpdir(): designer.js imports
+// './visual-preview.js', and a copy in the temp directory resolves that against the wrong folder.
 const sourcePath = path.resolve('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js');
-const tempModule = path.join(os.tmpdir(), `etl-sql-designer-${Date.now()}.mjs`);
-await fs.writeFile(tempModule, await fs.readFile(sourcePath, 'utf8'), 'utf8');
+const designerImport = await importSourceModule(sourcePath);
 
-async function importTempModule(sourceFile, prefix) {
-  const temp = path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}.mjs`);
-  await fs.writeFile(temp, await fs.readFile(sourceFile, 'utf8'), 'utf8');
-  return {
-    href: pathToFileURL(temp).href,
-    cleanup: () => fs.rm(temp, { force: true }),
-  };
+async function importTempModule(sourceFile) {
+  return importSourceModule(sourceFile);
 }
 
 try {
-  const { renderDag } = await import(pathToFileURL(tempModule).href);
+  const { renderDag } = designerImport.module;
   const root = new Element('div');
   const graph = {
     nodes: [
@@ -196,9 +195,9 @@ try {
 
   dag.dispose();
 
-  const lineageUiTemp = await importTempModule(path.resolve('src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js'), 'etl-sql-lineage-ui');
+  const lineageUiTemp = await importTempModule(path.resolve('src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js'));
   try {
-    const { lineageRowsToCsv, renderDependencies, renderLineageRow } = await import(lineageUiTemp.href);
+    const { lineageRowsToCsv, renderDependencies, renderLineageRow } = lineageUiTemp.module;
     const row = {
       runAt: '2026-05-30T14:15:00Z',
       jobName: 'nightly_sales_refresh',
@@ -261,9 +260,9 @@ try {
     await lineageUiTemp.cleanup();
   }
 
-  const vscodeStoryTemp = await importTempModule(path.resolve('tools/ui-sandbox/stories/vscode-webviews.story.js'), 'etl-sql-vscode-webviews-story');
+  const vscodeStoryTemp = await importTempModule(path.resolve('tools/ui-sandbox/stories/vscode-webviews.story.js'));
   try {
-    const { default: story } = await import(vscodeStoryTemp.href);
+    const { default: story } = vscodeStoryTemp.module;
     const fixtureIds = (story.fixtures || []).map(f => f.id).join(',');
     for (const expectedText of ['results', 'preview', 'designer']) {
       if (!fixtureIds.includes(expectedText)) {
@@ -281,7 +280,10 @@ try {
     }
   }
 
-  const portalIndex = await fs.readFile(path.resolve('src/ETL-SQL.Portal/wwwroot/index.html'), 'utf8');
+  // Markup plus the page module: the routing this asserts on moved out of an inline
+  // <script type="module"> block into wwwroot/js/pages/index.js, so reading the .html alone
+  // would assert over the half of the page that no longer carries it.
+  const portalIndex = readPortalPage('index');
   for (const expectedText of ['#governance/overview', '#governance/lineage', 'createGovernancePortal', 'showGovernanceCatalog']) {
     if (!portalIndex.includes(expectedText)) {
       throw new Error(`Portal governance routing missing: ${expectedText}`);
@@ -296,5 +298,5 @@ try {
 
   console.log('lineage-ui smoke passed');
 } finally {
-  await fs.rm(tempModule, { force: true });
+  await designerImport.cleanup();
 }

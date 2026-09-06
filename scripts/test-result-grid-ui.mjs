@@ -12,14 +12,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { importSourceModule } from './lib/import-source-module.mjs';
+
+// Imported from a sibling of the source, not a temp directory: designer.js imports
+// './visual-preview.js', which only resolves from the folder the author wrote it in.
 const sourcePath = path.resolve('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js');
-const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'etlsql-result-grid-'));
-const tempModule = path.join(tempDir, 'designer.mjs');
+const designerImport = await importSourceModule(sourcePath);
 const sourceText = await fs.readFile(sourcePath, 'utf8');
-await fs.writeFile(tempModule, sourceText, 'utf8');
 
 const { filterRows, toCsv, formatResultCell, resultRenderWindow, buildDataPreviewPayload, editLeaseRetryDelay, MAX_RENDERED_ROWS } =
-    await import(pathToFileURL(tempModule).href);
+    designerImport.module;
 
 const columns = ['Id', 'Name', 'Notes'];
 const rows = [
@@ -165,7 +167,10 @@ assert.equal(editLeaseRetryDelay('not-a-date', 0), 30_000);
 // renews, contention disables Save, and every browser exit/re-entry path releases or recovers.
 assert.match(sourceText, /apiJson\('\/api\/designer\/lease', 'POST', \{ reportId \}\)/);
 assert.match(sourceText, /scheduleLeaseAttempt\(120_000\)/);
-assert.match(sourceText, /querySelector\('#dsgn-save'\)\.disabled = true/);
+// The optional `)` absorbs the JSDoc cast the browser type gate wraps this call in:
+// `/** @type {...} */ (topbar.querySelector('#dsgn-save')).disabled = true`. The claim is that
+// the save button is disabled without a lease, not that the two tokens are adjacent.
+assert.match(sourceText, /querySelector\('#dsgn-save'\)\)?\.disabled = true/);
 assert.match(sourceText, /addEventListener\('pagehide', pageHideLeaseHandler\)/);
 assert.match(sourceText, /addEventListener\('pageshow', pageShowLeaseHandler\)/);
 assert.match(sourceText, /apiJson\(`\/api\/designer\/lease\/\$\{reportId\}`, 'DELETE'\)/);
@@ -178,5 +183,5 @@ assert.match(sourceText, /apiJson\(`\/api\/designer\/lease\/\$\{reportId\}`, 'DE
     assert.equal(exported.length, many.length + 1); // header + every row
 }
 
-await fs.rm(tempDir, { recursive: true, force: true });
+await designerImport.cleanup();
 console.log('result-grid-ui smoke passed');
