@@ -87,5 +87,27 @@ class load and shared background-service state from its startup/shutdown observa
   shared collection fixture, preserving a useful reminder that cross-process local database paths
   are part of test and deployment isolation.
 
+- **v0.19.0 — the browser lane fails as a whole under gate load, and says nothing useful when it
+  does.** Inside the release gate, after roughly forty minutes of other lanes, the lane reports
+  **178 failed / 53 passed of 231**, every failure identical: `The server has not been started or no
+  web application was configured`, thrown from `PortalBrowserFixture.InitializeAsync` line 28. That
+  is *one* host that failed to start, reported 178 times, and it names none of the real conditions —
+  the same shape that has already produced a wrong root cause more than once.
+
+  The lane's content is sound. Run on its own it is **231/231** in Debug and **230/231** in Release,
+  and the single Release outlier —
+  `RoleJourneyTests.EachRole_IsOfferedExactlyTheSurfacesItCanUse`, a page error caught by
+  `Assert.Empty(session.PageErrors)` — passes **5/5** when re-run alone. Configuration is not the
+  variable: isolated Release passes. Free memory is a contributor but not the whole story; the
+  cascade reproduced with 12.6 GB free after Docker's WSL VM was shut down.
+
+  **The reusable lesson is about the instrument, not the tests.** A fixture whose failure is
+  broadcast to every test in the assembly, stripped of its cause, converts one diagnosable problem
+  into 178 undiagnosable ones and invites exactly the wrong root cause. Repairing that — surfacing
+  the real startup exception, and not running every test class against one shared Portal, admin
+  account and sign-in gate — is slice 3 of *Code Stability* in [`ROADMAP.md`](../../ROADMAP.md).
+  Until then, treat a whole-assembly `PortalBrowserFixture` failure as an instrument reading and
+  re-run the lane in isolation before believing anything it says about the product.
+
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
 diagnostics belong in generated evidence, not a new release-specific tracking file.
