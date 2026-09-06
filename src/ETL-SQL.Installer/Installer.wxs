@@ -33,8 +33,26 @@
 
              The preset only sets the checkboxes; the user can still
              change individual selections before clicking Install.
+
+             Empty by default, as documented above. It used to default to
+             "ENTERPRISE", which made the preset actions run on every install
+             — including /qn, where there are no checkboxes to preset — and
+             overwrite whatever the caller passed on the command line. So
+             `msiexec /i ETL-SQL.msi /qn INSTALL_ORCHESTRATOR=0` silently
+             installed the Orchestrator anyway: the property was applied and
+             then reset 83 ms later by EntOrch.
+
+             Nothing changes for an ordinary install. The ENTERPRISE preset
+             set INSTALL_WORKSTATION / INSTALL_ORCHESTRATOR /
+             INSTALL_ADMIN_PORTAL / INSTALL_REPORT_PORTAL to 1 and
+             PORTAL_SURFACE to "All", which is exactly what each of those
+             properties already defaults to — the preset was a no-op except
+             for the overwriting.
         ══════════════════════════════════════════════════════════════════ -->
-        <Property Id="DEPLOY_PROFILE" Value="ENTERPRISE" Secure="yes" />
+        <!-- No @Value: WiX rejects an empty string, and an absent value is how a property is
+             left undefined. Secure="yes" still lists it in SecureCustomProperties so an
+             elevated silent install can set it. -->
+        <Property Id="DEPLOY_PROFILE" Secure="yes" />
 
         <!-- ═══════════════════════════════════════════════════════════════
              Component-selection properties.
@@ -260,7 +278,21 @@
                                 Account="LocalSystem"
                                 ErrorControl="normal"
                                 Arguments=" --urls http://localhost:5002" />
-                <ServiceControl Id="StartService_Portal" Start="install" Stop="both" Remove="uninstall" Name="ETL-SQL-Portal" Wait="yes" />
+                <!-- Split into two controls because @Wait governs the whole element, and start and
+                     stop need opposite answers.
+
+                     Start does not wait. The Portal's first start creates and migrates portal.db,
+                     which on a slow or cold machine takes longer than the Windows service start
+                     timeout. Waiting for "running" made the installer fail the entire installation
+                     with error 1920 / msiexec 1603 and roll back a build whose files were all
+                     correct — observed on a clean Windows runner, where the Orchestrator came up in
+                     1.7 s and the Portal was killed at 94 s. The service is Start="auto", so Windows
+                     starts it either way; the install does not need to witness the migration finish.
+
+                     Stop still waits. On uninstall and on the upgrade's RemoveExistingProducts the
+                     file lock must genuinely be released before the files are replaced. -->
+                <ServiceControl Id="StartService_Portal" Start="install" Name="ETL-SQL-Portal" Wait="no" />
+                <ServiceControl Id="StopService_Portal" Stop="both" Remove="uninstall" Name="ETL-SQL-Portal" Wait="yes" />
             </Component>
 
             <!-- JWT bootstrap script (used by the deferred WriteJwt custom action) -->

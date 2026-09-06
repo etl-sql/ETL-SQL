@@ -1,0 +1,33 @@
+{
+  "schema": "etl-sql.production-canary-certification/v1",
+  "runId": "20260906-173002-120",
+  "commit": "bb3007b98e41b8c4c1e68d2dd467acb276b246ec",
+  "dirty": false,
+  "dirtyPaths": [],
+  "startedUtc": "2026-09-06T22:30:02.1269530+00:00",
+  "completedUtc": "2026-09-06T22:30:08.5346591+00:00",
+  "plan": {
+    "path": "tests/fixtures/production-canary-plan.json",
+    "sha256": "2553f037d7c2378c82d1f0db464a080a4e08f424fd599bcd74947ddb9253bec5",
+    "environment": "hosted-production",
+    "tenant": "synthetic-canary-tenant",
+    "regions": [
+      "us-central",
+      "us-east"
+    ],
+    "failureDomains": [
+      "zone-a",
+      "zone-b"
+    ]
+  },
+  "journeyCount": 6,
+  "expectedRunCount": 120,
+  "actualRunCount": 120,
+  "invalidRunCount": 0,
+  "result": "Passed",
+  "testExitCode": 0,
+  "testLog": "production-canary-tests.log",
+  "journeyEvidence": "journey-evidence/production-canary-report.json",
+  "provisioningEvidence": "journey-evidence/production-canary-provisioning.json",
+  "credentialLifecycleEvidence": "journey-evidence/production-canary-credential-lifecycle.json"
+}

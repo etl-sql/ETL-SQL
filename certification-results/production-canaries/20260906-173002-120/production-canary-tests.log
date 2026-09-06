@@ -1,0 +1,63 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  ETL-SQL.Reporting.Contracts -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Reporting.Contracts\bin\Release\net10.0\ETL-SQL.Reporting.Contracts.dll
+  ETL-SQL.Core -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\bin\Release\net10.0\ETL-SQL.Core.dll
+  ETL-SQL.Connectors.Common -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\bin\Release\net10.0\ETL-SQL.Connectors.Common.dll
+  ETL-SQL.Infrastructure.Logging -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Logging\bin\Release\net10.0\ETL-SQL.Infrastructure.Logging.dll
+  ETL-SQL.Infrastructure.Sqlite -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Sqlite\bin\Release\net10.0\ETL-SQL.Infrastructure.Sqlite.dll
+  ETL-SQL.Infrastructure.Docker -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Infrastructure.Docker\bin\Release\net10.0\ETL-SQL.Infrastructure.Docker.dll
+  ETL-SQL.Gateway -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Gateway\bin\Release\net10.0\ETL-SQL.Gateway.dll
+  ETL-SQL.Analysis -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Analysis\bin\Release\net10.0\ETL-SQL.Analysis.dll
+  ETL-SQL.Reporting -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Reporting\bin\Release\net10.0\ETL-SQL.Reporting.dll
+  ETL-SQL.Portal.Data -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Portal.Data\bin\Release\net10.0\ETL-SQL.Portal.Data.dll
+  ETL-SQL.Connectors.Remote -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Remote\bin\Release\net10.0\ETL-SQL.Connectors.Remote.dll
+  ETL-SQL.Connectors.Files -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Files\bin\Release\net10.0\ETL-SQL.Connectors.Files.dll
+  ETL-SQL.Connectors.Cloud -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Cloud\bin\Release\net10.0\ETL-SQL.Connectors.Cloud.dll
+  ETL-SQL.Connectors.Messaging -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Messaging\bin\Release\net10.0\ETL-SQL.Connectors.Messaging.dll
+  ETL-SQL.Connectors.Databases -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Databases\bin\Release\net10.0\ETL-SQL.Connectors.Databases.dll
+  ETL-SQL.Portal.Migrations.Postgres -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Portal.Migrations.Postgres\bin\Release\net10.0\ETL-SQL.Portal.Migrations.Postgres.dll
+  ETL-SQL.ReportBuilder -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.ReportBuilder\bin\Release\net10.0\ETL-SQL.ReportBuilder.dll
+  ETL-SQL.Engine -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\bin\Release\net10.0\ETL-SQL.Engine.dll
+  ETL-SQL.Connectors -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\bin\Release\net10.0\ETL-SQL.Connectors.dll
+  ETL-SQL.ReportHosting -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.ReportHosting\bin\Release\net10.0\ETL-SQL.ReportHosting.dll
+  ETL-SQL.Orchestrator -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Orchestrator\bin\Release\net10.0\ETL-SQL.Orchestrator.dll
+  ETL-SQL.TUI -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.TUI\bin\Release\net10.0\ETL-SQL-TUI.dll
+  ETL-SQL.Portal -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Portal\bin\Release\net10.0\ETL-SQL-Portal.dll
+  ETL-SQL.WorkstationEditor -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.WorkstationEditor\bin\Release\net10.0\ETL-SQL-Editor.dll
+  ETL-SQL.App -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.App\bin\Release\net10.0\ETL-SQL.dll
+  ETL-SQL.Tests -> C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Release\net10.0\ETL-SQL.Tests.dll
+Test run for C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Release\net10.0\ETL-SQL.Tests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.11)
+[xUnit.net 00:00:00.20]   Discovering: ETL-SQL.Tests
+=== ETL-SQL Test Logger Initialized ===
+Security: Path Protection Mode set to Restricted.
+Security: Loaded 1 allowed hosts.
+Security: Loaded 1 approved safe zones.
+Security: Loaded 3 authorized environment variables.
+Security: Loaded 0 additional blocked file extensions.
+Security: Loaded 0 additional blocked paths.
+[xUnit.net 00:00:01.27]   Discovered:  ETL-SQL.Tests
+[xUnit.net 00:00:01.29]   Starting:    ETL-SQL.Tests
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.SyntheticResourcesAreProvisionedWithDedicatedGuardsAndNoCustomerReach [43 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.ProvisioningFailsClosedForEveryIsolationDefect(defect: "shared-capacity") [2 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.ProvisioningFailsClosedForEveryIsolationDefect(defect: "customer-grant") [< 1 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.ProvisioningFailsClosedForEveryIsolationDefect(defect: "customer-route") [< 1 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.ProvisioningFailsClosedForEveryIsolationDefect(defect: "weak-cost-guard") [< 1 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.ProvisioningFailsClosedForEveryIsolationDefect(defect: "wrong-tenant") [< 1 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.DependencyFailureHasUnambiguousAttributionEvenWhenTheJourneyResultIsWrong [5 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.RevokedExpiredOrOverlongCredentialsCannotRun [4 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.NormalJourneysAndFaultDrillsCoverEveryRegionAndFailureDomain [22 ms]
+[xUnit.net 00:00:01.45]   Finished:    ETL-SQL.Tests
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.AvailabilitySloUsesWindowSamplesAndRoutesAProductAlert [1 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.CredentialsRotateOnScheduleAndCompromiseRevokesBeforeReplacement [9 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.ConfiguredExecutorRequiresAndDispatchesEveryConcreteJourney [7 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.HostedPlanPinsSloRegionFailureDomainAndIsolationContracts [1 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.DrillFailsWhenObservedFailureDoesNotMatchTheInjectedFault [< 1 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.EvidenceFailsClosedForCustomerAccessCapacityAndCost [1 ms]
+  Passed ETL_SQL.Tests.Orchestration.ProductionCanaryTests.PlanRejectsMissingJourneysSharedCustomerBoundariesAndAmbiguousRoutes [2 ms]
+
+Test Run Successful.
+Total tests: 16
+     Passed: 16
+ Total time: 1.7748 Seconds

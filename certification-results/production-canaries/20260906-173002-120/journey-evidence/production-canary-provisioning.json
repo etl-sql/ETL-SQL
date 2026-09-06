@@ -1,0 +1,25 @@
+{
+  "schema": "etl-sql.production-canary-provisioning/v1",
+  "completedUtc": "2026-08-25T12:00:00+00:00",
+  "provisionerKind": "production-like",
+  "expected": {
+    "tenantId": "synthetic-canary-tenant",
+    "identityId": "synthetic-canary-runner",
+    "resourceNamespace": "synthetic-canary-resources",
+    "quotaPool": "synthetic-canary-quota",
+    "maximumMonthlyCostUsd": 250.00,
+    "customerNetworkAccessAllowed": false,
+    "customerCapacityAllowed": false
+  },
+  "observed": {
+    "tenantId": "synthetic-canary-tenant",
+    "identityId": "synthetic-canary-runner",
+    "resourceNamespace": "synthetic-canary-resources",
+    "quotaPool": "synthetic-canary-quota",
+    "enforcedMonthlyCostLimitUsd": 250.00,
+    "customerResourceGrants": 0,
+    "customerNetworkRoutes": 0,
+    "usesDedicatedCapacity": true
+  },
+  "passed": true
+}

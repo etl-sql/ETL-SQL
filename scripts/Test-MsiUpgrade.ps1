@@ -130,9 +130,21 @@ if (@(Get-EtlSqlUninstallEntries).Count -ne 0) {
 }
 
 try {
+    # DEPLOY_PROFILE=SOLO, not the individual INSTALL_* properties.
+    #
+    # This asked for a service-free install with 'INSTALL_SDK=1 INSTALL_ORCHESTRATOR=0
+    # INSTALL_PORTAL=0' and never got one. INSTALL_SDK and INSTALL_PORTAL are not properties the
+    # installer defines — the real names are INSTALL_ADMIN_PORTAL and INSTALL_REPORT_PORTAL — so
+    # they set nothing. INSTALL_ORCHESTRATOR does exist and was applied, then overwritten 83 ms
+    # later by the ENTERPRISE profile preset, which DEPLOY_PROFILE defaults to and which runs in
+    # the execute sequence on every install including /qn.
+    #
+    # So every run installed the Orchestrator and both Portal surfaces, and the certification died
+    # waiting for the Portal service to finish its first-start migration. SOLO is the installer's
+    # own name for "workstation only, no services", it survives the preset because it *is* the
+    # preset, and it works against a previously shipped MSI that cannot be changed.
     Write-Host "Installing previous MSI $previousVersionText..." -ForegroundColor Yellow
-    Invoke-MsiExec @('/i', $previousPath, 'INSTALL_SDK=1', 'INSTALL_ORCHESTRATOR=0',
-        'INSTALL_PORTAL=0') $previousLog 'Previous MSI install'
+    Invoke-MsiExec @('/i', $previousPath, 'DEPLOY_PROFILE=SOLO') $previousLog 'Previous MSI install'
     $installedByThisRun = $true
 
     $previousEntries = @(Assert-EntryCount 1 'Previous install')
@@ -154,8 +166,7 @@ try {
     Set-Content -LiteralPath $sentinelPath -Value $sentinelValue -Encoding UTF8
 
     Write-Host "Installing current MSI $currentVersionText over the previous version..." -ForegroundColor Yellow
-    Invoke-MsiExec @('/i', $currentPath, 'INSTALL_SDK=1', 'INSTALL_ORCHESTRATOR=0',
-        'INSTALL_PORTAL=0') $upgradeLog 'Current MSI upgrade'
+    Invoke-MsiExec @('/i', $currentPath, 'DEPLOY_PROFILE=SOLO') $upgradeLog 'Current MSI upgrade'
 
     $currentEntries = @(Assert-EntryCount 1 'Current upgrade')
     $currentEntry = $currentEntries[0]
