@@ -23,6 +23,7 @@
 | [v0.17.0 Performance Results — Scale Certification](v0.17.0-performance-results.md) | **Status:** Decision record. **There is no v0.17.0 performance regression.** Both certification |
 | [ETL-SQL v0.17.0](v0.17.0.md) | **Released:** 2026-07-26 |
 | [v0.18.0 Deployment Profile Review](v0.18.0-deployment-profile-review.md) | The release review that |
+| [v0.19.0 Performance Results — Scale Certification](v0.19.0-performance-results.md) | **Status:** Decision record. **There is no v0.19.0 performance regression.** Measured by the |
 | [ETL-SQL v0.19.0](v0.19.0.md) | **Released:** 2026-09-06 |
 | [ETL-SQL v0.2.0 *(Unofficial)*](v0.2.0.md) | **Released:** 2026-03-23 |
 | [ETL-SQL v0.3.0 *(Unofficial)*](v0.3.0.md) | **Released:** 2026-04-06 |
