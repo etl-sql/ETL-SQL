@@ -490,13 +490,13 @@ CREATE BUTTON RefreshSelection AS (
         }
 
         [Fact]
-        public void ParseCreateVisual_PassiveVisualWithActions_ReportsSyntaxError()
+        public void ParseCreateVisual_TextOnChangeAction_ReportsSyntaxError()
         {
-            var script = Parse("CREATE VISUAL HelpText AS TEXT (CONTENT = 'Pick a region', ACTIONS (ON_CLICK = SET_UI_STATE('Filters', 'VISIBLE', ON)));");
+            var script = Parse("CREATE VISUAL HelpText AS TEXT (CONTENT = 'Pick a region', ACTIONS (ON_CHANGE = SET_UI_STATE('Filters', 'VISIBLE', ON)));");
 
             Assert.Contains(script.Diagnostics, d =>
                 d.Severity == DiagnosticSeverity.Error &&
-                d.Message.Contains("TEXT visuals do not support ACTIONS", StringComparison.OrdinalIgnoreCase));
+                d.Message.Contains("TEXT visuals only support ACTIONS (ON_CLICK", StringComparison.OrdinalIgnoreCase));
         }
 
         [Fact]

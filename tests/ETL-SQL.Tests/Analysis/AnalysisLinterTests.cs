@@ -23,7 +23,7 @@ namespace ETL_SQL.Tests.Analysis
         }
 
         private static void EnsureConnectorRegistry() =>
-            _ = DependencyInjectionSetup.BuildServiceProvider();
+            _ = Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<ETL_SQL.Data.IConnectorRegistry>(DependencyInjectionSetup.BuildServiceProvider());
 
         [Fact]
         public async Task Linter_AnalyzeAsync_RunsIndependentRulesConcurrently()

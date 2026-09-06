@@ -3436,9 +3436,7 @@ public class ReportParser : ParserComponent
         or VisualType.Textbox
         or VisualType.Numberbox;
 
-    private static bool IsPassiveVisual(VisualType visualType) => visualType is
-        VisualType.Text
-        or VisualType.Image;
+    private static bool IsPassiveVisual(VisualType visualType) => false;
 
     private VisualFetchMode ParseVisualFetchMode()
     {
