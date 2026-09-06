@@ -1,4 +1,4 @@
-﻿/* 
+/* 
   -- @requires: docker
   Sample: Docker-based SQL Server Integration
   Demonstrates:
@@ -16,10 +16,9 @@ DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
 CREATE CONNECTION ds AS MSSQL(@conn);
 
 -- 3. Execute a block of ETL-SQL statements on the remote server
--- Note: Supports omitted types (defaults to NVARCHAR(MAX))
 EXECUTE ds
 BEGIN
-  CREATE TABLE Employee (id, employee_name);
+  CREATE TABLE Employee (id INT, employee_name NVARCHAR(100));
   INSERT INTO  Employee(id, employee_name) VALUES (1, 'New Employee');
 END;
 

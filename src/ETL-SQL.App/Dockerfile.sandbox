@@ -48,8 +48,8 @@ RUN dotnet publish "ETL-SQL.App.csproj" -c Release -r linux-x64 --self-contained
 # Ensure the executable has the exact requested lowercase name
 RUN if [ -f /app/publish/ETL-SQL ]; then mv /app/publish/ETL-SQL /app/publish/etl-sql; fi
 
-# Final image contains the .NET 10 runtime needed by the CLI, not the ASP.NET service host
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
+# Final image contains the .NET 10 ASP.NET runtime needed by the CLI
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
 # Same native dependencies as service hosts:
