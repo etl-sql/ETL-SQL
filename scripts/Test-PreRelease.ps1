@@ -852,14 +852,23 @@ function Invoke-HangPreflight {
         if (-not $dockerCmd) {
             throw "-IncludeDockerIntegration was requested but 'docker' is not on PATH. Install/start Docker or drop the switch."
         }
-        $probe = Start-Process -FilePath $dockerCmd.Source -ArgumentList @("version", "--format", "{{.Server.Os}}") `
-            -NoNewWindow -PassThru -RedirectStandardOutput "NUL" -RedirectStandardError "NUL"
-        if (-not $probe.WaitForExit(60000)) {
-            try { $probe.Kill() } catch { }
-            throw "-IncludeDockerIntegration was requested but 'docker version' did not answer within 60s. The daemon is unresponsive; start Docker Desktop and retry rather than letting the Docker phase hang."
+        # Start-Process refuses to send both streams to one path, so the probe gets two temp files.
+        $probeOut = [System.IO.Path]::GetTempFileName()
+        $probeErr = [System.IO.Path]::GetTempFileName()
+        try {
+            $probe = Start-Process -FilePath $dockerCmd.Source -ArgumentList @("version", "--format", "{{.Server.Os}}") `
+                -NoNewWindow -PassThru -RedirectStandardOutput $probeOut -RedirectStandardError $probeErr
+            if (-not $probe.WaitForExit(60000)) {
+                try { $probe.Kill() } catch { }
+                throw "-IncludeDockerIntegration was requested but 'docker version' did not answer within 60s. The daemon is unresponsive; start Docker Desktop and retry rather than letting the Docker phase hang."
+            }
+            if ($probe.ExitCode -ne 0) {
+                $detail = (Get-Content -LiteralPath $probeErr -Raw -ErrorAction SilentlyContinue)
+                throw "-IncludeDockerIntegration was requested but 'docker version' failed with exit code $($probe.ExitCode). Start the Docker daemon and retry. $($detail -replace '\s+', ' ')"
+            }
         }
-        if ($probe.ExitCode -ne 0) {
-            throw "-IncludeDockerIntegration was requested but 'docker version' failed with exit code $($probe.ExitCode). Start the Docker daemon and retry."
+        finally {
+            Remove-Item -LiteralPath $probeOut, $probeErr -Force -ErrorAction SilentlyContinue
         }
         Write-Host "  Docker daemon responded." -ForegroundColor DarkGray
     }
