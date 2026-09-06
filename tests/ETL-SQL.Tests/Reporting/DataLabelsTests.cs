@@ -521,13 +521,24 @@ namespace ETL_SQL.Tests
                 Layers = ImmutableArray.Create(sourcePlan.Layers[0] with { Data = collidingData })
             };
 
-            // 1. Default OFF: zero leader paths
+            // 1. Explicit OFF: zero leader paths
             var planOff = planBase with
             {
-                Style = ImmutableArray.Create(new StyleToken("DATA_LABELS", "ON"))
+                Style = ImmutableArray.Create(
+                    new StyleToken("DATA_LABELS", "ON"),
+                    new StyleToken("DATA_LABELS:LEADER_LINE", "OFF")
+                )
             };
             var svgOff = new SvgChartRenderer().Render(planOff);
             Assert.Equal(0, CountOccurrences(svgOff, "class='plot-smart-label-leader'"));
+
+            // Default: displaced label draws leader line automatically to keep mark attribution
+            var planDefault = planBase with
+            {
+                Style = ImmutableArray.Create(new StyleToken("DATA_LABELS", "ON"))
+            };
+            var svgDefault = new SvgChartRenderer().Render(planDefault);
+            Assert.Equal(1, CountOccurrences(svgDefault, "class='plot-smart-label-leader'"));
 
             // 2. Explicit ON with DASHED: exactly 1 leader path for the 1 displaced label
             var planOnDashed = planBase with

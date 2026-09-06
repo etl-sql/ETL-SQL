@@ -295,8 +295,22 @@ public sealed class StudioStewardshipJourneyTests(PortalBrowserFixture fixture)
     private static async Task RunReportAsync(IPage page, string folderName, string reportName)
     {
         await page.GotoAsync("/index.html");
-        await page.ClickAsync($"#folderTree .folder-item:has-text(\"{folderName}\")");
-        await page.ClickAsync($"a.report-card-link:has-text(\"{reportName}\")");
+        var folderItem = page.Locator($"#folderTree .folder-item:has-text(\"{folderName}\")");
+        await folderItem.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible, Timeout = 30_000 });
+        await folderItem.ClickAsync();
+        await Expect(page.Locator($"#folderTree .folder-item.active:has-text(\"{folderName}\")"))
+            .ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 30_000 });
+
+        var cardLink = page.Locator($"a.report-card-link:has-text(\"{reportName}\")");
+        await Expect(cardLink.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 30_000 });
+        try
+        {
+            await cardLink.First.ClickAsync();
+        }
+        catch (PlaywrightException)
+        {
+            await cardLink.First.ClickAsync();
+        }
 
         var execute = page.Locator("#execBtn");
         var refresh = page.Locator("#refreshBtn");

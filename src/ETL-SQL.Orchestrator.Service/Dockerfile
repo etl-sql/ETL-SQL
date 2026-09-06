@@ -28,6 +28,7 @@ COPY ["src/ETL-SQL.Infrastructure.Docker/ETL-SQL.Infrastructure.Docker.csproj", 
 COPY ["src/ETL-SQL.Infrastructure.Logging/ETL-SQL.Infrastructure.Logging.csproj", "ETL-SQL.Infrastructure.Logging/"]
 COPY ["src/ETL-SQL.Infrastructure.Sqlite/ETL-SQL.Infrastructure.Sqlite.csproj", "ETL-SQL.Infrastructure.Sqlite/"]
 COPY ["src/ETL-SQL.Gateway/ETL-SQL.Gateway.csproj", "ETL-SQL.Gateway/"]
+COPY ["src/ETL-SQL.WorkstationEditor/ETL-SQL.WorkstationEditor.csproj", "ETL-SQL.WorkstationEditor/"]
 
 
 RUN dotnet restore "ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj" -r linux-x64

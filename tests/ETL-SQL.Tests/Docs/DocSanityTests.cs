@@ -638,6 +638,7 @@ namespace ETL_SQL.Tests.Docs
                            !parts.Contains(".claude") &&
                            !parts.Contains(".worktrees") &&
                            !parts.Contains(".vscode-test") &&
+                           !parts.Contains("artifacts") &&
                            !f.EndsWith("TEMPLATE.md", StringComparison.OrdinalIgnoreCase) &&
                            !f.EndsWith("CLAUDE.md", StringComparison.OrdinalIgnoreCase) &&
                            !f.EndsWith("GEMINI.md", StringComparison.OrdinalIgnoreCase) &&

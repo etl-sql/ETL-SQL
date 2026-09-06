@@ -635,6 +635,9 @@ public sealed class DesignerScriptGenerationService
         || string.Equals(key, "html_mode", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "html_style", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "html_fallback", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "MODE", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "FALLBACK", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "TEMPLATE", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("action:", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("interaction:", StringComparison.OrdinalIgnoreCase);
 

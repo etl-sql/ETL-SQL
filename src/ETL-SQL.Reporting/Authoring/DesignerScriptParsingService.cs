@@ -267,10 +267,11 @@ public sealed class DesignerScriptParsingService
                     mapping.ColorScaleTo),
                 StringComparer.OrdinalIgnoreCase);
 
-        var options = v.Options.ToDictionary(
-            o => o.Key,
-            o => NormalizeOptionValue(o.Value),
-            StringComparer.OrdinalIgnoreCase);
+        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var opt in v.Options)
+        {
+            options[opt.Key] = NormalizeOptionValue(opt.Value);
+        }
 
         if (v.Source.InlineSelect != null)
         {

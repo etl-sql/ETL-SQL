@@ -2546,6 +2546,16 @@ public class ReportParser : ParserComponent
             {
                 throw new SyntaxException("CREATE CONTAINER ICON is now a top-level clause. Use ICON = 'name' outside OPTIONS (...).", _parser.Previous.Line, _parser.Previous.Column);
             }
+            else if (Match(TokenType.PINNABLE) || IsCurrentValue("PINNABLE"))
+            {
+                if (IsCurrentValue("PINNABLE")) Advance();
+                throw new SyntaxException("CREATE CONTAINER PINNABLE is now part of the LAYOUT clause. Use LAYOUT (PINNABLE = ON|OFF) outside OPTIONS (...).", _parser.Previous.Line, _parser.Previous.Column);
+            }
+            else if (Match(TokenType.COLLAPSIBLE) || IsCurrentValue("COLLAPSIBLE"))
+            {
+                if (IsCurrentValue("COLLAPSIBLE")) Advance();
+                throw new SyntaxException("CREATE CONTAINER COLLAPSIBLE is now a top-level clause. Use COLLAPSIBLE = ON|OFF outside OPTIONS (...).", _parser.Previous.Line, _parser.Previous.Column);
+            }
             else
             {
                 if (_parser.Current.Type == TokenType.RPAREN || _parser.Current.Type == TokenType.EOF)
@@ -2555,10 +2565,6 @@ public class ReportParser : ParserComponent
                 Match(TokenType.EQUALS);
                 var val = ConsumeReportOptionValue();
                 options[key] = val;
-                if (key == "COLLAPSIBLE")
-                {
-                    isCollapsible = string.Equals(val, "ON", StringComparison.OrdinalIgnoreCase);
-                }
             }
             Match(TokenType.COMMA);
         }
@@ -3430,7 +3436,9 @@ public class ReportParser : ParserComponent
         or VisualType.Textbox
         or VisualType.Numberbox;
 
-    private static bool IsPassiveVisual(VisualType visualType) => false;
+    private static bool IsPassiveVisual(VisualType visualType) => visualType is
+        VisualType.Text
+        or VisualType.Image;
 
     private VisualFetchMode ParseVisualFetchMode()
     {

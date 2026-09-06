@@ -135,7 +135,10 @@ describe('Pipeline task editing layer', () => {
 
         const kinds = [...host.querySelectorAll('[data-task-kind]')].map(chip => (chip as HTMLElement).dataset.taskKind);
         expect(kinds).toEqual([
-            'execution', 'fileoperation', 'validation', 'notification', 'parallel', 'foreach', 'transaction',
+            'execution', 'validation', 'notification', 'throw', 'waitfor',
+            'if', 'foreach', 'for', 'while', 'parallel', 'transaction', 'break', 'continue',
+            'copyfile', 'movefile', 'renamefile', 'deletefile',
+            'createdirectory', 'copydirectory', 'movedirectory', 'renamedirectory', 'deletedirectorycontents', 'deletedirectory',
         ]);
 
         // Nothing in the palette is a dead control: each kind has passed its emission gate, so none
@@ -336,10 +339,8 @@ describe('Pipeline task editing layer', () => {
     test('the palette offers the control-flow containers alongside the task kinds', () => {
         attach(host, canvas, { tasks });
 
-        const kinds = [...host.querySelectorAll('[data-task-kind]')].map(chip => (chip as HTMLElement).dataset.taskKind);
-        expect(kinds).toEqual([
-            'execution', 'fileoperation', 'validation', 'notification', 'parallel', 'foreach', 'transaction',
-        ]);
+        const containers = [...host.querySelectorAll('.is-container-chip')].map(chip => (chip as HTMLElement).dataset.taskKind);
+        expect(containers).toEqual(['if', 'foreach', 'for', 'while', 'parallel', 'transaction']);
     });
 
     test('dropping a task onto a container puts it inside, not after it', () => {
