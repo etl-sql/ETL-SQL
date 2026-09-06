@@ -42,6 +42,26 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   author declared, and URL-encodes every value, so a row value cannot introduce a path segment, a
   query parameter, or a scheme of its own. A placeholder naming an undeclared or missing column
   resolves to empty rather than being left in the URL, and `PARAMS` without `TEMPLATE` is rejected.
+- **`PAGE` options and `MOBILE_LAYOUT` reach the rendered page.** `BACKGROUND_IMAGE`,
+  `BACKGROUND_SIZE`, `MAX_WIDTH`, `ALIGN_CONTENT`, `OVERFLOW`, and the whole `MOBILE_LAYOUT` block
+  parsed, serialized into the manifest, and were then dropped: `renderLayout` read only `structure`
+  and `slotMap`, so none of them had ever reached a pixel. The page now paints its background and
+  overflow, constrains and centres its grid, and below the declared `BREAKPOINT` lays itself out
+  from the mobile structure and slot map — re-rendering when the breakpoint is crossed, because the
+  two layouts put different visuals in different slots. A bare `BACKGROUND_IMAGE` path is wrapped so
+  it cannot close `url()` and start a second declaration. The tests that covered this asserted the
+  options were present in `page.options` and stopped there, which is why the gap stayed invisible;
+  `scripts/test-page-layout-options.mjs` asserts the mechanism and runs in the pre-push gate.
+- **The published grammar agrees with the parser again.** `docs/grammar.ebnf` did not recognize 47 of
+  the 1,092 working documentation examples the parser accepts, including the v0.19.0 syntax this
+  release ships: `OVERLAYS (REFERENCE_BAND …)`, `RUNNING_TOTAL`/`PERCENT_OF_TOTAL`,
+  `DATA_LABELS = ON WITH (…)`, `SERIES_LABELS`, `MOBILE_LAYOUT`, page `OPTIONS`/`ACTIONS`, the
+  `OPEN_URL`/`SHOW_MODAL`/`RESET_PARAMETERS`/`SET_UI_STATE` actions, per-tab container options,
+  navigation groups and links, `CUSTOM CHART` geographic coordinates, shared and named layer
+  encodings, error-bar and OHLC channels, chart annotations, `||` concatenation, and a single-
+  statement `IF`/`WHILE` body. The `EXECUTE <conn> BEGIN … END` body is pushed down verbatim rather
+  than parsed, and the grammar now says so and documents the Portal commands authors write there.
+  The EBNF conformance lane — a required pre-release phase — is green at 1,092 of 1,092.
 - **A displaced data label is connected to its mark again.** Adding `DATA_LABELS LEADER_LINE`
   styling put the leader behind an opt-in gate on the *shared* smart-label path, which silently
   dropped the connector whenever the renderer moved a label on its own to resolve a collision — the

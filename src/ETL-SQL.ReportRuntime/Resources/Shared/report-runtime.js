@@ -1794,6 +1794,52 @@
         });
     }
 
+    // `MAX_WIDTH = 1440` and `BREAKPOINT = 768` are written unitless as often as they are written
+    // '1440px', and both reach here as strings. A bare number is pixels.
+    function toCssLength(value) {
+        const text = String(value == null ? '' : value).trim();
+        if (!text) return null;
+        return /^-?\d+(\.\d+)?$/.test(text) ? text + 'px' : text;
+    }
+
+    function toPixels(value) {
+        const length = toCssLength(value);
+        if (!length) return 0;
+        const parsed = parseFloat(length);
+        return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    // PAGE OPTIONS reached the manifest but nothing ever read them, so every option below was
+    // parsed, serialized, asserted in a test, and then silently dropped before it reached a pixel.
+    function applyPageOptions(pageDiv, contentDiv, page) {
+        const opts = page.options;
+        if (!opts) return;
+
+        const backgroundImage = getOption(opts, 'BACKGROUND_IMAGE');
+        if (backgroundImage) {
+            const raw = String(backgroundImage).trim();
+            // Authors write either a bare path or the CSS url(...) form. Quotes and parentheses are
+            // stripped from the bare form so a value cannot close url() and start another token.
+            pageDiv.style.backgroundImage = /^url\(/i.test(raw)
+                ? raw
+                : `url("${raw.replace(/["'();\\\s]/g, '')}")`;
+            pageDiv.style.backgroundRepeat = 'no-repeat';
+            pageDiv.style.backgroundPosition = 'center';
+            pageDiv.style.backgroundSize = (getOption(opts, 'BACKGROUND_SIZE') || 'cover').toLowerCase();
+        }
+
+        const overflow = getOption(opts, 'OVERFLOW');
+        if (overflow) pageDiv.style.overflow = String(overflow).toLowerCase();
+
+        const maxWidth = toCssLength(getOption(opts, 'MAX_WIDTH'));
+        if (maxWidth) contentDiv.style.maxWidth = maxWidth;
+
+        if ((getOption(opts, 'ALIGN_CONTENT') || '').toUpperCase() === 'CENTER') {
+            contentDiv.style.marginLeft = 'auto';
+            contentDiv.style.marginRight = 'auto';
+        }
+    }
+
     function renderPage(manifest, page, pageSections, pageTheme) {
         console.debug(`[Layout] Rendering Page: ${page.name}`);
         const div = document.createElement('div');
@@ -1806,16 +1852,47 @@
         const content = document.createElement('div');
         content.className = 'page-grid';
         div.appendChild(content);
+        applyPageOptions(div, content, page);
 
         pageSections[page.name] = div;
-        
+
         if (page.mode === 'PAGINATED' && page.physicalPages && page.physicalPages.length > 0) {
             renderPhysicalPages(content, page, manifest, pageTheme);
         } else {
-            renderLayout(content, page, manifest, pageTheme);
+            renderResponsiveLayout(content, page, manifest, pageTheme);
         }
-        
+
         return div;
+    }
+
+    // MOBILE_LAYOUT is an alternate structure, not a style: below the breakpoint the page is laid
+    // out from the mobile structure and slot map instead of the desktop pair. Crossing the
+    // breakpoint re-renders, because the two layouts place different visuals in different slots.
+    function renderResponsiveLayout(content, page, manifest, pageTheme) {
+        const mobile = page.mobileLayout;
+        const breakpoint = mobile ? toPixels(mobile.breakpoint) : 0;
+        if (!mobile || !mobile.structure || breakpoint <= 0) {
+            renderLayout(content, page, manifest, pageTheme);
+            return;
+        }
+
+        const query = window.matchMedia(`(max-width: ${breakpoint}px)`);
+        const draw = () => {
+            const layoutDef = query.matches
+                ? { structure: mobile.structure, slotMap: mobile.slotMap || page.slotMap }
+                : page;
+            content.dataset.activeLayout = query.matches ? 'MOBILE' : 'DEFAULT';
+            content.replaceChildren();
+            content.removeAttribute('style');
+            content.className = 'page-grid';
+            applyPageOptions(content.parentElement, content, page);
+            renderLayout(content, layoutDef, manifest, pageTheme);
+        };
+
+        draw();
+        const onChange = () => draw();
+        if (typeof query.addEventListener === 'function') query.addEventListener('change', onChange);
+        else if (typeof query.addListener === 'function') query.addListener(onChange);
     }
 
     function renderPhysicalPages(container, pageDef, manifest, pageTheme) {

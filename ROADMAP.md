@@ -68,7 +68,7 @@ Keep entries concise and link to detailed designs rather than copying them here.
 **Status:** Planned  
 **Horizon:** v0.20.0  
 **Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md) for the
-Studio scope; the browser plan and the evidence behind its ordering are in `TODO.md`.
+Studio scope; the browser plan and the evidence behind its ordering are the slices below.
 
 v0.20.0 is about making the browser side of ETL-SQL something that can be changed safely, rather
 than adding to it. Studio, the Portal's reporting and stewardship surfaces, and the multi-tenant
@@ -138,7 +138,12 @@ requires a bundler.
    statements it writes. The authoring limits are real and specific: an `IF` written on the canvas
    cannot be given an `ELSE` there, the task editor can only rename most kinds rather than edit their
    fields, and `PARALLEL` has no swimlanes. Rebuilding the pipeline canvas as a teaching surface is
-   the largest single piece.
+   the largest single piece. Four more came out of driving Studio by hand in v0.19.0 and are open
+   for the same reason — the properties inspector offers no aggregate selector, so the aggregation a
+   measure uses can only be changed in the script; the dashboard workflow cannot be advanced past
+   cross-filter setup, so an author who wants none must configure some; paginated headers and footers
+   accept text only, with no field, page number or image; and a selection inside the current line is
+   invisible, because the active-line highlight paints over the selection background.
 5. **Move the sources to `.ts`.** A real module graph and a build step, over files that are by then
    linted, split, and type-checked. This is the step the delivery-model boundary applies to, and it
    is scheduled last so the sync, the drift gate and the sandbox are redesigned once, against modules
