@@ -330,10 +330,12 @@ patching preserves hand-authored SQL and comments.
 **Horizon:** Launch Gate
 **Authoritative design:** [SaaS Tenant Isolation Architecture](docs/architecture/saas-tenant-isolation.md), [Deployment Profile Certification](docs/administration/platform/deployment-profile-certification.md), and [Provider-Neutral Fault Certification](docs/architecture/decisions/provider-neutral-fault-certification.md)
 
-Managed Dedicated and Shared SaaS profile lanes have passed their topology-specific isolation gates.
-The remaining increment is operational closure around those certified boundaries: complete Shared
-metering, recover queued work after scheduler-process loss, certify Shared lifecycle transitions,
-and attach physical runtime and hosting evidence to production claims.
+Managed Dedicated and Shared SaaS profile lanes have passed their topology-specific isolation gates,
+and more of the operational closure has landed than this entry previously claimed: the Gateway,
+storage and scheduler metering producers all write to the tenant ledger with their connector class,
+and queued admission is reconciled after scheduler-process loss by
+`SandboxAdmissionReconciliationService`. What genuinely remains is sandbox metering, certified Shared
+lifecycle transitions, and physical runtime and hosting evidence bound to production claims.
 
 **Why launch gate:** Contract and deterministic-adapter evidence proves product invariants, but it
 does not prove an untested hardened runtime, cloud service, HA topology, or production region. Those
@@ -348,11 +350,12 @@ authorization input.
 scheduler workload identity, object-native artifact storage, tenant metering ledger, hardened
 sandbox provider, production canaries, HA soak tooling, and release claims index.
 
-**Delivery slices:** Add Gateway-traffic, storage-sampling, and connector-class metering producers;
-host queued-admission recovery from immutable scheduler metadata; add explicit Shared upgrade,
-promotion/import, backup/restore, and exit lanes where those journeys are supported; then run the
-provider-specific hardened-runtime, cloud-fault, HA/soak, and canary evidence for each production
-topology.
+**Delivery slices:** Add the sandbox metering producer — `TenantMeteringSource.Sandbox` is declared
+and nothing writes it, so sandbox execution is the one class the ledger cannot account for; add
+explicit Shared upgrade, promotion/import, backup/restore, and exit lanes where those journeys are
+supported, since every SaaS transition row in the v0.19.0 claims index reads `NotCertified` for
+Shared; then run the provider-specific hardened-runtime, cloud-fault, HA/soak, and canary evidence
+for each production topology.
 
 **Acceptance evidence:** Tenant-partitioned and idempotent metering across every producer; restart
 tests that recover only current queued authority; release-eligible Shared transition bundles with
