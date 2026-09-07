@@ -192,7 +192,8 @@ async function callAiApi(
             'Content-Type': 'application/json'
         };
 
-        const defaultModel = provider === 'OpenRouter' ? 'google/gemini-flash-1.5' : 'gpt-4o';
+        const defaultModel = provider === 'OpenRouter' ? 'google/gemini-flash-1.5'
+            : provider === 'OpenAI' ? 'gpt-6-astra' : 'gpt-4o';
         const targetModel = model || defaultModel;
 
         if (!isTextFile) {

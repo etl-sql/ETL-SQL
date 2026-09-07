@@ -262,7 +262,7 @@
           "etlsql.ai.model": {
             "type": "string",
             "default": "",
-            "markdownDescription": "The specific AI model to run (e.g. `gemini-1.5-flash`, `gpt-4o`, `claude-3-5-sonnet-latest`). If blank, standard defaults are used based on the provider."
+            "markdownDescription": "The specific AI model to run (e.g. `gemini-1.5-flash`, `gpt-6-astra`, `claude-3-5-sonnet-latest`). If blank, provider defaults are used; OpenAI uses `gpt-6-astra`."
           },
           "etlsql.ai.endpoint": {
             "type": "string",
