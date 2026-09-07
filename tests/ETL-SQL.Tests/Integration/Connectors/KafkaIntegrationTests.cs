@@ -8,6 +8,7 @@ using ETL_SQL.Connectors.Kafka;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Services;
+using ETL_SQL.TestSupport;
 using Moq;
 using Xunit;
 
@@ -96,7 +97,26 @@ namespace ETL_SQL.Tests.Integration.Connectors
             await ds.WriteBatches(GetBatches(), append: true);
 
             // 2. Consume (ReadBatches)
-            var batches = await ds.ReadBatches().ToListAsync();
+            //
+            // Waited for, not assumed. A single ReadBatches call polls for TIMEOUT_MS and returns
+            // whatever arrived; on a loaded runner the consumer's group join, partition assignment
+            // and offset reset can take longer than that whole window, so the first read comes back
+            // empty and the assertion below fails with "Collection was empty" after exactly 3
+            // seconds — which is what it did in CI while passing everywhere else.
+            //
+            // This is the observable condition the wait exists for: both produced rows readable.
+            // It is not a retry around a flaky assertion — a read that returns one row of two is
+            // still polled again, and a broker that never delivers still fails, with the last
+            // observed state named.
+            var batches = await LoadAwareWait.UntilAsync(
+                $"both rows produced to {topic} to be consumable",
+                async _ => await ds.ReadBatches().ToListAsync(),
+                observed => observed.Count > 0 && observed[0].Rows.Count == 2,
+                TimeSpan.FromSeconds(30),
+                TimeSpan.FromMilliseconds(250),
+                observed => observed.Count == 0
+                    ? "no batches"
+                    : $"{observed[0].Rows.Count} row(s) in the first of {observed.Count} batch(es)");
 
             Assert.NotEmpty(batches);
             var resultTable = batches[0];

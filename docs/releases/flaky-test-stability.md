@@ -109,5 +109,21 @@ class load and shared background-service state from its startup/shutdown observa
   Until then, treat a whole-assembly `PortalBrowserFixture` failure as an instrument reading and
   re-run the lane in isolation before believing anything it says about the product.
 
+- **v0.19.0 — a connector's own timeout option is not a wait.**
+  `KafkaIntegrationTests.KafkaDataSource_ProduceAndConsume_RoundTrip_Success` produced two rows,
+  read once with the data source's `TIMEOUT_MS = 3000`, and asserted `NotEmpty` on the result. On a
+  loaded CI runner the consumer's group join, partition assignment and offset reset can consume that
+  entire window, so the single read returned nothing and the test failed in *exactly* three seconds
+  — the timeout, not the broker. It passed everywhere else, including a full local Docker
+  integration run.
+
+  The lesson is that a timeout **parameter passed to the code under test** reads like a wait and is
+  not one: it bounds one attempt, and the assertion still runs against whatever that attempt
+  happened to see. The read is now inside `LoadAwareWait.UntilAsync`, waiting for the observable
+  condition — both produced rows readable — which is not the same as retrying a flaky assertion: a
+  read returning one row of two is polled again, and a broker that never delivers still fails, with
+  the last observed state named. Worth checking wherever a test hands a `TIMEOUT_MS`, `poll`, or
+  `wait` option to a connector and then asserts on a single call.
+
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
 diagnostics belong in generated evidence, not a new release-specific tracking file.
