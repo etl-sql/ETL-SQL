@@ -121,7 +121,10 @@ async function init() {
     canGovernanceOverview =
       hasRole(identity, 'Admin', 'GovernanceManager', 'DataSteward', 'GovernanceViewer');
     canQuarantine = hasRole(identity, 'Admin', 'DataSteward');
-  } catch {}
+  } catch {
+    // Identity is unreadable, so no role-gated entry is revealed. The two flags above keep
+    // whatever the page was initialised with, which is the closed position.
+  }
   // The top-level entries — Admin, Orchestrator, Docs, Studio — come from one server answer.
   await applyNavigationSafely();
 
@@ -904,17 +907,6 @@ function reportActivityLine(report) {
   return 'Ready for first run';
 }
 
-function formatDuration(ms) {
-  const value = Number(ms);
-  if (!Number.isFinite(value)) return '';
-  if (value < 1000) return `${value} ms`;
-  const seconds = Math.round(value / 100) / 10;
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remaining = Math.round(seconds % 60);
-  return `${minutes}m ${remaining}s`;
-}
-
 function formatBuiltAt(value) {
   return value ? new Date(value).toLocaleString() : 'Never run';
 }
@@ -999,7 +991,7 @@ async function renderNoSnapshot(report) {
   const runButton = document.getElementById('execBtn');
   /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (runButton).disabled = Boolean(parameterError);
   runButton.addEventListener('click', () => {
-    const validation = validateParamFields('runParameterFields', params);
+    const validation = validateParamFields('runParameterFields');
     const error = document.getElementById('runParameterError');
     if (!validation.ok) {
       error.textContent = 'Complete the required report parameters before running.';
@@ -1109,6 +1101,9 @@ function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
   const initialPageJs = initialPage
     ? `window.__INITIAL_PAGE__ = ${JSON.stringify(initialPage)};` : '';
   const isDark = document.body.classList.contains('theme-dark') ? 'true' : 'false';
+  /* eslint-disable no-useless-escape -- the `<\/script>` closers below. This template is a
+     whole HTML document, and this module was itself carved out of an inline
+     <script type="module"> block: unescaped, a closer ends the script that emitted it. */
   return `<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
@@ -1139,6 +1134,7 @@ function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
 <\/script>
 </body></html>`;
 }
+/* eslint-enable no-useless-escape */
 
 
 // ── Execute / Refresh with polling ────────────────────────────────────────────
@@ -1205,7 +1201,10 @@ async function runAndPoll(id, report = null, parameters = {}) {
         renderRunFailure(id, report, job.error || 'Report execution was cancelled.');
         return;
       }
-    } catch {}
+    } catch {
+      // A poll that fails is retried by the next turn of the loop; the loop itself is what
+      // gives up, with the timeout message below.
+    }
   }
   renderRunFailure(id, report, 'Timed out waiting for report execution.');
 }
@@ -1470,7 +1469,7 @@ function wireSubscribeModal() {
     const smtp   = format !== 'Link' ? /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('sub-smtp')).value : null;
 
     // Collect parameters from dynamic fields
-    const validation = validateParamFields('sub-params-fields', _subParams);
+    const validation = validateParamFields('sub-params-fields');
     if (!validation.ok) {
       $err.textContent = 'Complete the required report parameters before creating the subscription.';
       $err.classList.add('show');
@@ -1680,7 +1679,7 @@ function wireEditParamsModal() {
   document.getElementById('ep-saveBtn').addEventListener('click', async () => {
     const $err = document.getElementById('ep-error');
     $err.classList.remove('show');
-    const validation = validateParamFields('ep-fields', _epParams);
+    const validation = validateParamFields('ep-fields');
     if (!validation.ok) {
       $err.textContent = 'Complete the required report parameters before saving.';
       $err.classList.add('show');
@@ -1760,7 +1759,7 @@ function renderParamFields(containerId, params, currentValues) {
   });
 }
 
-function collectParamValues(containerId, params) {
+function collectParamValues(containerId) {
   const result = {};
   const $container = document.getElementById(containerId);
   $container.querySelectorAll('[data-param]').forEach(input => {
@@ -1770,8 +1769,8 @@ function collectParamValues(containerId, params) {
   return result;
 }
 
-function validateParamFields(containerId, params) {
-  const values = collectParamValues(containerId, params);
+function validateParamFields(containerId) {
+  const values = collectParamValues(containerId);
   let ok = true;
   const $container = document.getElementById(containerId);
   $container.querySelectorAll('[data-param]').forEach(input => {
@@ -1787,9 +1786,6 @@ function validateParamFields(containerId, params) {
 function formatOptionalDate(value) {
   return value ? new Date(value).toLocaleString() : 'Not scheduled';
 }
-
-// ── Export modal ───────────────────────────────────────────────────────────────
-function showExportModal() {}  // defined inline above
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
 function esc(s) {

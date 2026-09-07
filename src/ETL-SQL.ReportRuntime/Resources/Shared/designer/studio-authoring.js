@@ -1824,7 +1824,7 @@ export function createStudioAuthoringSurfaces({
     }
 
     async function showPaginationBreakdown(parameters) {
-        let manifest = null;
+        let manifest;
         try {
             manifest = await request(routes.preview, {
                 body: {

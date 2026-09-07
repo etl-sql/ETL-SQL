@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- The browser sources are linted. `eslint.config.mjs` at the repository root points `eslint:recommended` at the canonical shared assets and the Portal's own modules — the same sources the type gate covers — and `node scripts/lint-browser.mjs` gates them from pre-push and CI against `browser-lint-baseline.txt`, on the same shrink-only ratchet as the type baseline. A file ESLint cannot parse is never baselined.
+
+### Fixed
+
+- All 115 findings the lint gate first reported are worked off, so its baseline ships empty. Among them: a dataset's permissions table and both Portal settings forms failed silently, leaving stale or blank fields that read as "nothing is configured"; an invalid parameter `PATTERN` dropped that parameter's validation without saying so; a `const` in two unbraced `switch` cases put every sibling case in its temporal dead zone; and over 350 lines of unreachable browser code — including a `showExportModal` stub that did nothing and was called by nothing — are gone.
+
 ## [0.19.0] — 2026-09-06
 
 For complete release details, highlights, and migration notes, see [Release Notes v0.19.0](docs/releases/v0.19.0.md).

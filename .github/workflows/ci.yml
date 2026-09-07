@@ -47,6 +47,12 @@ jobs:
       - name: Check browser-side types
         run: node scripts/typecheck-browser.mjs
 
+      - name: Install browser lint-gate toolchain
+        run: npm ci --prefix scripts/lint
+
+      - name: Lint the browser sources
+        run: node scripts/lint-browser.mjs
+
       - name: Check syntax index is up to date with LanguageMetadata.cs
         run: node scripts/generate-syntax-index.js --check
 

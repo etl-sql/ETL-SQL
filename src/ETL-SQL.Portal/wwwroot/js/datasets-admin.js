@@ -357,7 +357,9 @@ export function createDatasetsAdmin(opts) {
         btn.addEventListener('click', () =>
           revoke(version => datasetsApi.revokeUserAcl(datasetId, +/** @type {HTMLElement} */ (btn).dataset.uid, version)));
       });
-    } catch {}
+    } catch (err) {
+      $wrap.innerHTML = `<div class="empty-state">Failed to load permissions: ${esc(err.message)}</div>`;
+    }
   }
 
   // ── Dataset Viewer ──────────────────────────────────────────────────────────

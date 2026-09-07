@@ -119,15 +119,13 @@ function _documentKindLabel(path, doc = null) {
     return 'Query';
 }
 
-const CHART_PALETTE = ['#388bfd', '#2ea043', '#f0883e', '#a371f7', '#58a6ff', '#7ee787', '#d29922', '#bc8cff'];
-
 function _isUntitledPath(path) {
     return /^untitled(?:_|\.)/i.test(String(path || '').split(/[\\/]/).pop() || '');
 }
 
 // Prefer a structured { error } / { message } body over a raw HTML error page.
 async function _readErrorText(response) {
-    let body = '';
+    let body;
     try {
         body = await response.text();
     } catch {
@@ -320,7 +318,6 @@ export async function createStudioWorkbench(container, opts = {}) {
     `;
 
     const shell = container.querySelector('.etlsql-studio-shell');
-    const tabbar = shell.querySelector('[data-studio-tabbar]');
     const tabsContainer = shell.querySelector('[data-studio-tabs]');
     const scrollLeftBtn = shell.querySelector('[data-studio-scroll="left"]');
     const scrollRightBtn = shell.querySelector('[data-studio-scroll="right"]');
@@ -2182,10 +2179,9 @@ export async function createStudioWorkbench(container, opts = {}) {
         const rptCount = state.documents.filter(d => (d.path || '').endsWith('.rptsql')).length + 1;
         const etlCount = state.documents.filter(d => (d.path || '').endsWith('.etlsql')).length + 1;
 
-        let path = '';
-        let content = '';
-        let sourceRevision = null;
-        let proj = 'split';
+        let path;
+        let content;
+        let proj;
 
         if (isReportType) {
             path = reportWorkflow === 'paginated' ? `untitled_paginated_${rptCount}.rptsql` : `untitled_dashboard_${rptCount}.rptsql`;
@@ -3758,7 +3754,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         const line = cursorLine();
         sidebarContent.innerHTML = '<div class="etlsql-studio-git-loading" role="status">Reading the script…</div>';
 
-        let scope = null;
+        let scope;
         try {
             scope = await designerApiJson(STUDIO_ROUTES.pipelineScope, { script: activeScriptText(), line });
         } catch (error) {
@@ -3910,7 +3906,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         sidebarContent.innerHTML = '<div class="etlsql-studio-git-loading" role="status">Reading the script…</div>';
         await loadPreviewAsVocabulary();
 
-        let governance = null;
+        let governance;
         try {
             // The document path travels with every governance call: a schedule names a path on the
             // server, and the panel has to be able to say so before an author asks for one.
@@ -3957,7 +3953,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             ${selected ? governanceRoutingMarkup(governance, selected) : ''}
             ${governanceDatasetsMarkup(governance)}
             ${governanceScheduleMarkup(governance)}
-            ${governanceSecurityMarkup(governance)}
+            ${governanceSecurityMarkup()}
             ${governanceFindingsMarkup(governance, selected)}`;
 
         bindGovernancePanel();
@@ -4365,7 +4361,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     // authority, and the run reaches exactly the data it always could. What it changes is the one
     // thing an author cannot otherwise see — what their predicates do to somebody else's rows.
 
-    function governanceSecurityMarkup(governance) {
+    function governanceSecurityMarkup() {
         const preview = state.previewAs;
         const vocabulary = state.previewAsVocabulary;
         const names = list => (list || []).join(', ');
@@ -5222,7 +5218,7 @@ export async function createStudioWorkbench(container, opts = {}) {
     });
 
     let isResizing = false;
-    resizer.addEventListener('mousedown', (e) => {
+    resizer.addEventListener('mousedown', () => {
         isResizing = true;
         document.body.style.cursor = 'row-resize';
     });

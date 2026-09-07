@@ -287,7 +287,7 @@ function renderTrackedJobs(jobs) {
 
 export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
   let storage = null;
-  try { storage = typeof sessionStorage !== 'undefined' ? sessionStorage : null; } catch { }
+  try { storage = typeof sessionStorage !== 'undefined' ? sessionStorage : null; } catch { /* Site data is blocked; the queue works without remembering tracked jobs. */ }
   const pollTimers = new Map();
   let disposed = false;
   const state = {
@@ -318,7 +318,7 @@ export function createDataQualityQueue({ host, dataQualityApi, prepare }) {
   };
 
   function persistTrackedJobs() {
-    try { storage?.setItem(TRACKED_JOBS_KEY, JSON.stringify(state.trackedJobs.slice(0, 20))); } catch { }
+    try { storage?.setItem(TRACKED_JOBS_KEY, JSON.stringify(state.trackedJobs.slice(0, 20))); } catch { /* Site data is blocked; the tracked-job list just does not survive a reload. */ }
   }
 
   function restoreTrackedJobs() {

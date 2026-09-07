@@ -9,7 +9,7 @@ const repoRoot = path.resolve(scriptRoot, '..');
 const source = readPortalPage('index');
 
 assert.match(source, /await reportsApi\.getParameters\(id\)/);
-assert.match(source, /validateParamFields\('runParameterFields', params\)/);
+assert.match(source, /validateParamFields\('runParameterFields'\)/);
 assert.match(source, /runAndPoll\(id, report, validation\.values\)/);
 assert.match(source, /reportsApi\.execute\(id, parameters\)/);
 assert.doesNotMatch(source, /reportsApi\.refresh\(id\)/);

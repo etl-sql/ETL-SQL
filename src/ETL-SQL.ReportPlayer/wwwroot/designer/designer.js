@@ -31,10 +31,6 @@ import { renderVisualSample } from './visual-preview.js';
 // Phase 2 — DAG Visualization
 // ─────────────────────────────────────────────────────────────────────────────
 
-function _h(str) {
-    return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
 const _feedback = globalThis.ETLSQLFeedback;
 
 const _TYPE_COLOR = {
@@ -59,21 +55,6 @@ const _TYPE_COLOR = {
 
 function _nodeColor(type) {
     return _TYPE_COLOR[type] ?? '#94a3b8';
-}
-
-function _nodeSymbol(type) {
-    if (type === 'visual')                          return 'diamond';
-    if (type === 'page' || type === 'container')    return 'roundRect';
-    if (type === 'dataset' || type === 'table')     return 'roundRect';
-    if (type === 'column')                          return 'circle';
-    return 'circle';
-}
-
-function _nodeSize(type) {
-    if (type === 'page')   return 44;
-    if (type === 'container') return 40;
-    if (type === 'column') return 18;
-    return 36;
 }
 
 /**
@@ -605,7 +586,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         sub.className = 'etlsql-dag-panel-sub';
         sub.textContent = `Type: ${node.type}`;
         panel.appendChild(sub);
-        appendPanelList('Metadata', Object.entries(node.meta ?? {}).filter(([_, v]) => typeof v !== 'object').map(([k, v]) => ({ k, v })), 'No scalar metadata.');
+        appendPanelList('Metadata', Object.entries(node.meta ?? {}).filter(([, v]) => typeof v !== 'object').map(([k, v]) => ({ k, v })), 'No scalar metadata.');
         appendPanelList('Columns', (node.meta?.columns ?? []).map(c => ({ v: c })), 'No columns captured.');
         appendPanelList('Mappings', (node.meta?.mappings ?? []).map(m => ({ k: m.role, v: m.column })), 'No visual mappings captured.');
     }
@@ -918,12 +899,12 @@ function _getRptsqlLang(cm) {
             const ch = stream.peek();
             if (ch === "'" || ch === '"') {
                 stream.next();
-                while (!stream.eol() && stream.next() !== ch) {}
+                while (!stream.eol() && stream.next() !== ch) { /* advance to the closing quote */ }
                 return 'string';
             }
             if (ch === '[') {
                 stream.next();
-                while (!stream.eol() && stream.next() !== ']') {}
+                while (!stream.eol() && stream.next() !== ']') { /* advance to the closing bracket */ }
                 return 'quotedId';
             }
             if (stream.match(/^[0-9]+\.?[0-9]*/)) return 'number';
@@ -935,7 +916,7 @@ function _getRptsqlLang(cm) {
                 return null;
             }
             if (stream.match(/^(<>|!=|>=|<=|=>|->|::)/)) return 'op';
-            if (stream.match(/^[=<>!+\-*\/&|^~%]/))      return 'op';
+            if (stream.match(/^[=<>!+\-*/&|^~%]/))      return 'op';
             stream.next();
             return null;
         },
@@ -1806,8 +1787,8 @@ export function redactSecrets(text) {
     return text
         .replace(/\b(USE\s+PASSWORD|PASSWORD|PWD|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCESS_KEY|ACCESSKEY|ACCOUNT_KEY|ACCOUNTKEY|SAS_TOKEN|PASSPHRASE|KEY_FILE)\s*=\s*(['"]?)[^'"\s,;)]*\2/gi, '$1 = $2********$2')
         .replace(/\bUSE\s+PASSWORD\s+(?!PROMPT\b)(['"])[^'"\s;]+\1/gi, 'USE PASSWORD $1********$1')
-        .replace(/\b(ENC|DPAPI-M|DPAPI|MACHINE|SECRET|CAPABILITY|SHARED):[A-Za-z0-9+/=_:.\-]+/gi, '$1:********')
-        .replace(/\bBearer\s+[A-Za-z0-9._~+/=\-]+/gi, 'Bearer ********');
+        .replace(/\b(ENC|DPAPI-M|DPAPI|MACHINE|SECRET|CAPABILITY|SHARED):[A-Za-z0-9+/=_:.-]+/gi, '$1:********')
+        .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer ********');
 }
 
 export function normalizeRunTrace(result, script) {
@@ -2092,7 +2073,7 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
         const match = columnMatches.find(e =>
             String(e.targetTable || e.TargetTable || '').toUpperCase() === 'RESULTSET'
         ) ?? columnMatches[0];
-        let pathStr = '';
+        let pathStr;
         if (match) {
             const srcT = match.sourceTables || match.SourceTables || 'source';
             const srcC = match.sourceColumns || match.SourceColumns || activeLineageColumn;
@@ -2282,9 +2263,9 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
     function exportResults(format) {
         const { columns, rows } = latestResults();
         if (!columns.length) return;
-        let text = '';
-        let mime = '';
-        let ext = '';
+        let text;
+        let mime;
+        let ext;
 
         if (format === 'json') {
             text = JSON.stringify(rows, null, 2);
@@ -4405,20 +4386,6 @@ export function createDesigner(container, opts = {}) {
     document.addEventListener('visibilitychange', visibilityLeaseHandler);
     if (reportId && opts.host === 'portal') queueMicrotask(acquireEditLease);
 
-    function setSaveButtonLoading(isLoading) {
-        const btn = topbar.querySelector('#dsgn-save');
-        if (!btn) return;
-        /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = Boolean(isLoading);
-        btn.innerHTML = isLoading ? '<span class="etlsql-spinner" aria-hidden="true"></span> Saving…' : 'Save';
-    }
-
-    function applyCanvasTheme(themeName) {
-        const t = themeName === 'midnight' ? 'midnight' : themeName === 'dark' ? 'dark' : 'light';
-        canvasWrap.setAttribute('data-canvas-theme', t);
-        localStorage.setItem('portal-theme', t);
-        /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (topbar.querySelector('#dsgn-theme-select')).value = t;
-    }
-
     // ── Sidebar (Palette + Tree + Datasets + Bookmarks) ─────────────────────────
     const sidebar = document.createElement('div');
     sidebar.className = 'etlsql-designer-sidebar';
@@ -4613,7 +4580,7 @@ export function createDesigner(container, opts = {}) {
 
     function disconnectSnapshotResizeObservers() {
         for (const observer of snapshotResizeObservers) {
-            try { observer.disconnect(); } catch {}
+            try { observer.disconnect(); } catch { /* Already disconnected, or its element is gone; either way nothing is left to do. */ }
         }
         snapshotResizeObservers.clear();
     }
@@ -4712,6 +4679,8 @@ export function createDesigner(container, opts = {}) {
 
     function _isSafeHtmlPreviewUrl(value) {
         const url = String(value || '').trim();
+/* eslint-disable-next-line no-control-regex -- matching control characters is the point:
+           a URL carrying one is how a javascript: scheme gets past a prefix check. */
         if (/[^\S\r\n]*[\u0000-\u001f\u007f]/.test(url)) return false;
         if (/^(https?:|mailto:|tel:|#)/i.test(url)) return true;
         if (/^data:image\/(png|jpeg|gif|webp)(;|,)/i.test(url)) return true;
@@ -4793,8 +4762,8 @@ export function createDesigner(container, opts = {}) {
             return rowHtml;
         };
 
-        let sampleHtml = '';
-        let budgetHtml = '';
+        let sampleHtml;
+        let budgetHtml;
         if (mode === 'REPEATER' && rows.length > 0) {
             const columns = snapshotPackage.datasets[visual.dataset].columns || [];
             sampleHtml = rows.slice(0, 5).map(row => renderRow(row, columns)).join('');
@@ -5167,36 +5136,6 @@ export function createDesigner(container, opts = {}) {
         }
     }
 
-    function extractDeclaredVariables() {
-        const vars = new Set(['@startDate', '@endDate', '@region', '@category', '@status', '@tenantId']);
-        for (const ds of state.datasets || []) {
-            const matches = (ds.query || '').match(/@([a-zA-Z0-9_]+)/g);
-            if (matches) matches.forEach(m => vars.add(m));
-        }
-        for (const page of state.pages || []) {
-            for (const vis of page.visuals || []) {
-                if (!vis.options) continue;
-                for (const val of Object.values(vis.options)) {
-                    if (typeof val === 'string') {
-                        const matches = val.match(/@([a-zA-Z0-9_]+)/g);
-                        if (matches) matches.forEach(m => vars.add(m));
-                    }
-                }
-            }
-        }
-        // `editor` was a name nothing in this scope ever declared, so the `typeof` guard was
-        // permanently false and this step never ran: a variable declared only in the script text
-        // was missing from every list the designer offers. `currentScriptText()` is the accessor
-        // the rest of `createDesigner` uses, and it answers from the workbench when one is
-        // mounted and from the host's script otherwise.
-        const scriptText = currentScriptText();
-        if (scriptText) {
-            const matches = scriptText.match(/@([a-zA-Z0-9_]+)/g);
-            if (matches) matches.forEach(m => vars.add(m));
-        }
-        return Array.from(vars).sort();
-    }
-
     function toHexColor(val, fallback) {
         if (!val || typeof val !== 'string') return fallback;
         const s = val.trim();
@@ -5283,14 +5222,12 @@ export function createDesigner(container, opts = {}) {
         const isNetwork = v.type === 'NETWORK';
         const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
         const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
-        const supportsBarLayout = ['BAR', 'HBAR', 'HORIZONTALBAR', 'COMBO'].includes(v.type);
         const isTable = v.type === 'TABLE';
         const supportsRules = isChart || isTable || v.type === 'CARD' || v.type === 'KPI';
         const availableFields = [...new Set([
             ...Object.values(v.mappings || {}).filter(Boolean),
             ...(columns || [])
         ])];
-        const palettePreview = palette.length ? palette : ['#2563eb', '#16a34a', '#f59e0b', '#dc2626'];
         const formatValue = v.options?.FORMAT || '';
         const fieldOptions = value => availableFields.map(field =>
             `<option value="${esc(field)}"${field === value ? ' selected' : ''}>${esc(field)}</option>`).join('');
@@ -7936,7 +7873,7 @@ export function createDesigner(container, opts = {}) {
         let matchLength = 0;
 
         for (const pattern of patterns) {
-            const regex = new RegExp(`\\b${pattern.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
+            const regex = new RegExp(`\\b${pattern.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
             const match = text.match(regex);
             if (match && match.index !== undefined) {
                 foundIdx = match.index;
@@ -8022,10 +7959,17 @@ export function createDesigner(container, opts = {}) {
                         const anchor = Math.min(prevSel.anchor, newLen);
                         const head = Math.min(prevSel.head, newLen);
                         view.dispatch({ selection: { anchor, head } });
-                    } catch {}
+                    } catch {
+                        // Restoring the caret is best-effort: the regenerated document may
+                        // have no position corresponding to the old one.
+                    }
                 }
             }
-        } catch {}
+        } catch {
+            // A failed regenerate leaves the script as it was. The grid and the script are
+            // then out of step until the next edit, and nothing here says so — surfacing it
+            // needs somewhere in the workbench UI to say it, which this does not have.
+        }
     }
 
     let syncTimeout = null;
@@ -8063,7 +8007,7 @@ export function createDesigner(container, opts = {}) {
     // ── Script overlay ────────────────────────────────────────────────────────
 
     async function openScript() {
-        let text = '';
+        let text;
         try {
             const currentScript = currentScriptText() || null;
             const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
@@ -8167,11 +8111,6 @@ export function createDesigner(container, opts = {}) {
 
     function closePreview() {
         previewOverlay.classList.remove('active');
-    }
-
-    async function applyScript() {
-        if (!scriptEditor) return;
-        await applyScriptText(scriptEditor.getValue());
     }
 
     let scriptApplySequence = 0;
@@ -8833,7 +8772,7 @@ export function createDesigner(container, opts = {}) {
         }
     }
 
-    function handleMouseUp(e) {
+    function handleMouseUp() {
         if (ghostEl) {
             ghostEl.remove();
             ghostEl = null;

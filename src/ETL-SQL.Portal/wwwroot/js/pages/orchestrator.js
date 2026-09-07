@@ -13,9 +13,9 @@ import { applyNavigationSafely } from '../portal-nav.js';
 import { renderTriageBoard, selectedJobNames } from '../triage-ui.js';
 import { renderPortalHeader } from '../portal-header.js';
 import { installDialogAccessibility } from '../dialog-a11y.js';
-import { accessPanelHtml, ownerLabel, unownedListHtml } from '../orchestrator-acl-ui.js';
+import { accessPanelHtml, ownerLabel } from '../orchestrator-acl-ui.js';
 import {
-  escHtml, fmtDt, fmtTimeAgo,
+  escHtml, fmtDt,
   filterAndPaginateJobs,
   renderSchedulesTable,
   renderNotificationsTable,
@@ -52,12 +52,11 @@ applyPortalBranding();
 initTheme();
 
 let isAdmin = false;
-let isManager = false;
 try {
   const identity = getSessionIdentity(auth.getToken());
   renderSessionIdentity(identity, document.getElementById('topbarUser'));
   isAdmin = hasRole(identity, 'Admin');
-  isManager = hasRole(identity, 'Admin', 'OrchestratorManager');
+  const isManager = hasRole(identity, 'Admin', 'OrchestratorManager');
   const canOrch = hasRole(identity, 'Admin', 'OrchestratorManager', 'OrchestratorViewer');
   if (!canOrch) window.location.href = '/index.html';
   if (!isManager) {
@@ -161,7 +160,6 @@ const api = {
 };
 
 // ── State ──────────────────────────────────────────────────────────────────────
-let activeView = 'jobs'; // 'jobs' | 'schedules' | 'notifications'
 let allJobs = [];
 let allSchedules = [];
 let allNotifications = [];
@@ -172,28 +170,21 @@ let depGraphChart = null;
 let timelineMode = 'gantt'; // 'gantt' | 'calendar'
 let sparklineMetric = 'duration'; // 'duration' | 'rows'
 let online = false;
-let pollHandle = null;
-let triageHandle = null;
 let jobsFilter = 'all';
 let jobsSearchTerm = '';
 let jobsStatusFilter = 'all';
 let jobsPage = 1;
 let jobsPageSize = 25;
-let metricJobNames = new Map();
-let metricHistoryByJob = new Map();
-let dagInstance  = null;
 let dagJobName   = null;
 let scriptEditor = null;
 let scriptOriginalValue = '';
 let lastSparklineEntries = [];
-let unownedObjects = [];
 let editingScheduleName = null;
 let editingNotificationName = null;
 let activeJobStates = [];
 
 // ── View Switcher ──────────────────────────────────────────────────────────────
 function setActiveView(view) {
-  activeView = view;
   document.getElementById('orchNavJobs').classList.toggle('active', view === 'jobs');
   document.getElementById('orchNavSchedules').classList.toggle('active', view === 'schedules');
   document.getElementById('orchNavNotifications').classList.toggle('active', view === 'notifications');
@@ -479,7 +470,10 @@ function renderCurrentJobsView() {
           try {
             const parsed = typeof optionsRaw === 'string' ? JSON.parse(optionsRaw) : optionsRaw;
             if (parsed.SandboxProfile) sandbox = parsed.SandboxProfile;
-          } catch {}
+          } catch {
+            // Options is free-form JSON; unparseable means no sandbox profile, so the
+            // 'Default' above stands.
+          }
         }
 
         return `
@@ -720,7 +714,7 @@ function renderGantt(jobs) {
     textStyle: { fontFamily: fontFam, color: textColor },
     tooltip: {
       formatter: params => {
-        const [, s, , name] = params.data;
+        const [, , , name] = params.data;
         const job = allJobs.find(j => jobValue(j, 'Name') === name);
         if (!job) return name;
         return `<strong>${escHtml(name)}</strong><br/>${escHtml(fmtSchedule(job))}<br/>Next: ${fmtDt(jobValue(job, 'NextRun'))}`;
@@ -763,7 +757,6 @@ function renderGantt(jobs) {
 }
 
 // ── Detail Panel Sub-Tabs & Open / Close ──────────────────────────────────────
-const detailTabs = ['details', 'flow', 'deps', 'quality', 'audit'];
 let activeDetailTab = 'details';
 
 function setDetailTab(tab) {
@@ -788,7 +781,7 @@ function setDetailTab(tab) {
       dagJobName = name;
       api.dag(name).then(dagData => {
         const container = document.getElementById('jobDagContainer');
-        dagInstance = renderDag(container, dagData, { height: 360 });
+        renderDag(container, dagData, { height: 360 });
       }).catch(err => {
         document.getElementById('jobDagContainer').innerHTML =
           `<div class="empty-state" style="color:var(--portal-danger)">Could not load DAG: ${err.message}</div>`;
@@ -834,7 +827,9 @@ async function openDetail(job) {
     try {
       const parsed = typeof optionsRaw === 'string' ? JSON.parse(optionsRaw) : optionsRaw;
       if (parsed.SandboxProfile) sandbox = parsed.SandboxProfile;
-    } catch {}
+    } catch {
+      // Options is free-form JSON; unparseable means no sandbox profile, so 'Default' stands.
+    }
   }
 
   document.getElementById('detailJobName').textContent = name;
@@ -1019,7 +1014,6 @@ function renderSparkline(entries) {
 
   const style = getComputedStyle(document.body);
   const accentColor = style.getPropertyValue('--portal-accent').trim() || '#2563eb';
-  const borderSoftColor = style.getPropertyValue('--portal-border-soft').trim() || '#e8edf4';
 
   const data = (lastSparklineEntries.slice().reverse()).map(h => {
     if (sparklineMetric === 'rows') {
@@ -1958,5 +1952,5 @@ async function openRequestedJob() {
 poll();
 loadTriage();
 loadJobs().then(openRequestedJob);
-pollHandle = setInterval(poll, 5000);
-triageHandle = setInterval(loadTriage, 15000);
+setInterval(poll, 5000);
+setInterval(loadTriage, 15000);

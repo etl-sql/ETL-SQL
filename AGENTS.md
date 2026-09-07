@@ -222,7 +222,7 @@ The repository has three browser/extension surfaces. Follow the conventions and 
 | :--- | :--- | :--- | :--- |
 | VS Code extension | `src/etl-sql-vscode/src/` | Strict TypeScript, CommonJS, ES2020 | From `src/etl-sql-vscode`: `npm run compile`, `npm run lint`, `npm run test:unit` |
 | VS Code UI | `src/etl-sql-vscode/ui/src/` | React, TSX, Vite, browser DOM | From `src/etl-sql-vscode/ui`: `npm run lint`, `npm run build`, `npm run test:unit` |
-| Portal/report runtime | Portal `wwwroot` sources and `src/ETL-SQL.ReportRuntime/Resources/Shared/` | HTML, CSS, browser JavaScript checked with `tsc --checkJs` | `node scripts/typecheck-browser.mjs`, plus the UI sandbox and the asset-sync checks in [§12](#12-shared-report-runtime-assets) |
+| Portal/report runtime | Portal `wwwroot` sources and `src/ETL-SQL.ReportRuntime/Resources/Shared/` | HTML, CSS, browser JavaScript checked with `tsc --checkJs` and ESLint | `node scripts/typecheck-browser.mjs` and `node scripts/lint-browser.mjs`, plus the UI sandbox and the asset-sync checks in [§12](#12-shared-report-runtime-assets) |
 
 - Keep TypeScript strict. Do not weaken compiler or ESLint rules to make a change pass.
 - Preserve the module system and JavaScript target configured by the package you are editing; the extension and UI use different targets.
@@ -237,6 +237,14 @@ The repository has three browser/extension surfaces. Follow the conventions and 
   findings the sources carried when the gate went in have all been worked off — so any finding at
   all fails the gate. The baseline may shrink and must never grow; do not add a line to it by hand.
   `scripts/fix-dom-narrowing.mjs` writes the JSDoc casts for the DOM-narrowing class mechanically.
+- **Browser JavaScript is linted.** `eslint.config.mjs` at the repository root points
+  `eslint:recommended` at the same sources, and `node scripts/lint-browser.mjs` is the gate (pre-push
+  step 4, and a CI step). It answers what a type checker does not ask — a value assigned and never
+  read, a `catch` that swallows, a duplicated key — and `no-undef` plus `no-dupe-keys` alone would
+  have caught ten of v0.19.0's twelve live browser defects. `browser-lint-baseline.txt` works exactly
+  like the type baseline and is **empty** for the same reason. A parse error is never baselined.
+  An `eslint-disable` needs a `--` reason on it, and a disable that stops suppressing anything is
+  itself reported.
 - **Page behaviour goes in a file, not in the page.** A Portal page loads
   `wwwroot/js/pages/<page>.js`; an inline `<script type="module">` block is invisible to the type gate,
   the linters and the parse check. Imports between browser modules are relative (`./api.js`), because a

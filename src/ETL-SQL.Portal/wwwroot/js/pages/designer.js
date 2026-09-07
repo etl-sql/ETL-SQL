@@ -64,7 +64,7 @@ let initialSourceRevision = null;
 let initialSourceControlEnabled = false;
 let initialSnapshot = null;
 let studioSession = null;
-let studioFolders = [];
+let studioFolders;
 
 try {
   studioSession = await studioApi.session();

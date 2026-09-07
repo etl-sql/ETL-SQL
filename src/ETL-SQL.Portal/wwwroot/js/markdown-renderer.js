@@ -44,7 +44,7 @@ function tableCells(line) {
 
 export function renderMarkdown(markdown, { copyButtons = true } = {}) {
   const lines = String(markdown || '').replace(/\\n/g, '\n').replace(/\r\n/g, '\n').split('\n');
-  const out = []; let list = null; let quote = false; let code = false; let language = ''; let codeIndex = 0;
+  const out = []; let list = null; let quote = false; let code = false; let codeIndex = 0;
   const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
   const closeQuote = () => { if (quote) { out.push('</blockquote>'); quote = false; } };
 
@@ -53,7 +53,7 @@ export function renderMarkdown(markdown, { copyButtons = true } = {}) {
     if (trimmed.startsWith('```')) {
       closeList(); closeQuote();
       if (!code) {
-        language = trimmed.slice(3).trim();
+        const language = trimmed.slice(3).trim();
         out.push(`<div class="md-code"><div class="md-code-head"><span>${escapeHtml(language || 'text')}</span>${copyButtons ? `<button type="button" class="btn btn-outline btn-xs" data-md-copy="${codeIndex++}">Copy</button>` : ''}</div><pre><code class="language-${escapeHtml(language)}">`);
         code = true;
       } else { out.push('</code></pre></div>'); code = false; }

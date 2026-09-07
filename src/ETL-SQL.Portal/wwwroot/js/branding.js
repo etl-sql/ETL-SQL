@@ -36,7 +36,10 @@ export async function applyPortalBranding() {
         mark?.classList.remove('brand-mark-hidden');
       }
     });
-  } catch { }
+  } catch {
+    // Branding is cosmetic and every page calls this on load. A failure leaves the default
+    // name and mark in place, which is the right outcome — it must not stop a page rendering.
+  }
 }
 
 function firstValue(obj, key) {

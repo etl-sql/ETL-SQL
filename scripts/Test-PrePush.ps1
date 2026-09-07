@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$Configuration = "Release",
     [switch]$SkipFormat,
@@ -17,7 +17,7 @@ Write-Host "=======================================================" -Foreground
 
 # 1. Code Formatting
 if (-not $SkipFormat) {
-    Write-Host "[1/11] Verifying code formatting..." -ForegroundColor White
+    Write-Host "[1/12] Verifying code formatting..." -ForegroundColor White
     & dotnet format (Join-Path $RepoRoot "ETL-SQL.slnx") --verify-no-changes --no-restore
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Formatting check failed. Run 'dotnet format' to fix."
@@ -26,7 +26,7 @@ if (-not $SkipFormat) {
 }
 
 # 2. Shared Report Assets
-Write-Host "[2/11] Checking shared report runtime assets..." -ForegroundColor White
+Write-Host "[2/12] Checking shared report runtime assets..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "sync-assets.js") -Check
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Shared report runtime assets are out of sync. Edit canonical files in 'src/ETL-SQL.ReportRuntime/Resources/Shared/' and run 'node .\scripts\sync-assets.js'."
@@ -34,72 +34,80 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 3. Browser Type Gate
-Write-Host "[3/11] Checking browser-side types..." -ForegroundColor White
+Write-Host "[3/12] Checking browser-side types..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "typecheck-browser.mjs")
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Browser type gate failed. See the findings above; run 'node scripts/typecheck-browser.mjs --summary' for the current picture. If the toolchain is missing, run 'npm ci --prefix scripts/typecheck'."
     exit $LASTEXITCODE
 }
 
-# 4. Report Runtime Page Layout Contract
-Write-Host "[4/11] Checking PAGE OPTIONS and MOBILE_LAYOUT reach the rendered page..." -ForegroundColor White
+# 4. Browser Lint Gate
+Write-Host "[4/12] Linting the browser sources..." -ForegroundColor White
+& node (Join-Path $ScriptRoot "lint-browser.mjs")
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Browser lint gate failed. See the findings above; run 'node scripts/lint-browser.mjs --summary' for the current picture. If the toolchain is missing, run 'npm ci --prefix scripts/lint'."
+    exit $LASTEXITCODE
+}
+
+# 5. Report Runtime Page Layout Contract
+Write-Host "[5/12] Checking PAGE OPTIONS and MOBILE_LAYOUT reach the rendered page..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "test-page-layout-options.mjs")
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Page layout option contract failed. PAGE OPTIONS or MOBILE_LAYOUT is reaching the manifest without reaching the rendered page."
     exit $LASTEXITCODE
 }
 
-# 5. Syntax Index Sync
-Write-Host "[5/11] Checking syntax index synchronization..." -ForegroundColor White
+# 6. Syntax Index Sync
+Write-Host "[6/12] Checking syntax index synchronization..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "generate-syntax-index.js") --check
 if ($LASTEXITCODE -ne 0) {
     Write-Error "docs/syntax-index.md is out of sync with LanguageMetadata.cs. Run 'node scripts/generate-syntax-index.js'."
     exit $LASTEXITCODE
 }
 
-# 6. Syntax Index Links & Doc Reference Coverage
-Write-Host "[6/11] Auditing syntax index links and reference page coverage..." -ForegroundColor White
+# 7. Syntax Index Links & Doc Reference Coverage
+Write-Host "[7/12] Auditing syntax index links and reference page coverage..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "audit-syntax-index.js") --strict
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Syntax index audit failed with broken links or unreferenced reference pages."
     exit $LASTEXITCODE
 }
 
-# 7. Broad Documentation Audit (links, filenames, hub membership, template conformance)
-Write-Host "[7/11] Auditing documentation links, filenames, hub membership, and template conformance..." -ForegroundColor White
+# 8. Broad Documentation Audit (links, filenames, hub membership, template conformance)
+Write-Host "[8/12] Auditing documentation links, filenames, hub membership, and template conformance..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "audit-docs.js") --strict
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Docs audit failed. Run 'node scripts/audit-docs.js' for details, or '--verbose' for the full file list."
     exit $LASTEXITCODE
 }
 
-# 8. Flaky Sleep Delays
-Write-Host "[8/11] Checking for flaky sleep-then-assert test patterns..." -ForegroundColor White
+# 9. Flaky Sleep Delays
+Write-Host "[9/12] Checking for flaky sleep-then-assert test patterns..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "check-flaky-test-delays.mjs")
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Found raw sleep delays in tests. Use LoadAwareWait.UntilAsync instead."
     exit $LASTEXITCODE
 }
 
-# 9. Shell Script Line Endings (LF enforcement)
-Write-Host "[9/11] Checking shell script line endings (LF)..." -ForegroundColor White
+# 10. Shell Script Line Endings (LF enforcement)
+Write-Host "[10/12] Checking shell script line endings (LF)..." -ForegroundColor White
 & node (Join-Path $ScriptRoot "check-shell-line-endings.js")
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Shell scripts contain CRLF line endings. Run 'node scripts/check-shell-line-endings.js --fix' to normalize."
     exit $LASTEXITCODE
 }
 
-# 10. Test Lane Inventory & Categories
-Write-Host "[10/11] Auditing test lane inventory & category structure..." -ForegroundColor White
+# 11. Test Lane Inventory & Categories
+Write-Host "[11/12] Auditing test lane inventory & category structure..." -ForegroundColor White
 & (Join-Path $ScriptRoot "Get-TestLaneInventory.ps1") -FailOnIssues
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Test lane inventory audit failed."
     exit $LASTEXITCODE
 }
 
-# 11. Fast Contract & Smoke Suite
+# 12. Fast Contract & Smoke Suite
 if (-not $SkipSmoke) {
-    Write-Host "[11/11] Running fast contract, architecture, and smoke tests..." -ForegroundColor White
+    Write-Host "[12/12] Running fast contract, architecture, and smoke tests..." -ForegroundColor White
     $filter = "Category=Architecture|Category=Docs|Category=Smoke.Core|Category=Smoke.Reporting|Category=Smoke.Security"
     & dotnet test (Join-Path $RepoRoot "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj") `
         --filter $filter `

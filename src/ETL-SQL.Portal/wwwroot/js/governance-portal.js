@@ -625,14 +625,6 @@ export function createGovernancePortal(opts = {}) {
 
   const STEWARD_BADGES = ['Reviewed', 'Trusted', 'Certified'];
 
-  const TABS = [
-    ['overview', 'Overview'],
-    ['workqueue', 'Workqueue'],
-    ['exceptions', 'Exceptions'],
-    ['glossary', 'Glossary'],
-    ['settings', 'Settings'],
-  ];
-
   const render = async () => {
     prepare(state.tab);
     if (state.load === 'idle') await load();

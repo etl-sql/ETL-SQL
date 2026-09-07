@@ -18,7 +18,7 @@ this file decomposes it into executable work.
 
 | What | Where | Count |
 | :--- | :--- | ---: |
-| Lint the browser sources | [§1](#1-lint-the-browser-sources) | 3 |
+| Lint the browser sources | [§1](#1-lint-the-browser-sources) | ✔ |
 | Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 3 |
 | Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | 7 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 12 |
@@ -38,12 +38,12 @@ that closes the most bugs.
 
 ## 1. Lint the browser sources
 
-- [ ] Add ESLint over the canonical shared assets (`src/ETL-SQL.ReportRuntime/Resources/Shared/`) and
+- [x] Add ESLint over the canonical shared assets (`src/ETL-SQL.ReportRuntime/Resources/Shared/`) and
   the Portal's own modules (`src/ETL-SQL.Portal/wwwroot/js/`). The VS Code extension and its React UI
   already carry configs, so this extends an existing practice rather than introducing one.
-- [ ] Wire it into `Test-PrePush.ps1` beside the type gate, and into CI. `no-undef` and
+- [x] Wire it into `Test-PrePush.ps1` beside the type gate, and into CI. `no-undef` and
   `no-dupe-keys` alone would have caught ten of v0.19.0's twelve defects, in seconds.
-- [ ] Adopt the same ratchet shape as `browser-typecheck-baseline.txt`: fail on any finding not in
+- [x] Adopt the same ratchet shape as `browser-typecheck-baseline.txt`: fail on any finding not in
   the baseline **and** on any baseline entry that no longer reproduces, so the file can only shrink.
 
 ## 2. Split the two large browser files

@@ -181,7 +181,7 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
         <tbody>`;
 
     for (const g of gatewaysCache) {
-      let statusBadge = '';
+      let statusBadge;
       if (g.state === 'Revoked') {
         statusBadge = '<span class="chip chip-inactive">Revoked</span>';
       } else if (g.state === 'Pending') {

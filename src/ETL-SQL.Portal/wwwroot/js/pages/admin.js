@@ -437,7 +437,6 @@ document.getElementById('am-saveBtn').addEventListener('click', async () => {
 });
 
 // ── Folders & ACL ──────────────────────────────────────────────────────────────
-let selectedFolderId = null;
 let allFolders = [];
 
 async function loadFolders() {
@@ -490,7 +489,6 @@ async function handleFolderAction(btn) {
     /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('nf-id')).value = f.id;
     document.getElementById('newFolderForm').style.display = '';
   } else if (btn.dataset.action === 'acl') {
-    selectedFolderId = id;
     document.getElementById('aclFolderName').textContent = btn.dataset.name;
     document.getElementById('aclPanel').style.display = '';
     loadAcl(id);
@@ -1198,7 +1196,11 @@ async function loadSettings() {
     /** @type {HTMLInputElement} */ (document.getElementById('orch-clear-check')).checked = false;
     document.getElementById('orch-error').classList.remove('show');
     document.getElementById('orch-test-result').textContent = '';
-  } catch { }
+  } catch (err) {
+    const $err = document.getElementById('orch-error');
+    $err.textContent = err.message || 'Failed to load orchestrator settings.';
+    $err.classList.add('show');
+  }
 
   try {
     const branding = await adminApi.getBrandingSettings();
@@ -1206,7 +1208,11 @@ async function loadSettings() {
     /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('brand-logo')).value = branding.logoUrl || '';
     /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('brand-footer')).value = branding.footerText || '';
     document.getElementById('brand-error').classList.remove('show');
-  } catch { }
+  } catch (err) {
+    const $err = document.getElementById('brand-error');
+    $err.textContent = err.message || 'Failed to load branding settings.';
+    $err.classList.add('show');
+  }
 }
 
 document.getElementById('orchSaveBtn').addEventListener('click', async () => {

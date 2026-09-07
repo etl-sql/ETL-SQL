@@ -381,7 +381,6 @@ export function needsALoop(kind) {
  *   `after` null means "run first".
  * @param {(change: {id: *, container: *}) => Promise<void>} [options.onNest]
  *   `container` null means "move out".
- * @param {(change: {id: *, [key: string]: *}) => Promise<void>} [options.onUpdate]
  * @param {(change: {id: *}) => Promise<void>} [options.onRemove]
  * @param {((change: {id: *}) => Promise<void>)|null} [options.onRunTo]
  *   Executes the pipeline through this task.
@@ -401,7 +400,6 @@ export function attachPipelineTaskEditing(host, canvas, {
     onDisconnect = async () => {},
     onMove = async () => {},
     onNest = async () => {},
-    onUpdate = async () => {},
     onRemove = async () => {},
     onRunTo = null,
     onOpenLine = () => {},

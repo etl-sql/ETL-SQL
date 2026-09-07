@@ -140,11 +140,11 @@ export function validatePathSecurity(pathStr) {
         return 'Zero-Trust Guardrail: Accessing .sql, .etlsql, or .rptsql script files is forbidden.';
     }
 
-    if (p.includes('..') || p.startsWith('/') || p.startsWith('\\') || /^[a-zA-Z]:[\\\/]/.test(p)) {
+    if (p.includes('..') || p.startsWith('/') || p.startsWith('\\') || /^[a-zA-Z]:[\\/]/.test(p)) {
         return 'Zero-Trust Guardrail: Absolute system paths and directory traversal (..) are forbidden. Emitted paths must be workspace-relative (e.g. data/sales.csv).';
     }
 
-    if (/(^|[\\\/])(windows|etc|root|bin|sbin|usr|var|tmp|\.git|\.ssh)([\\\/]|$)/i.test(p)) {
+    if (/(^|[\\/])(windows|etc|root|bin|sbin|usr|var|tmp|\.git|\.ssh)([\\/]|$)/i.test(p)) {
         return 'Zero-Trust Guardrail: Access to system directories, .git, or .ssh is strictly prohibited.';
     }
 
@@ -738,7 +738,7 @@ export function createConnectionWizard(options = {}) {
                     state.selectedResource = null;
                 }
             }
-        } catch (err) {
+        } catch {
             console.warn('ConnectionWizard: Gateway resource discovery failed.');
             state.gatewayResourcesError = 'Failed to discover Gateway resources. Try again.';
             state.gatewayResources = [];
@@ -1966,7 +1966,7 @@ export function createConnectionWizard(options = {}) {
                         };
                         await onSave(entry);
                         closeModal();
-                    } catch (error) {
+                    } catch {
                         console.warn('ConnectionWizard: catalog save failed.');
                         state.isSaving = false;
                         state.saveError = 'Connection could not be saved. Review the entry and try again.';

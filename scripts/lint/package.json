@@ -1,0 +1,11 @@
+{
+  "name": "etlsql-browser-lint",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned toolchain for the browser-side lint gate (eslint.config.mjs at the repository root). A sibling of scripts/typecheck for the same reason that one exists: keeping it out of the root means the repository has no root package.json, so node does not treat every .js file in the tree as belonging to a package with no \"type\" and warn on each one it has to detect as ESM.",
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.10.0",
+    "globals": "17.12.0"
+  }
+}

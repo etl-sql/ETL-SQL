@@ -164,7 +164,7 @@ export async function connectionPreamble(connection, script, { request, routes }
     try {
         parsed = await request(routes.parse, { body: { script: text }, fallbackError: 'The script could not be parsed.' });
     } catch (error) {
-        throw new Error(`The script has to parse before an embedded query can resolve its connections: ${error.message}`);
+        throw new Error(`The script has to parse before an embedded query can resolve its connections: ${error.message}`, { cause: error });
     }
     if (parsed?.error) {
         throw new Error(`The script has to parse before an embedded query can resolve its connections: ${parsed.error}`);
