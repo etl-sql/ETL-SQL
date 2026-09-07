@@ -57,15 +57,19 @@ if (!string.IsNullOrWhiteSpace(portalConfig.Dataset.AtRestKey))
         ETL_SQL.Core.Common.EncryptionOptions.PortalAtRestKeyEnvVar, portalConfig.Dataset.AtRestKey);
 
 // ── Engine services (centralized in Orchestrator extension) ─────────
-var loggerService = new LoggerService();
-loggerService.InitializeAppLogger(
-    builder.Configuration["Logging:AppLog:Directory"] ?? "logs/portal",
-    int.TryParse(builder.Configuration["Logging:AppLog:RetentionDays"], out var rd) ? rd : 30,
-    int.TryParse(builder.Configuration["Logging:AppLog:FileSizeLimitMb"], out var sl) ? sl : 10);
-
-builder.Services.AddSingleton<LoggerService>(loggerService);
-builder.Services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
-builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
+builder.Services.AddSingleton<LoggerService>(services =>
+{
+    var configuration = services.GetRequiredService<IConfiguration>();
+    var logger = new LoggerService();
+    logger.InitializeAppLogger(configuration["Logging:AppLog:Directory"] ?? "logs/portal",
+        configuration.GetValue("Logging:AppLog:RetentionDays", 30),
+        configuration.GetValue("Logging:AppLog:FileSizeLimitMb", 10));
+    return logger;
+});
+builder.Services.AddSingleton<ETL_SQL.Common.ILogger>(services => services.GetRequiredService<LoggerService>());
+builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(services => services.GetRequiredService<LoggerService>());
+builder.Logging.ClearProviders();
+builder.Services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider, ApplicationLoggerProvider>();
 
 builder.Services.AddEtlSqlEngine(builder.Configuration);
 

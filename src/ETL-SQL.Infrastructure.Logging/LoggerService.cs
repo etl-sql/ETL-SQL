@@ -1,12 +1,12 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using ETL_SQL.Core.Common;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Context;
 using Serilog.Events;
-using Serilog.Extensions.Logging;
 
 namespace ETL_SQL.Common;
 /// <summary>
@@ -18,8 +18,6 @@ public class LoggerService : ILogger, ILoggerService, IDisposable
     private Serilog.Core.Logger? _appLogger;
     private Serilog.Core.Logger? _scriptLogger;
     private Serilog.Core.Logger? _testLogger;
-    private ILoggerFactory? _msLoggerFactory;
-    private Microsoft.Extensions.Logging.ILogger? _msLogger;
     private readonly AsyncLocal<string?> _sessionId = new();
     private readonly AsyncLocal<IDisposable?> _sessionContext = new();
 
@@ -112,19 +110,6 @@ public class LoggerService : ILogger, ILoggerService, IDisposable
         _scriptLogger?.Write(serilogLevel, safeException, safeTemplate, safeArgs);
         _testLogger?.Write(serilogLevel, safeException, safeTemplate, safeArgs);
 
-        // 2. MEL Bridge
-        if (_msLogger != null)
-        {
-            var msLevel = level switch
-            {
-                LogLevel.Error => Microsoft.Extensions.Logging.LogLevel.Error,
-                LogLevel.Warning => Microsoft.Extensions.Logging.LogLevel.Warning,
-                LogLevel.Debug => Microsoft.Extensions.Logging.LogLevel.Debug,
-                _ => Microsoft.Extensions.Logging.LogLevel.Information
-            };
-            _msLogger.Log(msLevel, safeException, ILogger.FormatArgs(safeTemplate, safeArgs));
-        }
-
         // 3. Console — format template and prefix SessionId when set
         var consoleMessage = ILogger.FormatArgs(safeTemplate, safeArgs);
         if (_sessionId.Value != null) consoleMessage = $"[{_sessionId.Value}] {consoleMessage}";
@@ -142,13 +127,65 @@ public class LoggerService : ILogger, ILoggerService, IDisposable
 
     }
 
+    internal void WriteHostEvent<TState>(string category, Microsoft.Extensions.Logging.LogLevel level,
+        EventId eventId, TState state, Exception? exception, IExternalScopeProvider scopes)
+    {
+        if (_appLogger == null || level == Microsoft.Extensions.Logging.LogLevel.None) return;
+        var sink = _appLogger.ForContext("SourceContext", category).ForContext("EventId", eventId.Id);
+        var scopeProperties = new Dictionary<string, object?>();
+        scopes.ForEachScope((scope, properties) =>
+        {
+            if (scope is IEnumerable<KeyValuePair<string, object?>> pairs)
+                foreach (var pair in pairs) properties[pair.Key] = pair.Value;
+            else properties["Scope"] = scope;
+        }, scopeProperties);
+        foreach (var pair in scopeProperties)
+            sink = sink.ForContext(pair.Key, SecretRedactor.IsSensitiveKey(pair.Key) ? SecretRedactor.Mask : RedactLogArgument(pair.Value));
+
+        var fields = (state as IEnumerable<KeyValuePair<string, object?>>)?.ToList();
+        var template = fields?.FirstOrDefault(p => p.Key == "{OriginalFormat}").Value as string;
+        var arguments = fields?.Where(p => p.Key != "{OriginalFormat}")
+            .Select(p => SecretRedactor.IsSensitiveKey(p.Key) ? SecretRedactor.Mask : RedactLogArgument(p.Value)).ToArray();
+        if (template == null)
+        {
+            template = "{State}";
+            arguments = [RedactLogArgument(state)];
+        }
+        sink.Write((LogEventLevel)Math.Clamp((int)level, 0, 5), SecretRedactor.RedactException(exception),
+            SecretRedactor.Redact(template) ?? string.Empty, arguments!);
+    }
+
     private static object RedactLogArgument(object? arg)
     {
         if (arg is null) return "<null>";
         if (arg is Exception ex) return (object?)SecretRedactor.RedactException(ex) ?? "<null>";
         if (arg is string text) return SecretRedactor.Redact(text) ?? string.Empty;
-        return arg;
+        if (arg is bool or byte or sbyte or short or ushort or int or uint or long or ulong
+            or float or double or decimal or DateTime or DateTimeOffset or TimeSpan or Guid)
+            return arg;
+
+        // Arbitrary ToString/destructuring can expose nested credentials. Serialize only a
+        // sanitized tree; unsupported or cyclic objects fail closed without logging their error.
+        try
+        {
+            var element = JsonSerializer.SerializeToElement(arg, new JsonSerializerOptions { MaxDepth = 16 });
+            return JsonSerializer.Serialize(SanitizeElement(element));
+        }
+        catch (Exception)
+        {
+            return "[unavailable log object]";
+        }
     }
+
+    private static object? SanitizeElement(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.Object => element.EnumerateObject().ToDictionary(
+            property => property.Name,
+            property => SecretRedactor.IsSensitiveKey(property.Name) ? SecretRedactor.Mask : SanitizeElement(property.Value)),
+        JsonValueKind.Array => element.EnumerateArray().Select(SanitizeElement).ToArray(),
+        JsonValueKind.String => SecretRedactor.Redact(element.GetString()),
+        _ => element
+    };
 
     public void InitializeAppLogger(string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)
     {
@@ -156,6 +193,7 @@ public class LoggerService : ILogger, ILoggerService, IDisposable
         Directory.CreateDirectory(logDirectory);
         PurgeOldLogs(logDirectory, retentionDays, "*.log");
 
+        _appLogger?.Dispose();
         _appLogger = new LoggerConfiguration()
             .MinimumLevel.Debug()
             .Enrich.FromLogContext()
@@ -164,14 +202,8 @@ public class LoggerService : ILogger, ILoggerService, IDisposable
                 rollingInterval: RollingInterval.Day,
                 fileSizeLimitBytes: fileSizeLimitMb > 0 ? (long?)fileSizeLimitMb * 1024 * 1024 : null,
                 rollOnFileSizeLimit: true,
-                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}]{SessionId: [sid=]:l} {Message:lj}{NewLine}{Exception}")
+                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}]{SessionId: [sid=]:l} {Message:lj} {Properties:j}{NewLine}{Exception}")
             .CreateLogger();
-
-        if (_msLoggerFactory == null)
-        {
-            _msLoggerFactory = new SerilogLoggerFactory(_appLogger, dispose: false);
-            _msLogger = _msLoggerFactory.CreateLogger("ETL_SQL.Common.Logger");
-        }
     }
 
     public void InitializeScriptLogger(string sourceScript, string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)
@@ -245,6 +277,5 @@ public class LoggerService : ILogger, ILoggerService, IDisposable
         _testLogger?.Dispose();
         _scriptLogger?.Dispose();
         _appLogger?.Dispose();
-        _msLoggerFactory?.Dispose();
     }
 }

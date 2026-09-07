@@ -114,6 +114,8 @@ ETL-SQL settings can be configured via `appsettings.json`, environment variables
 
 Sandbox execution routes scheduled jobs through a hardened Docker provider. It requires `SandboxAdmission` to be enabled first.
 
+Workspace allocation writes a server-owned recovery record under `WorkspaceRoot/.recovery` before creating input, scratch, or output content. After a host restart, admission reconciliation deletes the recorded workspace only after the runtime confirms detachment. It checks tenant and assignment ownership and refuses paths through links. Failed ownership checks or deletion retain the admission and log the tenant, run, and attempt for operator follow-up. A different machine cannot acknowledge removal from an unavailable node's local disk. Workspace age alone never authorizes deletion.
+
 | Key | Type | Description |
 | :--- | :--- | :--- |
 | `Orchestration:SandboxAdmission:Enabled` | boolean | Enables ledger-backed sandbox admission. Requires a runtime-provider `ISandboxRuntimeReconciler` binding. |

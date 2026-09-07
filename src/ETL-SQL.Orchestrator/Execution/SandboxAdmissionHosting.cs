@@ -146,7 +146,8 @@ public static class SandboxAdmissionServiceCollectionExtensions
             sp.GetRequiredService<ETL_SQL.Orchestrator.Storage.ISandboxAdmissionLedger>(),
             sp.GetRequiredService<ISandboxRuntimeReconciler>(),
             options.PoolCapacities.Keys.ToArray(),
-            options.AbandonedQueueHorizon));
+            options.AbandonedQueueHorizon,
+            sp.GetService<ISandboxWorkspaceProvider>() as ISandboxWorkspaceRecovery));
         services.AddHostedService<SandboxAdmissionReconciliationHostedService>();
         return services;
     }

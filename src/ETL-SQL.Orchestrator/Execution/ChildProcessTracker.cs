@@ -23,12 +23,17 @@ namespace ETL_SQL.Orchestrator.Execution
     {
         private readonly string _persistPath;
         private readonly ILogger<ChildProcessTracker> _logger;
-        private readonly ConcurrentDictionary<int, string> _active = new(); // pid → script path
+        private readonly ConcurrentDictionary<int, PersistedPid> _active = new();
+        private readonly ITrackedChildProcessFactory _processes;
+        private readonly object _storeLock = new();
+        private readonly string _owner = $"{Environment.MachineName}/{Environment.UserDomainName}/{Environment.UserName}";
 
-        public ChildProcessTracker(ILogger<ChildProcessTracker> logger, string? persistPath = null)
+        public ChildProcessTracker(ILogger<ChildProcessTracker> logger, string? persistPath = null,
+            ITrackedChildProcessFactory? processes = null)
         {
             _logger = logger;
-            _persistPath = persistPath ?? Path.Combine("logs", "child-pids.json");
+            _persistPath = Path.GetFullPath(persistPath ?? Path.Combine("logs", "child-pids.json"));
+            _processes = processes ?? new TrackedChildProcessFactory();
         }
 
         /// <summary>
@@ -61,11 +66,24 @@ namespace ETL_SQL.Orchestrator.Execution
             {
                 try
                 {
-                    var p = Process.GetProcessById(entry.Pid);
+                    if (entry.Identity == null || entry.Owner != _owner)
+                    {
+                        _logger.LogWarning("Skipping stale child metadata PID={Pid}: missing creation identity or different service owner.", entry.Pid);
+                        continue;
+                    }
+                    using var p = _processes.Open(entry.Pid);
                     if (!p.HasExited)
                     {
+                        var identity = p.Identity;
+                        if (identity.StartedUtcTicks != entry.Identity.StartedUtcTicks
+                            || !string.Equals(identity.ExecutablePath, entry.Identity.ExecutablePath,
+                                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                        {
+                            _logger.LogWarning("Skipping stale child metadata PID={Pid}: creation time or executable changed.", entry.Pid);
+                            continue;
+                        }
                         _logger.LogWarning("Killing orphaned child process PID={Pid} (script={Script})", entry.Pid, entry.ScriptPath);
-                        p.Kill(entireProcessTree: true);
+                        p.Kill();
                     }
                 }
                 catch (ArgumentException)
@@ -74,19 +92,32 @@ namespace ETL_SQL.Orchestrator.Execution
                 }
                 catch (Exception ex)
                 {
+                    _active[entry.Pid] = entry;
                     _logger.LogWarning(ex, "Could not kill orphan PID={Pid}", entry.Pid);
                 }
             }
 
-            // Clear the store after cleanup
-            try { File.Delete(_persistPath); } catch { /* best effort */ }
+            // Retain failed cleanup records for the next restart.
+            Persist();
         }
 
         /// <summary>Records a newly spawned child process.</summary>
         public void Register(int pid, string scriptPath)
         {
-            _active[pid] = scriptPath;
-            Persist();
+            try
+            {
+                using var process = _processes.Open(pid);
+                if (process.HasExited) return;
+                // Ownership is established by the executor's registration of its newly spawned
+                // child, bound to this service account and the exact creation/executable identity.
+                _active[pid] = new PersistedPid(pid, scriptPath, process.Identity, _owner);
+                Persist();
+            }
+            catch (ArgumentException) { /* Child exited before registration. */ }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not identify child PID={Pid}; no unsafe PID-only record will be persisted.", pid);
+            }
         }
 
         /// <summary>Removes a child process that has exited normally.</summary>
@@ -101,19 +132,24 @@ namespace ETL_SQL.Orchestrator.Execution
 
         private void Persist()
         {
-            try
+            lock (_storeLock)
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(_persistPath) ?? "logs");
-                var entries = new List<PersistedPid>();
-                foreach (var kv in _active)
-                    entries.Add(new PersistedPid(kv.Key, kv.Value));
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(_persistPath) ?? "logs");
+                    var entries = new List<PersistedPid>();
+                    foreach (var kv in _active)
+                        entries.Add(kv.Value);
 
-                var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = false });
-                File.WriteAllText(_persistPath, json);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to persist child PID store.");
+                    var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = false });
+                    var temporaryPath = _persistPath + ".tmp";
+                    File.WriteAllText(temporaryPath, json);
+                    File.Move(temporaryPath, _persistPath, overwrite: true);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to persist child PID store.");
+                }
             }
         }
 
@@ -158,6 +194,6 @@ namespace ETL_SQL.Orchestrator.Execution
             }
         }
 
-        private record PersistedPid(int Pid, string ScriptPath);
+        private record PersistedPid(int Pid, string ScriptPath, ChildProcessIdentity? Identity = null, string? Owner = null);
     }
 }

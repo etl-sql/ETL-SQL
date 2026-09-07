@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.20.0 — TypeSystem: Tool output preserves exact JSON numbers
+- **What changed**: Integer and decimal tool output no longer rounds through binary double precision before expected-schema conversion. Floating-point columns retain floating-point conversion.
+- **Who is affected**: Scripts consuming large integers or high-precision decimals from tools.
+- **Migration**: Remove workarounds for rounded tool output; use FLOAT or DOUBLE only for approximate values.
+- **Diagnostic**: N/A — runtime data conversion.
+- **Earliest removal**: N/A.
+
 ### v0.19.0 — Runtime: PIE and DONUT data-label leader lines default to OFF
 - **What changed**: Arc data-label leader lines on `PIE` and `DONUT` visuals now default to `OFF` instead of rendering unconditionally.
 - **Who is affected**: Existing `PIE` and `DONUT` charts that relied on default leader lines to connect outer arc slice labels to slices.

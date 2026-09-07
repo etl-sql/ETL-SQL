@@ -166,7 +166,7 @@ public class ProcessJobExecutorChaosTests
 
             await WaitForExitAsync(child, timeoutSeconds: 10);
             Assert.True(child.HasExited);
-            Assert.False(File.Exists(pidStore));
+            Assert.Equal("[]", File.ReadAllText(pidStore));
         }
         finally
         {

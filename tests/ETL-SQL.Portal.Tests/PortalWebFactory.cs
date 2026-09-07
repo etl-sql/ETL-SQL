@@ -25,6 +25,7 @@ namespace ETL_SQL.Portal.Tests;
 /// </summary>
 public class PortalWebFactory : WebApplicationFactory<PortalMarker>
 {
+    protected virtual bool EnableApplicationFileLogging => false;
     public string TempDir { get; } = Path.Combine(Path.GetTempPath(), $"portal_test_{Guid.NewGuid():N}");
     private readonly int authPermitLimit;
     private readonly int anonymousTokenPermitLimit;
@@ -71,7 +72,8 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
         const string jwtSecret = "integration-test-secret-key-1234567890";
 
         builder.UseEnvironment("Testing");
-        builder.ConfigureLogging(logging => logging.ClearProviders());
+        if (!EnableApplicationFileLogging)
+            builder.ConfigureLogging(logging => logging.ClearProviders());
 
         builder.ConfigureAppConfiguration((_, cfg) =>
         {

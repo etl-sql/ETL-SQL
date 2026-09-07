@@ -228,7 +228,9 @@ public sealed class SandboxExecutionCoordinator(
         var retainForReconciliation = false;
         try
         {
-            workspace = await workspaces.AssignAsync(request.Assignment, executionToken);
+            retainForReconciliation = true;
+            workspace = await workspaces.AssignAsync(request.Assignment with { AdmissionId = admission.AdmissionId }, executionToken);
+            retainForReconciliation = false;
             try
             {
                 attempt = await provider.PrepareAsync(
@@ -279,15 +281,9 @@ public sealed class SandboxExecutionCoordinator(
             // detached; otherwise retain the workspace for fenced reconciliation and residue evidence.
             if (!retainForReconciliation && (attempt is null || runtimeDestroyed))
             {
-                try
-                {
-                    if (workspace is not null)
-                        await workspace.DestroyAsync(CancellationToken.None);
-                }
-                finally
-                {
-                    await admission.ReleaseAsync();
-                }
+                if (workspace is not null)
+                    await workspace.DestroyAsync(CancellationToken.None);
+                await admission.ReleaseAsync();
             }
         }
     }

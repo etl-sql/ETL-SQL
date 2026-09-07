@@ -108,6 +108,20 @@ Precedence, most specific first:
 
 ---
 
+## Tool Execution Limits
+
+Tool execution observes the enclosing run's cancellation token and the registered tool's `TIMEOUT` in seconds. Cancellation stops the process and waits for it to exit. Container tools receive a server-generated name; teardown force-removes that container and checks the daemon for its absence. If removal cannot be verified, execution fails and logs the container name for operator cleanup.
+
+| Key | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `Tools:Limits:MaxBytes` | long | `104857600` | Maximum UTF-8 stdout bytes, including discarded output and whitespace. |
+| `Tools:Limits:MaxRows` | int | `1000000` | Maximum parsed output rows. |
+| `Tools:Limits:MaxLineChars` | int | `1048576` | Maximum characters in a stdout line; enforced while reading. |
+| `Tools:Limits:MaxStderrChars` | int | `65536` | Captured stderr characters, split between its head and tail. Excess output is drained; one truncation warning includes tool and run correlation. |
+| `Tools:Limits:CleanupTimeoutSeconds` | int | `30` | Deadline for each process teardown or Docker removal/query phase. Cleanup uses its own token so run cancellation cannot skip it. |
+
+Container `CAPABILITY_SECRETS` are forwarded by environment variable name. Their values are placed in the Docker client's child environment and excluded from its command-line arguments. Secret parameters cannot be substituted into `ARGS`.
+
 ## Related
 
 - [Configuration Settings Reference](../appsettings-reference.md) — full config hub

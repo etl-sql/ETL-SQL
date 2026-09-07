@@ -59,7 +59,7 @@ public interface ILogger
         int i = 0;
         var positional = Regex.Replace(
             template,
-            @"\{[A-Za-z_][A-Za-z0-9_]*(?::[^}]*)?\}",
+            @"\{[@$]?[A-Za-z_][A-Za-z0-9_]*(?::[^}]*)?\}",
             _ => $"{{{i++}}}");
         return string.Format(positional, args.Select(a => (object)(a ?? "<null>")).ToArray());
     }

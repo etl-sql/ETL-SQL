@@ -11,6 +11,66 @@ public sealed class SandboxAdmissionReconciliationServiceTests : IDisposable
         Path.GetTempPath(), $"etlsql-admission-reconcile-{Guid.NewGuid():N}.db");
 
     [Fact]
+    public async Task RestartDeletesWorkspaceOnlyAfterDetachProofAndBeforeRelease()
+    {
+        var root = _databasePath + ".workspaces";
+        try
+        {
+            var ledger = Ledger();
+            await ActiveAsync(ledger, "workspace-restart", "tenant-a");
+            var options = new FileSystemSandboxWorkspaceOptions { RootPath = root };
+            var original = new FileSystemSandboxWorkspaceProvider(options);
+            var assignment = await original.AssignAsync(new SandboxAssignmentIdentity(Tenant("tenant-a"), "run-1", "attempt-1")
+            { AdmissionId = "workspace-restart" });
+            await File.WriteAllTextAsync(Path.Combine(assignment.InputPath, "private-input.json"), "synthetic tenant input");
+            var runtime = new StubRuntime(new Dictionary<string, SandboxRuntimeReconciliationState>
+            { ["workspace-restart"] = SandboxRuntimeReconciliationState.Running });
+            // New provider has no live assignment objects or in-memory ownership entries.
+            var service = new SandboxAdmissionReconciliationService(ledger, runtime, ["shared-hardened"],
+                workspaces: new FileSystemSandboxWorkspaceProvider(options));
+            await service.RunOnceAsync(DateTimeOffset.UtcNow.AddMinutes(10));
+            Assert.True(Directory.Exists(assignment.RootPath));
+            Assert.Equal(SandboxAdmissionState.Retained, (await ledger.ReadAsync("workspace-restart"))!.State);
+            runtime.States["workspace-restart"] = SandboxRuntimeReconciliationState.Detached;
+            var recovered = await service.RunOnceAsync(DateTimeOffset.UtcNow.AddMinutes(11));
+            Assert.Equal(1, recovered.DetachedReleased);
+            Assert.False(Directory.Exists(assignment.RootPath));
+            Assert.Empty(Directory.GetFiles(Path.Combine(root, ".recovery")));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
+    public async Task WorkspaceOwnershipMismatchRetainsAdmissionAndRetriesAfterRepair()
+    {
+        var root = _databasePath + ".workspaces";
+        try
+        {
+            var ledger = Ledger();
+            await ActiveAsync(ledger, "workspace-mismatch", "tenant-a");
+            var options = new FileSystemSandboxWorkspaceOptions { RootPath = root };
+            var assignment = await new FileSystemSandboxWorkspaceProvider(options).AssignAsync(
+                new SandboxAssignmentIdentity(Tenant("tenant-a"), "run-2", "attempt-1") { AdmissionId = "workspace-mismatch" });
+            var marker = Path.Combine(assignment.RootPath, ".etlsql-assignment.json");
+            var originalMarker = await File.ReadAllTextAsync(marker);
+            await File.WriteAllTextAsync(marker, originalMarker.Replace("run-2", "run-other"));
+            var runtime = new StubRuntime(new Dictionary<string, SandboxRuntimeReconciliationState>
+            { ["workspace-mismatch"] = SandboxRuntimeReconciliationState.Detached });
+            var service = new SandboxAdmissionReconciliationService(ledger, runtime, ["shared-hardened"],
+                workspaces: new FileSystemSandboxWorkspaceProvider(options));
+            var failed = await service.RunOnceAsync(DateTimeOffset.UtcNow.AddMinutes(10));
+            Assert.Equal(0, failed.DetachedReleased);
+            Assert.True(Directory.Exists(assignment.RootPath));
+            Assert.Equal(SandboxAdmissionState.Retained, (await ledger.ReadAsync("workspace-mismatch"))!.State);
+            await File.WriteAllTextAsync(marker, originalMarker);
+            var recovered = await service.RunOnceAsync(DateTimeOffset.UtcNow.AddMinutes(11));
+            Assert.Equal(1, recovered.DetachedReleased);
+            Assert.False(Directory.Exists(assignment.RootPath));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public async Task ExpiredLeaseIsReleasedOnlyAfterPositiveDetachProof()
     {
         var ledger = Ledger();

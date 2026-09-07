@@ -46,15 +46,18 @@ public sealed class SandboxAdmissionReconciliationService
     private readonly ISandboxRuntimeReconciler _runtime;
     private readonly IReadOnlyList<string> _poolIds;
     private readonly TimeSpan _abandonedQueueHorizon;
+    private readonly ISandboxWorkspaceRecovery? _workspaces;
 
     public SandboxAdmissionReconciliationService(
         ISandboxAdmissionLedger ledger,
         ISandboxRuntimeReconciler runtime,
         IReadOnlyCollection<string> poolIds,
-        TimeSpan? abandonedQueueHorizon = null)
+        TimeSpan? abandonedQueueHorizon = null,
+        ISandboxWorkspaceRecovery? workspaces = null)
     {
         _ledger = ledger ?? throw new ArgumentNullException(nameof(ledger));
         _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
+        _workspaces = workspaces;
         ArgumentNullException.ThrowIfNull(poolIds);
         _poolIds = poolIds.Distinct(StringComparer.Ordinal).ToArray();
         if (_poolIds.Count == 0 || _poolIds.Any(string.IsNullOrWhiteSpace))
@@ -108,6 +111,11 @@ public sealed class SandboxAdmissionReconciliationService
                 switch (state)
                 {
                     case SandboxRuntimeReconciliationState.Detached:
+                        if (_workspaces != null && !await _workspaces.CleanupDetachedAsync(admission, cancellationToken))
+                        {
+                            probeFailures++;
+                            break;
+                        }
                         if (await _ledger.ReleaseRetainedAsync(
                                 admission.AdmissionId, admission.FenceToken, cancellationToken))
                             released++;
