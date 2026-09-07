@@ -131,6 +131,20 @@ requires a bundler.
    alongside a mutable global connector registry. Nine `scripts/test-*.mjs` checks are red and have
    been for some time, because none of them runs in pre-push or CI. Stability work that leaves these
    in place will be measured by a suite nobody trusts.
+
+   The v0.19.0 release run sharpened this considerably. Five separate failures were diagnosed, none
+   of them in shipped code, and four shared one shape — **a wait that watches for the wrong thing**:
+   a connector's own `TIMEOUT_MS` mistaken for a wait; a regex satisfied by a `MAPPINGS` clause
+   existing rather than by both chart roles being present; an assertion made before the host had
+   answered its first health probe, against a call that *deletes* what it judges unhealthy; and a
+   click that kept losing its element to a list re-render, behind a retry that caught
+   `PlaywrightException` while action timeouts arrive as `System.TimeoutException`, so it had never
+   run. The fixture now names which step of host creation failed, which is the smallest piece of
+   this slice and was pulled forward because without it every recurrence was a guess — two wrong
+   root causes were proposed in one evening. What remains is the shared-state half: one Portal, one
+   admin account and one sign-in gate across every test class, plus the mutable global connector
+   registry. Auditing the lane for the wait-shape above is worth more than fixing them as they
+   surface.
 4. **Close the Studio Alpha gaps.** Studio ships in v0.19.0 as an Alpha that does not replace
    `ReportBuilder` or `WorkstationEditor`; this slice is what earns it that replacement. Three of the
    five hosts are uncertified. Every certified journey is an author's and none is a reader's.
