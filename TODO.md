@@ -24,6 +24,9 @@ this file decomposes it into executable work.
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 12 |
 | Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 4 |
 | Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 5 |
+| *Candidates — not v0.20.0 scope yet* | | |
+| Grammar-of-Graphics semantic extensions | [§7](#7-grammar-of-graphics-semantic-extensions-candidate) | 3 |
+| SaaS operations and hosted launch evidence | [§8](#8-saas-operations-and-hosted-launch-evidence-candidate) | 3 |
 
 **Why this order.** v0.19.0's type gate found twelve live browser defects and **ten were scope or
 syntax errors** — a name never declared, a duplicated object key, a file that did not parse. The 617
@@ -152,3 +155,61 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
   builds are indistinguishable from each other; see
   [v0.19.0 Performance Results](docs/releases/v0.19.0-performance-results.md). Do **not** re-bless
   until the cause is known — v0.17.0 established why.
+
+---
+
+## Candidates — sequenced only when picked up
+
+Sections 7 and 8 are **not** part of the v0.20.0 *Code Stability* theme. They are the genuinely
+remaining increments of two `ROADMAP.md` entries, written out here so they can be prioritised against
+the theme rather than rediscovered. Both were verified against the code on 2026-09-07; neither is
+partially done in some invisible way.
+
+## 7. Grammar-of-Graphics semantic extensions (candidate)
+
+[`ROADMAP.md` — Grammar-of-Graphics Semantic Extensions](ROADMAP.md#reporting--presentation--grammar-of-graphics-semantic-extensions).
+Horizon **Later**: no catalog visual or renderer retirement depends on these, so demand and
+representative reports should choose the order. Each is a combination `AdvancedChartSemanticValidator`
+rejects today, so each has an exact starting point and an exact test that must flip.
+
+- [ ] **Renderer-neutral polar/radial stacking.** `AdvancedChartSemanticValidator.cs:324` — *"STACK
+  requires a quantitative Cartesian/transposed Y or Y2 binding; polar/radial stacking is not yet
+  portable."* Needs a stacking model that resolves the same way for SVG, terminal, and static export
+  before the rejection can be lifted.
+- [ ] **Physical aspect semantics beyond continuous Cartesian.**
+  `AdvancedChartSemanticValidator.cs:750` — *"ASPECT_RATIO currently supports CARTESIAN coordinates
+  only."* `ChartSpec.cs:401` carries the matching contract guard, so both move together.
+- [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**
+  `AdvancedChartSemanticValidator.cs:697` — today the author is told to stage separate series or
+  layers in ETL-SQL. The question to settle first is what a per-row condition *means* on a connected
+  mark, since the segment between two rows belongs to both.
+
+Add one complete combination at a time — grammar, immutable contracts, resolution, validation,
+authoring help, and every applicable backend — then update the capability matrix before starting the
+next. Acceptance follows the roadmap entry: round trips, versioned contract compatibility,
+deterministic plan and SVG goldens, invalid-combination diagnostics, and unchanged payload,
+render-time and bundle budgets.
+
+## 8. SaaS operations and hosted launch evidence (candidate)
+
+[`ROADMAP.md` — SaaS Operations](ROADMAP.md#saas-operations--shared-lifecycle-metering-and-hosted-launch-evidence).
+Horizon **Launch Gate**: these bind production claims, so they gate a hosted launch rather than a
+version. The Gateway, storage and scheduler metering producers and the queued-admission recovery are
+already shipped — what follows is what is actually left.
+
+- [ ] **Add the sandbox metering producer.** `TenantMeteringSource.Sandbox` is declared in
+  `TenantMeteringLedger.cs` and **nothing writes it**; `ITenantMeteringLedger` is not injected
+  anywhere under `src/ETL-SQL.Orchestrator/Execution/`. Sandbox execution is therefore the one
+  workload class the tenant ledger cannot account for, which matters because metering is the basis of
+  a hosted bill. Keep it observational — it must not become an execution-policy or authorization
+  input.
+- [ ] **Certify Shared lifecycle transitions.** Every SaaS transition row in
+  `artifacts/release-evidence/0.19.0/deployment-profiles/claims-index.md` reads `NotCertified` for
+  Shared SaaS. Add explicit Shared upgrade, promotion/import, backup/restore and exit lanes where
+  those journeys are supported, with hostile negative cases. A Shared transition may not be inferred
+  from Managed Dedicated evidence.
+- [ ] **Attach physical runtime and hosting evidence to production claims.** Provider-specific
+  hardened-runtime, cloud-fault, HA/soak and canary evidence for each production topology, naming the
+  runtime and provider versions and bound to the exact clean candidate commit. Contract and
+  deterministic-adapter evidence proves product invariants; it does not prove an untested hardened
+  runtime, cloud service, HA topology, or region.
