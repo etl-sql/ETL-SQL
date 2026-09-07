@@ -1,4 +1,4 @@
-# ETL-SQL Development TODO List
+﻿# ETL-SQL Development TODO List
 
 Use this list as the execution ledger for product and release work. Work top to bottom inside each
 section unless a dependency or release-blocking defect changes the order. When an item is verified,
@@ -20,7 +20,7 @@ this file decomposes it into executable work.
 | :--- | :--- | ---: |
 | Lint the browser sources | [§1](#1-lint-the-browser-sources) | ✔ |
 | Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 3 |
-| Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | 7 |
+| Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | 6 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 12 |
 | Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 4 |
 | Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 5 |
@@ -61,7 +61,7 @@ A separate problem from typing, and it must not be folded into it: none of these
 the browser sources. The v0.19.0 release run made the shape concrete — the evidence is in
 [flaky-test-stability.md](docs/releases/flaky-test-stability.md).
 
-- [ ] **Audit the lane for the wait shape**, which is worth more than fixing occurrences as they
+- [x] **Audit the lane for the wait shape**, which is worth more than fixing occurrences as they
   surface. Four of v0.19.0's five failures were one mistake — *a wait that watches for the wrong
   thing*: a connector's own `TIMEOUT_MS` mistaken for a wait; a regex satisfied by a `MAPPINGS`
   clause existing rather than by both chart roles being present; an assertion made before the host

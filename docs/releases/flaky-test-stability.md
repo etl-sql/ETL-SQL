@@ -1,4 +1,4 @@
-# Flaky Test Stability
+﻿# Flaky Test Stability
 
 This is the canonical record and maintenance policy for timing-sensitive tests. It consolidates
 the v0.15.0, v0.17.0, and v0.18.0 tracking notes after the wall-clock wait class was retired in
@@ -124,6 +124,30 @@ class load and shared background-service state from its startup/shutdown observa
   read returning one row of two is polled again, and a broker that never delivers still fails, with
   the last observed state named. Worth checking wherever a test hands a `TIMEOUT_MS`, `poll`, or
   `wait` option to a connector and then asserts on a single call.
+
+- **v0.20.0 — the wait-shape audit, and what it found.** All four v0.19.0 shapes were swept across
+  the whole test tree, not only the browser lane: `TIMEOUT_MS` handed to code under test, a retry
+  catching the wrong exception type, an assertion racing a first health probe, and presence-only
+  waits. The first three are closed as classes — each had one instance, each is fixed, and the
+  remaining lookalikes are deterministic (a mocked Kafka consumer, an `AlwaysHealthyHandler` stub).
+
+  **The reusable lesson is how to tell a presence-only defect from a lookalike.** Three Studio
+  journeys click *apply* and then check a filter value, but wait only for the
+  `ETL-SQL-STUDIO-FILTER` marker — the MAPPINGS shape exactly. They are nonetheless correct, because
+  `DesignerQueryFilterService.BuildCategorical` returns `null` for empty values, so the apply click
+  writes no marker at all and the marker cannot appear before the value lands. A wait is presence-only
+  when its predicate names a *container* and some earlier interaction can fill that container alone;
+  reading the predicate is not enough to know that, and the answer is in the code that writes it.
+
+  Two outcomes worth keeping. `StudioPaginatedJourneyTests` rewrites the script and then waits on
+  `!includes('SOURCE = (SELECT')` without ever having asserted that text was present — a negative
+  wait is satisfied by a script that never contained it, so the step would go quiet rather than red
+  the day it stopped applying. It now asserts the premise first. And
+  `SchedulerServiceTests.LegacyUnboundJob_DoesNotWriteTenantUsage` *looks* vacuous — it waits for
+  `LogJobEndAsync` while the `SaveTenantUsageAsync` it forbids runs later, in the attempt's `finally`
+  — but removing the tenant guard from `SchedulerService` makes it fail, so `Stop()` drains the
+  in-flight attempt and the barrier holds. Mutating the product is what settles these; reading the
+  ordering is what raises them.
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
 diagnostics belong in generated evidence, not a new release-specific tracking file.

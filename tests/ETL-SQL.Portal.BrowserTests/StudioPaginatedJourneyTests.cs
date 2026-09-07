@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using ETL_SQL.Portal.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -118,6 +118,14 @@ public sealed class StudioPaginatedJourneyTests(PortalBrowserFixture fixture)
         // step 1 — so at this point the parameter filters #catalog and nothing renders from it. A
         // prompt that changes nothing on the page is not a parameterized report, so the bands are
         // pointed at the staged table, which is the one the parameter governs.
+        // The rewrite below only means something if the bands really did write a subquery source.
+        // Asserting that first is what keeps the negative wait honest: `!includes(...)` is satisfied
+        // by a script that never contained the text, so on its own it would go quiet — not red — the
+        // day step 3 stops writing one, and this step would silently stop testing anything.
+        var beforeRewrite = await page.EvaluateAsync<string>(
+            "() => window.__STUDIO__.state.editorInstance.getValue()");
+        Assert.Contains("SOURCE = (SELECT", beforeRewrite, StringComparison.Ordinal);
+
         await page.EvaluateAsync(
             """
             () => {
