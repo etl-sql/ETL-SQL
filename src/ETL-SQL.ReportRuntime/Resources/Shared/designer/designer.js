@@ -20,12 +20,11 @@
  */
 
 import { renderVisualSample } from './visual-preview.js';
+import { escapeHtml, _feedback } from './designer-util.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase 2 — DAG Visualization
 // ─────────────────────────────────────────────────────────────────────────────
-
-const _feedback = globalThis.ETLSQLFeedback;
 
 const _TYPE_COLOR = {
     dataset:     '#10b981',
@@ -866,14 +865,6 @@ let _cmPromise = null;
 function _loadCm() {
     if (!_cmPromise) _cmPromise = import('./codemirror/codemirror-bundle.min.js');
     return _cmPromise;
-}
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
 }
 
 // Cached rptsql StreamLanguage instance (shared across all editor instances).
