@@ -303,14 +303,19 @@ public sealed class StudioStewardshipJourneyTests(PortalBrowserFixture fixture)
 
         var cardLink = page.Locator($"a.report-card-link:has-text(\"{reportName}\")");
         await Expect(cardLink.First).ToBeVisibleAsync(new LocatorAssertionsToBeVisibleOptions { Timeout = 30_000 });
-        try
-        {
-            await cardLink.First.ClickAsync();
-        }
-        catch (PlaywrightException)
-        {
-            await cardLink.First.ClickAsync();
-        }
+
+        // Navigate by the card's own href instead of clicking it. The report list re-renders on a
+        // refresh cycle, so a click resolves the element and then loses it — Playwright's log reads
+        // "element was detached from the DOM, retrying" until the 30 s action timeout, and CI failed
+        // exactly that way. The retry below it never helped either: it caught PlaywrightException,
+        // while an action timeout arrives as System.TimeoutException.
+        //
+        // The link is a plain `#report-<id>` anchor and index.js routes on hashchange, so setting
+        // the hash is what the click does, minus the race. This helper exists to reach a report and
+        // run it; card-link click behaviour is asserted where it is the subject, not here.
+        var href = await cardLink.First.GetAttributeAsync("href")
+            ?? throw new InvalidOperationException($"The report card for '{reportName}' has no href to open.");
+        await page.EvaluateAsync("hash => { window.location.hash = hash; }", href);
 
         var execute = page.Locator("#execBtn");
         var refresh = page.Locator("#refreshBtn");

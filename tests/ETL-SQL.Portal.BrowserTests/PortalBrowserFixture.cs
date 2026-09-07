@@ -25,7 +25,21 @@ public sealed class PortalBrowserFixture : IAsyncLifetime
     public async Task InitializeAsync()
     {
         // Resolving a client is what builds and starts the host, which is what assigns the port.
-        Factory.CreateClient().Dispose();
+        // Wrapped so the assembly-wide failure names this fixture and carries the factory's own
+        // diagnosis, rather than every test reporting an InvalidOperationException from deep inside
+        // WebApplicationFactory that says only that some server was not started.
+        try
+        {
+            Factory.CreateClient().Dispose();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                "PortalBrowserFixture could not start the Portal under test, so every test in this "
+                + "assembly will fail. The cause is attached; it is not a defect in the tests that "
+                + $"report it. {ex.GetType().Name}: {ex.Message}",
+                ex);
+        }
 
         if (Environment.GetEnvironmentVariable("ETLSQL_PLAYWRIGHT_SKIP_INSTALL") != "1")
         {

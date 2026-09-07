@@ -37,22 +37,46 @@ public sealed class PortalBrowserFactory : PortalWebFactory
 
     protected override IHost CreateHost(IHostBuilder builder)
     {
-        // Build the TestServer host first: once the builder is switched to Kestrel below, the
-        // factory's own in-memory client would otherwise be pointed at a server it cannot use.
-        var testHost = builder.Build();
+        // Every step is named, because of how this fails when it fails. If anything in here throws,
+        // WebApplicationFactory leaves its server unset and every subsequent test in the assembly
+        // dies on "The server has not been started or no web application was configured" — one real
+        // cause reported 178 times, naming none of the conditions and pointing at the fixture rather
+        // than at whatever actually went wrong. That message has already sent two investigations
+        // down the wrong path. Rethrowing with the failed step and the original exception attached
+        // costs nothing on the passing path and is the difference between a diagnosis and a guess.
+        var step = "build the TestServer host";
+        try
+        {
+            // Build the TestServer host first: once the builder is switched to Kestrel below, the
+            // factory's own in-memory client would otherwise be pointed at a server it cannot use.
+            var testHost = builder.Build();
 
-        builder.ConfigureWebHost(webHost => webHost.UseKestrel().UseUrls("http://127.0.0.1:0"));
-        kestrelHost = builder.Build();
-        kestrelHost.Start();
+            step = "switch the builder to Kestrel and build the loopback host";
+            builder.ConfigureWebHost(webHost => webHost.UseKestrel().UseUrls("http://127.0.0.1:0"));
+            kestrelHost = builder.Build();
 
-        var addresses = kestrelHost.Services.GetRequiredService<IServer>()
-            .Features.Get<IServerAddressesFeature>()
-            ?? throw new InvalidOperationException("Kestrel did not expose a server addresses feature.");
-        ServerAddress = addresses.Addresses.Last();
-        ClientOptions.BaseAddress = new Uri(ServerAddress);
+            step = "start the Kestrel host on 127.0.0.1:0";
+            kestrelHost.Start();
 
-        testHost.Start();
-        return testHost;
+            step = "read the OS-assigned port from Kestrel";
+            var addresses = kestrelHost.Services.GetRequiredService<IServer>()
+                .Features.Get<IServerAddressesFeature>()
+                ?? throw new InvalidOperationException("Kestrel did not expose a server addresses feature.");
+            ServerAddress = addresses.Addresses.Last();
+            ClientOptions.BaseAddress = new Uri(ServerAddress);
+
+            step = "start the TestServer host";
+            testHost.Start();
+            return testHost;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"The Portal browser host could not be created — failed while trying to {step}. "
+                + "Every test in this assembly will report 'The server has not been started' after "
+                + $"this; that message is the symptom, and this is the cause: {ex.GetType().Name}: {ex.Message}",
+                ex);
+        }
     }
 
     /// <summary>
