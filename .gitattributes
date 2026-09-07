@@ -10,27 +10,19 @@
 *.min.js            text eol=lf
 *.min.css           text eol=lf
 *.geojson           text eol=lf
-report-runtime.js   text eol=lf
-report-runtime.css  text eol=lf
-designer.js         text eol=lf
-designer.css        text eol=lf
-studio.js           text eol=lf
-connection-wizard.js text eol=lf
-arrow.min.js        text eol=lf
-feedback.js         text eol=lf
-studio-authoring.js text eol=lf
-studio-authoring-ui.js text eol=lf
-studio-contracts.js text eol=lf
-studio-query-workbench.js text eol=lf
-studio-sql-mutations.js text eol=lf
-studio-pipeline-canvas.js text eol=lf
-studio-data.js      text eol=lf
-studio-git-diff.js  text eol=lf
-studio-host.js      text eol=lf
-studio-lifecycle.js text eol=lf
-studio-security.js  text eol=lf
-studio-state.js     text eol=lf
-visual-preview.js   text eol=lf
+
+# Shared browser/runtime assets are copied verbatim from
+# src/ETL-SQL.ReportRuntime/Resources/Shared/ to host copies (VS Code, Player, Portal, Workstation).
+# Pin them to LF by path rather than by filename: these directories gain files routinely, and a
+# file missed by a per-name pin fails `sync-assets.js --check` only on a fresh clone with
+# core.autocrlf=true, where the cause is invisible.
+src/ETL-SQL.ReportRuntime/Resources/Shared/**   text eol=lf
+src/ETL-SQL.Portal/wwwroot/**/*.js              text eol=lf
+src/ETL-SQL.Portal/wwwroot/**/*.css             text eol=lf
+src/ETL-SQL.Portal/wwwroot/**/*.html            text eol=lf
+src/ETL-SQL.ReportPlayer/wwwroot/**             text eol=lf
+src/ETL-SQL.WorkstationEditor/wwwroot/**        text eol=lf
+src/etl-sql-vscode/media/**                     text eol=lf
 
 # Reporting golden artifacts are compared and hashed byte for byte across Windows and Linux runners.
 # Pin them to LF so a Windows checkout (core.autocrlf=true) cannot change what the lane is comparing.
