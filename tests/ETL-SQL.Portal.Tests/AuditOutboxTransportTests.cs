@@ -8,6 +8,7 @@ using ETL_SQL.Portal.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ETL_SQL.Portal.Tests;
@@ -23,6 +24,113 @@ public sealed class AuditOutboxTransportTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_scratch, recursive: true); } catch { }
+    }
+
+    [Fact]
+    public async Task HostedServicePrunesWithoutCollectorAndKeepsDurableAudit()
+    {
+        var handler = new CapturingHandler(_ => throw new InvalidOperationException("No send expected"));
+        var (provider, config) = await CreateProviderAsync("no-collector.db", handler);
+        await using var providerLifetime = provider;
+        config.Audit.TransportEndpoint = "";
+        config.Audit.RequireRemoteDelivery = false;
+        config.Audit.OutboxMaxBytes = 1;
+        await SeedAuditAsync(provider);
+        var logger = new RecordingLogger();
+        using var service = NewService(provider, config, handler, logger);
+        await service.StartAsync(CancellationToken.None);
+        try
+        {
+            await logger.Shed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            await using var scope = provider.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            Assert.Equal(0, await db.AuditOutboxMessages.CountAsync());
+            Assert.Equal(1, await db.AuditLogs.CountAsync());
+            Assert.Equal("", handler.LastBody);
+        }
+        finally { await service.StopAsync(CancellationToken.None); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NetworkFailuresFollowBackoffReleaseClaimAndReachAttemptLimit(bool timeout)
+    {
+        var handler = new CapturingHandler(_ => throw (timeout
+            ? new TaskCanceledException("synthetic private provider detail")
+            : new HttpRequestException("synthetic private provider detail")));
+        var (provider, config) = await CreateProviderAsync("network.db", handler);
+        await using var providerLifetime = provider;
+        config.Audit.TransportMaxAttempts = 3;
+        await SeedAuditAsync(provider);
+        var logger = new RecordingLogger();
+        using var service = NewService(provider, config, handler, logger);
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            var before = DateTime.UtcNow;
+            Assert.Equal(1, await service.DrainOnceAsync());
+            await using var scope = provider.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var row = await db.AuditOutboxMessages.SingleAsync();
+            Assert.Equal(attempt, row.Attempts);
+            Assert.Null(row.LockedUntil);
+            Assert.DoesNotContain("synthetic", row.LastError);
+            Assert.Equal(attempt == 3 ? "Failed" : "Pending", row.Status);
+            if (attempt < 3)
+            {
+                Assert.True(row.NextAttemptAt >= before.AddSeconds(30 * Math.Pow(2, attempt - 1)));
+                row.NextAttemptAt = before.AddSeconds(-1);
+                await db.SaveChangesAsync();
+            }
+            else Assert.Null(row.NextAttemptAt);
+        }
+        Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Warning);
+        Assert.Single(logger.Entries, entry => entry.Level == LogLevel.Error);
+        Assert.All(logger.Entries, entry => Assert.DoesNotContain("synthetic", entry.Message));
+    }
+
+    [Theory]
+    [InlineData(401)]
+    [InlineData(403)]
+    [InlineData(500)]
+    public async Task HttpFailureLogsSanitizedStatusAndTerminalTransition(int status)
+    {
+        var handler = new CapturingHandler(_ => new HttpResponseMessage((HttpStatusCode)status) { ReasonPhrase = "synthetic private detail" });
+        var (provider, config) = await CreateProviderAsync("http-log.db", handler);
+        await using var providerLifetime = provider;
+        config.Audit.TransportMaxAttempts = 1;
+        await SeedAuditAsync(provider);
+        var logger = new RecordingLogger();
+        using var service = NewService(provider, config, handler, logger);
+        await service.DrainOnceAsync();
+        var entry = Assert.Single(logger.Entries, e => e.Level == LogLevel.Error);
+        Assert.Contains($"HTTP {status}", entry.Message);
+        Assert.Contains("tenant=portal-host", entry.Message);
+        Assert.Contains("events=1", entry.Message);
+        Assert.Contains("attempt=1", entry.Message);
+        Assert.DoesNotContain("synthetic", entry.Message);
+    }
+
+    [Fact]
+    public async Task ShutdownCancellationReleasesClaimWithoutCountingFailure()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var handler = new CapturingHandler(_ =>
+        {
+            cancellation.Cancel();
+            throw new OperationCanceledException(cancellation.Token);
+        });
+        var (provider, config) = await CreateProviderAsync("shutdown.db", handler);
+        await using var providerLifetime = provider;
+        await SeedAuditAsync(provider);
+        using var service = NewService(provider, config, handler);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.DrainOnceAsync(cancellation.Token));
+        await using var scope = provider.CreateAsyncScope();
+        var row = await scope.ServiceProvider.GetRequiredService<PortalDbContext>().AuditOutboxMessages.SingleAsync();
+        Assert.Null(row.LockedUntil);
+        Assert.Null(row.LastError);
+        Assert.Equal(0, row.Attempts);
+        Assert.Equal("Pending", row.Status);
     }
 
     [Fact]
@@ -329,13 +437,27 @@ public sealed class AuditOutboxTransportTests : IDisposable
     private static AuditOutboxTransportService NewService(
         ServiceProvider provider,
         PortalConfig config,
-        HttpMessageHandler handler) =>
+        HttpMessageHandler handler, ILogger<AuditOutboxTransportService>? logger = null) =>
         new(
             provider.GetRequiredService<IServiceScopeFactory>(),
             config,
             new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(5) },
             TimeProvider.System,
-            NullLogger<AuditOutboxTransportService>.Instance);
+            logger ?? NullLogger<AuditOutboxTransportService>.Instance);
+
+    private sealed class RecordingLogger : ILogger<AuditOutboxTransportService>
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<(LogLevel Level, string Message)> Entries { get; } = new();
+        public TaskCompletionSource Shed { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel level) => true;
+        public void Log<TState>(LogLevel level, EventId id, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            var message = formatter(state, exception);
+            Entries.Enqueue((level, message));
+            if (message.StartsWith("Shed ", StringComparison.Ordinal)) Shed.TrySetResult();
+        }
+    }
 
     private sealed class CapturingHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
     {

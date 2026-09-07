@@ -18,12 +18,10 @@ public sealed class AuditOutboxTransportService(
     ILogger<AuditOutboxTransportService> log) : BackgroundService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private long _nextFailureWarningTicks;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (string.IsNullOrWhiteSpace(config.Audit.TransportEndpoint))
-            return;
-
         var interval = TimeSpan.FromSeconds(Math.Max(1, config.Audit.TransportIntervalSeconds));
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -54,6 +52,7 @@ public sealed class AuditOutboxTransportService(
 
     public async Task<int> DrainOnceAsync(CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(config.Audit.TransportEndpoint)) return 0;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         using var activity = BackgroundServiceObservability.StartRun("portal", "audit-outbox-transport", "drain");
         try
@@ -81,7 +80,31 @@ public sealed class AuditOutboxTransportService(
                 return 0;
             }
 
-            var response = await PostBatchAsync(endpoint, rows, ct);
+            HttpResponseMessage response;
+            try
+            {
+                response = await PostBatchAsync(endpoint, rows, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                // Shutdown is not a delivery attempt. Release this claim so another node can retry.
+                foreach (var row in rows) row.LockedUntil = null;
+                using var releaseDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await db.SaveChangesAsync(releaseDeadline.Token);
+                throw;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+            {
+                now = clock.GetUtcNow().UtcDateTime;
+                // Provider messages can echo URLs, credentials, and payload fragments. Record the failure class only.
+                var error = ex is OperationCanceledException ? "Transport request timed out." : "Transport connection failed.";
+                ApplyFailure(rows, now, error);
+                await db.SaveChangesAsync(ct);
+                LogFailure(rows, now, error);
+                CompleteTransport(activity, sw, "drain", "failed", rows.Count);
+                return rows.Count;
+            }
+            using var responseLifetime = response;
             now = clock.GetUtcNow().UtcDateTime;
 
             if (response.IsSuccessStatusCode)
@@ -97,11 +120,12 @@ public sealed class AuditOutboxTransportService(
             }
             else
             {
-                var error = SecretRedactor.Redact($"{(int)response.StatusCode} {response.ReasonPhrase}") ?? "Transport failed";
+                var error = $"Collector returned HTTP {(int)response.StatusCode}.";
                 ApplyFailure(rows, now, error);
             }
 
             await db.SaveChangesAsync(ct);
+            if (!response.IsSuccessStatusCode) LogFailure(rows, now, $"HTTP {(int)response.StatusCode}");
             CompleteTransport(activity, sw, "drain", response.IsSuccessStatusCode ? "delivered" : "failed", rows.Count);
             return rows.Count;
         }
@@ -367,6 +391,23 @@ public sealed class AuditOutboxTransportService(
         };
         request.Content = new StringContent(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
         return await http.SendAsync(request, ct);
+    }
+
+    private void LogFailure(IReadOnlyList<AuditOutboxMessage> rows, DateTime now, string error)
+    {
+        var nextWarning = Interlocked.Read(ref _nextFailureWarningTicks);
+        var warn = now.Ticks >= nextWarning && Interlocked.CompareExchange(ref _nextFailureWarningTicks,
+            now.AddSeconds(Math.Max(30, config.Audit.TransportIntervalSeconds)).Ticks, nextWarning) == nextWarning;
+        var batchId = Guid.NewGuid().ToString("N");
+        foreach (var group in rows.GroupBy(row => new { row.TenantId, row.Attempts, row.Status, row.NextAttemptAt }))
+        {
+            if (group.Key.Status == "Failed")
+                log.LogError("Audit delivery exhausted: tenant={Tenant} batch={Batch} events={Count} attempt={Attempt} status={Status}",
+                    group.Key.TenantId, batchId, group.Count(), group.Key.Attempts, error);
+            else if (warn)
+                log.LogWarning("Audit delivery retry scheduled: tenant={Tenant} batch={Batch} events={Count} attempt={Attempt} nextRetry={NextRetry} status={Status}",
+                    group.Key.TenantId, batchId, group.Count(), group.Key.Attempts, group.Key.NextAttemptAt, error);
+        }
     }
 
     private void ApplyFailure(IReadOnlyList<AuditOutboxMessage> rows, DateTime now, string error)

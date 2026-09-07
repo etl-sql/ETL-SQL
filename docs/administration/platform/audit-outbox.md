@@ -29,7 +29,11 @@ The collector endpoint must be HTTPS. Each POST body has an `events` array. Ever
 `EventId`, audit metadata, and a redacted JSON payload; collectors should treat `EventId` as the deduplication key
 because a row may be resent after a crash or lost delivery acknowledgement. Any 2xx response marks the batch
 delivered. Non-2xx responses retry with exponential backoff until `TransportMaxAttempts`, then the row is marked
-`Failed`.
+`Failed`. Connection errors and request timeouts use the same attempt counter and backoff. Shutdown cancellation
+releases the claim without consuming an attempt. Retry warnings include HTTP status or failure class, tenant,
+batch, count, attempt, and next retry; repeated warnings are limited to one interval of at least 30 seconds.
+Terminal delivery failures always produce an error event. Collector response bodies and provider exception
+messages are excluded from these diagnostics.
 
 `RequireRemoteDelivery` changes the Portal from best-effort forwarding to fail-closed mutation behavior. **Leaving it
 unset is the recommended default**: fail-closed then turns on automatically for an **enrolled** deployment that has a
@@ -45,7 +49,8 @@ is configured, monitored, and treated as mandatory infrastructure.
 When `RequireRemoteDelivery` is disabled, the outbox transport may shed old delivered rows and then oldest queued
 rows to keep local disk usage under `OutboxMaxBytes`; the durable local `AuditLog` rows remain. When
 `RequireRemoteDelivery` is enabled, ETL-SQL never drops queued remote-audit rows to satisfy the cap; it blocks new
-mutations until the collector drains the backlog.
+mutations until the collector drains the backlog. Local outbox maintenance also runs when no collector endpoint
+is configured, so retention and the optional size cap remain enforced independently of remote forwarding.
 
 Operational checks:
 
