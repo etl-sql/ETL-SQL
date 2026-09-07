@@ -202,6 +202,23 @@ public sealed class WorkstationEditorTests
             Guid.NewGuid().ToString("D"), workspace.Root, Environment.ProcessId, port, DateTimeOffset.UtcNow,
             new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "registry-token"));
         await registry.WriteAsync(healthyRecord);
+
+        // The health probe is an HTTP call with a two-second timeout, and a cold host's first
+        // request pays JIT and routing warm-up that can exceed it on a loaded machine. That matters
+        // more than usual here: ListHealthyAsync *deletes* the record of anything it judges
+        // unhealthy, so a single slow first response does not just fail the assertion, it destroys
+        // the state the assertion is about — retrying afterwards can never recover it.
+        //
+        // So the endpoint is warmed through the registry's own health notion first. IsHealthyAsync
+        // asks the same question without the delete, which makes this a precondition rather than a
+        // retry: once it answers true, the single ListHealthyAsync call below is the real assertion.
+        await LoadAwareWait.UntilAsync(
+            "the Studio lifecycle endpoint to answer its first health probe",
+            _ => registry.IsHealthyAsync(healthyRecord),
+            healthy => healthy,
+            TimeSpan.FromSeconds(30),
+            TimeSpan.FromMilliseconds(200));
+
         await registry.WriteAsync(new StudioSessionRecord(
             Guid.NewGuid().ToString("D"), workspace.Root, int.MaxValue, port + 1, DateTimeOffset.UtcNow,
             new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "stale")));
