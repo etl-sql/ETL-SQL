@@ -29,8 +29,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// green throughout.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class StudioWizardContractTests(PortalBrowserFixture fixture) : IAsyncLifetime
+[Collection(StudioSurfaceCollection.Name)]
+public sealed class StudioWizardContractTests(StudioSurfaceFixture fixture) : IAsyncLifetime
 {
     private IHost? host;
     private string baseUrl = "";

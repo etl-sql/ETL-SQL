@@ -12,7 +12,7 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// Playwright browsers directory). Set <c>ETLSQL_PLAYWRIGHT_SKIP_INSTALL=1</c> where the browsers
 /// are provisioned separately, e.g. a CI job with a restored browser cache.
 /// </summary>
-public sealed class PortalBrowserFixture : IAsyncLifetime
+public class PortalBrowserFixture : IAsyncLifetime
 {
     private IPlaywright? playwright;
     private IBrowser? browser;
@@ -35,9 +35,11 @@ public sealed class PortalBrowserFixture : IAsyncLifetime
         catch (Exception ex)
         {
             throw new InvalidOperationException(
-                "PortalBrowserFixture could not start the Portal under test, so every test in this "
-                + "assembly will fail. The cause is attached; it is not a defect in the tests that "
-                + $"report it. {ex.GetType().Name}: {ex.Message}",
+                $"{GetType().Name} could not start the Portal under test, so every test in its "
+                + "collection will fail — and only that collection, which is the point of the split "
+                + "in PortalBrowserCollections.cs. The other groups still report on the product, so "
+                + "read them before believing anything this group says. The cause is attached; it is "
+                + $"not a defect in the tests that report it. {ex.GetType().Name}: {ex.Message}",
                 ex);
         }
 
@@ -60,11 +62,11 @@ public sealed class PortalBrowserFixture : IAsyncLifetime
     /// Signs in as the seeded administrator, performing the forced first-run password change on the
     /// first call only.
     ///
-    /// <para>The whole lane shares one Portal, so the change happens once for the lane and the
-    /// original password stops working afterwards. Owning that here rather than in each test class
-    /// is what keeps classes independent of the order they run in — three classes each tracking
-    /// their own password against one shared account is a race that only surfaces in whichever
-    /// class happens to run second.</para>
+    /// <para>A collection shares one Portal, so the change happens once per collection and the
+    /// original password stops working afterwards for that group. Owning that here rather than in
+    /// each test class is what keeps classes independent of the order they run in — three classes
+    /// each tracking their own password against one shared account is a race that only surfaces in
+    /// whichever class happens to run second.</para>
     /// </summary>
     public async Task SignInAsync(IPage page)
     {

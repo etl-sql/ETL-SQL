@@ -23,8 +23,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// cannot be satisfied by an SVG pinned to its own pixel size.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class StudioChartTileWidthTests(PortalBrowserFixture fixture) : IAsyncLifetime
+[Collection(StudioSurfaceCollection.Name)]
+public sealed class StudioChartTileWidthTests(StudioSurfaceFixture fixture) : IAsyncLifetime
 {
     private IHost? host;
     private string baseUrl = "";

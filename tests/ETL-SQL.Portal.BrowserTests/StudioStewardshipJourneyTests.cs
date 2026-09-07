@@ -27,8 +27,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// estate has anything in it.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class StudioStewardshipJourneyTests(PortalBrowserFixture fixture)
+[Collection(StudioAuthoringCollection.Name)]
+public sealed class StudioStewardshipJourneyTests(StudioAuthoringFixture fixture)
 {
     /// <summary>Report execution is a real engine run, so it gets a longer budget than a click.</summary>
     private const float ExecutionTimeoutMs = 120_000;

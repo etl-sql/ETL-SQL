@@ -23,8 +23,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// than pretending one surface does everything.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class StudioSsisJourneyTests(PortalBrowserFixture fixture)
+[Collection(StudioAuthoringCollection.Name)]
+public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
 {
     /// <summary>Only the connection. Everything else in the file is authored by the journey.</summary>
     private const string Seed = "CREATE CONNECTION sample_data AS MOCKDB();\n";

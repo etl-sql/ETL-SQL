@@ -23,8 +23,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// that survives until the tab is closed is not persistent formatting.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class StudioDashboardJourneyTests(PortalBrowserFixture fixture)
+[Collection(StudioAuthoringCollection.Name)]
+public sealed class StudioDashboardJourneyTests(StudioAuthoringFixture fixture)
 {
     private const string KpiTitle = "Revenue to date";
     private const string TrendTitle = "Revenue over time";

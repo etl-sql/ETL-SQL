@@ -14,8 +14,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// a stale cached folder list, or a page that throws mid-flow fails here rather than in production.
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class CriticalJourneyTests(PortalBrowserFixture fixture)
+[Collection(PortalJourneyCollection.Name)]
+public sealed class CriticalJourneyTests(PortalJourneyFixture fixture)
 {
 
     /// <summary>Self-contained report: no connections, no parameters, one visual with one row.</summary>

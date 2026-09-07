@@ -16,8 +16,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// fine.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class AdminPanelFailureStateTests(PortalBrowserFixture fixture)
+[Collection(PortalAdminCollection.Name)]
+public sealed class AdminPanelFailureStateTests(PortalAdminFixture fixture)
 {
     /// <summary>
     /// Opening one folder's permissions, then another's while the second load fails, must not leave

@@ -17,8 +17,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// the catalog, where the same rule holds but the artifact is a row rather than a path.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class StudioLineEndingTests(PortalBrowserFixture fixture)
+[Collection(StudioSurfaceCollection.Name)]
+public sealed class StudioLineEndingTests(StudioSurfaceFixture fixture)
 {
     private static readonly string[] ScriptLines =
     [

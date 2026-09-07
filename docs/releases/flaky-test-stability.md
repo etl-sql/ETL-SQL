@@ -1,4 +1,4 @@
-﻿# Flaky Test Stability
+# Flaky Test Stability
 
 This is the canonical record and maintenance policy for timing-sensitive tests. It consolidates
 the v0.15.0, v0.17.0, and v0.18.0 tracking notes after the wall-clock wait class was retired in
@@ -148,6 +148,43 @@ class load and shared background-service state from its startup/shutdown observa
   — but removing the tenant guard from `SchedulerService` makes it fail, so `Stop()` drains the
   in-flight attempt and the barrier holds. Mutating the product is what settles these; reading the
   ordering is what raises them.
+
+- **v0.20.0 — the browser lane's Portals are split, and the cascade now reproduces locally.** The
+  lane no longer runs every class against one Portal. Five themed collections each own a Portal, and
+  therefore their own SQLite databases, script root, seeded administrator and forced first-run
+  password change: `studio-authoring`, `studio-surfaces`, `portal-journeys`, `portal-admin` and
+  `sandbox-stories`, alongside the existing Portal-less `detail-surface`. This is safe because
+  `PortalWebFactory` already gives each instance its own `portal_test_<guid>` directory, so two live
+  hosts share no files, and it costs about 21 seconds on a five-minute lane.
+
+  **Containment was verified rather than assumed.** Making `SandboxStoryFixture` throw on startup
+  failed 60 tests — all of them in `SandboxStoryTests`, each naming the injected cause — while the
+  other four groups ran and reported normally. Before the split the same failure was 178 tests
+  reporting a message that named nothing.
+
+  **The cascade itself is not fixed, and it is no longer only a gate-load phenomenon.** It
+  reproduced on a developer machine during this work with no load applied: 178/53 once before the
+  split, then 138, 61 and 40 failures across later runs, interleaved with clean 231/231 runs of the
+  same binary. Two attempts to trigger it deliberately — a single-class run immediately before a
+  full lane — both passed, so it is not a simple back-to-back collision. The one correlation worth
+  carrying forward is duration: **a failing run finishes far faster than a passing one** (40 s to
+  3 m 46 s against roughly 5 m), which is consistent with a fixture failing early rather than tests
+  failing on their merits.
+
+  **The split then caught it with its cause attached, and the lead is specific.** One contained
+  occurrence failed all 70 `portal-journeys` tests while the other four groups passed, reporting
+  `TestServer.get_Application()` throwing "The server has not been started or no web application was
+  configured" from `WebApplicationFactory.CreateClient`.
+
+  What matters is what is *absent*: `PortalBrowserFactory.CreateHost` did not throw. Its own
+  step-naming wrapper would have said which step failed, and it said nothing — so both hosts were
+  built and started, and the `TestServer` still had no `Application`. `CreateHost` builds the same
+  `IHostBuilder` twice — once for the TestServer host, then again after
+  `ConfigureWebHost(webHost => webHost.UseKestrel())` for the loopback host — and starts the Kestrel
+  one first. If the two hosts resolve the same `IServer` singleton, the surviving `TestServer` never
+  has its `Application` assigned and `CreateClient` fails exactly this way, intermittently and
+  without any step throwing. **Suspect the double `Build()` in `CreateHost` before suspecting load,
+  memory or the tests.**
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
 diagnostics belong in generated evidence, not a new release-specific tracking file.

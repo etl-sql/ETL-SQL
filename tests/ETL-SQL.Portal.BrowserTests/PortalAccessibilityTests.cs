@@ -16,8 +16,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// "3 controls have no accessible name" is a finding nobody can act on.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class PortalAccessibilityTests(PortalBrowserFixture fixture)
+[Collection(PortalJourneyCollection.Name)]
+public sealed class PortalAccessibilityTests(PortalJourneyFixture fixture)
 {
     /// <summary>A phone-width viewport. Not an edge case — it is how the on-call operator looks.</summary>
     private static readonly ViewportSize Narrow = new() { Width = 390, Height = 844 };

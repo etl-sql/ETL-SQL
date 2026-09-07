@@ -27,8 +27,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// are held to.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class StudioContinuousJourneyTests(PortalBrowserFixture fixture)
+[Collection(StudioAuthoringCollection.Name)]
+public sealed class StudioContinuousJourneyTests(StudioAuthoringFixture fixture)
 {
     /// <summary>The visual the journey drags in. BAR because it is not the type already on the page.</summary>
     private const string DraggedVisualType = "BAR";

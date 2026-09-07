@@ -5,8 +5,8 @@ using static Microsoft.Playwright.Assertions;
 namespace ETL_SQL.Portal.BrowserTests;
 
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class ControlPlaneDashboardUiTests(PortalBrowserFixture fixture)
+[Collection(PortalAdminCollection.Name)]
+public sealed class ControlPlaneDashboardUiTests(PortalAdminFixture fixture)
 {
     [Fact]
     public async Task ControlPlaneDashboard_LoadsAndRendersZeroTrustSecurityBoundary()

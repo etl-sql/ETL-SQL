@@ -23,8 +23,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// of the module can pass while the page never loads it.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class GovernanceDashboardUiTests(PortalBrowserFixture fixture)
+[Collection(PortalAdminCollection.Name)]
+public sealed class GovernanceDashboardUiTests(PortalAdminFixture fixture)
 {
     /// <summary>
     /// The never-scanned state, asserted on a response this test owns.

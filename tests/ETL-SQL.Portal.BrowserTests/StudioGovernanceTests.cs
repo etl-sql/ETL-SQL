@@ -13,8 +13,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// swallows a 404 and renders a success — so the assertions here end at the author's own text.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class StudioGovernanceTests(PortalBrowserFixture fixture)
+[Collection(StudioSurfaceCollection.Name)]
+public sealed class StudioGovernanceTests(StudioSurfaceFixture fixture)
 {
     private const string InitialScript = """
         CREATE CONNECTION sample_data AS MOCKDB();

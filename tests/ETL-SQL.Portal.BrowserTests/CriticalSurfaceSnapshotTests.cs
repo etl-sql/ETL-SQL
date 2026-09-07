@@ -21,8 +21,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// the new structure is correct, which is a review decision rather than a mechanical one.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class CriticalSurfaceSnapshotTests(PortalBrowserFixture fixture)
+[Collection(PortalJourneyCollection.Name)]
+public sealed class CriticalSurfaceSnapshotTests(PortalJourneyFixture fixture)
 {
     private static bool Updating =>
         Environment.GetEnvironmentVariable("ETLSQL_UPDATE_SNAPSHOTS") == "1";

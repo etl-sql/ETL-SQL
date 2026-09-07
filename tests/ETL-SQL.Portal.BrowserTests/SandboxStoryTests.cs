@@ -23,8 +23,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// break every time the fixtures changed, which would end with it being deleted.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class SandboxStoryTests(PortalBrowserFixture fixture) : IAsyncLifetime
+[Collection(SandboxStoryCollection.Name)]
+public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifetime
 {
     private IHost? host;
     private string baseUrl = "";

@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using ETL_SQL.Portal.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,8 +25,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// report passes a test named for pagination.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class StudioPaginatedJourneyTests(PortalBrowserFixture fixture)
+[Collection(StudioAuthoringCollection.Name)]
+public sealed class StudioPaginatedJourneyTests(StudioAuthoringFixture fixture)
 {
     [Fact]
     public async Task Certifies_TheSsrsLikePaginatedJourney()

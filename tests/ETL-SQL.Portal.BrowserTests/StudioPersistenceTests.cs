@@ -9,8 +9,8 @@ using static Microsoft.Playwright.Assertions;
 namespace ETL_SQL.Portal.BrowserTests;
 
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class StudioPersistenceTests(PortalBrowserFixture fixture)
+[Collection(StudioSurfaceCollection.Name)]
+public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
 {
     private const string InitialScript = """
         SET REPORT TITLE = 'Studio Save';

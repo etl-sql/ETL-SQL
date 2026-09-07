@@ -20,6 +20,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - All 115 findings the lint gate first reported are worked off, so its baseline ships empty. Among them: a dataset's permissions table and both Portal settings forms failed silently, leaving stale or blank fields that read as "nothing is configured"; an invalid parameter `PATTERN` dropped that parameter's validation without saying so; a `const` in two unbraced `switch` cases put every sibling case in its temporal dead zone; and over 350 lines of unreachable browser code — including a `showExportModal` stub that did nothing and was called by nothing — are gone.
 
+- The browser test lane no longer runs every test class against a single Portal. Five themed collections each own a Portal, administrator and sign-in gate, so a host that fails to start fails its own group instead of 178 of 231 tests, and the message names the group rather than claiming the assembly. Verified by making one group's host throw and confirming the other four still ran.
+
 ## [0.19.0] — 2026-09-06
 
 For complete release details, highlights, and migration notes, see [Release Notes v0.19.0](docs/releases/v0.19.0.md).

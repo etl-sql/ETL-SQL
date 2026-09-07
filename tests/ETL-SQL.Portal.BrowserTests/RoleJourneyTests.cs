@@ -17,8 +17,8 @@ namespace ETL_SQL.Portal.BrowserTests;
 /// behaviour of any UI nobody checked.</para>
 /// </summary>
 [Trait("Category", "Browser")]
-[Collection(PortalBrowserCollection.Name)]
-public sealed class RoleJourneyTests(PortalBrowserFixture fixture)
+[Collection(PortalJourneyCollection.Name)]
+public sealed class RoleJourneyTests(PortalJourneyFixture fixture)
 {
     /// <param name="Role">The role assigned at creation.</param>
     /// <param name="SeesAdminNav">Whether the Admin entry point should be offered.</param>
