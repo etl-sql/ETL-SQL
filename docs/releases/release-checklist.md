@@ -25,6 +25,28 @@ Replace `x.y.z` with the target version (current target: **0.19.0**) throughout.
 
 ## Phase 0 — Pre-flight
 
+- [ ] **Account for every unmerged branch before anything else.** A branch that never merged is
+      silent: the release ships without it and nothing reports a gap. v0.19.0 shipped the `EXPECT`
+      clause as a breaking change while `feat/dq-expect-clause` sat unmerged with the editor
+      completions, formatter handling, and syntax highlighting for it — found only during the
+      post-release cleanup. `main` had also diverged by two commits, so the documented
+      `git push origin release/x.y.z:main` fast-forward would have silently discarded them.
+      ```powershell
+      git fetch --prune
+
+      # Branches carrying commits main does not have — decide on each, do not skim
+      git branch -a --no-merged origin/main | Where-Object { $_ -notmatch 'main|dev|release/' }
+
+      # What each one actually holds
+      git log --oneline origin/main..<branch>
+
+      # And the reverse: has main moved ahead of the release branch?
+      git log --oneline release/vx.y.z..origin/main
+      ```
+      For each: **merge it**, or record why it is superseded. "Superseded" means the content is on
+      `main` by another route — verify that, do not assume it from the branch's age. Three of
+      v0.19.0's four stale `test/` branches were genuinely superseded; the fourth held assertions
+      `main` lacked, and only checking showed newer suites covered the same behaviour.
 - [ ] Working tree is clean or only contains intended release changes (`git status`).
 - [ ] You are on the release branch (e.g., `release/vx.y.z`), with all version features merged in.
 - [ ] `ROADMAP.md` items for this release are either done or explicitly deferred.
