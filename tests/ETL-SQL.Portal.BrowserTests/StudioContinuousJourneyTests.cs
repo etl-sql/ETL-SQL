@@ -180,8 +180,20 @@ public sealed class StudioContinuousJourneyTests(PortalBrowserFixture fixture)
         await fields.First.WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
         await fields.Nth(0).ClickAsync();
         await fields.Nth(1).ClickAsync();
+        // Both roles, not just "a MAPPINGS clause exists". Each click patches the script on its own,
+        // so after the first one `MAPPINGS (X = …)` already satisfies a presence-only regex — the
+        // journey then saved a BAR with no Y and the linter rejected it, which is exactly what CI
+        // caught while a faster machine landed both clicks before the check ran. The condition that
+        // matters is the one the engine enforces: a bar chart needs X and Y.
         await page.WaitForFunctionAsync(
-            "() => /MAPPINGS\\s*\\([^)]*\\)/.test(window.__STUDIO__.state.editorInstance.getValue().split('CREATE VISUAL').slice(-1)[0])",
+            """
+            () => {
+                const last = window.__STUDIO__.state.editorInstance.getValue()
+                    .split('CREATE VISUAL').slice(-1)[0];
+                const mappings = last.match(/MAPPINGS\s*\(([^)]*)\)/);
+                return !!mappings && /\bX\s*=/.test(mappings[1]) && /\bY\s*=/.test(mappings[1]);
+            }
+            """,
             null, new PageWaitForFunctionOptions { Timeout = 15_000 });
 
         // ── Filter ───────────────────────────────────────────────────────────
