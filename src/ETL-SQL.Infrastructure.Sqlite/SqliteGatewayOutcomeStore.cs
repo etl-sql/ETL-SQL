@@ -55,11 +55,11 @@ public sealed class SqliteGatewayOutcomeStore : IGatewayOutcomeStore, IDisposabl
     /// <summary>Streams the old JSON array once. The import marker and receipts commit together.</summary>
     public async Task ImportLegacyAsync(string path, CancellationToken cancellationToken = default)
     {
-        using var check = _connection.CreateCommand();
-        check.CommandText = "SELECT COUNT(*) FROM StoreMetadata WHERE Name='legacy-imported'";
-        if (Convert.ToInt64(await check.ExecuteScalarAsync(cancellationToken)) != 0 || !File.Exists(path)) return;
         try
         {
+            using var check = _connection.CreateCommand();
+            check.CommandText = "SELECT COUNT(*) FROM StoreMetadata WHERE Name='legacy-imported'";
+            if (Convert.ToInt64(await check.ExecuteScalarAsync(cancellationToken)) != 0) return;
             await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
             using var transaction = _connection.BeginTransaction();
             await foreach (var item in JsonSerializer.DeserializeAsyncEnumerable<GatewayOperationOutcome>(stream, cancellationToken: cancellationToken))
@@ -75,6 +75,10 @@ public sealed class SqliteGatewayOutcomeStore : IGatewayOutcomeStore, IDisposabl
             marker.CommandText = "INSERT INTO StoreMetadata(Name) VALUES ('legacy-imported')";
             await marker.ExecuteNonQueryAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+        }
+        catch (FileNotFoundException)
+        {
+            // A new Gateway has no legacy ledger. Access errors must never be treated as absence.
         }
         catch (Exception ex) when (ex is SqliteException or IOException or UnauthorizedAccessException or JsonException)
         {
