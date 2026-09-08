@@ -295,6 +295,46 @@ public interface IPortalAdminConnection : IDataSource
 public class ConnectorRegistry : IConnectorRegistry
 {
     public static IConnectorRegistry? Instance { get; internal set; }
+
+    /// <summary>
+    /// Installs <paramref name="registry"/> as <see cref="Instance"/> for the life of the returned
+    /// scope, then restores whatever was there before.
+    ///
+    /// <para><see cref="Instance"/> is process-wide mutable state, and a test that assigns it
+    /// without putting the previous value back changes what every later test in the run sees — the
+    /// documented cause of order-dependent connector and dialect failures. Several tests already do
+    /// this by hand with try/finally; the ones that forget are indistinguishable from the ones that
+    /// do not need to, which is what makes the failure hard to attribute. This exists so the correct
+    /// thing is the short thing:</para>
+
+    /// <code>using var _ = ConnectorRegistry.UseScoped(new ConnectorRegistry(myConnectors));</code>
+
+    /// <para>It restores rather than clearing, because clearing would be a different bug: the
+    /// registry the run started with is the one the untouched tests expect. It is not thread-safe,
+    /// for the same reason the property it guards is not — two scopes open at once on different
+    /// threads is the problem, not the solution.</para>
+    /// </summary>
+    public static IDisposable UseScoped(IConnectorRegistry registry)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        var previous = Instance;
+        Instance = registry;
+        return new RegistryScope(previous);
+    }
+
+    private sealed class RegistryScope(IConnectorRegistry? previous) : IDisposable
+    {
+        private bool disposed;
+
+        public void Dispose()
+        {
+            // Idempotent: a `using` inside a test that also disposes explicitly must not put back a
+            // registry a later scope has since replaced.
+            if (disposed) return;
+            disposed = true;
+            Instance = previous;
+        }
+    }
     private readonly Dictionary<string, IConnector> _connectors = new(StringComparer.OrdinalIgnoreCase);
 
     public ConnectorRegistry() { }

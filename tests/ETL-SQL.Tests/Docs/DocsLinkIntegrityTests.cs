@@ -39,6 +39,36 @@ public sealed class DocsLinkIntegrityTests
         return t;
     }
 
+    /// <summary>
+    /// Blanks the contents of fenced code blocks, keeping the line count.
+    ///
+    /// <para>A link inside a fence is quoted text, not a link. The case that found this is a plan
+    /// carrying a block someone is meant to paste into a file elsewhere in the tree, where the
+    /// relative path it contains is correct — resolving it against the plan's own directory is
+    /// meaningless, and the only ways to quiet the failure were to break the text for its real
+    /// destination or to delete the check. The same reasoning covers sample markup naming files
+    /// deliberately not in the repository.</para>
+    /// </summary>
+    private static string OutsideCodeFences(string markdown)
+    {
+        var lines = markdown.Split('\n');
+        var inFence = false;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (lines[i].TrimStart().StartsWith("```", StringComparison.Ordinal))
+            {
+                inFence = !inFence;
+                lines[i] = string.Empty;
+            }
+            else if (inFence)
+            {
+                lines[i] = string.Empty;
+            }
+        }
+
+        return string.Join('\n', lines);
+    }
+
     [Fact]
     public void AllRelativeMarkdownLinks_ResolveOnDisk()
     {
@@ -49,7 +79,7 @@ public sealed class DocsLinkIntegrityTests
         foreach (var file in DocFiles())
         {
             var dir = Path.GetDirectoryName(file)!;
-            var text = File.ReadAllText(file);
+            var text = OutsideCodeFences(File.ReadAllText(file));
 
             foreach (Match m in LinkPattern.Matches(text))
             {
@@ -81,7 +111,7 @@ public sealed class DocsLinkIntegrityTests
 
         foreach (var file in DocFiles())
         {
-            var text = File.ReadAllText(file);
+            var text = OutsideCodeFences(File.ReadAllText(file));
             foreach (Match m in LinkPattern.Matches(text))
             {
                 var target = m.Groups[1].Value;
@@ -104,7 +134,7 @@ public sealed class DocsLinkIntegrityTests
 
         foreach (var file in DocFiles())
         {
-            var text = File.ReadAllText(file);
+            var text = OutsideCodeFences(File.ReadAllText(file));
             foreach (Match m in LinkPattern.Matches(text))
             {
                 if (m.Groups[1].Value.StartsWith("file:", StringComparison.OrdinalIgnoreCase))

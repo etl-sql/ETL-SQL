@@ -20,7 +20,7 @@ public class DialectKeywordRule : ILintRule
     public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
     {
         var results = new List<LintResult>();
-        var registry = ConnectorRegistry.Instance;
+        var registry = context.Connectors;
         if (registry == null)
             return Task.FromResult<IEnumerable<LintResult>>(results);
 

@@ -113,22 +113,14 @@ namespace ETL_SQL.Tests.Docs
             // validation must resolve a complete registry from DI, so a polluted static must not make
             // a real connector look "unknown". This deterministically reproduces the pollution that
             // only surfaced under coverage test ordering, so the fast lane catches any regression.
-            var original = ConnectorRegistry.Instance;
-            try
-            {
-                ConnectorRegistry.Instance = new ConnectorRegistry(new List<IConnector> { new MockDbConnector() });
+            using var _ = ConnectorRegistry.UseScoped(new ConnectorRegistry(new List<IConnector> { new MockDbConnector() }));
 
-                const string sql = "CREATE CONNECTION db AS POSTGRES(HOST='h', DATABASE='d');";
-                var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+            const string sql = "CREATE CONNECTION db AS POSTGRES(HOST='h', DATABASE='d');";
+            var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
 
-                var failures = FindUnsupportedConnectionOptions("polluted-registry regression", 1, script).ToList();
+            var failures = FindUnsupportedConnectionOptions("polluted-registry regression", 1, script).ToList();
 
-                Assert.DoesNotContain(failures, f => f.Contains("unknown connector", StringComparison.OrdinalIgnoreCase));
-            }
-            finally
-            {
-                ConnectorRegistry.Instance = original;
-            }
+            Assert.DoesNotContain(failures, f => f.Contains("unknown connector", StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>
@@ -622,6 +614,36 @@ namespace ETL_SQL.Tests.Docs
         private static string Truncate(string s, int maxLen) =>
             s.Length <= maxLen ? s : s[..maxLen] + "…";
 
+        /// <summary>
+        /// Blanks the contents of fenced code blocks, keeping the line count so reported positions
+        /// still line up.
+        ///
+        /// <para>A link inside a fence is quoted text, not a link: it is sample markup, or — the case
+        /// that found this — a block a plan tells someone to paste into a file somewhere else in the
+        /// tree, where its relative path is correct and resolving it against the plan's own directory
+        /// is meaningless. The checker reported one such block as broken, and the only ways to quiet
+        /// it were to break the text for its real destination or to delete the check.</para>
+        /// </summary>
+        private static string StripFencedCodeBlocks(string markdown)
+        {
+            var lines = markdown.Split('\n');
+            var inFence = false;
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (lines[i].TrimStart().StartsWith("```", StringComparison.Ordinal))
+                {
+                    inFence = !inFence;
+                    lines[i] = string.Empty;
+                }
+                else if (inFence)
+                {
+                    lines[i] = string.Empty;
+                }
+            }
+
+            return string.Join('\n', lines);
+        }
+
         [Fact]
         public void MarkdownLinks_AllResolveCleanly()
         {
@@ -652,7 +674,7 @@ namespace ETL_SQL.Tests.Docs
             foreach (var file in mdFiles)
             {
                 var relativePath = Path.GetRelativePath(RepoRoot, file);
-                var content = File.ReadAllText(file);
+                var content = StripFencedCodeBlocks(File.ReadAllText(file));
                 var matches = linkRegex.Matches(content);
                 var fileDir = Path.GetDirectoryName(file)!;
 

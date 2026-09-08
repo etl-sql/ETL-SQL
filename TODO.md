@@ -55,6 +55,30 @@ typing changes, and product behavior changes in separate reviewable batches.
 
 ---
 
+## v0.20.0 Release Evidence Gates
+
+Target release: **v0.20.0**
+
+Reinstated after the v0.19.0 section was removed when this file opened for v0.20.0. The gates are
+not v0.19.0-specific and dropping them left `SecurityBoundaryDocTests` red against the very
+document it guards, which is how a release could have been cut with none of this evidence tracked.
+
+Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.md) and
+[`Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/enterprise-release-evidence-checklist.md).
+
+- [ ] Run the full local pre-release gate required by the release checklist, including the selected
+  SLT, Docker integration, scale, packaging, and platform lanes.
+- [ ] Pass the Enterprise Release Evidence Checklist, `test-lane.ps1`, `Test-PreRelease.ps1`,
+  `Test-EnterpriseHardeningCertification.ps1`, `admin restore --validate`, `ha-soak validate`, and
+  `SecurityBoundaryDocTests` as applicable to the shipped v0.20.0 claims.
+- [ ] Build the deployment-profile claim matrix from evidence and do not promote unfinished Shared
+  SaaS or hosted-production outcomes into release claims.
+- [ ] Verify third-party notices/inventory, secret scanning, SBOM, checksums, installers, release
+  notes, upgrade guidance, and changelog entries for the final shipped scope.
+- [ ] Reconcile `TODO.md` and `ROADMAP.md` immediately before release: remove verified completed
+  work, retain unfinished increments with accurate status, and ensure release notes describe only
+  evidence-backed outcomes.
+
 ## 1. Lint the browser sources
 
 - [x] Add ESLint over the canonical shared assets (`src/ETL-SQL.ReportRuntime/Resources/Shared/`) and
@@ -219,8 +243,32 @@ the browser sources. The v0.19.0 release run made the shape concrete — the evi
   Both edges lay out diagonally today (9.55 × 22.95), so this was latent rather than failing. They
   now wait for `Attached` and assert the `d` geometry, which is what actually says the edge was
   drawn.
-- [ ] Address the mutable global `ConnectorRegistry.Instance`, which makes connector and dialect
-  tests order-dependent.
+- [x] **Gave callers a supported way off the mutable global `ConnectorRegistry.Instance`.** The
+  global stays — removing it would mean wiring a registry through every construction path in App,
+  TUI and Portal — but nothing is now forced to reach for it:
+  - `ILintContext.Connectors`, a defaulted interface member (the interface already defaults
+    `Logger`, so no implementer breaks) that falls through to the global when unset.
+    `DialectKeywordRule` and `UnsupportedConnectionOptionRule` read it instead of the static.
+  - `ConnectorRegistry.UseScoped(registry)` returns an `IDisposable` that restores the previous
+    registry, replacing the hand-written try/finally that some tests do and others forget. It is
+    idempotent, so a second dispose cannot put an old registry back over a newer scope's.
+  - `DialectKeywordRuleTests` was itself an instance of the problem: it built a registry through the
+    `ConnectorRegistry(IEnumerable)` constructor — which assigns the global as a side effect — never
+    passed it anywhere, and linted with a bare context. It now registers onto a private instance and
+    hands it to the context. `SuggestTests` and `DocSanityTests` use the scope.
+  - Mutation-tested: pointing the rule back at the static turns the new context test red.
+- [x] **Two pre-existing reds in the same lane, found while verifying the above.** Both were failing
+  before any of this work and neither was caused by it.
+  - `DocSanityTests.MarkdownLinks_AllResolveCleanly` and
+    `DocsLinkIntegrityTests.AllRelativeMarkdownLinks_ResolveOnDisk` both reported the same broken
+    link, and it was not broken: it sits inside a fenced code block in the §2 plan, as text to paste
+    into `TODO.md` at the repo root, where the path is correct. Both checkers now blank fenced
+    blocks before scanning. Verified a genuinely broken link outside a fence is still caught.
+  - `SecurityBoundaryDocTests.Todo_TracksReleaseSuiteEvidenceForTheActiveRelease` was red because
+    the v0.19.0 release-evidence section was removed when this file opened for v0.20.0 and never
+    replaced. The gates are not version-specific; the section above is reinstated for v0.20.0, which
+    is the point of the guard — without it a release could be cut with none of that evidence
+    tracked.
 - [x] **All eight red `scripts/test-*.mjs` checks resolved.** Measured 2026-09-08: eight red, not
   nine, and none of them reads `report-runtime.js`, so none was blocked on §2. Seven were repaired
   and one was reclassified. Three had drifted behind moved code, three were asserting the product

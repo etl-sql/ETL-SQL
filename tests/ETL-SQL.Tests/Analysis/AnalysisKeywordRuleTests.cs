@@ -23,20 +23,76 @@ namespace ETL_SQL.Tests.Analysis.Statements
             return new Parser(tokens, sql).Parse();
         }
 
+        /// <summary>
+        /// Builds the two connectors this rule is about, without touching
+        /// <see cref="ConnectorRegistry.Instance"/>.
+        ///
+        /// <para>The <c>ConnectorRegistry(IEnumerable&lt;IConnector&gt;)</c> constructor assigns the
+        /// process-wide instance as a side effect. This helper used to call it, never pass the
+        /// result anywhere, and lint with a bare context — so the rule was reached through the global
+        /// the constructor had just overwritten, and every later test in the run inherited a registry
+        /// holding two connectors. Registering onto a private instance and handing it to the context
+        /// makes the dependency the one the code actually reads.</para>
+        /// </summary>
+        private static IConnectorRegistry DialectConnectors()
+        {
+            var registry = new ConnectorRegistry();
+            registry.Register(new ETL_SQL.Connectors.SqlServer.SqlServerConnector());
+            registry.Register(new ETL_SQL.Connectors.Postgres.PostgresConnector());
+            return registry;
+        }
+
         private static async Task<System.Collections.Generic.List<LintResult>> Lint(string sql)
         {
-            // Ensure connectors are registered for the linter
-            var connectors = new System.Collections.Generic.List<IConnector>
-            {
-                new ETL_SQL.Connectors.SqlServer.SqlServerConnector(),
-                new ETL_SQL.Connectors.Postgres.PostgresConnector()
-            };
-            var registry = new ConnectorRegistry(connectors);
-
             var script = Parse(sql);
             var linter = new Linter();
             linter.AddRule(new DialectKeywordRule());
-            return (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+            var context = new DefaultLintContext { Connectors = DialectConnectors() };
+            return (await linter.AnalyzeAsync(script, context)).ToList();
+        }
+
+        [Fact]
+        public async Task DialectKeyword_Reads_The_Context_Registry_Not_The_Global()
+        {
+            // The point of ILintContext.Connectors: a caller's own registry must win over whatever
+            // the process-wide one happens to hold. An empty global would make the rule skip
+            // entirely if it were still reading Instance, so a warning here can only come from the
+            // registry the context supplied.
+            using var _ = ConnectorRegistry.UseScoped(new ConnectorRegistry());
+
+            var script = Parse(@"
+CREATE CONNECTION pg_conn AS POSTGRES('Server=localhost;');
+EXECUTE pg_conn BEGIN
+    SELECT TOP 10 id, name FROM users;
+END;");
+            var linter = new Linter();
+            linter.AddRule(new DialectKeywordRule());
+
+            var withContextRegistry = (await linter.AnalyzeAsync(script, new DefaultLintContext { Connectors = DialectConnectors() })).ToList();
+            var withEmptyGlobal = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.NotEmpty(withContextRegistry);
+            Assert.Empty(withEmptyGlobal);
+        }
+
+        [Fact]
+        public void UseScoped_Restores_The_Previous_Registry_And_Is_Idempotent()
+        {
+            var original = ConnectorRegistry.Instance;
+            var scoped = new ConnectorRegistry();
+
+            var scope = ConnectorRegistry.UseScoped(scoped);
+            Assert.Same(scoped, ConnectorRegistry.Instance);
+
+            scope.Dispose();
+            Assert.Same(original, ConnectorRegistry.Instance);
+
+            // A second dispose must not put `original` back over a registry some later scope has
+            // since installed — that would be the restore itself becoming the pollution.
+            var later = new ConnectorRegistry();
+            using var laterScope = ConnectorRegistry.UseScoped(later);
+            scope.Dispose();
+            Assert.Same(later, ConnectorRegistry.Instance);
         }
 
 

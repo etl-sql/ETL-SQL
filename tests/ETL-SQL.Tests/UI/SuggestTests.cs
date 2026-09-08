@@ -18,30 +18,23 @@ namespace ETL_SQL.Tests.UI
 {
     public class SuggestTests : IDisposable
     {
-        private readonly IConnectorRegistry? _originalRegistry;
+        private readonly IDisposable _registryScope;
 
         public SuggestTests()
         {
-            // Save the shared global registry first. These tests install a reduced mock registry;
-            // leaking it into the process-wide ConnectorRegistry.Instance pollutes order-dependent
-            // consumers (e.g. DocSanityTests, which then reports every real connector as "unknown"
-            // when it happens to run after this class — a failure surfaced under coverage ordering).
-            _originalRegistry = ConnectorRegistry.Instance;
-
-            // Initialize ConnectorRegistry with mock connectors for suggestion tests
-            var registry = new ConnectorRegistry(new List<IConnector> {
+            // These tests need a reduced registry, and ConnectorRegistry.Instance is process-wide:
+            // leaking a reduced one pollutes order-dependent consumers — DocSanityTests then reports
+            // every real connector as "unknown" whenever it happens to run after this class, a
+            // failure that only surfaced under coverage ordering. UseScoped puts the previous
+            // registry back on dispose, so the restore cannot be forgotten or half-written.
+            _registryScope = ConnectorRegistry.UseScoped(new ConnectorRegistry(new List<IConnector>
+            {
                 new MockDbConnector(),
                 new FlatFileConnector()
-            });
-            // We ensure Instance is set (although the constructor above already does it)
-            ConnectorRegistry.Instance = registry;
+            }));
         }
 
-        public void Dispose()
-        {
-            // Restore the global registry so other test classes see the full connector set.
-            ConnectorRegistry.Instance = _originalRegistry;
-        }
+        public void Dispose() => _registryScope.Dispose();
 
         [Fact]
         public void TestAliasParsing()
