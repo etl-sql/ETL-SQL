@@ -232,6 +232,45 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
+    public async Task SessionRegistry_KeepsTheRecordOfALiveSessionThatMissedItsProbe()
+    {
+        // The probe has a two-second timeout, and a cold host's first request can exceed it on a
+        // loaded machine. That used to delete the record: the host kept running and kept its port,
+        // but nothing could discover it again, and nothing said why. A timeout is "no answer yet",
+        // not "gone" — this process is this test's own, so it is provably alive.
+        using var workspace = new TempWorkspace();
+        using var registryStorage = new TempWorkspace();
+        using var httpClient = new HttpClient(new AlwaysTimesOutHandler());
+        var registry = new StudioSessionRegistry(registryStorage.Root, httpClient);
+
+        var live = new StudioSessionRecord(
+            Guid.NewGuid().ToString("D"), workspace.Root, Environment.ProcessId, 41010, DateTimeOffset.UtcNow,
+            new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "slow-to-answer"));
+        var dead = live with
+        {
+            InstanceId = Guid.NewGuid().ToString("D"),
+            ProcessId = int.MaxValue,
+            Port = 41011,
+        };
+        await registry.WriteAsync(live);
+        await registry.WriteAsync(dead);
+
+        Assert.Equal(StudioSessionHealth.Unreachable, await registry.CheckHealthAsync(live));
+        Assert.Equal(StudioSessionHealth.Gone, await registry.CheckHealthAsync(dead));
+
+        var sessions = await registry.ListHealthyAsync();
+
+        // Unreachable is not offered — a session that cannot answer cannot be used.
+        Assert.Empty(sessions);
+
+        // ...but only the dead one is reaped, and the live one is still there to be found once it
+        // starts answering.
+        var remaining = Directory.EnumerateFiles(registryStorage.Root, "*.json").ToList();
+        Assert.Single(remaining);
+        Assert.Contains(Guid.Parse(live.InstanceId).ToString("N"), remaining[0]);
+    }
+
+    [Fact]
     public async Task SessionRegistry_KeepsDifferentProjectsAndSameProjectInstancesSeparate()
     {
         using var firstWorkspace = new TempWorkspace();
@@ -1321,5 +1360,12 @@ public sealed class WorkstationEditorTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+    }
+
+    /// <summary>Answers every probe the way HttpClient surfaces its own timeout.</summary>
+    private sealed class AlwaysTimesOutHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromException<HttpResponseMessage>(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout."));
     }
 }

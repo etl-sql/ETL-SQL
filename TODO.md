@@ -310,9 +310,16 @@ the browser sources. The v0.19.0 release run made the shape concrete — the evi
 - [ ] **Run the checks in a gate** — none runs in pre-push or CI today, which is why they went red
   unnoticed. **Add it before plan task 16 or after task 19, not between them**: task 19 rewrites the
   six hosts' `<script>` tags and will trip whichever checks assert on host HTML.
-- [ ] Decide whether `StudioSessionRegistry.IsHealthyAsync`'s two-second probe should reap a live
-  session's record on one slow response from a busy machine. Observed during v0.19.0 and
-  deliberately not changed mid-release.
+- [x] **Decided: it should not, and no longer does.** `IsHealthyAsync` returned one `bool` for two
+  different facts — "the process is gone" and "the process is running but did not answer in two
+  seconds" — and `ListHealthyAsync` deleted the record either way. A cold host's first request pays
+  JIT and routing warm-up that a loaded machine can push past two seconds, so one slow probe
+  destroyed a live session's record: the host kept running, kept its port, and became
+  undiscoverable, with nothing on screen to say why. `CheckHealthAsync` now returns
+  `Healthy | Unreachable | Gone`; only `Gone` is reaped, `Unreachable` is withheld from callers but
+  left on disk, and a caller's own cancellation is rethrown rather than being read as a failed
+  probe. `IsHealthyAsync` stays as a wrapper. Covered by
+  `SessionRegistry_KeepsTheRecordOfALiveSessionThatMissedItsProbe` and mutation-tested.
 
 ## 4. Close the Studio Alpha gaps
 

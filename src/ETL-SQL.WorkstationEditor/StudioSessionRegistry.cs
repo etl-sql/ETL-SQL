@@ -22,6 +22,27 @@ public sealed record StudioSessionRecord(
 }
 
 /// <summary>
+/// What a health probe found. The two unhealthy answers are separate because they call for
+/// opposite actions: one is a fact about a session that no longer exists, the other is the absence
+/// of an answer from one that may.
+/// </summary>
+public enum StudioSessionHealth
+{
+    /// <summary>The host answered its lifecycle probe.</summary>
+    Healthy,
+
+    /// <summary>
+    /// The process is running but did not answer — a timeout, a refused connection, or a non-success
+    /// status. Not offered to callers, and never deleted: the session may simply be starting, or
+    /// busy.
+    /// </summary>
+    Unreachable,
+
+    /// <summary>The process is gone. Nothing is recoverable, so the record can be removed.</summary>
+    Gone,
+}
+
+/// <summary>
 /// Persists and discovers local Studio hosts. Records are per instance, so separate projects and
 /// explicit same-project instances never share process, port, execution, or filesystem state.
 /// </summary>
@@ -66,13 +87,21 @@ public sealed class StudioSessionRegistry(string? storageRoot = null, HttpClient
                 SafeDelete(path);
             }
 
-            if (record is not null && await IsHealthyAsync(record, cancellationToken))
+            if (record is null) continue;
+
+            switch (await CheckHealthAsync(record, cancellationToken))
             {
-                healthy.Add(record);
-            }
-            else if (record is not null)
-            {
-                SafeDelete(path);
+                case StudioSessionHealth.Healthy:
+                    healthy.Add(record);
+                    break;
+                case StudioSessionHealth.Gone:
+                    SafeDelete(path);
+                    break;
+                default:
+                    // Running but silent: not offered, and deliberately not deleted. This used to be
+                    // a delete, which turned one slow probe on a busy machine into a live host that
+                    // no longer existed as far as the product was concerned.
+                    break;
             }
         }
         return healthy.OrderBy(record => record.StartedAtUtc).ToList();
@@ -124,19 +153,53 @@ public sealed class StudioSessionRegistry(string? storageRoot = null, HttpClient
 
     public void Remove(string instanceId) => SafeDelete(RecordPath(instanceId));
 
-    public async Task<bool> IsHealthyAsync(StudioSessionRecord record, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Whether the session answered its lifecycle probe. Equivalent to
+    /// <see cref="CheckHealthAsync"/> returning <see cref="StudioSessionHealth.Healthy"/>.
+    ///
+    /// <para>Callers deciding whether to <b>remove</b> a record must use
+    /// <see cref="CheckHealthAsync"/> instead: this collapses "the process is gone" and "the process
+    /// is running but did not answer in two seconds" into the same <c>false</c>, and those call for
+    /// opposite actions.</para>
+    /// </summary>
+    public async Task<bool> IsHealthyAsync(StudioSessionRecord record, CancellationToken cancellationToken = default) =>
+        await CheckHealthAsync(record, cancellationToken) == StudioSessionHealth.Healthy;
+
+    /// <summary>
+    /// Probes a session and reports which of the three states it is in.
+    ///
+    /// <para>The distinction that matters is between <see cref="StudioSessionHealth.Gone"/> and
+    /// <see cref="StudioSessionHealth.Unreachable"/>. The probe has a two-second timeout, and a
+    /// cold host's first request pays JIT and routing warm-up that a loaded machine can push past
+    /// it. Treating that timeout as death meant one slow response deleted a live session's record:
+    /// the host kept running, kept holding its port, and became undiscoverable, with nothing on
+    /// screen to say why. A timeout is "no answer yet", not "gone", and only the second is a fact
+    /// solid enough to destroy state on.</para>
+    ///
+    /// <para>A record left <see cref="StudioSessionHealth.Unreachable"/> is not offered to callers
+    /// either; it simply survives, and the next sweep after its process exits removes it.</para>
+    /// </summary>
+    public async Task<StudioSessionHealth> CheckHealthAsync(
+        StudioSessionRecord record,
+        CancellationToken cancellationToken = default)
     {
-        if (!IsProcessAlive(record.ProcessId)) return false;
+        if (!IsProcessAlive(record.ProcessId)) return StudioSessionHealth.Gone;
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, record.BaseUrl + "/api/studio/lifecycle");
             request.Headers.TryAddWithoutValidation(record.Authentication.HeaderName, record.Authentication.Token);
             using var response = await _httpClient.SendAsync(request, cancellationToken);
-            return response.IsSuccessStatusCode;
+            return response.IsSuccessStatusCode ? StudioSessionHealth.Healthy : StudioSessionHealth.Unreachable;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // The caller gave up, which says nothing about the session. Without this the probe's
+            // own timeout and the caller's cancellation are indistinguishable.
+            throw;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            return false;
+            return StudioSessionHealth.Unreachable;
         }
     }
 
