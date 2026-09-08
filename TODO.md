@@ -210,8 +210,15 @@ the browser sources. The v0.19.0 release run made the shape concrete — the evi
   in series, double-build 3–4 of 6 failing in parallel. `CreateHost` now waits on each host's own
   `IHostApplicationLifetime.ApplicationStarted`; `PortalBrowserFactoryConcurrencyTests` covers it and
   the full lane runs 232/232.
-- [ ] Fix the DAG assertions that wait on SVG **visibility**: an edge that lays out axis-aligned has
-  a zero-area box and times out.
+- [x] **Fixed the DAG assertions that waited on SVG visibility.** The mechanism, measured rather
+  than assumed: Playwright decides visibility from `getClientRects()`, which for a `path` reports
+  the geometry box and ignores the stroke, so an axis-aligned edge measures exactly zero on one
+  axis. Forcing one of this graph's conditional edges straight gives client rects `[0, 41.06]` and
+  `IsVisibleAsync() == false`, and the default wait times out — while `BoundingBoxAsync` still says
+  0.39 wide, because that one does count the stroke, which is why the box never looked zero-area.
+  Both edges lay out diagonally today (9.55 × 22.95), so this was latent rather than failing. They
+  now wait for `Attached` and assert the `d` geometry, which is what actually says the edge was
+  drawn.
 - [ ] Address the mutable global `ConnectorRegistry.Instance`, which makes connector and dialect
   tests order-dependent.
 - [x] **All eight red `scripts/test-*.mjs` checks resolved.** Measured 2026-09-08: eight red, not

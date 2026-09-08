@@ -984,8 +984,8 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         var trueEdge = page.Locator("[data-dag-source='quality_branch'][data-dag-target='#ready_sales'][data-dag-label='TRUE']");
         var elseEdge = page.Locator("[data-dag-source='quality_branch'][data-dag-target='#quarantine_sales'][data-dag-label='ELSE']");
-        await trueEdge.WaitForAsync();
-        await elseEdge.WaitForAsync();
+        await AssertEdgeDrawnAsync(trueEdge, "TRUE");
+        await AssertEdgeDrawnAsync(elseEdge, "ELSE");
 
         await page.Locator("[data-dag-node='quality_branch']").ClickAsync();
         var sourceAfterNavigation = await page.EvaluateAsync<string>(
@@ -1008,6 +1008,40 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);
     }
+
+    /// <summary>
+    /// Waits for a DAG edge and asserts it was drawn, <b>without</b> waiting for it to be visible.
+    ///
+    /// <para>Edges are SVG <c>path</c> elements, and <c>Locator.WaitForAsync()</c> defaults to
+    /// waiting for visibility. Playwright decides visibility from <c>getClientRects()</c>, which
+    /// for a path reports the <b>geometry</b> box and ignores the stroke — so an edge that lays out
+    /// axis-aligned, a straight vertical or horizontal run between two stages, measures exactly
+    /// zero on one axis and is never visible, however plainly a reader can see the line.</para>
+    ///
+    /// <para>Measured on this graph: the two conditional edges lay out diagonally and report
+    /// 9.55 × 22.95, so the old wait passed. Forcing one of them straight gives client rects of
+    /// <c>[0, 41.06]</c> — while <c>BoundingBoxAsync</c> still says 0.39 wide, because that one
+    /// does count the stroke — <c>IsVisibleAsync</c> answers false, and the visibility wait times
+    /// out. Nothing about the product differs between those two runs, which is what made this read
+    /// as a flake rather than as a wait watching the wrong thing.</para>
+    ///
+    /// <para>Attached is the honest wait, and <c>d</c> is the mechanism worth asserting: an edge in
+    /// the document with no path data is an edge nobody can see either.</para>
+    /// </summary>
+    private static async Task AssertEdgeDrawnAsync(ILocator edge, string label)
+    {
+        await edge.WaitForAsync(new LocatorWaitForOptions
+        {
+            State = WaitForSelectorState.Attached,
+            Timeout = 30_000,
+        });
+
+        var geometry = await edge.GetAttributeAsync("d");
+        Assert.False(
+            string.IsNullOrWhiteSpace(geometry),
+            $"The {label} edge is in the document but carries no path data, so nothing was drawn.");
+    }
+
 
     [Fact]
     public async Task Studio_PipelineTasks_AreEditableOnTheCanvasAndLeaveTheRestOfTheScriptAlone()
