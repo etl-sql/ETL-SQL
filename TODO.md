@@ -198,19 +198,33 @@ the browser sources. The v0.19.0 release run made the shape concrete — the evi
   making one group's host throw and confirming the other four still ran. **The cascade itself is not
   fixed** — it still reproduces intermittently on a developer machine. What changed is that it is
   now contained and named, and that naming produced a specific lead: see the next item.
-- [ ] **Fix the double `Build()` in `PortalBrowserFactory.CreateHost`, the likely cause of the
-  cascade.** A contained occurrence reported `TestServer.get_Application()` throwing "The server has
-  not been started" while `CreateHost`'s own step-naming wrapper threw nothing — so both hosts built
-  and started and the `TestServer` still had no `Application`. `CreateHost` builds one `IHostBuilder`
-  twice, switching it to Kestrel in between, and starts the Kestrel host first; if both hosts resolve
-  the same `IServer` singleton that is exactly the observed failure. Evidence in
-  [flaky-test-stability.md](docs/releases/flaky-test-stability.md).
+- [x] **Fixed the double `Build()` in `PortalBrowserFactory.CreateHost` — it was the cause of the
+  cascade, by a different mechanism than this item guessed.** Not a shared `IServer` singleton: the
+  two hosts have separate providers and separate servers. `DeferredHostBuilder` holds **one**
+  `TaskCompletionSource` per builder and gives the same instance to every host it builds, and
+  `DeferredHost.StartAsync` does nothing but await it. Building twice therefore lets the Kestrel
+  host's start complete the shared signal, so `testHost.Start()` returns without waiting for the
+  TestServer host at all — leaving `TestServer.Application` null whenever the entry-point thread
+  loses the race, which is why `CreateHost` returned cleanly and the failure surfaced later from
+  `CreateClient`. Isolating measurements: single-build 6/6 clean in parallel, double-build 4/4 clean
+  in series, double-build 3–4 of 6 failing in parallel. `CreateHost` now waits on each host's own
+  `IHostApplicationLifetime.ApplicationStarted`; `PortalBrowserFactoryConcurrencyTests` covers it and
+  the full lane runs 232/232.
 - [ ] Fix the DAG assertions that wait on SVG **visibility**: an edge that lays out axis-aligned has
   a zero-area box and times out.
 - [ ] Address the mutable global `ConnectorRegistry.Instance`, which makes connector and dialect
   tests order-dependent.
-- [ ] Get the nine red `scripts/test-*.mjs` checks green and **run them in a gate** — none runs in
-  pre-push or CI today, which is why they went red unnoticed.
+- [ ] Get the red `scripts/test-*.mjs` checks green and **run them in a gate** — none runs in
+  pre-push or CI today, which is why they went red unnoticed. Measured 2026-09-08: **eight** red, not
+  nine — `test-data-quality-job-tracking`, `test-designer-polish`, `test-feedback-system`,
+  `test-governance-production-boundary`, `test-orchestrator-checkpoint-resume`,
+  `test-orchestrator-run-overrides`, `test-portal-studio`, `test-service-capacity`. None of them
+  reads `report-runtime.js`, so none is blocked on §2. `test-designer-polish` is now green: its nine
+  formatting-picker assertions were greping `designer.js` for markup that moved to
+  `visual-format-inspector.js`, and each assertion now names the module that owns it rather than
+  greping a concatenation, which would pass while asserting nothing about where anything lives.
+  **Add the gate before task 16 or after task 19, not between them** — task 19 rewrites the six
+  hosts' `<script>` tags and will trip whichever checks assert on host HTML.
 - [ ] Decide whether `StudioSessionRegistry.IsHealthyAsync`'s two-second probe should reap a live
   session's record on one slow response from a busy machine. Observed during v0.19.0 and
   deliberately not changed mid-release.
