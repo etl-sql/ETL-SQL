@@ -20,8 +20,13 @@ export function createGovernancePortal(opts = {}) {
     governanceApi,
     dataQualityApi,
     prepare = () => {},
-    notify = (msg, o) => window.ETLSQLFeedback?.notify(msg, o),
-    confirm = (msg, o) => window.ETLSQLFeedback?.confirm(msg, o),
+    // Named *Fn, not notify/confirm: a local binding called `confirm` reads as the native dialog
+    // at every call site below and is indistinguishable from one to any check scanning for them.
+    // No `?.` either — if the shared feedback module failed to load, a governance delete that
+    // silently resolves to undefined is a cancelled action nobody was told about, and throwing
+    // says so.
+    notifyFn = (msg, o) => window.ETLSQLFeedback.notify(msg, o),
+    confirmFn = (msg, o) => window.ETLSQLFeedback.confirm(msg, o),
   } = opts;
 
   const state = {
@@ -63,14 +68,14 @@ export function createGovernancePortal(opts = {}) {
   async function mutate(action, { success, failure, auditAction }) {
     try {
       const result = await action();
-      notify(success, { title: 'Governance', tone: 'success', auditAction });
+      notifyFn(success, { title: 'Governance', tone: 'success', auditAction });
       // Re-read and redraw. Reloading without redrawing leaves the steward looking at the state
       // before their change — which reads as the change having failed.
       await load();
       await render();
       return result;
     } catch (err) {
-      notify(
+      notifyFn(
         isForbidden(err)
           ? 'Your role does not permit this governance change.'
           : `${failure} ${err?.message || ''}`.trim(),
@@ -1113,7 +1118,7 @@ export function createGovernancePortal(opts = {}) {
     on('#btnConfirmDecision', 'click', async () => {
       const reason = host.querySelector('#decisionReason').value.trim();
       if (!reason) {
-        notify('Enter a justification. The decision has to be reviewable later.',
+        notifyFn('Enter a justification. The decision has to be reviewable later.',
           { title: 'Justification required', tone: 'warning' });
         return;
       }
@@ -1164,7 +1169,7 @@ export function createGovernancePortal(opts = {}) {
         disabled: false,
       };
       if (!payload.term || !payload.dataType || !payload.aliases || !payload.description) {
-        notify('Term, type, aliases, and definition are required.',
+        notifyFn('Term, type, aliases, and definition are required.',
           { title: 'Complete required fields', tone: 'warning' });
         return;
       }
@@ -1177,7 +1182,7 @@ export function createGovernancePortal(opts = {}) {
     });
     each('[data-delete-term]', 'click', async e => {
       const term = e.currentTarget.getAttribute('data-delete-term');
-      const ok = await confirm(`Delete glossary term "${term}"?`, {
+      const ok = await confirmFn(`Delete glossary term "${term}"?`, {
         title: 'Delete glossary term',
         impact: 'Metadata rules that reference this term may stop matching.',
         confirmLabel: 'Delete term',
@@ -1256,7 +1261,7 @@ export function createGovernancePortal(opts = {}) {
       const label = host.querySelector('#catLabel').value.trim();
       const value = host.querySelector('#catValue').value.trim();
       if (!label || !value) {
-        notify('Enter both a category label and value.',
+        notifyFn('Enter both a category label and value.',
           { title: 'Complete required fields', tone: 'warning' });
         return;
       }
@@ -1278,7 +1283,7 @@ export function createGovernancePortal(opts = {}) {
       const value = e.currentTarget.getAttribute('data-disable-cat');
       // Disable, never delete: historical suppressions cite this value, and removing it would
       // leave them pointing at a reason nobody can look up.
-      const ok = await confirm(`Disable bypass category "${value}"?`, {
+      const ok = await confirmFn(`Disable bypass category "${value}"?`, {
         title: 'Disable category',
         impact: 'Stewards can no longer choose it. Existing decisions keep citing it.',
         confirmLabel: 'Disable',

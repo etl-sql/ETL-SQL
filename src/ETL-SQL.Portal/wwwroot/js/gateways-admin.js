@@ -239,29 +239,21 @@ export function createGatewaysAdmin({ host, gatewaysApi }) {
     $tableWrap.querySelectorAll('.gw-revoke-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const gwId = btn.getAttribute('data-gw-id');
-        const confirmed = window.ETLSQLFeedback?.confirm
-          ? await window.ETLSQLFeedback.confirm(`Are you sure you want to revoke Gateway '${gwId}'? Connected nodes will be disconnected immediately.`, {
-              title: 'Revoke Gateway',
-              impact: 'Connected nodes will be disconnected immediately.',
-              confirmLabel: 'Revoke gateway',
-              danger: true,
-              auditAction: 'admin.gateway.revoke'
-            })
-          : confirm(`Are you sure you want to revoke Gateway '${gwId}'? Connected nodes will be disconnected immediately.`);
+        const confirmed = await window.ETLSQLFeedback.confirm(`Are you sure you want to revoke Gateway '${gwId}'?`, {
+          title: 'Revoke Gateway',
+          impact: 'Connected nodes will be disconnected immediately.',
+          confirmLabel: 'Revoke gateway',
+          danger: true,
+          auditAction: 'admin.gateway.revoke'
+        });
         if (!confirmed) return;
 
         try {
           await gatewaysApi.revoke(gwId);
-          if (window.ETLSQLFeedback?.notify) {
-            window.ETLSQLFeedback.notify(`Gateway '${gwId}' revoked.`, { title: 'Gateway Revoked', tone: 'success' });
-          }
+          window.ETLSQLFeedback.notify(`Gateway '${gwId}' revoked.`, { title: 'Gateway Revoked', tone: 'success' });
           await load();
         } catch (err) {
-          if (window.ETLSQLFeedback?.notify) {
-            window.ETLSQLFeedback.notify(err.message || 'Failed to revoke gateway.', { title: 'Revocation failed', tone: 'error' });
-          } else {
-            alert('Failed to revoke gateway: ' + (err.message || err));
-          }
+          window.ETLSQLFeedback.notify(err.message || 'Failed to revoke gateway.', { title: 'Revocation failed', tone: 'error' });
         }
       });
     });

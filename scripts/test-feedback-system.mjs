@@ -18,6 +18,25 @@ const embeddedHostSources = [
 const extensions = new Set(['.js', '.html']);
 const nativeDialog = /(^|[^.A-Za-z0-9_$])(alert|prompt|confirm)\s*\(/gm;
 
+// One line in the sandbox is an XSS payload the constrained-HTML story feeds the sanitiser:
+// `&lt;img src=x onerror=alert(1)&gt;`, entity-escaped, inside a string. It is the fixture for a
+// security test, not a dialog anyone can open, and flagging it would push whoever hits this check
+// to weaken that test to quiet it. Markup escaped this way is data being displayed, not code being
+// run, so a dialog name inside it is not a call.
+const escapedMarkupPayload = /&lt;|&gt;|&amp;lt;/;
+
+function dialogCallsIn(file, source) {
+  const lines = source.split('\n');
+  const found = [];
+  for (const match of source.matchAll(nativeDialog)) {
+    const lineNumber = source.slice(0, match.index).split('\n').length;
+    if (escapedMarkupPayload.test(lines[lineNumber - 1])) continue;
+    found.push(`${file}:${lineNumber} uses native ${match[2]}()`);
+  }
+  if (/window\.(?:alert|prompt|confirm)\b/.test(source)) found.push(`${file} references a native window dialog`);
+  return found;
+}
+
 async function filesUnder(root) {
   const entries = await readdir(root, { withFileTypes: true });
   const files = [];
@@ -33,20 +52,12 @@ const violations = [];
 for (const root of roots) {
   for (const file of await filesUnder(root)) {
     const source = await readFile(file, 'utf8');
-    for (const match of source.matchAll(nativeDialog)) {
-      const line = source.slice(0, match.index).split('\n').length;
-      violations.push(`${file}:${line} uses native ${match[2]}()`);
-    }
-    if (/window\.(?:alert|prompt|confirm)\b/.test(source)) violations.push(`${file} references a native window dialog`);
+    violations.push(...dialogCallsIn(file, source));
   }
 }
 for (const file of embeddedHostSources) {
   const source = await readFile(file, 'utf8');
-  for (const match of source.matchAll(nativeDialog)) {
-    const line = source.slice(0, match.index).split('\n').length;
-    violations.push(`${file}:${line} uses native ${match[2]}()`);
-  }
-  if (/window\.(?:alert|prompt|confirm)\b/.test(source)) violations.push(`${file} references a native window dialog`);
+  violations.push(...dialogCallsIn(file, source));
 }
 assert.deepEqual(violations, [], violations.join('\n'));
 

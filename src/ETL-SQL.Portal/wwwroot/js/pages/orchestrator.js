@@ -901,7 +901,7 @@ async function loadJobLinkedSchedules(jobName) {
     host.querySelectorAll('[data-detach-schedule]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const schedName = /** @type {HTMLElement} */ (btn).dataset.detachSchedule;
-        if (!confirm(`Detach schedule '${schedName}' from job '${jobName}'?`)) return;
+        if (!await ETLSQLFeedback.confirm(`Detach schedule '${schedName}' from job '${jobName}'?`, { title: 'Detach schedule', impact: 'The job keeps its definition; it just stops running on this schedule.', confirmLabel: 'Detach schedule', danger: true, auditAction: 'orchestrator.job.schedule.detach' })) return;
         try {
           await api.jobScheduleDetach(jobName, schedName);
           showToast(`Schedule detached.`);
@@ -944,7 +944,7 @@ async function loadJobLinkedNotifications(jobName) {
       btn.addEventListener('click', async () => {
         const notifName = /** @type {HTMLElement} */ (btn).dataset.detachNotif;
         const trigger = /** @type {HTMLElement} */ (btn).dataset.trigger;
-        if (!confirm(`Detach notification '${notifName}' from job '${jobName}'?`)) return;
+        if (!await ETLSQLFeedback.confirm(`Detach notification '${notifName}' from job '${jobName}'?`, { title: 'Detach notification', impact: 'Nobody will be notified for this trigger until it is attached again.', confirmLabel: 'Detach notification', danger: true, auditAction: 'orchestrator.job.notification.detach' })) return;
         try {
           await api.jobNotificationDetach(jobName, notifName, trigger);
           showToast(`Notification detached.`);
@@ -977,7 +977,7 @@ async function loadJobWatermarks(jobName) {
     host.querySelectorAll('[data-state-action="reset"]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const key = /** @type {HTMLElement} */ (btn).dataset.key;
-        if (!confirm(`Reset and clear watermark key '${key}'? This will trigger a full backfill on next run.`)) return;
+        if (!await ETLSQLFeedback.confirm(`Reset and clear watermark key '${key}'?`, { title: 'Clear watermark', impact: 'The next run will backfill from the beginning.', confirmLabel: 'Clear watermark', danger: true, auditAction: 'orchestrator.job.watermark.reset' })) return;
         try {
           await api.jobStateDelete(jobName, key);
           showToast(`Watermark '${key}' cleared.`);
@@ -1871,15 +1871,15 @@ document.getElementById('triageBoard').addEventListener('change', event => {
 async function rerunJobs(jobNames) {
   if (!jobNames.length) return;
   if (jobNames.length === 1) { openRunModal(jobNames[0]); return; }
-  if (!confirm(`Re-run ${jobNames.length} jobs?`)) return;
+  if (!await ETLSQLFeedback.confirm(`Re-run ${jobNames.length} jobs?`, { title: 'Re-run selected jobs', confirmLabel: 'Re-run jobs', auditAction: 'orchestrator.job.rerun' })) return;
   try {
     const res = await api.rerun(jobNames);
     const body = await res.json().catch(() => null);
-    if (!res.ok) { alert(body?.error || 'Re-run failed.'); return; }
+    if (!res.ok) { ETLSQLFeedback.notify(body?.error || 'Re-run failed.', { title: 'Re-run failed', tone: 'error' }); return; }
     triageState.selected.clear();
     await loadTriage();
     await loadJobs();
-  } catch (err) { alert(`Re-run failed: ${err.message || err}`); }
+  } catch (err) { ETLSQLFeedback.notify(`${err.message || err}`, { title: 'Re-run failed', tone: 'error' }); }
 }
 
 // ── One-run overrides ─────────────────────────────────────────────────────────

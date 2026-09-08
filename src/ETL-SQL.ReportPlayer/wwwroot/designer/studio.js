@@ -30,11 +30,13 @@ import { createStudioContextStore, createStudioState } from './studio-state.js';
 
 export { secureStudioScriptForSave } from './studio-security.js';
 
-const _feedback = globalThis.ETLSQLFeedback || {
-    notify: (msg, opts) => console.log(`[Notification ${opts?.tone || 'info'}] ${msg}`),
-    confirm: async (msg) => window.confirm(msg),
-    prompt: async (msg, opts) => window.prompt(msg, opts?.value || ''),
-};
+// Same binding designer-util.js exports, and deliberately without a fallback. The old one routed
+// notifications to console.log and confirmations to the native dialog whenever this module was
+// evaluated before feedback.js — silently, so an author saw a browser-chrome prompt on one host and
+// the Portal's own dialog on another, and nothing anywhere said which had happened. Every host that
+// loads studio.js loads feedback.js first, including the inlined offline snapshot, so a missing
+// module is a wiring bug and should read as one.
+const _feedback = globalThis.ETLSQLFeedback;
 
 function _escapeHtml(str) {
     return String(str ?? '')

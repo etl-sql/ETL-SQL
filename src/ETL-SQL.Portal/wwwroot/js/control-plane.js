@@ -4,6 +4,14 @@
 (function () {
   'use strict';
 
+  // Every failure here used to be a native browser dialog, which blocks the page, cannot be
+  // styled, is not read by the live region the rest of the Portal announces through, and gives
+  // an operator no way to keep the receipt on screen while they act on it. control-plane.html
+  // now loads the shared feedback module, so these are toasts like every other admin surface.
+  function notifyFailure(title, detail) {
+    window.ETLSQLFeedback.notify(String(detail || 'The request failed.'), { title, tone: 'error' });
+  }
+
   function esc(s) {
     if (s == null) return '';
     return String(s)
@@ -211,10 +219,10 @@
             if (onReload) onReload();
           } else {
             const err = await res.json();
-            alert('Provisioning failed: ' + (err.error || res.statusText));
+            notifyFailure('Provisioning failed', err.error || res.statusText);
           }
         } catch (err) {
-          alert('Network error: ' + err.message);
+          notifyFailure('Network error', err.message);
         }
       });
     }
@@ -245,10 +253,10 @@
             if (onReload) onReload();
           } else {
             const err = await res.json();
-            alert('Updating quotas failed: ' + (err.error || res.statusText));
+            notifyFailure('Updating quotas failed', err.error || res.statusText);
           }
         } catch (err) {
-          alert('Network error: ' + err.message);
+          notifyFailure('Network error', err.message);
         }
       });
     }
@@ -278,10 +286,10 @@
             if (onReload) onReload();
           } else {
             const err = await res.json();
-            alert('Updating state failed: ' + (err.error || res.statusText));
+            notifyFailure('Updating state failed', err.error || res.statusText);
           }
         } catch (err) {
-          alert('Network error: ' + err.message);
+          notifyFailure('Network error', err.message);
         }
       });
     }
