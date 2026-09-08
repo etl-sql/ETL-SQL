@@ -1293,7 +1293,17 @@ async function loadHistory(jobName) {
           const dur = et ? `${Math.round((et.getTime() - st.getTime()) / 1000)}s` : '—';
           const rows = Number(h.RowsProcessed ?? h.rowsProcessed ?? 0).toLocaleString();
           const isSuccess = status === 'Success' || status === 'Completed';
-          const canResume = h.HasResumeSession ?? h.hasResumeSession;
+
+          // Recovery needs three facts, and the reader needs to be told which one is missing. A
+          // dash in this cell says only "no", and an operator staring at a failed run wants to know
+          // whether it cannot resume because the run succeeded, or because nothing was checkpointed.
+          const checkpoint = h.CheckpointLabel ?? h.checkpointLabel ?? null;
+          const eligibleStatus = status === 'Failed' || status === 'Cancelled';
+          const hasSession = Boolean(h.HasResumeSession ?? h.hasResumeSession);
+          const canResume = eligibleStatus && hasSession && Boolean(checkpoint);
+          const unavailableReason = eligibleStatus
+            ? 'No resumable checkpoint: this run was not persistent or never reached a top-level label.'
+            : 'Only failed or cancelled runs can resume.';
 
           return `
             <tr>
@@ -1303,7 +1313,9 @@ async function loadHistory(jobName) {
               <td>${dur}</td>
               <td>${rows}</td>
               <td>
-                ${canResume ? `<button class="btn btn-sm btn-outline" data-resume-id="${id}" title="Resume from named checkpoint">Resume</button>` : '—'}
+                ${canResume
+                  ? `<button class="btn btn-sm btn-outline history-resume-btn" type="button" data-resume-id="${id}" data-resume-label="${escHtml(checkpoint)}" title="Resume from named checkpoint">Resume · ${escHtml(checkpoint)}</button>`
+                  : `<button class="btn btn-sm btn-outline history-resume-btn" type="button" disabled>Unavailable</button><span class="history-resume-reason">${escHtml(unavailableReason)}</span>`}
               </td>
             </tr>`;
         }).join('')}
@@ -1314,6 +1326,15 @@ async function loadHistory(jobName) {
     host.querySelectorAll('[data-resume-id]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const hid = /** @type {HTMLElement} */ (btn).dataset.resumeId;
+        const label = /** @type {HTMLElement} */ (btn).dataset.resumeLabel;
+        // Resuming re-runs everything the checkpoint did not cover, which for a partially applied
+        // load is the difference between a recovery and a duplicate. Say so before doing it.
+        if (!await ETLSQLFeedback.confirm(`Resume run #${hid} from checkpoint '${label}'?`, {
+          title: 'Resume from named checkpoint',
+          impact: 'Work after that label may run again.',
+          confirmLabel: 'Resume run',
+          auditAction: 'orchestrator.run.resume'
+        })) return;
         /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = true;
         try {
           const res = await api.resume(hid);
@@ -1883,6 +1904,13 @@ async function rerunJobs(jobNames) {
 }
 
 // ── One-run overrides ─────────────────────────────────────────────────────────
+
+// The same shape the engine accepts for a script variable. Without this an override typed as
+// `@start date` or `@1st` was sent verbatim, the run failed somewhere inside the engine, and the
+// operator was left reading a parse error about a script they had not edited. Rejecting it here
+// names the actual mistake while the modal is still open and the value is still on screen.
+const RUN_OVERRIDE_NAME = /^@[A-Za-z_][A-Za-z0-9_]*$/;
+
 let runJobName = null;
 function openRunModal(name) {
   runJobName = name;
@@ -1918,6 +1946,10 @@ document.getElementById('runJobSubmitBtn').addEventListener('click', async () =>
     const v = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (row.querySelector('.run-override-value')).value;
     if (!n && !v) continue;
     if (!n.startsWith('@')) n = '@' + n;
+    if (!RUN_OVERRIDE_NAME.test(n)) {
+      err.textContent = `'${n}' is not a variable name. Use @ followed by a letter or underscore, then letters, numbers or underscores.`;
+      return;
+    }
     variables[n] = v;
   }
   /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (btn).disabled = true;
