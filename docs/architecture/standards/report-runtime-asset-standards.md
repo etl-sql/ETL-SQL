@@ -22,6 +22,7 @@ src/ETL-SQL.ReportRuntime/Resources/Shared/
 The canonical shared assets are compiled and synchronized into these specific host directories:
 
 - **Report Player**: `src/ETL-SQL.ReportPlayer/wwwroot/`
+- **Workstation Editor**: `src/ETL-SQL.WorkstationEditor/wwwroot/`
 - **Portal**: `src/ETL-SQL.Portal/wwwroot/js/` and `src/ETL-SQL.Portal/wwwroot/css/`
 - **VS Code Extension**: `src/etl-sql-vscode/media/`
 
@@ -45,6 +46,18 @@ After modifying files inside the canonical `Shared` directory, you must run the 
 
 ---
 
+### Runtime module and offline bundle ownership
+
+`report-runtime.js` and the sibling `rt-*.js` files are authored ES modules. Keep part imports
+as single-line named imports with no aliases, and export declarations directly. The entry's
+hoisted `renderManifest` participates in the rendering cycle; do not call across that cycle at
+module initialization time.
+
+`report-runtime.bundle.js` is generated, including the copy under `Resources/Shared`. Never edit
+it by hand. Add each new part to `RUNTIME_PARTS` in `sync-assets.js`; an unlisted part fails sync.
+The generator strips supported module syntax, checks that the result parses, and wraps it in a
+classic-script IIFE for `OfflineSnapshotViewer`. Online hosts use `type="module"` on the entry.
+
 ## 4. UI Sandbox Prototyping
 
 Before committing a user interface or charting change, you should prototype and verify the layout inside the dev-only **UI Sandbox**:
@@ -67,9 +80,9 @@ Gated figures:
 
 | Figure | What it covers |
 | :--- | :--- |
-| `report-runtime.js` | Raw and gzip bytes of the shared report runtime script |
+| `report-runtime.js` | Sum of raw and separately compressed gzip bytes of the entry and all `rt-*.js` modules |
 | `report-runtime.css` | Raw and gzip bytes of the shared report runtime stylesheet |
-| `shared-runtime-total` | Raw and gzip bytes of everything under `Resources/Shared/`, vendor bundles included |
+| `shared-runtime-total` | Raw and gzip bytes of viewer assets, vendor bundles included; excludes authoring assets, map data, and the alternative offline bundle |
 | `page-weight:<fixture>` | End-to-end page weight of the heaviest representative report: shared assets plus that report's delivered browser manifest |
 
 Tolerance is 3% plus a 2,048-byte floor, applied per figure. Shrink never fails.

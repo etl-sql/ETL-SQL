@@ -28,6 +28,7 @@
       runtimeInjected = true;
       // report-runtime.js boots on load and reads window.__MANIFEST__, so it must be present first.
       var rt = document.createElement('script');
+      rt.type = 'module';
       rt.src = '/js/report-runtime.js';
       rt.onerror = showError;
       document.body.appendChild(rt);

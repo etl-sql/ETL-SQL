@@ -564,13 +564,23 @@ Produces a static, portable `.md` file:
 
 ### 6.5 Client-Side Runtime (`src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js`)
 
-Dual-mode JavaScript file:
+The entry `report-runtime.js` imports 16 sibling `rt-*.js` modules for state, theme, transport,
+data, detail surfaces, renderers, layouts, actions, saved views, and chrome. Online hosts load the
+entry with `type="module"`. Cross-module render cycles use hoisted functions and defer state reads
+until boot. Mutable binding replacement goes through accessors in the owning module.
+
+`node scripts/sync-assets.js` also generates `report-runtime.bundle.js` for offline viewers.
+`ETL-SQL.Reporting` embeds that bundle under the existing `runtime.report-runtime.js` resource
+name. Check mode verifies both the generated bundle and host copies without writing files.
+
+Host modes:
 
 | Mode | Data source | Activation |
 |---|---|---|
 | VS Code preview | `window.__MANIFEST__` injected by extension | `window.__MANIFEST__` present |
 | Single-report web | `window.__MANIFEST__` pre-embedded in HTML | `window.__IS_WEB__ = true` |
 | Multi-report web | `GET {apiBase}/manifest` | `window.__IS_WEB__ = true`, no pre-embedded manifest |
+| Offline snapshot | Embedded manifest and single-file runtime bundle | `window.__ETLSNAP__ = true` |
 
 `window.__API_BASE__` is injected in multi-report mode as `/reports/{name}/api`. All API calls use `apiBase` as their prefix so the same script works for both single and multi-report deployments.
 
@@ -663,7 +673,7 @@ CREATE PAGE Sales AS DASHBOARD (
 { "params": [{ "name": "@region", "value": "East" }, { "name": "@year", "value": "2026" }] }
 ```
 
-The `report-runtime.js` `postParameters(params)` helper is used by all filter controls to send batch updates, reducing round-trips when multiple parameters change simultaneously.
+The `rt-transport.js` `postParameters(params)` helper is used by all filter controls to send batch updates, reducing round-trips when multiple parameters change simultaneously.
 
 ### 8.4 Slicer and Filter Visuals
 

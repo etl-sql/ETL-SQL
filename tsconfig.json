@@ -35,6 +35,7 @@
     "types/**/*.d.ts"
   ],
   "exclude": [
+    "**/report-runtime.bundle.js",
     "**/node_modules",
     "**/bin",
     "**/obj",
@@ -43,6 +44,7 @@
 
     // Generated host copies of the canonical shared assets. See scripts/sync-assets.js.
     "src/ETL-SQL.Portal/wwwroot/js/report-runtime.js",
+    "src/ETL-SQL.Portal/wwwroot/js/rt-*.js",
     "src/ETL-SQL.Portal/wwwroot/js/feedback.js"
   ]
 }

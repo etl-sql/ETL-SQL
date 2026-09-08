@@ -10,6 +10,22 @@
 
 **Spec:** [`docs/superpowers/specs/2026-09-07-browser-file-split-design.md`](../specs/2026-09-07-browser-file-split-design.md)
 
+## Implementation record — 2026-09-08
+
+Tasks 11–19 and 21 are implemented. Checks and remaining gate results are recorded in
+[the post-split evidence](../../releases/v0.20.0-browser-split-baseline.md).
+The task lists below retain the original procedure.
+
+Live-source corrections: there are 16 parts plus the entry, and several parts import the entry's
+hoisted `renderManifest`. Native layout observers and drill-in-flight state also need accessors.
+The Portal report iframe and sandbox fixtures require module loading too. The payload gate counts
+all online modules and excludes the alternative offline bundle.
+
+The VS Code extension-host webview test and file-based offline browser tests cover paths task 20
+originally called manual-only. A Portal preview browser test covers dynamic injection.
+Extraction preserved template literal contents; all 219 original declarations matched an AST
+comparison after reversing accessors, with top-level effect ordering unchanged.
+
 ## Global Constraints
 
 Every task's requirements implicitly include this section.

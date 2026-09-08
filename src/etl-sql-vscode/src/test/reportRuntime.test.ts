@@ -11,10 +11,11 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { execFileSync } from 'node:child_process';
 
 const RUNTIME_PATH = resolve(
     __dirname,
-    '../../../../src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js'
+    '../../../../src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.bundle.js'
 );
 const RUNTIME_SRC = readFileSync(RUNTIME_PATH, 'utf8');
 
@@ -715,5 +716,31 @@ describe('offline snapshot bookmark replay', () => {
         // Saved views are a Portal feature; offering save-as in a file on disk would be a dead control.
         expect(labels).not.toContain('My saved views');
         expect(labels).not.toContain('Saved view actions');
+    });
+});
+
+// Offline snapshots execute this as one classic script, without sibling modules.
+describe('offline snapshot bundle', () => {
+    it('rejects drift and unsupported source changes before writing host assets', () => {
+        const output = execFileSync(process.execPath,
+            [resolve(__dirname, '../../../../scripts/test-runtime-bundle.mjs')], { encoding: 'utf8' });
+        expect(output).toContain('rejected-input checks passed');
+    });
+
+    it('carries no leftover module syntax', () => {
+        const offenders = RUNTIME_SRC.split('\n')
+            .map((line, i) => ({ line: line.trim(), n: i + 1 }))
+            .filter(({ line }) => /^import\b/.test(line) || /^export\b/.test(line));
+        expect(offenders).toEqual([]);
+    });
+
+    it('parses and exposes the test hook when loaded as a classic script', () => {
+        const win = makeDOM(w => {
+            w.__ETLSNAP__ = true;
+            w.__MANIFEST__ = EMPTY_MANIFEST;
+        });
+        expect(win.__reportRuntime__).toBeDefined();
+        expect(typeof win.__reportRuntime__.renderCard).toBe('function');
+        win.close();
     });
 });

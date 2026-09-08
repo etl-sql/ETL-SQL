@@ -19,10 +19,10 @@ this file decomposes it into executable work.
 | What | Where | Count |
 | :--- | :--- | ---: |
 | Lint the browser sources | [§1](#1-lint-the-browser-sources) | ✔ |
-| Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 6 |
+| Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 3 deferred |
 | Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | 5 |
 | Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 6 |
-| Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 24 |
+| Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 33 |
 | Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 5 |
 | *Candidates — not v0.20.0 scope yet* | | |
 | Grammar-of-Graphics semantic extensions | [§7](#7-grammar-of-graphics-semantic-extensions-candidate) | 3 |
@@ -40,9 +40,9 @@ typing changes, and product behavior changes in separate reviewable batches.
 
 ### Restart here
 
-1. **Finish §2's runtime half.** The designer extraction is merged; start at implementation-plan
-   task 11, bundle generation. Complete tasks 11–23, including host loading, offline snapshots,
-   consumer checks, and the pre-push gate. Do not start by renaming files to `.ts`.
+1. **§2's mechanical split is implemented.** The runtime is 17 ES modules with a generated
+   offline bundle. See the [verification record](docs/releases/v0.20.0-browser-split-baseline.md)
+   for checks and environment limits. Stateful closure refactors remain deferred.
 2. **Complete §3's remaining test repairs.** In particular, resolve the Portal fixture startup
    issue, repair the consumer checks, and put them in a gate. Fix any test issue that prevents
    verifying §2 immediately; do not wait for the whole split to finish to unblock its validation.
@@ -91,95 +91,26 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 
 ## 2. Split the two large browser files
 
-**Status: designer half done and merged (`c77d9712f`). `report-runtime.js` not started.**
+**Status: both mechanical extractions implemented.**
 Design: [browser file split](docs/superpowers/specs/2026-09-07-browser-file-split-design.md).
-Plan, with the remaining tasks written out step by step:
-[implementation plan](docs/superpowers/plans/2026-09-07-browser-file-split.md).
-Pre-split measurements to compare against:
-[baseline](docs/releases/v0.20.0-browser-split-baseline.md).
+Implementation history: [plan](docs/superpowers/plans/2026-09-07-browser-file-split.md).
+Checks and costs: [verification record](docs/releases/v0.20.0-browser-split-baseline.md).
 
-- [x] Split `designer.js` (was 9,069 lines, measured 9,008). Now **4,209 lines across 11 modules**:
-  `designer-util`, `dag`, `rptsql-language`, `editor-toolbar`, `run-results`, `script-editor`,
-  `script-workbench`, `data-prep-recipes`, `html-preview`, `visual-format-inspector`. `createDesigner`
-  stays in `designer.js` — see the deferred item below for why it is still 4,209 and not smaller.
-- [ ] Split `report-runtime.js` (was 9,426 lines, now 9,668). **This is the remaining work**, and it
-  is harder than the designer half for reasons that are not size:
-  - it is a classic-script `(function(){...})()` IIFE, not an ES module, loaded by six hosts with a
-    plain `<script src>`;
-  - `OfflineSnapshotViewer.cs` inlines it **whole** into single-file `.etlsnap` snapshots, and a
-    single file has no siblings to `import`.
-  Plan tasks 11–19 cover it: build the bundler first, then cut 17 `rt-*.js` modules, then rewire the
-  hosts.
-- [x] Split along the seams the defects already follow rather than by file size, and keep
-  `scripts/sync-assets.js`, the `.gitattributes` LF pinning and the drift gate working — all three
-  still work. `.gitattributes` now pins **by path glob rather than by filename**, because a per-name
-  pin missed by a new file fails `sync-assets.js --check` only on a fresh clone with
-  `core.autocrlf=true`, where the cause is invisible.
-- [ ] **This slice does introduce a bundle step, contrary to what this item used to say.** The
-  original text read "no bundler is required for this slice, and introducing one here would change
-  the delivery model." That is superseded: the alternative was namespaced IIFEs routing every
-  cross-part call through a `window` object — exactly the indirection that hid the scope defects
-  this work exists to prevent. `scripts/sync-assets.js` will generate a checked-in, drift-gated
-  `report-runtime.bundle.js`; no new gate, no Node in the .NET build graph. Delete this checkbox once
-  the bundler lands in plan task 11.
-
-### Where to pick up (for whoever continues this)
-
-Everything below is already merged into `release/v0.20.0`. The unmerged worktree branch
-`refactor/browser-file-split` still exists at `C:\Users\chuck\scratch\ETL-SQL-wt\browser-split` and
-carries the working notes; it holds nothing that is not in this branch.
-
-Remaining plan tasks, in order. Tasks 16–17 **deliberately commit with the lint gate red** on
-`no-undef` for `executeAction` — `rt-controls-input.js` cannot import it before `rt-actions.js`
-exists, and merging 16–18 into one commit produces an unreviewable ~6,000-line diff. Task 18 is
-where it must go green again.
-
-| # | Task | Note |
-| :--- | :--- | :--- |
-| 11 | Bundle generation in `sync-assets.js`, plus `eslint.config.mjs` / `tsconfig.json` / `ETL-SQL.Reporting.csproj` | Build and tamper-test it **before** any part module exists |
-| 12 | Bundle self-check in `reportRuntime.test.ts` | Asserts the bundle parses and exposes `window.__reportRuntime__` |
-| 13 | `rt-util`, `rt-state`, `rt-theme`; unwrap the IIFE | The four shared `let` bindings gain accessors here |
-| 14 | `rt-transport`, `rt-data` | |
-| 15 | `rt-detail`, `rt-charts` | |
-| 16 | `rt-table`, `rt-matrix`, `rt-controls-date`, `rt-controls-input` | Commits knowingly red |
-| 17 | `rt-visual`, `rt-layout` | Enters the deliberate import cycle; red continues |
-| 18 | `rt-actions`, `rt-views`, `rt-chrome` | **Red must clear here** |
-| 19 | Six hosts to `type="module"`, plus the VS Code CSP fix | Must land with 18 in one push |
-| 20 | **Manual verification — no gate covers it** | See below |
-| 21 | Repair the consumer checks the split broke | Includes the known `test-designer-polish` failure |
-| 22 | Full pre-push gate | |
-| 23 | Close out TODO.md and CHANGELOG | |
-
-**Task 19 carries the one genuinely load-bearing line in the whole plan.**
-`src/etl-sql-vscode/src/reportPreviewPanel.ts` sets `script-src 'nonce-${nonce}'`. A nonce does
-**not** propagate to modules fetched by an `import` statement, so the moment the runtime imports a
-sibling the preview breaks with a CSP violation and no other symptom. `visualFlowPanel.ts` in the
-same extension already sets `script-src ${webview.cspSource} 'nonce-${nonce}'` for this exact
-reason — copy that line.
-
-**Task 20 cannot be automated.** Three paths have no gate: the VS Code preview webview (proves the
-CSP change), a generated `.etlsnap` opened over `file://` (proves the bundle), and the Portal
-designer preview. Tasks 18, 19 and 20 must land together — after 18 the runtime is an ES module, and
-until 19 the hosts still load it as a classic script.
-
-### Four traps this work exposed, none of which any gate catches
-
-1. **`checkJs` binds JSDoc to the next function.** `tsconfig.json` sets `checkJs: true`, so a
-   `/** */` block immediately above a function becomes its type annotation. Moving `createDesigner`'s
-   docblock onto `createDesigner` took the type gate 0 → 24 findings.
-2. **Never dedent moved code.** Both files are dense with multi-line HTML/CSS template literals; a
-   blanket dedent strips spaces from continuation lines *inside* the strings and `node --check`
-   still passes.
-3. **Literal NUL bytes are deliberate.** One in `report-runtime.js` line 120, five in
-   `visual-preview.js`, all inside comments. Plain `grep` reports "Binary file matches" and shows
-   nothing — use `grep -a`. Never remove one. This NUL travels with `UNSAFE_CSS_PATTERN` into
-   `rt-theme.js` in task 13.
-4. **A silent transcription flip passes every gate.** One implementer caught itself turning `===`
-   into `!==` mid-move. `.superpowers/sdd/2026-09-07-browser-file-split/verify-tokens.py` in the
-   worktree compares operator/keyword multisets across a move and catches the one that is not caught;
-   `verify-exports.py` and `verify-closure.py` beside it prove the export surface is unchanged and
-   that code extracted from a closure no longer references its locals. Pass every file on **both**
-   sides of a token comparison, or pre-existing content reads as new.
+- [x] Split `designer.js` (9,008 lines). Its entry is 4,209 lines across 11 modules;
+  `createDesigner` remains a closure, with further work deferred below.
+- [x] Split `report-runtime.js` (9,668 lines) into a **356-line entry and 16 sibling modules**.
+  The largest part is `rt-controls-input.js` at 1,371 lines. Functions and template literal
+  contents are preserved; replaced shared state uses accessors. All 219 original declarations
+  matched an AST comparison after reversing those accessor substitutions.
+- [x] Generate the checked-in `report-runtime.bundle.js` through `sync-assets.js`, with drift,
+  unsupported-import/export, unlisted-part, and parse guards. Offline snapshots embed the bundle;
+  online hosts load the module graph. No new dependency or Node step in the .NET build graph.
+- [x] Update Portal, ReportPlayer, WorkstationEditor, VS Code, and sandbox loaders. The VS Code
+  CSP permits sibling module assets, verified in a real extension-host webview. Offline viewers
+  remain self-contained and are exercised from disk with network requests blocked.
+- [x] Follow the split in consumer checks and retain empty lint/type baselines. The payload gate
+  counts the whole online module graph, excludes the alternative offline bundle, and records
+  the separate-compression cost in its reviewed budget.
 
 ### Deferred out of this slice
 
@@ -307,9 +238,28 @@ the browser sources. The v0.19.0 release run made the shape concrete — the evi
     needs a live Portal and says so. A gate should run the smoke test, or this one with
     `--validate-only`.
 
-- [ ] **Run the checks in a gate** — none runs in pre-push or CI today, which is why they went red
-  unnoticed. **Add it before plan task 16 or after task 19, not between them**: task 19 rewrites the
-  six hosts' `<script>` tags and will trip whichever checks assert on host HTML.
+- [x] **The checks now run in a gate.** Landed before plan task 16, which was the window: task 19
+  rewrites the six hosts' `<script>` tags and would have tripped whichever checks assert on host
+  HTML if the gate had arrived mid-split. `scripts/check-consumer-contracts.mjs` discovers every
+  `scripts/test-*.mjs` and runs it — 28 checks in about 5 seconds — and is pre-push step 5, which
+  previously ran `test-page-layout-options.mjs` alone while its twenty-seven siblings ran nowhere.
+  Discovery rather than a list, so a new check is gated when it is written rather than when someone
+  remembers to register it. `--only <substring>` and `--list` for iterating; each failure prints the
+  script's own output and the command to rerun it alone. `test-service-capacity.mjs` is the one
+  special case, invoked with `--validate-only` for the reason recorded in the runner.
+- [x] **Two more pre-existing gate failures fixed on the way.** `scripts/audit-docs.js` was a third
+  markdown link checker with the same fenced-code-block false positive as the other two, and
+  `docs/releases/README.md` was missing two release documents. Both were failing pre-push before any
+  of this work.
+
+### One gate defect found and not fixed
+
+- [ ] **`Test-PrePush.ps1` step 12 can test a stale binary.** It runs `dotnet test --no-build`
+  against `-Configuration Release`, and nothing in the gate builds Release. On this machine the
+  Release test DLL was a day old, so seven tests failed that pass on the current source — and the
+  reverse is worse: the step can report green against code that no longer exists. Either build
+  before the run or drop `--no-build`.
+
 - [x] **Decided: it should not, and no longer does.** `IsHealthyAsync` returned one `bool` for two
   different facts — "the process is gone" and "the process is running but did not answer in two
   seconds" — and `ListHealthyAsync` deleted the record either way. A cold host's first request pays
@@ -468,6 +418,61 @@ fixes or certify a production host.
   task, a query over staged data, required variables, and a valid zero-row result. The current
   `firstResultSet` also treats a flat result with `rows: []` as no result set. A successful empty
   result should teach what happened, not report that execution failed.
+
+**Fresh-eyes review — delivery, scale, and degraded states (2026-09-08)**
+
+Traced the shared Studio modules, both host adapters, `DesignerController` and its services, the docs
+tree, and the payload budget. Complements the review above rather than repeating it: run auditing
+(`PortalDesignerRunService` audits per statement), save concurrency (Portal `If-Match` plus the lease
+409, WorkstationEditor `baseRevision` and external-change polling), editor search/goto, and the
+bounded result grid with CSV/XLSX/JSON export were checked and are present.
+
+- [ ] **Correct the host count before certifying against it.** `createStudioWorkbench` is mounted in
+  two places plus the sandbox: the [Portal page module](src/ETL-SQL.Portal/wwwroot/js/pages/studio.js),
+  [StudioShell.cs](src/ETL-SQL.WorkstationEditor/StudioShell.cs), and
+  `tools/ui-sandbox/stories/studio.story.js`. `ReportPlayer/wwwroot/designer/` and
+  `etl-sql-vscode/media/designer/` carry the whole Studio asset tree with no importer — the
+  extension's command is `etlsql.openReportDesigner`, which is the designer, not Studio. The ADR
+  names two editions. Restate the certification item against the editions that actually mount
+  Studio, then either host it in the other two or stop shipping unmounted Studio assets there;
+  they still cost asset sync, drift checks, and CSP surface.
+- [ ] **Define what earns the replacement.** This section claims Studio replaces `ReportBuilder` and
+  `WorkstationEditor`, but nothing states when that is true. Produce a parity matrix against both
+  tools with deliberate non-goals recorded, plus the deprecation and migration decision for the
+  existing editors. Without it every checkbox here can close with the replacement question still open.
+- [ ] **Write the user-facing Studio documentation.** `docs/guides/tooling/` has `report-builder.md`
+  and `vscode-extension.md` and no Studio guide; only the CLI reference pages exist. Nothing in the
+  designer modules links into the embedded language help either. A tool intended as the primary
+  editor where no VS Code or TUI is available cannot ship undocumented; use release versions in the
+  guide, not internal phase names.
+- [ ] **Budget the Studio assets.** `docs/benchmarks/report-payload-budget.json` gates
+  `report-runtime.js` and `.css` only. The designer module tree and the CodeMirror bundle are
+  ungated for transfer size and first-usable time, so §2 and §5 can move them without any gate
+  failing. Add Studio entries and a cold-load measurement before those sections move more code.
+- [ ] **Say so when the editor degrades to a textarea.** The `createScriptEditor` failure path in
+  [studio.js](src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio.js) logs `console.warn` and
+  mounts a plain textarea. The author silently loses diagnostics, completion, undo history, lint,
+  and goto-line. Show the degraded state, offer retry, and disable the actions that no longer mean
+  anything. Same shape as the failed-read item above.
+- [ ] **Do not present a failed session load as reduced permissions.** In the
+  [Portal page module](src/ETL-SQL.Portal/wwwroot/js/pages/studio.js), a thrown `studioApi.session()`
+  falls back to `{ mode: 'Viewer', capabilities: [] }`. A transient failure is then indistinguishable
+  from an authorization outcome, and the learner concludes they lack rights. Render an error state
+  with retry instead of a capability downgrade; test a 500, a timeout, and an expired token.
+- [ ] **Make document discovery work at catalog scale and stay fresh.** The Portal adapter fetches
+  every report and folder once at page load and filters in the browser: no paging, no server-side
+  search, no refresh. A large catalog makes Home unusable, and reports created, renamed, moved, or
+  deleted by anyone else during the session stay invisible or open and fail. Cover a deleted or
+  moved report opened from a stale list, which the open-failure item above does not.
+- [ ] **Define large-document behavior.** Typing schedules a 400 ms debounced server round trip for
+  canvas synchronization on top of analyze, complete, and hover. The server caps script characters,
+  but there is no client ceiling, no degraded mode, and no defined experience when the `designer`
+  rate limiter rejects mid-typing. Measure a several-thousand-line script in both hosts and state
+  what Studio does at the limit.
+- [ ] **Decide localization explicitly.** There is no `IStringLocalizer` or `.resx` in the Portal and
+  every Studio string is a hard-coded English literal across the shared modules. Acceptable as a
+  recorded decision; unacceptable as an accident, given the Enterprise and SaaS primary-editor goal.
+  Record the decision before the string count grows through the work above.
 
 ## 5. Move the sources to `.ts`
 

@@ -31,7 +31,6 @@ import globals from './scripts/lint/node_modules/globals/index.js';
  */
 const classicScripts = [
     'src/ETL-SQL.ReportRuntime/Resources/Shared/feedback.js',
-    'src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js',
     'src/ETL-SQL.Portal/wwwroot/js/control-plane.js',
     'src/ETL-SQL.Portal/wwwroot/js/native-charts.js',
 ];
@@ -39,6 +38,7 @@ const classicScripts = [
 export default [
     {
         ignores: [
+            '**/report-runtime.bundle.js',
             '**/node_modules/**',
             '**/bin/**',
             '**/obj/**',
@@ -49,6 +49,7 @@ export default [
 
             // Generated host copies of the canonical shared assets. See scripts/sync-assets.js.
             'src/ETL-SQL.Portal/wwwroot/js/report-runtime.js',
+            'src/ETL-SQL.Portal/wwwroot/js/rt-*.js',
             'src/ETL-SQL.Portal/wwwroot/js/feedback.js',
         ],
     },

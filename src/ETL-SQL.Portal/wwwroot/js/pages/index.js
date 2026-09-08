@@ -1126,7 +1126,7 @@ function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
 <\/script>
 </head><body style="margin:0" class="${isDark === 'true' ? 'theme-dark' : ''}">
 <div id="root"></div>
-<script nonce="${CSP_NONCE}" src="/js/report-runtime.js?v=0.18.0"><\/script>
+<script nonce="${CSP_NONCE}" type="module" src="/js/report-runtime.js?v=0.18.0"><\/script>
 <script nonce="${CSP_NONCE}">
   if (${isDark} || (window.parent && window.parent.document.body.classList.contains('theme-dark'))) {
     document.body.classList.add('theme-dark');

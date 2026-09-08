@@ -16,6 +16,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - The browser sources are linted. `eslint.config.mjs` at the repository root points `eslint:recommended` at the canonical shared assets and the Portal's own modules — the same sources the type gate covers — and `node scripts/lint-browser.mjs` gates them from pre-push and CI against `browser-lint-baseline.txt`, on the same shrink-only ratchet as the type baseline. A file ESLint cannot parse is never baselined.
 
+### Changed
+
+- Browser sources are split by concern. The designer has 11 modules, and the report runtime has
+  a 356-line entry plus 16 parts. Online hosts load ES modules; offline snapshots embed a
+  generated, drift-gated bundle. The VS Code preview CSP permits sibling modules. The runtime
+  payload budget counts all parts: separate gzip compression adds 10,787 bytes (11.3%) while raw
+  JavaScript shrinks by 27,271 bytes. Stateful designer and Studio closures remain unchanged.
+
 ### Fixed
 
 - Orchestrator host and engine logs now share configured application log paths, rolling limits, retention, minimum levels, and text or JSON formatting.

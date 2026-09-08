@@ -29,7 +29,7 @@
     <!-- Browser runtime, inlined verbatim into the self-contained offline snapshot viewer
          (OfflineSnapshotViewer). Embedded rather than read from disk so the exporter works from a
          published CLI, where no wwwroot exists. -->
-    <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\report-runtime.js">
+    <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\report-runtime.bundle.js">
       <LogicalName>runtime.report-runtime.js</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\report-runtime.css">

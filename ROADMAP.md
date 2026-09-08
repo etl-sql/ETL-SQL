@@ -117,11 +117,10 @@ requires a bundler.
    modules, wired into the pre-push gate beside the type gate. `no-undef` and `no-dupe-keys` alone
    would have caught ten of the twelve defects above, in seconds, with no structural change. The VS
    Code extension and its React UI already carry configs, so this extends an existing practice.
-2. **Split `designer.js` and `report-runtime.js`.** 9,069 and 9,426 lines. `designer.js` holds
-   `createDesigner`, `createScriptEditorWorkbench` and `renderDag` in one scope, and two of the
-   three scope-confusion defects found in v0.19.0 were inside it; the third was inside
-   `report-runtime.js`. Splitting along the seams the bugs already follow is worth doing on its own
-   terms and needs no TypeScript.
+2. **Split `designer.js` and `report-runtime.js`.** Mechanical extraction is implemented:
+   the designer has 11 modules, while the runtime has a 356-line entry and 16 sibling modules.
+   Online hosts load ES modules; offline snapshots embed the drift-gated generated bundle.
+   Stateful designer and Studio closure refactors remain tracked in TODO §2.
 3. **Repair the browser and Portal test lanes.** A separate problem from typing, and it must not be
    folded into it — none of these failures live in the browser sources. The lane reports one fixture
    failure as 231 identical, contentless messages naming none of the real conditions, which has

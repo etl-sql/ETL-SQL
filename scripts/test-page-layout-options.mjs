@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const runtimePath = 'src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js';
+const runtimePath = 'src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.bundle.js';
 const source = await readFile(runtimePath, 'utf8');
 
 function lift(name) {

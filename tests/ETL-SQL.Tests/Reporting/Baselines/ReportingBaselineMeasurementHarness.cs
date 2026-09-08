@@ -120,6 +120,8 @@ public class ReportingBaselineMeasurementHarness
         var authoringPrefix = Path.Combine(runtimeDir, "designer") + Path.DirectorySeparatorChar;
         var assetFiles = Directory.GetFiles(runtimeDir, "*.*", SearchOption.AllDirectories)
             .Where(f => !f.EndsWith(".geojson", StringComparison.OrdinalIgnoreCase))
+            // Online hosts load the modules; the alternative offline bundle is embedded in HTML.
+            .Where(f => !f.EndsWith("report-runtime.bundle.js", StringComparison.OrdinalIgnoreCase))
             .Where(f => !f.StartsWith(authoringPrefix, StringComparison.OrdinalIgnoreCase))
             .OrderBy(f => f)
             .ToList();
