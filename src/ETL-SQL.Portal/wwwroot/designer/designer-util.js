@@ -21,3 +21,8 @@ export function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 }
+
+// `esc` and `escapeHtml` are NOT interchangeable: `esc` does not escape `>`.
+// Preserved as-is because changing it is a behavior change outside this refactor;
+// unifying the two escapers is follow-up work.
+export const esc       = s  => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
