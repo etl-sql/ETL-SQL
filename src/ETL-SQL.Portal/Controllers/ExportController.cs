@@ -24,7 +24,8 @@ public class ExportController(
     IArtifactStorage artifacts,
     SnapshotPackageService snapshotPackages,
     DatasetTenantScope? datasetScope = null,
-    PortalTenantCatalogScope? catalogScope = null) : ControllerBase
+    PortalTenantCatalogScope? catalogScope = null,
+    ETL_SQL.Common.ILogger? logger = null) : ControllerBase
 {
     private readonly DatasetTenantScope _datasetScope = datasetScope ?? new DatasetTenantScope(portalConfig);
     private PortalTenantCatalogScope CatalogScope => catalogScope ?? new PortalTenantCatalogScope(db, _datasetScope);
@@ -166,7 +167,7 @@ public class ExportController(
             // CDP Network.setExtraHTTPHeaders, which has no URL filter — leaking the viewer's bearer
             // token to every sub-resource the report references (e.g. an attacker-controlled image
             // URL embedded in report content). Static rendering needs no token and no host round-trip.
-            var exporter = new ReportPdfExporter();
+            var exporter = new ReportPdfExporter(logger: logger);
             pdfBytes = await exporter.ExportAsync(manifest, new PdfExportOptions
             {
                 Mode = PdfExportMode.Static,

@@ -17,6 +17,7 @@ namespace ETL_SQL.Portal.Tests;
 
 public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
 {
+    protected virtual bool EnableApplicationFileLogging => false;
     public const string IdentitySecret = "test-only-federated-orchestrator-identity-secret";
     public string TempDir { get; }
     private readonly bool requireFederatedIdentity;
@@ -40,7 +41,8 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
         var scriptRoot = Path.Combine(TempDir, "scripts");
 
         builder.UseEnvironment("Testing");
-        builder.ConfigureLogging(logging => logging.ClearProviders());
+        if (!EnableApplicationFileLogging)
+            builder.ConfigureLogging(logging => logging.ClearProviders());
 
         builder.ConfigureAppConfiguration((_, cfg) =>
         {

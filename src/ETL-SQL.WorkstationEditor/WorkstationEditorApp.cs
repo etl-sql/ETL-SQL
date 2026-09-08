@@ -973,6 +973,7 @@ public static class WorkstationEditorApp
         app.MapPost("/api/designer/preview/pdf", async (
             PreviewRequest request,
             WorkstationPreviewService previewer,
+            ETL_SQL.Common.ILogger logger,
             CancellationToken cancellationToken) =>
         {
             try
@@ -981,7 +982,7 @@ public static class WorkstationEditorApp
                 // be a blank sheet in the file.
                 var manifest = await previewer.BuildPreviewAsync(
                     request.Script ?? string.Empty, cancellationToken, runEveryPage: true, request.Parameters);
-                var pdf = await new ETL_SQL.Reporting.ReportPdfExporter().ExportAsync(
+                var pdf = await new ETL_SQL.Reporting.ReportPdfExporter(logger: logger).ExportAsync(
                     manifest,
                     new ETL_SQL.Reporting.PdfExportOptions
                     {

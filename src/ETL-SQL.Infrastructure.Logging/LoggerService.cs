@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using ETL_SQL.Core.Common;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Context;
@@ -187,22 +188,47 @@ public class LoggerService : ILogger, ILoggerService, IDisposable
         _ => element
     };
 
+    public void InitializeAppLogger(IConfiguration configuration, string defaultDirectory = "logs/app")
+    {
+        var level = configuration["Logging:LogLevel:Default"] ?? "Information";
+        if (!Enum.TryParse<Microsoft.Extensions.Logging.LogLevel>(level, true, out var minimum))
+            throw new ArgumentException("Logging:LogLevel:Default is invalid.");
+        InitializeAppLogger(configuration["Logging:AppLog:Directory"] ?? defaultDirectory,
+            configuration.GetValue("Logging:AppLog:RetentionDays", 30),
+            configuration.GetValue("Logging:AppLog:FileSizeLimitMb", 10),
+            minimum, configuration["Logging:AppLog:Format"] ?? "Text");
+    }
+
     public void InitializeAppLogger(string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)
+        => InitializeAppLogger(logDirectory, retentionDays, fileSizeLimitMb, Microsoft.Extensions.Logging.LogLevel.Debug, "Text");
+
+    public void InitializeAppLogger(string logDirectory, int retentionDays, int fileSizeLimitMb,
+        Microsoft.Extensions.Logging.LogLevel minimumLevel, string format)
     {
         logDirectory = ResolvePath(logDirectory);
         Directory.CreateDirectory(logDirectory);
         PurgeOldLogs(logDirectory, retentionDays, "*.log");
 
         _appLogger?.Dispose();
+        Serilog.Formatting.ITextFormatter formatter = format.ToUpperInvariant() switch
+        {
+            "TEXT" => new Serilog.Formatting.Display.MessageTemplateTextFormatter(
+                "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}]{SessionId: [sid=]:l} {Message:lj} {Properties:j}{NewLine}{Exception}"),
+            "JSON" => new Serilog.Formatting.Json.JsonFormatter(renderMessage: true),
+            _ => throw new ArgumentException("Logging:AppLog:Format must be Text or Json.")
+        };
         _appLogger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
+            .MinimumLevel.Is((LogEventLevel)Math.Clamp((int)minimumLevel, 0, 5))
+            .Filter.ByIncludingOnly(_ => minimumLevel != Microsoft.Extensions.Logging.LogLevel.None)
             .Enrich.FromLogContext()
             .WriteTo.File(
+                formatter: formatter,
                 path: Path.Combine(logDirectory, "etlsql-.log"),
                 rollingInterval: RollingInterval.Day,
                 fileSizeLimitBytes: fileSizeLimitMb > 0 ? (long?)fileSizeLimitMb * 1024 * 1024 : null,
                 rollOnFileSizeLimit: true,
-                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}]{SessionId: [sid=]:l} {Message:lj} {Properties:j}{NewLine}{Exception}")
+                retainedFileCountLimit: null,
+                retainedFileTimeLimit: retentionDays > 0 ? TimeSpan.FromDays(retentionDays) : null)
             .CreateLogger();
     }
 

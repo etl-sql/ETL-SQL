@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -294,7 +294,7 @@ if (multiMode)
         if (svc == null) return Results.NotFound();
         var manifest = await svc.GetManifestAsync();
         var url = BuildAbsoluteUrl(ctx, "/reports/" + WebUtility.UrlEncode(name));
-        var bytes = await new ReportPdfExporter().ExportAsync(manifest, new PdfExportOptions
+        var bytes = await new ReportPdfExporter(logger: loggerService).ExportAsync(manifest, new PdfExportOptions
         {
             Mode = PdfExportMode.Auto,
             Host = url,
@@ -400,7 +400,7 @@ else
     app.MapGet("/api/export/pdf", async (HttpContext ctx, DashboardService svc) =>
     {
         var manifest = await svc.GetManifestAsync();
-        var bytes = await new ReportPdfExporter().ExportAsync(manifest, new PdfExportOptions
+        var bytes = await new ReportPdfExporter(logger: loggerService).ExportAsync(manifest, new PdfExportOptions
         {
             Mode = PdfExportMode.Auto,
             Host = BuildAbsoluteUrl(ctx, "/"),

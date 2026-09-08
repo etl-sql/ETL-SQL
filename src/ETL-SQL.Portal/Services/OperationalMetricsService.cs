@@ -97,11 +97,10 @@ public sealed class OperationalMetricsService(
         var activeExecutions = await ExecutionJobs.CountAsync(j => j.Status == "Running", ct);
         var queuedExecutions = await ExecutionJobs.CountAsync(j => j.Status == "Pending", ct);
 
-        var queuedJobs = await ExecutionJobs
-            .AsNoTracking()
-            .Where(j => j.Status == "Pending")
-            .Select(j => j.CreatedAt)
-            .ToListAsync(ct);
+        var queuedJobs = ExecutionJobs.AsNoTracking().Where(j => j.Status == "Pending");
+        var averageQueuedExecutionAgeSeconds = db.Database.IsSqlite()
+            ? await queuedJobs.AverageAsync(j => (double?)Math.Max(0, (now.Ticks - j.CreatedAt.Ticks) / (double)TimeSpan.TicksPerSecond), ct) ?? 0
+            : await queuedJobs.AverageAsync(j => (double?)Math.Max(0, (now - j.CreatedAt).TotalSeconds), ct) ?? 0;
         var recentExecutions = await ExecutionJobs
             .CountAsync(j => j.CompletedAt != null && j.CompletedAt >= since, ct);
         var recentExecutionFailures = await ExecutionJobs
@@ -135,21 +134,12 @@ public sealed class OperationalMetricsService(
                 row.Failures,
                 row.RowsProcessed,
                 row.PeakMemoryBytes)));
-        var durationRows = await ExecutionJobs
+        var durationRows = ExecutionJobs
             .AsNoTracking()
-            .Where(j => j.CompletedAt != null && j.CompletedAt >= since && j.StartedAt != null)
-            .Select(j => new { j.StartedAt, j.CompletedAt })
-            .ToListAsync(ct);
-        var completedDurations = durationRows
-            .Select(j => (j.CompletedAt!.Value - j.StartedAt!.Value).TotalMilliseconds)
-            .Where(ms => ms >= 0)
-            .ToList();
-        var averageExecutionDurationMs = completedDurations.Count == 0
-            ? 0
-            : completedDurations.Average();
-        var averageQueuedExecutionAgeSeconds = queuedJobs.Count == 0
-            ? 0
-            : queuedJobs.Select(createdAt => Math.Max(0, (now - createdAt).TotalSeconds)).Average();
+            .Where(j => j.CompletedAt != null && j.CompletedAt >= since && j.StartedAt != null && j.CompletedAt >= j.StartedAt);
+        var averageExecutionDurationMs = db.Database.IsSqlite()
+            ? await durationRows.AverageAsync(j => (double?)((j.CompletedAt!.Value.Ticks - j.StartedAt!.Value.Ticks) / (double)TimeSpan.TicksPerMillisecond), ct) ?? 0
+            : await durationRows.AverageAsync(j => (double?)(j.CompletedAt!.Value - j.StartedAt!.Value).TotalMilliseconds, ct) ?? 0;
 
         var recentDeliveries = await SubscriptionDeliveries
             .CountAsync(d => d.CompletedAt != null && d.CompletedAt >= since, ct);
@@ -178,8 +168,9 @@ public sealed class OperationalMetricsService(
             auditOutbox = auditOutbox.Where(message => message.TenantId == tenantId);
         var auditPending = await auditOutbox
             .Where(x => x.Status == "Pending")
-            .Select(x => new { x.CreatedAt, x.PayloadJson })
-            .ToListAsync(ct);
+            .GroupBy(x => 1)
+            .Select(group => new { Count = group.Count(), Bytes = group.Sum(x => (long)x.PayloadJson.Length), Oldest = group.Min(x => x.CreatedAt) })
+            .SingleOrDefaultAsync(ct);
         var auditFailed = await auditOutbox.CountAsync(x => x.Status == "Failed", ct);
         var securityEvents = SecurityEventRuntime.GetDiagnostics();
         var health = await GetHealthSummaryAsync(ct);
@@ -213,10 +204,10 @@ public sealed class OperationalMetricsService(
             pendingMigrations.Count,
             appliedMigrations.LastOrDefault(),
             pendingMigrations.Count == 0,
-            auditPending.Count,
+            auditPending?.Count ?? 0,
             auditFailed,
-            auditPending.Sum(x => (long)x.PayloadJson.Length),
-            auditPending.Count == 0 ? 0 : auditPending.Max(x => Math.Max(0, (now - x.CreatedAt).TotalSeconds)),
+            auditPending?.Bytes ?? 0,
+            auditPending is null ? 0 : Math.Max(0, (now - auditPending.Oldest).TotalSeconds),
             securityEvents.PendingCount,
             securityEvents.FailedCount,
             securityEvents.StoredBytes,

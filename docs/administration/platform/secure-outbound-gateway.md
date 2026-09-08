@@ -193,6 +193,37 @@ An ambiguous Gateway write is also marked non-retryable in script execution resu
 preserves the failure and stops immediately even when the job has retries configured. Operators must
 reconcile the case and make any later corrective action explicitly.
 
+## Outcome storage and retention
+
+Gateway v0.20.0 stores receipts in `outcomes.db` beside `gateway-config.json`. Each transition commits
+one indexed SQLite row with full durability. Startup streams an existing `outcomes.json` into one
+transaction; the import marker commits with the receipts. The legacy file remains as a backup and
+is ignored after a successful import. Only one daemon can own this store at a time.
+
+Set `OutcomeRetention` in `gateway-config.json` to override these defaults, then restart the daemon:
+
+```json
+"OutcomeRetention": {
+  "ReadOnlyRetentionDays": 7,
+  "ReceiptDetailRetentionDays": 30,
+  "MaintenanceEveryTransitions": 1000,
+  "MaintenanceBatchSize": 1000,
+  "IncrementalVacuumPages": 256
+}
+```
+
+Read-only outcomes expire after the configured interval since their last transition; an expired
+read may run again. Mutating operation IDs, states, row counts, and triage metadata never expire.
+For committed or failed writes, only the optional detail text is cleared after its retention window.
+Ambiguous writes retain their detail for reconciliation. Mutating receipt storage therefore grows
+with unique write IDs, but each transition and lookup touches only the requested receipt.
+
+Maintenance runs at startup and after the configured number of transitions. Each pass deletes at
+most `MaintenanceBatchSize` expired reads and compacts at most that many write details. Freed pages
+are reused; incremental vacuum reclaims up to `IncrementalVacuumPages` pages per pass (zero disables
+vacuum). A passive WAL checkpoint follows maintenance. All other values must be positive.
+Preserve the database when moving or restoring a Gateway; deleting it removes replay protection.
+
 ## See also
 
 - [SaaS Tenant Isolation Architecture §11](../../architecture/saas-tenant-isolation.md#11-secure-outbound-data-gateway)

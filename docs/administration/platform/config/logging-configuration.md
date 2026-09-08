@@ -24,11 +24,17 @@ Valid values (ascending severity): `Trace`, `Debug`, `Information`, `Warning`, `
 
 Captures service startup, shutdown, health, and infrastructure-level events.
 
+Portal and Orchestrator host events and engine events share this sink and its sanitization boundary. Orchestrator
+bootstrap diagnostics use the console until host configuration is available; it does not open a separate hard-coded
+file. `Logging:LogLevel:Default` applies to the application sink; host category thresholds still apply before forwarding.
+Restart the host to apply sink configuration changes. Retention is checked at startup and rollover.
+
 | Key | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `Logging:AppLog:Directory` | string | `logs/app` | Directory where application log files are written. |
 | `Logging:AppLog:RetentionDays` | integer | `30` | Days to retain application log files before recycling. |
 | `Logging:AppLog:FileSizeLimitMb` | integer | `10` | Maximum size in MB before the log file rolls over. |
+| `Logging:AppLog:Format` | string | `Text` | `Text` includes structured properties alongside each message; `Json` emits one JSON event per line. |
 
 ---
 
@@ -69,7 +75,8 @@ Captures output from smoke tests and deployment certification runs.
     "AppLog": {
       "Directory": "logs/app",
       "RetentionDays": 30,
-      "FileSizeLimitMb": 10
+      "FileSizeLimitMb": 10,
+      "Format": "Text"
     },
     "ScriptLog": {
       "Directory": "logs/scripts",

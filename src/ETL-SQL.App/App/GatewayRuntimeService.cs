@@ -7,6 +7,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Gateway;
+using ETL_SQL.Infrastructure.Sqlite;
 
 namespace ETL_SQL.App;
 
@@ -43,7 +44,10 @@ internal static class GatewayRuntimeService
         }
 
         var registry = new GatewayResourceRegistry(Path.Combine(GatewaySetupService.ConfigDirectory, "resources.protected"));
-        var ledger = new GatewayOutcomeLedger(Path.Combine(GatewaySetupService.ConfigDirectory, "outcomes.json"));
+        using var outcomeStore = new SqliteGatewayOutcomeStore(
+            Path.Combine(GatewaySetupService.ConfigDirectory, "outcomes.db"), config.OutcomeRetention);
+        await outcomeStore.ImportLegacyAsync(Path.Combine(GatewaySetupService.ConfigDirectory, "outcomes.json"));
+        var ledger = new GatewayOutcomeLedger(outcomeStore);
         var dispatcher = new GatewayOperationDispatcher(
             registry, new ConnectorResourceExecutor(connectors), ledger, CreateViewerContextVerifier(logger));
         var publishedResources = await registry.PublishAsync().ConfigureAwait(false);

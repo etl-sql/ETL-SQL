@@ -215,7 +215,7 @@ public sealed class GatewayOperationProtocolTests
     public void DurableLedgerPreservesCommittedAndAmbiguousWriteDecisionsAcrossRestart()
     {
         var directory = Path.Combine(Path.GetTempPath(), $"gateway-ledger-{Guid.NewGuid():N}");
-        var path = Path.Combine(directory, "outcomes.json");
+        var path = Path.Combine(directory, "outcomes.db");
         try
         {
             var committed = Operation() with
@@ -231,14 +231,17 @@ public sealed class GatewayOperationProtocolTests
                 CorrelationId = "corr-interrupted",
                 DispatchedAtUtc = interruptedAt
             };
-            var firstProcess = new GatewayOutcomeLedger(path);
+            using var firstStore = new ETL_SQL.Infrastructure.Sqlite.SqliteGatewayOutcomeStore(path);
+            var firstProcess = new GatewayOutcomeLedger(firstStore);
             firstProcess.RecordDispatched(committed);
             firstProcess.RecordTerminal(Tenant, committed.OperationId, GatewayOutcomeState.Committed, 3);
             firstProcess.RecordDispatched(ambiguous);
             firstProcess.RecordTerminal(Tenant, ambiguous.OperationId, GatewayOutcomeState.Ambiguous);
             firstProcess.RecordDispatched(interrupted);
 
-            var restarted = new GatewayOutcomeLedger(path);
+            firstStore.Dispose();
+            using var restartedStore = new ETL_SQL.Infrastructure.Sqlite.SqliteGatewayOutcomeStore(path);
+            var restarted = new GatewayOutcomeLedger(restartedStore);
             Assert.Equal(
                 GatewayReconnectAction.ReturnRecordedOutcome,
                 restarted.DecideReconnect(Tenant, committed.OperationId));

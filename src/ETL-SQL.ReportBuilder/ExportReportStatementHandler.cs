@@ -69,7 +69,7 @@ namespace ETL_SQL.ReportBuilder
             switch (stmt.Format.ToUpperInvariant())
             {
                 case "PDF":
-                    var pdfBytes = await new ReportPdfExporter().ExportAsync(manifest, await BuildPdfExportOptionsAsync(stmt, context), context.CancellationToken);
+                    var pdfBytes = await new ReportPdfExporter(logger: logger).ExportAsync(manifest, await BuildPdfExportOptionsAsync(stmt, context), context.CancellationToken);
                     await File.WriteAllBytesAsync(outputPath, pdfBytes);
                     break;
 

@@ -77,12 +77,8 @@ namespace ETL_SQL.App
             services.AddSingleton<IConfiguration>(configuration);
 
             // ── Logging via LoggerService ──────────────────────────────────────
-            string appLogDir = configuration["Logging:AppLog:Directory"] ?? "logs/app";
-            int retentionDays = int.TryParse(configuration["Logging:AppLog:RetentionDays"], out var rd) ? rd : 30;
-            int sizeLimitMb = int.TryParse(configuration["Logging:AppLog:FileSizeLimitMb"], out var sl) ? sl : 10;
-
             var loggerService = new LoggerService();
-            loggerService.InitializeAppLogger(appLogDir, retentionDays, sizeLimitMb);
+            loggerService.InitializeAppLogger(configuration);
 
             services.AddSingleton<LoggerService>(loggerService);
             services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);

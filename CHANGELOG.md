@@ -18,6 +18,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Orchestrator host and engine logs now share configured application log paths, rolling limits, retention, minimum levels, and text or JSON formatting.
+- Operational metrics aggregate audit backlog sizes and execution timings in the database, avoiding payload-sized allocations during collector outages.
+- PDF export cleans up partial image files after cancellation or failed writes and reports cleanup failures.
+- Gateway outcomes use incremental SQLite receipts with indexed lookup, bounded retention maintenance, and atomic migration from the legacy JSON ledger. Mutating receipts retain replay protection permanently.
+
 - All 115 findings the lint gate first reported are worked off, so its baseline ships empty. Among them: a dataset's permissions table and both Portal settings forms failed silently, leaving stale or blank fields that read as "nothing is configured"; an invalid parameter `PATTERN` dropped that parameter's validation without saying so; a `const` in two unbraced `switch` cases put every sibling case in its temporal dead zone; and over 350 lines of unreachable browser code — including a `showExportModal` stub that did nothing and was called by nothing — are gone.
 
 - The browser test lane no longer runs every test class against a single Portal. Five themed collections each own a Portal, administrator and sign-in gate, so a host that fails to start fails its own group instead of 178 of 231 tests, and the message names the group rather than claiming the assembly. Verified by making one group's host throw and confirming the other four still ran.

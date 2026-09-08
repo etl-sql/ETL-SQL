@@ -32,6 +32,61 @@ public sealed class OperationalObservabilityTests : IDisposable
     }
 
     [Fact]
+    public async Task MetricsAggregateLargeBacklogWithoutLoadingPayloads()
+    {
+        var capture = new MetricsQueryCapture();
+        var options = new DbContextOptionsBuilder<PortalDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_root, "backlog.db")}")
+            .AddInterceptors(capture).Options;
+        await using var db = new PortalDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+        var payload = new string('x', 4096);
+        var oldest = DateTime.UtcNow.AddHours(-2);
+        db.AuditOutboxMessages.AddRange(Enumerable.Range(0, 10000).Select(i => new AuditOutboxMessage
+        {
+            TenantId = i < 5000 ? "portal-host" : "other-tenant",
+            Status = "Pending",
+            PayloadJson = payload,
+            Action = "TEST",
+            CreatedAt = oldest.AddSeconds(i),
+            UpdatedAt = oldest
+        }));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var service = new OperationalMetricsService(db, new PortalConfig
+        { DatasetRootPath = _root, SnapshotDirectory = _root });
+        await service.GetAsync(); // Warm EF translation and provider caches before measuring.
+        capture.Commands.Clear();
+        var before = GC.GetTotalAllocatedBytes(precise: true);
+        var metrics = await service.GetAsync();
+        var allocated = GC.GetTotalAllocatedBytes(precise: true) - before;
+        Assert.Equal(5000, metrics.AuditOutboxPending);
+        Assert.Equal(5000L * payload.Length, metrics.AuditOutboxPendingBytes);
+        Assert.InRange(metrics.AuditOutboxOldestPendingAgeSeconds, 7199, 7300);
+        Assert.True(allocated < 5000L * payload.Length,
+            $"Metrics allocated {allocated} bytes while the tenant backlog contains {5000L * payload.Length} payload bytes.");
+        var aggregate = Assert.Single(capture.Commands, sql => sql.Contains("SUM", StringComparison.OrdinalIgnoreCase) && sql.Contains("PayloadJson"));
+        Assert.Contains("length(", aggregate, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("MIN(", aggregate, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("COUNT(", aggregate, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("TenantId", aggregate);
+        Assert.Equal(0, metrics.AverageExecutionDurationMs);
+        Assert.Equal(0, metrics.AverageQueuedExecutionAgeSeconds);
+    }
+
+    private sealed class MetricsQueryCapture : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+    {
+        public List<string> Commands { get; } = [];
+        public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+            System.Data.Common.DbCommand command, Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+            Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Commands.Add(command.CommandText);
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    [Fact]
     public async Task Metrics_ReportExecutionsQueueFailuresAndStorage()
     {
         var datasetDir = Path.Combine(_root, "datasets");

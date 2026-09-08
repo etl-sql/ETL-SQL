@@ -61,9 +61,7 @@ builder.Services.AddSingleton<LoggerService>(services =>
 {
     var configuration = services.GetRequiredService<IConfiguration>();
     var logger = new LoggerService();
-    logger.InitializeAppLogger(configuration["Logging:AppLog:Directory"] ?? "logs/portal",
-        configuration.GetValue("Logging:AppLog:RetentionDays", 30),
-        configuration.GetValue("Logging:AppLog:FileSizeLimitMb", 10));
+    logger.InitializeAppLogger(configuration, "logs/portal");
     return logger;
 });
 builder.Services.AddSingleton<ETL_SQL.Common.ILogger>(services => services.GetRequiredService<LoggerService>());

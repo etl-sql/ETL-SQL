@@ -15,7 +15,8 @@ public sealed record GatewayConfig(
     string GatewayId,
     string NodeId,
     string WorkloadPublicKeyThumbprint,
-    string ProtectedWorkloadPrivateKeyPkcs8);
+    string ProtectedWorkloadPrivateKeyPkcs8,
+    GatewayOutcomeRetentionOptions? OutcomeRetention = null);
 
 public static class GatewaySetupService
 {

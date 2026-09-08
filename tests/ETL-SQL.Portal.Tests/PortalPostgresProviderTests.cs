@@ -25,6 +25,45 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
     public Task DisposeAsync() => _pg.DisposeAsync().AsTask();
 
     [Fact]
+    public async Task OperationalMetricsAggregateOnPostgres()
+    {
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "pg-metrics-" + Guid.NewGuid().ToString("N"));
+        var config = new PortalConfig
+        {
+            TenantId = "tenant-alpha",
+            DatasetRootPath = root,
+            SnapshotDirectory = root,
+            Database = new PortalDatabaseConfig { Provider = "Postgres", ConnectionString = _pg.GetConnectionString() }
+        };
+        var builder = new DbContextOptionsBuilder<PortalDbContext>();
+        PortalDatabase.Configure(builder, config);
+        await using var db = new PortalDbContext(builder.Options);
+        await db.Database.MigrateAsync();
+        var owner = new PortalUser { UserName = "metrics-owner", IsActive = true };
+        db.Users.Add(owner);
+        await db.SaveChangesAsync();
+        var folder = new Folder { Name = "metrics", Path = "/metrics", OwnerId = owner.Id };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+        var report = new Report { FolderId = folder.Id, Name = "Metrics", ScriptPath = "metrics.rptsql", CreatedBy = owner.Id };
+        db.Reports.Add(report);
+        await db.SaveChangesAsync();
+        var now = DateTime.UtcNow;
+        db.PortalExecutionJobs.AddRange(
+            new PortalExecutionJob { Id = "pending", ReportId = report.Id, UserId = owner.Id, Status = "Pending", CreatedAt = now.AddMinutes(-2) },
+            new PortalExecutionJob { Id = "done", ReportId = report.Id, UserId = owner.Id, Status = "Completed", CreatedAt = now.AddMinutes(-3), StartedAt = now.AddSeconds(-30), CompletedAt = now });
+        db.AuditOutboxMessages.AddRange(
+            new AuditOutboxMessage { TenantId = "tenant-alpha", EventId = "mine", PayloadJson = "{\"a\":1}", CreatedAt = now.AddMinutes(-1) },
+            new AuditOutboxMessage { TenantId = "other", EventId = "theirs", PayloadJson = "{}", CreatedAt = now.AddHours(-1) });
+        await db.SaveChangesAsync();
+        var metrics = await new OperationalMetricsService(db, config).GetAsync();
+        Assert.InRange(metrics.AverageQueuedExecutionAgeSeconds, 120, 180);
+        Assert.Equal(30_000, metrics.AverageExecutionDurationMs, precision: 2);
+        Assert.Equal(1, metrics.AuditOutboxPending);
+        Assert.Equal(7, metrics.AuditOutboxPendingBytes);
+    }
+
+    [Fact]
     public async Task PostgresProvider_AppliesMigrationsAndRoundTrips()
     {
         var config = new PortalConfig

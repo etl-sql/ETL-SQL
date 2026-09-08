@@ -120,7 +120,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             }
             else if (format == "pdf")
             {
-                var pdfBytes = await new PdfExporter().ExportAsync(manifest);
+                var pdfBytes = await new PdfExporter(evaluator.Logger).ExportAsync(manifest);
                 await File.WriteAllBytesAsync(outputPath, pdfBytes);
             }
             else

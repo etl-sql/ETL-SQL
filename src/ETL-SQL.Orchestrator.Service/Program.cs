@@ -32,48 +32,29 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Serilog;
-using Serilog.Events;
 
 #if WINDOWS
 // Running as a Windows Service, the working directory defaults to System32, which sends relative
 // paths (Serilog file logs, SQLite job store) there. Anchor it to the executable folder before the
-// bootstrap logger opens its file sink so all logs land in the install folder.
+// configured logger opens its file sink so all logs land in the install folder.
 if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindowsService())
 {
     System.IO.Directory.SetCurrentDirectory(System.AppContext.BaseDirectory);
 }
 #endif
 
-// ── Serilog bootstrap logger (captures startup errors before host is ready) ──
-Log.Logger = new LoggerConfiguration()
-    .MinimumLevel.Debug()
-    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-    .MinimumLevel.Override("System", LogEventLevel.Warning)
-    .Enrich.FromLogContext()
-    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}")
-    .WriteTo.File("logs/orchestrator-.log",
-        rollingInterval: RollingInterval.Day,
-        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] [{SourceContext}] [{SessionId: [sid=]:l}]{Message:lj}{NewLine}{Exception}")
-    .CreateBootstrapLogger();
+// Before configuration is available, emit sanitized startup diagnostics to the console.
+using var bootstrapLogger = new LoggerService();
+LoggerService? operationalLogger = null;
 
 try
 {
-    Log.Information("ETL-SQL Orchestrator Service starting up.");
+    bootstrapLogger.Info("ETL-SQL Orchestrator Service starting up.");
 
     ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
         new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
     await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
     var builder = WebApplication.CreateBuilder(args);
-
-    // ── Replace default logging with Serilog ──────────────────────────────
-    builder.Host.UseSerilog((ctx, services, cfg) =>
-        cfg.ReadFrom.Configuration(ctx.Configuration)
-           .ReadFrom.Services(services)
-           .Enrich.FromLogContext()
-           .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
-           .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-           .WriteTo.File("logs/orchestrator-.log", rollingInterval: RollingInterval.Day));
 
     // ── Windows Service / systemd integration ────────────────────────────
 #if WINDOWS
@@ -93,15 +74,17 @@ try
     var cfg = builder.Configuration;
 
     // ── Engine services (centralized in Orchestrator extension) ─────────
-    var loggerService = new LoggerService();
-    loggerService.InitializeAppLogger(
-        cfg["Logging:AppLog:Directory"] ?? "logs/orchestrator",
-        int.TryParse(cfg["Logging:AppLog:RetentionDays"], out var rd) ? rd : 30,
-        int.TryParse(cfg["Logging:AppLog:FileSizeLimitMb"], out var sl) ? sl : 10);
-
-    builder.Services.AddSingleton<LoggerService>(loggerService);
-    builder.Services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
-    builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
+    builder.Services.AddSingleton<LoggerService>(services =>
+    {
+        var logger = new LoggerService();
+        logger.InitializeAppLogger(services.GetRequiredService<IConfiguration>(), "logs/orchestrator");
+        operationalLogger = logger;
+        return logger;
+    });
+    builder.Services.AddSingleton<ETL_SQL.Common.ILogger>(services => services.GetRequiredService<LoggerService>());
+    builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(services => services.GetRequiredService<LoggerService>());
+    builder.Logging.ClearProviders();
+    builder.Services.AddSingleton<ILoggerProvider, ApplicationLoggerProvider>();
 
     builder.Services.AddEtlSqlEngine(cfg);
     builder.Services.AddSandboxAdmissionHosting(cfg);
@@ -123,12 +106,10 @@ try
     {
         builder.Services.AddTransient<IScriptExecutor,
             ETL_SQL.Orchestrator.Execution.ProcessJobExecutor>();
-        Log.Information("Job execution mode: process spawning (ETL-SQL.exe run)");
     }
     else
     {
         builder.Services.AddTransient<IScriptExecutor, ScriptExecutorAdapter>();
-        Log.Information("Job execution mode: in-process (ScriptExecutorAdapter)");
     }
 
     // Hosted service (starts/stops SchedulerService with the host)
@@ -147,6 +128,7 @@ try
     });
 
     var app = builder.Build();
+    app.Logger.LogInformation("Job execution mode: {Mode}", useProcessSpawning ? "process spawning" : "in-process");
 
     // ── Security guard: never serve the ad-hoc job API unauthenticated on a ──
     //    network-reachable address. Fails fast when no API key is configured
@@ -160,9 +142,9 @@ try
     //    look Solo.
     var authorizationMode = OrchestratorAuthorizationMode.Resolve(cfg);
     if (authorizationMode.RequiresOperatorAttention)
-        Log.Warning("{AuthorizationMode}", authorizationMode.Describe());
+        app.Logger.LogWarning("{AuthorizationMode}", authorizationMode.Describe());
     else
-        Log.Information("{AuthorizationMode}", authorizationMode.Describe());
+        app.Logger.LogInformation("{AuthorizationMode}", authorizationMode.Describe());
 
     // ── Orphan PID cleanup on startup ────────────────────────────────────
     var tracker = app.Services.GetRequiredService<ETL_SQL.Orchestrator.Execution.ChildProcessTracker>();
@@ -196,10 +178,6 @@ try
 }
 catch (Exception ex) when (ex is not OperationCanceledException && ex is not HostAbortedException)
 {
-    Log.Fatal(ex, "ETL-SQL Orchestrator Service terminated unexpectedly.");
+    (operationalLogger ?? bootstrapLogger).Error("ETL-SQL Orchestrator Service terminated unexpectedly.", ex);
     return 1;
-}
-finally
-{
-    Log.CloseAndFlush();
 }

@@ -6,9 +6,10 @@ namespace ETL_SQL.Reporting
 {
     public sealed class ReportPdfExporter(
         IReportPdfExporter? staticExporter = null,
-        IReportPdfExporter? highFidelityExporter = null) : IReportPdfExporter
+        IReportPdfExporter? highFidelityExporter = null,
+        ETL_SQL.Common.ILogger? logger = null) : IReportPdfExporter
     {
-        private readonly IReportPdfExporter _staticExporter = staticExporter ?? new StaticReportPdfExporter();
+        private readonly IReportPdfExporter _staticExporter = staticExporter ?? new StaticReportPdfExporter(logger);
         private readonly IReportPdfExporter _highFidelityExporter = highFidelityExporter ?? new BrowserReportPdfExporter();
 
         public byte[] Export(ReportManifest manifest, PdfExportOptions? options = null)

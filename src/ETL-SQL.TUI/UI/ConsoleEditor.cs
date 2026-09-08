@@ -474,7 +474,7 @@ namespace ETL_SQL.TUI.UI
                 string outPath = Path.ChangeExtension(Path.GetFullPath(_filePath), pdf ? ".pdf" : ".md");
 
                 if (pdf)
-                    await File.WriteAllBytesAsync(outPath, await new ETL_SQL.Reporting.PdfExporter().ExportAsync(manifest));
+                    await File.WriteAllBytesAsync(outPath, await new ETL_SQL.Reporting.PdfExporter(_logger).ExportAsync(manifest));
                 else
                     await File.WriteAllTextAsync(outPath, new ETL_SQL.Reporting.MarkdownRenderer().Render(manifest));
 

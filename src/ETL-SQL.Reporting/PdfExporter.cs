@@ -20,7 +20,7 @@ namespace ETL_SQL.Reporting
     /// Charts are rendered as SVG via <see cref="SvgChartRenderer"/> then rasterized to PNG
     /// via Svg.Skia for embedding. No headless browser required.
     /// </summary>
-    public class PdfExporter
+    public class PdfExporter(ETL_SQL.Common.ILogger? logger = null)
     {
         private static readonly Color _greyDark2 = Color.FromRgb(0x61, 0x61, 0x61);
         private static readonly Color _greyDark1 = Color.FromRgb(0x75, 0x75, 0x75);
@@ -56,9 +56,27 @@ namespace ETL_SQL.Reporting
             }
             finally
             {
+                var failures = new List<Exception>();
                 foreach (var tmp in tempFiles)
-                    try { if (File.Exists(tmp)) File.Delete(tmp); } catch { /* best-effort */ }
+                {
+                    try { DeleteTemporaryImage(tmp); }
+                    catch (Exception ex)
+                    {
+                        logger?.Warning("PDF image cleanup failed for {Path}: {Error}", tmp, ex.Message);
+                        failures.Add(new IOException($"PDF temporary image remains at '{tmp}'.", ETL_SQL.Core.Common.SecretRedactor.RedactException(ex)));
+                    }
+                }
+                if (failures.Count > 0)
+                    throw new AggregateException("PDF image cleanup failed; retained files require operator cleanup.", failures);
             }
+        }
+
+        protected virtual Task WriteTemporaryImageAsync(string path, byte[] bytes, CancellationToken cancellationToken)
+            => File.WriteAllBytesAsync(path, bytes, cancellationToken);
+
+        protected virtual void DeleteTemporaryImage(string path)
+        {
+            if (File.Exists(path)) File.Delete(path);
         }
 
         private static void EnsureFontsInitialized()
@@ -379,8 +397,8 @@ namespace ETL_SQL.Reporting
                 if (png.Length > 0)
                 {
                     var tmp = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".png");
-                    await File.WriteAllBytesAsync(tmp, png, cancellationToken);
                     tempFiles.Add(tmp);
+                    await WriteTemporaryImageAsync(tmp, png, cancellationToken);
                     var img = section.AddImage(tmp);
                     img.Width = Unit.FromPoint(ContentWidthPt);
                     img.LockAspectRatio = true;
@@ -562,8 +580,8 @@ namespace ETL_SQL.Reporting
             var png = SvgToPng(micro.Svg);
             if (png.Length == 0) return null;
             var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".png");
-            await File.WriteAllBytesAsync(path, png, cancellationToken);
             tempFiles.Add(path);
+            await WriteTemporaryImageAsync(path, png, cancellationToken);
             return path;
         }
 
@@ -596,7 +614,7 @@ namespace ETL_SQL.Reporting
             }
         }
 
-        private static async Task RenderImageAsync(Section section, VisualManifest v, List<string> tempFiles, CancellationToken cancellationToken)
+        private async Task RenderImageAsync(Section section, VisualManifest v, List<string> tempFiles, CancellationToken cancellationToken)
         {
             var src = v.Options.GetValueOrDefault("SRC") ?? v.Options.GetValueOrDefault("src");
             var path = string.IsNullOrWhiteSpace(src) ? null : await DataUriToTempImageAsync(src!, tempFiles, cancellationToken);
@@ -618,7 +636,7 @@ namespace ETL_SQL.Reporting
 
         // Decodes a data: URI to a temp image file (SVG rasterised at native aspect,
         // base64 raster written as-is). Remote URLs are skipped (no network during export).
-        private static async Task<string?> DataUriToTempImageAsync(string src, List<string> tempFiles, CancellationToken cancellationToken)
+        private async Task<string?> DataUriToTempImageAsync(string src, List<string> tempFiles, CancellationToken cancellationToken)
         {
             if (!src.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return null;
             int comma = src.IndexOf(',');
@@ -653,8 +671,8 @@ namespace ETL_SQL.Reporting
 
             if (bytes.Length == 0) return null;
             var tmp = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + "." + ext);
-            await File.WriteAllBytesAsync(tmp, bytes, cancellationToken);
             tempFiles.Add(tmp);
+            await WriteTemporaryImageAsync(tmp, bytes, cancellationToken);
             return tmp;
         }
 

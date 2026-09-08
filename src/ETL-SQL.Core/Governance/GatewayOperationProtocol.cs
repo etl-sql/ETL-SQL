@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace ETL_SQL.Core.Governance;
 
 /// <summary>Transport a Gateway session speaks. One versioned operation model over either.</summary>
@@ -167,49 +165,12 @@ public sealed record GatewayAmbiguousOutcomeNotice(
 /// </summary>
 public sealed class GatewayOutcomeLedger
 {
-    private readonly Dictionary<(string TenantId, string OperationId), GatewayOperationOutcome> _outcomes = new();
+    private readonly IGatewayOutcomeStore _store;
     private readonly Lock _gate = new();
-    private readonly string? _persistencePath;
 
-    /// <summary>
-    /// Creates an in-memory ledger for tests, or a restart-durable ledger when an absolute local
-    /// persistence path is supplied. The file is replaced atomically after every state transition.
-    /// </summary>
-    public GatewayOutcomeLedger(string? persistencePath = null)
+    public GatewayOutcomeLedger(IGatewayOutcomeStore? store = null)
     {
-        if (persistencePath is null)
-            return;
-        if (!Path.IsPathFullyQualified(persistencePath))
-            throw new ArgumentException("The Gateway outcome ledger path must be absolute.", nameof(persistencePath));
-
-        _persistencePath = Path.GetFullPath(persistencePath);
-        var directory = Path.GetDirectoryName(_persistencePath)
-            ?? throw new ArgumentException("The Gateway outcome ledger path has no parent directory.", nameof(persistencePath));
-        Directory.CreateDirectory(directory);
-        if (!File.Exists(_persistencePath))
-            return;
-
-        try
-        {
-            var records = JsonSerializer.Deserialize<List<GatewayOperationOutcome>>(
-                File.ReadAllText(_persistencePath)) ?? [];
-            var promoted = false;
-            foreach (var record in records)
-            {
-                var restored = record.State == GatewayOutcomeState.InFlight
-                    && record.Effect == GatewayOperationEffect.Mutating
-                        ? record with { State = GatewayOutcomeState.Ambiguous }
-                        : record;
-                promoted |= restored.State != record.State;
-                _outcomes[Key(restored.TenantId, restored.OperationId)] = restored;
-            }
-            if (promoted) PersistLocked();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-        {
-            throw new GatewayProtocolException(
-                "The durable Gateway outcome ledger could not be loaded; operations are refused to avoid replaying an ambiguous write.");
-        }
+        _store = store ?? new MemoryGatewayOutcomeStore();
     }
 
     public void RecordDispatched(GatewayOperation operation)
@@ -218,20 +179,19 @@ public sealed class GatewayOutcomeLedger
         operation.Validate();
         lock (_gate)
         {
-            if (_outcomes.TryGetValue(Key(operation.TenantId, operation.OperationId), out var existing)
+            if (_store.Find(operation.TenantId, operation.OperationId) is { } existing
                 && existing.State != GatewayOutcomeState.InFlight)
             {
                 throw new GatewayProtocolException(
                     $"Operation '{operation.OperationId}' already has a terminal outcome and cannot be re-dispatched.");
             }
 
-            _outcomes[Key(operation.TenantId, operation.OperationId)] = new GatewayOperationOutcome(
+            _store.Save(new GatewayOperationOutcome(
                 operation.OperationId, operation.TenantId, GatewayOutcomeState.InFlight, operation.Effect,
                 GatewayId: operation.GatewayId,
                 ResourceId: operation.ResourceId,
                 CorrelationId: operation.CorrelationId,
-                DispatchedAtUtc: operation.DispatchedAtUtc ?? DateTimeOffset.UtcNow);
-            PersistLocked();
+                DispatchedAtUtc: operation.DispatchedAtUtc ?? DateTimeOffset.UtcNow));
         }
     }
 
@@ -243,7 +203,7 @@ public sealed class GatewayOutcomeLedger
 
         lock (_gate)
         {
-            if (!_outcomes.TryGetValue(Key(tenantId, operationId), out var existing))
+            if (_store.Find(tenantId, operationId) is not { } existing)
                 throw new GatewayProtocolException($"Operation '{operationId}' was never dispatched for this tenant.");
 
             // A committed outcome is final. Letting a later ambiguous report overwrite it would turn
@@ -252,9 +212,7 @@ public sealed class GatewayOutcomeLedger
                 throw new GatewayProtocolException(
                     $"Operation '{operationId}' is already committed and its outcome cannot be downgraded.");
 
-            _outcomes[Key(tenantId, operationId)] =
-                existing with { State = state, RowsProduced = rowsProduced, Detail = detail };
-            PersistLocked();
+            _store.Save(existing with { State = state, RowsProduced = rowsProduced, Detail = detail });
         }
     }
 
@@ -263,7 +221,7 @@ public sealed class GatewayOutcomeLedger
     {
         lock (_gate)
         {
-            if (!_outcomes.TryGetValue(Key(tenantId, operationId), out var existing))
+            if (_store.Find(tenantId, operationId) is not { } existing)
                 return GatewayReconnectAction.Dispatch;
 
             return existing.State switch
@@ -287,7 +245,7 @@ public sealed class GatewayOutcomeLedger
     {
         lock (_gate)
         {
-            return _outcomes.GetValueOrDefault(Key(tenantId, operationId));
+            return _store.Find(tenantId, operationId);
         }
     }
 
@@ -295,11 +253,8 @@ public sealed class GatewayOutcomeLedger
     {
         lock (_gate)
         {
-            return _outcomes.Values
-                .Where(item => item.TenantId == tenantId
-                    && item.Effect == GatewayOperationEffect.Mutating
-                    && item.State == GatewayOutcomeState.Ambiguous
-                    && !string.IsNullOrWhiteSpace(item.GatewayId)
+            return _store.ListAmbiguousMutating(tenantId)
+                .Where(item => !string.IsNullOrWhiteSpace(item.GatewayId)
                     && !string.IsNullOrWhiteSpace(item.ResourceId)
                     && !string.IsNullOrWhiteSpace(item.CorrelationId))
                 .OrderBy(item => item.DispatchedAtUtc)
@@ -310,28 +265,4 @@ public sealed class GatewayOutcomeLedger
         }
     }
 
-    // Tenant is half of the key, so equal operation IDs across tenants are different operations and
-    // one tenant can never observe or resolve another's outcome. A tuple key rather than a
-    // concatenated string: with a string, ("a", "bc") and ("ab", "c") would collide into one
-    // another's outcome, and that class of bug cannot occur here.
-    private static (string, string) Key(string tenantId, string operationId) => (tenantId, operationId);
-
-    private void PersistLocked()
-    {
-        if (_persistencePath is null)
-            return;
-
-        var temporaryPath = _persistencePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            File.WriteAllText(temporaryPath, JsonSerializer.Serialize(_outcomes.Values));
-            File.Move(temporaryPath, _persistencePath, overwrite: true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            try { File.Delete(temporaryPath); } catch { }
-            throw new GatewayProtocolException(
-                "The durable Gateway outcome ledger could not record the operation; execution is refused.");
-        }
-    }
 }

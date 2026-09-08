@@ -54,6 +54,7 @@ public class DesignerController : ControllerBase
     private readonly DesignerQueryFilterService _queryFilters = new();
     private readonly LanguageHoverService? _hoverService;
     private readonly PortalDbContext? _db;
+    private readonly ETL_SQL.Common.ILogger? _logger;
 
     public DesignerController(
         PortalDesignerSchemaService? schemaService = null,
@@ -72,7 +73,8 @@ public class DesignerController : ControllerBase
         PortalDesignerDataPreviewService? dataPreviewService = null,
         ILanguageHelpRegistry? languageHelp = null,
         IFunctionRegistry? functionRegistry = null,
-        PortalDbContext? db = null)
+        PortalDbContext? db = null,
+        ETL_SQL.Common.ILogger? logger = null)
     {
         _schemaService = schemaService;
         _runService = runService;
@@ -89,6 +91,7 @@ public class DesignerController : ControllerBase
         _snapshots = snapshots;
         _scriptDag = scriptDag ?? new ScriptDagProjectionService();
         _db = db;
+        _logger = logger;
         _hoverService = languageHelp is not null && functionRegistry is not null
             ? new LanguageHoverService(languageHelp, functionRegistry)
             : null;
@@ -942,7 +945,7 @@ public class DesignerController : ControllerBase
             // for the reader to press Run — a deferred page exports as an empty sheet.
             var manifest = await _previewService.BuildPreviewAsync(
                 req.Script, req.Page, runEveryPage: true, User, cancellationToken, req.Parameters);
-            var exporter = new ETL_SQL.Reporting.ReportPdfExporter();
+            var exporter = new ETL_SQL.Reporting.ReportPdfExporter(logger: _logger);
             var pdfBytes = await exporter.ExportAsync(manifest, new ETL_SQL.Reporting.PdfExportOptions
             {
                 Mode = ETL_SQL.Reporting.PdfExportMode.Static,
