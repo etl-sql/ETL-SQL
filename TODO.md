@@ -20,7 +20,7 @@ this file decomposes it into executable work.
 | :--- | :--- | ---: |
 | Lint the browser sources | [§1](#1-lint-the-browser-sources) | ✔ |
 | Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 3 deferred |
-| Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | 5 |
+| Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | 2 |
 | Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 6 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 33 |
 | Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 5 |
@@ -43,9 +43,9 @@ typing changes, and product behavior changes in separate reviewable batches.
 1. **§2's mechanical split is implemented.** The runtime is 17 ES modules with a generated
    offline bundle. See the [verification record](docs/releases/v0.20.0-browser-split-baseline.md)
    for checks and environment limits. Stateful closure refactors remain deferred.
-2. **Complete §3's remaining test repairs.** In particular, resolve the Portal fixture startup
-   issue, repair the consumer checks, and put them in a gate. Fix any test issue that prevents
-   verifying §2 immediately; do not wait for the whole split to finish to unblock its validation.
+2. **Complete §3's remaining test repairs.** Portal fixture startup and consumer gates are fixed.
+   Address the desktop fixture's inherited Git signing requirement and the custom-chart story's
+   fixed-delay assertion, both recorded during split validation.
 3. **Execute §5 incrementally.** First document source/output ownership and compilation, then
    migrate one small leaf module end to end. Prove generated output, asset sync, sandbox loading,
    host loading, and offline delivery before expanding the migration.
@@ -252,13 +252,24 @@ the browser sources. The v0.19.0 release run made the shape concrete — the evi
   `docs/releases/README.md` was missing two release documents. Both were failing pre-push before any
   of this work.
 
-### One gate defect found and not fixed
+### Current-source gate validation
 
-- [ ] **`Test-PrePush.ps1` step 12 can test a stale binary.** It runs `dotnet test --no-build`
-  against `-Configuration Release`, and nothing in the gate builds Release. On this machine the
-  Release test DLL was a day old, so seven tests failed that pass on the current source — and the
-  reverse is worse: the step can report green against code that no longer exists. Either build
-  before the run or drop `--no-build`.
+- [x] **`Test-PrePush.ps1` step 12 builds current source before testing.** Removed `--no-build`
+  from the filtered test command so the selected configuration is built and compilation failures
+  fail the gate. Previously the default Release run could test a day-old DLL and report results
+  unrelated to the current checkout. Dependency restore remains a prerequisite. Verified with
+  `Test-PrePush.ps1 -Configuration Release -SkipFormat`: Release build completed and all 142 fast
+  tests passed; the preceding split commit ran the formatting hook.
+
+### Failures observed during runtime split validation
+
+- [ ] Isolate the desktop journey's temporary Git repository from developer commit-signing
+  settings. Its initial fixture commit failed before the desktop host started.
+- [ ] Replace the custom-chart designer story's fixed 300 ms delay with a wait for the intended
+  canvas state. The full browser run saw three cards where the assertion expected one.
+
+See the [runtime split verification record](docs/releases/v0.20.0-browser-split-baseline.md)
+for the completed browser run and exact test names.
 
 - [x] **Decided: it should not, and no longer does.** `IsHealthyAsync` returned one `bool` for two
   different facts — "the process is gone" and "the process is running but did not answer in two

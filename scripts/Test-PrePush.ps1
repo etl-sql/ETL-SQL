@@ -12,7 +12,7 @@ $RepoRoot = Resolve-Path (Join-Path $ScriptRoot "..")
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " ETL-SQL FAST PRE-PUSH VALIDATION" -ForegroundColor Cyan
-Write-Host " Catches 90%+ of CI failures locally in ~20-30s" -ForegroundColor Cyan
+Write-Host " Validates current sources before pushing" -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
 
 # 1. Code Formatting
@@ -112,13 +112,12 @@ if ($LASTEXITCODE -ne 0) {
 
 # 12. Fast Contract & Smoke Suite
 if (-not $SkipSmoke) {
-    Write-Host "[12/12] Running fast contract, architecture, and smoke tests..." -ForegroundColor White
+    Write-Host "[12/12] Building and running fast contract, architecture, and smoke tests..." -ForegroundColor White
     $filter = "Category=Architecture|Category=Docs|Category=Smoke.Core|Category=Smoke.Reporting|Category=Smoke.Security"
     & dotnet test (Join-Path $RepoRoot "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj") `
         --filter $filter `
         --configuration $Configuration `
         --no-restore `
-        --no-build `
         --logger "console;verbosity=minimal"
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Fast pre-push smoke/contract tests failed."
@@ -132,4 +131,3 @@ Write-Host "=======================================================" -Foreground
 Write-Host (" PRE-PUSH VALIDATION SUCCEEDED in {0:F1}s" -f $stopwatch.Elapsed.TotalSeconds) -ForegroundColor Green
 Write-Host " Safe to push to remote without wasting CI cycles." -ForegroundColor Green
 Write-Host "=======================================================" -ForegroundColor Green
-

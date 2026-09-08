@@ -26,6 +26,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Pre-push builds the selected configuration before running fast tests, preventing stale test
+  binaries from producing a false pass or failure.
+
 - Orchestrator host and engine logs now share configured application log paths, rolling limits, retention, minimum levels, and text or JSON formatting.
 - Operational metrics aggregate audit backlog sizes and execution timings in the database, avoiding payload-sized allocations during collector outages.
 - PDF export cleans up partial image files after cancellation or failed writes and reports cleanup failures.
