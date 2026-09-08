@@ -135,13 +135,13 @@ public sealed class StudioSessionRegistry(string? storageRoot = null, HttpClient
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            return !IsProcessAlive(record.ProcessId);
+            return !IsProcessAlive(record);
         }
 
         var deadline = DateTimeOffset.UtcNow + timeout;
         while (DateTimeOffset.UtcNow < deadline)
         {
-            if (!IsProcessAlive(record.ProcessId))
+            if (!IsProcessAlive(record))
             {
                 Remove(record.InstanceId);
                 return true;
@@ -183,7 +183,7 @@ public sealed class StudioSessionRegistry(string? storageRoot = null, HttpClient
         StudioSessionRecord record,
         CancellationToken cancellationToken = default)
     {
-        if (!IsProcessAlive(record.ProcessId)) return StudioSessionHealth.Gone;
+        if (!IsProcessAlive(record)) return StudioSessionHealth.Gone;
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, record.BaseUrl + "/api/studio/lifecycle");
@@ -210,14 +210,36 @@ public sealed class StudioSessionRegistry(string? storageRoot = null, HttpClient
         return Path.Combine(_storageRoot, parsed.ToString("N") + ".json");
     }
 
-    private static bool IsProcessAlive(int processId)
+    /// <summary>
+    /// Whether the recorded process is still running <b>and is still the process the record
+    /// describes</b>.
+    ///
+    /// <para>Liveness alone is not identity. Operating systems reuse process IDs freely, so a
+    /// record whose session exited can find an unrelated process wearing its number. That did not
+    /// matter much while any unanswered probe deleted the record within seconds; now that a running
+    /// but silent session is deliberately kept, a PID-only check would let a record — and the
+    /// bearer token in it — survive indefinitely pointing at a stranger, and its
+    /// <c>StudioUrl</c> would offer that token to whatever now answers on the recorded port.</para>
+    ///
+    /// <para>The start time settles it. The session had to be running before its record could be
+    /// written, so a process that started <em>after</em> <see cref="StudioSessionRecord.StartedAtUtc"/>
+    /// cannot be that session. A process whose start time cannot be read is not one we can confirm
+    /// is ours either, and is treated the same way — the closed answer, since the consequence of
+    /// guessing wrong is handing out a token.</para>
+    /// </summary>
+    private static bool IsProcessAlive(StudioSessionRecord record)
     {
         try
         {
-            using var process = Process.GetProcessById(processId);
-            return !process.HasExited;
+            using var process = Process.GetProcessById(record.ProcessId);
+            if (process.HasExited) return false;
+            return process.StartTime.ToUniversalTime() <= record.StartedAtUtc.UtcDateTime;
         }
         catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
             return false;
         }

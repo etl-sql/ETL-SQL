@@ -49,11 +49,16 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# 5. Report Runtime Page Layout Contract
-Write-Host "[5/12] Checking PAGE OPTIONS and MOBILE_LAYOUT reach the rendered page..." -ForegroundColor White
-& node (Join-Path $ScriptRoot "test-page-layout-options.mjs")
+# 5. Consumer Contract Checks
+#
+# Was one script — test-page-layout-options.mjs — while its twenty-seven siblings ran nowhere. That
+# is how eight of them came to be red at the same time without anyone noticing. The runner discovers
+# every scripts/test-*.mjs, so a new check is gated the moment it is written rather than when
+# somebody remembers to add a line here.
+Write-Host "[5/12] Running consumer contract checks over the shipped sources..." -ForegroundColor White
+& node (Join-Path $ScriptRoot "check-consumer-contracts.mjs")
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Page layout option contract failed. PAGE OPTIONS or MOBILE_LAYOUT is reaching the manifest without reaching the rendered page."
+    Write-Error "Consumer contract checks failed. Each failure above names the script and how to rerun it on its own."
     exit $LASTEXITCODE
 }
 

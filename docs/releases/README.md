@@ -25,6 +25,8 @@
 | [v0.18.0 Deployment Profile Review](v0.18.0-deployment-profile-review.md) | The release review that |
 | [v0.19.0 Performance Results — Scale Certification](v0.19.0-performance-results.md) | **Status:** Decision record. **There is no v0.19.0 performance regression.** Measured by the |
 | [ETL-SQL v0.19.0](v0.19.0.md) | **Released:** 2026-09-06 |
+| [v0.19.0 Code Review](v0.19.0-code-review.md) | **Reviewed:** 2026-09-07 · Checkout `1188a56e1` including the working tree; no product source changed. |
+| [v0.20.0 Browser File Split — Baseline](v0.20.0-browser-split-baseline.md) | Pre-split measurements for `designer.js` and `report-runtime.js`, recorded before any code moved. |
 | [ETL-SQL v0.2.0 *(Unofficial)*](v0.2.0.md) | **Released:** 2026-03-23 |
 | [ETL-SQL v0.3.0 *(Unofficial)*](v0.3.0.md) | **Released:** 2026-04-06 |
 | [ETL-SQL v0.4.0 *(Unofficial)*](v0.4.0.md) | **Released:** 2026-04-20 |
