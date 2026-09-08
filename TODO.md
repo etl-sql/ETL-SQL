@@ -21,7 +21,7 @@ this file decomposes it into executable work.
 | Lint the browser sources | [§1](#1-lint-the-browser-sources) | ✔ |
 | Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 3 deferred |
 | Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | ✔ |
-| Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 6 |
+| Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 5 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 33 |
 | Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 5 |
 | *Candidates — not v0.20.0 scope yet* | | |
@@ -45,8 +45,8 @@ typing changes, and product behavior changes in separate reviewable batches.
    for checks and environment limits. Stateful closure refactors remain deferred.
 2. **§3's tracked repairs are implemented.** Portal fixture startup, consumer gates, current-source
    pre-push builds, temporary-repository Git signing, and custom-chart fixture waits are fixed.
-3. **Execute §5 incrementally.** First document source/output ownership and compilation, then
-   migrate one small leaf module end to end. Prove generated output, asset sync, sandbox loading,
+3. **Execute §5 incrementally.** Source/output ownership and compilation are designed. Implement
+   the compiler and migrate `rt-util` end to end. Prove generated output, asset sync, sandbox loading,
    host loading, and offline delivery before expanding the migration.
 4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
    a prerequisite for §5. The stateful closure extractions deferred from §2 remain separate
@@ -492,7 +492,11 @@ bounded result grid with CSV/XLSX/JSON export were checked and are present.
 The module graph and offline bundle already belong to §2. This section adds TypeScript compilation
 to that delivery pipeline; it must not introduce a second competing bundler or repeat the split.
 
-- [ ] **Design compilation and asset ownership before converting files.** Record where canonical
+- [x] **Design compilation and asset ownership before converting files.** Recorded the
+  [planned pipeline](docs/architecture/standards/report-runtime-asset-standards.md#planned-typescript-compilation-and-ownership):
+  separate source roots, checked-in JS at existing URLs, mixed-source resolution, no pilot source
+  maps, compilation-before-sync, and preservation of the offline concatenator. The compiler resolver
+  probe passed; pipeline implementation and delivery evidence remain open below. The design covers where canonical
   `.ts` sources live, where generated `.js` and source maps go, how mixed JS/TS imports resolve,
   and which outputs are checked in. Extend §2's pipeline for browser ES modules and the single-file
   offline bundle. Keep generated host copies output-only and preserve the no-Node-in-.NET-build

@@ -58,6 +58,89 @@ it by hand. Add each new part to `RUNTIME_PARTS` in `sync-assets.js`; an unliste
 The generator strips supported module syntax, checks that the result parses, and wraps it in a
 classic-script IIFE for `OfflineSnapshotViewer`. Online hosts use `type="module"` on the entry.
 
+### Planned TypeScript compilation and ownership
+
+This is the implementation design for TODO §5, recorded on 2026-09-08. Compilation is not wired
+yet; the current JavaScript workflow above remains authoritative until the pilot lands.
+
+Preserve browser URLs and the existing offline concatenator. Use the pinned TypeScript toolchain
+under `scripts/typecheck`; do not add another bundler or a Node invocation to the .NET build.
+
+| Surface | Authored TypeScript | Generated JavaScript |
+| :--- | :--- | :--- |
+| Shared runtime and designer | `src/ETL-SQL.ReportRuntime/Resources/TypeScript/` | Matching relative path under `Resources/Shared/` |
+| Portal-owned pages and modules | `src/ETL-SQL.Portal/BrowserSources/` | Matching relative path under `wwwroot/js/` |
+
+Keep unmigrated JavaScript where it is. A migrated module has exactly one authored implementation:
+its `.ts` file. Its old `.js` path becomes checked-in generated output, with a banner identifying
+the TypeScript source. Shared host copies and `report-runtime.bundle.js` remain checked-in outputs.
+Portal's generated shared copies must never become Portal-owned TypeScript inputs.
+
+Keep `.ts` sources outside served asset directories. Do not emit source maps or declarations in
+the pilot: no `.map`, `.d.ts`, or `sourceMappingURL` is shipped. Source-level debugging can be added
+later with an explicit development-only map delivery decision. Preserve copyright/license comments,
+emit LF, and retain comments needed by consumer checks. No minification or formatting cleanup is
+part of a conversion.
+
+#### Mixed-source compilation
+
+Use separate strict compiler programs for shared assets and Portal-owned modules. Each uses its
+TypeScript and JavaScript directories as `rootDirs`, with relative `.js` import specifiers preserved
+in emitted code. The compiler host must hide known generated JavaScript implementations during
+source resolution so an existing output cannot shadow its TypeScript owner. Read ownership from
+the discovered `.ts` paths, not hand-maintained parallel lists. Reject output collisions and any
+attempt to emit outside the corresponding JavaScript root.
+
+The installed TypeScript 6.0.3 resolver was probed with virtual sibling roots: a `.ts` importer
+resolved an unmigrated `.js` sibling, and a `.js` importer resolved a migrated `.ts` sibling while
+retaining a `.js` specifier. The pilot must also test resolution with stale generated `.js` files
+present; the resolver probe alone does not verify the complete compiler host.
+
+Use `strict`, `noEmitOnError`, ES2022, ESNext modules, Bundler resolution, DOM libraries,
+`verbatimModuleSyntax`, and `allowJs`. Keep `checkJs` off in the strict migration program and run
+the existing JavaScript gate separately over remaining authored JS. Do not relax that gate or add
+baseline entries. Resolve shared TypeScript dependencies from Portal through the same ownership
+mapping; do not create a second compiled copy of shared modules.
+
+Emit into memory or a temporary directory and select only outputs belonging to authored TypeScript
+inputs. Never overwrite an unmigrated JS file emitted incidentally by `allowJs`. Check all diagnostics
+before writing any output. Add strict unused-local/parameter checks and keep existing ESLint checks
+over the emitted JS, including unsupported globals and duplicate keys. Evaluate a TypeScript-aware
+lint parser separately if source-only rules become necessary; any new dependency follows the
+repository license policy.
+
+#### Compilation, sync, and verification order
+
+Add a shared compiler implementation behind `scripts/compile-browser.mjs`. Normal mode writes
+generated JS; `--check` computes expected output without repairing the checkout and fails on missing,
+stale, or orphaned outputs. Track generated ownership so removing or renaming a source cannot leave
+a silently served old implementation. Fail with the exact path and regeneration command.
+
+Extend `sync-assets.js` to compile first, build the existing offline bundle second, and copy shared
+assets to hosts last. Its check mode must validate compilation before comparing bundle and host
+outputs. Stop before downstream writes on compiler errors. The constrained concatenator continues
+to consume JavaScript: named imports, direct exports, and the existing cycle rules still apply.
+Reject TypeScript constructs whose emitted helpers or module syntax violate those constraints;
+do not silently strip unsupported output or introduce a second bundle path.
+
+The UI sandbox continues serving the same JavaScript paths. Add a documented compiler watch command
+for source editing, and run compilation before sandbox startup. Reload alone cannot compile `.ts`.
+CI and pre-push must run compilation drift checks before type/lint and consumer checks. Published
+.NET hosts consume checked-in generated assets and require no Node installation. Update `AGENTS.md`
+and these current-workflow instructions in the implementation commit, not before the pipeline exists.
+
+#### Pilot acceptance
+
+Start with `rt-util`: it is a stateless runtime leaf and exercises both online modules and offline
+delivery without moving a stateful closure. Preserve its exports, coercions, HTML escaping, and URL
+handling. Use typed boundaries without narrowing away input cases supported by the JavaScript.
+
+Verify current-source diagnostics, unchanged output on a second compile, stale/missing/orphan output
+rejection, mixed imports with generated files present, and no writes after a failed compilation.
+Then run existing utility behavior tests, bundle rejection tests, asset drift, browser lint/type,
+consumer checks, payload budget, sandbox, Portal preview, real VS Code preview/CSP, and an offline
+snapshot from disk with networking blocked. Record results before expanding to another module.
+
 ## 4. UI Sandbox Prototyping
 
 Before committing a user interface or charting change, you should prototype and verify the layout inside the dev-only **UI Sandbox**:

@@ -79,6 +79,7 @@ sdk_test_output/
 coverage/
 coverage.*.xml
 /coverage-fresh
+TestResults/
 
 ## OS
 Thumbs.db
