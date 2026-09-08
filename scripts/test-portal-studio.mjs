@@ -1,16 +1,18 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { readPortalPage, readPortalPageModule } from './lib/portal-page.mjs';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
-const [studio, designerHost, api, controller, designer, sharedStudio, designerCss, css, program, portalHeader, indexPage, adminPage] = await Promise.all([
+const [studio, designerHost, api, controller, designer, sharedStudio, studioState, studioContracts, designerCss, css, program, portalHeader, indexPage, adminPage] = await Promise.all([
   Promise.resolve(readPortalPage('studio')),
   Promise.resolve(readPortalPage('designer')),
   read('src/ETL-SQL.Portal/wwwroot/js/api.js'),
   read('src/ETL-SQL.Portal/Controllers/StudioController.cs'),
   read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js'),
   read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio.js'),
+  read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-state.js'),
+  read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-contracts.js'),
   read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.css'),
   read('src/ETL-SQL.Portal/wwwroot/css/portal.css'),
   read('src/ETL-SQL.Portal/Program.cs'),
@@ -18,6 +20,23 @@ const [studio, designerHost, api, controller, designer, sharedStudio, designerCs
   Promise.resolve(readPortalPage('index')),
   Promise.resolve(readPortalPage('admin'))
 ]);
+
+// Both of the checks below are "this must exist nowhere" checks, and a negative assertion pinned to
+// one file gets quietly weaker every time that file is split — the designer became eleven modules
+// and studio.js a family of studio-*.js, so a pin to either would now pass while the thing it
+// forbids lived one module over. These read the whole shared browser source instead, and name the
+// file when they fail.
+const sharedRoot = new URL('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/', root);
+const sharedSources = await Promise.all(
+  (await readdir(sharedRoot, { withFileTypes: true }))
+    .filter(entry => entry.isFile() && entry.name.endsWith('.js'))
+    .map(async entry => [entry.name, await readFile(new URL(entry.name, sharedRoot), 'utf8')]));
+assert.ok(sharedSources.length >= 20, `Expected the split designer and studio modules, found ${sharedSources.length} files.`);
+
+function assertAbsentEverywhere(pattern, what) {
+  const offenders = sharedSources.filter(([, source]) => pattern.test(source)).map(([name]) => name);
+  assert.deepEqual(offenders, [], `${what} (${pattern}) must appear in no shared browser module, but is in: ${offenders.join(', ')}`);
+}
 
 const moduleSource = readPortalPageModule('studio');
 assert.ok(moduleSource, 'Studio page module script was not found.');
@@ -36,17 +55,17 @@ assert.match(studio, /\/api\/designer\/save/);
 assert.match(designer, /id="dsgn-design-mode"/);
 assert.match(designer, /id="dsgn-code-mode"/);
 assert.match(designer, /\/api\/studio\/reports/);
-assert.doesNotMatch(designer, /\/api\/scripts\/upload/);
+assertAbsentEverywhere(/\/api\/scripts\/upload/, 'the legacy script-upload endpoint');
 assert.match(designer, /opts\.hideTopbar/);
 assert.match(sharedStudio, /hideTopbar: true/);
 assert.match(sharedStudio, /hideSidebar: true/);
 assert.match(sharedStudio, /propertiesHost/);
 assert.match(sharedStudio, /requireDataFirst: true/);
-assert.match(sharedStudio, /snapshotCache: new Map/);
-assert.match(sharedStudio, /['"]\/api\/designer\/parse['"]/);
-assert.match(sharedStudio, /['"]\/api\/designer\/patch['"]/);
+assert.match(studioState, /snapshotCache: new Map/);
+assert.match(studioContracts, /['"]\/api\/designer\/parse['"]/);
+assert.match(studioContracts, /['"]\/api\/designer\/patch['"]/);
 assert.match(sharedStudio, /canonicalDesignerMutation/);
-assert.doesNotMatch(sharedStudio, /script\.replace\s*\(/);
+assertAbsentEverywhere(/script\.replace\s*\(/, 'raw text mutation of the script');
 assert.match(sharedStudio, /data-property-field/);
 assert.match(sharedStudio, /data-action="run-selected"/);
 assert.match(sharedStudio, /No filters yet/);
