@@ -21,18 +21,37 @@ this file decomposes it into executable work.
 | Lint the browser sources | [§1](#1-lint-the-browser-sources) | ✔ |
 | Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 6 |
 | Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | 5 |
+| Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 6 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 24 |
-| Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 4 |
 | Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 5 |
 | *Candidates — not v0.20.0 scope yet* | | |
 | Grammar-of-Graphics semantic extensions | [§7](#7-grammar-of-graphics-semantic-extensions-candidate) | 3 |
 | SaaS operations and hosted launch evidence | [§8](#8-saas-operations-and-hosted-launch-evidence-candidate) | 3 |
 
-**Why this order.** v0.19.0's type gate found twelve live browser defects and **ten were scope or
-syntax errors** — a name never declared, a duplicated object key, a file that did not parse. The 617
-DOM-narrowing findings that took most of the effort found none. Linting is therefore first and the
-`.ts` migration last: it is the most expensive step and, on the measured defect profile, not the one
-that closes the most bugs.
+**Execution order: §2 → §3 → §5 → §4**, followed by the remaining release work in §6. Section
+numbers stay unchanged to preserve links. This sequence supersedes the older “TypeScript last”
+ordering in the roadmap. Release-blocking defects can still move ahead of planned work.
+
+**Why this order.** Linting is complete. v0.19.0's measured defect profile justified doing it first;
+it does not require postponing TypeScript until every Studio feature is finished. Finish the module
+split under the existing ESLint and `checkJs` gates, stabilize the tests that protect it, then migrate
+the smaller modules to TypeScript before substantial new Studio development. Keep structural moves,
+typing changes, and product behavior changes in separate reviewable batches.
+
+### Restart here
+
+1. **Finish §2's runtime half.** The designer extraction is merged; start at implementation-plan
+   task 11, bundle generation. Complete tasks 11–23, including host loading, offline snapshots,
+   consumer checks, and the pre-push gate. Do not start by renaming files to `.ts`.
+2. **Complete §3's remaining test repairs.** In particular, resolve the Portal fixture startup
+   issue, repair the consumer checks, and put them in a gate. Fix any test issue that prevents
+   verifying §2 immediately; do not wait for the whole split to finish to unblock its validation.
+3. **Execute §5 incrementally.** First document source/output ownership and compilation, then
+   migrate one small leaf module end to end. Prove generated output, asset sync, sandbox loading,
+   host loading, and offline delivery before expanding the migration.
+4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
+   a prerequisite for §5. The stateful closure extractions deferred from §2 remain separate
+   refactors; do not silently add them to either the mechanical split or the type migration.
 
 ---
 
@@ -346,19 +365,39 @@ fixes or certify a production host.
 
 ## 5. Move the sources to `.ts`
 
-Scheduled last, deliberately. This is the step the delivery-model boundary applies to.
+**Starts after §2 and the relevant test repairs in §3; precedes the remaining §4 feature expansion.**
+The module graph and offline bundle already belong to §2. This section adds TypeScript compilation
+to that delivery pipeline; it must not introduce a second competing bundler or repeat the split.
 
-- [ ] Introduce a real module graph and build step over files that are by then linted, split and
-  type-checked.
-- [ ] Redesign `scripts/sync-assets.js`, the drift gate and the ui-sandbox **together** with the
-  bundler rather than after it. One canonical asset is copied verbatim to five mount points, and both
-  the sandbox and the browser tests rely on the file served being the file in the repo; a bundler
-  changes that property.
+- [ ] **Design compilation and asset ownership before converting files.** Record where canonical
+  `.ts` sources live, where generated `.js` and source maps go, how mixed JS/TS imports resolve,
+  and which outputs are checked in. Extend §2's pipeline for browser ES modules and the single-file
+  offline bundle. Keep generated host copies output-only and preserve the no-Node-in-.NET-build
+  contract unless an explicit design change replaces it. Inspect §2's constrained concatenator
+  before implementation; document any replacement and retire the old path in the same batch.
+- [ ] **Wire compilation, sync, drift checks, and the UI sandbox together.** A source edit must
+  regenerate what the sandbox and hosts serve. Gate stale or missing generated output, retain LF
+  normalization and license banners, and keep both lint and type baselines empty. Introduce a
+  strict TypeScript configuration for migrated modules while retaining `checkJs` for remaining JS;
+  do not weaken checks or use blanket suppressions to make conversion pass.
+- [ ] **Pilot one small leaf module, then migrate by dependency order.** Start with a stateless
+  utility from the completed split. Verify its public exports and behavior, generated output,
+  sandbox story, affected hosts, and offline snapshot path. Then move through shared contracts,
+  utilities, components, and entry points in separately validated batches. Preserve served URLs
+  where possible; update every consumer together when an output path changes.
+- [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
+  inline-script lines instead of treating that number as current. Extract any remaining page
+  behavior into checked modules and include it in the migration inventory. Cover Portal-owned
+  modules as well as shared runtime sources; the existing TypeScript extension/UI are not a rewrite
+  target.
 - [ ] Retire the hand-written regex contract tests that stand in for a type checker
   (`StudioRouteContractTests`, the palette id/enum comparison) only once a generated route table
   makes them redundant — a `.d.ts` of DTO shapes says nothing about routes.
-- [ ] Bring the ~5,500 lines that were inline `<script type="module">` blocks under the same
-  treatment as the rest.
+- [ ] **Close with delivery evidence.** Run type/lint, generated-asset drift, repaired consumer
+  checks, affected browser tests, and pre-push validation. Verify the VS Code preview/CSP, Portal
+  designer preview, and a generated offline snapshot opened over `file://`. Record commands and
+  results, update the canonical asset instructions in `AGENTS.md` and the architecture docs to
+  match the final pipeline, then mark the migration complete. A file rename alone is not completion.
 
 ## 6. Release engineering follow-ups
 
