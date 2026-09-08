@@ -214,17 +214,47 @@ the browser sources. The v0.19.0 release run made the shape concrete — the evi
   a zero-area box and times out.
 - [ ] Address the mutable global `ConnectorRegistry.Instance`, which makes connector and dialect
   tests order-dependent.
-- [ ] Get the red `scripts/test-*.mjs` checks green and **run them in a gate** — none runs in
-  pre-push or CI today, which is why they went red unnoticed. Measured 2026-09-08: **eight** red, not
-  nine — `test-data-quality-job-tracking`, `test-designer-polish`, `test-feedback-system`,
-  `test-governance-production-boundary`, `test-orchestrator-checkpoint-resume`,
-  `test-orchestrator-run-overrides`, `test-portal-studio`, `test-service-capacity`. None of them
-  reads `report-runtime.js`, so none is blocked on §2. `test-designer-polish` is now green: its nine
-  formatting-picker assertions were greping `designer.js` for markup that moved to
-  `visual-format-inspector.js`, and each assertion now names the module that owns it rather than
-  greping a concatenation, which would pass while asserting nothing about where anything lives.
-  **Add the gate before task 16 or after task 19, not between them** — task 19 rewrites the six
-  hosts' `<script>` tags and will trip whichever checks assert on host HTML.
+- [x] **All eight red `scripts/test-*.mjs` checks resolved.** Measured 2026-09-08: eight red, not
+  nine, and none of them reads `report-runtime.js`, so none was blocked on §2. Seven were repaired
+  and one was reclassified. Three had drifted behind moved code, three were asserting the product
+  as it used to be, one found a real gap, and one is not a check at all:
+
+  - `test-designer-polish` — nine formatting-picker assertions greping `designer.js` for markup that
+    moved to `visual-format-inspector.js`. Each now names the module that owns it, rather than
+    greping a concatenation, which would pass while asserting nothing about where anything lives.
+  - `test-portal-studio` — three positives repointed at `studio-state.js` and `studio-contracts.js`.
+    Its two **negative** assertions mattered more: a "this exists nowhere" check pinned to one file
+    gets weaker every time that file is split, and both were pinned, so a `script.replace(` in
+    `studio-sql-mutations.js` would have passed. They now read every shared browser module.
+  - `test-feedback-system` — a real backlog, not drift. Fifteen native `alert`/`confirm` call sites
+    converted to the shared feedback module, including `control-plane.html`, which loaded no
+    feedback module at all, and a `window.ETLSQLFeedback?.confirm(...)` in governance that resolved
+    to `undefined` and so performed a delete's cancel path silently. The check also flagged the
+    sandbox's entity-escaped XSS payload; it now skips dialog names inside escaped markup, because
+    quieting it the other way would have meant weakening a sanitiser test.
+  - `test-orchestrator-checkpoint-resume` — a real product gap. The run-history table rendered `—`
+    for anything unresumable, so an operator could not tell a successful run from a run with no
+    checkpoint. It now renders the disabled button and the reason the story fixture already
+    specified, labels the button with the checkpoint, and confirms before resuming.
+  - `test-orchestrator-run-overrides` — override names were never validated, so `@start date` was
+    sent verbatim and failed inside the engine with a parse error about a script nobody had edited.
+    Validated against the engine's identifier shape while the modal is still open.
+  - `test-governance-production-boundary` — asserted a boundary that `5c8285327` deliberately lifted
+    when the governance dashboard stopped being a prototype, and read `index.html` alone after the
+    page's code moved to `js/pages/index.js`. Rewritten to assert the boundary that now exists:
+    every view but Lineage Search hidden in the markup and gated on the roles its API accepts, with
+    a redirect rather than a 403. Both halves mutation-tested.
+  - `test-data-quality-job-tracking` — asserted `/api/jobs/{id}`, which was the defect: data-quality
+    submissions are `IJobChannel` jobs and that namespace answered 404 forever while the client read
+    it as a transient outage. Now asserts the corrected endpoint and the old one's absence.
+  - `test-service-capacity` — **not a check.** It is the load driver that
+    `test-service-capacity-smoke.mjs` (green) exercises end to end against a stub server; run bare it
+    needs a live Portal and says so. A gate should run the smoke test, or this one with
+    `--validate-only`.
+
+- [ ] **Run the checks in a gate** — none runs in pre-push or CI today, which is why they went red
+  unnoticed. **Add it before plan task 16 or after task 19, not between them**: task 19 rewrites the
+  six hosts' `<script>` tags and will trip whichever checks assert on host HTML.
 - [ ] Decide whether `StudioSessionRegistry.IsHealthyAsync`'s two-second probe should reap a live
   session's record on one slow response from a busy machine. Observed during v0.19.0 and
   deliberately not changed mid-release.
