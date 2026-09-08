@@ -172,8 +172,8 @@ until 19 the hosts still load it as a classic script.
   also reads `snapshotPackage`, `sourceControlEnabled`, `previewUrl`, `host`, `isVisualLocked` and
   `hideTopbar`. It is currently a plain `/* */` comment, not JSDoc, precisely so it does not fail
   the type gate. Correct the `@param` list, then restore it to `/** */`.
-- [ ] Two orphaned half-banners at `designer.js` lines ~36–40 ("Phase 2 — DAG Visualization",
-  "Phase 3 — Script Editor") whose sections are now empty.
+- [x] Remove the orphaned DAG visualization and script editor section banners from `designer.js`
+  after extraction. Generated host copies synchronized; asset drift check passes.
 
 ## 3. Repair the browser and Portal test lanes
 
