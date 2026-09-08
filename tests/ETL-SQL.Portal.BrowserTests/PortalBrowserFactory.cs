@@ -56,7 +56,7 @@ public sealed class PortalBrowserFactory : PortalWebFactory
             kestrelHost = builder.Build();
 
             step = "start the Kestrel host on 127.0.0.1:0";
-            kestrelHost.Start();
+            StartAndWaitUntilStarted(kestrelHost, "Kestrel");
 
             step = "read the OS-assigned port from Kestrel";
             var addresses = kestrelHost.Services.GetRequiredService<IServer>()
@@ -66,7 +66,7 @@ public sealed class PortalBrowserFactory : PortalWebFactory
             ClientOptions.BaseAddress = new Uri(ServerAddress);
 
             step = "start the TestServer host";
-            testHost.Start();
+            StartAndWaitUntilStarted(testHost, "TestServer");
             return testHost;
         }
         catch (Exception ex)
@@ -76,6 +76,39 @@ public sealed class PortalBrowserFactory : PortalWebFactory
                 + "Every test in this assembly will report 'The server has not been started' after "
                 + $"this; that message is the symptom, and this is the cause: {ex.GetType().Name}: {ex.Message}",
                 ex);
+        }
+    }
+
+    /// <summary>
+    /// Starts <paramref name="host"/> and waits for <b>that host</b> to signal
+    /// <c>ApplicationStarted</c>, because <c>IHost.Start()</c> does not do so here.
+    ///
+    /// <para>The builder handed to <see cref="CreateHost"/> is a <c>DeferredHostBuilder</c>, which
+    /// holds <b>one</b> <c>TaskCompletionSource</c> and gives the same instance to every host it
+    /// builds. Its <c>DeferredHost.StartAsync</c> does nothing but await that shared source, so once
+    /// either host has started, <c>Start()</c> on the other returns immediately whether or not it has
+    /// started. Building twice — which this factory must, to get both a <c>TestServer</c> and a real
+    /// socket — therefore turns the second <c>Start()</c> into no wait at all.</para>
+    ///
+    /// <para>That is the whole of the cascade. The Kestrel host completes the shared source, the
+    /// TestServer host is left racing its own entry-point thread, and when it loses, its
+    /// <c>TestServer</c> has no <c>Application</c> — so <c>CreateHost</c> returns cleanly and the
+    /// failure surfaces later, from <c>CreateClient</c>, as <c>The server has not been started</c>
+    /// for every test in the assembly. Measured on this factory: six concurrent creations failed
+    /// three to four of six, while six single-build factories in parallel and four double-build
+    /// factories in series were both clean, which is what isolates the shared signal from load.</para>
+    /// </summary>
+    private static void StartAndWaitUntilStarted(IHost host, string name)
+    {
+        host.Start();
+
+        // Bounded, so a host that never starts fails this run with a named cause instead of hanging
+        // it or handing back a half-started host for 178 tests to misreport.
+        var started = host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStarted;
+        if (!started.WaitHandle.WaitOne(TimeSpan.FromSeconds(60)))
+        {
+            throw new TimeoutException(
+                $"The {name} host did not signal ApplicationStarted within 60 seconds of Start().");
         }
     }
 
