@@ -19,7 +19,7 @@ this file decomposes it into executable work.
 | What | Where | Count |
 | :--- | :--- | ---: |
 | Lint the browser sources | [§1](#1-lint-the-browser-sources) | ✔ |
-| Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 3 |
+| Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 6 |
 | Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | 5 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 24 |
 | Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 4 |
@@ -48,12 +48,113 @@ that closes the most bugs.
 
 ## 2. Split the two large browser files
 
-- [ ] Split `designer.js` (9,069 lines). It holds `createDesigner`, `createScriptEditorWorkbench`
-  and `renderDag` in one scope, and two of v0.19.0's three scope-confusion defects were inside it.
-- [ ] Split `report-runtime.js` (9,426 lines), which carried the third.
-- [ ] Split along the seams the defects already follow rather than by file size, and keep
-  `scripts/sync-assets.js`, the `.gitattributes` LF pinning and the drift gate working unchanged —
-  no bundler is required for this slice, and introducing one here would change the delivery model.
+**Status: designer half done and merged (`c77d9712f`). `report-runtime.js` not started.**
+Design: [browser file split](docs/superpowers/specs/2026-09-07-browser-file-split-design.md).
+Plan, with the remaining tasks written out step by step:
+[implementation plan](docs/superpowers/plans/2026-09-07-browser-file-split.md).
+Pre-split measurements to compare against:
+[baseline](docs/releases/v0.20.0-browser-split-baseline.md).
+
+- [x] Split `designer.js` (was 9,069 lines, measured 9,008). Now **4,209 lines across 11 modules**:
+  `designer-util`, `dag`, `rptsql-language`, `editor-toolbar`, `run-results`, `script-editor`,
+  `script-workbench`, `data-prep-recipes`, `html-preview`, `visual-format-inspector`. `createDesigner`
+  stays in `designer.js` — see the deferred item below for why it is still 4,209 and not smaller.
+- [ ] Split `report-runtime.js` (was 9,426 lines, now 9,668). **This is the remaining work**, and it
+  is harder than the designer half for reasons that are not size:
+  - it is a classic-script `(function(){...})()` IIFE, not an ES module, loaded by six hosts with a
+    plain `<script src>`;
+  - `OfflineSnapshotViewer.cs` inlines it **whole** into single-file `.etlsnap` snapshots, and a
+    single file has no siblings to `import`.
+  Plan tasks 11–19 cover it: build the bundler first, then cut 17 `rt-*.js` modules, then rewire the
+  hosts.
+- [x] Split along the seams the defects already follow rather than by file size, and keep
+  `scripts/sync-assets.js`, the `.gitattributes` LF pinning and the drift gate working — all three
+  still work. `.gitattributes` now pins **by path glob rather than by filename**, because a per-name
+  pin missed by a new file fails `sync-assets.js --check` only on a fresh clone with
+  `core.autocrlf=true`, where the cause is invisible.
+- [ ] **This slice does introduce a bundle step, contrary to what this item used to say.** The
+  original text read "no bundler is required for this slice, and introducing one here would change
+  the delivery model." That is superseded: the alternative was namespaced IIFEs routing every
+  cross-part call through a `window` object — exactly the indirection that hid the scope defects
+  this work exists to prevent. `scripts/sync-assets.js` will generate a checked-in, drift-gated
+  `report-runtime.bundle.js`; no new gate, no Node in the .NET build graph. Delete this checkbox once
+  the bundler lands in plan task 11.
+
+### Where to pick up (for whoever continues this)
+
+Everything below is already merged into `release/v0.20.0`. The unmerged worktree branch
+`refactor/browser-file-split` still exists at `C:\Users\chuck\scratch\ETL-SQL-wt\browser-split` and
+carries the working notes; it holds nothing that is not in this branch.
+
+Remaining plan tasks, in order. Tasks 16–17 **deliberately commit with the lint gate red** on
+`no-undef` for `executeAction` — `rt-controls-input.js` cannot import it before `rt-actions.js`
+exists, and merging 16–18 into one commit produces an unreviewable ~6,000-line diff. Task 18 is
+where it must go green again.
+
+| # | Task | Note |
+| :--- | :--- | :--- |
+| 11 | Bundle generation in `sync-assets.js`, plus `eslint.config.mjs` / `tsconfig.json` / `ETL-SQL.Reporting.csproj` | Build and tamper-test it **before** any part module exists |
+| 12 | Bundle self-check in `reportRuntime.test.ts` | Asserts the bundle parses and exposes `window.__reportRuntime__` |
+| 13 | `rt-util`, `rt-state`, `rt-theme`; unwrap the IIFE | The four shared `let` bindings gain accessors here |
+| 14 | `rt-transport`, `rt-data` | |
+| 15 | `rt-detail`, `rt-charts` | |
+| 16 | `rt-table`, `rt-matrix`, `rt-controls-date`, `rt-controls-input` | Commits knowingly red |
+| 17 | `rt-visual`, `rt-layout` | Enters the deliberate import cycle; red continues |
+| 18 | `rt-actions`, `rt-views`, `rt-chrome` | **Red must clear here** |
+| 19 | Six hosts to `type="module"`, plus the VS Code CSP fix | Must land with 18 in one push |
+| 20 | **Manual verification — no gate covers it** | See below |
+| 21 | Repair the consumer checks the split broke | Includes the known `test-designer-polish` failure |
+| 22 | Full pre-push gate | |
+| 23 | Close out TODO.md and CHANGELOG | |
+
+**Task 19 carries the one genuinely load-bearing line in the whole plan.**
+`src/etl-sql-vscode/src/reportPreviewPanel.ts` sets `script-src 'nonce-${nonce}'`. A nonce does
+**not** propagate to modules fetched by an `import` statement, so the moment the runtime imports a
+sibling the preview breaks with a CSP violation and no other symptom. `visualFlowPanel.ts` in the
+same extension already sets `script-src ${webview.cspSource} 'nonce-${nonce}'` for this exact
+reason — copy that line.
+
+**Task 20 cannot be automated.** Three paths have no gate: the VS Code preview webview (proves the
+CSP change), a generated `.etlsnap` opened over `file://` (proves the bundle), and the Portal
+designer preview. Tasks 18, 19 and 20 must land together — after 18 the runtime is an ES module, and
+until 19 the hosts still load it as a classic script.
+
+### Four traps this work exposed, none of which any gate catches
+
+1. **`checkJs` binds JSDoc to the next function.** `tsconfig.json` sets `checkJs: true`, so a
+   `/** */` block immediately above a function becomes its type annotation. Moving `createDesigner`'s
+   docblock onto `createDesigner` took the type gate 0 → 24 findings.
+2. **Never dedent moved code.** Both files are dense with multi-line HTML/CSS template literals; a
+   blanket dedent strips spaces from continuation lines *inside* the strings and `node --check`
+   still passes.
+3. **Literal NUL bytes are deliberate.** One in `report-runtime.js` line 120, five in
+   `visual-preview.js`, all inside comments. Plain `grep` reports "Binary file matches" and shows
+   nothing — use `grep -a`. Never remove one. This NUL travels with `UNSAFE_CSS_PATTERN` into
+   `rt-theme.js` in task 13.
+4. **A silent transcription flip passes every gate.** One implementer caught itself turning `===`
+   into `!==` mid-move. `.superpowers/sdd/2026-09-07-browser-file-split/verify-tokens.py` in the
+   worktree compares operator/keyword multisets across a move and catches the one that is not caught;
+   `verify-exports.py` and `verify-closure.py` beside it prove the export surface is unchanged and
+   that code extracted from a closure no longer references its locals. Pass every file on **both**
+   sides of a token comparison, or pre-existing content reads as new.
+
+### Deferred out of this slice
+
+- [ ] Extract the stateful interiors of `createDesigner` (4,209 lines),
+  `createScriptEditorWorkbench` (1,412) and `createStudioWorkbench`. Each is a closure over its own
+  mutable state, so its interior cannot move without threading a context object through every
+  reference — a restructure, not a move, and deliberately excluded so a reviewer could tell the two
+  apart. `studio.js` (315 KB) and `studio-authoring.js` (149 KB) are larger than `designer.js` was
+  and were never in this section's scope; assess them here.
+- [ ] `designer.js` escapes HTML 118 times with `esc`, which does **not** escape `>`; `escapeHtml`
+  in the same module escapes all four characters. Preserved verbatim because changing it is a
+  behavior change outside a refactor. See the comment in `designer-util.js`.
+- [ ] `createDesigner`'s docblock is stale — it documents 15 `opts.*` properties but the function
+  also reads `snapshotPackage`, `sourceControlEnabled`, `previewUrl`, `host`, `isVisualLocked` and
+  `hideTopbar`. It is currently a plain `/* */` comment, not JSDoc, precisely so it does not fail
+  the type gate. Correct the `@param` list, then restore it to `/** */`.
+- [ ] Two orphaned half-banners at `designer.js` lines ~36–40 ("Phase 2 — DAG Visualization",
+  "Phase 3 — Script Editor") whose sections are now empty.
 
 ## 3. Repair the browser and Portal test lanes
 
