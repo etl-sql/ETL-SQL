@@ -49,6 +49,36 @@ export { DATA_PREP_RECIPES } from './data-prep-recipes.js';
 // Phase 4 — Report Designer
 // ─────────────────────────────────────────────────────────────────────────────
 
+/*
+ * NOTE: an ordinary comment, not JSDoc. The @param list below is stale — createDesigner also
+ * accepts snapshotPackage, sourceControlEnabled, previewUrl, host, isVisualLocked and hideTopbar,
+ * among others. As /** it binds under checkJs and the type gate reports 24 real findings.
+ * Mount the full WYSIWYG report designer into `container`.
+ *
+ * Four zones: top bar (page tabs, script toggle, save/cancel), left sidebar
+ * (visual palette, datasets, component tree), canvas (12-col CSS grid),
+ * properties panel (selected-visual editor).
+ *
+ * @param {HTMLElement} container
+ * @param {Object}      [opts]
+ * @param {Object|null} [opts.designState=null]   Parsed DesignState JSON (null = new report).
+ * @param {number|null} [opts.reportId=null]       Existing report ID for save.
+ * @param {number|null} [opts.reportVersion=null]  Current optimistic concurrency version.
+ * @param {string|null} [opts.sourceRevision=null] Current source-control revision, when configured.
+ * @param {string}      [opts.reportName='New Report']
+ * @param {number|null} [opts.folderId=null]
+ * @param {Array}       [opts.folders=[]]          Catalog folders available for a new report.
+ * @param {'design'|'code'} [opts.initialMode='design'] Initial authoring mode.
+ * @param {string}      [opts.apiBase='']          Portal API base URL.
+ * @param {Function}    [opts.authFetch]            (url, fetchInit) → Promise<Response>. Falls back to plain fetch.
+ * @param {Function}    [opts.onSaveScript]         (script: string) → Promise. VS Code host override — bypasses portal API save.
+ * @param {Function}    [opts.onSave]               Called after successful save.
+ * @param {Function}    [opts.onCancel]             Called on back/cancel.
+ * @param {boolean}     [opts.hideSidebar=false]     Hide the built-in library when hosted by Studio's activity rail.
+ * @param {boolean}     [opts.hideProps=false]       Hide the built-in property dock when Studio provides its own inspector.
+ * @param {Function}    [opts.onVisualSelect]         Called with the selected visual id.
+ * @returns {{ dispose: Function }}
+ */
 export function createDesigner(container, opts = {}) {
 
     // ── State ────────────────────────────────────────────────────────────────
