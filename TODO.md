@@ -20,7 +20,7 @@ this file decomposes it into executable work.
 | :--- | :--- | ---: |
 | Lint the browser sources | [§1](#1-lint-the-browser-sources) | ✔ |
 | Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 3 deferred |
-| Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | 2 |
+| Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | ✔ |
 | Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 6 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 33 |
 | Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 5 |
@@ -43,9 +43,8 @@ typing changes, and product behavior changes in separate reviewable batches.
 1. **§2's mechanical split is implemented.** The runtime is 17 ES modules with a generated
    offline bundle. See the [verification record](docs/releases/v0.20.0-browser-split-baseline.md)
    for checks and environment limits. Stateful closure refactors remain deferred.
-2. **Complete §3's remaining test repairs.** Portal fixture startup and consumer gates are fixed.
-   Address the desktop fixture's inherited Git signing requirement and the custom-chart story's
-   fixed-delay assertion, both recorded during split validation.
+2. **§3's tracked repairs are implemented.** Portal fixture startup, consumer gates, current-source
+   pre-push builds, temporary-repository Git signing, and custom-chart fixture waits are fixed.
 3. **Execute §5 incrementally.** First document source/output ownership and compilation, then
    migrate one small leaf module end to end. Prove generated output, asset sync, sandbox loading,
    host loading, and offline delivery before expanding the migration.
@@ -263,10 +262,12 @@ the browser sources. The v0.19.0 release run made the shape concrete — the evi
 
 ### Failures observed during runtime split validation
 
-- [ ] Isolate the desktop journey's temporary Git repository from developer commit-signing
-  settings. Its initial fixture commit failed before the desktop host started.
-- [ ] Replace the custom-chart designer story's fixed 300 ms delay with a wait for the intended
-  canvas state. The full browser run saw three cards where the assertion expected one.
+- [x] Isolate the desktop journey's temporary Git repository from developer commit-signing
+  settings with repository-local `commit.gpgsign=false`. The focused desktop journey passed.
+- [x] Replace the custom-chart designer story's fixed delays with waits for the initial sales
+  canvas, requested custom-chart SVG, properties control, and updated POLAR code. Waiting for
+  the initial mount prevents it from overwriting the subsequently selected fixture. The focused
+  chart test passed alongside both desktop journey tests.
 
 See the [runtime split verification record](docs/releases/v0.20.0-browser-split-baseline.md)
 for the completed browser run and exact test names.

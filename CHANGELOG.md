@@ -26,6 +26,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Browser tests wait for the designer's initial fixture before switching to the custom chart,
+  then wait for rendered controls instead of fixed delays. Desktop journey fixture commits
+  disable signing only in their temporary repository, avoiding dependency on developer keys.
+
 - Pre-push builds the selected configuration before running fast tests, preventing stale test
   binaries from producing a false pass or failure.
 

@@ -319,8 +319,10 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await page.WaitForSelectorAsync("#fixtureSel", new PageWaitForSelectorOptions { Timeout = 30_000 });
 
         // 1. Mount the custom-chart fixture
+        // Let the initial asynchronous mount finish before requesting another fixture.
+        await page.Locator(".etlsql-dsgn-visual-card[data-vid='salesBar']").WaitForAsync();
         await page.SelectOptionAsync("#fixtureSel", "custom-chart");
-        await page.WaitForTimeoutAsync(300);
+        await page.Locator(".etlsql-dsgn-visual-card[data-vid='customGog'] svg").First.WaitForAsync();
 
         // 2. Visual card on canvas must be rendered with SVG preview
         var card = page.Locator(".etlsql-dsgn-visual-card");
@@ -331,7 +333,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         // 3. Click the visual to select and open Properties panel
         await card.ClickAsync();
-        await page.WaitForTimeoutAsync(200);
+        await page.Locator("#pp-chart-coord").WaitForAsync();
 
         // 4. Grammar of Graphics (CHART) controls must be visible in properties panel
         var chartSection = page.Locator(".etlsql-dsgn-chart-editor-section");
@@ -350,7 +352,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         // 5. Modify coordinate to POLAR
         await coordSelect.SelectOptionAsync("POLAR");
-        await page.WaitForTimeoutAsync(200);
+        await page.WaitForFunctionAsync("() => document.querySelector('#pp-chart-code')?.value.includes('COORDINATE (TYPE = POLAR)')");
         var updatedCode = await chartCode.InputValueAsync();
         Assert.Contains("COORDINATE (TYPE = POLAR)", updatedCode);
 

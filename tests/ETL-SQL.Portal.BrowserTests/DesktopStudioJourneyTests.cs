@@ -33,6 +33,8 @@ public sealed class DesktopStudioJourneyTests(StudioAuthoringFixture fixture)
         RunGit(firstWorkspace.Root, "init");
         RunGit(firstWorkspace.Root, "config", "user.email", "studio-browser@example.invalid");
         RunGit(firstWorkspace.Root, "config", "user.name", "Studio Browser");
+        // Fixture commits must not require the developer's signing key.
+        RunGit(firstWorkspace.Root, "config", "--local", "commit.gpgsign", "false");
         RunGit(firstWorkspace.Root, "add", "users.rptsql");
         RunGit(firstWorkspace.Root, "commit", "-m", "Add users report");
 
