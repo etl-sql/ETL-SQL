@@ -1,10 +1,13 @@
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-host.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Normalizes the host-specific services supplied to the canonical Studio runtime.
  */
-
 export function createStudioHostAdapter(options = {}) {
     const authFetch = options.authFetch ?? ((url, init) => fetch(url, {
         ...init,
@@ -14,7 +17,6 @@ export function createStudioHostAdapter(options = {}) {
     const hasGitHost = typeof options.onLoadGitStatus === 'function'
         && typeof options.onLoadGitHistory === 'function'
         && typeof options.onLoadGitDiff === 'function';
-
     return {
         authFetch,
         apiBase: options.apiBase || '',

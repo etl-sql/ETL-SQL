@@ -435,7 +435,7 @@ When changing report runtime JavaScript, CSS, themes, or shared browser dependen
 
 Migrated modules are authored under `src/ETL-SQL.ReportRuntime/Resources/TypeScript/`, currently
 `rt-util.ts`, `designer/designer-util.ts`, `designer/editor-toolbar.ts`, and
-`designer/studio-git-diff.ts`. Their matching paths under `Shared/` are generated;
+`designer/studio-git-diff.ts`, and `designer/studio-host.ts`. Their matching paths under `Shared/` are generated;
 edit the TypeScript source. `sync-assets.js` compiles migrated modules before bundling and copying.
 Install the pinned compiler with `npm ci --prefix scripts/typecheck`. For sandbox development,
 run `node scripts/compile-browser.mjs --watch` and reload after successful compilation. Sandbox

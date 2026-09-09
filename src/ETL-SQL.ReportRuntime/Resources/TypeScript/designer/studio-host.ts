@@ -1,21 +1,28 @@
-// @ts-nocheck — generated copy; check the canonical source.
-/* GENERATED FILE - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-host.js
- * Edit the canonical source, then run: node .\scripts\sync-assets.js
- */
-
-/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-host.ts
- * Run: node scripts/sync-assets.js
- */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Normalizes the host-specific services supplied to the canonical Studio runtime.
  */
-export function createStudioHostAdapter(options = {}) {
-    const authFetch = options.authFetch ?? ((url, init) => fetch(url, {
+
+export interface StudioHostOptions {
+    authFetch?: typeof fetch;
+    headers?: Record<string, string>;
+    hasWorkspaceHost?: boolean;
+    deploymentMode?: string;
+    onLoadGitStatus?: unknown;
+    onLoadGitHistory?: unknown;
+    onLoadGitDiff?: unknown;
+    apiBase?: string;
+}
+
+export interface StudioCapabilityState {
+    deploymentMode: string;
+    capabilities: ReadonlySet<string>;
+}
+
+export function createStudioHostAdapter(options: StudioHostOptions = {}) {
+    const authFetch = options.authFetch ?? ((url: RequestInfo | URL, init?: RequestInit) => fetch(url, {
         ...init,
         headers: { ...(options.headers || {}), ...(init?.headers || {}) }
     }));
@@ -23,12 +30,13 @@ export function createStudioHostAdapter(options = {}) {
     const hasGitHost = typeof options.onLoadGitStatus === 'function'
         && typeof options.onLoadGitHistory === 'function'
         && typeof options.onLoadGitDiff === 'function';
+
     return {
         authFetch,
         apiBase: options.apiBase || '',
         hasWorkspaceHost,
         hasGitHost,
-        hasCapability(state, capability) {
+        hasCapability(state: StudioCapabilityState, capability: string) {
             return state.deploymentMode === 'Desktop' || state.capabilities.has(capability);
         }
     };

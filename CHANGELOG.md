@@ -18,6 +18,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's host adapter now compiles from strict TypeScript with typed host options and capability
+  state. Existing fetch overrides, header precedence, and host availability decisions are preserved.
+
 - Studio's side-by-side Git diff helper now compiles from strict TypeScript with typed operations
   and output rows. Alignment and the large-file fallback retain their existing behavior.
 
