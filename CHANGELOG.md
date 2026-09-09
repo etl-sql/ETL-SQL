@@ -18,6 +18,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- The designer's shared escaping helpers now compile from strict TypeScript at the same JavaScript
+  URL. Both existing escaping behaviors are preserved.
+
 - The report runtime's utility module is now authored in strict TypeScript. Asset sync compiles it
   to the existing JavaScript URL before generating the offline bundle and host copies. Drift checks
   reject stale output; .NET builds still consume checked-in assets without Node.

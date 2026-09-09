@@ -14,7 +14,7 @@ src/ETL-SQL.ReportRuntime/Resources/Shared/
 
 - **Rule**: Edit authored JavaScript, styles, and vendor assets here. Migrated modules are authored
   under `Resources/TypeScript/`; their corresponding JavaScript here is generated. Currently
-  `rt-util.ts` is the migrated pilot. Follow the generated banner to its source.
+  `rt-util.ts` and `designer/designer-util.ts` are migrated. Follow the generated banner to its source.
 - **Strictly Prohibited**: Never edit files directly inside the generated target directories of host applications. Any direct edits in host directories will be flagged as drift and overwritten by the asset synchronizer.
 
 ---
@@ -68,7 +68,7 @@ classic-script IIFE for `OfflineSnapshotViewer`. Online hosts use `type="module"
 ### Planned TypeScript compilation and ownership
 
 This is the implementation design for TODO §5, recorded on 2026-09-08. The shared `rt-util` pilot
-now uses this pipeline. Portal conversion and broader migration remain pending. The source roots,
+and designer utility now use this pipeline. Portal conversion and broader migration remain pending. The source roots,
 compiler, drift checks, sync integration, and sandbox startup compilation are implemented; the
 remaining acceptance steps apply to each subsequent conversion.
 

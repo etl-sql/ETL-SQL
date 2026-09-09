@@ -16,12 +16,14 @@ try {
     write(path.join(source, 'leaf.ts'), 'export const amount: number = 7;\n');
     write(path.join(output, 'legacy.js'), "import { amount } from './leaf.js';\nexport function twice() { return amount * 2; }\n");
     write(path.join(source, 'entry.ts'), "import { twice } from './legacy.js';\nexport const result: number = twice();\n");
+    write(path.join(source, 'nested/consumer.ts'), "import { amount } from '../leaf.js';\nexport const nested: number = amount;\n");
     assert.throws(() => compile(true), /missing or stale/);
     compile(false);
     const leaf = path.join(output, 'leaf.js');
     const expected = fs.readFileSync(leaf, 'utf8');
     const legacy = fs.readFileSync(path.join(output, 'legacy.js'), 'utf8');
     compile(true);
+    assert.match(fs.readFileSync(path.join(output, 'nested/consumer.js'), 'utf8'), /from '\.\.\/leaf\.js'/);
     compile(false);
     assert.equal(fs.readFileSync(leaf, 'utf8'), expected);
     assert.equal(fs.readFileSync(path.join(output, 'legacy.js'), 'utf8'), legacy);
@@ -61,3 +63,15 @@ assert.equal(util.interpolateColor('#000', '#fff', 0.5), 'rgb(128,128,128)');
 assert.match(util.simpleMarkdown('# Heading\n\n```sql\n<x>\n```'), /&lt;x&gt;/);
 assert.equal(util.renderInlineMarkdown('<img> **safe**'), '&lt;img&gt; <strong>safe</strong>');
 console.log('runtime utility pilot: coercion, URL, escaping, formatting and markdown checks passed');
+
+const designerPath = path.join(repo, 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer-util.js');
+const designer = await import(`data:text/javascript;base64,${Buffer.from(fs.readFileSync(designerPath, 'utf8')).toString('base64')}`);
+assert.equal(designer.escapeHtml('<>&"\''), '&lt;&gt;&amp;&quot;\'');
+assert.equal(designer.esc('<>&"\''), '&lt;>&amp;&quot;\'');
+for (const escape of [designer.escapeHtml, designer.esc]) {
+    assert.equal(escape(null), '');
+    assert.equal(escape(undefined), '');
+    assert.equal(escape(0), '0');
+    assert.equal(escape(false), 'false');
+}
+console.log('designer utility: existing escaping and coercion behavior preserved');

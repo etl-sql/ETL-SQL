@@ -518,6 +518,8 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   **Pilot implemented:** `rt-util.ts` compiles to the existing `Shared/rt-util.js` URL. Generated
   JavaScript matches the prior JavaScript AST after removing comments/formatting. Broader migration
   remains open; pilot evidence is recorded with the browser split verification notes.
+  **Next leaf migrated:** `designer/designer-util.ts`; generated output keeps the nested path and
+  both escapers' existing semantics. Compiler regression coverage now includes nested imports.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned
