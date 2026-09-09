@@ -18,6 +18,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- The designer's HTML-preview sanitizer now compiles from strict TypeScript with typed DOM
+  inputs and attribute rules. Existing preview sanitization behavior is preserved.
 - Studio's credential-save helper now compiles from strict TypeScript with typed detection
   findings and encryption callbacks. Secret detection and save behavior are unchanged.
 - Studio's document lease lifecycle now compiles from strict TypeScript. Renewal, lease-loss

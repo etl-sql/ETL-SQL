@@ -540,6 +540,9 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   **Credential-save helper migrated:** `designer/studio-security.ts` types detection findings and
   the encryption callback. Generated-output tests cover replacement offsets, protected references,
   required passphrases, and failed encryption without changing save behavior.
+  **HTML preview sanitizer migrated:** `designer/html-preview.ts` types DOM copying and attribute
+  allow-lists. Generated-output tests cover URL schemes, SVG payloads, malformed data URLs, and
+  scoped CSS. Emitted executable syntax is unchanged.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned
