@@ -18,6 +18,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's embedded query workbench now compiles from strict TypeScript, using generated
+  parse/run contracts and typed editor callbacks. Query and preview behavior is preserved.
 - Studio's recipe catalogue, route constants, and starter templates now compile from strict
   TypeScript. Exported values and template text are unchanged.
 - Studio's shared SQL-preview, inline-note, and sample-grid helpers now compile from strict

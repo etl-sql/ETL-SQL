@@ -16,7 +16,7 @@ src/ETL-SQL.ReportRuntime/Resources/Shared/
   under `Resources/TypeScript/`; their corresponding JavaScript here is generated. Currently
   `rt-util.ts`, `designer/designer-util.ts`, `designer/editor-toolbar.ts`, and
   `designer/studio-git-diff.ts`, `designer/studio-host.ts`, `designer/studio-lifecycle.ts`, `designer/studio-security.ts`, `designer/html-preview.ts`, `designer/studio-authoring-ui.ts`,
-`designer/data-prep-recipes.ts`, and `designer/studio-contracts.ts` are migrated.
+`designer/data-prep-recipes.ts`, `designer/studio-contracts.ts`, and `designer/studio-query-workbench.ts` are migrated.
   Follow the generated banner to its source.
 - **Strictly Prohibited**: Never edit files directly inside the generated target directories of host applications. Any direct edits in host directories will be flagged as drift and overwritten by the asset synchronizer.
 

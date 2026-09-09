@@ -34,6 +34,9 @@ internal static class BrowserContractsGenerator
     /// </summary>
     private static readonly Type[] Records =
     [
+        typeof(ParseDesignerResponse),
+        typeof(RunDesignerRequest),
+        typeof(RunDesignerResponse),
         typeof(PipelineTaskDto),
         typeof(PipelineTaskResponse),
         typeof(PipelineDependencyDto),
@@ -152,6 +155,13 @@ internal static class BrowserContractsGenerator
         // `object?` on a DTO is a payload the browser is expected to inspect but the server does not
         // constrain — `unknown` says exactly that, and forces a check at the point of use.
         if (type == typeof(object)) return "unknown";
+
+        if (type.IsGenericType && type.GetGenericArguments()[0] == typeof(string)
+            && (type.GetGenericTypeDefinition() == typeof(Dictionary<,>)
+                || type.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)))
+        {
+            return $"Record<string, {Declare(type.GetGenericArguments()[1], queue)}>";
+        }
 
         if (type.IsEnum) return string.Join(" | ", Enum.GetNames(type).Select(n => $"'{n}'"));
 
