@@ -18,6 +18,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's document lease lifecycle now compiles from strict TypeScript. Renewal, lease-loss
+  handling, release flags, and disposal behavior remain unchanged.
+
 - Studio's host adapter now compiles from strict TypeScript with typed host options and capability
   state. Existing fetch overrides, header precedence, and host availability decisions are preserved.
 

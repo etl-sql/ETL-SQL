@@ -20,7 +20,7 @@ this file decomposes it into executable work.
 | :--- | :--- | ---: |
 | Lint the browser sources | [§1](#1-lint-the-browser-sources) | ✔ |
 | Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 3 deferred |
-| Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | ✔ |
+| Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | 1 |
 | Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 4 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 33 |
 | Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 5 |
@@ -43,8 +43,8 @@ typing changes, and product behavior changes in separate reviewable batches.
 1. **§2's mechanical split is implemented.** The runtime is 17 ES modules with a generated
    offline bundle. See the [verification record](docs/releases/v0.20.0-browser-split-baseline.md)
    for checks and environment limits. Stateful closure refactors remain deferred.
-2. **§3's tracked repairs are implemented.** Portal fixture startup, consumer gates, current-source
-   pre-push builds, temporary-repository Git signing, and custom-chart fixture waits are fixed.
+2. **Investigate §3's newly observed Portal catalog test failure.** Earlier repairs are implemented;
+   lease lifecycle validation found the home dashboard button hidden after closing a report.
 3. **Execute §5 incrementally.** The compiler and `rt-util` TypeScript pilot are implemented.
    Continue through stateless modules in dependency order, retaining mixed-source checks and
    verifying generated output, sandbox, hosts, and offline delivery for each batch.
@@ -261,6 +261,11 @@ the browser sources. The v0.19.0 release run made the shape concrete — the evi
   tests passed; the preceding split commit ran the formatting hook.
 
 ### Failures observed during runtime split validation
+
+- [ ] Investigate `CatalogHome_OpenAndClose_CarriesIdentityAndEditLease`: on 2026-09-09 the lease
+  open/close assertions passed, then the create-dashboard button remained hidden. A pending
+  `switchDoc` continuation after close is a candidate; lifecycle JavaScript matches its prior AST.
+  A baseline-source probe was stopped without a result, so it is not reproduction evidence.
 
 - [x] Isolate the desktop journey's temporary Git repository from developer commit-signing
   settings with repository-local `commit.gpgsign=false`. The focused desktop journey passed.
@@ -528,6 +533,9 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   **Host adapter migrated:** `designer/studio-host.ts` defines host options and capability state.
   Defaults, explicit workspace overrides, Git callbacks, capability decisions, and authenticated
   fetch header precedence are tested against generated output.
+  **Lease lifecycle migrated:** `designer/studio-lifecycle.ts` types host callbacks and document
+  lease state. Deterministic timer tests cover renewals, lease loss, release flags, timer cleanup,
+  and preview/DAG cancellation without changing the existing scheduling behavior.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned
