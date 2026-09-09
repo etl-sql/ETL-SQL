@@ -14,7 +14,8 @@ src/ETL-SQL.ReportRuntime/Resources/Shared/
 
 - **Rule**: Edit authored JavaScript, styles, and vendor assets here. Migrated modules are authored
   under `Resources/TypeScript/`; their corresponding JavaScript here is generated. Currently
-  `rt-util.ts`, `designer/designer-util.ts`, and `designer/editor-toolbar.ts` are migrated.
+  `rt-util.ts`, `designer/designer-util.ts`, `designer/editor-toolbar.ts`, and
+  `designer/studio-git-diff.ts` are migrated.
   Follow the generated banner to its source.
 - **Strictly Prohibited**: Never edit files directly inside the generated target directories of host applications. Any direct edits in host directories will be flagged as drift and overwritten by the asset synchronizer.
 

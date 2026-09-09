@@ -522,6 +522,9 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   both escapers' existing semantics. Compiler regression coverage now includes nested imports.
   **Dependent module migrated:** `designer/editor-toolbar.ts`; the emitted import resolves to the
   generated designer utility. Button escaping, accessible labels, and missing-icon behavior are covered.
+  **Studio diff migrated:** `designer/studio-git-diff.ts` types operations and aligned rows while
+  preserving both the LCS and large-file positional paths. Generated-output tests cover text and
+  line-number preservation, additions, deletions, replacements, and line-ending normalization.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned

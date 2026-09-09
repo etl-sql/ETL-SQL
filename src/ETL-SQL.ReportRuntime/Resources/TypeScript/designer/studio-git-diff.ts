@@ -1,8 +1,17 @@
-/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-git-diff.ts
- * Run: node scripts/sync-assets.js
+/**
+ * Aligns two script revisions for Studio's side-by-side Git viewer.
+ * The bounded LCS keeps ordinary scripts readable without allowing a very large file to stall the UI.
  */
-export function buildSideBySideDiff(baselineContent, workingContent) {
+type DiffOperation = { kind: 'equal' | 'delete' | 'add'; text: string };
+export type DiffRow = {
+    kind: 'equal' | 'change' | 'delete' | 'add';
+    leftNumber: number | null;
+    rightNumber: number | null;
+    leftText: string;
+    rightText: string;
+};
+
+export function buildSideBySideDiff(baselineContent: unknown, workingContent: unknown): DiffRow[] {
     const left = String(baselineContent ?? '').replace(/\r\n?/g, '\n').split('\n');
     const right = String(workingContent ?? '').replace(/\r\n?/g, '\n').split('\n');
     const operations = left.length * right.length <= 400000
@@ -10,7 +19,8 @@ export function buildSideBySideDiff(baselineContent, workingContent) {
         : positionalOperations(left, right);
     return alignChangeRuns(operations);
 }
-function lcsOperations(left, right) {
+
+function lcsOperations(left: string[], right: string[]): DiffOperation[] {
     const widths = right.length + 1;
     const table = new Uint32Array((left.length + 1) * widths);
     for (let leftIndex = left.length - 1; leftIndex >= 0; leftIndex--) {
@@ -21,7 +31,8 @@ function lcsOperations(left, right) {
                 : Math.max(table[(leftIndex + 1) * widths + rightIndex], table[offset + 1]);
         }
     }
-    const operations = [];
+
+    const operations: DiffOperation[] = [];
     let leftIndex = 0;
     let rightIndex = 0;
     while (leftIndex < left.length || rightIndex < right.length) {
@@ -29,33 +40,30 @@ function lcsOperations(left, right) {
             operations.push({ kind: 'equal', text: left[leftIndex] });
             leftIndex++;
             rightIndex++;
-        }
-        else if (rightIndex >= right.length || (leftIndex < left.length
+        } else if (rightIndex >= right.length || (leftIndex < left.length
             && table[(leftIndex + 1) * widths + rightIndex] >= table[leftIndex * widths + rightIndex + 1])) {
             operations.push({ kind: 'delete', text: left[leftIndex++] });
-        }
-        else {
+        } else {
             operations.push({ kind: 'add', text: right[rightIndex++] });
         }
     }
     return operations;
 }
-function positionalOperations(left, right) {
-    const operations = [];
+
+function positionalOperations(left: string[], right: string[]): DiffOperation[] {
+    const operations: DiffOperation[] = [];
     for (let index = 0; index < Math.max(left.length, right.length); index++) {
-        if (left[index] === right[index])
-            operations.push({ kind: 'equal', text: left[index] });
+        if (left[index] === right[index]) operations.push({ kind: 'equal', text: left[index] });
         else {
-            if (index < left.length)
-                operations.push({ kind: 'delete', text: left[index] });
-            if (index < right.length)
-                operations.push({ kind: 'add', text: right[index] });
+            if (index < left.length) operations.push({ kind: 'delete', text: left[index] });
+            if (index < right.length) operations.push({ kind: 'add', text: right[index] });
         }
     }
     return operations;
 }
-function alignChangeRuns(operations) {
-    const rows = [];
+
+function alignChangeRuns(operations: DiffOperation[]): DiffRow[] {
+    const rows: DiffRow[] = [];
     let leftNumber = 1;
     let rightNumber = 1;
     for (let index = 0; index < operations.length;) {
@@ -65,8 +73,9 @@ function alignChangeRuns(operations) {
             index++;
             continue;
         }
-        const deleted = [];
-        const added = [];
+
+        const deleted: string[] = [];
+        const added: string[] = [];
         while (index < operations.length && operations[index].kind !== 'equal') {
             const change = operations[index++];
             (change.kind === 'delete' ? deleted : added).push(change.text);

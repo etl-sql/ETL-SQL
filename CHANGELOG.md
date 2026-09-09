@@ -18,6 +18,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's side-by-side Git diff helper now compiles from strict TypeScript with typed operations
+  and output rows. Alignment and the large-file fallback retain their existing behavior.
+
 - Editor toolbar helpers now compile from strict TypeScript, including their import of the migrated
   designer helpers. Existing button markup, accessibility labels, and JavaScript URLs are preserved.
 
