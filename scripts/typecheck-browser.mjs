@@ -28,6 +28,10 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { compileBrowser } from './compile-browser.mjs';
+
+try { compileBrowser({ check: true }); }
+catch (error) { console.error(error.message); process.exit(1); }
 
 const scriptRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptRoot, '..');

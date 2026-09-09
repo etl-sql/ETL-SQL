@@ -564,6 +564,12 @@ Produces a static, portable `.md` file:
 
 ### 6.5 Client-Side Runtime (`src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js`)
 
+`rt-util` is authored in `Resources/TypeScript/rt-util.ts` and compiled with the pinned strict
+TypeScript configuration to its existing `Shared/rt-util.js` path. Other runtime modules remain
+JavaScript. Asset sync compiles before bundling and copying; check mode rejects stale output.
+The .NET build consumes checked-in outputs without Node. See the
+[asset ownership standard](standards/report-runtime-asset-standards.md#planned-typescript-compilation-and-ownership).
+
 The entry `report-runtime.js` imports 16 sibling `rt-*.js` modules for state, theme, transport,
 data, detail surfaces, renderers, layouts, actions, saved views, and chrome. Online hosts load the
 entry with `type="module"`. Cross-module render cycles use hoisted functions and defer state reads

@@ -18,6 +18,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- The report runtime's utility module is now authored in strict TypeScript. Asset sync compiles it
+  to the existing JavaScript URL before generating the offline bundle and host copies. Drift checks
+  reject stale output; .NET builds still consume checked-in assets without Node.
+
 - Browser sources are split by concern. The designer has 11 modules, and the report runtime has
   a 356-line entry plus 16 parts. Online hosts load ES modules; offline snapshots embed a
   generated, drift-gated bundle. The VS Code preview CSP permits sibling modules. The runtime

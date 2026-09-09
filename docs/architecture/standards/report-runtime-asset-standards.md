@@ -12,7 +12,9 @@ To prevent code drift and duplication, all browser-based report player and catal
 src/ETL-SQL.ReportRuntime/Resources/Shared/
 ```
 
-- **Rule**: Any change to shared JavaScript logic (e.g. `designer.js`, `chart-rendering.js`), visual styles (`theme-dark.css`), or third-party web libraries must be made **exclusively** inside this folder.
+- **Rule**: Edit authored JavaScript, styles, and vendor assets here. Migrated modules are authored
+  under `Resources/TypeScript/`; their corresponding JavaScript here is generated. Currently
+  `rt-util.ts` is the migrated pilot. Follow the generated banner to its source.
 - **Strictly Prohibited**: Never edit files directly inside the generated target directories of host applications. Any direct edits in host directories will be flagged as drift and overwritten by the asset synchronizer.
 
 ---
@@ -32,6 +34,10 @@ The canonical shared assets are compiled and synchronized into these specific ho
 
 After modifying files inside the canonical `Shared` directory, you must run the asset synchronizer to update the host applications:
 
+For migrated modules, edit `Resources/TypeScript/` instead. Install the pinned compiler once with
+`npm ci --prefix scripts/typecheck`. Sync compiles TypeScript before bundling and copying assets;
+check mode fails on stale compilation without writing files. .NET builds consume checked-in assets.
+
 1. **Synchronize Assets**:
    Run the sync script from the repository root:
    ```powershell
@@ -48,7 +54,8 @@ After modifying files inside the canonical `Shared` directory, you must run the 
 
 ### Runtime module and offline bundle ownership
 
-`report-runtime.js` and the sibling `rt-*.js` files are authored ES modules. Keep part imports
+`report-runtime.js` and the sibling `rt-*.js` files are ES modules; `rt-util.js` is generated from
+`Resources/TypeScript/rt-util.ts`, while the other parts remain authored JavaScript. Keep part imports
 as single-line named imports with no aliases, and export declarations directly. The entry's
 hoisted `renderManifest` participates in the rendering cycle; do not call across that cycle at
 module initialization time.
@@ -60,8 +67,10 @@ classic-script IIFE for `OfflineSnapshotViewer`. Online hosts use `type="module"
 
 ### Planned TypeScript compilation and ownership
 
-This is the implementation design for TODO §5, recorded on 2026-09-08. Compilation is not wired
-yet; the current JavaScript workflow above remains authoritative until the pilot lands.
+This is the implementation design for TODO §5, recorded on 2026-09-08. The shared `rt-util` pilot
+now uses this pipeline. Portal conversion and broader migration remain pending. The source roots,
+compiler, drift checks, sync integration, and sandbox startup compilation are implemented; the
+remaining acceptance steps apply to each subsequent conversion.
 
 Preserve browser URLs and the existing offline concatenator. Use the pinned TypeScript toolchain
 under `scripts/typecheck`; do not add another bundler or a Node invocation to the .NET build.
@@ -91,13 +100,12 @@ source resolution so an existing output cannot shadow its TypeScript owner. Read
 the discovered `.ts` paths, not hand-maintained parallel lists. Reject output collisions and any
 attempt to emit outside the corresponding JavaScript root.
 
-The installed TypeScript 6.0.3 resolver was probed with virtual sibling roots: a `.ts` importer
-resolved an unmigrated `.js` sibling, and a `.js` importer resolved a migrated `.ts` sibling while
-retaining a `.js` specifier. The pilot must also test resolution with stale generated `.js` files
-present; the resolver probe alone does not verify the complete compiler host.
+The installed TypeScript 6.0.3 resolver supports mixed siblings with `.js` specifiers.
+`scripts/test-browser-compiler.mjs` exercises the compiler host with stale generated files present,
+unmigrated JS imports, strict errors, idempotence, orphan rejection, and unchanged outputs on failure.
 
 Use `strict`, `noEmitOnError`, ES2022, ESNext modules, Bundler resolution, DOM libraries,
-`verbatimModuleSyntax`, and `allowJs`. Keep `checkJs` off in the strict migration program and run
+`verbatimModuleSyntax`, `erasableSyntaxOnly`, and `allowJs`. Keep `checkJs` off in the strict migration program and run
 the existing JavaScript gate separately over remaining authored JS. Do not relax that gate or add
 baseline entries. Resolve shared TypeScript dependencies from Portal through the same ownership
 mapping; do not create a second compiled copy of shared modules.
@@ -111,20 +119,21 @@ repository license policy.
 
 #### Compilation, sync, and verification order
 
-Add a shared compiler implementation behind `scripts/compile-browser.mjs`. Normal mode writes
+The shared compiler is `scripts/compile-browser.mjs`. Normal mode writes
 generated JS; `--check` computes expected output without repairing the checkout and fails on missing,
 stale, or orphaned outputs. Track generated ownership so removing or renaming a source cannot leave
 a silently served old implementation. Fail with the exact path and regeneration command.
 
-Extend `sync-assets.js` to compile first, build the existing offline bundle second, and copy shared
+`sync-assets.js` compiles first, builds the existing offline bundle second, and copies shared
 assets to hosts last. Its check mode must validate compilation before comparing bundle and host
 outputs. Stop before downstream writes on compiler errors. The constrained concatenator continues
 to consume JavaScript: named imports, direct exports, and the existing cycle rules still apply.
 Reject TypeScript constructs whose emitted helpers or module syntax violate those constraints;
 do not silently strip unsupported output or introduce a second bundle path.
 
-The UI sandbox continues serving the same JavaScript paths. Add a documented compiler watch command
-for source editing, and run compilation before sandbox startup. Reload alone cannot compile `.ts`.
+The UI sandbox continues serving the same JavaScript paths. Use
+`node scripts/compile-browser.mjs --watch` for source editing; sandbox startup compiles once.
+Reload alone cannot compile `.ts`.
 CI and pre-push must run compilation drift checks before type/lint and consumer checks. Published
 .NET hosts consume checked-in generated assets and require no Node installation. Update `AGENTS.md`
 and these current-workflow instructions in the implementation commit, not before the pipeline exists.
@@ -148,7 +157,8 @@ Before committing a user interface or charting change, you should prototype and 
 - **Location**: `tools/ui-sandbox/`
 - **Command**: Run `pwsh -File tools\ui-sandbox\serve.ps1` to launch the local sandbox development server.
 - **Workflow**:
-  - The UI Sandbox imports canonical JavaScript/CSS files directly and bypasses compilation cache layers.
+  - The UI Sandbox imports served JavaScript/CSS files directly. For migrated TypeScript, run the
+    compiler watcher and reload after successful compilation.
   - Develop your dashboard features in the sandbox using isolated mock datasets (`mockApi.js`) and story scenarios (`tools/ui-sandbox/stories/`).
   - This avoids the overhead of launching docker containers, databases, or web servers just to verify visual components.
 

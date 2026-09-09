@@ -1,5 +1,7 @@
 {
   // Browser-side type gate.
+  // Migrated TypeScript is compiled strictly through tsconfig.browser-build.json first by
+  // scripts/typecheck-browser.mjs; this config continues checking the JavaScript surface.
   //
   // The shipped browser code stays plain `.js` and is served verbatim — nothing here emits,
   // bundles or rewrites a single file. This config only points a checker at the sources that

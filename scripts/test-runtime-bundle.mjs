@@ -28,9 +28,13 @@ try {
     mkdirSync(shared, { recursive: true });
     mkdirSync(path.dirname(command));
     copyFileSync(path.join(repo, 'scripts/sync-assets.js'), command);
+    copyFileSync(path.join(repo, 'scripts/compile-browser.mjs'), path.join(work, 'scripts/compile-browser.mjs'));
     for (const name of readdirSync(path.join(repo, relative))) {
         if (name === 'report-runtime.js' || /^rt-.*\.js$/.test(name)) {
             copyFileSync(path.join(repo, relative, name), path.join(shared, name));
+            // This isolated fixture tests bundle syntax mutations, not TypeScript ownership.
+            const copied = path.join(shared, name);
+            writeFileSync(copied, readFileSync(copied, 'utf8').replace('/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.', '/* Bundle test fixture.'));
         }
     }
 

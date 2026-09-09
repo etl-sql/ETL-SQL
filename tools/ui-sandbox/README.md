@@ -1,9 +1,11 @@
 # UI sandbox (dev-only)
 
-A no-Docker, no-build way to develop and visually check the portal/VS-Code
-browser-side components in isolation. It imports the **canonical** source
-directly, so editing it + hitting **↻ Reload** shows changes with no
-`sync-assets.ps1`, no portal build, and no catalog DB.
+A no-Docker way to develop and visually check the portal/VS-Code browser components in isolation.
+It imports the canonical JavaScript delivery files directly, with no Portal build or catalog DB.
+For migrated TypeScript such as `rt-util.ts`, startup compiles once. Install the compiler with
+`npm ci --prefix scripts/typecheck`, then use `node scripts/compile-browser.mjs --watch` while
+editing TypeScript and hit **↻ Reload** after successful compilation. Authored JS/CSS still reloads
+directly. Run `node scripts/sync-assets.js` before committing to update the offline bundle and hosts.
 
 Storybook-style: a categorized, searchable sidebar lists **stories** (components) and a fixture picker
 drives each with sample data.
@@ -29,7 +31,7 @@ Pass the matching `-Port` when using a non-default port. The server also stops a
 without a request so a detached development process cannot live forever. Set
 `-IdleTimeoutMinutes 0` only when an intentionally persistent sandbox is needed.
 
-Nothing here needs a build step: every story renders from files the repository tracks, so a clean
+Every story renders from files the repository tracks, so a clean
 checkout gets the same result as a working tree that has built everything. `SandboxStoryTests`
 asserts that property rather than trusting it — see
 [Clean checkout](#clean-checkout-no-build-step) below.

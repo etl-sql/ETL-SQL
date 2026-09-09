@@ -37,12 +37,12 @@ jobs:
       - name: Verify formatting
         run: dotnet format ETL-SQL.slnx --verify-no-changes --no-restore
 
+      - name: Install browser type-gate toolchain
+        run: npm ci --prefix scripts/typecheck
+
       - name: Check shared report runtime assets
         shell: pwsh
         run: node .\scripts\sync-assets.js -Check
-
-      - name: Install browser type-gate toolchain
-        run: npm ci --prefix scripts/typecheck
 
       - name: Check browser-side types
         run: node scripts/typecheck-browser.mjs
@@ -108,6 +108,9 @@ jobs:
       - name: Install UI dependencies
         working-directory: src/etl-sql-vscode/ui
         run: npm ci
+
+      - name: Install shared browser compiler
+        run: npm ci --prefix scripts/typecheck
 
       - name: Audit npm packages for known vulnerabilities
         working-directory: src/etl-sql-vscode

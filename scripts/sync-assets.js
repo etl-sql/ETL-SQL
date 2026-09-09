@@ -228,6 +228,8 @@ async function syncOrCheck(filePath, relativePath, targetDir, label, fileContent
 }
 
 async function run() {
+    const { compileBrowser } = await import('./compile-browser.mjs');
+    compileBrowser({ check: checkMode });
     if (!(await existsAsync(sharedDir))) {
         console.error(`Shared source directory not found: ${sharedDir}`);
         process.exit(1);

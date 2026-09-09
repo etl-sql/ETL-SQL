@@ -21,7 +21,7 @@ this file decomposes it into executable work.
 | Lint the browser sources | [§1](#1-lint-the-browser-sources) | ✔ |
 | Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 3 deferred |
 | Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | ✔ |
-| Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 5 |
+| Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 4 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 33 |
 | Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 5 |
 | *Candidates — not v0.20.0 scope yet* | | |
@@ -45,9 +45,9 @@ typing changes, and product behavior changes in separate reviewable batches.
    for checks and environment limits. Stateful closure refactors remain deferred.
 2. **§3's tracked repairs are implemented.** Portal fixture startup, consumer gates, current-source
    pre-push builds, temporary-repository Git signing, and custom-chart fixture waits are fixed.
-3. **Execute §5 incrementally.** Source/output ownership and compilation are designed. Implement
-   the compiler and migrate `rt-util` end to end. Prove generated output, asset sync, sandbox loading,
-   host loading, and offline delivery before expanding the migration.
+3. **Execute §5 incrementally.** The compiler and `rt-util` TypeScript pilot are implemented.
+   Continue through stateless modules in dependency order, retaining mixed-source checks and
+   verifying generated output, sandbox, hosts, and offline delivery for each batch.
 4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
    a prerequisite for §5. The stateful closure extractions deferred from §2 remain separate
    refactors; do not silently add them to either the mechanical split or the type migration.
@@ -496,13 +496,16 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   [planned pipeline](docs/architecture/standards/report-runtime-asset-standards.md#planned-typescript-compilation-and-ownership):
   separate source roots, checked-in JS at existing URLs, mixed-source resolution, no pilot source
   maps, compilation-before-sync, and preservation of the offline concatenator. The compiler resolver
-  probe passed; pipeline implementation and delivery evidence remain open below. The design covers where canonical
+  probe passed; the pilot pipeline is implemented and broader migration remains open below. The design covers where canonical
   `.ts` sources live, where generated `.js` and source maps go, how mixed JS/TS imports resolve,
   and which outputs are checked in. Extend §2's pipeline for browser ES modules and the single-file
   offline bundle. Keep generated host copies output-only and preserve the no-Node-in-.NET-build
   contract unless an explicit design change replaces it. Inspect §2's constrained concatenator
   before implementation; document any replacement and retire the old path in the same batch.
-- [ ] **Wire compilation, sync, drift checks, and the UI sandbox together.** A source edit must
+- [x] **Wire compilation, sync, drift checks, and the UI sandbox together.** `compile-browser.mjs`
+  owns strict compilation; sync and the browser type gate verify generated output, CI installs
+  the compiler before sync, and sandbox startup compiles once with a watch command for edits.
+  The pilot keeps empty lint/type baselines. A source edit must
   regenerate what the sandbox and hosts serve. Gate stale or missing generated output, retain LF
   normalization and license banners, and keep both lint and type baselines empty. Introduce a
   strict TypeScript configuration for migrated modules while retaining `checkJs` for remaining JS;
@@ -512,6 +515,9 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   sandbox story, affected hosts, and offline snapshot path. Then move through shared contracts,
   utilities, components, and entry points in separately validated batches. Preserve served URLs
   where possible; update every consumer together when an output path changes.
+  **Pilot implemented:** `rt-util.ts` compiles to the existing `Shared/rt-util.js` URL. Generated
+  JavaScript matches the prior JavaScript AST after removing comments/formatting. Broader migration
+  remains open; pilot evidence is recorded with the browser split verification notes.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned

@@ -54,6 +54,9 @@ if ($Stop) {
     }
 }
 
+& node (Join-Path $RepoRoot 'scripts/compile-browser.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Browser compilation failed; sandbox was not started.' }
+
 $mime = @{
     '.html' = 'text/html; charset=utf-8'
     '.js'   = 'text/javascript; charset=utf-8'
