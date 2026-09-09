@@ -45,6 +45,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Closing a Studio report while its workflow detection is pending no longer lets the late response
+  hide Home or repaint the editor for the closed document.
+
 - Browser tests wait for the designer's initial fixture before switching to the custom chart,
   then wait for rendered controls instead of fixed delays. Desktop journey fixture commits
   disable signing only in their temporary repository, avoiding dependency on developer keys.

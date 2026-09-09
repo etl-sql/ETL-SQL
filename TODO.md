@@ -20,7 +20,7 @@ this file decomposes it into executable work.
 | :--- | :--- | ---: |
 | Lint the browser sources | [§1](#1-lint-the-browser-sources) | ✔ |
 | Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 3 deferred |
-| Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | 1 |
+| Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | ✔ |
 | Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 4 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 33 |
 | Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 5 |
@@ -43,8 +43,8 @@ typing changes, and product behavior changes in separate reviewable batches.
 1. **§2's mechanical split is implemented.** The runtime is 17 ES modules with a generated
    offline bundle. See the [verification record](docs/releases/v0.20.0-browser-split-baseline.md)
    for checks and environment limits. Stateful closure refactors remain deferred.
-2. **Investigate §3's newly observed Portal catalog test failure.** Earlier repairs are implemented;
-   lease lifecycle validation found the home dashboard button hidden after closing a report.
+2. **§3's tracked repairs are implemented.** The late document-open continuation now checks that
+   its document is still active before hiding Home or updating editor state.
 3. **Execute §5 incrementally.** The compiler and `rt-util` TypeScript pilot are implemented.
    Continue through stateless modules in dependency order, retaining mixed-source checks and
    verifying generated output, sandbox, hosts, and offline delivery for each batch.
@@ -262,10 +262,11 @@ the browser sources. The v0.19.0 release run made the shape concrete — the evi
 
 ### Failures observed during runtime split validation
 
-- [ ] Investigate `CatalogHome_OpenAndClose_CarriesIdentityAndEditLease`: on 2026-09-09 the lease
-  open/close assertions passed, then the create-dashboard button remained hidden. A pending
-  `switchDoc` continuation after close is a candidate; lifecycle JavaScript matches its prior AST.
-  A baseline-source probe was stopped without a result, so it is not reproduction evidence.
+- [x] Fixed `CatalogHome_OpenAndClose_CarriesIdentityAndEditLease`: a delayed workflow response
+  resumed `switchDoc` after the document had closed and hid Home. The continuation now checks
+  document identity before updating the editor. The regression holds the real parse response until
+  after close; it reproduced hidden Home before the fix. This was a document-switch race, not a
+  lease lifecycle migration change.
 
 - [x] Isolate the desktop journey's temporary Git repository from developer commit-signing
   settings with repository-local `commit.gpgsign=false`. The focused desktop journey passed.

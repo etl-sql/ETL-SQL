@@ -2043,6 +2043,8 @@ export async function createStudioWorkbench(container, opts = {}) {
         if (newDoc) {
             rememberLineEnding(newDoc);
             await ensureReportWorkflow(newDoc);
+            // The tab can close or change while workflow detection waits on the host.
+            if (getActiveDoc() !== newDoc) return;
             const context = documentContext(newDoc);
             homeStage.style.display = 'none';
             paintResults(context);
