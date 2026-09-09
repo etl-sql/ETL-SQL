@@ -537,6 +537,9 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   **Lease lifecycle migrated:** `designer/studio-lifecycle.ts` types host callbacks and document
   lease state. Deterministic timer tests cover renewals, lease loss, release flags, timer cleanup,
   and preview/DAG cancellation without changing the existing scheduling behavior.
+  **Credential-save helper migrated:** `designer/studio-security.ts` types detection findings and
+  the encryption callback. Generated-output tests cover replacement offsets, protected references,
+  required passphrases, and failed encryption without changing save behavior.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned

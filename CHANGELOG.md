@@ -18,6 +18,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's credential-save helper now compiles from strict TypeScript with typed detection
+  findings and encryption callbacks. Secret detection and save behavior are unchanged.
 - Studio's document lease lifecycle now compiles from strict TypeScript. Renewal, lease-loss
   handling, release flags, and disposal behavior remain unchanged.
 
