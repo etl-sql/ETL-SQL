@@ -46,12 +46,33 @@ typing changes, and product behavior changes in separate reviewable batches.
    for checks and environment limits. Stateful closure refactors remain deferred.
 2. **§3's tracked repairs are implemented.** The late document-open continuation now checks that
    its document is still active before hiding Home or updating editor state.
-3. **Execute §5 incrementally.** The compiler and `rt-util` TypeScript pilot are implemented.
-   Continue through stateless modules in dependency order, retaining mixed-source checks and
-   verifying generated output, sandbox, hosts, and offline delivery for each batch.
+3. **Execute §5 incrementally.** Twelve modules are migrated through `studio-query-workbench.ts`;
+   the per-module ledger is in §5. The latest migration commit is `3a4687bbd` on
+   `refactor/runtime-module-split`. Continue with another bounded module, retaining mixed-source
+   checks and verifying generated output, sandbox, hosts, and offline delivery for each batch.
 4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
    a prerequisite for §5. The stateful closure extractions deferred from §2 remain separate
    refactors; do not silently add them to either the mechanical split or the type migration.
+
+**Session handoff — 2026-09-09:** The query-workbench migration is complete and committed. Its two
+browser journeys, two generated-contract tests, and Debug pre-push validation passed (142 fast
+tests; 38 consumer checks in the working tree, including a concurrent checker addition). Full
+delivery certification remains open in §5; these focused checks do not close that item.
+
+For the next batch, inspect `designer/studio-data.js` or `designer/rptsql-language.js` before choosing
+scope. `studio-data.js` needs sample/manifest contracts; parse/run DTOs and string-keyed dictionary
+generation are now available, but the manifest contract still needs investigation. Do not expand
+the stateful Studio closure refactors into this migration.
+
+Keep the authored `.ts` files under `Resources/TypeScript/`, then run asset sync. The generated
+JavaScript is also checked: retain necessary JSDoc for remaining JS callers after type erasure.
+Use `ETLSQL_PLAYWRIGHT_SKIP_INSTALL=1` for browser tests when Chromium is already cached; an earlier
+install-enabled run stalled. Detailed evidence is in the verification record linked above.
+
+At handoff, unrelated comment-checker work remained uncommitted in `.github/workflows/ci.yml`,
+`scripts/README.md`, `scripts/Test-PrePush.ps1`, `scripts/check-ai-slop-comments.mjs`, and
+`scripts/test-check-ai-slop-comments.mjs`. Recheck status before resuming and preserve that work.
+Nothing from this migration session was pushed.
 
 ---
 
