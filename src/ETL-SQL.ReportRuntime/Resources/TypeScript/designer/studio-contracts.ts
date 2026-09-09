@@ -1,13 +1,10 @@
-/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-contracts.ts
- * Run: node scripts/sync-assets.js
- */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Stable host routes and script templates consumed by the Studio composition layer.
  */
+
 export const STUDIO_ROUTES = Object.freeze({
     analyze: '/api/designer/analyze',
     complete: '/api/designer/complete',
@@ -32,13 +29,16 @@ export const STUDIO_ROUTES = Object.freeze({
     sessionMetadata: '/api/session/metadata',
     connectorsSchema: '/api/connectors/schema',
 });
+
 export const STUDIO_CATALOG_ROUTES = Object.freeze({
     datasetRegistry: '/api/datasets',
 });
+
 export const STUDIO_WORKSPACE_ROUTES = Object.freeze({
     files: '/api/files',
     connections: '/api/connections',
 });
+
 export const STUDIO_STARTER_SCRIPTS = Object.freeze({
     report: `-- Sample dashboard. MOCKDB is a built-in in-memory connector, so this needs no database.
 -- Replace the connection below with your own when you are ready.
@@ -115,6 +115,7 @@ FROM demo.Orders
 GROUP BY Region;
 `,
 });
+
 export const REPORT_WORKFLOW_TEMPLATES = Object.freeze({
     dashboard: `-- Dashboard canvas: add data, then arrange charts, KPIs, tables, and slicers.
 CREATE PAGE [Dashboard] AS DASHBOARD ( LAYOUT ( STRUCTURE = '.' ) );

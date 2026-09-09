@@ -1,13 +1,3 @@
-// @ts-nocheck — generated copy; check the canonical source.
-/* GENERATED FILE - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/designer/data-prep-recipes.js
- * Edit the canonical source, then run: node .\scripts\sync-assets.js
- */
-
-/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/data-prep-recipes.ts
- * Run: node scripts/sync-assets.js
- */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -15,7 +5,17 @@
  * data-prep-recipes.js — split out of designer.js, TODO.md §2.
  * The catalogue of data-preparation recipes offered by the script workbench.
  */
-export const DATA_PREP_RECIPES = [
+
+export interface DataPrepRecipe {
+    id: string;
+    label: string;
+    algorithm: string;
+    description: string;
+    targetSuffix: string;
+    template: (target: string, source: string) => string;
+}
+
+export const DATA_PREP_RECIPES: DataPrepRecipe[] = [
     {
         id: 'rolling_aggregate',
         label: 'Rolling Aggregate (Moving Average)',
