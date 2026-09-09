@@ -23,7 +23,7 @@ this file decomposes it into executable work.
 | Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | ✔ |
 | Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 4 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 33 |
-| Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 5 |
+| Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 6 |
 | *Candidates — not v0.20.0 scope yet* | | |
 | Grammar-of-Graphics semantic extensions | [§7](#7-grammar-of-graphics-semantic-extensions-candidate) | 3 |
 | SaaS operations and hosted launch evidence | [§8](#8-saas-operations-and-hosted-launch-evidence-candidate) | 3 |
@@ -576,6 +576,17 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
   builds are indistinguishable from each other; see
   [v0.19.0 Performance Results](docs/releases/v0.19.0-performance-results.md). Do **not** re-bless
   until the cause is known — v0.17.0 established why.
+- [ ] **Support maintenance branches and out-of-order patch releases in CI workflows.** Releasing an
+  older point release (e.g. `v0.19.1` after `v0.20.0`, or `v1.0.1` when `v2.0.0` is `main`) breaks
+  three assumptions:
+  1. `release.yml` line 37 enforces `git merge-base --is-ancestor $TagCommit origin/main`, which
+     rejects tags living on diverged `release/**` branches. Relax the gate to accept tags contained
+     in `origin/main` or `origin/release/**`.
+  2. `msi-upgrade.yml` line 115 selects `$previous` by sorting descending across all tags. If a newer
+     release exists, it picks the higher release and fails attempting a downgrade. Filter `$previous`
+     with `[version]($_.tagName.TrimStart('v')) -lt [version]$currentVersion`.
+  3. `release.yml` publishing should pass `--latest=false` to `gh release edit` when the candidate is
+     older than the highest published release so GitHub does not overwrite the repository's Latest badge.
 
 ---
 
