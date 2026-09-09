@@ -18,6 +18,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's shared SQL-preview, inline-note, and sample-grid helpers now compile from strict
+  TypeScript with typed presentation inputs. Existing markup and escaping behavior are preserved.
 - The designer's HTML-preview sanitizer now compiles from strict TypeScript with typed DOM
   inputs and attribute rules. Existing preview sanitization behavior is preserved.
 - Studio's credential-save helper now compiles from strict TypeScript with typed detection

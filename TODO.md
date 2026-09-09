@@ -543,6 +543,9 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   **HTML preview sanitizer migrated:** `designer/html-preview.ts` types DOM copying and attribute
   allow-lists. Generated-output tests cover URL schemes, SVG payloads, malformed data URLs, and
   scoped CSS. Emitted executable syntax is unchanged.
+  **Authoring presentation helpers migrated:** `designer/studio-authoring-ui.ts` types structured
+  inline content and sample-grid presentation inputs. Generated-output tests cover escaping, required
+  explanations, object/positional rows, counts, and display limits; executable syntax is unchanged.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned

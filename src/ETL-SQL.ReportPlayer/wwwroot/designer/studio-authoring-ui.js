@@ -4,6 +4,10 @@
  * Edit the canonical source, then run: node .\scripts\sync-assets.js
  */
 
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-authoring-ui.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -15,10 +19,8 @@
  * render a SQL preview, a sample grid, and an inline note the same way — a second implementation is
  * how "preview before write" starts to mean something different in each dialog.
  */
-
 /** The design-time sample budget both hosts enforce; grids scroll rather than truncating. */
 export const STUDIO_SAMPLE_PREVIEW_ROWS = 50;
-
 export function escapeHtml(value) {
     return String(value ?? '')
         .replace(/&/g, '&amp;')
@@ -26,7 +28,6 @@ export function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 }
-
 /**
  * The exact Report-SQL a surface is about to write, and one sentence saying what it does.
  *
@@ -52,7 +53,6 @@ export function sqlPreviewMarkup(sql, explanation, label = 'Writes this Report-S
         + `<p class="etlsql-studio-sql-explains">${escapeHtml(explanation)}</p>`
         + `<pre>${escapeHtml(sql)}</pre></div>`;
 }
-
 /**
  * The same sentence, for a write whose exact text cannot honestly be previewed.
  *
@@ -68,7 +68,6 @@ export function mutationExplanationMarkup(explanation, label = 'Changes this') {
     return `<div class="etlsql-studio-sql-preview is-summary"><span>${escapeHtml(label)}</span>`
         + `<p class="etlsql-studio-sql-explains">${escapeHtml(explanation)}</p></div>`;
 }
-
 /**
  * Renders a structured inline model to markup.
  *
@@ -82,17 +81,24 @@ export function mutationExplanationMarkup(explanation, label = 'Changes this') {
  * and every caller lives in this repo, so it should fail where it is written.
  */
 export function inlineMarkup(content) {
-    if (content === null || content === undefined) return '';
-    if (typeof content === 'string' || typeof content === 'number') return escapeHtml(content);
-    if (Array.isArray(content)) return content.map(inlineMarkup).join('');
-    if (content.br) return '<br>';
-    if ('text' in content) return escapeHtml(content.text);
-    if ('strong' in content) return `<strong>${escapeHtml(content.strong)}</strong>`;
-    if ('em' in content) return `<em>${escapeHtml(content.em)}</em>`;
-    if ('code' in content) return `<code>${escapeHtml(content.code)}</code>`;
+    if (content === null || content === undefined)
+        return '';
+    if (typeof content === 'string' || typeof content === 'number')
+        return escapeHtml(content);
+    if (Array.isArray(content))
+        return content.map(inlineMarkup).join('');
+    if (content.br)
+        return '<br>';
+    if ('text' in content)
+        return escapeHtml(content.text);
+    if ('strong' in content)
+        return `<strong>${escapeHtml(content.strong)}</strong>`;
+    if ('em' in content)
+        return `<em>${escapeHtml(content.em)}</em>`;
+    if ('code' in content)
+        return `<code>${escapeHtml(content.code)}</code>`;
     throw new TypeError(`inlineMarkup: unsupported segment ${JSON.stringify(content)}`);
 }
-
 /**
  * An inline note. `content` is a structured model rendered by `inlineMarkup`, so plain text — a
  * server error message included — is escaped by default and emphasis has to be asked for.
@@ -100,7 +106,6 @@ export function inlineMarkup(content) {
 export function noteMarkup(content, tone = 'info') {
     return `<div class="etlsql-studio-guided-note is-${escapeHtml(tone)}">${inlineMarkup(content)}</div>`;
 }
-
 /**
  * A scrollable grid of sampled rows. `sample` is `{ columns, rows, rowCount }`; columns may be plain
  * names or column objects, and rows may be objects or positional arrays, because the data-sample and
@@ -113,15 +118,13 @@ export function sampleGridMarkup(sample, limit = STUDIO_SAMPLE_PREVIEW_ROWS) {
     const resolved = columns.length
         ? columns
         : (rows[0] && !Array.isArray(rows[0]) ? Object.keys(rows[0]) : []);
-
-    if (!resolved.length) return noteMarkup('The sample came back with no columns.', 'warning');
-
+    if (!resolved.length)
+        return noteMarkup('The sample came back with no columns.', 'warning');
     const cell = (row, column, index) => (Array.isArray(row) ? row[index] : row?.[column]);
     const count = sample?.rowCount ?? rows.length;
     return `<div class="etlsql-studio-sample-grid"><table>
         <thead><tr>${resolved.map(column => `<th>${escapeHtml(column)}</th>`).join('')}</tr></thead>
-        <tbody>${rows.slice(0, limit).map(row =>
-            `<tr>${resolved.map((column, index) => `<td>${escapeHtml(String(cell(row, column, index) ?? ''))}</td>`).join('')}</tr>`).join('')}</tbody>
+        <tbody>${rows.slice(0, limit).map(row => `<tr>${resolved.map((column, index) => `<td>${escapeHtml(String(cell(row, column, index) ?? ''))}</td>`).join('')}</tr>`).join('')}</tbody>
         </table></div>
         <p class="etlsql-studio-guided-hint">${count} row${count === 1 ? '' : 's'} sampled · ${resolved.length} field${resolved.length === 1 ? '' : 's'}</p>`;
 }
