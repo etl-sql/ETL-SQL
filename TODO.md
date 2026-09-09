@@ -24,6 +24,7 @@ this file decomposes it into executable work.
 | Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 4 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 33 |
 | Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 6 |
+| Code audit — bugs, security, resource leaks | [§9](#9-code-audit-findings) | 16 |
 | *Candidates — not v0.20.0 scope yet* | | |
 | Grammar-of-Graphics semantic extensions | [§7](#7-grammar-of-graphics-semantic-extensions-candidate) | 3 |
 | SaaS operations and hosted launch evidence | [§8](#8-saas-operations-and-hosted-launch-evidence-candidate) | 3 |
@@ -549,6 +550,9 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   **Recipe and template modules migrated:** `designer/data-prep-recipes.ts` types recipe metadata
   and template callbacks; `designer/studio-contracts.ts` uses inferred types for frozen route and
   starter-template tables. Exported values and generated template text are unchanged.
+  **Query workbench migrated:** `designer/studio-query-workbench.ts` types the embedded editor,
+  injected transport, and result adapters. Parse/run DTOs now come from the generated C# contracts,
+  including string-keyed dictionaries. Tests cover connection preambles and result-set selection.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned
@@ -599,6 +603,94 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
      with `[version]($_.tagName.TrimStart('v')) -lt [version]$currentVersion`.
   3. `release.yml` publishing should pass `--latest=false` to `gh release edit` when the candidate is
      older than the highest published release so GitHub does not overwrite the repository's Latest badge.
+
+---
+
+## 9. Code audit findings
+
+Found during the v0.20.0 pre-release review (2026-09-09). Items are prioritised release-blocking
+first. Audit detail: [`code-audit-v0.20.0.md`](.gemini/antigravity-cli/brain/007e4d74-31a8-4236-bf4f-54291dc1c8ed/code-audit-v0.20.0.md).
+
+**Release-blocking**
+
+- [ ] **`JobApiEndpoints.cs` — `_jobs` dictionary is an unbounded leak.** Ad-hoc job submissions add
+  a `JobEntry` (which holds a `CancellationTokenSource`) to a static `ConcurrentDictionary` and
+  nothing ever removes or disposes them. Fix: dispose the `CancellationTokenSource` and
+  `TryRemove` the entry in `RunJobAsync`'s `finally` block (or enforce a TTL eviction).
+  `JobApiEndpoints.cs:187–189`.
+
+- [ ] **`FlatFileDataSource.cs` — `ResolvePath` and path validation are both skipped when `context`
+  is `null`.** `context != null ? context.ResolvePath(cleanPath) : cleanPath` at line 289 means the
+  raw user-supplied path reaches the filesystem unchecked. `SecurityService.ValidatePath` two lines
+  below is gated on the same null check. A null context must throw rather than silently bypass the
+  Zero-Trust boundary. `FlatFileDataSource.cs:289`.
+
+- [ ] **`SmtpDataSource.cs` — same `ResolvePath` bypass via `??` fallback.** `_context?.ResolvePath(path) ?? path`
+  at line 138 uses the raw attachment path when `_context` is null. Attachment paths can be
+  user-supplied; this is a path-traversal risk. `SmtpDataSource.cs:138`.
+
+**Resource leaks**
+
+- [ ] **`EngineRunner.cs` — `treeCts` cancelled but never disposed.** `CancellationTokenSource`
+  holds a `WaitHandle` released only on `Dispose`. Each script run leaks one. Wrap in `using` or
+  dispose in `finally`. Lines 566 and 576.
+
+- [ ] **`ExecuteTreeDemoRunner.cs` — same CTS leak.** `var cts = new CancellationTokenSource()` at
+  line 33; cancelled at line 77, never disposed.
+
+**Sync-over-async**
+
+- [ ] **`ScriptGovernanceService.cs:665` — `.GetAwaiter().GetResult()` inside a `catch (Exception)`
+  that returns `[]`.** The sync block hides both deadlocks and real linting errors from callers.
+  Make the method `async` or, at minimum, log before returning empty.
+
+- [ ] **`DataSources.cs:852` — `_lock.Wait()` instead of `await _lock.WaitAsync()`.** Blocks the
+  calling thread. Change to `await` form unless the call site is deliberately off-async.
+
+- [ ] **`SchedulerService.cs:117` — `_runTask?.Wait(TimeSpan.FromSeconds(5))`.** Acceptable as
+  shutdown logic but violates §8.1. Change to `await _runTask.WaitAsync(...)` guarded by a try/catch
+  for `AggregateException`.
+
+- [ ] **`PortalStorageUsageSampler.cs:62–63` — `catch (OperationCanceledException)` does not cover
+  non-cancellation failures from background tasks.** A failure in `MeasureDirectoryDetailed` will
+  propagate unhandled from the hosted service. Add a general catch or use `await datasetTask`
+  instead of `.Result`.
+
+- [ ] **`ColumnQualityValidator.cs:219–222` — sync-over-async shim.** `FinalizeUniquePrePass()`
+  calls `FinalizeUniquePrePassAsync().GetAwaiter().GetResult()`. Deadlock risk if called from a
+  thread with a synchronization context. Document explicitly as intentional sync-only, or make async.
+
+- [ ] **`BackupRestoreService.cs`, `CryptoUtils.cs`, `MachineBoundCrypto.cs`, `PdfExporter.cs`,
+  `BrowserReportPdfExporter.cs` — sync wrappers using `.GetAwaiter().GetResult()`.** Multiple
+  public sync methods wrap async ones. Low immediate deadlock risk (no ASP.NET sync context) but
+  tech debt flagged for the ongoing async cleanup.
+
+**Browser / JavaScript**
+
+- [ ] **`studio-authoring.js:195` — raw `body` and `lede` strings injected via `innerHTML`.** Both
+  are set from callers inside the module, but the render method accepts arbitrary strings with no
+  sanitisation contract. Audit every call site; add an explicit `esc()` guard or enforce that only
+  compile-time-safe HTML reaches this path.
+
+- [ ] **`admin-catalog-ui.js:51–55` — pagination values from the server inserted unescaped.**
+  `start`, `end`, `total`, `page`, `pages` are interpolated directly. They are expected to be
+  numbers but not validated to be numbers before insertion. Add explicit `Number()` coercion with
+  NaN guards or `esc()` for each value.
+
+- [ ] **`datasets-admin.js:542` — API stat values inserted unescaped into `innerHTML`.** `s.min`,
+  `s.max`, `s.avg`, `s.nullCount` from the dataset profiling API are interpolated raw. Add `esc()`
+  or numeric validation.
+
+**Logging / diagnostics**
+
+- [ ] **`rt-transport.js:92, 133` and `rt-layout.js:84` — `console.debug` in production runtime
+  paths.** Debug traces log parameter lists and page names to the browser console in production.
+  Remove or gate behind an explicit debug flag.
+
+- [ ] **`JobApiEndpoints.cs:193` — fire-and-forget `RunJobAsync` discard not handling pre-try
+  faults.** If `RunJobAsync` throws before entering its try/catch (e.g. during scope creation),
+  the entry stays in `Queued` forever with no log. Add a `.ContinueWith` that handles `Faulted`
+  state, or move the discard setup inside the existing try.
 
 ---
 
