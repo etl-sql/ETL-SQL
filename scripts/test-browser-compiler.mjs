@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { compileBrowser } from './compile-browser.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -75,3 +75,16 @@ for (const escape of [designer.escapeHtml, designer.esc]) {
     assert.equal(escape(false), 'false');
 }
 console.log('designer utility: existing escaping and coercion behavior preserved');
+
+const toolbar = await import(pathToFileURL(path.join(repo, 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/editor-toolbar.js')).href);
+const button = toolbar.toolbarButton({ attr: 'data-save', icon: 'save', title: 'Save "draft"', label: '<Save>', primary: true, key: 'Ctrl+S' });
+assert.match(button, /type="button"/);
+assert.match(button, /etlsql-tool-btn-primary etlsql-tool-btn-labelled/);
+assert.match(button, /title="Save &quot;draft&quot; \(Ctrl\+S\)"/);
+assert.match(button, /aria-label="Save &quot;draft&quot;"/);
+assert.match(button, /<span>&lt;Save&gt;<\/span>/);
+assert.match(button, /aria-hidden="true"/);
+const iconOnly = toolbar.toolbarButton({ attr: 'data-close', icon: 'close', title: 'Close' });
+assert.doesNotMatch(iconOnly, /<span>|etlsql-tool-btn-primary|etlsql-tool-btn-labelled/);
+assert.match(toolbar.toolbarIcon('missing'), />\s*<\/svg>$/);
+console.log('editor toolbar: generated module imports, escaping, labels and icon fallback preserved');

@@ -1,7 +1,3 @@
-/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/editor-toolbar.ts
- * Run: node scripts/sync-assets.js
- */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -9,10 +5,12 @@
  * editor-toolbar.js — split out of designer.js, TODO.md §2.
  * The editor toolbar's icon set and button markup builder.
  */
+
 import { escapeHtml } from './designer-util.js';
+
 // Toolbar iconography. Inline stroke SVGs (currentColor, 16px) keep the workbench
 // self-contained — no icon font or sprite sheet to ship to VS Code / Player / Portal.
-export const _TOOLBAR_ICONS = {
+export const _TOOLBAR_ICONS: Record<string, string> = {
     back: '<path d="M10 3 5 8l5 5"/><path d="M5.5 8H14"/><path d="M2.5 3.5v9"/>',
     sidebar: '<path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5z"/><path d="M6.5 2v12"/>',
     theme: '<path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7z"/>',
@@ -34,10 +32,12 @@ export const _TOOLBAR_ICONS = {
     formatSettings: '<path d="M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"/><path d="M8 1v2m0 10v2m-6-7h2m10 0h2m-2.1-4.9-1.4 1.4m-7 7-1.4 1.4m0-9.8 1.4 1.4m7 7 1.4 1.4"/>',
     connection: '<path d="M4 2.5a3.5 3.5 0 0 0 7 0v2H4z"/><path d="M6 6.5v4a1.5 1.5 0 0 0 3 0v-4"/><path d="M7.5 12v2"/>',
 };
-export function toolbarIcon(name) {
+
+export function toolbarIcon(name: string) {
     return `<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"
         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${_TOOLBAR_ICONS[name] || ''}</svg>`;
 }
+
 // Icon-only by default; `label` is reserved for the primary action so the toolbar
 // still reads at a glance. Everything carries a title + aria-label for a11y.
 /**
@@ -49,7 +49,7 @@ export function toolbarIcon(name) {
  * @param {boolean} [button.primary]
  * @param {string} [button.key]   Keyboard shortcut, appended to the tooltip.
  */
-export function toolbarButton({ attr, icon, title, label, primary, key }) {
+export function toolbarButton({ attr, icon, title, label, primary, key }: { attr: string; icon: string; title: string; label?: string; primary?: boolean; key?: string }) {
     const hint = key ? `${title} (${key})` : title;
     return `<button type="button" class="etlsql-tool-btn${primary ? ' etlsql-tool-btn-primary' : ''}${label ? ' etlsql-tool-btn-labelled' : ''}"
         ${attr} title="${escapeHtml(hint)}" aria-label="${escapeHtml(title)}">${toolbarIcon(icon)}${label ? `<span>${escapeHtml(label)}</span>` : ''}</button>`;

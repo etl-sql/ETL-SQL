@@ -520,6 +520,8 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   remains open; pilot evidence is recorded with the browser split verification notes.
   **Next leaf migrated:** `designer/designer-util.ts`; generated output keeps the nested path and
   both escapers' existing semantics. Compiler regression coverage now includes nested imports.
+  **Dependent module migrated:** `designer/editor-toolbar.ts`; the emitted import resolves to the
+  generated designer utility. Button escaping, accessible labels, and missing-icon behavior are covered.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned

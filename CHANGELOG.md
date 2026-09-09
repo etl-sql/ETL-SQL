@@ -18,6 +18,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Editor toolbar helpers now compile from strict TypeScript, including their import of the migrated
+  designer helpers. Existing button markup, accessibility labels, and JavaScript URLs are preserved.
+
 - The designer's shared escaping helpers now compile from strict TypeScript at the same JavaScript
   URL. Both existing escaping behaviors are preserved.
 
