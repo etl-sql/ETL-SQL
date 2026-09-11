@@ -16,8 +16,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - The browser sources are linted. `eslint.config.mjs` at the repository root points `eslint:recommended` at the canonical shared assets and the Portal's own modules — the same sources the type gate covers — and `node scripts/lint-browser.mjs` gates them from pre-push and CI against `browser-lint-baseline.txt`, on the same shrink-only ratchet as the type baseline. A file ESLint cannot parse is never baselined.
 
-### Changed
-
+- Studio's SQL mutation and filter persistence service (`designer/studio-sql-mutations.ts`) now
+  compiles from strict TypeScript. Filter contracts, target resolution, query composition, patch queues,
+  and canonical report/pipeline mutations retain their existing behavior.
+- Studio's data sampling and package hydration helpers (`designer/studio-data.ts`) now compile
+  from strict TypeScript. Column resolution, active filtering, manifest canvas hydration, and sample
+  loading retain their existing behavior.
+- The rptsql CodeMirror language definition (`designer/rptsql-language.ts`) now compiles from
+  strict TypeScript. Keyword classification sets, stream tokenizer matching, and theme highlight
+  styles retain their existing behavior.
 - Studio's embedded query workbench now compiles from strict TypeScript, using generated
   parse/run contracts and typed editor callbacks. Query and preview behavior is preserved.
 - Studio's recipe catalogue, route constants, and starter templates now compile from strict
@@ -54,6 +61,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   JavaScript shrinks by 27,271 bytes. Stateful designer and Studio closures remain unchanged.
 
 ### Fixed
+
+- Orchestrator ad-hoc job execution disposes cancellation tokens on completion, evicts stale completed jobs via a 1-hour retention policy, and handles pre-try faults so submissions do not hang in queued state.
+- FlatFile and SMTP connectors enforce execution context presence during path resolution, preventing unvalidated path access when context is missing.
+- Live TUI visualizer and execution tree demo cancel and dispose cancellation token sources cleanly, including on evaluation failure.
+- Governance script analysis logs exceptions when linting instead of silently swallowing errors.
+- Portal storage usage sampler catches and records unexpected sampling failures, preventing unhandled background service faults.
+- Admin catalog and dataset management UIs validate and coerce numeric pagination and profiling statistics before inserting into the DOM.
+- Removed extraneous debug traces from the production report transport and layout modules.
 
 - Closing a Studio report while its workflow detection is pending no longer lets the late response
   hide Home or repaint the editor for the closed document.

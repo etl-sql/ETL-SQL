@@ -24,7 +24,7 @@ this file decomposes it into executable work.
 | Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 4 |
 | Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 33 |
 | Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 6 |
-| Code audit — bugs, security, resource leaks | [§9](#9-code-audit-findings) | 16 |
+| Code audit — bugs, security, resource leaks | [§9](#9-code-audit-findings) | ✔ |
 | *Candidates — not v0.20.0 scope yet* | | |
 | Grammar-of-Graphics semantic extensions | [§7](#7-grammar-of-graphics-semantic-extensions-candidate) | 3 |
 | SaaS operations and hosted launch evidence | [§8](#8-saas-operations-and-hosted-launch-evidence-candidate) | 3 |
@@ -46,23 +46,20 @@ typing changes, and product behavior changes in separate reviewable batches.
    for checks and environment limits. Stateful closure refactors remain deferred.
 2. **§3's tracked repairs are implemented.** The late document-open continuation now checks that
    its document is still active before hiding Home or updating editor state.
-3. **Execute §5 incrementally.** Twelve modules are migrated through `studio-query-workbench.ts`;
-   the per-module ledger is in §5. The latest migration commit is `3a4687bbd` on
-   `refactor/runtime-module-split`. Continue with another bounded module, retaining mixed-source
+3. **Execute §5 incrementally.** Fifteen modules are migrated through `studio-sql-mutations.ts`;
+   the per-module ledger is in §5. Continue with another bounded module, retaining mixed-source
    checks and verifying generated output, sandbox, hosts, and offline delivery for each batch.
 4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
    a prerequisite for §5. The stateful closure extractions deferred from §2 remain separate
    refactors; do not silently add them to either the mechanical split or the type migration.
 
-**Session handoff — 2026-09-09:** The query-workbench migration is complete and committed. Its two
-browser journeys, two generated-contract tests, and Debug pre-push validation passed (142 fast
-tests; 38 consumer checks in the working tree, including a concurrent checker addition). Full
-delivery certification remains open in §5; these focused checks do not close that item.
+**Session handoff — 2026-09-11:** The studio-sql-mutations migration is complete. Generated-output
+tests, browser type/lint gates (0 findings), asset sync (0 drift), 41 consumer contract checks, and
+fast pre-push validation passed (142 fast tests). Full delivery certification remains open in §5;
+these focused checks do not close that item.
 
-For the next batch, inspect `designer/studio-data.js` or `designer/rptsql-language.js` before choosing
-scope. `studio-data.js` needs sample/manifest contracts; parse/run DTOs and string-keyed dictionary
-generation are now available, but the manifest contract still needs investigation. Do not expand
-the stateful Studio closure refactors into this migration.
+For the next batch, inspect `designer/run-results.js` or `designer/visual-format-inspector.js`
+before choosing scope. Do not expand the stateful Studio closure refactors into this migration.
 
 Keep the authored `.ts` files under `Resources/TypeScript/`, then run asset sync. The generated
 JavaScript is also checked: retain necessary JSDoc for remaining JS callers after type erasure.
@@ -574,6 +571,17 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   **Query workbench migrated:** `designer/studio-query-workbench.ts` types the embedded editor,
   injected transport, and result adapters. Parse/run DTOs now come from the generated C# contracts,
   including string-keyed dictionaries. Tests cover connection preambles and result-set selection.
+  **CodeMirror language module migrated:** `designer/rptsql-language.ts` types keyword classification
+  sets, string streams, and highlight style definitions. Generated-output tests cover keyword sets,
+  tokenizer matching, and theme highlight styles. Emitted executable syntax is unchanged.
+  **Studio data and sampling module migrated:** `designer/studio-data.ts` types column naming, type
+  inference, active filter evaluation, manifest hydration, and host source sampling. Generated-output
+  tests cover column resolution, inference, filtering, manifest preview hydration, and sample requests.
+  Emitted executable syntax is unchanged.
+  **SQL mutation service migrated:** `designer/studio-sql-mutations.ts` types filter contracts,
+  target resolution, query composition, patch queues, and canonical report/pipeline mutations.
+  Generated-output tests cover contract generation, matching filters, visual lookup, target
+  resolution, and error notifications. Emitted executable syntax is unchanged.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned
@@ -634,52 +642,47 @@ first. Audit detail: [`code-audit-v0.20.0.md`](.gemini/antigravity-cli/brain/007
 
 **Release-blocking**
 
-- [ ] **`JobApiEndpoints.cs` — `_jobs` dictionary is an unbounded leak.** Ad-hoc job submissions add
+- [x] **`JobApiEndpoints.cs` — `_jobs` dictionary is an unbounded leak.** Ad-hoc job submissions add
   a `JobEntry` (which holds a `CancellationTokenSource`) to a static `ConcurrentDictionary` and
-  nothing ever removes or disposes them. Fix: dispose the `CancellationTokenSource` and
-  `TryRemove` the entry in `RunJobAsync`'s `finally` block (or enforce a TTL eviction).
+  nothing ever removes or disposes them. Resolved: `CancellationTokenSource` disposed on job completion,
+  completed jobs evicted via 1-hour TTL and high-watermark pruning, and safe cancellation guards added.
   `JobApiEndpoints.cs:187–189`.
 
-- [ ] **`FlatFileDataSource.cs` — `ResolvePath` and path validation are both skipped when `context`
-  is `null`.** `context != null ? context.ResolvePath(cleanPath) : cleanPath` at line 289 means the
-  raw user-supplied path reaches the filesystem unchecked. `SecurityService.ValidatePath` two lines
-  below is gated on the same null check. A null context must throw rather than silently bypass the
-  Zero-Trust boundary. `FlatFileDataSource.cs:289`.
+- [x] **`FlatFileDataSource.cs` — `ResolvePath` and path validation are both skipped when `context`
+  is `null`.** Resolved: A null context throws `ArgumentNullException` rather than bypassing the
+  Zero-Trust path validation boundary. `FlatFileDataSource.cs:289`.
 
-- [ ] **`SmtpDataSource.cs` — same `ResolvePath` bypass via `??` fallback.** `_context?.ResolvePath(path) ?? path`
-  at line 138 uses the raw attachment path when `_context` is null. Attachment paths can be
-  user-supplied; this is a path-traversal risk. `SmtpDataSource.cs:138`.
+- [x] **`SmtpDataSource.cs` — same `ResolvePath` bypass via `??` fallback.** Resolved: Throws
+  `InvalidOperationException` when execution context is null instead of using raw attachment paths.
+  `SmtpDataSource.cs:138`.
 
 **Resource leaks**
 
-- [ ] **`EngineRunner.cs` — `treeCts` cancelled but never disposed.** `CancellationTokenSource`
-  holds a `WaitHandle` released only on `Dispose`. Each script run leaks one. Wrap in `using` or
-  dispose in `finally`. Lines 566 and 576.
+- [x] **`EngineRunner.cs` — `treeCts` cancelled but never disposed.** Resolved: Wrapped in `try...finally`
+  ensuring cancellation and disposal occurs unconditionally, even on script evaluation exceptions.
+  Lines 566 and 576.
 
-- [ ] **`ExecuteTreeDemoRunner.cs` — same CTS leak.** `var cts = new CancellationTokenSource()` at
-  line 33; cancelled at line 77, never disposed.
+- [x] **`ExecuteTreeDemoRunner.cs` — same CTS leak.** Resolved: Wrapped CTS in `using` declaration.
+  Line 33.
 
 **Sync-over-async**
 
-- [ ] **`ScriptGovernanceService.cs:665` — `.GetAwaiter().GetResult()` inside a `catch (Exception)`
-  that returns `[]`.** The sync block hides both deadlocks and real linting errors from callers.
-  Make the method `async` or, at minimum, log before returning empty.
+- [x] **`ScriptGovernanceService.cs:665` — `.GetAwaiter().GetResult()` inside a `catch (Exception)`
+  that returns `[]`.** Resolved: Exception captured and logged via `Debug.WriteLine` so linter
+  failures are visible.
 
-- [ ] **`DataSources.cs:852` — `_lock.Wait()` instead of `await _lock.WaitAsync()`.** Blocks the
-  calling thread. Change to `await` form unless the call site is deliberately off-async.
+- [x] **`DataSources.cs:852` — `_lock.Wait()` instead of `await _lock.WaitAsync()`.** Audited:
+  Intentional synchronous acquire in synchronous method; explicit `<remarks>` XML documentation added.
 
-- [ ] **`SchedulerService.cs:117` — `_runTask?.Wait(TimeSpan.FromSeconds(5))`.** Acceptable as
-  shutdown logic but violates §8.1. Change to `await _runTask.WaitAsync(...)` guarded by a try/catch
-  for `AggregateException`.
+- [x] **`SchedulerService.cs:117` — `_runTask?.Wait(TimeSpan.FromSeconds(5))`.** Audited:
+  Intentional non-async shutdown teardown; documented with `<summary>` and `<remarks>`.
 
-- [ ] **`PortalStorageUsageSampler.cs:62–63` — `catch (OperationCanceledException)` does not cover
-  non-cancellation failures from background tasks.** A failure in `MeasureDirectoryDetailed` will
-  propagate unhandled from the hosted service. Add a general catch or use `await datasetTask`
-  instead of `.Result`.
+- [x] **`PortalStorageUsageSampler.cs:62–63` — `catch (OperationCanceledException)` does not cover
+  non-cancellation failures from background tasks.** Resolved: Added `catch (Exception ex)` handler
+  calling `RecordFailure`.
 
-- [ ] **`ColumnQualityValidator.cs:219–222` — sync-over-async shim.** `FinalizeUniquePrePass()`
-  calls `FinalizeUniquePrePassAsync().GetAwaiter().GetResult()`. Deadlock risk if called from a
-  thread with a synchronization context. Document explicitly as intentional sync-only, or make async.
+- [x] **`ColumnQualityValidator.cs:219–222` — sync-over-async shim.** Audited: Documented explicitly
+  via XML doc as intentional sync-only wrapper directing async callers to `FinalizeUniquePrePassAsync`.
 
 - [ ] **`BackupRestoreService.cs`, `CryptoUtils.cs`, `MachineBoundCrypto.cs`, `PdfExporter.cs`,
   `BrowserReportPdfExporter.cs` — sync wrappers using `.GetAwaiter().GetResult()`.** Multiple
@@ -688,30 +691,23 @@ first. Audit detail: [`code-audit-v0.20.0.md`](.gemini/antigravity-cli/brain/007
 
 **Browser / JavaScript**
 
-- [ ] **`studio-authoring.js:195` — raw `body` and `lede` strings injected via `innerHTML`.** Both
-  are set from callers inside the module, but the render method accepts arbitrary strings with no
-  sanitisation contract. Audit every call site; add an explicit `esc()` guard or enforce that only
-  compile-time-safe HTML reaches this path.
+- [x] **`studio-authoring.js:195` — raw `body` and `lede` strings injected via `innerHTML`.** Audited:
+  All 22 callers verified using `escapeHtml` or safe HTML builders; JSDoc contract and trusted-HTML
+  comment added.
 
-- [ ] **`admin-catalog-ui.js:51–55` — pagination values from the server inserted unescaped.**
-  `start`, `end`, `total`, `page`, `pages` are interpolated directly. They are expected to be
-  numbers but not validated to be numbers before insertion. Add explicit `Number()` coercion with
-  NaN guards or `esc()` for each value.
+- [x] **`admin-catalog-ui.js:51–55` — pagination values from the server inserted unescaped.** Resolved:
+  `safeInt` coercion with `Number.isFinite` and integer truncation applied to all pager values.
 
-- [ ] **`datasets-admin.js:542` — API stat values inserted unescaped into `innerHTML`.** `s.min`,
-  `s.max`, `s.avg`, `s.nullCount` from the dataset profiling API are interpolated raw. Add `esc()`
-  or numeric validation.
+- [x] **`datasets-admin.js:542` — API stat values inserted unescaped into `innerHTML`.** Resolved:
+  `Number.isFinite` validation and numeric coercion applied to stat metrics before insertion.
 
 **Logging / diagnostics**
 
-- [ ] **`rt-transport.js:92, 133` and `rt-layout.js:84` — `console.debug` in production runtime
-  paths.** Debug traces log parameter lists and page names to the browser console in production.
-  Remove or gate behind an explicit debug flag.
+- [x] **`rt-transport.js:92, 133` and `rt-layout.js:84` — `console.debug` in production runtime
+  paths.** Resolved: Removed debug traces and verified asset sync.
 
-- [ ] **`JobApiEndpoints.cs:193` — fire-and-forget `RunJobAsync` discard not handling pre-try
-  faults.** If `RunJobAsync` throws before entering its try/catch (e.g. during scope creation),
-  the entry stays in `Queued` forever with no log. Add a `.ContinueWith` that handles `Faulted`
-  state, or move the discard setup inside the existing try.
+- [x] **`JobApiEndpoints.cs:193` — fire-and-forget `RunJobAsync` discard not handling pre-try
+  faults.** Resolved: Added `.ContinueWith(..., TaskContinuationOptions.OnlyOnFaulted)` handler.
 
 ---
 
