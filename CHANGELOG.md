@@ -16,6 +16,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - The browser sources are linted. `eslint.config.mjs` at the repository root points `eslint:recommended` at the canonical shared assets and the Portal's own modules — the same sources the type gate covers — and `node scripts/lint-browser.mjs` gates them from pre-push and CI against `browser-lint-baseline.txt`, on the same shrink-only ratchet as the type baseline. A file ESLint cannot parse is never baselined.
 
+### Changed
+
+- Studio's document context and workbench state module (`designer/studio-state.ts`) now compiles
+  from strict TypeScript. Document contexts, workspace file tracking, catalog reports, capability sets,
+  and context store resolution retain their existing behavior.
 - Studio's SQL mutation and filter persistence service (`designer/studio-sql-mutations.ts`) now
   compiles from strict TypeScript. Filter contracts, target resolution, query composition, patch queues,
   and canonical report/pipeline mutations retain their existing behavior.
