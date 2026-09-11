@@ -67,6 +67,11 @@ public sealed class PortalStorageUsageSampler(
             RecordFailure("Portal storage usage sampling timed out or was cancelled.");
             return;
         }
+        catch (Exception ex)
+        {
+            RecordFailure($"Portal storage usage sampling failed unexpectedly: {ex.Message}");
+            return;
+        }
 
         if (dataset.IsComplete && snapshot.IsComplete)
         {

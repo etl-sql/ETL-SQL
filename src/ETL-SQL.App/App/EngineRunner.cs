@@ -628,63 +628,78 @@ namespace ETL_SQL.App
                     }
 
                     var execTime = Stopwatch.StartNew();
-                    await evaluator.Evaluate(script);
-                    execTime.Stop();
-
-                    if (treeCts != null)
+                    try
                     {
-                        treeCts.Cancel();
-                        if (treeRenderTask != null)
+                        await evaluator.Evaluate(script);
+                        execTime.Stop();
+
+                        if (treeCts != null)
                         {
-                            try { await treeRenderTask; } catch (TaskCanceledException) { /* Expected */ }
-                        }
-
-                        // Final flush for fast scripts in JSON mode
-                        if (ctx.IsJsonMode && !ctx.IsSilentMode)
-                        {
-                            var finalSnapshot = new
+                            treeCts.Cancel();
+                            if (treeRenderTask != null)
                             {
-                                type = "progress",
-                                uri = ctx.ScriptFile.FullName,
-                                data = evaluator.Telemetry.ExecutionTree.ToSnapshot()
-                            };
-                            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(finalSnapshot));
-
-                            // Final variables flush
-                            var finalVars = new
-                            {
-                                type = "variables",
-                                uri = ctx.ScriptFile.FullName,
-                                data = evaluator.VarContext.GetVariablesWithMetadata().Select(kv => new
-                                {
-                                    name = kv.Key,
-                                    value = kv.Value.Value?.ToString() ?? "null",
-                                    type = kv.Value.Value?.GetType().Name ?? "null"
-                                }).ToList()
-                            };
-                            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(finalVars));
-
-                            // Emit performance telemetry
-                            if (evaluator.Telemetry.IsProfiling)
-                            {
-                                var perf = new
-                                {
-                                    type = "performance",
-                                    uri = ctx.ScriptFile.FullName,
-                                    data = new
-                                    {
-                                        totalDurationMs = execTime.ElapsedMilliseconds,
-                                        statements = evaluator.Telemetry.ProfileMetrics.Select(m => new
-                                        {
-                                            statementType = m.Sql.Split(' ')[0], // Simple type extraction
-                                            durationMs = m.DurationMs,
-                                            memoryUsageBytes = Math.Max(0, m.MemoryDeltaBytes),
-                                            sourceText = m.Sql
-                                        }).ToList()
-                                    }
-                                };
-                                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(perf));
+                                try { await treeRenderTask; } catch (TaskCanceledException) { /* Expected */ } catch (OperationCanceledException) { }
                             }
+
+                            // Final flush for fast scripts in JSON mode
+                            if (ctx.IsJsonMode && !ctx.IsSilentMode)
+                            {
+                                var finalSnapshot = new
+                                {
+                                    type = "progress",
+                                    uri = ctx.ScriptFile.FullName,
+                                    data = evaluator.Telemetry.ExecutionTree.ToSnapshot()
+                                };
+                                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(finalSnapshot));
+
+                                // Final variables flush
+                                var finalVars = new
+                                {
+                                    type = "variables",
+                                    uri = ctx.ScriptFile.FullName,
+                                    data = evaluator.VarContext.GetVariablesWithMetadata().Select(kv => new
+                                    {
+                                        name = kv.Key,
+                                        value = kv.Value.Value?.ToString() ?? "null",
+                                        type = kv.Value.Value?.GetType().Name ?? "null"
+                                    }).ToList()
+                                };
+                                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(finalVars));
+
+                                // Emit performance telemetry
+                                if (evaluator.Telemetry.IsProfiling)
+                                {
+                                    var perf = new
+                                    {
+                                        type = "performance",
+                                        uri = ctx.ScriptFile.FullName,
+                                        data = new
+                                        {
+                                            totalDurationMs = execTime.ElapsedMilliseconds,
+                                            statements = evaluator.Telemetry.ProfileMetrics.Select(m => new
+                                            {
+                                                statementType = m.Sql.Split(' ')[0], // Simple type extraction
+                                                durationMs = m.DurationMs,
+                                                memoryUsageBytes = Math.Max(0, m.MemoryDeltaBytes),
+                                                sourceText = m.Sql
+                                            }).ToList()
+                                        }
+                                    };
+                                    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(perf));
+                                }
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        if (treeCts != null)
+                        {
+                            try { treeCts.Cancel(); } catch (ObjectDisposedException) { }
+                            if (treeRenderTask != null)
+                            {
+                                try { await treeRenderTask; } catch (TaskCanceledException) { } catch (OperationCanceledException) { }
+                            }
+                            treeCts.Dispose();
                         }
                     }
 

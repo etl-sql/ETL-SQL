@@ -89,7 +89,6 @@ export async function _postParametersInternal(params, isInteraction = false, pag
         value: String(value ?? '')
     }));
 
-    console.debug('[ParameterUpdate] Sending:', { params: paramList, isInteraction });
 
     // Offline snapshot: the manifest in memory is the entire report, so every consumer of this
     // function is answered from it rather than from an API that is not there. Detail popovers
@@ -130,7 +129,6 @@ export async function _postParametersInternal(params, isInteraction = false, pag
             return null;
         }
         const manifest = await res.json();
-        console.debug('[ParameterUpdate] Received new manifest');
         return manifest;
     } catch (e) {
         console.error('Parameter update request failed:', e);

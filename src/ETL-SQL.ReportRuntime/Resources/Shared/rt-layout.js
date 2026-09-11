@@ -75,7 +75,6 @@ function applyPageOptions(pageDiv, contentDiv, page) {
 }
 
 export function renderPage(manifest, page, pageSections, pageTheme) {
-    console.debug(`[Layout] Rendering Page: ${page.name}`);
     const div = document.createElement('div');
     div.className = 'page';
     if (page.name) div.id = 'page-' + page.name.toLowerCase();

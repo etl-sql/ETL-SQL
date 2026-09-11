@@ -186,12 +186,21 @@ export function createStudioAuthoringSurfaces({
                 busy(flag) { actionHost.querySelectorAll('button').forEach(button => { button.disabled = flag; }); },
                 /**
                  * @param {Object} [content]
-                 * @param {string} [content.lede]
-                 * @param {string} [content.body]
+                 * @param {string} [content.lede]  Pre-sanitized HTML. Callers MUST escape any
+                 *     dynamic values with `escapeHtml` or produce markup via the safe builder
+                 *     functions from studio-authoring-ui.js. Raw user-supplied strings must never
+                 *     be passed directly.
+                 * @param {string} [content.body]  Pre-sanitized HTML. Same contract as `lede`:
+                 *     all dynamic content must go through `escapeHtml`, `sqlPreviewMarkup`,
+                 *     `sampleGridMarkup`, `mutationExplanationMarkup`, or equivalent safe builders
+                 *     before being interpolated into this string.
                  * @param {Array<*>} [content.actions]
                  * @param {Function} [content.wire] Called with the body once it is in the DOM.
                  */
                 render({ lede = '', body = '', actions = [], wire } = {}) {
+                    // Trusted-HTML insertion point. Both `lede` and `body` are pre-sanitized by
+                    // every caller in this module (dynamic values go through escapeHtml or a safe
+                    // HTML builder). Do NOT pass raw user-supplied strings here directly.
                     bodyHost.innerHTML = (lede ? `<p class="etlsql-studio-guided-lede">${lede}</p>` : '') + body;
                     currentActions = actions;
                     // Rebuilt only when the offer itself changed. `disabled` is not part of the

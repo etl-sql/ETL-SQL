@@ -30,7 +30,7 @@ namespace ETL_SQL.TUI.UI
             tree.AddNode(branchB, loadStep.Id);
 
             var visualizer = new ExecuteTreeVisualizer(tree);
-            var cts = new CancellationTokenSource();
+            using var cts = new CancellationTokenSource();
 
             // Start visualizer task
             var renderTask = visualizer.RenderLiveAsync(cts.Token);

@@ -539,9 +539,9 @@ export function createDatasetsAdmin(opts) {
       if (!s) return;
       const type = dvGuessType(col.type);
       if (type === 'number')
-        tds[i].innerHTML = `<span class="dv-stats-label">Min</span> ${s.min ?? '—'} <span class="dv-stats-label">Max</span> ${s.max ?? '—'} <span class="dv-stats-label">Avg</span> ${s.avg != null ? (+s.avg.toFixed(2)) : '—'} <span class="dv-stats-label">Nulls</span> ${s.nullCount}`;
+        tds[i].innerHTML = `<span class="dv-stats-label">Min</span> ${Number.isFinite(Number(s.min)) ? Number(s.min) : '—'} <span class="dv-stats-label">Max</span> ${Number.isFinite(Number(s.max)) ? Number(s.max) : '—'} <span class="dv-stats-label">Avg</span> ${s.avg != null ? (+s.avg.toFixed(2)) : '—'} <span class="dv-stats-label">Nulls</span> ${Number.isFinite(Number(s.nullCount)) ? Math.trunc(Number(s.nullCount)) : 0}`;
       else
-        tds[i].innerHTML = `<span class="dv-stats-label">Nulls</span> ${s.nullCount}`;
+        tds[i].innerHTML = `<span class="dv-stats-label">Nulls</span> ${Number.isFinite(Number(s.nullCount)) ? Math.trunc(Number(s.nullCount)) : 0}`;
     });
   }
 

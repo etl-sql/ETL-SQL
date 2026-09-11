@@ -1006,7 +1006,6 @@ async function _postParametersInternal(params, isInteraction = false, pageName =
         value: String(value ?? '')
     }));
 
-    console.debug('[ParameterUpdate] Sending:', { params: paramList, isInteraction });
 
     // Offline snapshot: the manifest in memory is the entire report, so every consumer of this
     // function is answered from it rather than from an API that is not there. Detail popovers
@@ -1047,7 +1046,6 @@ async function _postParametersInternal(params, isInteraction = false, pageName =
             return null;
         }
         const manifest = await res.json();
-        console.debug('[ParameterUpdate] Received new manifest');
         return manifest;
     } catch (e) {
         console.error('Parameter update request failed:', e);
@@ -6665,7 +6663,6 @@ function applyPageOptions(pageDiv, contentDiv, page) {
 }
 
 function renderPage(manifest, page, pageSections, pageTheme) {
-    console.debug(`[Layout] Rendering Page: ${page.name}`);
     const div = document.createElement('div');
     div.className = 'page';
     if (page.name) div.id = 'page-' + page.name.toLowerCase();
