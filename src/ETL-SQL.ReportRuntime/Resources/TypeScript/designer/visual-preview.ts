@@ -1,7 +1,3 @@
-/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/visual-preview.ts
- * Run: node scripts/sync-assets.js
- */
 /**
  * Mapping-aware sample rendering for report visuals.
  *
@@ -13,7 +9,77 @@
  *
  * Nothing here talks to the network or to a host: the caller supplies the sample.
  */
-const PALETTE = ['#388bfd', '#2ea043', '#f0883e', '#a371f7', '#58a6ff', '#7ee787', '#d29922', '#bc8cff'];
+
+const PALETTE: readonly string[] = ['#388bfd', '#2ea043', '#f0883e', '#a371f7', '#58a6ff', '#7ee787', '#d29922', '#bc8cff'];
+
+export interface VisualRoleSpec {
+    key: string;
+    label: string;
+    kind: string;
+    required?: boolean;
+    measure?: boolean;
+    repeatable?: boolean;
+    hint: string;
+}
+
+export interface VisualGroupSpec {
+    name: string;
+    types: readonly string[];
+}
+
+export interface ChartAggregateSpec {
+    id: string;
+    label: string;
+}
+
+export type SampleColumn = string | { name: string; type?: string; [key: string]: unknown };
+
+export interface SampleData {
+    columns?: readonly SampleColumn[];
+    rows?: readonly (Record<string, unknown> | readonly unknown[])[];
+    rowCount?: number;
+    [key: string]: unknown;
+}
+
+export interface NormalizedSample {
+    columns: string[];
+    rows: Record<string, unknown>[];
+    rowCount?: number;
+    [key: string]: unknown;
+}
+
+export interface MeasureSpec {
+    aggregate: string;
+    column: string;
+    alias: string;
+}
+
+export interface AggregationSpec {
+    groupBy: string[];
+    measure: MeasureSpec;
+}
+
+export interface BuildAggregatedSourceParams {
+    base: string;
+    groupBy: readonly string[];
+    measure: MeasureSpec;
+}
+
+export interface AggregateRowsOptions {
+    groupBy: readonly string[];
+    measure: MeasureSpec;
+}
+
+export interface VisualLike {
+    type?: string;
+    mappings?: Record<string, string>;
+    options?: {
+        inline_source?: string;
+        [key: string]: unknown;
+    };
+    [key: string]: unknown;
+}
+
 /**
  * The roles each visual type accepts, in the order an author fills them.
  *
@@ -22,7 +88,7 @@ const PALETTE = ['#388bfd', '#2ea043', '#f0883e', '#a371f7', '#58a6ff', '#7ee787
  * restriction, because a count of text values is a legitimate measure. `measure` marks the role that
  * an aggregate applies to: everything else bound on the visual becomes a grouping column.
  */
-export const VISUAL_ROLES = Object.freeze({
+export const VISUAL_ROLES: Readonly<Record<string, readonly VisualRoleSpec[]>> = Object.freeze({
     BAR: [
         { key: 'X', label: 'Category (X)', kind: 'any', required: true, hint: 'One bar per distinct value' },
         { key: 'Y', label: 'Value (Y)', kind: 'number', required: true, measure: true, hint: 'Bar height' },
@@ -70,8 +136,9 @@ export const VISUAL_ROLES = Object.freeze({
     ],
     TEXT: [],
 });
+
 // Types that render identically to one already described above.
-const ROLE_ALIASES = Object.freeze({
+const ROLE_ALIASES: Readonly<Record<string, string>> = Object.freeze({
     HBAR: 'BAR', COLUMN: 'BAR', WATERFALL: 'BAR',
     AREA: 'LINE', COMBO: 'LINE', RADAR: 'LINE',
     DONUT: 'PIE', FUNNEL: 'PIE', TREEMAP: 'PIE', SUNBURST: 'PIE',
@@ -79,107 +146,120 @@ const ROLE_ALIASES = Object.freeze({
     MULTISELECT: 'SLICER', DATEPICKER: 'SLICER', RELDATEPICKER: 'SLICER',
     SEARCH: 'SLICER', CHECKBOX: 'SLICER', SLIDER: 'SLICER',
 });
+
 /**
  * The visual types the palette offers, grouped as an author browses them. Lives beside the role
  * definitions because the two answer the same question — what visual types exist, and what does each
  * one bind to — and a type added to one without the other produces a palette entry that cannot be
  * configured, or a configurable type nobody can reach.
  */
-export const STUDIO_VISUAL_GROUPS = Object.freeze([
+export const STUDIO_VISUAL_GROUPS: readonly VisualGroupSpec[] = Object.freeze([
     { name: 'Charts', types: ['BAR', 'LINE', 'AREA', 'PIE', 'DONUT', 'HBAR', 'SCATTER', 'GAUGE', 'FUNNEL', 'TREEMAP', 'HEATMAP', 'COMBO', 'BOXPLOT', 'WATERFALL', 'BUBBLE', 'RADAR', 'CANDLESTICK', 'MAP', 'GANTT', 'SANKEY', 'SUNBURST', 'NETWORK', 'TRELLIS', 'MATRIX', 'CUSTOM'] },
     { name: 'Data & Content', types: ['CARD', 'TABLE', 'TEXT', 'IMAGE', 'HTML'] },
     { name: 'Filters & Inputs', types: ['SLICER', 'MULTISELECT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'] },
     { name: 'Layout & Actions', types: ['CONTAINER', 'BUTTON'] },
 ]);
+
 /** The roles a visual type accepts. Unknown types fall back to a category/value pair. */
-export function rolesForVisualType(type) {
+export function rolesForVisualType(type?: string): readonly VisualRoleSpec[] {
     const key = String(type || '').toUpperCase();
     return VISUAL_ROLES[key] || VISUAL_ROLES[ROLE_ALIASES[key]] || VISUAL_ROLES.BAR;
 }
+
 /** Role keys a visual type needs before it can draw anything. */
-export function missingRequiredRoles(visual) {
+export function missingRequiredRoles(visual?: VisualLike | null): string[] {
     const mappings = visual?.mappings || {};
     return rolesForVisualType(visual?.type)
         .filter(role => role.required)
         .filter(role => (role.repeatable
-        ? !Object.keys(mappings).some(key => key.toUpperCase().startsWith(role.key.replace(/S$/, '')))
-        : !mappings[role.key]))
+            ? !Object.keys(mappings).some(key => key.toUpperCase().startsWith(role.key.replace(/S$/, '')))
+            : !mappings[role.key]))
         .map(role => role.label);
 }
-function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] || character));
+
+function escapeHtml(value: unknown): string {
+    return String(value ?? '').replace(/[&<>"']/g, character => (
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as Record<string, string>)[character] || character));
 }
+
 /** Sample rows arrive either as objects or as positional arrays; both become objects here. */
-function normalizeRows(sample) {
+function normalizeRows(sample?: SampleData | NormalizedSample | null): NormalizedSample {
     const columns = (sample?.columns || []).map(column => (typeof column === 'string' ? column : column?.name || ''));
     const rows = sample?.rows || [];
-    if (!rows.length)
-        return { columns, rows: [] };
-    if (!Array.isArray(rows[0]))
-        return { columns: columns.length ? columns : Object.keys(rows[0]), rows: rows };
-    return { columns, rows: rows.map(row => Object.fromEntries(columns.map((column, index) => [column, row[index]]))) };
+    if (!rows.length) return { columns, rows: [] };
+    if (!Array.isArray(rows[0])) return { columns: columns.length ? columns : Object.keys(rows[0] as object), rows: rows as Record<string, unknown>[] };
+    return { columns, rows: (rows as readonly (readonly unknown[])[]).map(row => Object.fromEntries(columns.map((column, index) => [column, row[index]]))) };
 }
-function numeric(value) {
+
+function numeric(value: unknown): number {
     const number = Number(value);
     return Number.isFinite(number) ? number : 0;
 }
+
+interface AggregateBucket {
+    key: string;
+    value: number;
+}
+
 /** Sums `valueField` per distinct `keyField`, preserving first-seen order. */
-function aggregate(rows, keyField, valueField) {
-    const buckets = new Map();
+function aggregate(rows: readonly Record<string, unknown>[], keyField: string, valueField?: string): AggregateBucket[] {
+    const buckets = new Map<string, number>();
     for (const row of rows) {
         const key = String(row?.[keyField] ?? '');
         buckets.set(key, (buckets.get(key) || 0) + (valueField ? numeric(row?.[valueField]) : 1));
     }
     return [...buckets.entries()].map(([key, value]) => ({ key, value }));
 }
-function emptyState(message, detail) {
-    return `<div class="etlsql-visual-preview-empty"><strong>${escapeHtml(message)}</strong>${detail ? `<span>${escapeHtml(detail)}</span>` : ''}</div>`;
+
+function emptyState(message: string, detail?: string): string {
+    return `<div class="etlsql-visual-preview-empty"><strong>${escapeHtml(message)}</strong>${
+        detail ? `<span>${escapeHtml(detail)}</span>` : ''}</div>`;
 }
+
 /**
  * Renders `visual` against `sample` into `host`. `sample` is `{ columns, rows }`; rows may be objects
  * or positional arrays. Returns nothing — the host's markup is replaced.
  */
-export function renderVisualSample(host, visual, sample) {
-    if (!host)
-        return;
+export function renderVisualSample(host?: HTMLElement | null, visual?: VisualLike | null, sample?: SampleData | NormalizedSample | null): void {
+    if (!host) return;
+
     // A visual whose source is a grouped SELECT plots the aggregate, not the raw rows. The canvas
     // holds the dataset's own sample, so it must apply the same grouping the source will — otherwise
     // the measure resolves to a column that does not exist in the sample and every bar reads zero,
     // which is exactly what a card looked like after the chart builder wrote an aggregate.
     const derived = aggregationFromSource(visual?.options?.inline_source);
     const shaped = derived ? aggregateRows(sample, derived) : sample;
+
     const { columns, rows } = normalizeRows(shaped);
     if (!rows.length) {
         host.innerHTML = emptyState('No sample rows', 'Choose data so this visual can show real values.');
         return;
     }
+
     const missing = missingRequiredRoles(visual);
     if (missing.length) {
-        host.innerHTML = emptyState(`Assign ${missing.join(' and ')}`, 'Drag a field onto the highlighted role to see this visual with your data.');
+        host.innerHTML = emptyState(
+            `Assign ${missing.join(' and ')}`,
+            'Drag a field onto the highlighted role to see this visual with your data.');
         return;
     }
+
     const type = String(visual?.type || 'BAR').toUpperCase();
     const mappings = visual?.mappings || {};
     const canonical = VISUAL_ROLES[type] ? type : (ROLE_ALIASES[type] || 'BAR');
-    if (type === 'TABLE')
-        return void (host.innerHTML = tableMarkup(mappings, columns, rows));
-    if (canonical === 'MATRIX')
-        return void (host.innerHTML = matrixMarkup(mappings, rows));
-    if (canonical === 'CARD')
-        return void (host.innerHTML = cardMarkup(mappings, rows));
-    if (canonical === 'GAUGE')
-        return void (host.innerHTML = gaugeMarkup(mappings, rows));
-    if (canonical === 'PIE')
-        return void (host.innerHTML = shareMarkup(type, mappings, rows));
-    if (canonical === 'HEATMAP')
-        return void (host.innerHTML = heatmapMarkup(mappings, rows));
-    if (canonical === 'SLICER')
-        return void (host.innerHTML = slicerMarkup(mappings, rows));
-    if (canonical === 'SCATTER')
-        return void (host.innerHTML = scatterMarkup(mappings, rows));
+
+    if (type === 'TABLE') return void (host.innerHTML = tableMarkup(mappings, columns, rows));
+    if (canonical === 'MATRIX') return void (host.innerHTML = matrixMarkup(mappings, rows));
+    if (canonical === 'CARD') return void (host.innerHTML = cardMarkup(mappings, rows));
+    if (canonical === 'GAUGE') return void (host.innerHTML = gaugeMarkup(mappings, rows));
+    if (canonical === 'PIE') return void (host.innerHTML = shareMarkup(type, mappings, rows));
+    if (canonical === 'HEATMAP') return void (host.innerHTML = heatmapMarkup(mappings, rows));
+    if (canonical === 'SLICER') return void (host.innerHTML = slicerMarkup(mappings, rows));
+    if (canonical === 'SCATTER') return void (host.innerHTML = scatterMarkup(mappings, rows));
     host.innerHTML = seriesMarkup(type, mappings, rows);
 }
-function mappedColumns(mappings, columns) {
+
+function mappedColumns(mappings: Record<string, string>, columns: readonly string[]): string[] {
     // A TABLE's columns are positional roles (COLUMN1, COLUMN2, …); anything else falls back to the
     // sample's own column order so an unmapped table still shows the data it would print.
     const mapped = Object.entries(mappings)
@@ -190,14 +270,17 @@ function mappedColumns(mappings, columns) {
         ? Object.values(mappings).filter(Boolean)
         : [...columns];
 }
-function tableMarkup(mappings, columns, rows) {
+
+function tableMarkup(mappings: Record<string, string>, columns: readonly string[], rows: readonly Record<string, unknown>[]): string {
     const headers = mappedColumns(mappings, columns);
     return `<div class="etlsql-visual-preview-table"><table>
         <thead><tr>${headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead>
-        <tbody>${rows.slice(0, 100).map(row => `<tr>${headers.map(header => `<td>${escapeHtml(row?.[header])}</td>`).join('')}</tr>`).join('')}</tbody>
+        <tbody>${rows.slice(0, 100).map(row =>
+            `<tr>${headers.map(header => `<td>${escapeHtml(row?.[header])}</td>`).join('')}</tr>`).join('')}</tbody>
         </table></div>`;
 }
-function matrixMarkup(mappings, rows) {
+
+function matrixMarkup(mappings: Record<string, string>, rows: readonly Record<string, unknown>[]): string {
     const rowField = mappings.ROW;
     const colField = mappings.COL;
     const valueField = mappings.VALUE;
@@ -205,28 +288,31 @@ function matrixMarkup(mappings, rows) {
         const totals = aggregate(rows, rowField, valueField);
         return `<div class="etlsql-visual-preview-table"><table>
             <thead><tr><th>${escapeHtml(rowField)}</th><th>${escapeHtml(valueField)}</th></tr></thead>
-            <tbody>${totals.map(entry => `<tr><td>${escapeHtml(entry.key)}</td><td>${formatNumber(entry.value)}</td></tr>`).join('')}</tbody>
+            <tbody>${totals.map(entry =>
+                `<tr><td>${escapeHtml(entry.key)}</td><td>${formatNumber(entry.value)}</td></tr>`).join('')}</tbody>
             </table></div>`;
     }
     const rowKeys = [...new Set(rows.map(row => String(row?.[rowField] ?? '')))];
     const colKeys = [...new Set(rows.map(row => String(row?.[colField] ?? '')))];
-    const cells = new Map();
+    const cells = new Map<string, number>();
     for (const row of rows) {
         const key = `${row?.[rowField]} ${row?.[colField]}`;
         cells.set(key, (cells.get(key) || 0) + numeric(row?.[valueField]));
     }
     return `<div class="etlsql-visual-preview-table"><table>
         <thead><tr><th>${escapeHtml(rowField)}</th>${colKeys.map(key => `<th>${escapeHtml(key)}</th>`).join('')}</tr></thead>
-        <tbody>${rowKeys.map(rowKey => `<tr><td>${escapeHtml(rowKey)}</td>${colKeys.map(colKey => `<td>${formatNumber(cells.get(`${rowKey} ${colKey}`) || 0)}</td>`).join('')}</tr>`).join('')}</tbody>
+        <tbody>${rowKeys.map(rowKey => `<tr><td>${escapeHtml(rowKey)}</td>${colKeys.map(colKey =>
+            `<td>${formatNumber(cells.get(`${rowKey} ${colKey}`) || 0)}</td>`).join('')}</tr>`).join('')}</tbody>
         </table></div>`;
 }
-function formatNumber(value) {
-    if (!Number.isFinite(value))
-        return '';
+
+function formatNumber(value: number): string {
+    if (!Number.isFinite(value)) return '';
     return Math.abs(value) >= 1000 ? value.toLocaleString(undefined, { maximumFractionDigits: 0 })
         : String(Math.round(value * 100) / 100);
 }
-function cardMarkup(mappings, rows) {
+
+function cardMarkup(mappings: Record<string, string>, rows: readonly Record<string, unknown>[]): string {
     const total = rows.reduce((sum, row) => sum + numeric(row?.[mappings.VALUE]), 0);
     const label = mappings.LABEL ? String(rows[0]?.[mappings.LABEL] ?? mappings.LABEL) : mappings.VALUE;
     const goal = mappings.GOAL ? rows.reduce((sum, row) => sum + numeric(row?.[mappings.GOAL]), 0) : null;
@@ -236,7 +322,8 @@ function cardMarkup(mappings, rows) {
         ${goal ? `<small>Goal ${escapeHtml(formatNumber(goal))} · ${Math.round(total / goal * 100)}%</small>` : ''}
     </div>`;
 }
-function gaugeMarkup(mappings, rows) {
+
+function gaugeMarkup(mappings: Record<string, string>, rows: readonly Record<string, unknown>[]): string {
     const value = rows.reduce((sum, row) => sum + numeric(row?.[mappings.VALUE]), 0);
     const max = mappings.MAX ? rows.reduce((sum, row) => sum + numeric(row?.[mappings.MAX]), 0) : value * 1.25 || 1;
     const fraction = Math.max(0, Math.min(1, max ? value / max : 0));
@@ -250,7 +337,8 @@ function gaugeMarkup(mappings, rows) {
         <text x="100" y="108" text-anchor="middle" font-size="10" fill="#8b949e">${escapeHtml(mappings.LABEL ? String(rows[0]?.[mappings.LABEL] ?? '') : `of ${formatNumber(max)}`)}</text>
     </svg>`;
 }
-function shareMarkup(type, mappings, rows) {
+
+function shareMarkup(type: string, mappings: Record<string, string>, rows: readonly Record<string, unknown>[]): string {
     const slices = aggregate(rows, mappings.LABEL, mappings.VALUE).slice(0, 12);
     const total = slices.reduce((sum, slice) => sum + slice.value, 0) || 1;
     const isDonut = type === 'DONUT' || type === 'SUNBURST';
@@ -269,7 +357,7 @@ function shareMarkup(type, mappings, rows) {
         const start = angle;
         angle += sweep;
         const large = sweep > Math.PI ? 1 : 0;
-        const point = (radius, at) => `${(60 + radius * Math.cos(at)).toFixed(2)} ${(60 + radius * Math.sin(at)).toFixed(2)}`;
+        const point = (radius: number, at: number) => `${(60 + radius * Math.cos(at)).toFixed(2)} ${(60 + radius * Math.sin(at)).toFixed(2)}`;
         const outer = `M ${point(52, start)} A 52 52 0 ${large} 1 ${point(52, angle)}`;
         const inner = isDonut
             ? ` L ${point(28, angle)} A 28 28 0 ${large} 0 ${point(28, start)} Z`
@@ -278,13 +366,15 @@ function shareMarkup(type, mappings, rows) {
     }).join('');
     return `<div class="etlsql-visual-preview-share">
         <svg viewBox="0 0 120 120" role="img">${arcs}</svg>
-        <ul>${slices.slice(0, 6).map((slice, index) => `<li><i style="background:${PALETTE[index % PALETTE.length]}"></i>${escapeHtml(slice.key)}</li>`).join('')}</ul>
+        <ul>${slices.slice(0, 6).map((slice, index) =>
+            `<li><i style="background:${PALETTE[index % PALETTE.length]}"></i>${escapeHtml(slice.key)}</li>`).join('')}</ul>
     </div>`;
 }
-function heatmapMarkup(mappings, rows) {
+
+function heatmapMarkup(mappings: Record<string, string>, rows: readonly Record<string, unknown>[]): string {
     const xKeys = [...new Set(rows.map(row => String(row?.[mappings.X] ?? '')))].slice(0, 24);
     const yKeys = [...new Set(rows.map(row => String(row?.[mappings.Y] ?? '')))].slice(0, 12);
-    const cells = new Map();
+    const cells = new Map<string, number>();
     for (const row of rows) {
         const key = `${row?.[mappings.Y]} ${row?.[mappings.X]}`;
         cells.set(key, (cells.get(key) || 0) + numeric(row?.[mappings.VALUE]));
@@ -293,16 +383,19 @@ function heatmapMarkup(mappings, rows) {
     return `<div class="etlsql-visual-preview-heatmap" style="grid-template-columns:auto repeat(${xKeys.length}, 1fr)">
         <span></span>${xKeys.map(key => `<span class="is-axis">${escapeHtml(key)}</span>`).join('')}
         ${yKeys.map(yKey => `<span class="is-axis">${escapeHtml(yKey)}</span>${xKeys.map(xKey => {
-        const value = cells.get(`${yKey} ${xKey}`) || 0;
-        return `<i style="opacity:${(0.12 + 0.88 * value / max).toFixed(2)}" title="${escapeHtml(`${yKey} · ${xKey}: ${formatNumber(value)}`)}"></i>`;
-    }).join('')}`).join('')}
+            const value = cells.get(`${yKey} ${xKey}`) || 0;
+            return `<i style="opacity:${(0.12 + 0.88 * value / max).toFixed(2)}" title="${escapeHtml(`${yKey} · ${xKey}: ${formatNumber(value)}`)}"></i>`;
+        }).join('')}`).join('')}
     </div>`;
 }
-function slicerMarkup(mappings, rows) {
+
+function slicerMarkup(mappings: Record<string, string>, rows: readonly Record<string, unknown>[]): string {
     const values = [...new Set(rows.map(row => String(row?.[mappings.VALUE] ?? '')))].slice(0, 10);
-    return `<div class="etlsql-visual-preview-slicer">${values.map(value => `<button type="button" disabled>${escapeHtml(value)}</button>`).join('')}</div>`;
+    return `<div class="etlsql-visual-preview-slicer">${values.map(value =>
+        `<button type="button" disabled>${escapeHtml(value)}</button>`).join('')}</div>`;
 }
-function scatterMarkup(mappings, rows) {
+
+function scatterMarkup(mappings: Record<string, string>, rows: readonly Record<string, unknown>[]): string {
     const points = rows.slice(0, 400).map(row => ({
         x: numeric(row?.[mappings.X]),
         y: numeric(row?.[mappings.Y]),
@@ -324,14 +417,16 @@ function scatterMarkup(mappings, rows) {
         <line x1="30" y1="160" x2="345" y2="160" stroke="#30363d"/>
         <line x1="30" y1="16" x2="30" y2="160" stroke="#30363d"/>${marks}</svg>`;
 }
-function seriesMarkup(type, mappings, rows) {
+
+function seriesMarkup(type: string, mappings: Record<string, string>, rows: readonly Record<string, unknown>[]): string {
     const seriesField = mappings.SERIES;
     const seriesKeys = seriesField ? [...new Set(rows.map(row => String(row?.[seriesField] ?? '')))].slice(0, 6) : [''];
     const categories = [...new Set(rows.map(row => String(row?.[mappings.X] ?? '')))].slice(0, 24);
-    const valueFor = (category, series) => rows
+    const valueFor = (category: string, series: string): number => rows
         .filter(row => String(row?.[mappings.X] ?? '') === category
-        && (!seriesField || String(row?.[seriesField] ?? '') === series))
+            && (!seriesField || String(row?.[seriesField] ?? '') === series))
         .reduce((sum, row) => sum + numeric(row?.[mappings.Y]), 0);
+
     const grid = categories.map(category => seriesKeys.map(series => valueFor(category, series)));
     const max = Math.max(1, ...grid.flat().map(Math.abs));
     const width = 360, height = 180, padLeft = 34, padBottom = 22, padTop = 12;
@@ -339,6 +434,7 @@ function seriesMarkup(type, mappings, rows) {
     const plotHeight = height - padBottom - padTop;
     const slot = plotWidth / Math.max(1, categories.length);
     const isLine = type === 'LINE' || type === 'AREA' || type === 'COMBO' || type === 'RADAR';
+
     let marks;
     if (isLine) {
         marks = seriesKeys.map((_series, seriesIndex) => {
@@ -353,8 +449,7 @@ function seriesMarkup(type, mappings, rows) {
                 : '';
             return `${area}<polyline points="${points}" fill="none" stroke="${color}" stroke-width="2"/>`;
         }).join('');
-    }
-    else {
+    } else {
         const groupWidth = slot * 0.72;
         const barWidth = groupWidth / seriesKeys.length;
         marks = categories.map((category, index) => seriesKeys.map((series, seriesIndex) => {
@@ -365,15 +460,19 @@ function seriesMarkup(type, mappings, rows) {
             return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(1, barWidth - 1).toFixed(1)}" height="${barHeight.toFixed(1)}" rx="2" fill="${PALETTE[seriesIndex % PALETTE.length]}"><title>${escapeHtml(category)}${series ? ` · ${escapeHtml(series)}` : ''}: ${escapeHtml(formatNumber(value))}</title></rect>`;
         }).join('')).join('');
     }
+
     const ticks = categories.length <= 8
-        ? categories.map((category, index) => `<text x="${(padLeft + slot * (index + 0.5)).toFixed(1)}" y="${height - 6}" text-anchor="middle" font-size="8" fill="#8b949e">${escapeHtml(category.slice(0, 10))}</text>`).join('')
+        ? categories.map((category, index) =>
+            `<text x="${(padLeft + slot * (index + 0.5)).toFixed(1)}" y="${height - 6}" text-anchor="middle" font-size="8" fill="#8b949e">${escapeHtml(category.slice(0, 10))}</text>`).join('')
         : '';
+
     return `<svg viewBox="0 0 ${width} ${height}" style="width:100%;height:100%" role="img">
         <line x1="${padLeft}" y1="${padTop + plotHeight}" x2="${width - 12}" y2="${padTop + plotHeight}" stroke="#30363d"/>
         <line x1="${padLeft}" y1="${padTop}" x2="${padLeft}" y2="${padTop + plotHeight}" stroke="#30363d"/>
         <text x="${padLeft - 4}" y="${padTop + 8}" text-anchor="end" font-size="8" fill="#8b949e">${escapeHtml(formatNumber(max))}</text>
         ${marks}${ticks}</svg>`;
 }
+
 /**
  * Aggregation for chart measures.
  *
@@ -384,7 +483,7 @@ function seriesMarkup(type, mappings, rows) {
  * The same shaping is applied to the sample here, because a preview that summed while the query
  * counted would be a confident lie — the one thing a live preview must never be.
  */
-export const CHART_AGGREGATES = Object.freeze([
+export const CHART_AGGREGATES: readonly ChartAggregateSpec[] = Object.freeze([
     { id: 'NONE', label: 'No aggregate — plot the column' },
     { id: 'COUNT', label: 'Count' },
     { id: 'COUNT_DISTINCT', label: 'Count distinct' },
@@ -393,47 +492,51 @@ export const CHART_AGGREGATES = Object.freeze([
     { id: 'MIN', label: 'Minimum' },
     { id: 'MAX', label: 'Maximum' },
 ]);
+
 /** `COUNT(user_id)`, `COUNT(DISTINCT user_id)`, `SUM(amount)`. */
-export function aggregateExpression(aggregate, column) {
-    if (aggregate === 'COUNT_DISTINCT')
-        return `COUNT(DISTINCT ${column})`;
+export function aggregateExpression(aggregate: string, column: string): string {
+    if (aggregate === 'COUNT_DISTINCT') return `COUNT(DISTINCT ${column})`;
     return `${aggregate}(${column})`;
 }
+
 /**
  * The alias an aggregate gets by default. A COUNT of `user_id` is a count of users, so the trailing
  * `_id` is dropped — `user_count` reads as what it is, where `user_id_count` reads as a mistake.
  */
-export function defaultAggregateAlias(aggregate, column) {
+export function defaultAggregateAlias(aggregate: string, column: string): string {
     const base = String(column || 'value').replace(/[^A-Za-z0-9_]/g, '_').toLowerCase();
     const suffix = aggregate === 'COUNT_DISTINCT' ? 'distinct_count' : String(aggregate).toLowerCase();
     const stem = (aggregate === 'COUNT' || aggregate === 'COUNT_DISTINCT') ? base.replace(/_id$/, '') : base;
     return `${stem || 'value'}_${suffix}`;
 }
+
 /**
  * The grouped SELECT a visual reads from.
  *
  * `base` is whatever the visual would otherwise read: `&dataset`, `corp_db.Users`, or an inline
  * `(SELECT …)`. An inline source is wrapped as a derived table, which the dialect requires be aliased.
  */
-export function buildAggregatedSource({ base, groupBy, measure }) {
+export function buildAggregatedSource({ base, groupBy, measure }: BuildAggregatedSourceParams): string {
     const columns = [...groupBy, `${aggregateExpression(measure.aggregate, measure.column)} AS ${measure.alias}`];
     const from = String(base).trim().startsWith('(') ? `${base} AS source_rows` : base;
     const grouping = groupBy.length ? ` GROUP BY ${groupBy.join(', ')}` : '';
     return `(SELECT ${columns.join(', ')} FROM ${from}${grouping})`;
 }
+
 /**
  * Applies the same grouping to sampled rows so the preview matches the query.
  *
  * With no grouping columns the whole sample collapses to one row, which is what a CARD or GAUGE
  * showing a single aggregate should display.
  */
-export function aggregateRows(sample, { groupBy, measure } = { groupBy: [], measure: { aggregate: 'COUNT', column: '', alias: 'value' } }) {
+export function aggregateRows(sample?: SampleData | NormalizedSample | null, { groupBy, measure }: AggregateRowsOptions = { groupBy: [], measure: { aggregate: 'COUNT', column: '', alias: 'value' } }): NormalizedSample {
     const columns = (sample?.columns || []).map(column => (typeof column === 'string' ? column : column?.name || ''));
     const raw = sample?.rows || [];
-    const asObject = (row) => (Array.isArray(row)
+    const asObject = (row: unknown): Record<string, unknown> => (Array.isArray(row)
         ? Object.fromEntries(columns.map((column, index) => [column, row[index]]))
-        : row);
-    const buckets = new Map();
+        : (row as Record<string, unknown>));
+
+    const buckets = new Map<string, { keys: Record<string, unknown>; values: unknown[] }>();
     for (const source of raw) {
         const row = asObject(source);
         const key = groupBy.map(column => String(row?.[column] ?? '')).join(' ');
@@ -443,9 +546,10 @@ export function aggregateRows(sample, { groupBy, measure } = { groupBy: [], meas
                 values: [],
             });
         }
-        buckets.get(key).values.push(row?.[measure.column]);
+        buckets.get(key)!.values.push(row?.[measure.column]);
     }
-    const reduce = (values) => {
+
+    const reduce = (values: unknown[]): number => {
         const numbers = values.map(Number).filter(Number.isFinite);
         switch (measure.aggregate) {
             case 'COUNT': return values.filter(value => value != null && value !== '').length;
@@ -457,12 +561,15 @@ export function aggregateRows(sample, { groupBy, measure } = { groupBy: [], meas
             default: return numbers.reduce((total, value) => total + value, 0);
         }
     };
+
     const rows = [...buckets.values()].map(bucket => ({
         ...bucket.keys,
         [measure.alias]: Math.round(reduce(bucket.values) * 1000) / 1000,
     }));
+
     return { columns: [...groupBy, measure.alias], rows, rowCount: rows.length };
 }
+
 /**
  * Recognises the grouped SELECT that `buildAggregatedSource` emits, so a surface holding the raw
  * sample can shape it the way the visual's own source will.
@@ -472,25 +579,26 @@ export function aggregateRows(sample, { groupBy, measure } = { groupBy: [], meas
  * card that renders a *plausible* number for a query it did not understand is the same confident lie
  * as a preview that disagrees with its query.
  */
-export function aggregationFromSource(source) {
+export function aggregationFromSource(source?: string | null): AggregationSpec | null {
     const text = String(source || '').trim();
     const match = /^\(\s*SELECT\s+(.+?)\s+FROM\s+([\s\S]+?)(?:\s+GROUP\s+BY\s+(.+?))?\s*\)$/i.exec(text);
-    if (!match)
-        return null;
+    if (!match) return null;
+
     const [, projection, , grouping] = match;
     const parts = splitTopLevel(projection);
-    if (!parts.length)
-        return null;
+    if (!parts.length) return null;
+
     const last = parts[parts.length - 1];
     const measure = /^(COUNT|SUM|AVG|MIN|MAX)\s*\(\s*(DISTINCT\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*\)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)$/i.exec(last);
-    if (!measure)
-        return null;
+    if (!measure) return null;
+
     const [, fn, distinct, column, alias] = measure;
     const groupBy = grouping ? splitTopLevel(grouping).map(entry => entry.trim()) : [];
+
     // Everything projected before the measure must be a grouping column, or this is not our shape.
     const projected = parts.slice(0, -1).map(entry => entry.trim());
-    if (projected.length !== groupBy.length || projected.some((entry, index) => entry !== groupBy[index]))
-        return null;
+    if (projected.length !== groupBy.length || projected.some((entry, index) => entry !== groupBy[index])) return null;
+
     return {
         groupBy,
         measure: {
@@ -500,16 +608,15 @@ export function aggregationFromSource(source) {
         },
     };
 }
+
 /** Splits on commas that are not inside parentheses. */
-function splitTopLevel(list) {
-    const parts = [];
+function splitTopLevel(list: string): string[] {
+    const parts: string[] = [];
     let depth = 0;
     let current = '';
     for (const character of String(list)) {
-        if (character === '(')
-            depth++;
-        if (character === ')')
-            depth--;
+        if (character === '(') depth++;
+        if (character === ')') depth--;
         if (character === ',' && depth === 0) {
             parts.push(current.trim());
             current = '';
@@ -517,7 +624,6 @@ function splitTopLevel(list) {
         }
         current += character;
     }
-    if (current.trim())
-        parts.push(current.trim());
+    if (current.trim()) parts.push(current.trim());
     return parts;
 }

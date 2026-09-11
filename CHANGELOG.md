@@ -18,6 +18,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's visual preview and role mapping service (`designer/visual-preview.ts`) now compiles
+  from strict TypeScript. Visual roles, palette grouping, aggregate expressions, source generation,
+  sample grouping, and sample rendering across chart types retain their existing behavior.
 - Studio's document context and workbench state module (`designer/studio-state.ts`) now compiles
   from strict TypeScript. Document contexts, workspace file tracking, catalog reports, capability sets,
   and context store resolution retain their existing behavior.

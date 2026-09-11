@@ -46,15 +46,15 @@ typing changes, and product behavior changes in separate reviewable batches.
    for checks and environment limits. Stateful closure refactors remain deferred.
 2. **§3's tracked repairs are implemented.** The late document-open continuation now checks that
    its document is still active before hiding Home or updating editor state.
-3. **Execute §5 incrementally.** Sixteen modules are migrated through `studio-state.ts`;
+3. **Execute §5 incrementally.** Seventeen modules are migrated through `visual-preview.ts`;
    the per-module ledger is in §5. Continue with another bounded module, retaining mixed-source
    checks and verifying generated output, sandbox, hosts, and offline delivery for each batch.
 4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
    a prerequisite for §5. The stateful closure extractions deferred from §2 remain separate
    refactors; do not silently add them to either the mechanical split or the type migration.
 
-**Session handoff — 2026-09-11:** The studio-state migration is complete. Generated-output tests,
-browser type/lint gates (0 findings), asset sync (0 drift), 42 consumer contract checks, and fast
+**Session handoff — 2026-09-11:** The visual-preview migration is complete. Generated-output tests,
+browser type/lint gates (0 findings), asset sync (0 drift), 43 consumer contract checks, and fast
 pre-push validation passed (142 fast tests). Full delivery certification remains open in §5; these
 focused checks do not close that item.
 
@@ -586,6 +586,12 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   file records, catalog references, capability sets, workbench state, and context store resolution.
   Generated-output tests cover default contexts, snapshot attachment, state initialization, path
   parsing, and lazy document context resolution. Emitted executable syntax is unchanged.
+  **Visual preview and role mapping module migrated:** `designer/visual-preview.ts` types visual
+  role specifications, visual palette groups, role aliases, sample normalization, grouping/measure
+  aggregations, and sample rendering across table, matrix, card, gauge, share, heatmap, slicer,
+  scatter, and series visual types. Generated-output tests cover roles, aliases, aggregate expressions,
+  default aliases, source generation, aggregation parsing, sample grouping, and rendering across types.
+  Emitted executable syntax is unchanged.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned
