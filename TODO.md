@@ -46,19 +46,19 @@ typing changes, and product behavior changes in separate reviewable batches.
    for checks and environment limits. Stateful closure refactors remain deferred.
 2. **§3's tracked repairs are implemented.** The late document-open continuation now checks that
    its document is still active before hiding Home or updating editor state.
-3. **Execute §5 incrementally.** Eighteen modules are migrated through `run-results.ts`;
+3. **Execute §5 incrementally.** Nineteen modules are migrated through `visual-format-inspector.ts`;
    the per-module ledger is in §5. Continue with another bounded module, retaining mixed-source
    checks and verifying generated output, sandbox, hosts, and offline delivery for each batch.
 4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
    a prerequisite for §5. The stateful closure extractions deferred from §2 remain separate
    refactors; do not silently add them to either the mechanical split or the type migration.
 
-**Session handoff — 2026-09-11:** The run-results migration is complete. Generated-output tests,
-browser type/lint gates (0 findings), asset sync (0 drift), 44 consumer contract checks, and fast
+**Session handoff — 2026-09-11:** The visual-format-inspector migration is complete. Generated-output tests,
+browser type/lint gates (0 findings), asset sync (0 drift), 45 consumer contract checks, and fast
 pre-push validation passed (142 fast tests). Full delivery certification remains open in §5; these
 focused checks do not close that item.
 
-For the next batch, inspect `designer/run-results.js` or `designer/visual-format-inspector.js`
+For the next batch, inspect `designer/connection-wizard.js` or `designer/dag.js`
 before choosing scope. Do not expand the stateful Studio closure refactors into this migration.
 
 Keep the authored `.ts` files under `Resources/TypeScript/`, then run asset sync. The generated
@@ -598,6 +598,11 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   Generated-output tests cover secret redaction patterns, trace normalization for success and error
   states, diagnostics jumping, quick fix payloads, pagination/row caps, filtering, CSV formatting,
   data preview payload construction, and lease retry delays. Emitted executable syntax is unchanged.
+  **Visual format inspector module migrated:** `designer/visual-format-inspector.ts` types
+  title, subtitle, axis, conditional rule, field format, and visual formatting options.
+  Generated-output tests cover hex color parsing, radius and opacity clamping, formatting
+  initialization, rule condition parsing, inspector HTML rendering across 14 visual types, and
+  card style formatting controls. Emitted executable syntax is unchanged.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned

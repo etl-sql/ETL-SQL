@@ -18,6 +18,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's visual format inspector service (`designer/visual-format-inspector.ts`) now compiles
+  from strict TypeScript. Title, subtitle, axis, conditional rule, field format, and visual formatting
+  options retain their existing behavior.
 - Studio's run results and execution trace service (`designer/run-results.ts`) now compiles
   from strict TypeScript. Secret redaction, trace event normalization, diagnostic guidance,
   result grid pagination, and CSV/XLSX export retain their existing behavior.

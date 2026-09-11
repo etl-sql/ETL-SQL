@@ -1,7 +1,3 @@
-/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/visual-format-inspector.ts
- * Run: node scripts/sync-assets.js
- */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -9,10 +5,11 @@
  * visual-format-inspector.js — split out of designer.js, TODO.md §2.
  * HTML builders and value parsers for the visual formatting inspector.
  */
+
 import { esc } from './designer-util.js';
-export function toHexColor(val, fallback) {
-    if (!val || typeof val !== 'string')
-        return fallback;
+
+export function toHexColor(val: unknown, fallback: string): string {
+    if (!val || typeof val !== 'string') return fallback;
     const s = val.trim();
     const match = s.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
     if (match) {
@@ -23,32 +20,102 @@ export function toHexColor(val, fallback) {
     }
     return fallback;
 }
-export function parseNumericRadius(val, fallback) {
-    if (!val)
-        return fallback;
+
+export function parseNumericRadius(val: unknown, fallback: number): number {
+    if (!val) return fallback;
     const num = parseInt(String(val).replace(/[^0-9]/g, ''), 10);
     return isNaN(num) ? fallback : Math.min(32, Math.max(0, num));
 }
-export function parseNumericOpacity(val, fallback) {
-    if (!val)
-        return fallback;
+
+export function parseNumericOpacity(val: unknown, fallback: number): number {
+    if (!val) return fallback;
     const floatVal = parseFloat(String(val));
-    if (isNaN(floatVal))
-        return fallback;
-    if (floatVal <= 1)
-        return Math.round(floatVal * 100);
+    if (isNaN(floatVal)) return fallback;
+    if (floatVal <= 1) return Math.round(floatVal * 100);
     return Math.min(100, Math.max(0, Math.round(floatVal)));
 }
-const FORMAT_INSPECTOR_CHARTS = new Set([
+
+const FORMAT_INSPECTOR_CHARTS: ReadonlySet<string> = new Set([
     'BAR', 'HBAR', 'LINE', 'AREA', 'PIE', 'DONUT', 'SCATTER', 'BUBBLE', 'GAUGE',
     'RADAR', 'HEATMAP', 'FUNNEL', 'WATERFALL', 'TREEMAP', 'BOXPLOT', 'COMBO',
     'CANDLESTICK', 'GANTT', 'MAP', 'SANKEY', 'SUNBURST', 'NETWORK', 'TRELLIS', 'MATRIX'
 ]);
-const FORMAT_INSPECTOR_CARTESIAN = new Set([
+const FORMAT_INSPECTOR_CARTESIAN: ReadonlySet<string> = new Set([
     'BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'SCATTER', 'BUBBLE', 'HEATMAP',
     'WATERFALL', 'BOXPLOT', 'COMBO', 'CANDLESTICK', 'GANTT', 'TRELLIS'
 ]);
-export function visualFormatting(v) {
+
+export interface VisualFormattingTitle {
+    text?: string;
+    font?: string;
+    size?: string;
+    weight?: string;
+    align?: string;
+    color?: string;
+    [key: string]: unknown;
+}
+
+export interface VisualFormattingSubtitle {
+    text?: string;
+    [key: string]: unknown;
+}
+
+export interface VisualFormattingAxis {
+    SCALE?: string;
+    LABEL?: string;
+    label?: string;
+    MIN?: string | number;
+    min?: string | number;
+    MAX?: string | number;
+    max?: string | number;
+    FORMAT?: string;
+    format?: string;
+    INCLUDE_ZERO?: string;
+    REVERSE?: string;
+    MAJOR_TICK_COUNT?: string | number;
+    TICK_INTERVAL?: string | number;
+    MINOR_TICKS?: string;
+    AXIS_LINE?: string;
+    LABEL_ROTATION?: string;
+    LABEL_SKIP?: string | number;
+    [key: string]: unknown;
+}
+
+export interface VisualConditionalRule {
+    condition?: string;
+    backgroundColor?: string;
+    fontColor?: string;
+    [key: string]: unknown;
+}
+
+export interface VisualFieldFormat {
+    format?: string;
+    dataBar?: boolean;
+    dataBarColor?: string;
+    [key: string]: unknown;
+}
+
+export interface VisualFormatting {
+    title?: VisualFormattingTitle;
+    subtitle?: VisualFormattingSubtitle;
+    xAxis?: VisualFormattingAxis;
+    yAxis?: VisualFormattingAxis;
+    palette?: string[];
+    conditionalRules?: VisualConditionalRule[];
+    fields?: Record<string, VisualFieldFormat>;
+    [key: string]: unknown;
+}
+
+export interface FormattableVisual {
+    type?: string;
+    title?: string;
+    formatting?: VisualFormatting;
+    options?: Record<string, unknown>;
+    mappings?: Record<string, string>;
+    [key: string]: unknown;
+}
+
+export function visualFormatting(v: FormattableVisual): VisualFormatting {
     v.formatting ||= {};
     v.formatting.title ||= { text: v.title || '' };
     v.formatting.xAxis ||= {};
@@ -58,13 +125,21 @@ export function visualFormatting(v) {
     v.formatting.fields ||= {};
     return v.formatting;
 }
-export function splitRuleCondition(condition, fallbackField) {
+
+export interface RuleConditionParts {
+    field: string;
+    operator: string;
+    value: string;
+}
+
+export function splitRuleCondition(condition?: string | null, fallbackField?: string): RuleConditionParts {
     const match = String(condition || '').trim().match(/^(.+?)\s*(<=|>=|<>|!=|=|<|>)\s*(.+)$/);
     return match
         ? { field: match[1].trim(), operator: match[2], value: match[3].trim() }
         : { field: fallbackField || 'value', operator: '<', value: '0' };
 }
-export function renderVisualFormatInspectorHtml(v, columns) {
+
+export function renderVisualFormatInspectorHtml(v: FormattableVisual, columns?: readonly string[] | null): string {
     const formatting = v.formatting || {};
     const title = formatting.title || {};
     const subtitle = formatting.subtitle || {};
@@ -75,11 +150,11 @@ export function renderVisualFormatInspectorHtml(v, columns) {
     const fields = formatting.fields || {};
     const namedColors = Object.entries(v.options || {})
         .filter(([key]) => key.toUpperCase().startsWith('COLOR:'))
-        .map(([key, color]) => ({ name: key.slice('COLOR:'.length), color: color }));
-    const overlays = v.options?.overlays || '';
-    const isChart = FORMAT_INSPECTOR_CHARTS.has(v.type);
-    const isCartesian = FORMAT_INSPECTOR_CARTESIAN.has(v.type);
-    const isPieOrDonut = ['PIE', 'DONUT'].includes(v.type);
+        .map(([key, color]) => ({ name: key.slice('COLOR:'.length), color: color as string }));
+    const overlays = (v.options?.overlays as string) || '';
+    const isChart = FORMAT_INSPECTOR_CHARTS.has(v.type as string);
+    const isCartesian = FORMAT_INSPECTOR_CARTESIAN.has(v.type as string);
+    const isPieOrDonut = ['PIE', 'DONUT'].includes(v.type as string);
     const isScatter = v.type === 'SCATTER';
     const isBubble = v.type === 'BUBBLE';
     const isHeatmap = v.type === 'HEATMAP';
@@ -93,17 +168,20 @@ export function renderVisualFormatInspectorHtml(v, columns) {
     const isSunburst = v.type === 'SUNBURST';
     const isBoxPlot = v.type === 'BOXPLOT';
     const isNetwork = v.type === 'NETWORK';
-    const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type);
-    const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type);
+    const supportsZeroLine = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA', 'COMBO'].includes(v.type as string);
+    const supportsStacking = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'AREA'].includes(v.type as string);
     const isTable = v.type === 'TABLE';
     const supportsRules = isChart || isTable || v.type === 'CARD' || v.type === 'KPI';
     const availableFields = [...new Set([
-            ...Object.values(v.mappings || {}).filter(Boolean),
-            ...(columns || [])
-        ])];
-    const formatValue = v.options?.FORMAT || '';
-    const fieldOptions = (value) => availableFields.map(field => `<option value="${esc(field)}"${field === value ? ' selected' : ''}>${esc(field)}</option>`).join('');
+        ...Object.values(v.mappings || {}).filter(Boolean),
+        ...(columns || [])
+    ])];
+    const formatValue = (v.options?.FORMAT as string) || '';
+    const fieldOptions = (value: string) => availableFields.map(field =>
+        `<option value="${esc(field)}"${field === value ? ' selected' : ''}>${esc(field)}</option>`).join('');
+
     const tableFields = isTable ? availableFields : [];
+
     return `
             <details class="etlsql-format-group" open>
                 <summary>Title & number</summary>
@@ -154,13 +232,13 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                     ${isScatter ? `
                     <div class="etlsql-dsgn-section-divider"></div>
                     <div class="etlsql-dsgn-section-title">Jitter controls</div>
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-scatter-jitter" ${(v.options?.JITTER || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Enable jitter</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-scatter-jitter" ${((v.options?.JITTER as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Enable jitter</span></label>
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Jitter width (0-1)
-                            <input type="number" id="pp-format-scatter-jitter-width" class="form-control" min="0" max="1" step="0.05" value="${esc((v.options?.['JITTER:WIDTH'] || v.options?.JITTER_WIDTH || ''))}" placeholder="0.15">
+                            <input type="number" id="pp-format-scatter-jitter-width" class="form-control" min="0" max="1" step="0.05" value="${esc((v.options?.['JITTER:WIDTH'] || v.options?.JITTER_WIDTH || '') as string)}" placeholder="0.15">
                         </label>
                         <label class="etlsql-dsgn-label">Jitter height (0-1)
-                            <input type="number" id="pp-format-scatter-jitter-height" class="form-control" min="0" max="1" step="0.05" value="${esc((v.options?.['JITTER:HEIGHT'] || v.options?.JITTER_HEIGHT || ''))}" placeholder="0.15">
+                            <input type="number" id="pp-format-scatter-jitter-height" class="form-control" min="0" max="1" step="0.05" value="${esc((v.options?.['JITTER:HEIGHT'] || v.options?.JITTER_HEIGHT || '') as string)}" placeholder="0.15">
                         </label>
                     </div>` : ''}
                     ${isBubble ? `
@@ -168,10 +246,10 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                     <div class="etlsql-dsgn-section-title">Bubble size controls</div>
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Min bubble size (px)
-                            <input type="number" id="pp-format-bubble-min-size" class="form-control" min="0" max="200" step="1" value="${esc((v.options?.MIN_BUBBLE_SIZE || ''))}" placeholder="5">
+                            <input type="number" id="pp-format-bubble-min-size" class="form-control" min="0" max="200" step="1" value="${esc((v.options?.MIN_BUBBLE_SIZE || '') as string)}" placeholder="5">
                         </label>
                         <label class="etlsql-dsgn-label">Max bubble size (px)
-                            <input type="number" id="pp-format-bubble-max-size" class="form-control" min="0" max="200" step="1" value="${esc((v.options?.MAX_BUBBLE_SIZE || ''))}" placeholder="65">
+                            <input type="number" id="pp-format-bubble-max-size" class="form-control" min="0" max="200" step="1" value="${esc((v.options?.MAX_BUBBLE_SIZE || '') as string)}" placeholder="65">
                         </label>
                     </div>` : ''}
                     ${isHeatmap ? `
@@ -179,7 +257,7 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                     <div class="etlsql-dsgn-section-title">Heatmap controls</div>
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Midpoint value
-                            <input type="number" id="pp-format-heatmap-midpoint" class="form-control" value="${esc((v.options?.MIDPOINT || ''))}" placeholder="0">
+                            <input type="number" id="pp-format-heatmap-midpoint" class="form-control" value="${esc((v.options?.MIDPOINT || '') as string)}" placeholder="0">
                         </label>
                         <label class="etlsql-dsgn-label">Null cell color
                             <input type="color" id="pp-format-heatmap-null-color" value="${toHexColor(v.options?.NULL_COLOR, '#f1f5f9')}">
@@ -196,19 +274,19 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                             <input type="color" id="pp-format-heatmap-color-high" value="${toHexColor(v.options?.COLOR_HIGH || v.options?.['color:high'] || v.options?.['color:max'], '#1d4ed8')}">
                         </label>
                     </div>
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-heatmap-cell-border" ${(v.options?.CELL_BORDER || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show cell borders</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-heatmap-cell-border" ${((v.options?.CELL_BORDER as string) || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show cell borders</span></label>
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Border color
                             <input type="color" id="pp-format-heatmap-border-color" value="${toHexColor(v.options?.CELL_BORDER_COLOR, '#ffffff')}">
                         </label>
                         <label class="etlsql-dsgn-label">X axis sort
                             <select id="pp-format-heatmap-x-sort" class="form-control">
-                                ${['', 'SOURCE', 'ALPHA', 'VALUE_DESC', 'VALUE_ASC'].map(value => `<option value="${value}"${(v.options?.X_SORT || '').toUpperCase() === value ? ' selected' : ''}>${value || '(Default)'}</option>`).join('')}
+                                ${['', 'SOURCE', 'ALPHA', 'VALUE_DESC', 'VALUE_ASC'].map(value => `<option value="${value}"${((v.options?.X_SORT as string) || '').toUpperCase() === value ? ' selected' : ''}>${value || '(Default)'}</option>`).join('')}
                             </select>
                         </label>
                         <label class="etlsql-dsgn-label">Y axis sort
                             <select id="pp-format-heatmap-y-sort" class="form-control">
-                                ${['', 'SOURCE', 'ALPHA', 'VALUE_DESC', 'VALUE_ASC'].map(value => `<option value="${value}"${(v.options?.Y_SORT || '').toUpperCase() === value ? ' selected' : ''}>${value || '(Default)'}</option>`).join('')}
+                                ${['', 'SOURCE', 'ALPHA', 'VALUE_DESC', 'VALUE_ASC'].map(value => `<option value="${value}"${((v.options?.Y_SORT as string) || '').toUpperCase() === value ? ' selected' : ''}>${value || '(Default)'}</option>`).join('')}
                             </select>
                         </label>
                     </div>` : ''}
@@ -218,11 +296,11 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Orientation
                             <select id="pp-format-waterfall-orientation" class="form-control">
-                                <option value="VERTICAL"${(v.options?.ORIENTATION || 'VERTICAL').toUpperCase() === 'VERTICAL' ? ' selected' : ''}>Vertical</option>
-                                <option value="HORIZONTAL"${(v.options?.ORIENTATION || '').toUpperCase() === 'HORIZONTAL' ? ' selected' : ''}>Horizontal</option>
+                                <option value="VERTICAL"${((v.options?.ORIENTATION as string) || 'VERTICAL').toUpperCase() === 'VERTICAL' ? ' selected' : ''}>Vertical</option>
+                                <option value="HORIZONTAL"${((v.options?.ORIENTATION as string) || '').toUpperCase() === 'HORIZONTAL' ? ' selected' : ''}>Horizontal</option>
                             </select>
                         </label>
-                        <label class="etlsql-format-toggle" style="margin-top:20px;"><input type="checkbox" id="pp-format-waterfall-connector-lines" ${(v.options?.CONNECTOR_LINES || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Connector lines</span></label>
+                        <label class="etlsql-format-toggle" style="margin-top:20px;"><input type="checkbox" id="pp-format-waterfall-connector-lines" ${((v.options?.CONNECTOR_LINES as string) || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Connector lines</span></label>
                     </div>
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Total color
@@ -244,18 +322,18 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                     <div class="etlsql-dsgn-section-divider"></div>
                     <div class="etlsql-dsgn-section-title">Gantt controls</div>
                     <div class="etlsql-dsgn-typography-grid">
-                        <label class="etlsql-format-toggle" style="margin-top:20px;"><input type="checkbox" id="pp-format-gantt-today-line" ${(v.options?.TODAY_LINE || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Today line</span></label>
+                        <label class="etlsql-format-toggle" style="margin-top:20px;"><input type="checkbox" id="pp-format-gantt-today-line" ${((v.options?.TODAY_LINE as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Today line</span></label>
                         <label class="etlsql-dsgn-label">Today line color
                             <input type="color" id="pp-format-gantt-today-color" value="${toHexColor(v.options?.TODAY_COLOR, '#ef4444')}">
                         </label>
                     </div>
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Today date override
-                            <input type="text" id="pp-format-gantt-today-date" class="form-control" value="${esc((v.options?.TODAY_DATE || ''))}" placeholder="YYYY-MM-DD">
+                            <input type="text" id="pp-format-gantt-today-date" class="form-control" value="${esc((v.options?.TODAY_DATE || '') as string)}" placeholder="YYYY-MM-DD">
                         </label>
                         <label class="etlsql-dsgn-label">Label position
                             <select id="pp-format-gantt-label-position" class="form-control">
-                                ${['LEFT', 'INSIDE', 'RIGHT', 'NONE'].map(val => `<option${(v.options?.LABEL_POSITION || 'LEFT').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                ${['LEFT', 'INSIDE', 'RIGHT', 'NONE'].map(val => `<option${((v.options?.LABEL_POSITION as string) || 'LEFT').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
                             </select>
                         </label>
                     </div>` : ''}
@@ -289,15 +367,15 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                     ${isRadar ? `
                     <div class="etlsql-dsgn-section-divider"></div>
                     <div class="etlsql-dsgn-section-title">Radar options</div>
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-radar-independent-axes" ${(v.options?.INDEPENDENT_AXES || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Independent axes</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-radar-independent-axes" ${((v.options?.INDEPENDENT_AXES as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Independent axes</span></label>
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Shape style
                             <select id="pp-format-radar-shape" class="form-control">
-                                ${['POLYGON', 'CIRCLE'].map(val => `<option${(v.options?.SHAPE || 'POLYGON').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                ${['POLYGON', 'CIRCLE'].map(val => `<option${((v.options?.SHAPE as string) || 'POLYGON').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
                             </select>
                         </label>
                         <label class="etlsql-dsgn-label">Fill opacity (0.0 – 1.0)
-                            <input type="number" step="0.05" min="0" max="1" id="pp-format-radar-fill-opacity" class="form-control" value="${v.options?.FILL_OPACITY ?? '0.18'}">
+                            <input type="number" step="0.05" min="0" max="1" id="pp-format-radar-fill-opacity" class="form-control" value="${(v.options?.FILL_OPACITY as string) ?? '0.18'}">
                         </label>
                     </div>` : ''}
                     ${isFunnel ? `
@@ -306,19 +384,19 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Funnel shape
                             <select id="pp-format-funnel-shape" class="form-control">
-                                ${['FUNNEL', 'PYRAMID'].map(val => `<option${(v.options?.FUNNEL_SHAPE || v.options?.SHAPE || 'FUNNEL').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                ${['FUNNEL', 'PYRAMID'].map(val => `<option${((v.options?.FUNNEL_SHAPE || v.options?.SHAPE || 'FUNNEL') as string).toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
                             </select>
                         </label>
                         <label class="etlsql-dsgn-label">Stage sort
                             <select id="pp-format-funnel-sort" class="form-control">
-                                ${['VALUE_DESC', 'VALUE_ASC', 'SOURCE'].map(val => `<option${(v.options?.SORT || 'VALUE_DESC').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                ${['VALUE_DESC', 'VALUE_ASC', 'SOURCE'].map(val => `<option${((v.options?.SORT as string) || 'VALUE_DESC').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
                             </select>
                         </label>
                     </div>
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-funnel-show-percent" ${(v.options?.SHOW_PERCENT || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show conversion %</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-funnel-show-percent" ${((v.options?.SHOW_PERCENT as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show conversion %</span></label>
                     <label class="etlsql-dsgn-label">Percent mode
                         <select id="pp-format-funnel-percent-mode" class="form-control">
-                            ${['STEP', 'TOTAL'].map(val => `<option${(v.options?.PERCENT_MODE || 'STEP').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                            ${['STEP', 'TOTAL'].map(val => `<option${((v.options?.PERCENT_MODE as string) || 'STEP').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
                         </select>
                     </label>` : ''}
                     ${isSankey ? `
@@ -327,28 +405,28 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Node alignment
                             <select id="pp-format-sankey-node-align" class="form-control">
-                                ${['JUSTIFY', 'LEFT', 'RIGHT', 'CENTER'].map(val => `<option${(v.options?.NODE_ALIGN || 'JUSTIFY').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                ${['JUSTIFY', 'LEFT', 'RIGHT', 'CENTER'].map(val => `<option${((v.options?.NODE_ALIGN as string) || 'JUSTIFY').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
                             </select>
                         </label>
                         <label class="etlsql-dsgn-label">Node padding (px)
-                            <input type="number" min="0" max="100" id="pp-format-sankey-node-padding" class="form-control" value="${v.options?.NODE_PADDING ?? '12'}">
+                            <input type="number" min="0" max="100" id="pp-format-sankey-node-padding" class="form-control" value="${(v.options?.NODE_PADDING as string) ?? '12'}">
                         </label>
                     </div>
                     <label class="etlsql-dsgn-label">Link opacity (0.0 – 1.0)
-                        <input type="number" step="0.05" min="0" max="1" id="pp-format-sankey-link-opacity" class="form-control" value="${v.options?.LINK_OPACITY ?? '0.55'}">
+                        <input type="number" step="0.05" min="0" max="1" id="pp-format-sankey-link-opacity" class="form-control" value="${(v.options?.LINK_OPACITY as string) ?? '0.55'}">
                     </label>` : ''}
                     ${(isTreemap || isSunburst) ? `
                     <div class="etlsql-dsgn-section-divider"></div>
                     <div class="etlsql-dsgn-section-title">${isTreemap ? 'Treemap' : 'Sunburst'} options</div>
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-hierarchy-show-breadcrumb" ${(v.options?.SHOW_BREADCRUMB || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show breadcrumb path</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-hierarchy-show-breadcrumb" ${((v.options?.SHOW_BREADCRUMB as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show breadcrumb path</span></label>
                     ${isTreemap ? `
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Label min size (px)
-                            <input type="number" min="0" max="200" id="pp-format-treemap-label-min-size" class="form-control" value="${v.options?.LABEL_MIN_SIZE ?? '42'}">
+                            <input type="number" min="0" max="200" id="pp-format-treemap-label-min-size" class="form-control" value="${(v.options?.LABEL_MIN_SIZE as string) ?? '42'}">
                         </label>
                         <label class="etlsql-dsgn-label">Label overflow
                             <select id="pp-format-treemap-label-overflow" class="form-control">
-                                ${['CLIP', 'WRAP', 'HIDDEN'].map(val => `<option${(v.options?.LABEL_OVERFLOW || 'CLIP').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                ${['CLIP', 'WRAP', 'HIDDEN'].map(val => `<option${((v.options?.LABEL_OVERFLOW as string) || 'CLIP').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
                             </select>
                         </label>
                     </div>` : ''}` : ''}
@@ -358,112 +436,112 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Box style
                             <select id="pp-format-boxplot-style" class="form-control">
-                                ${['BOX', 'VIOLIN', 'BOTH'].map(val => `<option${(v.options?.BOX_STYLE || 'BOX').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                ${['BOX', 'VIOLIN', 'BOTH'].map(val => `<option${((v.options?.BOX_STYLE as string) || 'BOX').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
                             </select>
                         </label>
                         <label class="etlsql-dsgn-label">Orientation
                             <select id="pp-format-boxplot-orientation" class="form-control">
-                                ${['VERTICAL', 'HORIZONTAL'].map(val => `<option${(v.options?.ORIENTATION || 'VERTICAL').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                ${['VERTICAL', 'HORIZONTAL'].map(val => `<option${((v.options?.ORIENTATION as string) || 'VERTICAL').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
                             </select>
                         </label>
                     </div>
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-boxplot-notched" ${(v.options?.NOTCHED || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Notched boxes (median CI)</span></label>
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-boxplot-show-mean" ${(v.options?.SHOW_MEAN || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show mean marker</span></label>
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-boxplot-show-violin" ${(v.options?.SHOW_VIOLIN || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show violin density</span></label>` : ''}
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-boxplot-notched" ${((v.options?.NOTCHED as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Notched boxes (median CI)</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-boxplot-show-mean" ${((v.options?.SHOW_MEAN as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show mean marker</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-boxplot-show-violin" ${((v.options?.SHOW_VIOLIN as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show violin density</span></label>` : ''}
                     ${isNetwork ? `
                     <div class="etlsql-dsgn-section-divider"></div>
                     <div class="etlsql-dsgn-section-title">Network options</div>
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Layout
                             <select id="pp-format-network-layout" class="form-control">
-                                ${['FORCE', 'CIRCULAR'].map(val => `<option${(v.options?.LAYOUT || 'FORCE').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
+                                ${['FORCE', 'CIRCULAR'].map(val => `<option${((v.options?.LAYOUT as string) || 'FORCE').toUpperCase() === val ? ' selected' : ''}>${val}</option>`).join('')}
                             </select>
                         </label>
                         <label class="etlsql-dsgn-label">Repulsion force
-                            <input type="number" min="50" max="5000" step="50" id="pp-format-network-repulsion" class="form-control" value="${v.options?.REPULSION ?? '500'}">
+                            <input type="number" min="50" max="5000" step="50" id="pp-format-network-repulsion" class="form-control" value="${(v.options?.REPULSION as string) ?? '500'}">
                         </label>
                     </div>
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Min label size (px)
-                            <input type="number" min="0" max="50" id="pp-format-network-label-min-size" class="form-control" value="${v.options?.NODE_LABEL_MIN_SIZE ?? '0'}">
+                            <input type="number" min="0" max="50" id="pp-format-network-label-min-size" class="form-control" value="${(v.options?.NODE_LABEL_MIN_SIZE as string) ?? '0'}">
                         </label>
                         <label class="etlsql-dsgn-label">Node color
-                            <input type="color" id="pp-format-network-node-color" class="form-control form-control-color" value="${v.options?.NODE_COLOR || '#2563eb'}">
+                            <input type="color" id="pp-format-network-node-color" class="form-control form-control-color" value="${(v.options?.NODE_COLOR as string) || '#2563eb'}">
                         </label>
                     </div>
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-network-directed" ${(v.options?.DIRECTED || v.options?.ARROWS || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Directed edges (arrows)</span></label>
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-network-node-labels" ${(v.options?.NODE_LABELS || v.options?.LABELS || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show node labels</span></label>` : ''}
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-network-directed" ${(((v.options?.DIRECTED || v.options?.ARROWS || 'OFF') as string)).toUpperCase() === 'ON' ? 'checked' : ''}><span>Directed edges (arrows)</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-network-node-labels" ${(((v.options?.NODE_LABELS || v.options?.LABELS || 'ON') as string)).toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show node labels</span></label>` : ''}
                 </div>
             </details>
 
             ${isChart ? `<details class="etlsql-format-group">
                 <summary>Axes & legend</summary>
                 <div class="etlsql-format-group-body">
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-legend" ${(v.options?.LEGEND || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show legend</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-legend" ${((v.options?.LEGEND as string) || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show legend</span></label>
                     <label class="etlsql-dsgn-label">Legend placement
                         <select id="pp-format-legend-position" class="form-control">
-                            ${['TOP', 'RIGHT', 'BOTTOM', 'LEFT', 'INSIDE'].map(value => `<option${(v.options?.LEGEND_POSITION || 'BOTTOM').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}
+                            ${['TOP', 'RIGHT', 'BOTTOM', 'LEFT', 'INSIDE'].map(value => `<option${((v.options?.LEGEND_POSITION as string) || 'BOTTOM').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}
                         </select>
                     </label>
-                    <label class="etlsql-dsgn-label" id="pp-format-legend-anchor-wrap" style="${(v.options?.LEGEND_POSITION || '').toUpperCase() === 'INSIDE' ? '' : 'display:none;'}">Legend anchor
+                    <label class="etlsql-dsgn-label" id="pp-format-legend-anchor-wrap" style="${((v.options?.LEGEND_POSITION as string) || '').toUpperCase() === 'INSIDE' ? '' : 'display:none;'}">Legend anchor
                         <select id="pp-format-legend-anchor" class="form-control">
-                            ${['TOP_RIGHT', 'TOP_LEFT', 'BOTTOM_RIGHT', 'BOTTOM_LEFT'].map(value => `<option${(v.options?.LEGEND_ANCHOR || 'TOP_RIGHT').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}
+                            ${['TOP_RIGHT', 'TOP_LEFT', 'BOTTOM_RIGHT', 'BOTTOM_LEFT'].map(value => `<option${((v.options?.LEGEND_ANCHOR as string) || 'TOP_RIGHT').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}
                         </select>
                     </label>
                     <label class="etlsql-dsgn-label">Legend orientation
                         <select id="pp-format-legend-orientation" class="form-control">
-                            ${['', 'HORIZONTAL', 'VERTICAL'].map(value => `<option value="${value}"${(v.options?.LEGEND_ORIENTATION || '').toUpperCase() === value ? ' selected' : ''}>${value || '(Default)'}</option>`).join('')}
+                            ${['', 'HORIZONTAL', 'VERTICAL'].map(value => `<option value="${value}"${((v.options?.LEGEND_ORIENTATION as string) || '').toUpperCase() === value ? ' selected' : ''}>${value || '(Default)'}</option>`).join('')}
                         </select>
                     </label>
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-legend-reverse" ${(v.options?.LEGEND_REVERSE || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Reverse series order</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-legend-reverse" ${((v.options?.LEGEND_REVERSE as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Reverse series order</span></label>
                     <label class="etlsql-dsgn-label">Legend title
-                        <input type="text" id="pp-format-legend-title" class="form-control" value="${esc(v.options?.LEGEND_TITLE || '')}" placeholder="Title or NONE">
+                        <input type="text" id="pp-format-legend-title" class="form-control" value="${esc((v.options?.LEGEND_TITLE as string) || '')}" placeholder="Title or NONE">
                     </label>
                     <label class="etlsql-dsgn-label">Legend columns
-                        <input type="number" id="pp-format-legend-columns" class="form-control" min="1" max="20" value="${esc(v.options?.LEGEND_COLUMNS || '')}" placeholder="Auto">
+                        <input type="number" id="pp-format-legend-columns" class="form-control" min="1" max="20" value="${esc((v.options?.LEGEND_COLUMNS as string) || '')}" placeholder="Auto">
                     </label>
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-grid-lines" ${(v.options?.GRID_LINES || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show background grid lines</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-grid-lines" ${((v.options?.GRID_LINES as string) || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show background grid lines</span></label>
                     ${isCartesian ? `<div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Grid color
                             <input type="color" id="pp-format-grid-color" value="${toHexColor(v.options?.GRID_LINE_COLOR, '#e5e7eb')}">
                         </label>
                         <label class="etlsql-dsgn-label">Grid line
-                            <select id="pp-format-grid-dash" class="form-control">${['SOLID', 'DASHED', 'DOTTED'].map(value => `<option${(v.options?.GRID_LINE_DASH || 'SOLID').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}</select>
+                            <select id="pp-format-grid-dash" class="form-control">${['SOLID', 'DASHED', 'DOTTED'].map(value => `<option${((v.options?.GRID_LINE_DASH as string) || 'SOLID').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}</select>
                         </label>
                         <label class="etlsql-dsgn-label">Grid width
-                            <input type="number" id="pp-format-grid-width" class="form-control" min="0.1" max="10" step="0.1" value="${esc(v.options?.GRID_LINE_WIDTH || '1')}">
+                            <input type="number" id="pp-format-grid-width" class="form-control" min="0.1" max="10" step="0.1" value="${esc((v.options?.GRID_LINE_WIDTH as string) || '1')}">
                         </label>
-                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-minor-grid-lines" ${(v.options?.MINOR_GRID_LINES || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Minor grid lines</span></label>
+                        <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-minor-grid-lines" ${((v.options?.MINOR_GRID_LINES as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Minor grid lines</span></label>
                     </div>` : ''}
-                    ${supportsZeroLine ? `<label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-zero-line" ${(v.options?.ZERO_LINE || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show zero line</span></label>
+                    ${supportsZeroLine ? `<label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-zero-line" ${((v.options?.ZERO_LINE as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show zero line</span></label>
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Zero-line color<input type="color" id="pp-format-zero-line-color" value="${toHexColor(v.options?.ZERO_LINE_COLOR, '#6b7280')}"></label>
-                        <label class="etlsql-dsgn-label">Zero-line style<select id="pp-format-zero-line-dash" class="form-control">${['SOLID', 'DASHED', 'DOTTED'].map(value => `<option${(v.options?.ZERO_LINE_DASH || 'SOLID').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}</select></label>
-                        <label class="etlsql-dsgn-label">Zero-line width<input type="number" id="pp-format-zero-line-width" class="form-control" min="0.1" max="10" step="0.1" value="${esc(v.options?.ZERO_LINE_WIDTH || '1.5')}"></label>
+                        <label class="etlsql-dsgn-label">Zero-line style<select id="pp-format-zero-line-dash" class="form-control">${['SOLID', 'DASHED', 'DOTTED'].map(value => `<option${((v.options?.ZERO_LINE_DASH as string) || 'SOLID').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}</select></label>
+                        <label class="etlsql-dsgn-label">Zero-line width<input type="number" id="pp-format-zero-line-width" class="form-control" min="0.1" max="10" step="0.1" value="${esc((v.options?.ZERO_LINE_WIDTH as string) || '1.5')}"></label>
                     </div>` : ''}
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-zoom-slider" ${(v.options?.ZOOM_SLIDER || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show zoom slider</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-zoom-slider" ${((v.options?.ZOOM_SLIDER as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show zoom slider</span></label>
                     ${isPieOrDonut ? `
                     <div class="etlsql-dsgn-section-divider"></div>
                     <div class="etlsql-dsgn-section-title">Slice controls</div>
                     <label class="etlsql-dsgn-label">Slice sort order
                         <select id="pp-format-pie-sort" class="form-control">
-                            ${['SOURCE', 'VALUE_DESC', 'VALUE_ASC', 'ALPHA'].map(value => `<option${(v.options?.SORT || 'SOURCE').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}
+                            ${['SOURCE', 'VALUE_DESC', 'VALUE_ASC', 'ALPHA'].map(value => `<option${((v.options?.SORT as string) || 'SOURCE').toUpperCase() === value ? ' selected' : ''}>${value}</option>`).join('')}
                         </select>
                     </label>
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Min slice threshold (%)
-                            <input type="number" id="pp-format-pie-min-slice-pct" class="form-control" min="0" max="100" step="any" value="${esc(v.options?.MIN_SLICE_PCT || '')}" placeholder="None">
+                            <input type="number" id="pp-format-pie-min-slice-pct" class="form-control" min="0" max="100" step="any" value="${esc((v.options?.MIN_SLICE_PCT as string) || '')}" placeholder="None">
                         </label>
                         <label class="etlsql-dsgn-label">Other label
-                            <input type="text" id="pp-format-pie-other-label" class="form-control" value="${esc(v.options?.OTHER_LABEL || '')}" placeholder="Other">
+                            <input type="text" id="pp-format-pie-other-label" class="form-control" value="${esc((v.options?.OTHER_LABEL as string) || '')}" placeholder="Other">
                         </label>
                     </div>
                     <div class="etlsql-dsgn-typography-grid">
                         <label class="etlsql-dsgn-label">Explode slice
-                            <input type="text" id="pp-format-pie-explode" class="form-control" value="${esc(v.options?.EXPLODE || '')}" placeholder="Slice name">
+                            <input type="text" id="pp-format-pie-explode" class="form-control" value="${esc((v.options?.EXPLODE as string) || '')}" placeholder="Slice name">
                         </label>
                         <label class="etlsql-dsgn-label">Explode all (px)
-                            <input type="number" id="pp-format-pie-explode-all" class="form-control" min="0" max="100" step="1" value="${esc(v.options?.EXPLODE_ALL || '')}" placeholder="0">
+                            <input type="number" id="pp-format-pie-explode-all" class="form-control" min="0" max="100" step="1" value="${esc((v.options?.EXPLODE_ALL as string) || '')}" placeholder="0">
                         </label>
                     </div>
                     <div class="etlsql-dsgn-typography-grid">
@@ -471,11 +549,11 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                             <input type="color" id="pp-format-pie-border-color" value="${toHexColor(v.options?.SLICE_BORDER_COLOR, '#ffffff')}">
                         </label>
                         <label class="etlsql-dsgn-label">Border width (px)
-                            <input type="number" id="pp-format-pie-border-width" class="form-control" min="0" max="20" step="0.5" value="${esc(v.options?.SLICE_BORDER_WIDTH || '2')}">
+                            <input type="number" id="pp-format-pie-border-width" class="form-control" min="0" max="20" step="0.5" value="${esc((v.options?.SLICE_BORDER_WIDTH as string) || '2')}">
                         </label>
                     </div>
                     <label class="etlsql-dsgn-label">Start angle (degrees)
-                        <input type="number" id="pp-format-pie-start-angle" class="form-control" min="-360" max="360" step="15" value="${esc(v.options?.START_ANGLE || '')}" placeholder="0° (12 o'clock)">
+                        <input type="number" id="pp-format-pie-start-angle" class="form-control" min="-360" max="360" step="15" value="${esc((v.options?.START_ANGLE as string) || '')}" placeholder="0° (12 o'clock)">
                     </label>` : ''}
                     ${isCartesian ? `<div class="etlsql-format-axis-grid">
                         <strong>X axis</strong><strong>Y axis</strong>
@@ -512,29 +590,29 @@ export function renderVisualFormatInspectorHtml(v, columns) {
             ${isChart ? `<details class="etlsql-format-group">
                 <summary>Marks & labels</summary>
                 <div class="etlsql-format-group-body">
-                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-data-labels" ${(v.options?.DATA_LABELS || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show data labels</span></label>
+                    <label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-data-labels" ${((v.options?.DATA_LABELS as string) || 'OFF').toUpperCase() === 'ON' ? 'checked' : ''}><span>Show data labels</span></label>
                     <label class="etlsql-dsgn-label">Label position
                         <select id="pp-format-data-label-position" class="form-control">
-                            ${['OUTSIDE_TOP', 'OUTSIDE_MIDDLE', 'OUTSIDE_BOTTOM', 'INSIDE_TOP', 'INSIDE_MIDDLE', 'INSIDE_BOTTOM'].map(value => `<option${(v.options?.['DATA_LABELS:POSITION'] || 'OUTSIDE_TOP').toUpperCase() === value ? ' selected' : ''}>${value.replaceAll('_', ' ')}</option>`).join('')}
+                            ${['OUTSIDE_TOP', 'OUTSIDE_MIDDLE', 'OUTSIDE_BOTTOM', 'INSIDE_TOP', 'INSIDE_MIDDLE', 'INSIDE_BOTTOM'].map(value => `<option${((v.options?.['DATA_LABELS:POSITION'] as string) || 'OUTSIDE_TOP').toUpperCase() === value ? ' selected' : ''}>${value.replaceAll('_', ' ')}</option>`).join('')}
                         </select>
                     </label>
-                    ${v.type === 'LINE' || v.type === 'COMBO' ? `<label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-symbols" ${(v.options?.SYMBOLS || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show data points</span></label>` : ''}
+                    ${v.type === 'LINE' || v.type === 'COMBO' ? `<label class="etlsql-format-toggle"><input type="checkbox" id="pp-format-symbols" ${((v.options?.SYMBOLS as string) || 'ON').toUpperCase() !== 'OFF' ? 'checked' : ''}><span>Show data points</span></label>` : ''}
                     ${supportsStacking ? `<label class="etlsql-dsgn-label">Stacking
                         <select id="pp-format-stacked" class="form-control">
-                            <option value="OFF"${(v.options?.STACKED || 'OFF').toUpperCase() === 'OFF' ? ' selected' : ''}>Off</option>
-                            <option value="ON"${(v.options?.STACKED || '').toUpperCase() === 'ON' ? ' selected' : ''}>Stacked</option>
-                            <option value="100PCT"${(v.options?.STACKED || '').toUpperCase() === '100PCT' ? ' selected' : ''}>100% stacked</option>
+                            <option value="OFF"${((v.options?.STACKED as string) || 'OFF').toUpperCase() === 'OFF' ? ' selected' : ''}>Off</option>
+                            <option value="ON"${((v.options?.STACKED as string) || '').toUpperCase() === 'ON' ? ' selected' : ''}>Stacked</option>
+                            <option value="100PCT"${((v.options?.STACKED as string) || '').toUpperCase() === '100PCT' ? ' selected' : ''}>100% stacked</option>
                         </select>
                     </label>` : ''}
                     ${v.type === 'BAR' || v.type === 'HBAR' || v.type === 'HORIZONTALBAR' || v.type === 'COMBO' ? `<label class="etlsql-dsgn-label">Bar width
-                        <div class="etlsql-dsgn-slider-row"><input type="range" id="pp-format-band-size" min="0.1" max="1" step="0.05" value="${esc(v.options?.BAND_SIZE || '0.75')}"><output id="pp-format-band-size-value">${esc(v.options?.BAND_SIZE || '0.75')}</output></div>
+                        <div class="etlsql-dsgn-slider-row"><input type="range" id="pp-format-band-size" min="0.1" max="1" step="0.05" value="${esc((v.options?.BAND_SIZE as string) || '0.75')}"><output id="pp-format-band-size-value">${esc((v.options?.BAND_SIZE as string) || '0.75')}</output></div>
                         <span class="etlsql-format-hint">Narrower bars create more spacing.</span>
                     </label>
                     <label class="etlsql-dsgn-label">Series gap
-                        <div class="etlsql-dsgn-slider-row"><input type="range" id="pp-format-series-gap" min="0" max="1" step="0.05" value="${esc(v.options?.SERIES_GAP || '0')}"><output id="pp-format-series-gap-value">${esc(v.options?.SERIES_GAP || '0')}</output></div>
+                        <div class="etlsql-dsgn-slider-row"><input type="range" id="pp-format-series-gap" min="0" max="1" step="0.05" value="${esc((v.options?.SERIES_GAP as string) || '0')}"><output id="pp-format-series-gap-value">${esc((v.options?.SERIES_GAP as string) || '0')}</output></div>
                     </label>
                     <label class="etlsql-dsgn-label">Outer padding
-                        <div class="etlsql-dsgn-slider-row"><input type="range" id="pp-format-outer-padding" min="0" max="1" step="0.05" value="${esc(v.options?.OUTER_PADDING || '0')}"><output id="pp-format-outer-padding-value">${esc(v.options?.OUTER_PADDING || '0')}</output></div>
+                        <div class="etlsql-dsgn-slider-row"><input type="range" id="pp-format-outer-padding" min="0" max="1" step="0.05" value="${esc((v.options?.OUTER_PADDING as string) || '0')}"><output id="pp-format-outer-padding-value">${esc((v.options?.OUTER_PADDING as string) || '0')}</output></div>
                     </label>` : ''}
                     <label class="etlsql-dsgn-label">Overlays
                         <textarea id="pp-format-overlays" class="form-control etlsql-code-editor" rows="3" placeholder="OVERLAYS (GOAL(100) AS DASHED)">${esc(overlays)}</textarea>
@@ -570,15 +648,15 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                 <summary>Table cells <span>${tableFields.length}</span></summary>
                 <div class="etlsql-format-group-body etlsql-format-field-list">
                     ${tableFields.map(field => {
-        const key = Object.keys(v.mappings || {}).find(role => role.toUpperCase() === field.toUpperCase()) || field;
-        const value = fields[key] || fields[key.toUpperCase()] || {};
-        return `<div class="etlsql-format-field" data-format-field="${esc(key)}">
+                        const key = Object.keys(v.mappings || {}).find(role => role.toUpperCase() === field.toUpperCase()) || field;
+                        const value = fields[key] || fields[key.toUpperCase()] || {};
+                        return `<div class="etlsql-format-field" data-format-field="${esc(key)}">
                             <strong>${esc(field)}</strong>
                             <input class="form-control" data-field-format value="${esc(value.format || '')}" placeholder="Format · C2">
                             <label class="etlsql-format-toggle"><input type="checkbox" data-field-data-bar ${value.dataBar ? 'checked' : ''}><span>Data bar</span></label>
                             <input type="color" data-field-data-bar-color value="${toHexColor(value.dataBarColor, '#4472c4')}" aria-label="Data bar color">
                         </div>`;
-    }).join('') || '<p class="etlsql-format-hint">Map or sample a column to format table cells.</p>'}
+                    }).join('') || '<p class="etlsql-format-hint">Map or sample a column to format table cells.</p>'}
                 </div>
             </details>` : ''}
 
@@ -587,8 +665,8 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                 <div class="etlsql-format-group-body">
                     <div class="etlsql-format-rule-list">
                         ${rules.map((rule, index) => {
-        const condition = splitRuleCondition(rule.condition, availableFields[0]);
-        return `<div class="etlsql-format-rule" data-rule-index="${index}">
+                            const condition = splitRuleCondition(rule.condition, availableFields[0]);
+                            return `<div class="etlsql-format-rule" data-rule-index="${index}">
                                 <div class="etlsql-format-rule-line"><span>IF</span>
                                     <select data-rule-field class="form-control">${fieldOptions(condition.field)}${availableFields.includes(condition.field) ? '' : `<option selected>${esc(condition.field)}</option>`}</select>
                                     <select data-rule-operator class="form-control">${['<', '<=', '=', '!=', '>=', '>'].map(operator => `<option${operator === condition.operator ? ' selected' : ''}>${esc(operator)}</option>`).join('')}</select>
@@ -596,22 +674,24 @@ export function renderVisualFormatInspectorHtml(v, columns) {
                                 </div>
                                 <div class="etlsql-format-rule-result"><span>THEN</span><label>Fill <input type="color" data-rule-background value="${toHexColor(rule.backgroundColor, '#fee2e2')}"></label><label>Text <input type="color" data-rule-font value="${toHexColor(rule.fontColor, '#991b1b')}"></label><button type="button" data-rule-remove aria-label="Remove rule">Remove</button></div>
                             </div>`;
-    }).join('')}
+                        }).join('')}
                     </div>
                     <button type="button" class="etlsql-format-add" data-rule-add>+ Add rule</button>
                 </div>
             </details>` : ''}`;
 }
-export function renderFormattingSectionHtml(v) {
-    const bg = v.options?.BACKGROUND || '';
-    const color = v.options?.COLOR || '';
-    const border = v.options?.BORDER || '';
-    const radius = v.options?.BORDER_RADIUS || '';
-    const font = v.options?.FONT || '';
-    const fontSize = v.options?.FONT_SIZE || '';
-    const fontWeight = v.options?.FONT_WEIGHT || '';
-    const shadow = v.options?.SHADOW || '';
-    const opacity = v.options?.OPACITY || '';
+
+export function renderFormattingSectionHtml(v: FormattableVisual): string {
+    const bg = (v.options?.BACKGROUND as string) || '';
+    const color = (v.options?.COLOR as string) || '';
+    const border = (v.options?.BORDER as string) || '';
+    const radius = (v.options?.BORDER_RADIUS as string) || '';
+    const font = (v.options?.FONT as string) || '';
+    const fontSize = (v.options?.FONT_SIZE as string) || '';
+    const fontWeight = (v.options?.FONT_WEIGHT as string) || '';
+    const shadow = (v.options?.SHADOW as string) || '';
+    const opacity = (v.options?.OPACITY as string) || '';
+
     return `
         <details class="etlsql-format-group etlsql-dsgn-formatting-section">
             <summary>Card style <span>${[bg, border, shadow, radius].filter(Boolean).length || 'Default'}</span></summary>
