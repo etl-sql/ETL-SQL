@@ -62,6 +62,9 @@ jobs:
       - name: Check for flaky sleep-then-assert test delays
         run: node scripts/check-flaky-test-delays.mjs
 
+      - name: Check for AI slop and prohibited comments
+        run: node scripts/check-ai-slop-comments.mjs
+
       - name: Build
         run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
 
