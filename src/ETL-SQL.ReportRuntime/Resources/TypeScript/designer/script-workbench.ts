@@ -1,7 +1,3 @@
-/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/script-workbench.ts
- * Run: node scripts/sync-assets.js
- */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -9,29 +5,140 @@
  * script-workbench.js — split out of designer.js, TODO.md §2.
  * The script editor workbench: editor, results panel, run controls and data-prep recipes in one surface.
  */
+
 import { escapeHtml, _feedback } from './designer-util.js';
 import { toolbarButton } from './editor-toolbar.js';
-import { createScriptEditor } from './script-editor.js';
-import { createScriptResultsPanel, normalizeRunTrace, buildDataPreviewPayload } from './run-results.js';
-import { renderDag } from './dag.js';
+import { createScriptEditor, type ScriptEditorHandle, type ScriptEditorOptions, type ScriptEditorDiagnostic } from './script-editor.js';
+import { createScriptResultsPanel, normalizeRunTrace, buildDataPreviewPayload, type ScriptResultsPanel } from './run-results.js';
+import { renderDag, type DagHandle } from './dag.js';
+
+export interface ScriptWorkbenchSidebarOptions {
+    workspace?: boolean;
+    schema?: boolean;
+    session?: boolean;
+    git?: boolean;
+}
+
+export interface ScriptWorkbenchRunParams {
+    script: string;
+    selection: string;
+    connectionRef: string | null;
+    confirmDestructive: boolean;
+    signal?: AbortSignal;
+}
+
+export interface ScriptWorkbenchOptions {
+    title?: string;
+    editor?: ScriptEditorOptions;
+    authFetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    connectionRef?: string | null;
+    documentUri?: string | (() => string);
+    runUrl?: string | null;
+    dagUrl?: string | null;
+    previewApiUrl?: string | null;
+    previewUrl?: string | null;
+    dataPreviewUrl?: string | null;
+    workspaceUrl?: string | null;
+    gitStatusUrl?: string | null;
+    gitStatus?: { branch?: string; [key: string]: unknown } | null;
+    sidebar?: ScriptWorkbenchSidebarOptions | false | null;
+    showSidebar?: boolean;
+    onRun?: (params: ScriptWorkbenchRunParams) => Promise<any>;
+    onSave?: (script: string, filePath?: string) => Promise<void> | void;
+    onApply?: (script: string) => Promise<void> | void;
+    onFormat?: (script: string) => Promise<void> | void;
+    onFileSelect?: (filePath: string) => Promise<void> | void;
+    onClose?: () => void;
+    onExit?: () => void;
+}
+
+export interface ScriptWorkbenchHandle {
+    editor: ScriptEditorHandle;
+    resultsPanel: ScriptResultsPanel;
+    getValue: () => string;
+    run: (scope?: 'script' | 'selection', confirmDestructive?: boolean) => Promise<void>;
+    dispose: () => void;
+}
+
+export interface WorkspaceFileEntry {
+    path: string;
+    name?: string;
+    size?: number;
+    handle?: any;
+}
+
+export interface SchemaColumnEntry {
+    name: string;
+    type?: string;
+    dataType?: string;
+}
+
+export interface SchemaTableEntry {
+    name: string;
+    columns?: Array<SchemaColumnEntry | string>;
+}
+
+export interface SchemaMetadataResult {
+    connections?: string[];
+    variables?: Array<{ name: string; value?: unknown; type?: string }>;
+    tempTables?: SchemaTableEntry[];
+}
+
+export interface GitStatusResult {
+    branch?: string;
+    isGitRepository?: boolean;
+    staged?: string[];
+    modified?: string[];
+    untracked?: string[];
+}
+
+export interface TreeNodeOptions {
+    label: string;
+    icon?: string;
+    className?: string;
+    snippet?: string;
+    loadChildren?: (container: HTMLElement) => Promise<void> | void;
+    preview?: any;
+}
+
+export interface CommandPaletteItem {
+    id: string;
+    label: string;
+    enabled: boolean;
+    action: () => Promise<void> | void;
+}
+
+export interface FormatterConfig {
+    keywordCasing?: string;
+    indentSize?: number;
+    commaPlacement?: string;
+    lineWidth?: number;
+    indentJoins?: boolean;
+    onClauseOnNewLine?: boolean;
+    caseWhenThenNewLine?: boolean;
+    breakoutWindowFunctions?: boolean;
+    rightAlignKeywords?: boolean;
+}
+
 /**
  * DOM cast helpers: narrow elements and events so both TypeScript and `checkJs`
  * have precise types without manual inline casts.
  */
 /** @param {*} el @returns {HTMLElement} */
-function asHtml(el) { return el; }
+function asHtml<T extends Element = HTMLElement>(el: any): T { return el as T; }
 /** @param {*} el @returns {HTMLInputElement} */
-function asInput(el) { return el; }
+function asInput(el: any): HTMLInputElement { return el as HTMLInputElement; }
 /** @param {*} el @returns {HTMLSelectElement} */
-function asSelect(el) { return el; }
+function asSelect(el: any): HTMLSelectElement { return el as HTMLSelectElement; }
 /** @param {*} el @returns {HTMLButtonElement} */
-function asButton(el) { return el; }
+function asButton(el: any): HTMLButtonElement { return el as HTMLButtonElement; }
 /** @param {*} el @returns {HTMLIFrameElement} */
-function asIframe(el) { return el; }
+function asIframe(el: any): HTMLIFrameElement { return el as HTMLIFrameElement; }
 /** @param {*} ev @returns {KeyboardEvent} */
-function asKeyEvent(ev) { return ev; }
+function asKeyEvent(ev: any): KeyboardEvent { return ev as KeyboardEvent; }
 /** @param {*} ev @returns {PointerEvent} */
-function asPointer(ev) { return ev; }
+function asPointer(ev: any): PointerEvent { return ev as PointerEvent; }
+
 /**
  * @typedef {Object} ScriptWorkbenchOptions
  * @property {string} [title]
@@ -57,6 +164,7 @@ function asPointer(ev) { return ev; }
  * @property {Function} [onClose]
  * @property {Function} [onExit]
  */
+
 /**
  * @typedef {Object} ScriptWorkbenchHandle
  * @property {Object} editor
@@ -65,6 +173,7 @@ function asPointer(ev) { return ev; }
  * @property {(scope?: 'script' | 'selection', confirmDestructive?: boolean) => Promise<void>} run
  * @property {() => void} dispose
  */
+
 /**
  * The script-editor workbench: editor, sidebar, run, preview and flow, in one container.
  *
@@ -72,24 +181,25 @@ function asPointer(ev) { return ev; }
  * @param {ScriptWorkbenchOptions} [opts]
  * @returns {Promise<ScriptWorkbenchHandle>}
  */
-export async function createScriptEditorWorkbench(container, opts = {}) {
+export async function createScriptEditorWorkbench(container: HTMLElement, opts: ScriptWorkbenchOptions = {}): Promise<ScriptWorkbenchHandle> {
     const savedTheme = localStorage.getItem('portal-theme') || 'light';
     if (savedTheme === 'dark') {
         document.body.classList.add('theme-dark');
-    }
-    else {
+    } else {
         document.body.classList.remove('theme-dark');
     }
+
     // Sections are opt-in per host: the Workstation has a real file workspace and git,
     // the Portal has neither (its catalog is folders/reports, and git write-back is a
     // separate roadmap item), so it enables only schema + session.
     // `showSidebar: true` remains shorthand for "everything".
-    const sidebarOpts = (opts.sidebar || null) ?? (opts.showSidebar ? { workspace: true, schema: true, session: true, git: true } : null);
+    const sidebarOpts: ScriptWorkbenchSidebarOptions | null = (opts.sidebar || null) ?? (opts.showSidebar ? { workspace: true, schema: true, session: true, git: true } : null);
     const hasSidebar = Boolean(sidebarOpts);
     const showWorkspace = Boolean(sidebarOpts?.workspace);
     const showSchema = Boolean(sidebarOpts?.schema);
     const showSession = Boolean(sidebarOpts?.session);
     const showGit = Boolean(sidebarOpts?.git);
+
     container.innerHTML = `
         <div class="etlsql-script-workbench ${hasSidebar ? 'etlsql-script-workbench-with-sidebar' : ''}">
             <div class="etlsql-script-workbench-toolbar">
@@ -183,17 +293,17 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 </div>
             </div>
         </div>`;
-    let currentFilePath = opts.title && opts.title !== 'Script' ? opts.title : '';
-    let activeDirectoryHandle = null;
-    let activeFileHandle = null;
+
+    let currentFilePath: string = opts.title && opts.title !== 'Script' ? opts.title : '';
+    let activeDirectoryHandle: any = null;
+    let activeFileHandle: any = null;
     const originalDocUri = opts.editor?.documentUri;
-    const getDocumentUri = () => {
-        if (currentFilePath)
-            return currentFilePath;
-        if (typeof originalDocUri === 'function')
-            return originalDocUri();
+    const getDocumentUri = (): string => {
+        if (currentFilePath) return currentFilePath;
+        if (typeof originalDocUri === 'function') return originalDocUri();
         return originalDocUri || 'portal-designer';
     };
+
     const root = asHtml(container.querySelector('.etlsql-script-workbench'));
     const editorHost = asHtml(container.querySelector('[data-editor]'));
     const resultsHost = asHtml(container.querySelector('[data-results]'));
@@ -201,61 +311,68 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     const palette = asHtml(container.querySelector('[data-palette]'));
     const paletteFilter = asInput(container.querySelector('[data-palette-filter]'));
     const paletteList = asHtml(container.querySelector('[data-palette-list]'));
-    const resultsPanel = createScriptResultsPanel(resultsHost);
-    const editorOpts = {
+    const resultsPanel: ScriptResultsPanel = createScriptResultsPanel(resultsHost);
+
+    const editorOpts: ScriptEditorOptions = {
         ...(opts.editor || {}),
         documentUri: getDocumentUri,
         onCursorActivity: opts.editor?.onCursorActivity,
         // The workbench owns a Messages tab, so the editor's own inline diagnostics
         // list would be a third copy of the same information (gutter + underline).
         diagnosticsPanel: false,
-        onDiagnostics: (list) => {
-            resultsPanel.setDiagnostics(list);
+        onDiagnostics: (list: ScriptEditorDiagnostic[]) => {
+            resultsPanel.setDiagnostics(list as any);
             opts.editor?.onDiagnostics?.(list);
             // Analysis is what registers CREATE CONNECTION / #temp metadata on the
             // server, so this is the point where the sidebar has something new to show.
             scheduleSidebarRefresh();
         },
     };
-    const editor = await createScriptEditor(editorHost, editorOpts);
-    let runAbort = null;
+    const editor: ScriptEditorHandle = await createScriptEditor(editorHost, editorOpts);
+    let runAbort: AbortController | null = null;
+
     const content = asHtml(hasSidebar ? root.querySelector('.etlsql-script-workbench-content') : root);
-    splitter.addEventListener('pointerdown', (event) => {
+
+    splitter.addEventListener('pointerdown', (event: Event) => {
         event.preventDefault();
         splitter.setPointerCapture(asPointer(event).pointerId);
         const rect = content.getBoundingClientRect();
+
         const toolbar = root.querySelector('.etlsql-script-workbench-toolbar');
         const toolbarHeight = (hasSidebar || !toolbar) ? 0 : toolbar.getBoundingClientRect().height;
-        const onMove = (moveEvent) => {
+
+        const onMove = (moveEvent: PointerEvent): void => {
             const minEditor = 100;
             const minResults = 36;
             const splitterHeight = 8;
+
             const minY = rect.top + toolbarHeight + minEditor + (splitterHeight / 2);
             const maxY = rect.bottom - minResults - (splitterHeight / 2);
             const y = Math.max(minY, Math.min(maxY, moveEvent.clientY));
+
             const editorHeight = y - (rect.top + toolbarHeight) - (splitterHeight / 2);
             const resultHeight = rect.bottom - y - (splitterHeight / 2);
+
             if (hasSidebar) {
                 content.style.gridTemplateRows = `${editorHeight}px ${splitterHeight}px ${resultHeight}px`;
-            }
-            else {
+            } else {
                 content.style.gridTemplateRows = `auto ${editorHeight}px ${splitterHeight}px ${resultHeight}px`;
             }
         };
-        const onUp = () => {
-            splitter.removeEventListener('pointermove', onMove);
+        const onUp = (): void => {
+            splitter.removeEventListener('pointermove', onMove as EventListener);
             splitter.removeEventListener('pointerup', onUp);
         };
-        splitter.addEventListener('pointermove', onMove);
+        splitter.addEventListener('pointermove', onMove as EventListener);
         splitter.addEventListener('pointerup', onUp);
     });
-    async function loadFile(filePath) {
+
+    async function loadFile(filePath: string): Promise<void> {
         try {
             const fetcher = opts.authFetch ?? fetch;
             const url = `/api/files?path=${encodeURIComponent(filePath)}`;
             const res = await fetcher(url);
-            if (!res.ok)
-                throw new Error(`HTTP ${res.status}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
             if (data && typeof data.content === 'string') {
                 editor.setValue(data.content);
@@ -270,59 +387,55 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     loadGit();
                 }
             }
-        }
-        catch (err) {
+        } catch (err: any) {
             console.error(err);
             _feedback?.notify?.(`Error loading file: ${err.message}`, { title: 'File not loaded', tone: 'error' });
         }
     }
-    async function loadFiles() {
+
+    async function loadFiles(): Promise<void> {
         const filesEl = root.querySelector('[data-sidebar-files]');
-        if (!filesEl)
-            return;
+        if (!filesEl) return;
         try {
             const fetcher = opts.authFetch ?? fetch;
             const res = await fetcher(opts.workspaceUrl || '/api/workspace');
-            if (!res.ok)
-                throw new Error(`Workspace listing unavailable (HTTP ${res.status})`);
+            if (!res.ok) throw new Error(`Workspace listing unavailable (HTTP ${res.status})`);
             const data = await res.json();
             if (data && data.files) {
                 filesEl.innerHTML = '';
-                data.files.forEach((f) => {
+                data.files.forEach((f: { path: string; size: number }) => {
                     const item = document.createElement('div');
                     item.className = 'etlsql-sidebar-file';
                     item.innerHTML = `<span class="etlsql-tree-label">${escapeHtml(f.path)}</span><span class="etlsql-tree-type">${Math.round(f.size / 10.24) / 100} KB</span>`;
-                    if (f.path === currentFilePath)
-                        item.classList.add('active');
+
+                    if (f.path === currentFilePath) item.classList.add('active');
+
                     item.addEventListener('click', async () => {
                         filesEl.querySelectorAll('.etlsql-sidebar-file').forEach(e => e.classList.remove('active'));
                         item.classList.add('active');
                         if (opts.onFileSelect) {
                             await opts.onFileSelect(f.path);
-                        }
-                        else {
+                        } else {
                             await loadFile(f.path);
                         }
                     });
                     filesEl.appendChild(item);
                 });
-            }
-            else {
+            } else {
                 filesEl.innerHTML = '<div style="color:var(--portal-text-muted, #9da7b1); padding:4px;">No files.</div>';
             }
-        }
-        catch (err) {
+        } catch (err: any) {
             filesEl.innerHTML = `<div class="etlsql-tree-note etlsql-tree-error">${escapeHtml(err.message)}</div>`;
         }
     }
-    async function renderDirectoryTree(dirHandle) {
+
+    async function renderDirectoryTree(dirHandle: any): Promise<void> {
         const filesEl = root.querySelector('[data-sidebar-files]');
-        if (!filesEl)
-            return;
+        if (!filesEl) return;
         filesEl.innerHTML = '<div style="color:var(--portal-text-muted, #9da7b1); padding:4px;">Loading...</div>';
         try {
-            const files = [];
-            async function traverse(handle, relativePath = '') {
+            const files: WorkspaceFileEntry[] = [];
+            async function traverse(handle: any, relativePath = ''): Promise<void> {
                 for await (const entry of handle.values()) {
                     const fullPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
                     if (entry.kind === 'file') {
@@ -333,8 +446,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                                 handle: entry
                             });
                         }
-                    }
-                    else if (entry.kind === 'directory') {
+                    } else if (entry.kind === 'directory') {
                         await traverse(entry, fullPath);
                     }
                 }
@@ -350,8 +462,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 const item = document.createElement('div');
                 item.className = 'etlsql-sidebar-file';
                 item.innerHTML = `<span class="etlsql-tree-label">${escapeHtml(f.path)}</span>`;
-                if (f.path === currentFilePath)
-                    item.classList.add('active');
+                if (f.path === currentFilePath) item.classList.add('active');
                 item.addEventListener('click', async () => {
                     filesEl.querySelectorAll('.etlsql-sidebar-file').forEach(e => e.classList.remove('active'));
                     item.classList.add('active');
@@ -362,34 +473,35 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                         currentFilePath = f.path;
                         activeFileHandle = f.handle;
                         const titleEl = root.querySelector('.etlsql-script-workbench-toolbar strong');
-                        if (titleEl)
-                            titleEl.textContent = f.name || f.path;
-                    }
-                    catch (e) {
+                        if (titleEl) titleEl.textContent = f.name || f.path;
+                    } catch (e: any) {
                         _feedback?.notify?.('Failed to read file: ' + e.message, { title: 'File not loaded', tone: 'error' });
                     }
                 });
                 filesEl.appendChild(item);
             });
-        }
-        catch (err) {
+        } catch (err: any) {
             filesEl.innerHTML = `<div class="etlsql-tree-note etlsql-tree-error">${escapeHtml(err.message)}</div>`;
         }
     }
-    function metadataApiBase() {
+
+    function metadataApiBase(): string {
         const runUrl = opts.runUrl || '';
         return runUrl.includes('/api/designer/run') ? runUrl.split('/api/designer/run')[0] : '';
     }
+
     // ── Sidebar tree primitives ────────────────────────────────────────────────
     // Shared by the schema explorer and the session explorer so connections, tables,
     // temp tables and columns all expand and drag identically.
+
     // A private MIME type keeps CodeMirror's own text drag/drop untouched — we only
     // intercept drops that originated from one of these tree rows.
     const SNIPPET_MIME = 'application/x-etlsql-snippet';
-    function makeDraggable(el, snippet) {
+
+    function makeDraggable(el: HTMLElement, snippet: string): void {
         el.draggable = true;
         el.title = `Drag into the editor to insert "${snippet}"`;
-        el.addEventListener('dragstart', (event) => {
+        el.addEventListener('dragstart', (event: DragEvent) => {
             event.stopPropagation();
             if (event.dataTransfer) {
                 event.dataTransfer.setData(SNIPPET_MIME, snippet);
@@ -400,7 +512,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         });
         el.addEventListener('dragend', () => el.classList.remove('dragging'));
     }
-    function makeColumnRow(column, snippet) {
+
+    function makeColumnRow(column: SchemaColumnEntry, snippet: string): HTMLElement {
         const row = document.createElement('div');
         row.className = 'etlsql-tree-row etlsql-tree-column';
         const type = column.type ?? column.dataType ?? '';
@@ -409,14 +522,17 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         makeDraggable(row, snippet);
         return row;
     }
+
     // Builds a collapsible node. `loadChildren` runs once, on first expand.
-    function makeTreeNode(treeOpts) {
+    function makeTreeNode(treeOpts: TreeNodeOptions): HTMLElement {
         const { label, icon, className, snippet, loadChildren, preview } = treeOpts;
         const node = document.createElement('div');
         node.className = 'etlsql-tree-node';
+
         const header = document.createElement('div');
         header.className = `etlsql-tree-row etlsql-tree-header ${className || ''}`;
         header.innerHTML = `<span class="etlsql-tree-caret">▶</span><span class="etlsql-tree-icon">${icon || ''}</span><span class="etlsql-tree-label">${escapeHtml(label)}</span>`;
+
         if (preview && opts.dataPreviewUrl) {
             const action = document.createElement('button');
             action.type = 'button';
@@ -431,8 +547,10 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             });
             header.appendChild(action);
         }
+
         const children = document.createElement('div');
         children.className = 'etlsql-tree-children';
+
         let loaded = false;
         header.addEventListener('click', async (event) => {
             event.stopPropagation();
@@ -442,29 +560,31 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 children.innerHTML = '<div class="etlsql-tree-note">Loading…</div>';
                 try {
                     await loadChildren?.(children);
-                }
-                catch (err) {
+                } catch (err: any) {
                     children.innerHTML = `<div class="etlsql-tree-note etlsql-tree-error">${escapeHtml(err.message)}</div>`;
                     loaded = false;
                 }
             }
         });
-        if (snippet)
-            makeDraggable(header, snippet);
+
+        if (snippet) makeDraggable(header, snippet);
         node.append(header, children);
         return node;
     }
+
     // Re-fetching metadata after every keystroke-triggered analysis would collapse any
     // tree the user had expanded, so each section only re-renders when its data changed.
-    let schemaSignature = null;
-    let sessionSignature = null;
-    let sidebarRefreshTimer = null;
-    let dataPreviewAbort = null;
-    async function previewRows(source, action) {
+    let schemaSignature: string | null = null;
+    let sessionSignature: string | null = null;
+    let sidebarRefreshTimer: any = null;
+    let dataPreviewAbort: AbortController | null = null;
+
+    async function previewRows(source: any, action: HTMLElement): Promise<void> {
         if (dataPreviewAbort) {
             dataPreviewAbort.abort();
             return;
         }
+
         const abort = new AbortController();
         dataPreviewAbort = abort;
         const originalText = action.textContent || '';
@@ -476,9 +596,10 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             { type: 'status', status: 'Previewing' },
             { type: 'message', level: 'sys', text: `Reading bounded rows from ${source.tempTable || `${source.connection}.${source.table}`}…` },
         ]);
+
         try {
             const fetcher = opts.authFetch ?? fetch;
-            const response = await fetcher(opts.dataPreviewUrl, {
+            const response = await fetcher(opts.dataPreviewUrl!, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 signal: abort.signal,
@@ -489,10 +610,10 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 try {
                     const problem = await response.json();
                     detail = problem?.error || detail;
-                }
-                catch { /* keep the status */ }
+                } catch { /* keep the status */ }
                 throw new Error(detail);
             }
+
             const result = await response.json();
             const label = result.sourceKind === 'temp' ? 'Session temp' : 'Governed source';
             resultsPanel.replay([
@@ -512,48 +633,42 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 { type: 'message', level: 'info', text: result.message || 'Preview complete.' },
                 { type: 'done', exitCode: 0, status: result.message || 'Preview complete' },
             ]);
-        }
-        catch (error) {
+        } catch (error: any) {
             const cancelled = abort.signal.aborted || error?.name === 'AbortError';
             resultsPanel.replay([
                 { type: 'message', level: cancelled ? 'sys' : 'error', text: cancelled ? 'Preview cancelled.' : `Preview failed: ${error.message}` },
                 { type: 'done', exitCode: cancelled ? 0 : 1, status: cancelled ? 'Preview cancelled' : 'Preview failed' },
             ]);
-        }
-        finally {
+        } finally {
             resultsPanel.stopElapsed();
-            if (dataPreviewAbort === abort)
-                dataPreviewAbort = null;
+            if (dataPreviewAbort === abort) dataPreviewAbort = null;
             action.textContent = originalText;
             action.classList.remove('is-loading');
         }
     }
-    function scheduleSidebarRefresh() {
-        if (!showSchema && !showSession)
-            return;
+
+    function scheduleSidebarRefresh(): void {
+        if (!showSchema && !showSession) return;
         clearTimeout(sidebarRefreshTimer);
         sidebarRefreshTimer = setTimeout(() => {
-            if (showSchema)
-                loadSchema();
-            if (showSession)
-                loadSession();
+            if (showSchema) loadSchema();
+            if (showSession) loadSession();
         }, 200);
     }
-    async function loadSchema() {
+
+    async function loadSchema(): Promise<void> {
         const schemaEl = root.querySelector('[data-sidebar-schema]');
-        if (!schemaEl)
-            return;
+        if (!schemaEl) return;
         try {
             const fetcher = opts.authFetch ?? fetch;
             const apiBase = metadataApiBase();
             const docUri = getDocumentUri();
+
             const res = await fetcher(`${apiBase}/api/session/metadata?documentUri=${encodeURIComponent(docUri)}`);
-            if (!res.ok)
-                throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data: SchemaMetadataResult = await res.json();
             const signature = JSON.stringify(data?.connections ?? []);
-            if (signature === schemaSignature)
-                return;
+            if (signature === schemaSignature) return;
             schemaSignature = signature;
             if (data && data.connections && data.connections.length > 0) {
                 schemaEl.innerHTML = '';
@@ -562,12 +677,11 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                         label: conn,
                         icon: '🔌',
                         className: 'etlsql-tree-connection',
-                        loadChildren: async (host) => {
+                        loadChildren: async (host: HTMLElement) => {
                             const schemaRes = await fetcher(`${apiBase}/api/designer/schema?connection=${encodeURIComponent(conn)}&documentUri=${encodeURIComponent(docUri)}`);
-                            if (!schemaRes.ok)
-                                throw new Error(`HTTP ${schemaRes.status}`);
+                            if (!schemaRes.ok) throw new Error(`HTTP ${schemaRes.status}`);
                             const schemaData = await schemaRes.json();
-                            const tables = schemaData?.tables ?? [];
+                            const tables: SchemaTableEntry[] = schemaData?.tables ?? [];
                             if (!tables.length) {
                                 host.innerHTML = '<div class="etlsql-tree-note">No tables or views.</div>';
                                 return;
@@ -580,7 +694,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                                     className: 'etlsql-tree-table',
                                     snippet: `${conn}.${table.name}`,
                                     preview: { sourceKind: 'connection', connection: conn, table: table.name },
-                                    loadChildren: (columnHost) => {
+                                    loadChildren: (columnHost: HTMLElement) => {
                                         const columns = (table.columns ?? []).map(c => typeof c === 'string' ? { name: c } : c);
                                         if (!columns.length) {
                                             columnHost.innerHTML = '<div class="etlsql-tree-note">No columns</div>';
@@ -596,35 +710,33 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                         },
                     }));
                 });
-            }
-            else {
+            } else {
                 schemaEl.innerHTML = '<div class="etlsql-tree-note">No active connections.</div>';
             }
-        }
-        catch (err) {
+        } catch (err: any) {
             schemaSignature = null;
             schemaEl.innerHTML = `<div style="color:var(--portal-danger, #ff7b72);">${escapeHtml(err.message)}</div>`;
         }
     }
-    async function loadSession() {
+
+    async function loadSession(): Promise<void> {
         const varsEl = root.querySelector('[data-sidebar-variables]');
-        if (!varsEl)
-            return;
+        if (!varsEl) return;
         try {
             const fetcher = opts.authFetch ?? fetch;
             const apiBase = metadataApiBase();
             const docUri = getDocumentUri();
+
             const res = await fetcher(`${apiBase}/api/session/metadata?documentUri=${encodeURIComponent(docUri)}`);
-            if (!res.ok)
-                throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data: SchemaMetadataResult = await res.json();
             const signature = JSON.stringify([data?.variables ?? [], data?.tempTables ?? []]);
-            if (signature === sessionSignature)
-                return;
+            if (signature === sessionSignature) return;
             sessionSignature = signature;
             const variables = data?.variables ?? [];
             const tempTables = data?.tempTables ?? [];
             varsEl.innerHTML = '';
+
             for (const variable of variables) {
                 const row = document.createElement('div');
                 row.className = 'etlsql-tree-row etlsql-tree-variable';
@@ -634,6 +746,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 makeDraggable(row, variable.name);
                 varsEl.appendChild(row);
             }
+
             // Temp tables expand to their columns exactly like a schema table does.
             for (const table of tempTables) {
                 varsEl.appendChild(makeTreeNode({
@@ -642,7 +755,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     className: 'etlsql-tree-temp',
                     snippet: table.name,
                     preview: { sourceKind: 'temp', connection: opts.connectionRef || null, tempTable: table.name },
-                    loadChildren: (columnHost) => {
+                    loadChildren: (columnHost: HTMLElement) => {
                         const columns = (table.columns ?? []).map(c => (typeof c === 'string' ? { name: c, type: '' } : c));
                         if (!columns.length) {
                             columnHost.innerHTML = '<div class="etlsql-tree-note">No columns</div>';
@@ -655,48 +768,44 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     },
                 }));
             }
+
             if (!variables.length && !tempTables.length) {
                 varsEl.innerHTML = '<div class="etlsql-tree-note">No variables/temp tables.</div>';
             }
-        }
-        catch (err) {
+        } catch (err: any) {
             sessionSignature = null;
             varsEl.innerHTML = `<div class="etlsql-tree-note etlsql-tree-error">${escapeHtml(err.message)}</div>`;
         }
     }
-    function hideGitSection() {
+
+    function hideGitSection(): void {
         // Not every host exposes source control (see the Git Integration item in the
         // Unified Script Editor Roadmap). Hide the section rather than parking a fetch
         // error in the sidebar.
         root.querySelector('[data-sidebar-git]')?.remove();
         root.querySelector('[data-sidebar-git-header]')?.remove();
     }
-    async function loadGit() {
+
+    async function loadGit(): Promise<void> {
         const gitEl = root.querySelector('[data-sidebar-git]');
         const branchBadge = root.querySelector('[data-workbench-branch]');
-        if (!gitEl)
-            return;
+        if (!gitEl) return;
         try {
             const fetcher = opts.authFetch ?? fetch;
             const res = await fetcher(opts.gitStatusUrl || '/api/git/status');
-            if (!res.ok) {
-                hideGitSection();
-                if (branchBadge)
-                    asHtml(branchBadge).style.display = 'none';
-                return;
-            }
-            const data = await res.json();
+            if (!res.ok) { hideGitSection(); if (branchBadge) asHtml(branchBadge).style.display = 'none'; return; }
+            const data: GitStatusResult = await res.json();
             if (data && (data.branch || data.isGitRepository !== false)) {
                 const branchName = data.branch || opts.gitStatus?.branch || '';
                 if (branchBadge) {
                     if (branchName) {
                         branchBadge.textContent = `🌿 ${branchName}`;
                         asHtml(branchBadge).style.display = 'inline-block';
-                    }
-                    else {
+                    } else {
                         asHtml(branchBadge).style.display = 'none';
                     }
                 }
+
                 let gitHtml = `<div class="etlsql-tree-row etlsql-tree-header">🌿 ${escapeHtml(branchName)}</div>`;
                 if (data.staged && data.staged.length > 0) {
                     gitHtml += '<div class="etlsql-tree-note">Staged</div>';
@@ -715,6 +824,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     <button type="button" class="btn btn-sm btn-primary" data-git-commit style="margin-top:4px; font-size:11px; font-weight:600; padding:4px; width: 100%;">Commit Changes</button>
                 `;
                 gitEl.innerHTML = gitHtml;
+
                 const commitBtn = asButton(gitEl.querySelector('[data-git-commit]'));
                 const commentInput = asInput(gitEl.querySelector('[data-git-comment]'));
                 commitBtn?.addEventListener('click', async () => {
@@ -724,8 +834,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                         commentInput?.focus();
                         return;
                     }
-                    if (commitBtn)
-                        commitBtn.disabled = true;
+                    if (commitBtn) commitBtn.disabled = true;
                     try {
                         const cRes = await fetcher('/api/git/commit', {
                             method: 'POST',
@@ -737,32 +846,25 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                             _feedback?.notify?.(`Revision ${cData.sourceRevision || cData.rev || ''} was committed.`, { title: 'Commit completed', tone: 'success', auditAction: 'designer.source.commit' });
                             await loadGit();
                             await loadFiles();
-                        }
-                        else {
+                        } else {
                             _feedback?.notify?.(cData.message || 'Nothing to commit.', { title: 'No commit created', tone: 'info' });
                         }
-                    }
-                    catch (e) {
+                    } catch (e: any) {
                         _feedback?.notify?.('Commit failed: ' + e.message, { title: 'Commit failed', tone: 'error' });
-                    }
-                    finally {
-                        if (commitBtn)
-                            commitBtn.disabled = false;
+                    } finally {
+                        if (commitBtn) commitBtn.disabled = false;
                     }
                 });
-            }
-            else {
+            } else {
                 hideGitSection();
-                if (branchBadge)
-                    asHtml(branchBadge).style.display = 'none';
+                if (branchBadge) asHtml(branchBadge).style.display = 'none';
             }
-        }
-        catch {
+        } catch {
             hideGitSection();
-            if (branchBadge)
-                asHtml(branchBadge).style.display = 'none';
+            if (branchBadge) asHtml(branchBadge).style.display = 'none';
         }
     }
+
     const toggleBtn = container.querySelector('[data-toggle-sidebar]');
     const sidebar = container.querySelector('[data-sidebar]');
     toggleBtn?.classList.add('active'); // sidebar starts visible
@@ -770,67 +872,64 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         if (sidebar && asHtml(sidebar).style.display === 'none') {
             asHtml(sidebar).style.display = 'flex';
             toggleBtn.classList.add('active');
-        }
-        else if (sidebar) {
+        } else if (sidebar) {
             asHtml(sidebar).style.display = 'none';
             toggleBtn.classList.remove('active');
         }
     });
+
     const toggleThemeBtn = container.querySelector('[data-toggle-theme]');
     toggleThemeBtn?.addEventListener('click', () => {
         const isDark = document.body.classList.toggle('theme-dark');
         localStorage.setItem('portal-theme', isDark ? 'dark' : 'light');
+
         // Two surfaces in this workbench bake the theme in at render time rather than reading it
         // from CSS: the flow DAG picks its palette when `renderDag` is called, and the preview
         // iframe is handed a `dark` flag with its manifest. Both have to be told again, and only
         // if they are actually open — neither redraw is free.
-        if (flowOverlay?.classList.contains('active'))
-            refreshFlow();
+        if (flowOverlay?.classList.contains('active')) refreshFlow();
         if (_pendingManifest && asIframe(previewFrame)?.contentWindow) {
-            asIframe(previewFrame).contentWindow.postMessage({
+            asIframe(previewFrame).contentWindow!.postMessage({
                 type: 'reportManifest',
                 manifest: _pendingManifest,
                 dark: isDark,
             }, '*');
         }
     });
+
     const openDirBtn = container.querySelector('[data-open-directory]');
     openDirBtn?.addEventListener('click', async () => {
         try {
-            activeDirectoryHandle = await window.showDirectoryPicker();
+            activeDirectoryHandle = await (window as any).showDirectoryPicker();
             await renderDirectoryTree(activeDirectoryHandle);
-        }
-        catch (err) {
+        } catch (err) {
             console.error('Failed to open directory:', err);
         }
     });
-    if (showWorkspace)
-        loadFiles();
-    if (showSchema)
-        loadSchema();
-    if (showSession)
-        loadSession();
-    if (showGit)
-        loadGit();
+
+    if (showWorkspace) loadFiles();
+    if (showSchema) loadSchema();
+    if (showSession) loadSession();
+    if (showGit) loadGit();
+
     // scope: 'script' runs the whole file (Run); 'selection' runs the highlighted text
     // or the statement under the cursor (Run Selected) — see the roadmap's toolbar schema.
     // Hosts signal a destructive-statement refusal with a RUN_DESTRUCTIVE diagnostic code.
-    function isDestructiveRefusal(result) {
+    function isDestructiveRefusal(result: any): boolean {
         return result?.success === false
-            && (result.diagnostics ?? []).some((d) => d?.code === 'RUN_DESTRUCTIVE');
+            && (result.diagnostics ?? []).some((d: any) => d?.code === 'RUN_DESTRUCTIVE');
     }
-    function setRunning(isRunning) {
+
+    function setRunning(isRunning: boolean): void {
         root.classList.toggle('is-running', isRunning);
         const runBtn = asButton(container.querySelector('[data-run]'));
         const runSelBtn = asButton(container.querySelector('[data-run-selected]'));
-        if (runBtn)
-            runBtn.disabled = isRunning;
-        if (runSelBtn)
-            runSelBtn.disabled = isRunning;
+        if (runBtn) runBtn.disabled = isRunning;
+        if (runSelBtn) runSelBtn.disabled = isRunning;
     }
-    async function run(scope = 'script', confirmDestructive = false) {
-        if (!opts.runUrl && !opts.onRun)
-            return;
+
+    async function run(scope: 'script' | 'selection' = 'script', confirmDestructive = false): Promise<void> {
+        if (!opts.runUrl && !opts.onRun) return;
         const script = editor.getValue();
         let runText = script;
         if (scope === 'selection') {
@@ -850,16 +949,17 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 ? await opts.onRun({ script, selection: runText, connectionRef: opts.connectionRef || null, confirmDestructive, signal: runAbort.signal })
                 : await (async () => {
                     const fetcher = opts.authFetch ?? ((url, init) => fetch(url, init));
-                    const res = await fetcher(opts.runUrl, {
+                    const res = await fetcher(opts.runUrl!, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ script, selection: runText, connectionRef: opts.connectionRef || null, documentUri: getDocumentUri(), confirmDestructive }),
-                        signal: runAbort.signal,
+                        signal: runAbort!.signal,
                     });
-                    if (!res?.ok)
-                        throw new Error(await res.text());
+
+                    if (!res?.ok) throw new Error(await res.text());
                     return await res.json();
                 })();
+
             // The host refuses destructive statements until they are acknowledged. Ask once, then
             // re-run confirmed rather than making the user edit the script to get past the guard.
             if (!confirmDestructive && isDestructiveRefusal(result)) {
@@ -868,8 +968,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 const confirmed = await _feedback?.confirm?.(result.message, { title: 'Run despite validation findings?', impact: 'Running may execute a script that did not pass validation.', confirmLabel: 'Run anyway', danger: true, auditAction: 'designer.run.override' });
                 if (confirmed) {
                     await run(scope, true);
-                }
-                else {
+                } else {
                     resultsPanel.replay([
                         { type: 'message', level: 'warn', text: 'Run cancelled — destructive statements not confirmed.' },
                         { type: 'done', exitCode: 1, status: 'Cancelled' },
@@ -877,9 +976,9 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 }
                 return;
             }
+
             resultsPanel.replay(normalizeRunTrace(result, runText));
-        }
-        catch (err) {
+        } catch (err: any) {
             if (err?.name === 'AbortError') {
                 resultsPanel.replay([
                     { type: 'message', level: 'warn', text: 'Run cancelled.' },
@@ -892,32 +991,32 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 { type: 'message', level: 'error', text: err?.message || 'Run failed.' },
                 { type: 'done', exitCode: 1 },
             ]);
-        }
-        finally {
+        } finally {
             setRunning(false);
             resultsPanel.stopElapsed();
         }
     }
-    function cancelRun() {
+
+    function cancelRun(): void {
         runAbort?.abort();
     }
-    async function save() {
+
+    async function save(): Promise<void> {
         if (activeFileHandle) {
             try {
                 const writable = await activeFileHandle.createWritable();
                 await writable.write(editor.getValue());
                 await writable.close();
                 _feedback?.notify?.('The script was saved.', { title: 'Saved', tone: 'success', auditAction: 'designer.file.save' });
-            }
-            catch (err) {
+            } catch (err: any) {
                 _feedback?.notify?.('Browser save failed: ' + err.message, { title: 'Save failed', tone: 'error' });
             }
             return;
         }
+
         if (activeDirectoryHandle) {
             const requestedPath = await _feedback?.prompt?.('Choose a path for the new script.', { title: 'Save script as', label: 'Relative file path', value: currentFilePath || 'new-script.etlsql', required: true, pattern: /\.(?:etlsql|rptsql)$/i, patternMessage: 'Use an .etlsql or .rptsql filename.', confirmLabel: 'Save script', auditAction: 'designer.file.save-as' });
-            if (!requestedPath)
-                return;
+            if (!requestedPath) return;
             try {
                 activeFileHandle = await activeDirectoryHandle.getFileHandle(requestedPath, { create: true });
                 const writable = await activeFileHandle.createWritable();
@@ -930,20 +1029,18 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 }
                 await renderDirectoryTree(activeDirectoryHandle);
                 _feedback?.notify?.('The script was saved.', { title: 'Saved', tone: 'success', auditAction: 'designer.file.save-as' });
-            }
-            catch (err) {
+            } catch (err: any) {
                 _feedback?.notify?.('Browser save failed: ' + err.message, { title: 'Save failed', tone: 'error' });
             }
             return;
         }
+
         if (opts.onSave) {
             await opts.onSave?.(editor.getValue(), currentFilePath);
-        }
-        else {
+        } else {
             if (!currentFilePath) {
                 const requestedPath = await _feedback?.prompt?.('Choose a path for the new script.', { title: 'Save script as', label: 'Relative file path', value: 'new-script.etlsql', required: true, pattern: /\.(?:etlsql|rptsql)$/i, patternMessage: 'Use an .etlsql or .rptsql filename.', confirmLabel: 'Save script', auditAction: 'designer.file.save-as' });
-                if (!requestedPath)
-                    return;
+                if (!requestedPath) return;
                 currentFilePath = requestedPath;
                 const titleEl = root.querySelector('.etlsql-script-workbench-toolbar strong');
                 if (titleEl) {
@@ -957,42 +1054,41 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ path: currentFilePath, content: editor.getValue() })
                 });
-                if (!res.ok)
-                    throw new Error(`HTTP ${res.status}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 await loadFiles();
-            }
-            catch (err) {
+            } catch (err: any) {
                 console.error(err);
                 _feedback?.notify?.(`Error saving file: ${err.message}`, { title: 'Save failed', tone: 'error' });
             }
         }
     }
-    async function apply() {
+
+    async function apply(): Promise<void> {
         await opts.onApply?.(editor.getValue());
     }
+
     // ── Report preview ─────────────────────────────────────────────────────────
     const previewOverlay = container.querySelector('[data-preview-overlay]');
     const previewFrame = container.querySelector('[data-preview-frame]');
     const previewStatusEl = container.querySelector('[data-preview-status]');
     const previewUrl = opts.previewUrl ?? '/designer-preview.html';
-    let _pendingManifest = null;
-    let _previewMessageHandler = null;
-    function setPreviewStatus(text, kind) {
-        if (!previewStatusEl)
-            return;
+    let _pendingManifest: any = null;
+    let _previewMessageHandler: ((event: MessageEvent) => void) | null = null;
+
+    function setPreviewStatus(text: string, kind: 'error' | 'pending' | 'neutral'): void {
+        if (!previewStatusEl) return;
         previewStatusEl.textContent = text || '';
-        const colors = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
+        const colors: Record<string, string> = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
         asHtml(previewStatusEl).style.color = colors[kind] || colors.neutral;
     }
+
     if (previewFrame) {
         // The preview iframe posts 'previewReady' after each (re)load; hand it the latest manifest.
-        _previewMessageHandler = (event) => {
-            if (event.source !== asIframe(previewFrame).contentWindow)
-                return;
-            if (event.data?.type !== 'previewReady')
-                return;
+        _previewMessageHandler = (event: MessageEvent) => {
+            if (event.source !== asIframe(previewFrame).contentWindow) return;
+            if (event.data?.type !== 'previewReady') return;
             if (_pendingManifest) {
-                asIframe(previewFrame).contentWindow.postMessage({
+                asIframe(previewFrame).contentWindow!.postMessage({
                     type: 'reportManifest',
                     manifest: _pendingManifest,
                     dark: document.body.classList.contains('theme-dark'),
@@ -1001,22 +1097,19 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         };
         window.addEventListener('message', _previewMessageHandler);
     }
-    async function refreshPreview() {
+
+    async function refreshPreview(): Promise<void> {
         setPreviewStatus('Building preview…', 'pending');
         try {
             const script = editor.getValue();
-            if (!script.trim()) {
-                setPreviewStatus('Nothing to preview yet.', 'neutral');
-                return;
-            }
+            if (!script.trim()) { setPreviewStatus('Nothing to preview yet.', 'neutral'); return; }
             const fetcher = opts.authFetch ?? ((url, init) => fetch(url, init));
-            const res = await fetcher(opts.previewApiUrl, {
+            const res = await fetcher(opts.previewApiUrl!, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ script, connectionRef: opts.connectionRef || null }),
             });
-            if (!res?.ok)
-                throw new Error(await res.text());
+            if (!res?.ok) throw new Error(await res.text());
             const manifest = await res.json();
             _pendingManifest = manifest;
             // Reload the host page so report-runtime.js boots fresh with the new manifest.
@@ -1026,35 +1119,36 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             const pages = manifest?.pages?.length ?? 0;
             const visuals = manifest?.visuals?.length ?? 0;
             setPreviewStatus(`Rendered ${pages} page${pages === 1 ? '' : 's'}, ${visuals} visual${visuals === 1 ? '' : 's'}.`, 'neutral');
-        }
-        catch (e) {
+        } catch (e: any) {
             setPreviewStatus('Preview failed: ' + (e?.message || e), 'error');
         }
     }
-    function openPreview() {
-        if (!previewOverlay)
-            return;
+
+    function openPreview(): void {
+        if (!previewOverlay) return;
         previewOverlay.classList.add('active');
         refreshPreview();
     }
-    function closePreview() {
+
+    function closePreview(): void {
         previewOverlay?.classList.remove('active');
     }
+
     // ── Design-time flow preview ──────────────────────────────────────────────
     const flowOverlay = container.querySelector('[data-flow-overlay]');
     const flowBody = asHtml(container.querySelector('[data-flow-body]'));
     const flowStatusEl = container.querySelector('[data-flow-status]');
-    let flowDagInstance = null;
-    function setFlowStatus(text, kind) {
-        if (!flowStatusEl)
-            return;
+    let flowDagInstance: DagHandle | null = null;
+
+    function setFlowStatus(text: string, kind: 'error' | 'pending' | 'neutral'): void {
+        if (!flowStatusEl) return;
         flowStatusEl.textContent = text || '';
-        const colors = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
+        const colors: Record<string, string> = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
         asHtml(flowStatusEl).style.color = colors[kind] || colors.neutral;
     }
-    async function refreshFlow() {
-        if (!opts.dagUrl || !flowBody)
-            return;
+
+    async function refreshFlow(): Promise<void> {
+        if (!opts.dagUrl || !flowBody) return;
         setFlowStatus('Building flow...', 'pending');
         flowDagInstance?.dispose?.();
         flowDagInstance = null;
@@ -1066,14 +1160,14 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 setFlowStatus('Nothing to diagram.', 'neutral');
                 return;
             }
+
             const fetcher = opts.authFetch ?? ((url, init) => fetch(url, init));
             const res = await fetcher(opts.dagUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ script, documentUri: getDocumentUri() }),
             });
-            if (!res?.ok)
-                throw new Error(await res.text());
+            if (!res?.ok) throw new Error(await res.text());
             const data = await res.json();
             if (data?.error || data?.parsed === false) {
                 throw new Error(data.error || 'Script flow could not be parsed.');
@@ -1084,31 +1178,31 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 edges: graph.edges ?? graph.Edges ?? [],
             }, {
                 theme: document.body.classList.contains('theme-dark') ? 'vscode' : 'portal',
-                onNodeClick: (_nodeId, meta) => {
+                onNodeClick: (_nodeId: string | null, meta: any) => {
                     const line = meta?.line ?? meta?.Line;
-                    if (line)
-                        editor.gotoLine?.(line);
+                    if (line) editor.gotoLine?.(line);
                 },
             });
             const nodeCount = (graph.nodes ?? graph.Nodes ?? []).length;
             const edgeCount = (graph.edges ?? graph.Edges ?? []).length;
             setFlowStatus(`${nodeCount} node${nodeCount === 1 ? '' : 's'}, ${edgeCount} edge${edgeCount === 1 ? '' : 's'}.`, 'neutral');
-        }
-        catch (e) {
+        } catch (e: any) {
             flowBody.innerHTML = `<div class="etlsql-dag-empty">Flow preview failed: ${escapeHtml(e?.message || e)}</div>`;
             setFlowStatus('Flow failed.', 'error');
         }
     }
-    function openFlow() {
-        if (!flowOverlay)
-            return;
+
+    function openFlow(): void {
+        if (!flowOverlay) return;
         flowOverlay.classList.add('active');
         refreshFlow();
     }
-    function closeFlow() {
+
+    function closeFlow(): void {
         flowOverlay?.classList.remove('active');
     }
-    function commandItems() {
+
+    function commandItems(): CommandPaletteItem[] {
         return [
             { id: 'run', label: 'ETL-SQL: Run Script', enabled: Boolean(opts.runUrl || opts.onRun), action: () => run('script') },
             { id: 'run-selected', label: 'ETL-SQL: Run Selection or Current Statement', enabled: Boolean(opts.runUrl || opts.onRun), action: () => run('selection') },
@@ -1124,21 +1218,17 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             { id: 'close', label: 'ETL-SQL: Close Editor', enabled: Boolean(opts.onClose), action: () => opts.onClose?.() },
         ].filter(c => c.enabled);
     }
-    async function openConnectionWizard() {
+
+    async function openConnectionWizard(): Promise<void> {
         try {
             const { createConnectionWizard } = await import('./connection-wizard.js');
             const fetcher = opts.authFetch ?? fetch;
             const apiBase = metadataApiBase();
             const scriptText = editor.getValue();
-            const existingNames = [];
-            for (const m of scriptText.matchAll(/\bCREATE\s+CONNECTION\s+([a-zA-Z0-9_#]+)/gi)) {
-                if (m[1])
-                    existingNames.push(m[1]);
-            }
-            for (const m of scriptText.matchAll(/\bCREATE\s+DATASET\s+([a-zA-Z0-9_#]+)/gi)) {
-                if (m[1])
-                    existingNames.push(m[1]);
-            }
+            const existingNames: string[] = [];
+            for (const m of scriptText.matchAll(/\bCREATE\s+CONNECTION\s+([a-zA-Z0-9_#]+)/gi)) { if (m[1]) existingNames.push(m[1]); }
+            for (const m of scriptText.matchAll(/\bCREATE\s+DATASET\s+([a-zA-Z0-9_#]+)/gi)) { if (m[1]) existingNames.push(m[1]); }
+
             createConnectionWizard({
                 host: document.body,
                 mode: 'script',
@@ -1150,55 +1240,50 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                             const d = await res.json();
                             return Array.isArray(d) ? d : (d.schemas || []);
                         }
-                    }
-                    catch (e) {
+                    } catch (e) {
                         console.warn('Failed to fetch schemas', e);
                     }
                     return [];
                 },
-                onTest: async (req) => {
+                onTest: async (req: any) => {
                     const res = await fetcher(`${apiBase}/api/connectors/test`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(req)
                     });
-                    if (!res.ok)
-                        throw new Error(await res.text());
+                    if (!res.ok) throw new Error(await res.text());
                     return await res.json();
                 },
-                onParseString: async (rawString, hint) => {
+                onParseString: async (rawString: string, hint: string) => {
                     const res = await fetcher(`${apiBase}/api/connectors/parse-string`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ connectionString: rawString, hintProvider: hint })
                     });
-                    if (!res.ok)
-                        throw new Error(await res.text());
+                    if (!res.ok) throw new Error(await res.text());
                     return await res.json();
                 },
-                onInsert: (sql) => {
+                onInsert: (sql: string) => {
                     insertConnectionSql(sql);
                 }
             });
-        }
-        catch (err) {
+        } catch (err: any) {
             _feedback?.notify?.('Failed to open Connection Wizard: ' + err.message, { title: 'Wizard Error', tone: 'error' });
         }
     }
-    function insertConnectionSql(sql) {
+
+    function insertConnectionSql(sql: string): void {
         const current = editor.getValue();
         if (!current.trim()) {
             editor.setValue(sql + '\n\n');
-        }
-        else {
+        } else {
             const matches = [...current.matchAll(/CREATE\s+CONNECTION\s+[\s\S]*?(?:;|\n\);?)/gi)];
             if (matches.length > 0) {
                 const last = matches[matches.length - 1];
                 const pos = (last.index ?? 0) + last[0].length;
                 const updated = current.slice(0, pos) + '\n\n' + sql + current.slice(pos);
                 editor.setValue(updated);
-            }
-            else {
+            } else {
                 editor.setValue(sql + '\n\n' + current);
             }
         }
@@ -1206,7 +1291,8 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         scheduleSidebarRefresh();
         _feedback?.notify?.('Connection inserted into script.', { title: 'Connection Created', tone: 'success' });
     }
-    function renderPalette() {
+
+    function renderPalette(): void {
         const filter = String(asInput(paletteFilter).value || '').toLowerCase();
         const commands = commandItems().filter(c => !filter || c.label.toLowerCase().includes(filter));
         paletteList.innerHTML = commands.length
@@ -1220,19 +1306,21 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             });
         });
     }
-    function openPalette() {
+
+    function openPalette(): void {
         asHtml(palette).hidden = false;
         asInput(paletteFilter).value = '';
         renderPalette();
         asInput(paletteFilter).focus();
     }
-    function closePalette() {
+
+    function closePalette(): void {
         asHtml(palette).hidden = true;
         const cmEl = editorHost.querySelector('.cm-editor');
-        if (cmEl)
-            asHtml(cmEl).focus();
+        if (cmEl) asHtml(cmEl).focus();
     }
-    async function formatScript() {
+
+    async function formatScript(): Promise<void> {
         if (opts.onFormat) {
             await opts.onFormat(editor.getValue());
             return;
@@ -1248,15 +1336,14 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             });
             if (res.ok) {
                 const data = await res.json();
-                if (data?.script)
-                    editor.setValue(data.script);
+                if (data?.script) editor.setValue(data.script);
             }
-        }
-        catch (e) {
+        } catch (e) {
             console.warn('Format failed:', e);
         }
     }
-    async function openFormatterSettingsModal() {
+
+    async function openFormatterSettingsModal(): Promise<void> {
         let modalEl = container.querySelector('#etlsql-formatter-modal');
         if (!modalEl) {
             modalEl = document.createElement('div');
@@ -1265,6 +1352,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             container.appendChild(modalEl);
         }
         const modal = asHtml(modalEl);
+
         modal.innerHTML = `
             <div class="etlsql-formatter-header">
                 <strong>⚙️ Formatter Settings</strong>
@@ -1320,23 +1408,21 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 <span id="fmt-status" class="etlsql-fmt-status"></span>
             </div>
         `;
+
         modal.style.display = 'flex';
         modal.querySelector('[data-fmt-close]')?.addEventListener('click', () => { modal.style.display = 'none'; });
+
         try {
             const fetcher = opts.authFetch ?? fetch;
             const docUri = getDocumentUri();
             const res = await fetcher(`/api/formatter/config?documentUri=${encodeURIComponent(docUri)}`);
             if (res.ok) {
-                const config = await res.json();
+                const config: FormatterConfig = await res.json();
                 if (config) {
-                    if (config.keywordCasing)
-                        asSelect(modal.querySelector('#fmt-casing')).value = config.keywordCasing.toLowerCase();
-                    if (config.indentSize)
-                        asSelect(modal.querySelector('#fmt-indent')).value = String(config.indentSize);
-                    if (config.commaPlacement)
-                        asSelect(modal.querySelector('#fmt-comma')).value = config.commaPlacement.toLowerCase();
-                    if (config.lineWidth)
-                        asInput(modal.querySelector('#fmt-linewidth')).value = String(config.lineWidth);
+                    if (config.keywordCasing) asSelect(modal.querySelector('#fmt-casing')).value = config.keywordCasing.toLowerCase();
+                    if (config.indentSize) asSelect(modal.querySelector('#fmt-indent')).value = String(config.indentSize);
+                    if (config.commaPlacement) asSelect(modal.querySelector('#fmt-comma')).value = config.commaPlacement.toLowerCase();
+                    if (config.lineWidth) asInput(modal.querySelector('#fmt-linewidth')).value = String(config.lineWidth);
                     asInput(modal.querySelector('#fmt-indentjoins')).checked = Boolean(config.indentJoins);
                     asInput(modal.querySelector('#fmt-onnewline')).checked = Boolean(config.onClauseOnNewLine);
                     asInput(modal.querySelector('#fmt-casenewline')).checked = Boolean(config.caseWhenThenNewLine);
@@ -1344,10 +1430,10 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     asInput(modal.querySelector('#fmt-rightalign')).checked = Boolean(config.rightAlignKeywords);
                 }
             }
-        }
-        catch (e) {
+        } catch (e) {
             console.warn('Failed to load formatter options:', e);
         }
+
         modal.querySelector('#fmt-save-btn')?.addEventListener('click', async () => {
             const statusEl = asHtml(modal.querySelector('#fmt-status'));
             statusEl.textContent = 'Saving...';
@@ -1362,6 +1448,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 breakoutWindowFunctions: asInput(modal.querySelector('#fmt-breakwindow')).checked,
                 rightAlignKeywords: asInput(modal.querySelector('#fmt-rightalign')).checked,
             };
+
             try {
                 const fetcher = opts.authFetch ?? fetch;
                 const res = await fetcher('/api/formatter/config', {
@@ -1369,17 +1456,18 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                if (!res.ok)
-                    throw new Error(`HTTP ${res.status}`);
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 statusEl.textContent = '✓ Saved to .etlsql-formatter.json';
                 setTimeout(() => { modal.style.display = 'none'; }, 1000);
+
                 await formatScript();
-            }
-            catch (err) {
+            } catch (err: any) {
                 statusEl.textContent = 'Error: ' + err.message;
             }
         });
     }
+
     container.querySelector('[data-command-palette]')?.addEventListener('click', openPalette);
     container.querySelector('[data-connection-wizard]')?.addEventListener('click', openConnectionWizard);
     container.querySelector('[data-open-connection-wizard]')?.addEventListener('click', openConnectionWizard);
@@ -1400,7 +1488,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     container.querySelector('[data-close]')?.addEventListener('click', () => { opts.onClose?.(); });
     container.querySelector('[data-exit]')?.addEventListener('click', () => { opts.onExit?.(); });
     paletteFilter.addEventListener('input', renderPalette);
-    paletteFilter.addEventListener('keydown', async (event) => {
+    paletteFilter.addEventListener('keydown', async (event: Event) => {
         const kEvent = asKeyEvent(event);
         if (kEvent.key === 'Escape') {
             event.preventDefault();
@@ -1410,35 +1498,31 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         if (kEvent.key === 'Enter') {
             event.preventDefault();
             const first = paletteList.querySelector('[data-command]');
-            if (first)
-                asHtml(first).click();
+            if (first) asHtml(first).click();
         }
     });
-    palette.addEventListener('mousedown', (event) => {
-        if (event.target === palette)
-            closePalette();
+    palette.addEventListener('mousedown', (event: MouseEvent) => {
+        if (event.target === palette) closePalette();
     });
-    root.addEventListener('keydown', async (event) => {
+    root.addEventListener('keydown', async (event: Event) => {
         const kEvent = asKeyEvent(event);
         const key = String(kEvent.key || '').toLowerCase();
         const mod = kEvent.ctrlKey || kEvent.metaKey;
         if (key === 'escape' && root.classList.contains('is-running')) {
             event.preventDefault();
             cancelRun();
-        }
-        else if (mod && kEvent.shiftKey && key === 'p') {
+        } else if (mod && kEvent.shiftKey && key === 'p') {
             event.preventDefault();
             openPalette();
-        }
-        else if (mod && key === 'enter') {
+        } else if (mod && key === 'enter') {
             event.preventDefault();
             await run(kEvent.shiftKey ? 'script' : 'selection');
-        }
-        else if (mod && key === 's' && opts.onSave) {
+        } else if (mod && key === 's' && opts.onSave) {
             event.preventDefault();
             await save();
         }
     });
+
     return {
         editor,
         resultsPanel,
@@ -1447,8 +1531,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         dispose() {
             runAbort?.abort();
             dataPreviewAbort?.abort();
-            if (_previewMessageHandler)
-                window.removeEventListener('message', _previewMessageHandler);
+            if (_previewMessageHandler) window.removeEventListener('message', _previewMessageHandler);
             flowDagInstance?.dispose?.();
             editor.dispose();
             resultsPanel.dispose();

@@ -18,6 +18,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's script workbench service (`designer/script-workbench.ts`) now compiles from strict
+  TypeScript. The workbench container, sidebar sections, schema tree explorer, session variables,
+  git actions, execution controls, flow/preview overlays, and formatter settings drawer retain
+  their existing behavior while maintaining JSDoc typedef contracts for downstream callers.
 - Studio's script editor service (`designer/script-editor.ts`) now compiles from strict TypeScript.
   CodeMirror integration, editor handles, options, diagnostics, spans, completion items, and hover
   information retain their existing behavior while preserving JSDoc typedef comments for downstream
