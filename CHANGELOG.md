@@ -18,6 +18,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Shared report runtime network transport and parameter updates (`rt-transport.ts`) now compiles
+  from strict TypeScript. Network requests (`fetchJson`, `fetchText`), streaming responses (`fetchStream`),
+  interactive parameter updates (`updateParameters`), and live data export readiness callbacks (`whenExportReady`)
+  retain their existing behavior while maintaining full compatibility with the single-file offline bundle
+  concatenator and zero production debug logging.
 - Shared report runtime host mode and session state (`rt-state.ts`) now compiles from strict
   TypeScript. Offline host detection, web mode, VS Code webview integration, interactive state,
   frame scheduling, API base path normalization, parameter stores, and manifest lifecycle accessors
