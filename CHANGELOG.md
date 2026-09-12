@@ -18,6 +18,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's pipeline execution map and canvas editing service (`designer/studio-pipeline-canvas.ts`)
+  now compiles from strict TypeScript. Task palette drawers, chips, loop/container predicates,
+  edge conditions, dependency joins, scope inspection, and drag-and-drop editing handles retain
+  their existing behavior while preserving JSDoc typedef blocks for remaining callers.
 - Studio's script workbench service (`designer/script-workbench.ts`) now compiles from strict
   TypeScript. The workbench container, sidebar sections, schema tree explorer, session variables,
   git actions, execution controls, flow/preview overlays, and formatter settings drawer retain
