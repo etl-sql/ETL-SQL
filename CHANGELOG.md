@@ -18,6 +18,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's connection authoring wizard (`designer/connection-wizard.ts`) now compiles from strict
+  TypeScript. Connector schemas, option descriptors, gateway resource discovery, shared connections,
+  reachability diagnostics, connection string parsing, Zero-Trust path security guardrails, and
+  client-side AES-GCM (v2) password encryption retain their existing behavior while maintaining
+  JSDoc typedef blocks for downstream callers.
 - Studio's pipeline execution map and canvas editing service (`designer/studio-pipeline-canvas.ts`)
   now compiles from strict TypeScript. Task palette drawers, chips, loop/container predicates,
   edge conditions, dependency joins, scope inspection, and drag-and-drop editing handles retain
