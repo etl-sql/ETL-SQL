@@ -18,6 +18,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's script editor service (`designer/script-editor.ts`) now compiles from strict TypeScript.
+  CodeMirror integration, editor handles, options, diagnostics, spans, completion items, and hover
+  information retain their existing behavior while preserving JSDoc typedef comments for downstream
+  JavaScript callers.
 - Studio's lineage DAG layout and rendering service (`designer/dag.ts`) now compiles from strict
   TypeScript. Layered Sugiyama-inspired graph layout, lineage reach, conditional edge styling,
   swimlane flattening, compact DAG rendering, and connecting lines retain their existing behavior.

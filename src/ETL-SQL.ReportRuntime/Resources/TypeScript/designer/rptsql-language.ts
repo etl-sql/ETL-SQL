@@ -57,6 +57,7 @@ export interface CodeMirrorBundle {
     };
     tags: CodeMirrorTags;
     defaultHighlightStyle?: unknown;
+    [key: string]: any;
 }
 
 // rptsql token classification sets — sourced from LanguageMetadata.cs
