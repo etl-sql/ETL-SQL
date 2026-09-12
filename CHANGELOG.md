@@ -18,6 +18,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Shared report runtime data loading and export readiness (`rt-data.ts`) now compiles from strict
+  TypeScript. Row loading, binary Apache Arrow IPC stream parsing with automatic JSON fallback,
+  deferred row detection, image settle waiting, export readiness lifecycle signalling, and lazy row
+  counters retain their existing behavior while maintaining full compatibility with the single-file
+  offline bundle concatenator.
 - Shared report runtime network transport and parameter updates (`rt-transport.ts`) now compiles
   from strict TypeScript. Network requests (`fetchJson`, `fetchText`), streaming responses (`fetchStream`),
   interactive parameter updates (`updateParameters`), and live data export readiness callbacks (`whenExportReady`)

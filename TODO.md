@@ -46,7 +46,7 @@ typing changes, and product behavior changes in separate reviewable batches.
    for checks and environment limits. Stateful closure refactors remain deferred.
 2. **§3's tracked repairs are implemented.** The late document-open continuation now checks that
    its document is still active before hiding Home or updating editor state.
-3. **Execute §5 incrementally.** Twenty-seven modules are migrated through `rt-transport.ts`;
+3. **Execute §5 incrementally.** Twenty-eight modules are migrated through `rt-data.ts`;
    the per-module ledger is in §5. Continue with another bounded module, retaining mixed-source
    checks and verifying generated output, sandbox, hosts, and offline delivery for each batch.
 4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
@@ -653,6 +653,13 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   and live data export readiness callbacks (`whenExportReady`). Preserves single-line `INTRA_IMPORT` and
   inline `EXPORT_DECL` patterns required by the single-file offline bundle concatenator (`report-runtime.bundle.js`),
   host neutrality, and zero production debug noise. Emitted executable syntax is unchanged.
+  **Report runtime data hydration and export readiness module migrated:** `rt-data.ts` types
+  export state notifications (`publishExportState`), export readiness lifecycle transitions
+  (`markExportNotReady`, `markExportReady`), deferred row predicates (`hasDeferredRows`),
+  visual row hydration (`loadVisualRows`), Apache Arrow IPC stream decoding with graceful JSON fallback,
+  lazy row tracking counters, image settle detection, and export promise accessors. Preserves single-line
+  `INTRA_IMPORT` and inline `EXPORT_DECL` patterns required by the single-file offline bundle
+  concatenator (`report-runtime.bundle.js`). Emitted executable syntax is unchanged.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned
