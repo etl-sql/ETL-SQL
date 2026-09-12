@@ -46,7 +46,7 @@ typing changes, and product behavior changes in separate reviewable batches.
    for checks and environment limits. Stateful closure refactors remain deferred.
 2. **§3's tracked repairs are implemented.** The late document-open continuation now checks that
    its document is still active before hiding Home or updating editor state.
-3. **Execute §5 incrementally.** Twenty-five modules are migrated through `studio-authoring.ts`;
+3. **Execute §5 incrementally.** Twenty-six modules are migrated through `rt-state.ts`;
    the per-module ledger is in §5. Continue with another bounded module, retaining mixed-source
    checks and verifying generated output, sandbox, hosts, and offline delivery for each batch.
 4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
@@ -641,6 +641,13 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   network I/O, canonical `mutate` contract with the single `USE DATASET` bypass, pre-sanitized HTML documentation, JSDoc
   typedef blocks, and DOM helper functions. Verified against C# `StudioAuthoringContractTests` and consumer checks. Emitted
   executable syntax is unchanged.
+  **Report runtime state module migrated:** `rt-state.ts` types host mode flags (`isOfflineHost`, `isWebMode`),
+  VS Code webview integration (`vscode`), interactive execution state (`isInteractive`), frame rendering callbacks
+  (`safeRequestAnimationFrame`), feedback notifications (`feedback`), API base path resolution (`apiBase`),
+  parameter stores (`parameters`, `pendingParameters`), execution drill history (`_drillHistory`), cross-filter states
+  (`_crossFilterStates`), UI display states (`_uiStates`), and report manifest lifecycle accessors. Preserves strict
+  `EXPORT_DECL` compatibility for offline-snapshot concatenator (`report-runtime.bundle.js`). Emitted executable syntax
+  is unchanged.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned

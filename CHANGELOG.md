@@ -18,6 +18,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Shared report runtime host mode and session state (`rt-state.ts`) now compiles from strict
+  TypeScript. Offline host detection, web mode, VS Code webview integration, interactive state,
+  frame scheduling, API base path normalization, parameter stores, and manifest lifecycle accessors
+  retain their existing behavior while maintaining full compatibility with the single-file offline bundle
+  concatenator.
 - Studio's guided authoring surfaces and wizard dialogs (`designer/studio-authoring.ts`) now
   compile from strict TypeScript. Guided authoring dialogs, pipeline task editors, run plan confirmation,
   chart builders, step-by-step authoring wizards (choose data, parameters, details, totals, furniture,
