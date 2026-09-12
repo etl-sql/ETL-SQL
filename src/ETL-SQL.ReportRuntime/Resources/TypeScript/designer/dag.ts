@@ -1,7 +1,3 @@
-/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/dag.ts
- * Run: node scripts/sync-assets.js
- */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -9,50 +5,141 @@
  * dag.js — split out of designer.js, TODO.md §2.
  * Lineage DAG layout and rendering, including the compact and capsule variants.
  */
+
 import { escapeHtml } from './designer-util.js';
-export const _TYPE_COLOR = {
-    dataset: '#10b981',
-    connection: '#0ea5e9',
-    visual: '#3b82f6',
-    page: '#8b5cf6',
-    container: '#334155',
-    table: '#64748b',
-    column: '#94a3b8',
-    statement: '#475569',
+
+export interface DagNodeMapping {
+    role: string;
+    column: string;
+}
+
+export interface DagColumnLineageSource {
+    table: string;
+    column: string;
+}
+
+export interface DagColumnLineage {
+    sources?: DagColumnLineageSource[];
+    transform?: string;
+}
+
+export interface DagNodeMeta {
+    key?: string;
+    parent?: string;
+    columns?: string[];
+    mappings?: DagNodeMapping[];
+    columnLineage?: Record<string, DagColumnLineage>;
+    [key: string]: unknown;
+}
+
+export interface DagNodeLike {
+    id: string;
+    label?: string;
+    type?: string;
+    meta?: DagNodeMeta;
+}
+
+export interface DagEdgeLike {
+    source: string;
+    target: string;
+    label?: string;
+}
+
+export interface DagGraphInput {
+    nodes?: DagNodeLike[];
+    edges?: DagEdgeLike[];
+}
+
+export interface DagRenderOptions {
+    theme?: string;
+    orientation?: string;
+    onNodeClick?: (nodeId: string | null, nodeMeta: DagNodeMeta | null) => void;
+}
+
+export interface DagHandle {
+    dispose: () => void;
+    resize: () => void;
+    showDetail: (id: string) => void;
+}
+
+export interface DagEdgeStyle {
+    kind: string | null;
+    color: string;
+    dash: string | null;
+}
+
+export interface DagPosition {
+    x: number;
+    y: number;
+}
+
+export interface DagExecutionNodeLike {
+    name?: string;
+    status?: string;
+    rowsProcessed?: number | string;
+    durationMs?: number | null;
+    isParallelBlock?: boolean;
+    children?: DagExecutionNodeLike[];
+    [key: string]: unknown;
+}
+
+export interface DagSingleColumn {
+    type: 'single';
+    node: DagExecutionNodeLike;
+}
+
+export interface DagParallelColumn {
+    type: 'parallel';
+    nodes: DagExecutionNodeLike[];
+}
+
+export type DagColumnSpec = DagSingleColumn | DagParallelColumn;
+
+export const _TYPE_COLOR: Record<string, string> = {
+    dataset:     '#10b981',
+    connection:  '#0ea5e9',
+    visual:      '#3b82f6',
+    page:        '#8b5cf6',
+    container:   '#334155',
+    table:       '#64748b',
+    column:      '#94a3b8',
+    statement:   '#475569',
     conditional: '#f59e0b',
-    loop: '#f97316',
-    parallel: '#06b6d4',
+    loop:        '#f97316',
+    parallel:    '#06b6d4',
     transaction: '#2dd4bf',
-    validation: '#eab308',
-    io: '#14b8a6',
-    outbound: '#0f766e',
+    validation:  '#eab308',
+    io:          '#14b8a6',
+    outbound:    '#0f766e',
     destructive: '#dc2626',
-    procedure: '#a855f7',
+    procedure:   '#a855f7',
 };
-export function _nodeColor(type) {
+
+export function _nodeColor(type: string): string {
     return _TYPE_COLOR[type] ?? '#94a3b8';
 }
+
 /**
  * Assign x,y positions to nodes using a top-down layered (Sugiyama-inspired) layout.
  * Returns a map of { [nodeId]: { x, y } }.
  */
-export function _computeLayout(nodes, edges) {
-    const ids = nodes.map(n => n.id);
-    const inDeg = Object.fromEntries(ids.map(id => [id, 0]));
-    const children = Object.fromEntries(ids.map(id => [id, []]));
+export function _computeLayout(nodes: Array<{ id: string }>, edges: Array<{ source: string; target: string }>): Record<string, DagPosition> {
+    const ids     = nodes.map(n => n.id);
+    const inDeg: Record<string, number>   = Object.fromEntries(ids.map(id => [id, 0]));
+    const children: Record<string, string[]> = Object.fromEntries(ids.map(id => [id, []]));
+
     for (const e of edges) {
-        if (inDeg[e.target] !== undefined)
-            inDeg[e.target]++;
-        if (children[e.source])
-            children[e.source].push(e.target);
+        if (inDeg[e.target] !== undefined)  inDeg[e.target]++;
+        if (children[e.source])             children[e.source].push(e.target);
     }
+
     // BFS from roots to assign layers
-    const layer = {};
+    const layer: Record<string, number> = {};
     const queue = ids.filter(id => inDeg[id] === 0);
-    for (const id of queue)
-        layer[id] = 0;
+    for (const id of queue) layer[id] = 0;
+
     while (queue.length > 0) {
-        const id = queue.shift();
+        const id  = queue.shift()!;
         const cur = layer[id] ?? 0;
         for (const child of children[id] || []) {
             if (layer[child] === undefined || layer[child] <= cur) {
@@ -62,30 +149,31 @@ export function _computeLayout(nodes, edges) {
         }
     }
     // Any unreached nodes (isolated or cycles) get layer 0
-    for (const id of ids)
-        if (layer[id] === undefined)
-            layer[id] = 0;
+    for (const id of ids) if (layer[id] === undefined) layer[id] = 0;
+
     // Group by layer, preserving original node order within each layer
-    const byLayer = {};
+    const byLayer: Record<number, string[]> = {};
     for (const id of ids) {
         const l = layer[id];
         (byLayer[l] = byLayer[l] || []).push(id);
     }
-    const LAYER_H = 300;
-    const SUB_ROW_H = 180;
-    const NODE_W = 360;
+
+    const LAYER_H    = 300;
+    const SUB_ROW_H  = 180;
+    const NODE_W     = 360;
     const MAX_PER_ROW = 6;
-    const pos = {};
+
+    const pos: Record<string, DagPosition> = {};
     let yBase = 0;
     const sortedLayers = Object.keys(byLayer).map(Number).sort((a, b) => a - b);
     for (const l of sortedLayers) {
         const layerIds = byLayer[l];
-        const count = layerIds.length;
-        const numRows = Math.ceil(count / MAX_PER_ROW);
+        const count    = layerIds.length;
+        const numRows  = Math.ceil(count / MAX_PER_ROW);
         layerIds.forEach((id, i) => {
-            const row = Math.floor(i / MAX_PER_ROW);
-            const colInRow = i % MAX_PER_ROW;
-            const rowCount = Math.min(MAX_PER_ROW, count - row * MAX_PER_ROW);
+            const row        = Math.floor(i / MAX_PER_ROW);
+            const colInRow   = i % MAX_PER_ROW;
+            const rowCount   = Math.min(MAX_PER_ROW, count - row * MAX_PER_ROW);
             pos[id] = {
                 x: (colInRow - (rowCount - 1) / 2) * NODE_W,
                 y: yBase + row * SUB_ROW_H,
@@ -95,37 +183,33 @@ export function _computeLayout(nodes, edges) {
     }
     return pos;
 }
+
 /**
  * Union of a node's ancestors and descendants over directed edges — the lineage
  * path that flows through it. Drives focus mode: everything else is dimmed.
  * Returns a Set of node ids to keep lit (always includes `rootId`).
  */
-export function _lineageReach(rootId, allEdges, allNodes) {
-    const down = {}, up = {};
+export function _lineageReach(rootId: string, allEdges: DagEdgeLike[], allNodes: DagNodeLike[]): Set<string> {
+    const down: Record<string, string[]> = {}, up: Record<string, string[]> = {};
     for (const e of allEdges) {
         (down[e.source] ??= []).push(e.target);
-        (up[e.target] ??= []).push(e.source);
+        (up[e.target]   ??= []).push(e.source);
     }
-    const keep = new Set([rootId]);
-    const walk = (adj) => {
+    const keep = new Set<string>([rootId]);
+    const walk = (adj: Record<string, string[]>) => {
         const stack = [rootId];
         while (stack.length) {
-            const id = stack.pop();
-            for (const nxt of (adj[id] ?? []))
-                if (!keep.has(nxt)) {
-                    keep.add(nxt);
-                    stack.push(nxt);
-                }
+            const id = stack.pop()!;
+            for (const nxt of (adj[id] ?? [])) if (!keep.has(nxt)) { keep.add(nxt); stack.push(nxt); }
         }
     };
-    walk(down); // descendants
-    walk(up); // ancestors
+    walk(down);  // descendants
+    walk(up);    // ancestors
     // Keep expanded column children whose parent node is in focus.
-    for (const n of allNodes)
-        if (n.meta?.parent && keep.has(n.meta.parent))
-            keep.add(n.id);
+    for (const n of allNodes) if (n.meta?.parent && keep.has(n.meta.parent)) keep.add(n.id);
     return keep;
 }
+
 /**
  * How a precedence edge is drawn, from the label the projection put on it.
  *
@@ -133,59 +217,60 @@ export function _lineageReach(rootId, allEdges, allNodes) {
  * an on-failure edge in the Portal, in VS Code, and in the Workstation editor, or the same script
  * reads as a different pipeline depending on where it is opened.
  */
-export function _edgeStyle(label) {
+export function _edgeStyle(label?: string | null): DagEdgeStyle {
     const text = String(label ?? '').trim().toUpperCase();
-    if (text === 'ON SUCCESS')
-        return { kind: 'success', color: '#3fb950', dash: null };
-    if (text === 'ON FAILURE')
-        return { kind: 'failure', color: '#f85149', dash: '6 4' };
-    if (text === 'ON COMPLETION')
-        return { kind: 'completion', color: '#58a6ff', dash: '2 3' };
-    if (text.startsWith('WHEN '))
-        return { kind: 'expression', color: '#d29922', dash: '10 3 2 3' };
+    if (text === 'ON SUCCESS') return { kind: 'success', color: '#3fb950', dash: null };
+    if (text === 'ON FAILURE') return { kind: 'failure', color: '#f85149', dash: '6 4' };
+    if (text === 'ON COMPLETION') return { kind: 'completion', color: '#58a6ff', dash: '2 3' };
+    if (text.startsWith('WHEN ')) return { kind: 'expression', color: '#d29922', dash: '10 3 2 3' };
     return { kind: null, color: '#64748b', dash: null };
 }
-export function renderDag(container, { nodes, edges }, options = {}) {
-    const graphNodes = (nodes ?? []).map(n => ({ ...n, type: n.type || 'table' }));
-    const graphEdges = edges ?? [];
+
+export function renderDag(container: HTMLElement, { nodes, edges }: DagGraphInput, options: DagRenderOptions = {}): DagHandle {
+    const graphNodes: DagNodeLike[] = (nodes ?? []).map(n => ({ ...n, type: n.type || 'table' }));
+    const graphEdges: DagEdgeLike[] = edges ?? [];
     if (!graphNodes.length) {
         container.innerHTML = '<div class="etlsql-dag-empty">No structure data available.</div>';
-        return { dispose: () => { }, resize: () => { }, showDetail: () => { } };
+        return { dispose: () => {}, resize: () => {}, showDetail: () => {} };
     }
-    const nodeById = Object.fromEntries(graphNodes.map(n => [n.id, n]));
-    const hiddenTypes = new Set();
-    let focusedNode = null;
-    let focusSet = null;
-    let activeColumnPathSet = null;
-    let activeColumnLabel = null;
+
+    const nodeById: Record<string, DagNodeLike> = Object.fromEntries(graphNodes.map(n => [n.id, n]));
+    const hiddenTypes = new Set<string>();
+    let focusedNode: string | null = null;
+    let focusSet: Set<string> | null = null;
+    let activeColumnPathSet: Set<string> | null = null;
+    let activeColumnLabel: string | null = null;
     let panX = 0;
     let panY = 0;
     let zoom = graphNodes.length > 40 ? 0.45 : 0.75;
     let disposed = false;
-    const computePositions = (layoutNodes, layoutEdges) => {
+    const computePositions = (layoutNodes: DagNodeLike[], layoutEdges: DagEdgeLike[]): Record<string, DagPosition> => {
         const projected = _computeLayout(layoutNodes, layoutEdges);
-        if (options.orientation !== 'horizontal')
-            return projected;
+        if (options.orientation !== 'horizontal') return projected;
         return Object.fromEntries(Object.entries(projected).map(([id, point]) => [id, {
-                x: point.y,
-                y: point.x * 0.55,
-            }]));
+            x: point.y,
+            y: point.x * 0.55,
+        }]));
     };
     let positions = computePositions(graphNodes, graphEdges);
-    let searchMatches = [];
+    let searchMatches: string[] = [];
     let searchIdx = -1;
-    const dragRemovers = [];
+    const dragRemovers: Array<() => void> = [];
+
     container.style.position = container.style.position || 'relative';
     container.innerHTML = '';
     container.style.display = 'flex';
     container.style.flexDirection = 'column';
     container.classList.add('etlsql-dag-container');
+
     const toolbar = document.createElement('div');
     toolbar.className = 'etlsql-dag-toolbar';
     container.appendChild(toolbar);
+
     const chips = document.createElement('div');
     chips.className = 'etlsql-dag-chips';
     toolbar.appendChild(chips);
+
     const search = document.createElement('div');
     search.className = 'etlsql-dag-search';
     const searchInput = document.createElement('input');
@@ -196,62 +281,69 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     searchCount.className = 'etlsql-dag-search-count';
     search.append(searchInput, searchCount);
     toolbar.appendChild(search);
+
     const badge = document.createElement('button');
     badge.type = 'button';
     badge.className = 'etlsql-dag-focusbadge';
     badge.style.display = 'none';
     badge.addEventListener('click', clearFocus);
     toolbar.appendChild(badge);
+
     const body = document.createElement('div');
     body.className = 'etlsql-dag-body';
     container.appendChild(body);
+
     const canvas = document.createElement('div');
     canvas.className = 'etlsql-dag-canvas';
     body.appendChild(canvas);
+
     const viewport = document.createElement('div');
     viewport.className = 'etlsql-dag-viewport';
     canvas.appendChild(viewport);
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg') as SVGSVGElement;
     svg.setAttribute('class', 'etlsql-dag-svg');
     viewport.appendChild(svg);
+
     const badgeLayer = document.createElement('div');
     badgeLayer.className = 'etlsql-dag-badge-container';
     viewport.appendChild(badgeLayer);
+
     const cardLayer = document.createElement('div');
     cardLayer.className = 'etlsql-dag-card-layer';
     viewport.appendChild(cardLayer);
+
     const panel = document.createElement('div');
     panel.className = 'etlsql-dag-panel';
     panel.style.display = 'none';
     body.appendChild(panel);
+
     const zoomControls = document.createElement('div');
     zoomControls.className = 'etlsql-dag-zoom-controls';
     body.appendChild(zoomControls);
-    zoomControls.append(zoomButton('+', 'Zoom in', () => setZoom(Math.min(2, zoom * 1.2))), zoomButton('-', 'Zoom out', () => setZoom(Math.max(0.1, zoom / 1.2))), zoomButton('Reset', 'Fit graph to view', fitToView));
+    zoomControls.append(
+        zoomButton('+', 'Zoom in', () => setZoom(Math.min(2, zoom * 1.2))),
+        zoomButton('-', 'Zoom out', () => setZoom(Math.max(0.1, zoom / 1.2))),
+        zoomButton('Reset', 'Fit graph to view', fitToView)
+    );
+
     const presentTypes = [...new Set(graphNodes.map(n => n.type || 'table'))].sort();
     buildChips();
     render();
     requestAnimationFrame(fitToView);
+
     searchInput.addEventListener('input', () => {
         const term = searchInput.value.trim().toLowerCase();
         searchMatches = term ? visibleNodes().filter(n => String(n.label ?? '').toLowerCase().includes(term)).map(n => n.id) : [];
         searchIdx = -1;
         updateSearchCount();
-        if (searchMatches.length)
-            nextMatch();
+        if (searchMatches.length) nextMatch();
     });
     searchInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            nextMatch();
-        }
-        if (e.key === 'Escape') {
-            searchInput.value = '';
-            searchMatches = [];
-            searchIdx = -1;
-            updateSearchCount();
-        }
+        if (e.key === 'Enter') { e.preventDefault(); nextMatch(); }
+        if (e.key === 'Escape') { searchInput.value = ''; searchMatches = []; searchIdx = -1; updateSearchCount(); }
     });
+
     let isPanning = false;
     let panStartX = 0;
     let panStartY = 0;
@@ -268,37 +360,37 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         updateViewport();
     }, { passive: false });
     canvas.addEventListener('mousedown', e => {
-        if (e.target !== canvas && e.target !== viewport && e.target !== svg)
-            return;
+        if (e.target !== canvas && e.target !== viewport && e.target !== svg) return;
         isPanning = true;
         panStartX = e.clientX - panX;
         panStartY = e.clientY - panY;
         canvas.style.cursor = 'grabbing';
     });
-    const onDocMove = (e) => {
-        if (!isPanning)
-            return;
+    const onDocMove = (e: MouseEvent) => {
+        if (!isPanning) return;
         panX = e.clientX - panStartX;
         panY = e.clientY - panStartY;
         updateViewport(false);
     };
     const onDocUp = () => {
-        if (!isPanning)
-            return;
+        if (!isPanning) return;
         isPanning = false;
         canvas.style.cursor = '';
         drawConnections();
     };
     document.addEventListener('mousemove', onDocMove);
     document.addEventListener('mouseup', onDocUp);
-    function visibleNodes() {
+
+    function visibleNodes(): DagNodeLike[] {
         return graphNodes.filter(n => !hiddenTypes.has(n.type || 'table'));
     }
-    function visibleEdges() {
+
+    function visibleEdges(): DagEdgeLike[] {
         const ids = new Set(visibleNodes().map(n => n.id));
         return graphEdges.filter(e => ids.has(e.source) && ids.has(e.target));
     }
-    function buildChips() {
+
+    function buildChips(): void {
         chips.replaceChildren();
         for (const type of presentTypes) {
             const chip = document.createElement('button');
@@ -312,10 +404,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             text.textContent = `${type} ${graphNodes.filter(n => (n.type || 'table') === type).length}`;
             chip.append(dot, text);
             chip.addEventListener('click', () => {
-                if (hiddenTypes.has(type))
-                    hiddenTypes.delete(type);
-                else
-                    hiddenTypes.add(type);
+                if (hiddenTypes.has(type)) hiddenTypes.delete(type); else hiddenTypes.add(type);
                 buildChips();
                 focusedNode = null;
                 focusSet = null;
@@ -326,19 +415,19 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             chips.appendChild(chip);
         }
     }
-    function render() {
-        if (disposed)
-            return;
+
+    function render(): void {
+        if (disposed) return;
         const nodesToRender = visibleNodes();
         positions = { ...positions, ...computePositions(nodesToRender, visibleEdges()) };
         cardLayer.replaceChildren();
-        for (const node of nodesToRender)
-            renderCard(node);
+        for (const node of nodesToRender) renderCard(node);
         updateFocusBadge();
         updateViewport();
         options.onNodeClick?.(focusedNode, focusedNode ? (nodeById[focusedNode]?.meta ?? null) : null);
     }
-    function renderCard(node) {
+
+    function renderCard(node: DagNodeLike): void {
         const p = positions[node.id] ?? { x: 0, y: 0 };
         const card = document.createElement('div');
         card.id = `node__${node.id}`;
@@ -351,8 +440,8 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         card.dataset.dagNode = node.id;
         // A statement introduced by a section label is addressable by that label rather than by its
         // positional id. The DAG stays read-only; it just says which cards a surface can edit.
-        if (node.meta?.key)
-            card.dataset.taskKey = node.meta.key;
+        if (node.meta?.key) card.dataset.taskKey = node.meta.key;
+
         const header = document.createElement('div');
         header.className = 'etlsql-dag-card-header';
         const title = document.createElement('span');
@@ -365,9 +454,11 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         kind.style.color = _nodeColor(node.type || 'table');
         header.append(title, kind);
         card.appendChild(header);
-        const rows = node.meta?.mappings?.length
+
+        const rows: Array<{ id: string; label: string; column: string }> = node.meta?.mappings?.length
             ? node.meta.mappings.map(m => ({ id: `${node.id}__map__${m.role}`, label: `${m.role}: ${m.column}`, column: cleanColumn(m.column) }))
             : (node.meta?.columns ?? []).map(c => ({ id: `${node.id}__col__${c}`, label: c, column: c }));
+
         for (const row of rows.slice(0, 16)) {
             const line = document.createElement('div');
             line.id = row.id;
@@ -391,12 +482,14 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             });
             card.appendChild(line);
         }
+
         if (rows.length > 16) {
             const more = document.createElement('div');
             more.className = 'etlsql-dag-col-row';
             more.textContent = `+ ${rows.length - 16} more`;
             card.appendChild(more);
         }
+
         const leftPort = document.createElement('span');
         leftPort.className = 'card-port-left';
         leftPort.style.background = _nodeColor(node.type || 'table');
@@ -404,6 +497,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         rightPort.className = 'card-port-right';
         rightPort.style.background = _nodeColor(node.type || 'table');
         card.append(leftPort, rightPort);
+
         header.addEventListener('mousedown', e => {
             // A card the pipeline surface has claimed is a drag source for the script: dragging it
             // onto another task reorders, and onto a container nests. Repositioning a node on the
@@ -415,8 +509,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             // to avoid: these cards render about 26px tall with a 33px header, so the header is the
             // whole card - which meant the reorder and nest gestures could never fire at all, from
             // anywhere on any card, for anyone.
-            if (card.classList.contains('is-editable-task'))
-                return;
+            if (card.classList.contains('is-editable-task')) return;
             startNodeDrag(e, node.id, card);
         });
         card.addEventListener('click', () => focusNode(node.id));
@@ -424,13 +517,14 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         cardLayer.appendChild(card);
         applyCardState(card, node);
     }
-    function startNodeDrag(e, nodeId, card) {
+
+    function startNodeDrag(e: MouseEvent, nodeId: string, card: HTMLElement): void {
         e.preventDefault();
         const startX = e.clientX;
         const startY = e.clientY;
         const original = positions[nodeId] ?? { x: 0, y: 0 };
         card.style.cursor = 'grabbing';
-        const move = (me) => {
+        const move = (me: MouseEvent) => {
             positions[nodeId] = {
                 x: original.x + (me.clientX - startX) / zoom,
                 y: original.y + (me.clientY - startY) / zoom,
@@ -451,7 +545,8 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             document.removeEventListener('mouseup', up);
         });
     }
-    function focusNode(nodeId) {
+
+    function focusNode(nodeId: string): void {
         if (focusedNode === nodeId && !activeColumnPathSet) {
             clearFocus();
             return;
@@ -463,7 +558,8 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         showNodeDetails(nodeById[nodeId]);
         render();
     }
-    function clearFocus() {
+
+    function clearFocus(): void {
         focusedNode = null;
         focusSet = null;
         activeColumnPathSet = null;
@@ -471,30 +567,29 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         panel.style.display = 'none';
         render();
     }
-    function isolateColumn(nodeId, column, label) {
-        activeColumnPathSet = new Set();
+
+    function isolateColumn(nodeId: string, column: string, label: string): void {
+        activeColumnPathSet = new Set<string>();
         traceColumnPath(nodeId, column, activeColumnPathSet, 'both');
         activeColumnLabel = label;
         focusedNode = nodeId;
         focusSet = new Set([...activeColumnPathSet].filter(id => !id.includes('__col__') && !id.includes('__map__')));
         updateFocusBadge();
-        container.querySelectorAll('.etlsql-dag-card').forEach(card => applyCardState(card, nodeById[card.dataset.nodeId]));
+        container.querySelectorAll<HTMLElement>('.etlsql-dag-card').forEach(card => applyCardState(card, nodeById[card.dataset.nodeId!]));
         drawConnections();
     }
-    function traceColumnPath(nodeId, column, pathSet, direction) {
+
+    function traceColumnPath(nodeId: string, column: string, pathSet: Set<string>, direction: 'both' | 'up' | 'down'): void {
         const key = `${nodeId}__col__${column}`;
-        if (pathSet.has(key))
-            return;
+        if (pathSet.has(key)) return;
         pathSet.add(key);
         pathSet.add(nodeId);
         const node = nodeById[nodeId];
-        if (!node)
-            return;
+        if (!node) return;
         if (direction === 'both' || direction === 'up') {
             for (const src of (node.meta?.columnLineage?.[column]?.sources ?? [])) {
                 const srcNode = graphNodes.find(n => n.label === src.table || n.id === src.table);
-                if (srcNode)
-                    traceColumnPath(srcNode.id, src.column, pathSet, 'up');
+                if (srcNode) traceColumnPath(srcNode.id, src.column, pathSet, 'up');
             }
         }
         if (direction === 'both' || direction === 'down') {
@@ -513,9 +608,9 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             }
         }
     }
-    function showNodeDetails(node) {
-        if (!node)
-            return;
+
+    function showNodeDetails(node?: DagNodeLike): void {
+        if (!node) return;
         panel.style.display = 'block';
         panel.replaceChildren();
         const head = document.createElement('div');
@@ -541,7 +636,8 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         appendPanelList('Columns', (node.meta?.columns ?? []).map(c => ({ v: c })), 'No columns captured.');
         appendPanelList('Mappings', (node.meta?.mappings ?? []).map(m => ({ k: m.role, v: m.column })), 'No visual mappings captured.');
     }
-    function appendPanelList(title, items, emptyText) {
+
+    function appendPanelList(title: string, items: Array<{ k?: string; v?: unknown }>, emptyText: string): void {
         const h = document.createElement('div');
         h.className = 'etlsql-dag-panel-h';
         h.textContent = title;
@@ -572,73 +668,68 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         }
         panel.appendChild(ul);
     }
-    function applyCardState(card, node) {
-        if (!node)
-            return;
+
+    function applyCardState(card: HTMLElement, node?: DagNodeLike): void {
+        if (!node) return;
         const inFocus = !focusSet || focusSet.has(node.id);
         card.style.opacity = inFocus ? '1' : '0.12';
         card.style.borderColor = node.id === focusedNode ? '#f8fafc' : _nodeColor(node.type || 'table');
-        for (const row of card.querySelectorAll('.etlsql-dag-col-row')) {
+        for (const row of card.querySelectorAll<HTMLElement>('.etlsql-dag-col-row')) {
             const rowId = row.id;
             const active = !activeColumnPathSet || activeColumnPathSet.has(rowId) || activeColumnPathSet.has(node.id);
             row.style.opacity = active ? '1' : '0.14';
-            const label = row.querySelector('.col-label-span');
-            if (label)
-                label.style.color = activeColumnPathSet?.has(rowId) ? '#34d399' : '#cbd5e1';
+            const label = row.querySelector<HTMLElement>('.col-label-span');
+            if (label) label.style.color = activeColumnPathSet?.has(rowId) ? '#34d399' : '#cbd5e1';
         }
     }
-    function drawConnections() {
+
+    function drawConnections(): void {
         svg.replaceChildren();
         badgeLayer.replaceChildren();
         const rect = viewport.getBoundingClientRect();
-        for (const edge of visibleEdges())
-            drawEdge(edge, rect);
+        for (const edge of visibleEdges()) drawEdge(edge, rect);
         drawColumnEdges(rect);
     }
-    function drawEdge(edge, rect) {
+
+    function drawEdge(edge: DagEdgeLike, rect: DOMRect): void {
         const from = document.getElementById(`node__${edge.source}`);
         const to = document.getElementById(`node__${edge.target}`);
-        if (!from || !to)
-            return;
-        const fromPort = from.querySelector('.card-port-right');
-        const toPort = to.querySelector('.card-port-left');
-        if (!fromPort || !toPort)
-            return;
+        if (!from || !to) return;
+        const fromPort = from.querySelector<HTMLElement>('.card-port-right');
+        const toPort = to.querySelector<HTMLElement>('.card-port-left');
+        if (!fromPort || !toPort) return;
         const a = centerOf(fromPort, rect);
         const b = centerOf(toPort, rect);
         const inPath = !focusSet || (focusSet.has(edge.source) && focusSet.has(edge.target));
         const style = _edgeStyle(edge.label);
-        const path = drawLink(a.x, a.y, b.x, b.y, inPath ? style.color : 'rgba(71,85,105,0.08)', inPath ? 1.8 : 0.8);
+        const path = drawLink(
+            a.x, a.y, b.x, b.y,
+            inPath ? style.color : 'rgba(71,85,105,0.08)',
+            inPath ? 1.8 : 0.8);
         // The dash is not decoration. Colour alone would leave the difference between "only if this
         // succeeded" and "only if this failed" invisible to a red/green colour-blind reader, and to
         // anyone printing the map, so every conditional edge also has its own stroke pattern and
         // keeps the words on its badge.
-        if (style.dash && inPath)
-            path.setAttribute('stroke-dasharray', style.dash);
+        if (style.dash && inPath) path.setAttribute('stroke-dasharray', style.dash);
         path.dataset.dagSource = edge.source;
         path.dataset.dagTarget = edge.target;
-        if (edge.label)
-            path.dataset.dagLabel = edge.label;
-        if (style.kind)
-            path.dataset.dagEdgeKind = style.kind;
-        if (edge.label && inPath)
-            drawEdgeBadge(a.x, a.y, b.x, b.y, edge.label, false, false, style.color);
+        if (edge.label) path.dataset.dagLabel = edge.label;
+        if (style.kind) path.dataset.dagEdgeKind = style.kind;
+        if (edge.label && inPath) drawEdgeBadge(a.x, a.y, b.x, b.y, edge.label, false, false, style.color);
     }
-    function drawColumnEdges(rect) {
+
+    function drawColumnEdges(rect: DOMRect): void {
         for (const node of visibleNodes()) {
             for (const [targetColumn, lineage] of Object.entries(node.meta?.columnLineage ?? {})) {
                 for (const src of (lineage.sources ?? [])) {
                     const srcNode = graphNodes.find(n => n.label === src.table || n.id === src.table);
-                    if (!srcNode || hiddenTypes.has(srcNode.type || 'table'))
-                        continue;
+                    if (!srcNode || hiddenTypes.has(srcNode.type || 'table')) continue;
                     const from = document.getElementById(`${srcNode.id}__col__${src.column}`);
                     const to = document.getElementById(`${node.id}__col__${targetColumn}`);
-                    if (!from || !to)
-                        continue;
-                    const fromPort = from.querySelector('.port-right');
-                    const toPort = to.querySelector('.port-left');
-                    if (!fromPort || !toPort)
-                        continue;
+                    if (!from || !to) continue;
+                    const fromPort = from.querySelector<HTMLElement>('.port-right');
+                    const toPort = to.querySelector<HTMLElement>('.port-left');
+                    if (!fromPort || !toPort) continue;
                     const a = centerOf(fromPort, rect);
                     const b = centerOf(toPort, rect);
                     const fromKey = `${srcNode.id}__col__${src.column}`;
@@ -646,25 +737,25 @@ export function renderDag(container, { nodes, edges }, options = {}) {
                     const inPath = activeColumnPathSet && activeColumnPathSet.has(fromKey) && activeColumnPathSet.has(toKey);
                     const dim = activeColumnPathSet && !inPath;
                     drawLink(a.x, a.y, b.x, b.y, inPath ? '#10b981' : (dim ? 'rgba(16,185,129,0.05)' : 'rgba(16,185,129,0.35)'), inPath ? 3 : 1, !inPath);
-                    if (lineage.transform && !dim)
-                        drawEdgeBadge(a.x, a.y, b.x, b.y, transformLabel(lineage.transform), Boolean(inPath), Boolean(dim));
+                    if (lineage.transform && !dim) drawEdgeBadge(a.x, a.y, b.x, b.y, transformLabel(lineage.transform), Boolean(inPath), Boolean(dim));
                 }
             }
         }
     }
-    function drawLink(x1, y1, x2, y2, color, width, dashed = false) {
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+
+    function drawLink(x1: number, y1: number, x2: number, y2: number, color: string, width: number, dashed = false): SVGPathElement {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path') as SVGPathElement;
         const dx = Math.abs(x2 - x1) * 0.45;
         path.setAttribute('d', `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
         path.setAttribute('stroke', color);
         path.setAttribute('stroke-width', String(width));
         path.setAttribute('fill', 'none');
-        if (dashed)
-            path.setAttribute('stroke-dasharray', '4 4');
+        if (dashed) path.setAttribute('stroke-dasharray', '4 4');
         svg.appendChild(path);
         return path;
     }
-    function drawEdgeBadge(x1, y1, x2, y2, text, inPath, dim, accent = null) {
+
+    function drawEdgeBadge(x1: number, y1: number, x2: number, y2: number, text: string, inPath: boolean, dim: boolean, accent: string | null = null): void {
         const badgeEl = document.createElement('div');
         badgeEl.className = 'etlsql-dag-edge-badge';
         badgeEl.style.left = `${(x1 + x2) / 2}px`;
@@ -678,43 +769,48 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         badgeEl.textContent = text;
         badgeLayer.appendChild(badgeEl);
     }
-    function centerOf(el, viewportRect) {
-        if (!el)
-            return { x: 0, y: 0 };
+
+    function centerOf(el: Element | null, viewportRect: DOMRect): DagPosition {
+        if (!el) return { x: 0, y: 0 };
         const r = el.getBoundingClientRect();
         return { x: (r.left + r.width / 2 - viewportRect.left) / zoom, y: (r.top + r.height / 2 - viewportRect.top) / zoom };
     }
-    function updateViewport(redraw = true) {
+
+    function updateViewport(redraw = true): void {
         viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
-        if (redraw)
-            requestAnimationFrame(drawConnections);
+        if (redraw) requestAnimationFrame(drawConnections);
     }
-    function setZoom(value) {
+
+    function setZoom(value: number): void {
         zoom = value;
         updateViewport();
     }
-    function fitToView() {
+
+    function fitToView(): void {
         const visible = visibleNodes();
-        if (!visible.length || !canvas.clientWidth || !canvas.clientHeight)
-            return;
+        if (!visible.length || !canvas.clientWidth || !canvas.clientHeight) return;
         const points = visible.map(node => positions[node.id]).filter(Boolean);
-        if (!points.length)
-            return;
+        if (!points.length) return;
+
         const minX = Math.min(...points.map(point => point.x)) - 150;
         const maxX = Math.max(...points.map(point => point.x)) + 150;
         const minY = Math.min(...points.map(point => point.y)) - 45;
         const maxY = Math.max(...points.map(point => point.y)) + 110;
         const graphWidth = Math.max(300, maxX - minX);
         const graphHeight = Math.max(155, maxY - minY);
-        zoom = Math.max(0.2, Math.min(1.1, (canvas.clientWidth - 48) / graphWidth, (canvas.clientHeight - 40) / graphHeight));
+        zoom = Math.max(0.2, Math.min(1.1,
+            (canvas.clientWidth - 48) / graphWidth,
+            (canvas.clientHeight - 40) / graphHeight));
         panX = -((minX + maxX) / 2) * zoom;
         panY = canvas.clientHeight * 0.1 - ((minY + maxY) / 2) * zoom;
         updateViewport();
     }
-    function screenToGraph(x, y) {
+
+    function screenToGraph(x: number, y: number): DagPosition {
         return { x: (x - canvas.clientWidth / 2 - panX) / zoom, y: (y - canvas.clientHeight * 0.4 - panY) / zoom };
     }
-    function updateFocusBadge() {
+
+    function updateFocusBadge(): void {
         if (!focusedNode && !activeColumnLabel) {
             badge.style.display = 'none';
             return;
@@ -723,7 +819,8 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         badge.replaceChildren(document.createTextNode(`Focused: ${label}  x clear`));
         badge.style.display = 'flex';
     }
-    function updateSearchCount() {
+
+    function updateSearchCount(): void {
         if (!searchInput.value.trim()) {
             searchCount.textContent = '';
             searchCount.classList.remove('is-empty');
@@ -732,27 +829,29 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         searchCount.textContent = searchMatches.length ? `${searchIdx + 1}/${searchMatches.length}` : 'none';
         searchCount.classList.toggle('is-empty', searchMatches.length === 0);
     }
-    function nextMatch() {
-        if (!searchMatches.length)
-            return;
+
+    function nextMatch(): void {
+        if (!searchMatches.length) return;
         searchIdx = (searchIdx + 1) % searchMatches.length;
         updateSearchCount();
         const id = searchMatches[searchIdx];
         const p = positions[id];
-        if (!p)
-            return;
+        if (!p) return;
         panX = -p.x * zoom;
         panY = -p.y * zoom;
         updateViewport();
     }
-    function cleanColumn(value) {
+
+    function cleanColumn(value: unknown): string {
         return String(value ?? '').replace(/.*\((.*)\)/, '$1');
     }
-    function transformLabel(value) {
+
+    function transformLabel(value: unknown): string {
         const text = String(value ?? 'PASS');
         return text.includes('(') ? text.slice(0, text.indexOf('(')) : text;
     }
-    function zoomButton(text, title, handler) {
+
+    function zoomButton(text: string, title: string, handler: (e: MouseEvent) => void): HTMLButtonElement {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'etlsql-dag-zoom-btn';
@@ -762,72 +861,72 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         button.addEventListener('click', handler);
         return button;
     }
+
     return {
         dispose() {
             disposed = true;
             document.removeEventListener('mousemove', onDocMove);
             document.removeEventListener('mouseup', onDocUp);
-            for (const remove of dragRemovers)
-                remove();
+            for (const remove of dragRemovers) remove();
             container.innerHTML = '';
         },
         resize() { fitToView(); },
-        showDetail(id) { showNodeDetails(nodeById[id]); },
+        showDetail(id: string) { showNodeDetails(nodeById[id]); },
     };
 }
+
 // Flattens the execution tree into left-to-right swimlane columns: each sequential
 // step is its own column, a parallel block stacks its branches inside one column, and
 // a plain container (the script root) contributes its steps rather than itself.
-export function flattenDagColumns(nodes, columns = []) {
+export function flattenDagColumns(nodes?: DagExecutionNodeLike[] | null, columns: DagColumnSpec[] = []): DagColumnSpec[] {
     for (const node of (nodes || [])) {
         const children = Array.isArray(node.children) ? node.children : [];
         if (node.isParallelBlock && children.length) {
             columns.push({ type: 'parallel', nodes: children });
-        }
-        else if (children.length) {
+        } else if (children.length) {
             flattenDagColumns(children, columns);
-        }
-        else {
+        } else {
             columns.push({ type: 'single', node });
         }
     }
     return columns;
 }
-export function renderCompactDag(nodes) {
-    if (!nodes || !nodes.length)
-        return '';
+
+export function renderCompactDag(nodes?: DagExecutionNodeLike[] | null): string {
+    if (!nodes || !nodes.length) return '';
     const columns = flattenDagColumns(nodes);
-    if (!columns.length)
-        return '';
+    if (!columns.length) return '';
+
     let html = `<div class="etlsql-compact-dag">`;
     html += `<svg class="etlsql-compact-dag-svg" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:0;"></svg>`;
     html += `<div class="etlsql-compact-dag-columns" style="display:flex; gap:60px; padding:20px; align-items:center; position:relative; z-index:1; height:100%;">`;
+
     columns.forEach((col, colIdx) => {
         html += `<div class="etlsql-compact-dag-column" style="display:flex; flex-direction:column; gap:12px; justify-content:center;">`;
         if (col.type === 'single') {
             html += renderDagCapsule(col.node, colIdx, 0);
-        }
-        else {
+        } else {
             col.nodes.forEach((childNode, rowIdx) => {
                 html += renderDagCapsule(childNode, colIdx, rowIdx);
             });
         }
         html += `</div>`;
     });
+
     html += `</div></div>`;
     return html;
 }
-export function renderDagCapsule(node, col, row) {
+
+export function renderDagCapsule(node: DagExecutionNodeLike, col: number, row: number): string {
     const statusClass = (node.status || '').toLowerCase();
     const rows = Number(node.rowsProcessed || 0).toLocaleString();
     const duration = node.durationMs != null ? `${Math.round(node.durationMs).toLocaleString()} ms` : '';
+
     let statusIcon = '⚪';
-    if (statusClass === 'completed' || statusClass === 'success')
-        statusIcon = '✅';
-    else if (statusClass === 'running')
-        statusIcon = '🔄';
-    else if (statusClass === 'failed' || statusClass === 'error')
-        statusIcon = '❌';
+    if (statusClass === 'completed' || statusClass === 'success') statusIcon = '✅';
+    else if (statusClass === 'running') statusIcon = '🔄';
+    else if (statusClass === 'failed' || statusClass === 'error') statusIcon = '❌';
+
     return `
         <div class="etlsql-dag-capsule status-${statusClass}" data-col="${col}" data-row="${row}" title="${escapeHtml(node.name)}"
              style="border: 1px solid var(--portal-border, #30363d); background: var(--portal-surface-subtle, #161b22); padding: 8px 12px; border-radius: 8px; width: 160px; font-size: 11px; z-index:2; position:relative; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
@@ -841,34 +940,38 @@ export function renderDagCapsule(node, col, row) {
         </div>
     `;
 }
-export function updateDagLines(container) {
+
+export function updateDagLines(container: Element): void {
     const svg = container.querySelector('.etlsql-compact-dag-svg');
-    if (!svg)
-        return;
+    if (!svg) return;
     svg.innerHTML = '';
     const containerRect = container.getBoundingClientRect();
-    const capsules = Array.from(container.querySelectorAll('.etlsql-dag-capsule'));
-    const cols = {};
+
+    const capsules = Array.from(container.querySelectorAll<HTMLElement>('.etlsql-dag-capsule'));
+    const cols: Record<number, HTMLElement[]> = {};
     capsules.forEach(cap => {
         const col = parseInt(cap.dataset.col || '0', 10);
-        if (!cols[col])
-            cols[col] = [];
+        if (!cols[col]) cols[col] = [];
         cols[col].push(cap);
     });
-    const sortedColKeys = Object.keys(cols).map(Number).sort((a, b) => a - b);
+
+    const sortedColKeys = Object.keys(cols).map(Number).sort((a,b)=>a-b);
     for (let i = 0; i < sortedColKeys.length - 1; i++) {
         const c1 = sortedColKeys[i];
-        const c2 = sortedColKeys[i + 1];
+        const c2 = sortedColKeys[i+1];
         const nodes1 = cols[c1];
         const nodes2 = cols[c2];
+
         nodes1.forEach(n1 => {
             const r1 = n1.getBoundingClientRect();
             const x1 = r1.right - containerRect.left;
             const y1 = (r1.top + r1.bottom) / 2 - containerRect.top;
+
             nodes2.forEach(n2 => {
                 const r2 = n2.getBoundingClientRect();
                 const x2 = r2.left - containerRect.left;
                 const y2 = (r2.top + r2.bottom) / 2 - containerRect.top;
+
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const cp1x = x1 + (x2 - x1) / 3;
                 const cp2x = x1 + 2 * (x2 - x1) / 3;

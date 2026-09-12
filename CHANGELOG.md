@@ -18,6 +18,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's lineage DAG layout and rendering service (`designer/dag.ts`) now compiles from strict
+  TypeScript. Layered Sugiyama-inspired graph layout, lineage reach, conditional edge styling,
+  swimlane flattening, compact DAG rendering, and connecting lines retain their existing behavior.
 - Studio's visual format inspector service (`designer/visual-format-inspector.ts`) now compiles
   from strict TypeScript. Title, subtitle, axis, conditional rule, field format, and visual formatting
   options retain their existing behavior.
