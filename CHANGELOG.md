@@ -18,6 +18,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Studio's guided authoring surfaces and wizard dialogs (`designer/studio-authoring.ts`) now
+  compile from strict TypeScript. Guided authoring dialogs, pipeline task editors, run plan confirmation,
+  chart builders, step-by-step authoring wizards (choose data, parameters, details, totals, furniture,
+  preview, export, visuals, cross-filter), data sampling checks, and visual source bindings retain their
+  existing behavior while enforcing host neutrality, canonical `mutate` mechanics, pre-sanitized HTML
+  guarantees, and JSDoc typedef blocks.
 - Studio's connection authoring wizard (`designer/connection-wizard.ts`) now compiles from strict
   TypeScript. Connector schemas, option descriptors, gateway resource discovery, shared connections,
   reachability diagnostics, connection string parsing, Zero-Trust path security guardrails, and

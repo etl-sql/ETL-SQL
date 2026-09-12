@@ -46,7 +46,7 @@ typing changes, and product behavior changes in separate reviewable batches.
    for checks and environment limits. Stateful closure refactors remain deferred.
 2. **§3's tracked repairs are implemented.** The late document-open continuation now checks that
    its document is still active before hiding Home or updating editor state.
-3. **Execute §5 incrementally.** Twenty-four modules are migrated through `connection-wizard.ts`;
+3. **Execute §5 incrementally.** Twenty-five modules are migrated through `studio-authoring.ts`;
    the per-module ledger is in §5. Continue with another bounded module, retaining mixed-source
    checks and verifying generated output, sandbox, hosts, and offline delivery for each batch.
 4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
@@ -633,6 +633,13 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   (`ConnectionWizardOptions`), and wizard handles (`ConnectionWizardHandle`). Preserves byte-for-byte WebCrypto AES-GCM (v2)
   client password encryption, Zero-Trust file path guardrails, JSDoc typedef blocks for downstream callers, and DOM helper
   functions. Tests cover path security guardrails, client password encryption, and wizard handle lifecycle. Emitted
+  executable syntax is unchanged.
+  **Studio authoring surfaces module migrated:** `designer/studio-authoring.ts` types guided wizards and dialogs
+  (`StudioAuthoringDialogElements`, `StudioAuthoringEditorTransport`, `StudioAuthoringShell`, `StudioAuthoringFeedback`,
+  `StudioAuthoringRequestOptions`, `StudioAuthoringOptions`, `StudioAuthoringDialogAction`, `StudioAuthoringDialogRenderOptions`,
+  `StudioAuthoringDialogApi`, `PipelineTaskField`, `StudioAuthoringSurfacesHandle`). Preserves host neutrality, no independent
+  network I/O, canonical `mutate` contract with the single `USE DATASET` bypass, pre-sanitized HTML documentation, JSDoc
+  typedef blocks, and DOM helper functions. Verified against C# `StudioAuthoringContractTests` and consumer checks. Emitted
   executable syntax is unchanged.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
