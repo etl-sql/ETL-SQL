@@ -2172,6 +2172,38 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task InputControls_ClearSearchValidateNumbersAndRetainControlState()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/filter-controls.html");
+        var search = page.GetByRole(AriaRole.Searchbox, new() { Name = "CustomerSearch", Exact = true });
+        await search.WaitForAsync();
+        Assert.Equal("Quarterly sales", await search.InputValueAsync());
+        await page.GetByRole(AriaRole.Button, new() { Name = "Clear Customer search", Exact = true }).ClickAsync();
+        Assert.Equal("", await search.InputValueAsync());
+        Assert.True(await search.EvaluateAsync<bool>("element => element === document.activeElement"));
+
+        var note = page.GetByRole(AriaRole.Textbox, new() { Name = "AnalystNote", Exact = true });
+        Assert.Equal("12", await note.GetAttributeAsync("maxlength"));
+        var quantity = page.GetByRole(AriaRole.Spinbutton, new() { Name = "Quantity", Exact = true });
+        await quantity.FillAsync("20");
+        await quantity.DispatchEventAsync("change");
+        Assert.Equal("8", await quantity.InputValueAsync());
+        var enabled = page.GetByRole(AriaRole.Checkbox, new() { Name = "Enabled", Exact = true });
+        Assert.True(await enabled.IsCheckedAsync());
+        await enabled.UncheckAsync();
+        Assert.False(await enabled.IsCheckedAsync());
+        var slider = page.GetByRole(AriaRole.Slider, new() { Name = "Threshold", Exact = true });
+        Assert.Equal("8", await slider.InputValueAsync());
+        await slider.FillAsync("24");
+        await slider.DispatchEventAsync("input");
+        Assert.Equal("30", await page.Locator(".visual-card[data-name='Threshold'] .range-value").InnerTextAsync());
+        Assert.Contains("interactive in ReportPlayer", await page.Locator(".visual-card[data-name='Region'] .slicer-note").InnerTextAsync());
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task DateControls_ValidateRangesAndRelativeExpressions()
     {
         await using var session = await fixture.NewSessionAsync();

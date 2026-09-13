@@ -16,9 +16,9 @@
 window.__OFFLINE__ = true;
 window.__MANIFEST__ = {
   title: 'Filter control options',
-  parameters: { '@search': 'Quarterly sales', '@note': '' },
+  parameters: { '@search': 'Quarterly sales', '@note': '', '@threshold': '8' },
   parameterMetadata: {},
-  pages: [{ name: 'Controls', structure: 'A B', mode: 'DASHBOARD', slotMap: { A: 'CustomerSearch', B: 'AnalystNote' } }],
+  pages: [{ name: 'Controls', structure: 'A B / C D / E F', mode: 'DASHBOARD', slotMap: { A: 'CustomerSearch', B: 'AnalystNote', C: 'Quantity', D: 'Enabled', E: 'Threshold', F: 'Region' } }],
   visuals: [
     {
       name: 'CustomerSearch', visualType: 'SEARCH', title: 'Customer search',
@@ -31,7 +31,15 @@ window.__MANIFEST__ = {
       options: { PLACEHOLDER: 'Up to 12 characters', MAX_LENGTH: '12' },
       actions: [{ trigger: 'ON_CHANGE', type: 'SET_PARAMETER', parameterName: '@note' }],
       columns: [], rows: []
-    }
+    },
+    { name: 'Quantity', visualType: 'NUMBERBOX', options: { MIN: '2', MAX: '8', DEFAULT: '5' },
+      actions: [{ trigger: 'ON_CHANGE', type: 'SET_PARAMETER', parameterName: '@quantity' }], columns: [], rows: [] },
+    { name: 'Enabled', visualType: 'CHECKBOX', options: { DEFAULT: 'ON' },
+      actions: [{ trigger: 'ON_CHANGE', type: 'SET_PARAMETER', parameterName: '@enabled' }], columns: [], rows: [] },
+    { name: 'Threshold', visualType: 'SLIDER', options: { DEFAULT: '8', DATA_TICKS: '[0,10,30]' },
+      actions: [{ trigger: 'ON_CHANGE', type: 'SET_PARAMETER', parameterName: '@threshold' }], columns: [], rows: [] },
+    { name: 'Region', visualType: 'SLICER', options: {},
+      actions: [{ trigger: 'ON_CHANGE', type: 'SET_PARAMETER', parameterName: '@region' }], columns: ['Region'], rows: [['East'], ['West']] }
   ]
 };
 </script>

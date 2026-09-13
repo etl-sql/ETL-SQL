@@ -12,6 +12,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const ROOTS = [
     'src/ETL-SQL.Portal/wwwroot',
@@ -46,7 +47,9 @@ function inlineBlocks(html) {
     return blocks;
 }
 
-const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'etlsql-inline-'));
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const tempBase = fs.existsSync(path.join(repo, 'scratch')) ? path.join(repo, 'scratch') : os.tmpdir();
+const temp = fs.mkdtempSync(path.join(tempBase, 'etlsql-inline-'));
 const failures = [];
 let checked = 0;
 

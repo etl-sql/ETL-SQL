@@ -1,7 +1,3 @@
-/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-actions.ts
- * Run: node scripts/sync-assets.js
- */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -15,144 +11,193 @@ import { escHtml, interpolateUrlTemplate, isOn, safeUrl } from './rt-util.js';
 import { resizeChartsIn } from './rt-visual.js';
 import { hideModalDialog, showModalDialog, updateStagedUI } from './rt-chrome.js';
 import { applyBookmark } from './rt-views.js';
+
+type ActionRow = unknown[];
+
+export interface ReportAction {
+    type?: string;
+    trigger?: string;
+    parameterName?: string;
+    secondaryParameterName?: string;
+    valueSource?: string;
+    valueColumn?: string;
+    literalValue?: unknown;
+    parameterColumns?: Record<string, string>;
+    literalParameters?: Record<string, unknown>;
+    hierarchy?: string[];
+    keyColumns?: string[];
+    target?: string;
+    targetVisual?: string;
+    targetPage?: string;
+    targetReport?: string;
+    scriptPath?: string;
+    targets?: string[];
+    bookmarkName?: string;
+    resetParameters?: string[];
+    urlTemplate?: string;
+    url?: string;
+    [key: string]: unknown;
+}
+
+export interface ActionVisual {
+    name?: string;
+    id?: string;
+    columns?: string[];
+    rows?: ActionRow[];
+    actions?: ReportAction[];
+    options?: Record<string, string>;
+    drillState?: { currentLevel?: string };
+    [key: string]: unknown;
+}
+
+interface ActionVisualHost extends EtlSqlVisualHost {
+    _visualData?: ActionVisual;
+}
+
+interface CrossFilterSelection { value: string; column: string | null | undefined; visual?: string | null }
+interface CrossFilterState {
+    selections: CrossFilterSelection[];
+    lastBatch?: Record<string, string>;
+}
+
 let _drillInFlight = false;
+
 // ── Native SVG chart — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL / BUBBLE / RADAR / CANDLESTICK / MAP / GANTT / SANKEY / SUNBURST / NETWORK / TRELLIS) ──
+
 // Cross-filter state: { filterValue, filterColumn }. Stored per page section.
-function getPageState(container) {
-    let el = container;
-    while (el && !el.classList.contains('page'))
-        el = el.parentElement;
+function getPageState(container: HTMLElement): HTMLElement | null {
+    let el: HTMLElement | null = container;
+    while (el && !el.classList.contains('page')) el = el.parentElement as HTMLElement | null;
     return el;
 }
-export function applyPageCrossFilter(container, filterValue, filterColumn, sourceVisualName, event) {
+
+export function applyPageCrossFilter(container: HTMLElement, filterValue: string, filterColumn: string | null | undefined, sourceVisualName: string | null | undefined, event: MouseEvent | PointerEvent | null): void {
     const pageEl = getPageState(container);
-    if (!pageEl)
-        return;
+    if (!pageEl) return;
+
     // Use module-level state keyed by page ID so it survives renderManifest DOM rebuilds
     const pageKey = pageEl.id || 'default';
-    const state = _crossFilterStates[pageKey] || (_crossFilterStates[pageKey] = { selections: [] });
+    const state = _crossFilterStates[pageKey] as CrossFilterState || (_crossFilterStates[pageKey] = { selections: [] } as CrossFilterState);
     const isMulti = event && (event.ctrlKey || event.metaKey);
+
     // Update state
     if (isMulti) {
         const idx = state.selections.findIndex(s => s.value === filterValue && s.column === filterColumn);
-        if (idx >= 0)
-            state.selections.splice(idx, 1);
-        else
-            state.selections.push({ value: filterValue, column: filterColumn, visual: sourceVisualName });
-    }
-    else {
+        if (idx >= 0) state.selections.splice(idx, 1);
+        else state.selections.push({ value: filterValue, column: filterColumn, visual: sourceVisualName });
+    } else {
         if (state.selections.length === 1 && state.selections[0].value === filterValue && state.selections[0].visual === sourceVisualName) {
             state.selections = [];
-        }
-        else {
+        } else {
             state.selections = [{ value: filterValue, column: filterColumn, visual: sourceVisualName }];
         }
     }
+
     // Mark the source card with a border indicator; strip the marker from all others.
     pageEl.querySelectorAll('.visual-card').forEach(card => {
-        const v = /** @type {EtlSqlVisualHost} */ (card)._visualData;
-        if (!v)
-            return;
+        const v = /** @type {EtlSqlVisualHost} */ ((card) as ActionVisualHost)._visualData;
+        if (!v) return;
         if (state.selections.length > 0 && state.selections.some(s => s.visual === v.name)) {
             card.classList.add('cross-filter-source');
-        }
-        else {
+        } else {
             card.classList.remove('cross-filter-source');
         }
     });
+
     if (state.selections.length === 0) {
         // Deselect: post an empty non-interaction batch to force the server to re-evaluate
         // without any interactionValues, returning a clean manifest with no highlightRows.
         state.lastBatch = {};
-        postParameters({}, false, null, sourceVisualName).then(m => { if (m)
-            renderManifest(m); });
+        postParameters({}, false, null, sourceVisualName).then(m => { if (m) renderManifest(m); });
         return;
     }
+
     // Build interaction batch for the active selection
-    const batch = {};
-    const groups = {};
+    const batch: Record<string, string> = {};
+    const groups: Record<string, string[]> = {};
     state.selections.forEach(s => {
         const k = '@' + s.column;
-        if (!groups[k])
-            groups[k] = [];
+        if (!groups[k]) groups[k] = [];
         groups[k].push(s.value);
     });
     Object.keys(groups).forEach(k => { batch[k] = groups[k].join(','); });
     state.lastBatch = batch;
-    postParameters(batch, true, null, sourceVisualName).then(m => { if (m)
-        renderManifest(m); });
+
+    postParameters(batch, true, null, sourceVisualName).then(m => { if (m) renderManifest(m); });
 }
-export function reApplyCrossFilterStyling() {
+
+export function reApplyCrossFilterStyling(): void {
     document.querySelectorAll('.page').forEach(pageEl => {
-        const state = _crossFilterStates[pageEl.id];
-        if (!state || state.selections.length === 0)
-            return;
+        const state = _crossFilterStates[pageEl.id] as CrossFilterState | undefined;
+        if (!state || state.selections.length === 0) return;
         const activeVisuals = new Set(state.selections.map(s => s.visual));
         pageEl.querySelectorAll('.visual-card').forEach(card => {
-            const v = /** @type {EtlSqlVisualHost} */ (card)._visualData;
-            if (!v)
-                return;
+            const v = /** @type {EtlSqlVisualHost} */ ((card) as ActionVisualHost)._visualData;
+            if (!v) return;
             if (activeVisuals.has(v.name)) {
                 card.classList.add('cross-filter-source');
-            }
-            else {
+            } else {
                 card.classList.remove('cross-filter-source');
             }
         });
     });
 }
+
 // ── CSV export ──────────────────────────────────────────────────────────
-function exportCsv(visual) {
+
+function exportCsv(visual: ActionVisual): void {
     const cols = visual.columns || [];
     const rows = visual.rows || [];
-    const escape = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-    const lines = [cols.map(escape).join(',')];
+    const escape = (v: unknown): string => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const lines  = [cols.map(escape).join(',')];
     rows.forEach(r => lines.push(cols.map((_, i) => escape(r[i])).join(',')));
     const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
     a.download = (visual.name || 'export') + '.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
-function exportExcel(visual) {
+
+function exportExcel(visual: ActionVisual): void {
     const cols = visual.columns || [];
-    const rows = visual.rows || [];
-    const esc = (v) => escHtml(String(v ?? ''));
+    const rows = visual.rows    || [];
+    const esc  = (v: unknown): string => escHtml(String(v ?? ''));
     let html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
-        'xmlns:x="urn:schemas-microsoft-com:office:excel">' +
-        '<head><meta charset="UTF-8"></head><body><table>';
+               'xmlns:x="urn:schemas-microsoft-com:office:excel">' +
+               '<head><meta charset="UTF-8"></head><body><table>';
     html += '<tr>' + cols.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
     rows.forEach(r => {
         html += '<tr>' + cols.map((_, i) => `<td>${esc(r[i])}</td>`).join('') + '</tr>';
     });
     html += '</table></body></html>';
     const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
     a.download = (visual.name || 'export') + '.xls';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
+
 // Prefer a real .xlsx from the server (typed cells, one sheet, no "format
 // mismatch" warning). Falls back to the lightweight client-side .xls when no
 // export API is reachable (e.g. VS Code preview or a host without the endpoint).
-async function exportExcelDownload(visual) {
+async function exportExcelDownload(visual: ActionVisual): Promise<void> {
     const base = window.__API_BASE__;
     if (base) {
         try {
             const res = await fetch(base + '/export/xlsx?visual=' + encodeURIComponent(visual.name || ''));
             if (res.ok) {
                 const blob = await res.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
+                const url  = URL.createObjectURL(blob);
+                const a    = document.createElement('a');
+                a.href     = url;
                 a.download = (visual.name || 'export') + '.xlsx';
                 document.body.appendChild(a);
                 a.click();
@@ -160,42 +205,37 @@ async function exportExcelDownload(visual) {
                 URL.revokeObjectURL(url);
                 return;
             }
-        }
-        catch { /* fall through to client-side export */ }
+        } catch { /* fall through to client-side export */ }
     }
     exportExcel(visual);
 }
-function findVisualData(targetName) {
+
+function findVisualData(targetName: string): ActionVisual | null {
     const el = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`);
-    return el ? /** @type {EtlSqlVisualHost} */ (el)._visualData : null;
+    return el ? /** @type {EtlSqlVisualHost} */ ((el) as ActionVisualHost)._visualData as ActionVisual | null : null;
 }
+
 // Drill-through back-navigation stack
-function showDrillBackButton() {
+function showDrillBackButton(): void {
     let btn = document.getElementById('drill-back-btn');
     if (!btn) {
         btn = document.createElement('button');
         btn.id = 'drill-back-btn';
         btn.className = 'drill-back-btn';
         btn.addEventListener('click', () => {
-            if (_drillHistory.length === 0)
-                return;
+            if (_drillHistory.length === 0) return;
             const prevParams = _drillHistory.pop();
             // Restore all previous params; blank out any keys added by the drill
             const restoreBatch = Object.assign({}, prevParams);
             Object.keys(parameters).forEach(k => {
-                if (!(k in prevParams))
-                    restoreBatch[k] = '';
+                if (!(k in prevParams)) restoreBatch[k] = '';
             });
-            if (_drillHistory.length === 0)
-                hideDrillBackButton();
-            else
-                btn.innerHTML = '← Back' + (_drillHistory.length > 1 ? ` (${_drillHistory.length})` : '');
+            if (_drillHistory.length === 0) hideDrillBackButton();
+            else btn!.innerHTML = '← Back' + (_drillHistory.length > 1 ? ` (${_drillHistory.length})` : '');
             if (vscode) {
                 vscode.postMessage({ type: 'refreshReport', parameters: restoreBatch });
-            }
-            else {
-                postParameters(restoreBatch).then(m => { if (m)
-                    renderManifest(m); });
+            } else {
+                postParameters(restoreBatch).then(m => { if (m) renderManifest(m); });
             }
         });
         document.body.appendChild(btn);
@@ -203,21 +243,24 @@ function showDrillBackButton() {
     btn.innerHTML = '← Back' + (_drillHistory.length > 1 ? ` (${_drillHistory.length})` : '');
     btn.style.display = 'flex';
 }
-function hideDrillBackButton() {
+
+function hideDrillBackButton(): void {
     const btn = document.getElementById('drill-back-btn');
-    if (btn)
-        btn.style.display = 'none';
+    if (btn) btn.style.display = 'none';
 }
+
 // Lightweight singleton context menu for DRILL_DOWN and Export
-let _ctxMenu = null;
-export function showCtxMenu(x, y, visual, rowData) {
+let _ctxMenu: HTMLDivElement | null = null;
+export function showCtxMenu(x: number, y: number, visual: ActionVisual, rowData: ActionRow | null): void {
     hideCtxMenu();
     const menu = document.createElement('div');
     menu.className = 'report-ctx-menu';
     menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
+    menu.style.top  = y + 'px';
+
     const drillDowns = (visual.actions || []).filter(a => a.type === 'DRILL_DOWN');
     const drillReports = (visual.actions || []).filter(a => a.type === 'DRILL_REPORT');
+
     drillDowns.forEach(action => {
         const item = document.createElement('div');
         item.className = 'ctx-item';
@@ -229,6 +272,7 @@ export function showCtxMenu(x, y, visual, rowData) {
         });
         menu.appendChild(item);
     });
+
     drillReports.forEach(action => {
         const item = document.createElement('div');
         item.className = 'ctx-item';
@@ -242,33 +286,37 @@ export function showCtxMenu(x, y, visual, rowData) {
         });
         menu.appendChild(item);
     });
+
     if (drillDowns.length > 0 || drillReports.length > 0) {
         const sep = document.createElement('div');
         sep.className = 'ctx-sep';
         menu.appendChild(sep);
     }
+
     const exportItem = document.createElement('div');
     exportItem.className = 'ctx-item';
     exportItem.innerHTML = `<span>&#x2913;</span> Export to CSV`;
     exportItem.addEventListener('click', () => { exportCsv(visual); hideCtxMenu(); });
     menu.appendChild(exportItem);
+
     const excelItem = document.createElement('div');
     excelItem.className = 'ctx-item';
     excelItem.innerHTML = `<span>&#x2913;</span> Export to Excel`;
     excelItem.addEventListener('click', () => { exportExcelDownload(visual); hideCtxMenu(); });
     menu.appendChild(excelItem);
+
     document.body.appendChild(menu);
     _ctxMenu = menu;
+
     // Close on any outside click
     setTimeout(() => document.addEventListener('click', hideCtxMenu, { once: true }), 10);
 }
+
 function hideCtxMenu() {
-    if (_ctxMenu) {
-        _ctxMenu.remove();
-        _ctxMenu = null;
-    }
+    if (_ctxMenu) { _ctxMenu.remove(); _ctxMenu = null; }
 }
-export function matchesCondition(cond, val, colName) {
+
+export function matchesCondition(cond: string, val: number, colName: string): boolean {
     let expr = (cond || '').trim();
     while (expr.startsWith('(') && expr.endsWith(')')) {
         expr = expr.slice(1, -1).trim();
@@ -279,6 +327,7 @@ export function matchesCondition(cond, val, colName) {
         const high = parseFloat(betweenMatch[2]);
         return val >= low && val <= high;
     }
+
     const andParts = expr.split(/\s+AND\s+/i);
     if (andParts.length > 1) {
         return andParts.every(part => matchesCondition(part, val, colName));
@@ -287,10 +336,12 @@ export function matchesCondition(cond, val, colName) {
     if (orParts.length > 1) {
         return orParts.some(part => matchesCondition(part, val, colName));
     }
+
     const bareMatch = expr.match(/^(<>|[<>!=]=?)\s*(-?[\d.]+)$/);
     if (bareMatch) {
         return compareValues(val, bareMatch[1], parseFloat(bareMatch[2]));
     }
+
     const compMatch = expr.match(/^(.*?)\s*(<>|[<>!=]=?)\s*(.*?)$/);
     if (compMatch) {
         const leftStr = compMatch[1].trim().replace(/^[(["]+|[)\]"]+$/g, '');
@@ -298,14 +349,13 @@ export function matchesCondition(cond, val, colName) {
         const rightStr = compMatch[3].trim().replace(/^[(["]+|[)\]"]+$/g, '');
         const rNum = parseFloat(rightStr);
         const lNum = parseFloat(leftStr);
-        if (!isNaN(rNum))
-            return compareValues(val, op, rNum);
-        if (!isNaN(lNum))
-            return compareValues(lNum, op, val);
+        if (!isNaN(rNum)) return compareValues(val, op, rNum);
+        if (!isNaN(lNum)) return compareValues(lNum, op, val);
     }
     return false;
 }
-function compareValues(a, op, b) {
+
+function compareValues(a: number, op: string, b: number): boolean {
     switch (op) {
         case '>': return a > b;
         case '>=': return a >= b;
@@ -318,21 +368,19 @@ function compareValues(a, op, b) {
         default: return false;
     }
 }
-export function evaluateExpressionAgainstParameters(expr, currentParams) {
-    if (!expr)
-        return false;
+
+export function evaluateExpressionAgainstParameters(expr: unknown, currentParams: Record<string, unknown>): boolean {
+    if (!expr) return false;
     const s = String(expr).trim();
-    if (/^(true|1|on)$/i.test(s))
-        return true;
-    if (/^(false|0|off)$/i.test(s))
-        return false;
-    function resolveToken(token) {
+    if (/^(true|1|on)$/i.test(s)) return true;
+    if (/^(false|0|off)$/i.test(s)) return false;
+
+    function resolveToken(token: string): string {
         token = token.trim();
         if (token.startsWith('@')) {
             const pKey = token.toLowerCase();
             for (const k in currentParams) {
-                if (k.toLowerCase() === pKey)
-                    return String(currentParams[k] ?? '');
+                if (k.toLowerCase() === pKey) return String(currentParams[k] ?? '');
             }
             return '';
         }
@@ -341,14 +389,17 @@ export function evaluateExpressionAgainstParameters(expr, currentParams) {
         }
         return token;
     }
+
     const m = s.match(/^(.*?)\s*(<>|[<>!=]=?)\s*(.*?)$/);
     if (m) {
         const left = resolveToken(m[1]);
         const op = m[2];
         const right = resolveToken(m[3]);
+
         const lNum = Number(left);
         const rNum = Number(right);
         const bothNum = !isNaN(lNum) && !isNaN(rNum) && left !== '' && right !== '';
+
         switch (op) {
             case '=':
             case '==':
@@ -366,200 +417,189 @@ export function evaluateExpressionAgainstParameters(expr, currentParams) {
                 return bothNum ? lNum <= rNum : left <= right;
         }
     }
+
     if (s.startsWith('@')) {
         const val = resolveToken(s);
         return !!val && !/^(false|0|off)$/i.test(val);
     }
+
     return false;
 }
+
 // ── Actions ─────────────────────────────────────────────────────────────
-export function actionsFor(visual, trigger) {
-    return (visual.actions || []).filter((a) => a.trigger === trigger);
+
+export function actionsFor(visual: ActionVisual, trigger: string): ReportAction[] {
+    return (visual.actions || []).filter((a: ReportAction) => a.trigger === trigger);
 }
-function resolveActionValue(action, rowData, columns, controlValue) {
+
+function resolveActionValue(action: ReportAction, rowData: ActionRow, columns: string[], controlValue?: unknown): unknown {
     const source = (action.valueSource || '').toUpperCase();
-    if (source === 'CONTROL_VALUE')
-        return controlValue ?? '';
+    if (source === 'CONTROL_VALUE') return controlValue ?? '';
     if (source === 'COLUMN') {
-        const colIdx = columns.findIndex(c => c.toLowerCase() === (action.valueColumn || '').toLowerCase());
+        const colIdx = columns.findIndex(
+            c => c.toLowerCase() === (action.valueColumn || '').toLowerCase());
         return colIdx >= 0 ? rowData[colIdx] : '';
     }
-    if (source === 'LITERAL')
-        return action.literalValue ?? '';
+    if (source === 'LITERAL') return action.literalValue ?? '';
     return action.literalValue ?? '';
 }
-function resolveActionParameters(action, rowData, columns) {
-    const result = {};
+
+function resolveActionParameters(action: ReportAction, rowData: ActionRow, columns: string[]): Record<string, string> {
+    const result: Record<string, string> = {};
     const columnParams = action.parameterColumns || {};
     const literalParams = action.literalParameters || {};
+
     Object.entries(columnParams).forEach(([name, column]) => {
         const colIdx = columns.findIndex(c => c.toLowerCase() === String(column).toLowerCase());
         result[name] = colIdx >= 0 ? String(rowData[colIdx] ?? '') : '';
     });
+
     Object.entries(literalParams).forEach(([name, value]) => {
         result[name] = String(value ?? '');
     });
+
     return result;
 }
-export function navigateToPage(pageName) {
-    if (!pageName)
-        return;
+
+export function navigateToPage(pageName: string | null | undefined): void {
+    if (!pageName) return;
+
     try {
         const navItem = document.querySelector(`[data-page="${CSS.escape(pageName)}"]`);
         if (navItem) {
-            /** @type {HTMLElement} */ (navItem).click();
+            /** @type {HTMLElement} */ ((navItem) as HTMLElement).click();
             return;
         }
-    }
-    catch (e) {
-        console.error(e);
-    }
+    } catch (e) { console.error(e); }
+
     const targetPage = document.getElementById('page-' + String(pageName).toLowerCase());
-    if (!targetPage)
-        return;
+    if (!targetPage) return;
+
     try {
-        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.page')).forEach(page => {
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll<HTMLElement>('.page')).forEach(page => {
             const isTarget = (page === targetPage);
             page.style.display = isTarget ? 'block' : 'none';
-            if (isTarget)
-                page.classList.add('active');
-            else
-                page.classList.remove('active');
+            if (isTarget) page.classList.add('active');
+            else page.classList.remove('active');
         });
-    }
-    catch (e) {
-        console.error(e);
-    }
+    } catch (e) { console.error(e); }
+
     try {
-        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-page]')).forEach(item => {
-            if (item.dataset.page === pageName)
-                item.classList.add('active');
-            else
-                item.classList.remove('active');
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll<HTMLElement>('[data-page]')).forEach(item => {
+            if (item.dataset.page === pageName) item.classList.add('active');
+            else item.classList.remove('active');
         });
-    }
-    catch (e) {
-        console.error(e);
-    }
+    } catch (e) { console.error(e); }
     setLastActivePage(pageName);
+
     try {
         resizeChartsIn(targetPage);
-    }
-    catch (e) {
-        console.error(e);
-    }
+    } catch (e) { console.error(e); }
+
     try {
         if (window.parent && window.parent !== window) {
             window.parent.postMessage({ type: 'etl-page-changed', page: pageName, userTriggered: true }, '*');
         }
-    }
-    catch (e) {
-        console.error(e);
-    }
+    } catch (e) { console.error(e); }
 }
-function getActivePage() {
-    return Array.from(/** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.page')))
+
+function getActivePage(): HTMLElement | null {
+    return Array.from(/** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll<HTMLElement>('.page')))
         .find(page => page.style.display !== 'none' && page.classList.contains('active')) ||
-        Array.from(/** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.page')))
-            .find(page => page.style.display !== 'none') || null;
+        Array.from(/** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll<HTMLElement>('.page')))
+        .find(page => page.style.display !== 'none') || null;
 }
-export function getActivePageName() {
+
+export function getActivePageName(): string | null {
     const page = getActivePage();
     return page ? (page.dataset.pageName || null) : null;
 }
-export function isActivePagePaginated() {
+
+export function isActivePagePaginated(): boolean {
     const page = getActivePage();
     return !!page && (page.dataset.pageMode || '').toUpperCase() === 'PAGINATED';
 }
-export function executeAction(action, rowData, columns, visualName, visualCtx) {
+
+export function executeAction(action: ReportAction, rowData: ActionRow, columns: string[], visualName: string | null | undefined, visualCtx: ActionVisual | null | undefined): void {
     if (action.type === 'DRILL_IN') {
         const hierarchy = action.hierarchy || [];
-        if (!hierarchy.length || !visualName)
-            return;
+        if (!hierarchy.length || !visualName) return;
         // Current level comes from the server-stamped drillState; fall back to hierarchy root.
         const curLevel = visualCtx?.drillState?.currentLevel || hierarchy[0];
-        const colIdx = columns.findIndex(c => c.toLowerCase() === curLevel.toLowerCase());
-        const clicked = colIdx >= 0 ? String(rowData?.[colIdx] ?? '') : '';
-        if (!clicked)
-            return;
+        const colIdx   = columns.findIndex(c => c.toLowerCase() === curLevel.toLowerCase());
+        const clicked  = colIdx >= 0 ? String(rowData?.[colIdx] ?? '') : '';
+        if (!clicked) return;
         postDrillIn(visualName, clicked);
         return;
     }
     if (action.type === 'DRILL_DOWN') {
         const keyColumns = action.keyColumns || [];
-        const params = {};
+        const params: Record<string, string> = {};
         for (const key of keyColumns) {
             const colIdx = columns.findIndex(c => c.toLowerCase() === key.toLowerCase());
-            const value = colIdx >= 0 ? rowData[colIdx] : null;
-            if (value != null)
-                params['@' + key] = String(value);
+            const value  = colIdx >= 0 ? rowData[colIdx] : null;
+            if (value != null) params['@' + key] = String(value);
         }
-        if (Object.keys(params).length === 0)
-            return;
+        if (Object.keys(params).length === 0) return;
+
         // Push current parameter snapshot onto back-navigation stack
         _drillHistory.push(Object.assign({}, parameters));
         showDrillBackButton();
+
         // Visual feedback: pulse target or entire page if navigating
         const targetName = action.target || action.targetVisual || action.targetPage;
         if (targetName) {
             const targetEl = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`)
-                || document.getElementById('page-' + targetName.toLowerCase());
+                          || document.getElementById('page-' + targetName.toLowerCase());
             if (targetEl) {
                 targetEl.classList.add('drilled-down');
                 setTimeout(() => targetEl.classList.remove('drilled-down'), 1500);
+
                 // If it's on the same page, scroll to it
                 targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
                 // If it's a page, navigate to it
                 const navBtn = document.querySelector(`.nav-tab[data-page="${CSS.escape(targetName)}"]`);
-                if (navBtn) /** @type {HTMLElement} */
-                    (navBtn).click();
+                if (navBtn) /** @type {HTMLElement} */ ((navBtn) as HTMLElement).click();
             }
         }
+
         if (vscode) {
             vscode.postMessage({ type: 'refreshReport', parameters: params });
+        } else {
+            postParameters(params).then(manifest => { if (manifest) renderManifest(manifest); });
         }
-        else {
-            postParameters(params).then(manifest => { if (manifest)
-                renderManifest(manifest); });
-        }
-    }
-    else if (action.type === 'SET_PARAMETER') {
+
+    } else if (action.type === 'SET_PARAMETER') {
         const value = resolveActionValue(action, rowData, columns);
-        const params = { [action.parameterName]: String(value ?? '') };
+        const params = { [action.parameterName!]: String(value ?? '') };
         if (vscode) {
             vscode.postMessage({ type: 'refreshReport', parameters: params });
+        } else {
+            postParameters(params).then(manifest => { if (manifest) renderManifest(manifest); });
         }
-        else {
-            postParameters(params).then(manifest => { if (manifest)
-                renderManifest(manifest); });
-        }
-    }
-    else if (action.type === 'RUN_SCRIPT') {
+    } else if (action.type === 'RUN_SCRIPT') {
         const scriptPath = action.scriptPath;
         const finalParams = resolveActionParameters(action, rowData, columns);
+
         if (isInteractive) {
-            postRunScript(scriptPath, finalParams).then(res => {
-                if (res && res.message)
-                    feedback.notify(res.message, { title: 'Script action', tone: 'success', auditAction: 'report.script.run' });
+            (postRunScript(scriptPath!, finalParams) as Promise<{ message?: string; refresh?: boolean } | null>).then(res => {
+                if (res && res.message) feedback!.notify(res.message, { title: 'Script action', tone: 'success', auditAction: 'report.script.run' });
                 if (res && res.refresh) {
                     // `fetchManifest` was never defined, so a RUN_SCRIPT action that asked for a
                     // refresh threw instead of refreshing — after the script had already run.
                     // Re-posting an empty parameter set is how the two branches above refresh;
                     // `isInteraction` keeps a paginated page from staging the empty set and
                     // handing back null, and keeps the report's parameter state untouched.
-                    postParameters({}, true).then(m => { if (m)
-                        renderManifest(m); });
+                    postParameters({}, true).then(m => { if (m) renderManifest(m); });
                 }
             });
-        }
-        else {
+        } else {
             console.warn('RUN_SCRIPT is only supported in web mode.');
         }
-    }
-    else if (action.type === 'CLEAR_FILTERS') {
+    } else if (action.type === 'CLEAR_FILTERS') {
         // Reset all cross-filter states on all pages
-        for (let k in _crossFilterStates)
-            delete _crossFilterStates[k];
+        for (let k in _crossFilterStates) delete _crossFilterStates[k];
         document.querySelectorAll('.page').forEach(pageEl => {
             pageEl.querySelectorAll('.visual-card').forEach(card => {
                 card.classList.remove('cross-filter-source');
@@ -567,108 +607,86 @@ export function executeAction(action, rowData, columns, visualName, visualCtx) {
         });
         // Reset parameters to baseline
         if (getBaselineManifest() && getBaselineManifest().parameters) {
-            const resetBatch = {};
+            const resetBatch: Record<string, unknown> = {};
             Object.keys(getBaselineManifest().parameters).forEach(k => {
                 resetBatch[k] = getBaselineManifest().parameters[k];
             });
-            postParameters(resetBatch).then(m => { if (m)
-                renderManifest(m); });
+            postParameters(resetBatch).then(m => { if (m) renderManifest(m); });
+        } else {
+            if (vscode) vscode.postMessage({ type: 'refreshReport', parameters: {} });
+            else postParameters({}).then(m => { if (m) renderManifest(m); });
         }
-        else {
-            if (vscode)
-                vscode.postMessage({ type: 'refreshReport', parameters: {} });
-            else
-                postParameters({}).then(m => { if (m)
-                    renderManifest(m); });
-        }
-    }
-    else if (action.type === 'APPLY_PARAMETERS') {
+    } else if (action.type === 'APPLY_PARAMETERS') {
         const batch = { ...pendingParameters };
         // Clear pending
-        for (let k in pendingParameters)
-            delete pendingParameters[k];
+        for (let k in pendingParameters) delete pendingParameters[k];
         updateStagedUI();
+
         // Flush to server
-        _postParametersInternal(batch, false, getActivePageName()).then(m => { if (m)
-            renderManifest(m); });
-    }
-    else if (action.type === 'BACK') {
+        _postParametersInternal(batch, false, getActivePageName()).then(m => { if (m) renderManifest(m); });
+    } else if (action.type === 'BACK') {
         window.history.back();
-    }
-    else if (action.type === 'REFRESH') {
+    } else if (action.type === 'REFRESH') {
         if (isInteractive) {
             fetch(apiBase + '/manifest')
                 .then(r => r.json())
                 .then(m => renderManifest(m))
                 .catch(e => console.error('Refresh failed:', e));
         }
-    }
-    else if (action.type === 'REFRESH_VISUALS') {
+    } else if (action.type === 'REFRESH_VISUALS') {
         const targets = (action.targets || []).filter(Boolean);
-        if (targets.length === 0)
-            return;
+        if (targets.length === 0) return;
         if (vscode) {
             vscode.postMessage({ type: 'refreshVisuals', visuals: targets });
+        } else {
+            postRefreshVisuals(targets).then(m => { if (m) renderManifest(m); });
         }
-        else {
-            postRefreshVisuals(targets).then(m => { if (m)
-                renderManifest(m); });
-        }
-    }
-    else if (action.type === 'EXPORT_CSV' || action.type === 'EXPORT_EXCEL') {
+    } else if (action.type === 'EXPORT_CSV' || action.type === 'EXPORT_EXCEL') {
         const targetName = action.targetVisual || (visualCtx && visualCtx.options && visualCtx.options.TARGET);
         const visual = targetName ? findVisualData(targetName) : null;
-        if (!visual) {
-            console.warn('EXPORT action: no target visual found:', targetName);
-            return;
-        }
-        if (action.type === 'EXPORT_CSV')
-            exportCsv(visual);
-        else
-            exportExcelDownload(visual);
-    }
-    else if (action.type === 'EXPORT_PDF') {
+        if (!visual) { console.warn('EXPORT action: no target visual found:', targetName); return; }
+        if (action.type === 'EXPORT_CSV') exportCsv(visual);
+        else exportExcelDownload(visual);
+    } else if (action.type === 'EXPORT_PDF') {
         window.print();
-    }
-    else if (action.type === 'NAVIGATE_PAGE') {
+    } else if (action.type === 'NAVIGATE_PAGE') {
         navigateToPage(action.targetPage);
-    }
-    else if (action.type === 'DRILL_REPORT') {
+    } else if (action.type === 'DRILL_REPORT') {
         const targetReport = resolveActionValue(action, rowData, columns) || action.targetReport;
-        if (!targetReport)
-            return;
+        if (!targetReport) return;
+
         const finalParams = resolveActionParameters(action, rowData, columns);
+
         // Build query string
         const qs = Object.entries(finalParams)
             .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
             .join('&');
+
         if (vscode) {
             vscode.postMessage({
                 type: 'drillReport',
                 targetReport: targetReport,
                 parameters: finalParams
             });
-        }
-        else {
+        } else {
             // Determine target URL based on current environment
             let targetUrl;
-            const reportName = targetReport.replace(/\.[^/.]+$/, "").replace(/^.*[\\/]/, '');
+            const reportName = (targetReport as string).replace(/\.[^/.]+$/, "").replace(/^.*[\\/]/, '');
+
             if (window.__API_BASE__) {
                 // Portal mode: navigate to sibling report
                 const parts = window.__API_BASE__.split('/'); // e.g. ["", "reports", "Summary", "api"]
                 if (parts.length >= 3) {
                     targetUrl = `/${parts[1]}/${encodeURIComponent(reportName)}`;
-                }
-                else {
+                } else {
                     targetUrl = `/reports/${encodeURIComponent(reportName)}`;
                 }
-            }
-            else {
+            } else {
                 // Standalone mode: assume sibling file on same server
                 targetUrl = `/${encodeURIComponent(reportName)}`;
             }
-            if (qs)
-                targetUrl += (targetUrl.includes('?') ? '&' : '?') + qs;
+
+            if (qs) targetUrl += (targetUrl.includes('?') ? '&' : '?') + qs;
             // Only navigate to a local, same-origin path: must start with a single '/'
             // (reject '//host' / '/\host' protocol-relative targets) so a crafted report
             // name can never redirect off-site.
@@ -676,84 +694,71 @@ export function executeAction(action, rowData, columns, visualName, visualCtx) {
                 window.location.href = targetUrl;
             }
         }
-    }
-    else if (action.type === 'SET_UI_STATE') {
+    } else if (action.type === 'SET_UI_STATE') {
         const targets = action.targets || [];
-        const key = (action.key || '').toUpperCase();
-        const value = action.value;
+        const key = ((action.key as string) || '').toUpperCase();
+        const value = action.value as string;
+
         // Resolve target elements
-        const elements = [];
+        const elements: HTMLElement[] = [];
         targets.forEach(t => {
             if (t.startsWith('TAG:')) {
                 const tagName = t.substring(4);
-                /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(`[data-tag="${tagName}"]`)).forEach(el => elements.push(el));
-            }
-            else {
+                /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll<HTMLElement>(`[data-tag="${tagName}"]`)).forEach(el => elements.push(el));
+            } else {
                 const el = document.getElementById(t) || document.querySelector(`[data-name="${t}"]`);
-                if (el)
-                    elements.push /** @type {HTMLElement} */((el));
+                if (el) elements.push/** @type {HTMLElement} */ ((el) as HTMLElement);
             }
         });
+
         elements.forEach(el => {
             if (key === 'VISIBLE') {
                 const isVisible = isOn(value);
                 el.style.display = isVisible ? '' : 'none';
                 const name = el.getAttribute('data-name') || el.id;
-                if (name)
-                    _uiStates[name] = Object.assign({}, _uiStates[name], { visible: isVisible });
-            }
-            else if (key === 'COLLAPSED') {
+                if (name) _uiStates[name] = Object.assign({}, _uiStates[name], { visible: isVisible });
+            } else if (key === 'COLLAPSED') {
                 const isCollapsed = isOn(value);
                 const container = el.closest('.collapsible-drawer') || el.closest('.collapsible-inline') || el.closest('.report-container') || el;
+
                 const name = container.getAttribute('data-name');
-                if (name)
-                    _uiStates[name] = Object.assign({}, _uiStates[name], { collapsed: isCollapsed });
-                if (isCollapsed)
-                    container.classList.add('collapsed');
-                else
-                    container.classList.remove('collapsed');
+                if (name) _uiStates[name] = Object.assign({}, _uiStates[name], { collapsed: isCollapsed });
+
+                if (isCollapsed) container.classList.add('collapsed');
+                else container.classList.remove('collapsed');
+
                 // Update chevrons for inline collapsible
                 if (container.classList.contains('collapsible-inline')) {
                     const chevron = container.querySelector('.container-chevron');
-                    if (chevron)
-                        chevron.innerHTML = isCollapsed ? '&#x25BC;' : '&#x25B2;';
+                    if (chevron) chevron.innerHTML = isCollapsed ? '&#x25BC;' : '&#x25B2;';
                 }
+
                 // Specific logic for drawers
                 if (container.classList.contains('collapsible-drawer')) {
-                    if (isCollapsed)
-                        container.classList.remove('open');
-                    else
-                        container.classList.add('open');
+                    if (isCollapsed) container.classList.remove('open');
+                    else container.classList.add('open');
                 }
+
                 // Trigger resize to handle grid reflow
                 setTimeout(() => {
-                    const pageGrid = /** @type {HTMLElement | null} */ (document.querySelector('.page-grid'));
-                    if (pageGrid)
-                        resizeChartsIn(pageGrid);
+                    const pageGrid = /** @type {HTMLElement | null} */ (document.querySelector<HTMLElement>('.page-grid'));
+                    if (pageGrid) resizeChartsIn(pageGrid);
                 }, 350);
-            }
-            else if (key === 'BACKGROUND-COLOR') {
+            } else if (key === 'BACKGROUND-COLOR') {
                 el.style.backgroundColor = value;
-            }
-            else if (key === 'COLOR') {
+            } else if (key === 'COLOR') {
                 el.style.color = value;
-            }
-            else if (key === 'CLASS') {
-                if (value.startsWith('+'))
-                    el.classList.add(value.substring(1));
-                else if (value.startsWith('-'))
-                    el.classList.remove(value.substring(1));
-                else
-                    el.className = value;
+            } else if (key === 'CLASS') {
+                if (value.startsWith('+')) el.classList.add(value.substring(1));
+                else if (value.startsWith('-')) el.classList.remove(value.substring(1));
+                else el.className = value;
             }
         });
-    }
-    else if (action.type === 'APPLY_BOOKMARK') {
+    } else if (action.type === 'APPLY_BOOKMARK') {
         applyBookmark(action.bookmarkName);
-    }
-    else if (action.type === 'RESET_PARAMETERS') {
+    } else if (action.type === 'RESET_PARAMETERS') {
         const targets = action.resetParameters || [];
-        const resetBatch = {};
+        const resetBatch: Record<string, unknown> = {};
         if (getBaselineManifest() && getBaselineManifest().parameters) {
             if (targets.length > 0) {
                 targets.forEach(p => {
@@ -767,14 +772,12 @@ export function executeAction(action, rowData, columns, visualName, visualCtx) {
                     }
                     resetBatch[cleanP] = foundVal;
                 });
-            }
-            else {
+            } else {
                 Object.keys(getBaselineManifest().parameters).forEach(k => {
                     resetBatch[k] = getBaselineManifest().parameters[k];
                 });
             }
-        }
-        else {
+        } else {
             if (targets.length > 0) {
                 targets.forEach(p => {
                     const cleanP = p.startsWith('@') ? p : ('@' + p);
@@ -782,18 +785,14 @@ export function executeAction(action, rowData, columns, visualName, visualCtx) {
                 });
             }
         }
-        for (let k in pendingParameters)
-            delete pendingParameters[k];
+        for (let k in pendingParameters) delete pendingParameters[k];
         updateStagedUI();
         if (vscode) {
             vscode.postMessage({ type: 'refreshReport', parameters: resetBatch });
+        } else {
+            _postParametersInternal(resetBatch, false, getActivePageName()).then(m => { if (m) renderManifest(m); });
         }
-        else {
-            _postParametersInternal(resetBatch, false, getActivePageName()).then(m => { if (m)
-                renderManifest(m); });
-        }
-    }
-    else if (action.type === 'OPEN_URL') {
+    } else if (action.type === 'OPEN_URL') {
         const rawUrl = action.urlTemplate
             ? interpolateUrlTemplate(action, rowData, columns)
             : (action.url || resolveActionValue(action, rowData, columns));
@@ -802,13 +801,12 @@ export function executeAction(action, rowData, columns, visualName, visualCtx) {
             const target = action.target || '_blank';
             window.open(url, target);
         }
-    }
-    else if (action.type === 'SHOW_MODAL') {
-        showModalDialog(action.modalName, getLastManifest());
-    }
-    else if (action.type === 'HIDE_MODAL') {
-        hideModalDialog(action.modalName);
+    } else if (action.type === 'SHOW_MODAL') {
+        showModalDialog(action.modalName as string | null | undefined, getLastManifest());
+    } else if (action.type === 'HIDE_MODAL') {
+        hideModalDialog(action.modalName as string | null | undefined);
     }
 }
-export function getDrillInFlight() { return _drillInFlight; }
-export function setDrillInFlight(value) { _drillInFlight = value; }
+
+export function getDrillInFlight(): boolean { return _drillInFlight; }
+export function setDrillInFlight(value: boolean): void { _drillInFlight = value; }

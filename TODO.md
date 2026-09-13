@@ -46,26 +46,30 @@ typing changes, and product behavior changes in separate reviewable batches.
    for checks and environment limits. Stateful closure refactors remain deferred.
 2. **§3's tracked repairs are implemented.** The late document-open continuation now checks that
    its document is still active before hiding Home or updating editor state.
-3. **Execute §5 incrementally.** Thirty-one modules are migrated through `rt-controls-date.ts`;
+3. **Execute §5 incrementally.** Thirty-five modules are migrated through `rt-views.ts`;
    the per-module ledger is in §5. Continue with another bounded module, retaining mixed-source
    checks and verifying generated output, sandbox, hosts, and offline delivery for each batch.
 4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
    a prerequisite for §5. The stateful closure extractions deferred from §2 remain separate
    refactors; do not silently add them to either the mechanical split or the type migration.
 
-**Session handoff — 2026-09-13:** Resume with incremental module batches. `rt-controls-date.ts` is migrated;
-its generated executable AST matches the previous JavaScript after ignoring redundant expression
-and arrow-parameter parentheses added by TypeScript. Focused checks cover disabled dates/days,
-range ordering, relative expressions, quick picks, and parameter batches. The filter-controls sandbox
-now includes a date-controls fixture and a focused Chromium regression test. Type/lint and asset
-checks pass, along with 56 consumer checks, 142 fast tests, and the Chromium date-controls test.
-Full delivery certification remains open in §5; these focused checks do not close that item.
+**Session handoff — 2026-09-13:** Resume with incremental module batches. Theme, layout, and date-control
+batches were committed as `ede1f882e`. Input controls, actions, `rt-chrome.ts`, and `rt-views.ts` are now migrated.
+Its generated executable AST matches the previous JavaScript after ignoring redundant expression
+and arrow-parameter parentheses. Retained JSDoc keeps generated JavaScript callers checked.
+Focused tests cover bookmarks, saved views, state capture, hash parsing, views picker, accessible state,
+checkbox values, numeric bounds, slider snapping, textbox validation, and slicer selection; the expanded
+filter-controls sandbox exercises these controls through the full runtime. Latest type/lint and asset checks,
+59 consumer checks, 142 fast tests, and PrePush validation pass with all 13 steps green. Input controls,
+actions, report chrome, and views remain uncommitted; nothing was pushed. Forty-five existing first-party
+JavaScript modules remain. The separate action-expression `<>` fix now passes numeric and string regression
+checks. Full delivery certification remains open in §5; these focused checks do not close that item.
 
 The broad unfinished draft is preserved locally under `artifacts/typescript-migration-drafts-20260912/`
 with its original repository-relative paths: 53 TypeScript drafts and copies of the compiler,
 compiler tests, and Portal designer preview HTML. These files are outside active compiler roots and
 are not committed. The Studio draft still has unresolved types. Do not restore the whole draft at once.
-For the next batch, inspect `rt-controls-input.js` and its saved draft before choosing scope.
+For the next migration batch, inspect `rt-views.js` and its saved draft before choosing scope.
 Do not expand the stateful Studio closure refactors into this migration.
 
 Keep the authored `.ts` files under `Resources/TypeScript/`, then run asset sync. The generated
@@ -677,6 +681,31 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   prior executable AST apart from redundant parentheses. Focused checks cover disabled dates/days,
   absolute range ordering, relative expressions, quick picks, and parameter batches; the sandbox
   date fixture exercises errors and recovery through the full report runtime.
+  **Input controls module migrated:** `rt-controls-input.ts` types control actions, option maps,
+  slicer items/selections, numeric values, DOM elements, callbacks, and timers. Removed the broad
+  draft's dependency on unfinished actions types and its utility wrappers, aliases, and behavioral
+  changes. Preserved generated JavaScript JSDoc for the mixed-source gate. Focused checks cover
+  accessible state, checkbox values, numeric bounds, slider snapping, and textbox validation.
+  **Actions module migrated:** `rt-actions.ts` types action payloads, parameter state, visual hosts,
+  navigation, and script results. Generated executable AST is unchanged apart from redundant
+  parentheses. Focused checks cover comparisons, action filtering, parameter updates/reset/apply,
+  visual refresh, and script completion. Chromium tests cover HTML actions and offline bookmarks.
+  **Report chrome module migrated:** `rt-chrome.ts` types header metadata, navigation, parameter
+  prompts, modal containers, pipeline messages, and execution trees. Removed draft runtime changes
+  and `as never` casts. Generated executable AST matches the original apart from redundant
+  parentheses; DOM JSDoc preserves the mixed-source gate.
+  **Report views module migrated:** `rt-views.ts` types view states (`ViewState`), view options
+  (`ViewOptions`), bookmarks (`Bookmark`), saved views (`SavedView`), view manifests (`ViewManifest`),
+  and hash states (`ViewHash`). Preserved single-line `INTRA_IMPORT` and inline `EXPORT_DECL` patterns
+  required by the single-file offline bundle concatenator (`report-runtime.bundle.js`). Emitted executable
+  AST matches the original apart from redundant parentheses; DOM JSDoc preserves the mixed-source gate.
+  Focused consumer check `scripts/test-runtime-views.mjs` verifies hash parsing, endpoint routing, state
+  capture, offline bookmark replay, and views picker generation.
+  **Visual module migrated:** `rt-visual.ts` types visual dispatch, maximization state, KPI cards,
+  text/image rendering, and HTML sanitization. Generated-output checks cover card creation,
+  maximization, KPI formatting, text interpolation, and URL rejection. Runtime asset assertions
+  tolerate compiler whitespace while retaining the MATRIX dispatch and chart fallback checks.
+  All six runtime asset tests and all 60 consumer checks pass; type/lint and asset drift are clean.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned
@@ -736,6 +765,13 @@ Found during the v0.20.0 pre-release review (2026-09-09). Items are prioritised 
 first. Audit detail: [`code-audit-v0.20.0.md`](.gemini/antigravity-cli/brain/007e4d74-31a8-4236-bf4f-54291dc1c8ed/code-audit-v0.20.0.md).
 
 **Release-blocking**
+
+- [x] **P0: Browser action expressions misread `<>`.** In `Resources/TypeScript/rt-actions.ts`,
+  `evaluateExpressionAgainstParameters('@amount <> 12', { '@amount': '12' })` returns `true`.
+  The comparison regex matches `<` before `<>`, leaving `> 12` as the right operand. This predates
+  the TypeScript migration. Fixed by matching `<>` before single-character operators in parameter
+  expressions and conditional formatting. Generated-output regressions cover all eight comparison
+  operators with equal, lesser, and greater numeric values, plus case-insensitive string inequality.
 
 - [x] **`JobApiEndpoints.cs` — `_jobs` dictionary is an unbounded leak.** Ad-hoc job submissions add
   a `JobEntry` (which holds a `CancellationTokenSource`) to a static `ConcurrentDictionary` and

@@ -1,14 +1,15 @@
 // Exercise the real sync command in an isolated tree, including its failure paths.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Script } from 'node:vm';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const work = mkdtempSync(path.join(tmpdir(), 'etlsql-runtime-bundle-'));
+const tempBase = existsSync(path.join(repo, 'scratch')) ? path.join(repo, 'scratch') : tmpdir();
+const work = mkdtempSync(path.join(tempBase, 'etlsql-runtime-bundle-'));
 const relative = 'src/ETL-SQL.ReportRuntime/Resources/Shared';
 const shared = path.join(work, relative);
 const bundle = path.join(shared, 'report-runtime.bundle.js');

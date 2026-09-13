@@ -9,6 +9,12 @@ $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot = Resolve-Path (Join-Path $ScriptRoot "..")
 
+$scratchDir = Join-Path $RepoRoot "scratch"
+if (Test-Path $scratchDir) {
+    $env:TEMP = $scratchDir
+    $env:TMP = $scratchDir
+}
+
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " ETL-SQL FAST PRE-PUSH VALIDATION" -ForegroundColor Cyan

@@ -18,6 +18,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Shared report visuals now compile from strict TypeScript (`rt-visual.ts`), including visual
+  dispatch, maximization, KPI cards, text, images, and HTML sanitization.
+- Report headers, navigation, parameter prompts, dialogs, and pipeline consoles now compile from
+  strict TypeScript (`rt-chrome.ts`) with unchanged executable behavior.
+- Shared report actions now compile from strict TypeScript (`rt-actions.ts`). Parameter updates,
+  navigation, visual refresh, and script execution preserve their existing executable behavior.
+- Slicer, slider, search, checkbox, textbox, numberbox, and button controls now compile from strict
+  TypeScript (`rt-controls-input.ts`). Parameter updates, validation, and accessible state retain
+  their existing behavior.
 - Absolute and relative date controls now compile from strict TypeScript (`rt-controls-date.ts`).
   Date restrictions, range validation, quick picks, and parameter updates retain their existing behavior.
 - Shared report page and container layouts now compile from strict TypeScript (`rt-layout.ts`).
@@ -123,6 +132,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Browser action expressions and conditional formatting now parse `<>` as inequality. Equal values
+  no longer produce an incorrect result because the operator was split into `<` and `>`.
 - Orchestrator ad-hoc job execution disposes cancellation tokens on completion, evicts stale completed jobs via a 1-hour retention policy, and handles pre-try faults so submissions do not hang in queued state.
 - FlatFile and SMTP connectors enforce execution context presence during path resolution, preventing unvalidated path access when context is missing.
 - Live TUI visualizer and execution tree demo cancel and dispose cancellation token sources cleanly, including on evaluation failure.

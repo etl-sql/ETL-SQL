@@ -22,6 +22,7 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("renderNavBar", js);
             Assert.Contains("applyPageCrossFilter", js);
             Assert.Contains("ON_SELECT", js);
+
             Assert.Contains("function crossFilterActive", js);
             Assert.Contains("toggleVisualMaximize", js);
             Assert.Contains("closeMaximizedVisual", js);
@@ -29,7 +30,7 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("collapsedRows", js);
             Assert.Contains("collapsedCols", js);
             Assert.Contains("matrix-toggle", js);
-            Assert.Contains("case 'MATRIX':      renderMatrix(card, visual)", js);
+            Assert.Matches(@"case 'MATRIX':\s+renderMatrix\(card, visual\);", js);
             Assert.Contains("visual.highlightRows.map(rowKey)", js);
             Assert.Contains("function applyNativeHighlight", js);
             Assert.Contains("const hasCrossHighlights", js);
@@ -118,7 +119,7 @@ namespace ETL_SQL.Tests.Reporting
 
             Assert.DoesNotContain("renderChart(", js);
             Assert.Contains("function renderMissingChartPayload", js);
-            Assert.Contains(": renderMissingChartPayload(card, visual); break;", js);
+            Assert.Matches(@":\s+renderMissingChartPayload\(card, visual\);\s+break;", js);
             Assert.Contains("el.setAttribute('role', 'status')", js);
             Assert.Contains(".missing-chart-payload", css);
         }

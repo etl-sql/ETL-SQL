@@ -4210,21 +4210,22 @@ function renderRelDatePicker(container, visual, manifest) {
 
 
 // ─── rt-controls-input.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-controls-input.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Slicer, slider, search, checkbox, textbox, numberbox, and button controls.
  */
-
-
 function applyControlState(input, visual, wrapper) {
     const opts = visual?.options || {};
     const disabledExpr = opts['DISABLED'] || opts['disabled'];
     const readOnlyExpr = opts['READ_ONLY'] || opts['read_only'] || opts['READONLY'] || opts['readonly'];
     const isDisabled = disabledExpr != null && evaluateExpressionAgainstParameters(disabledExpr, parameters);
     const isReadOnly = readOnlyExpr != null && evaluateExpressionAgainstParameters(readOnlyExpr, parameters);
-
     if (input) {
         if (isDisabled) {
             input.disabled = true;
@@ -4236,47 +4237,39 @@ function applyControlState(input, visual, wrapper) {
         }
     }
     if (wrapper) {
-        if (isDisabled) wrapper.classList.add('is-disabled');
-        if (isReadOnly) wrapper.classList.add('is-readonly');
+        if (isDisabled)
+            wrapper.classList.add('is-disabled');
+        if (isReadOnly)
+            wrapper.classList.add('is-readonly');
     }
 }
-
 // ── Slicer ──────────────────────────────────────────────────────────────
-
 function setParameterAccessibleName(control, visual, parameterName, qualifier) {
     const visualName = String((visual && visual.name) || '').trim();
     const normalizedParameter = String(parameterName || '').replace(/^@/, '').trim();
     const baseName = visualName || normalizedParameter || 'Report parameter';
     control.setAttribute('aria-label', qualifier ? `${baseName} ${qualifier}` : baseName);
 }
-
 function renderSlicer(container, visual, manifest) {
     const wrapper = document.createElement('div');
     wrapper.className = 'slicer-wrapper';
-
     const opts = visual.options || {};
     const vstyles = visual.styles || {};
-    const action = visual.actions.find(a => a.type === 'SET_PARAMETER');
+    const action = visual.actions.find((a) => a.type === 'SET_PARAMETER');
     const paramName = action ? action.parameterName : null;
-
     const typeStr = visual.visualType.toLowerCase();
     const modeOpt = (getOption(opts, 'mode') || '').toUpperCase();
     const isMulti = typeStr === 'multiselect' || modeOpt === 'MULTI' || isOn(opts['multiple'] || opts['MULTIPLE']);
-
-    const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+    const changeActions = actionsFor(visual, 'ON_CHANGE').filter((a) => a.type === 'SET_PARAMETER');
     const isInteractive = (isWebMode || vscode) && changeActions.length > 0;
-
     const valCol = (getOption(opts, 'mapping:value') || visual.columns[0] || 'value').toLowerCase();
     const lblCol = (getOption(opts, 'mapping:label') || (visual.columns.length > 1 ? visual.columns[1] : visual.columns[0]) || 'label').toLowerCase();
     const imgCol = (getOption(opts, 'mapping:image') || getOption(opts, 'image') || '').toLowerCase();
-
     const valIdx = visual.columns.findIndex(c => c.toLowerCase() === valCol);
     const lblIdx = visual.columns.findIndex(c => c.toLowerCase() === lblCol);
     const imgIdx = imgCol ? visual.columns.findIndex(c => c.toLowerCase() === imgCol) : -1;
-
     const finalValIdx = valIdx >= 0 ? valIdx : 0;
     const finalLblIdx = lblIdx >= 0 ? lblIdx : (visual.columns.length > 1 ? 1 : 0);
-
     // Extract options
     const rawItems = (visual.rows || []).map((row, idx) => {
         const val = String(row[finalValIdx] ?? '');
@@ -4284,34 +4277,31 @@ function renderSlicer(container, visual, manifest) {
         const img = imgIdx >= 0 && row[imgIdx] != null ? String(row[imgIdx]) : null;
         return { value: val, label: lbl, image: img, origIndex: idx };
     });
-
     // Deduplicate by value
     const seen = new Set();
     const items = [];
-    rawItems.forEach(it => {
+    rawItems.forEach((it) => {
         if (!seen.has(it.value)) {
             seen.add(it.value);
             items.push(it);
         }
     });
-
     // Sorting
     const sortOpt = (getOption(opts, 'sort') || 'SOURCE').toUpperCase();
     if (sortOpt === 'ALPHA' || sortOpt === 'LABEL') {
         items.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
-    } else if (sortOpt === 'VALUE') {
+    }
+    else if (sortOpt === 'VALUE') {
         items.sort((a, b) => {
             const an = parseFloat(a.value), bn = parseFloat(b.value);
             return (!isNaN(an) && !isNaN(bn)) ? an - bn : a.value.localeCompare(b.value);
         });
     }
-
     // Option limit
     const maxOptions = parseInt(getOption(opts, 'max_options') || '0', 10);
     const totalOptions = items.length;
     const hasOverflow = maxOptions > 0 && totalOptions > maxOptions;
     const displayedItems = hasOverflow ? items.slice(0, maxOptions) : items;
-
     // Current parameter / default value
     let currentVal = undefined;
     if (paramName && manifest && manifest.parameters) {
@@ -4320,43 +4310,38 @@ function renderSlicer(container, visual, manifest) {
     if (currentVal === undefined || currentVal === null || currentVal === '') {
         currentVal = visual.defaultValue || getOption(opts, 'default') || '';
     }
-
     const param = paramName;
-
     let selected = isMulti
         ? new Set(parseMultiParameter(currentVal))
         : (currentVal !== undefined && currentVal !== '' ? String(currentVal) : (displayedItems[0]?.value ?? ''));
-
     // Layout
     let layout = (getStyle(vstyles, 'LAYOUT') || getOption(opts, 'layout') || '').toUpperCase();
     if (!layout) {
         layout = typeStr === 'multiselect' ? 'LIST' : 'DROPDOWN';
     }
-
     // Searchable
     const isSearchable = isOn(getOption(opts, 'searchable'));
-
     // Select All control
     const showSelectAll = isMulti && (isOn(getOption(opts, 'show_select_all')) || isOn(getOption(opts, 'legend')));
     const selectAllLabel = getOption(opts, 'select_all_label') || 'Select All';
     const clearAllLabel = getOption(opts, 'clear_all_label') || 'Clear All';
-
     // Image styling options
     const imgSize = getOption(opts, 'image_size') || '24px';
     const imgPos = (getOption(opts, 'image_position') || 'LEFT').toUpperCase();
     const imgFit = getOption(opts, 'image_fit') || 'cover';
-
     function postBatch(val) {
-        if (!isInteractive) return;
+        if (!isInteractive)
+            return;
         const batch = {};
-        changeActions.forEach(a => {
+        changeActions.forEach((a) => {
             batch[a.parameterName] = val;
         });
-        postParameters(batch).then(m => { if (m) renderManifest(m); });
+        postParameters(batch).then(m => { if (m)
+            renderManifest(m); });
     }
-
     function createOptionImage(src) {
-        if (!src) return null;
+        if (!src)
+            return null;
         const img = document.createElement('img');
         img.src = src;
         img.className = 'slicer-option-image' + (imgPos === 'TOP' ? ' pos-top' : '');
@@ -4365,15 +4350,14 @@ function renderSlicer(container, visual, manifest) {
         img.style.objectFit = imgFit;
         return img;
     }
-
     function createOverflowIndicator() {
-        if (!hasOverflow) return null;
+        if (!hasOverflow)
+            return null;
         const div = document.createElement('div');
         div.className = isMulti ? 'multiselect-overflow' : 'slicer-overflow';
         div.textContent = `Showing first ${maxOptions} of ${totalOptions} options`;
         return div;
     }
-
     // Render based on layout
     if (layout === 'TILE' || layout === 'BUTTON_BAR' || layout === 'CHIPS') {
         if (isSearchable) {
@@ -4383,7 +4367,6 @@ function renderSlicer(container, visual, manifest) {
             searchIn.placeholder = 'Type to filter…';
             wrapper.appendChild(searchIn);
         }
-
         if (showSelectAll) {
             const headerActions = document.createElement('div');
             headerActions.className = 'multiselect-header-actions';
@@ -4398,7 +4381,6 @@ function renderSlicer(container, visual, manifest) {
             headerActions.appendChild(selAllBtn);
             headerActions.appendChild(clrAllBtn);
             wrapper.appendChild(headerActions);
-
             selAllBtn.addEventListener('click', () => {
                 displayedItems.forEach(it => selected.add(it.value));
                 tileContainer.querySelectorAll('.slicer-tile, .multiselect-chip').forEach(t => t.classList.add('active'));
@@ -4410,71 +4392,69 @@ function renderSlicer(container, visual, manifest) {
                 postBatch(JSON.stringify([]));
             });
         }
-
         const tileContainer = document.createElement('div');
         tileContainer.className = layout === 'BUTTON_BAR' ? 'slicer-button-bar' : (layout === 'CHIPS' ? 'multiselect-chips' : 'slicer-tile-container');
-        if (paramName) tileContainer.setAttribute('data-parameter', paramName);
-
+        if (paramName)
+            tileContainer.setAttribute('data-parameter', paramName);
         const tileEntries = [];
-        displayedItems.forEach(item => {
+        displayedItems.forEach((item) => {
             const tile = document.createElement('button');
             tile.type = 'button';
             tile.className = (layout === 'CHIPS' ? 'multiselect-chip' : 'slicer-tile') + (imgPos === 'TOP' ? ' pos-top' : '');
             const isSelected = isMulti ? selected.has(item.value) : (selected === item.value);
-            if (isSelected) tile.classList.add('active');
+            if (isSelected)
+                tile.classList.add('active');
             setParameterAccessibleName(tile, visual, paramName, item.label);
-
             const imgEl = createOptionImage(item.image);
             const labelSpan = document.createElement('span');
             labelSpan.textContent = item.label;
-
             if (imgEl && imgPos === 'RIGHT') {
                 tile.appendChild(labelSpan);
                 tile.appendChild(imgEl);
-            } else {
-                if (imgEl) tile.appendChild(imgEl);
+            }
+            else {
+                if (imgEl)
+                    tile.appendChild(imgEl);
                 tile.appendChild(labelSpan);
             }
-
             tile.addEventListener('click', () => {
                 if (isMulti) {
                     if (selected.has(item.value)) {
                         selected.delete(item.value);
                         tile.classList.remove('active');
-                    } else {
+                    }
+                    else {
                         selected.add(item.value);
                         tile.classList.add('active');
                     }
                     postBatch(JSON.stringify(Array.from(selected)));
-                } else {
+                }
+                else {
                     tileContainer.querySelectorAll('.slicer-tile, .multiselect-chip').forEach(t => t.classList.remove('active'));
                     tile.classList.add('active');
                     selected = item.value;
                     postBatch(item.value);
                 }
             });
-
             tileContainer.appendChild(tile);
             tileEntries.push({ el: tile, item });
         });
-
         wrapper.appendChild(tileContainer);
-
         if (isSearchable) {
-            const searchIn = wrapper.querySelector('.slicer-search, .multiselect-search');
+            const searchIn = /** @type {HTMLInputElement | null} */ (wrapper.querySelector('.slicer-search, .multiselect-search'));
             searchIn?.addEventListener('input', () => {
-                const q = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (searchIn).value.toLowerCase().trim();
+                const q = searchIn.value.toLowerCase().trim();
                 tileEntries.forEach(({ el, item }) => {
                     const m = !q || item.label.toLowerCase().includes(q) || item.value.toLowerCase().includes(q);
                     el.style.display = m ? '' : 'none';
                 });
             });
         }
-
         const overflowEl = createOverflowIndicator();
-        if (overflowEl) wrapper.appendChild(overflowEl);
-
-    } else if (layout === 'LIST') {
+        if (overflowEl)
+            wrapper.appendChild(overflowEl);
+    }
+    else if (layout === 'LIST') {
         if (isSearchable) {
             const searchIn = document.createElement('input');
             searchIn.type = 'search';
@@ -4482,7 +4462,6 @@ function renderSlicer(container, visual, manifest) {
             searchIn.placeholder = 'Type to filter…';
             wrapper.appendChild(searchIn);
         }
-
         if (showSelectAll) {
             const headerActions = document.createElement('div');
             headerActions.className = 'multiselect-header-actions';
@@ -4497,101 +4476,98 @@ function renderSlicer(container, visual, manifest) {
             headerActions.appendChild(selAllBtn);
             headerActions.appendChild(clrAllBtn);
             wrapper.appendChild(headerActions);
-
             selAllBtn.addEventListener('click', () => {
                 displayedItems.forEach(it => selected.add(it.value));
-                list.querySelectorAll('input[type="checkbox"]').forEach(cb => { /** @type {HTMLInputElement} */ (cb).checked = true; });
+                /** @type {NodeListOf<HTMLInputElement>} */ (list.querySelectorAll('input[type="checkbox"]')).forEach(cb => { cb.checked = true; });
                 postBatch(JSON.stringify(Array.from(selected)));
             });
             clrAllBtn.addEventListener('click', () => {
                 selected.clear();
-                list.querySelectorAll('input[type="checkbox"]').forEach(cb => { /** @type {HTMLInputElement} */ (cb).checked = false; });
+                /** @type {NodeListOf<HTMLInputElement>} */ (list.querySelectorAll('input[type="checkbox"]')).forEach(cb => { cb.checked = false; });
                 postBatch(JSON.stringify([]));
             });
         }
-
         const list = document.createElement('div');
         list.className = 'multiselect-list';
-        if (paramName) list.setAttribute('data-parameter', paramName);
-
+        if (paramName)
+            list.setAttribute('data-parameter', paramName);
         const listEntries = [];
-        displayedItems.forEach(item => {
+        displayedItems.forEach((item) => {
             const itemEl = document.createElement('label');
             itemEl.className = 'multiselect-item' + (imgPos === 'TOP' ? ' pos-top' : '');
-
             const input = document.createElement('input');
             input.type = isMulti ? 'checkbox' : 'radio';
-            if (!isMulti && paramName) input.name = paramName;
+            if (!isMulti && paramName)
+                input.name = paramName;
             input.value = item.value;
             input.checked = isMulti ? selected.has(item.value) : (selected === item.value);
             setParameterAccessibleName(input, visual, paramName, item.label);
-
             input.addEventListener('change', () => {
                 if (isMulti) {
-                    if (input.checked) selected.add(item.value);
-                    else selected.delete(item.value);
+                    if (input.checked)
+                        selected.add(item.value);
+                    else
+                        selected.delete(item.value);
                     postBatch(JSON.stringify(Array.from(selected)));
-                } else {
+                }
+                else {
                     selected = item.value;
                     postBatch(item.value);
                 }
             });
-
             const imgEl = createOptionImage(item.image);
             const span = document.createElement('span');
             span.textContent = item.label;
-
             itemEl.appendChild(input);
             if (imgEl && imgPos === 'RIGHT') {
                 itemEl.appendChild(span);
                 itemEl.appendChild(imgEl);
-            } else {
-                if (imgEl) itemEl.appendChild(imgEl);
+            }
+            else {
+                if (imgEl)
+                    itemEl.appendChild(imgEl);
                 itemEl.appendChild(span);
             }
-
             list.appendChild(itemEl);
             listEntries.push({ el: itemEl, item });
         });
-
         wrapper.appendChild(list);
-
         if (isSearchable) {
-            const searchIn = wrapper.querySelector('.slicer-search, .multiselect-search');
+            const searchIn = /** @type {HTMLInputElement | null} */ (wrapper.querySelector('.slicer-search, .multiselect-search'));
             searchIn?.addEventListener('input', () => {
-                const q = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (searchIn).value.toLowerCase().trim();
+                const q = searchIn.value.toLowerCase().trim();
                 listEntries.forEach(({ el, item }) => {
                     const m = !q || item.label.toLowerCase().includes(q) || item.value.toLowerCase().includes(q);
                     el.style.display = m ? '' : 'none';
                 });
             });
         }
-
         const overflowEl = createOverflowIndicator();
-        if (overflowEl) wrapper.appendChild(overflowEl);
-
-    } else {
+        if (overflowEl)
+            wrapper.appendChild(overflowEl);
+    }
+    else {
         // DROPDOWN layout
         if (isMulti) {
             const dropWrapper = document.createElement('div');
             dropWrapper.className = 'multiselect-dropdown';
-
             const toggle = document.createElement('button');
             toggle.type = 'button';
             toggle.className = 'multiselect-toggle';
-
             const updateToggleText = () => {
-                if (selected.size === 0) toggle.innerHTML = '<span>All</span>';
-                else if (selected.size === 1) toggle.innerHTML = `<span>${escHtml(Array.from(selected)[0])}</span>`;
-                else toggle.innerHTML = `<span>${selected.size} selected</span>`;
+                if (selected.size === 0)
+                    toggle.innerHTML = '<span>All</span>';
+                else if (selected.size === 1)
+                    toggle.innerHTML = `<span>${escHtml(Array.from(selected)[0])}</span>`;
+                else
+                    toggle.innerHTML = `<span>${selected.size} selected</span>`;
                 toggle.innerHTML += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
             };
             updateToggleText();
-
             const popup = document.createElement('div');
             popup.className = 'multiselect-popup';
-            if (paramName) popup.setAttribute('data-parameter', paramName);
-
+            if (paramName)
+                popup.setAttribute('data-parameter', paramName);
             if (isSearchable) {
                 const searchIn = document.createElement('input');
                 searchIn.type = 'search';
@@ -4600,7 +4576,6 @@ function renderSlicer(container, visual, manifest) {
                 searchIn.addEventListener('click', e => e.stopPropagation());
                 popup.appendChild(searchIn);
             }
-
             if (showSelectAll) {
                 const headerActions = document.createElement('div');
                 headerActions.className = 'multiselect-header-actions';
@@ -4615,87 +4590,82 @@ function renderSlicer(container, visual, manifest) {
                 headerActions.appendChild(selAllBtn);
                 headerActions.appendChild(clrAllBtn);
                 popup.appendChild(headerActions);
-
                 selAllBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     displayedItems.forEach(it => selected.add(it.value));
-                    popup.querySelectorAll('input[type="checkbox"]').forEach(cb => { /** @type {HTMLInputElement} */ (cb).checked = true; });
+                    /** @type {NodeListOf<HTMLInputElement>} */ (popup.querySelectorAll('input[type="checkbox"]')).forEach(cb => { cb.checked = true; });
                     updateToggleText();
                     postBatch(JSON.stringify(Array.from(selected)));
                 });
                 clrAllBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     selected.clear();
-                    popup.querySelectorAll('input[type="checkbox"]').forEach(cb => { /** @type {HTMLInputElement} */ (cb).checked = false; });
+                    /** @type {NodeListOf<HTMLInputElement>} */ (popup.querySelectorAll('input[type="checkbox"]')).forEach(cb => { cb.checked = false; });
                     updateToggleText();
                     postBatch(JSON.stringify([]));
                 });
             }
-
             const popupEntries = [];
-            displayedItems.forEach(item => {
+            displayedItems.forEach((item) => {
                 const itemEl = document.createElement('label');
                 itemEl.className = 'multiselect-item';
-
                 const cb = document.createElement('input');
                 cb.type = 'checkbox';
                 cb.value = item.value;
                 cb.checked = selected.has(item.value);
                 const val = item.value;
                 setParameterAccessibleName(cb, visual, param, val);
-
                 cb.addEventListener('change', () => {
-                    if (cb.checked) selected.add(item.value);
-                    else selected.delete(item.value);
+                    if (cb.checked)
+                        selected.add(item.value);
+                    else
+                        selected.delete(item.value);
                     updateToggleText();
                     postBatch(JSON.stringify(Array.from(selected)));
                 });
-
                 const imgEl = createOptionImage(item.image);
                 const span = document.createElement('span');
                 span.textContent = item.label;
-
                 itemEl.appendChild(cb);
                 if (imgEl && imgPos === 'RIGHT') {
                     itemEl.appendChild(span);
                     itemEl.appendChild(imgEl);
-                } else {
-                    if (imgEl) itemEl.appendChild(imgEl);
+                }
+                else {
+                    if (imgEl)
+                        itemEl.appendChild(imgEl);
                     itemEl.appendChild(span);
                 }
-
                 popup.appendChild(itemEl);
                 popupEntries.push({ el: itemEl, item });
             });
-
             if (isSearchable) {
-                const searchIn = popup.querySelector('.multiselect-search');
+                const searchIn = /** @type {HTMLInputElement | null} */ (popup.querySelector('.multiselect-search'));
                 searchIn?.addEventListener('input', () => {
-                    const q = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (searchIn).value.toLowerCase().trim();
+                    const q = searchIn.value.toLowerCase().trim();
                     popupEntries.forEach(({ el, item }) => {
                         const m = !q || item.label.toLowerCase().includes(q) || item.value.toLowerCase().includes(q);
                         el.style.display = m ? '' : 'none';
                     });
                 });
             }
-
             const overflowEl = createOverflowIndicator();
-            if (overflowEl) popup.appendChild(overflowEl);
-
+            if (overflowEl)
+                popup.appendChild(overflowEl);
             toggle.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const isOpen = popup.classList.contains('open');
                 document.querySelectorAll('.multiselect-popup.open').forEach(p => p.classList.remove('open'));
-                if (!isOpen) popup.classList.add('open');
+                if (!isOpen)
+                    popup.classList.add('open');
             });
             popup.addEventListener('click', e => e.stopPropagation());
             document.addEventListener('click', () => { popup.classList.remove('open'); });
-
             dropWrapper.appendChild(toggle);
             dropWrapper.appendChild(popup);
             wrapper.appendChild(dropWrapper);
-
-        } else {
+        }
+        else {
             // Single-select dropdown
             if (isSearchable) {
                 const searchIn = document.createElement('input');
@@ -4704,156 +4674,168 @@ function renderSlicer(container, visual, manifest) {
                 searchIn.placeholder = 'Type to filter…';
                 wrapper.appendChild(searchIn);
             }
-
             const select = document.createElement('select');
             setParameterAccessibleName(select, visual, paramName);
-            if (paramName) select.setAttribute('data-parameter', paramName);
-
+            if (paramName)
+                select.setAttribute('data-parameter', paramName);
             displayedItems.forEach(item => {
                 const opt = document.createElement('option');
                 opt.value = item.value;
                 opt.textContent = item.label;
                 select.appendChild(opt);
             });
-
             if (selected !== undefined && selected !== '') {
                 select.value = selected;
             }
-
             if (isInteractive) {
                 select.addEventListener('change', () => {
                     postBatch(select.value);
                 });
                 wrapper.appendChild(select);
-            } else {
+            }
+            else {
                 const note = document.createElement('p');
                 note.className = 'slicer-note';
                 note.textContent = '[Slicer — interactive in ReportPlayer only]';
                 wrapper.appendChild(note);
             }
-
             if (isSearchable) {
-                const searchIn = wrapper.querySelector('.slicer-search');
+                const searchIn = /** @type {HTMLInputElement | null} */ (wrapper.querySelector('.slicer-search'));
                 searchIn?.addEventListener('input', () => {
-                    const q = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (searchIn).value.toLowerCase().trim();
+                    const q = searchIn.value.toLowerCase().trim();
                     Array.from(select.options).forEach(opt => {
                         const m = !q || opt.text.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q);
                         opt.hidden = !m;
                     });
                 });
             }
-
             const overflowEl = createOverflowIndicator();
-            if (overflowEl) wrapper.appendChild(overflowEl);
+            if (overflowEl)
+                wrapper.appendChild(overflowEl);
         }
     }
-
     container.appendChild(wrapper);
 }
-
 // ── Slider ──────────────────────────────────────────────────────────────
-
 function renderSlider(container, visual, manifest) {
-    const opts          = visual.options || {};
+    const opts = visual.options || {};
     const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
-    const startAction   = changeActions.length > 0 ? changeActions[0] : null;
-    const param         = startAction ? startAction.parameterName : null;
+    const startAction = changeActions.length > 0 ? changeActions[0] : null;
+    const param = startAction ? startAction.parameterName : null;
     const secondaryParam = (startAction && startAction.secondaryParameterName) || (changeActions.length > 1 ? changeActions[1].parameterName : null);
-    const mode          = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
-    const isRange       = mode === 'RANGE';
-    const min           = parseFloat(opts['MIN']  || opts['min']  || '0');
-    const max           = parseFloat(opts['MAX']  || opts['max']  || '100');
-    const step          = parseFloat(opts['STEP'] || opts['step'] || '1');
-    const formatOpt     = getOption(opts, 'format');
-    const fireOn        = (getOption(opts, 'fire_on') || 'RELEASE').toUpperCase();
-    const showTicks     = isOn(getOption(opts, 'show_ticks'));
+    const mode = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
+    const isRange = mode === 'RANGE';
+    const min = parseFloat(opts['MIN'] || opts['min'] || '0');
+    const max = parseFloat(opts['MAX'] || opts['max'] || '100');
+    const step = parseFloat(opts['STEP'] || opts['step'] || '1');
+    const formatOpt = getOption(opts, 'format');
+    const fireOn = (getOption(opts, 'fire_on') || 'RELEASE').toUpperCase();
+    const showTicks = isOn(getOption(opts, 'show_ticks'));
     const showTickLabels = isOn(getOption(opts, 'tick_labels'));
-
     let dataTicks = null;
     if (opts['DATA_TICKS']) {
         try {
             dataTicks = typeof opts['DATA_TICKS'] === 'string' ? JSON.parse(opts['DATA_TICKS']) : opts['DATA_TICKS'];
-        } catch {
+        }
+        catch {
             // DATA_TICKS is author-supplied; unparseable leaves the computed ticks.
         }
     }
-
     function snapValue(val) {
-        if (!Array.isArray(dataTicks) || dataTicks.length === 0) return val;
+        if (!Array.isArray(dataTicks) || dataTicks.length === 0)
+            return val;
         let closest = dataTicks[0];
         let minDiff = Math.abs(val - closest);
         for (let i = 1; i < dataTicks.length; i++) {
             const diff = Math.abs(val - dataTicks[i]);
-            if (diff < minDiff) { minDiff = diff; closest = dataTicks[i]; }
+            if (diff < minDiff) {
+                minDiff = diff;
+                closest = dataTicks[i];
+            }
         }
         return closest;
     }
-
     function formatDisplay(val) {
         return formatOpt ? formatValue(val, formatOpt) : String(val);
     }
-
     const wrapper = document.createElement('div');
     wrapper.className = 'filter-wrapper' + (isRange ? ' slider-range-wrapper' : '');
-
     const datalistId = 'ticks-' + (visual.name || Math.random().toString(36).slice(2));
     if (showTicks) {
         const dl = document.createElement('datalist');
         dl.id = datalistId;
         if (Array.isArray(dataTicks) && dataTicks.length > 0) {
-            dataTicks.forEach(t => {
+            dataTicks.forEach((t) => {
                 const opt = document.createElement('option');
                 opt.value = t;
-                if (showTickLabels) opt.label = formatDisplay(t);
+                if (showTickLabels)
+                    opt.label = formatDisplay(t);
                 dl.appendChild(opt);
             });
-        } else {
+        }
+        else {
             for (let v = min; v <= max; v += step) {
                 const opt = document.createElement('option');
                 opt.value = String(v);
-                if (showTickLabels) opt.label = formatDisplay(v);
+                if (showTickLabels)
+                    opt.label = formatDisplay(v);
                 dl.appendChild(opt);
             }
         }
         wrapper.appendChild(dl);
     }
-
     if (isRange) {
         let lowVal = min;
         let highVal = max;
         if (manifest && manifest.parameters) {
-            if (param) { const v = parseFloat(getParam(manifest.parameters, param)); if (!isNaN(v)) lowVal = v; }
-            if (secondaryParam) { const v = parseFloat(getParam(manifest.parameters, secondaryParam)); if (!isNaN(v)) highVal = v; }
-        } else {
+            if (param) {
+                const v = parseFloat(getParam(manifest.parameters, param));
+                if (!isNaN(v))
+                    lowVal = v;
+            }
+            if (secondaryParam) {
+                const v = parseFloat(getParam(manifest.parameters, secondaryParam));
+                if (!isNaN(v))
+                    highVal = v;
+            }
+        }
+        else {
             const def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
             const parts = parseMultiParameter(def);
-            if (parts.length > 0 && !isNaN(parseFloat(parts[0]))) lowVal = parseFloat(parts[0]);
-            if (parts.length > 1 && !isNaN(parseFloat(parts[1]))) highVal = parseFloat(parts[1]);
+            if (parts.length > 0 && !isNaN(parseFloat(parts[0])))
+                lowVal = parseFloat(parts[0]);
+            if (parts.length > 1 && !isNaN(parseFloat(parts[1])))
+                highVal = parseFloat(parts[1]);
         }
         lowVal = snapValue(lowVal);
         highVal = snapValue(highVal);
-
         const rangeInputs = document.createElement('div');
         rangeInputs.className = 'slider-range-inputs';
-
         const lowInput = document.createElement('input');
         lowInput.type = 'range';
         setParameterAccessibleName(lowInput, visual, param, 'minimum');
-        lowInput.min = String(min); lowInput.max = String(max); lowInput.step = String(step); lowInput.value = String(lowVal);
-        if (showTicks) lowInput.setAttribute('list', datalistId);
-        if (param) lowInput.setAttribute('data-parameter', param);
-
+        lowInput.min = String(min);
+        lowInput.max = String(max);
+        lowInput.step = String(step);
+        lowInput.value = String(lowVal);
+        if (showTicks)
+            lowInput.setAttribute('list', datalistId);
+        if (param)
+            lowInput.setAttribute('data-parameter', param);
         const highInput = document.createElement('input');
         highInput.type = 'range';
         setParameterAccessibleName(highInput, visual, secondaryParam, 'maximum');
-        highInput.min = String(min); highInput.max = String(max); highInput.step = String(step); highInput.value = String(highVal);
-        if (showTicks) highInput.setAttribute('list', datalistId);
-        if (secondaryParam) highInput.setAttribute('data-parameter', secondaryParam);
-
+        highInput.min = String(min);
+        highInput.max = String(max);
+        highInput.step = String(step);
+        highInput.value = String(highVal);
+        if (showTicks)
+            highInput.setAttribute('list', datalistId);
+        if (secondaryParam)
+            highInput.setAttribute('data-parameter', secondaryParam);
         const valueLabel = document.createElement('span');
         valueLabel.className = 'range-value';
         valueLabel.textContent = `${formatDisplay(lowVal)} – ${formatDisplay(highVal)}`;
-
         function updateRangeDisplay() {
             let l = snapValue(parseFloat(lowInput.value));
             let h = snapValue(parseFloat(highInput.value));
@@ -4863,25 +4845,25 @@ function renderSlider(container, visual, manifest) {
             }
             valueLabel.textContent = `${formatDisplay(l)} – ${formatDisplay(h)}`;
         }
-
         function postRangeValues() {
             let l = snapValue(parseFloat(lowInput.value));
             let h = snapValue(parseFloat(highInput.value));
-            if (l > h) l = h;
+            if (l > h)
+                l = h;
             if (isWebMode && changeActions.length > 0) {
                 const batch = {};
-                if (param) batch[param] = String(l);
-                if (secondaryParam) batch[secondaryParam] = String(h);
-                postParameters(batch).then(m => { if (m) renderManifest(m); });
+                if (param)
+                    batch[param] = String(l);
+                if (secondaryParam)
+                    batch[secondaryParam] = String(h);
+                postParameters(batch).then(m => { if (m)
+                    renderManifest(m); });
             }
         }
-
         lowInput.addEventListener('input', updateRangeDisplay);
         highInput.addEventListener('input', updateRangeDisplay);
-
         const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
         const debounceMs = parseInt(debounceOpt || '200', 10);
-
         if (fireOn === 'CHANGE') {
             let timer = null;
             const debounced = () => {
@@ -4890,119 +4872,116 @@ function renderSlider(container, visual, manifest) {
             };
             lowInput.addEventListener('input', debounced);
             highInput.addEventListener('input', debounced);
-        } else {
+        }
+        else {
             lowInput.addEventListener('change', postRangeValues);
             highInput.addEventListener('change', postRangeValues);
         }
-
         applyControlState(lowInput, visual, wrapper);
-        if (lowInput.disabled) highInput.disabled = true;
-
+        if (lowInput.disabled)
+            highInput.disabled = true;
         rangeInputs.appendChild(lowInput);
         rangeInputs.appendChild(highInput);
         wrapper.appendChild(rangeInputs);
         wrapper.appendChild(valueLabel);
-
-    } else {
+    }
+    else {
         // SINGLE mode
         let def = min;
         if (param && manifest && manifest.parameters) {
             const current = parseFloat(getParam(manifest.parameters, param));
-            if (!isNaN(current)) def = current;
-        } else {
+            if (!isNaN(current))
+                def = current;
+        }
+        else {
             const rawDef = parseFloat(visual.defaultValue || opts['DEFAULT'] || opts['default']);
-            if (!isNaN(rawDef)) def = rawDef;
+            if (!isNaN(rawDef))
+                def = rawDef;
         }
         def = snapValue(def);
-
         const input = document.createElement('input');
         input.type = 'range';
         setParameterAccessibleName(input, visual, param);
-        input.min = String(min); input.max = String(max); input.step = String(step); input.value = String(def);
-        if (showTicks) input.setAttribute('list', datalistId);
-        if (param) input.setAttribute('data-parameter', param);
-
+        input.min = String(min);
+        input.max = String(max);
+        input.step = String(step);
+        input.value = String(def);
+        if (showTicks)
+            input.setAttribute('list', datalistId);
+        if (param)
+            input.setAttribute('data-parameter', param);
         applyControlState(input, visual, wrapper);
-
         const valueLabel = document.createElement('span');
         valueLabel.className = 'range-value';
         valueLabel.textContent = formatDisplay(def);
-
         function updateDisplay() {
             const snapped = snapValue(parseFloat(input.value));
             valueLabel.textContent = formatDisplay(snapped);
         }
-
         function postSliderValue() {
             const snapped = snapValue(parseFloat(input.value));
             if (isWebMode && changeActions.length > 0) {
-                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = String(snapped); return o; }, {});
-                postParameters(batch).then(m => { if (m) renderManifest(m); });
+                const batch = changeActions.reduce((o, a) => {
+                    o[a.parameterName] = String(snapped);
+                    return o;
+                }, {});
+                postParameters(batch).then(m => { if (m)
+                    renderManifest(m); });
             }
         }
-
         input.addEventListener('input', updateDisplay);
-
         const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
         const debounceMs = parseInt(debounceOpt || '200', 10);
-
         if (fireOn === 'CHANGE') {
             let timer = null;
             input.addEventListener('input', () => {
                 clearTimeout(timer);
                 timer = setTimeout(postSliderValue, debounceMs);
             });
-        } else {
+        }
+        else {
             input.addEventListener('change', postSliderValue);
         }
-
         wrapper.appendChild(input);
         wrapper.appendChild(valueLabel);
     }
-
     container.appendChild(wrapper);
 }
-
 // ── Search ──────────────────────────────────────────────────────────────
-
 function renderSearch(container, visual, manifest) {
-    const opts          = visual.options || {};
+    const opts = visual.options || {};
     const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
-    const param         = changeActions.length > 0 ? changeActions[0].parameterName : null;
-    const placeholder   = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || 'Search…';
-    const showClear     = isOn(opts['SHOW_CLEAR'] ?? opts['show_clear']);
-    const matchMode     = (getOption(opts, 'match_mode') || 'EXACT').toUpperCase();
-    const minChars      = parseInt(getOption(opts, 'min_chars') || '0', 10);
-
+    const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
+    const placeholder = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || 'Search…';
+    const showClear = isOn(opts['SHOW_CLEAR'] ?? opts['show_clear']);
+    const matchMode = (getOption(opts, 'match_mode') || 'EXACT').toUpperCase();
+    const minChars = parseInt(getOption(opts, 'min_chars') || '0', 10);
     function formatSearchValue(raw) {
-        if (!raw) return '';
+        if (!raw)
+            return '';
         switch (matchMode) {
             case 'CONTAINS': return `%${raw}%`;
             case 'STARTS_WITH': return `${raw}%`;
             default: return raw;
         }
     }
-
     const wrapper = document.createElement('div');
     wrapper.className = 'filter-wrapper';
-
     const inputShell = document.createElement('div');
     inputShell.className = 'search-input-shell';
-
-    const input       = document.createElement('input');
-    input.type        = 'search';
+    const input = document.createElement('input');
+    input.type = 'search';
     setParameterAccessibleName(input, visual, param);
     input.placeholder = placeholder;
-    if (param) input.setAttribute('data-parameter', param);
-
+    if (param)
+        input.setAttribute('data-parameter', param);
     // Restore current value from manifest parameters
     if (param && manifest && manifest.parameters) {
         const current = getParam(manifest.parameters, param);
-        if (current) input.value = current;
+        if (current)
+            input.value = current;
     }
-
     inputShell.appendChild(input);
-
     let clearButton = null;
     if (showClear) {
         clearButton = document.createElement('button');
@@ -5019,15 +4998,12 @@ function renderSearch(container, visual, manifest) {
         });
         inputShell.appendChild(clearButton);
     }
-
     wrapper.appendChild(inputShell);
-
     input.addEventListener('input', () => {
-        if (clearButton) clearButton.hidden = input.value.length === 0;
+        if (clearButton)
+            clearButton.hidden = input.value.length === 0;
     });
-
     applyControlState(input, visual, wrapper);
-
     if (isWebMode && changeActions.length > 0) {
         let debounceTimer = null;
         const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
@@ -5040,77 +5016,69 @@ function renderSearch(container, visual, manifest) {
                     return; // Suppress ON_CHANGE until minimum characters typed
                 }
                 const searchVal = raw.length === 0 ? '' : formatSearchValue(raw);
-                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = searchVal; return o; }, {});
-                postParameters(batch).then(m => { if (m) renderManifest(m); });
+                const batch = changeActions.reduce((o, a) => {
+                    o[a.parameterName] = searchVal;
+                    return o;
+                }, {});
+                postParameters(batch).then(m => { if (m)
+                    renderManifest(m); });
             }, debounceMs);
         });
     }
-
     container.appendChild(wrapper);
 }
-
 // ── Checkbox ────────────────────────────────────────────────────────────
-
 function renderCheckbox(container, visual, manifest) {
     const opts = visual.options || {};
     const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
     const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
     const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
-
-    const labelText = opts['LABEL'] || opts['label'] || visual.title || visual.name;
+    const labelText = (opts['LABEL'] || opts['label'] || visual.title || visual.name);
     const displayStyle = (opts['DISPLAY_STYLE'] || opts['display_style'] || 'CHECKBOX').toUpperCase();
     const isToggle = displayStyle === 'TOGGLE';
-
     const trueVal = opts['TRUE_VALUE'] ?? opts['true_value'] ?? '1';
     const falseVal = opts['FALSE_VALUE'] ?? opts['false_value'] ?? '0';
-
     let def = visual.defaultValue ?? opts['DEFAULT'] ?? opts['default'] ?? 'FALSE';
     let currentVal = undefined;
     if (param && manifest && manifest.parameters) {
         currentVal = getParam(manifest.parameters, param);
     }
-
     let checked;
     if (currentVal !== undefined) {
         const strVal = String(currentVal).trim();
         checked = strVal === String(trueVal) || isOn(strVal);
-    } else {
+    }
+    else {
         const strDef = String(def).trim();
         checked = strDef === String(trueVal) || isOn(strDef);
     }
-
     const wrapper = document.createElement('div');
     wrapper.className = 'filter-wrapper checkbox-wrapper pos-' + labelPos.toLowerCase();
-
     const input = document.createElement('input');
     input.type = 'checkbox';
     input.checked = checked;
     setParameterAccessibleName(input, visual, param);
-    if (param) input.setAttribute('data-parameter', param);
-
+    if (param)
+        input.setAttribute('data-parameter', param);
     const label = document.createElement('label');
     label.textContent = labelText;
-
     if (isToggle) {
         const toggleWrapper = document.createElement('label');
         toggleWrapper.className = 'checkbox-toggle-wrapper';
-
         const switchSpan = document.createElement('span');
         switchSpan.className = 'checkbox-toggle-switch';
         switchSpan.appendChild(input);
-
         const sliderSpan = document.createElement('span');
         sliderSpan.className = 'checkbox-toggle-slider';
         switchSpan.appendChild(sliderSpan);
-
         toggleWrapper.appendChild(switchSpan);
         const toggleLabel = document.createElement('span');
         toggleLabel.className = 'toggle-label';
         toggleLabel.textContent = labelText;
         toggleWrapper.appendChild(toggleLabel);
-
         wrapper.appendChild(toggleWrapper);
-    } else {
+    }
+    else {
         if (labelPos === 'TOP' || labelPos === 'LEFT') {
             wrapper.appendChild(label);
         }
@@ -5119,84 +5087,81 @@ function renderCheckbox(container, visual, manifest) {
             wrapper.appendChild(label);
         }
     }
-
     if (isWebMode && changeActions.length > 0) {
         input.addEventListener('change', () => {
             const val = input.checked ? trueVal : falseVal;
-            const batch = changeActions.reduce((o, a) => { o[a.parameterName] = String(val); return o; }, {});
-            postParameters(batch).then(m => { if (m) renderManifest(m); });
+            const batch = changeActions.reduce((o, a) => {
+                o[a.parameterName] = String(val);
+                return o;
+            }, {});
+            postParameters(batch).then(m => { if (m)
+                renderManifest(m); });
         });
     }
     applyControlState(input, visual, wrapper);
     container.appendChild(wrapper);
 }
-
 // ── Textbox ─────────────────────────────────────────────────────────────
-
 function renderTextbox(container, visual, manifest) {
     const opts = visual.options || {};
     const submitActions = actionsFor(visual, 'ON_SUBMIT').filter(a => a.type === 'SET_PARAMETER');
     const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
     const activeActions = submitActions.length > 0 ? submitActions : changeActions;
     const param = activeActions.length > 0 ? activeActions[0].parameterName : null;
-
     const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
-    const labelText = opts['LABEL'] || opts['label'] || visual.title || visual.name;
+    const labelText = (opts['LABEL'] || opts['label'] || visual.title || visual.name);
     const placeholder = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || '';
     const maxLengthValue = opts['MAX_LENGTH'] ?? opts['max_length'];
     const maxLength = typeof maxLengthValue === 'number'
         ? maxLengthValue
         : Number(String(maxLengthValue ?? '').trim());
-
     const isMultiline = isOn(opts['MULTILINE'] ?? opts['multiline']) || opts['ROWS'] != null || opts['rows'] != null;
     const rows = parseInt(opts['ROWS'] || opts['rows'] || '3', 10);
-
     const pattern = opts['PATTERN'] || opts['pattern'] || null;
     const validationMsg = opts['VALIDATION_MESSAGE'] || opts['validation_message'] || 'Invalid format';
     let regex = null;
     if (pattern) {
         try {
             regex = new RegExp(pattern);
-        } catch (err) {
+        }
+        catch (err) {
             console.warn(`PATTERN is not a valid regular expression, so this parameter is not validated: ${pattern}`, err);
         }
     }
-
     let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
     if (param && manifest && manifest.parameters) {
         const current = getParam(manifest.parameters, param);
-        if (current !== undefined) def = current;
+        if (current !== undefined)
+            def = current;
     }
-
     const wrapper = document.createElement('div');
     wrapper.className = 'filter-wrapper textbox-wrapper pos-' + labelPos.toLowerCase() + (isMultiline ? ' is-multiline' : '');
-
     const input = isMultiline ? document.createElement('textarea') : document.createElement('input');
-    if (!isMultiline) /** @type {HTMLInputElement} */ (input).type = 'text';
-    else /** @type {HTMLTextAreaElement} */ (input).rows = rows > 0 ? rows : 3;
-
+    if (!isMultiline) /** @type {HTMLInputElement} */
+        (input).type = 'text';
+    else /** @type {HTMLTextAreaElement} */
+        (input).rows = rows > 0 ? rows : 3;
     setParameterAccessibleName(input, visual, param);
     input.value = def;
     input.placeholder = placeholder;
-    if (Number.isSafeInteger(maxLength) && maxLength > 0) input.maxLength = maxLength;
-    if (param) input.setAttribute('data-parameter', param);
-
+    if (Number.isSafeInteger(maxLength) && maxLength > 0)
+        input.maxLength = maxLength;
+    if (param)
+        input.setAttribute('data-parameter', param);
     const label = document.createElement('label');
     label.textContent = labelText;
-
     if (labelPos === 'TOP' || labelPos === 'LEFT') {
         wrapper.appendChild(label);
     }
     wrapper.appendChild(input);
-
     const errorEl = document.createElement('div');
     errorEl.className = 'filter-error';
     errorEl.textContent = validationMsg;
     errorEl.style.display = 'none';
     wrapper.appendChild(errorEl);
-
     function validateInput() {
-        if (!regex) return true;
+        if (!regex)
+            return true;
         const val = input.value;
         if (val === '') {
             input.classList.remove('is-invalid');
@@ -5207,36 +5172,41 @@ function renderTextbox(container, visual, manifest) {
         if (!valid) {
             input.classList.add('is-invalid');
             errorEl.style.display = 'block';
-        } else {
+        }
+        else {
             input.classList.remove('is-invalid');
             errorEl.style.display = 'none';
         }
         return valid;
     }
-
     input.addEventListener('input', () => {
-        if (regex) validateInput();
+        if (regex)
+            validateInput();
     });
-
     function postValues(actionsList) {
-        if (!validateInput()) return;
+        if (!validateInput())
+            return;
         if (isWebMode && actionsList.length > 0) {
-            const batch = actionsList.reduce((o, a) => { o[a.parameterName] = input.value; return o; }, {});
-            postParameters(batch).then(m => { if (m) renderManifest(m); });
+            const batch = actionsList.reduce((o, a) => {
+                o[a.parameterName] = input.value;
+                return o;
+            }, {});
+            postParameters(batch).then(m => { if (m)
+                renderManifest(m); });
         }
     }
-
     applyControlState(input, visual, wrapper);
-
     if (submitActions.length > 0) {
         input.addEventListener('blur', () => postValues(submitActions));
         input.addEventListener('keydown', (e) => {
-            if (/** @type {KeyboardEvent} */ (e).key === 'Enter' && (!isMultiline || /** @type {KeyboardEvent | MouseEvent} */ (e).ctrlKey || /** @type {KeyboardEvent | MouseEvent} */ (e).metaKey)) {
-                if (!isMultiline) e.preventDefault();
+            if ( /** @type {KeyboardEvent} */(e).key === 'Enter' && (!isMultiline || /** @type {KeyboardEvent} */ (e).ctrlKey || /** @type {KeyboardEvent} */ (e).metaKey)) {
+                if (!isMultiline)
+                    e.preventDefault();
                 postValues(submitActions);
             }
         });
-    } else if (changeActions.length > 0) {
+    }
+    else if (changeActions.length > 0) {
         const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
         if (debounceOpt != null) {
             const debounceMs = parseInt(debounceOpt, 10) || 300;
@@ -5245,112 +5215,106 @@ function renderTextbox(container, visual, manifest) {
                 clearTimeout(timer);
                 timer = setTimeout(() => postValues(changeActions), debounceMs);
             });
-        } else {
+        }
+        else {
             input.addEventListener('change', () => postValues(changeActions));
         }
     }
-
     container.appendChild(wrapper);
 }
-
 // ── Numberbox ───────────────────────────────────────────────────────────
-
 function renderNumberbox(container, visual, manifest) {
     const opts = visual.options || {};
     const submitActions = actionsFor(visual, 'ON_SUBMIT').filter(a => a.type === 'SET_PARAMETER');
     const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
     const activeActions = submitActions.length > 0 ? submitActions : changeActions;
     const param = activeActions.length > 0 ? activeActions[0].parameterName : null;
-
     const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
-    const labelText = opts['LABEL'] || opts['label'] || visual.title || visual.name;
+    const labelText = (opts['LABEL'] || opts['label'] || visual.title || visual.name);
     const min = visual.min != null ? visual.min : (opts['MIN'] != null ? parseFloat(opts['MIN']) : null);
     const max = visual.max != null ? visual.max : (opts['MAX'] != null ? parseFloat(opts['MAX']) : null);
     const decimals = visual.decimals != null ? visual.decimals : (opts['DECIMALS'] != null ? parseInt(opts['DECIMALS'], 10) : 0);
-
     const stepOpt = opts['STEP'] || opts['step'];
     const stepVal = stepOpt != null ? parseFloat(stepOpt) : (decimals > 0 ? Math.pow(10, -decimals) : 1);
     const stepStr = stepOpt != null ? String(stepOpt) : (decimals > 0 ? Math.pow(10, -decimals).toFixed(decimals) : '1');
-
     const showStepper = isOn(opts['SHOW_STEPPER'] ?? opts['show_stepper']);
     const prefix = opts['PREFIX'] || opts['prefix'] || '';
     const suffix = opts['SUFFIX'] || opts['suffix'] || '';
     const formatOpt = opts['FORMAT'] || opts['format'] || null;
-
     let def = visual.defaultValue ?? opts['DEFAULT'] ?? opts['default'] ?? '0';
     let rawNum = parseFloat(def);
-    if (isNaN(rawNum)) rawNum = 0;
-
+    if (isNaN(rawNum))
+        rawNum = 0;
     if (param && manifest && manifest.parameters) {
         const current = getParam(manifest.parameters, param);
-        if (current !== undefined && !isNaN(parseFloat(current))) rawNum = parseFloat(current);
+        if (current !== undefined && !isNaN(parseFloat(current)))
+            rawNum = parseFloat(current);
     }
-
     const wrapper = document.createElement('div');
     wrapper.className = 'filter-wrapper numberbox-wrapper pos-' + labelPos.toLowerCase();
-
     const input = document.createElement('input');
     input.type = formatOpt ? 'text' : 'number';
     setParameterAccessibleName(input, visual, param);
     input.placeholder = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || '';
-    if (min !== undefined && min !== null) input.min = min;
-    if (max !== null && max !== undefined) input.max = max;
+    if (min !== undefined && min !== null)
+        input.min = min;
+    if (max !== null && max !== undefined)
+        input.max = max;
     input.step = stepStr;
-    if (param) input.setAttribute('data-parameter', param);
-
+    if (param)
+        input.setAttribute('data-parameter', param);
     function displayVal(val) {
         return formatOpt ? formatValue(val, formatOpt) : String(val);
     }
-
     input.value = displayVal(rawNum);
-
     if (formatOpt) {
         input.addEventListener('focus', () => {
             input.value = String(rawNum);
         });
         input.addEventListener('blur', () => {
             const parsed = parseFloat(input.value);
-            if (!isNaN(parsed)) rawNum = parsed;
+            if (!isNaN(parsed))
+                rawNum = parsed;
             input.value = displayVal(rawNum);
         });
     }
-
     const label = document.createElement('label');
     label.textContent = labelText;
-
     if (labelPos === 'TOP' || labelPos === 'LEFT') {
         wrapper.appendChild(label);
     }
-
     function setNumericValue(val) {
         let n = val;
-        if (min !== null && min !== undefined && n < min) n = min;
-        if (max !== null && max !== undefined && n > max) n = max;
+        if (min !== null && min !== undefined && n < min)
+            n = min;
+        if (max !== null && max !== undefined && n > max)
+            n = max;
         rawNum = n;
         input.value = (document.activeElement === input && formatOpt) ? String(rawNum) : displayVal(rawNum);
     }
-
     function postValues(actionsList) {
         const parsed = parseFloat(input.value.replace(/[^0-9.-]+/g, ''));
-        if (!isNaN(parsed)) setNumericValue(parsed);
+        if (!isNaN(parsed))
+            setNumericValue(parsed);
         if (isWebMode && actionsList.length > 0) {
-            const batch = actionsList.reduce((o, a) => { o[a.parameterName] = String(rawNum); return o; }, {});
-            postParameters(batch).then(m => { if (m) renderManifest(m); });
+            const batch = actionsList.reduce((o, a) => {
+                o[a.parameterName] = String(rawNum);
+                return o;
+            }, {});
+            postParameters(batch).then(m => { if (m)
+                renderManifest(m); });
         }
     }
-
     const hasGroup = prefix || suffix || showStepper;
     if (hasGroup) {
         const group = document.createElement('div');
         group.className = 'numberbox-group';
-
         if (prefix) {
             const preSpan = document.createElement('span');
             preSpan.className = 'numberbox-prefix';
             preSpan.textContent = prefix;
             group.appendChild(preSpan);
         }
-
         if (showStepper) {
             const decBtn = document.createElement('button');
             decBtn.type = 'button';
@@ -5363,9 +5327,7 @@ function renderNumberbox(container, visual, manifest) {
             });
             group.appendChild(decBtn);
         }
-
         group.appendChild(input);
-
         if (showStepper) {
             const incBtn = document.createElement('button');
             incBtn.type = 'button';
@@ -5378,24 +5340,21 @@ function renderNumberbox(container, visual, manifest) {
             });
             group.appendChild(incBtn);
         }
-
         if (suffix) {
             const sufSpan = document.createElement('span');
             sufSpan.className = 'numberbox-suffix';
             sufSpan.textContent = suffix;
             group.appendChild(sufSpan);
         }
-
         wrapper.appendChild(group);
-    } else {
+    }
+    else {
         wrapper.appendChild(input);
     }
-
     applyControlState(input, visual, wrapper);
     if (input.disabled) {
-        wrapper.querySelectorAll('.numberbox-stepper-btn').forEach(b => /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (b).disabled = true);
+        /** @type {NodeListOf<HTMLInputElement | HTMLButtonElement>} */ (wrapper.querySelectorAll('.numberbox-stepper-btn')).forEach(b => b.disabled = true);
     }
-
     if (submitActions.length > 0) {
         input.addEventListener('blur', () => postValues(submitActions));
         input.addEventListener('keydown', (e) => {
@@ -5404,7 +5363,8 @@ function renderNumberbox(container, visual, manifest) {
                 postValues(submitActions);
             }
         });
-    } else if (changeActions.length > 0) {
+    }
+    else if (changeActions.length > 0) {
         const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
         if (debounceOpt != null) {
             const debounceMs = parseInt(debounceOpt, 10) || 300;
@@ -5413,16 +5373,14 @@ function renderNumberbox(container, visual, manifest) {
                 clearTimeout(timer);
                 timer = setTimeout(() => postValues(changeActions), debounceMs);
             });
-        } else {
+        }
+        else {
             input.addEventListener('change', () => postValues(changeActions));
         }
     }
-
     container.appendChild(wrapper);
 }
-
 // ── Button ──────────────────────────────────────────────────────────────
-
 function renderButton(container, btn) {
     const styles = btn.styles || {};
     const opts = btn.options || {};
@@ -5430,58 +5388,62 @@ function renderButton(container, btn) {
     applyDesignTokens(btnEl, btn.styles, false);
     btnEl.className = 'report-btn';
     btnEl.setAttribute('data-name', btn.name);
-
     const variant = (getOption(opts, 'VARIANT') || 'secondary').toLowerCase();
     btnEl.classList.add('btn-' + variant);
-
     const tag = getOption(opts, 'TAG') || getStyle(styles, 'TAG');
-    if (tag) btnEl.setAttribute('data-tag', tag);
-    if (btn.tooltip && btn.tooltip.text) btnEl.title = btn.tooltip.text;
-
+    if (tag)
+        btnEl.setAttribute('data-tag', tag);
+    if (btn.tooltip && btn.tooltip.text)
+        btnEl.title = btn.tooltip.text;
     // Apply inline styles from STYLE definition
-    const bg   = getStyle(styles, 'BACKGROUND') || getStyle(styles, 'BACKGROUND-COLOR');
-    const fg   = getStyle(styles, 'COLOR');
-    const pad  = getStyle(styles, 'PADDING');
-    const rad  = getStyle(styles, 'BORDER-RADIUS');
-    const fw   = getStyle(styles, 'FONT-WEIGHT');
-    const fs   = getStyle(styles, 'FONT-SIZE');
-    const brd  = getStyle(styles, 'BORDER');
-    const shd  = getStyle(styles, 'BOX-SHADOW');
-
-    if (bg)   btnEl.style.background   = bg;
-    if (fg)   btnEl.style.color        = fg;
-    if (pad)  btnEl.style.padding      = pad;
-    if (rad)  btnEl.style.borderRadius = rad;
-    if (fw)   btnEl.style.fontWeight   = fw;
-    if (fs)   btnEl.style.fontSize     = fs;
-    if (brd)  btnEl.style.border       = brd;
-    if (shd)  btnEl.style.boxShadow    = shd;
-
+    const bg = getStyle(styles, 'BACKGROUND') || getStyle(styles, 'BACKGROUND-COLOR');
+    const fg = getStyle(styles, 'COLOR');
+    const pad = getStyle(styles, 'PADDING');
+    const rad = getStyle(styles, 'BORDER-RADIUS');
+    const fw = getStyle(styles, 'FONT-WEIGHT');
+    const fs = getStyle(styles, 'FONT-SIZE');
+    const brd = getStyle(styles, 'BORDER');
+    const shd = getStyle(styles, 'BOX-SHADOW');
+    if (bg)
+        btnEl.style.background = bg;
+    if (fg)
+        btnEl.style.color = fg;
+    if (pad)
+        btnEl.style.padding = pad;
+    if (rad)
+        btnEl.style.borderRadius = rad;
+    if (fw)
+        btnEl.style.fontWeight = fw;
+    if (fs)
+        btnEl.style.fontSize = fs;
+    if (brd)
+        btnEl.style.border = brd;
+    if (shd)
+        btnEl.style.boxShadow = shd;
     btnEl.style.cursor = 'pointer';
-    if (!brd && !variant) btnEl.style.border = 'none';
-    if (!fw)  btnEl.style.fontWeight = '600';
-
+    if (!brd && !variant)
+        btnEl.style.border = 'none';
+    if (!fw)
+        btnEl.style.fontWeight = '600';
     const icon = getOption(opts, 'ICON');
     const iconPos = (getOption(opts, 'ICON_POSITION') || 'left').toLowerCase();
     const baseTitle = btn.title || btn.name;
-
     function updateButtonContent(titleText) {
         btnEl.innerHTML = '';
         const textSpan = document.createElement('span');
         textSpan.className = 'btn-label';
         textSpan.textContent = titleText;
-
         let iconEl = null;
         if (icon) {
             iconEl = document.createElement('span');
             iconEl.className = 'btn-icon';
             if (icon.includes('.') || icon.includes('/')) {
                 iconEl.innerHTML = `<img src="${escHtml(safeUrl(icon))}" style="width:16px;height:16px;vertical-align:middle;">`;
-            } else {
+            }
+            else {
                 iconEl.textContent = icon;
             }
         }
-
         if (iconEl && iconPos === 'left') {
             btnEl.appendChild(iconEl);
             btnEl.appendChild(document.createTextNode(' '));
@@ -5492,9 +5454,7 @@ function renderButton(container, btn) {
             btnEl.appendChild(iconEl);
         }
     }
-
     updateButtonContent(baseTitle);
-
     // Disabled expression
     const disabledExpr = getOption(opts, 'DISABLED') || getStyle(styles, 'DISABLED');
     if (disabledExpr != null && evaluateExpressionAgainstParameters(disabledExpr, parameters)) {
@@ -5502,55 +5462,55 @@ function renderButton(container, btn) {
         btnEl.classList.add('is-disabled');
         btnEl.setAttribute('aria-disabled', 'true');
     }
-
     // Toggle mode support
     const mode = (getOption(opts, 'MODE') || '').toUpperCase();
     const isToggle = mode === 'TOGGLE';
     const onValue = getOption(opts, 'ON_VALUE') || '1';
     const offValue = getOption(opts, 'OFF_VALUE') || '0';
     const defaultState = (getOption(opts, 'DEFAULT') || 'OFF').toUpperCase();
-
     let isToggledOn = _uiStates[btn.name]?.toggled ?? (defaultState === 'ON');
     if (isToggle) {
         btnEl.classList.add('mode-toggle');
-        if (isToggledOn) btnEl.classList.add('btn-active');
+        if (isToggledOn)
+            btnEl.classList.add('btn-active');
     }
-
     // Mark RUN buttons so updateStagedUI can target them precisely
-    if ((btn.actions || []).some(a => a.type === 'APPLY_PARAMETERS')) {
+    if ((btn.actions || []).some((a) => a.type === 'APPLY_PARAMETERS')) {
         btnEl.dataset.isRunBtn = 'true';
     }
-
     btnEl.addEventListener('click', async () => {
-        if (btnEl.disabled) return;
-
+        if (btnEl.disabled)
+            return;
         // Confirm prompt
         const confirmMsg = getOption(opts, 'CONFIRM');
         if (confirmMsg) {
-            if (!await window.ETLSQLFeedback.confirm(confirmMsg, { title: 'Confirm action', confirmLabel: 'Continue', auditAction: `report.button.${btn.name}` })) return;
+            if (!await window.ETLSQLFeedback.confirm(confirmMsg, { title: 'Confirm action', confirmLabel: 'Continue', auditAction: `report.button.${btn.name}` }))
+                return;
         }
-
         // Toggle mode state flip
         if (isToggle) {
             isToggledOn = !isToggledOn;
             _uiStates[btn.name] = Object.assign({}, _uiStates[btn.name], { toggled: isToggledOn });
-            if (isToggledOn) btnEl.classList.add('btn-active');
-            else btnEl.classList.remove('btn-active');
-
+            if (isToggledOn)
+                btnEl.classList.add('btn-active');
+            else
+                btnEl.classList.remove('btn-active');
             const toggleVal = isToggledOn ? onValue : offValue;
-            const setParams = (btn.actions || []).filter(a => a.type === 'SET_PARAMETER');
+            const setParams = (btn.actions || []).filter((a) => a.type === 'SET_PARAMETER');
             if (setParams.length > 0 && !setParams[0].valueExpression) {
                 const batch = {};
-                setParams.forEach(a => batch[a.parameterName] = toggleVal);
-                if (vscode) vscode.postMessage({ type: 'refreshReport', parameters: batch });
-                else postParameters(batch).then(m => { if (m) renderManifest(m); });
+                setParams.forEach((a) => batch[a.parameterName] = toggleVal);
+                if (vscode)
+                    vscode.postMessage({ type: 'refreshReport', parameters: batch });
+                else
+                    postParameters(batch).then(m => { if (m)
+                        renderManifest(m); });
                 return;
             }
         }
-
         const clickActions = actionsFor(btn, 'ON_CLICK');
-        if (clickActions.length === 0) return;
-
+        if (clickActions.length === 0)
+            return;
         // Spinner feedback
         const showSpinner = isOn(getOption(opts, 'SHOW_SPINNER'));
         let spinnerEl = null;
@@ -5560,24 +5520,27 @@ function renderButton(container, btn) {
             spinnerEl.className = 'btn-spinner';
             btnEl.prepend(spinnerEl);
         }
-
         try {
             for (const action of clickActions) {
                 await executeAction(action, [], [], btn.name, btn);
             }
-        } finally {
+        }
+        finally {
             if (spinnerEl) {
                 spinnerEl.remove();
                 btnEl.classList.remove('btn-loading');
             }
         }
     });
-
     container.appendChild(btnEl);
 }
 
 
 // ─── rt-visual.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-visual.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -5588,31 +5551,27 @@ function renderButton(container, btn) {
 // Cross-cycle functions use hoisted declarations; imported state is read only when
 // those functions run. Boot starts after the graph has evaluated. Preserve that
 // ordering when adding top-level work or changing functions to const declarations.
-
 let _maximizedVisualCard = null;
-
 function resizeChartsIn(section) {
     section.querySelectorAll('.chart-wrapper').forEach(() => {
     });
 }
-
 const NON_MAXIMIZABLE_CONTROL_TYPES = new Set([
     'SLICER', 'MULTISELECT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER',
     'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'
 ]);
-
 function shouldShowVisualToolbar(type, styles) {
     const allowMaximize = getStyle(styles, 'ALLOW_MAXIMIZE');
-    if (isOn(allowMaximize)) return true;
-    if (isOff(allowMaximize)) return false;
+    if (isOn(allowMaximize))
+        return true;
+    if (isOff(allowMaximize))
+        return false;
     return !NON_MAXIMIZABLE_CONTROL_TYPES.has(type);
 }
-
 function addVisualToolbar(card) {
     card.classList.add('has-visual-toolbar');
     const toolbar = document.createElement('div');
     toolbar.className = 'visual-toolbar';
-
     const maxBtn = document.createElement('button');
     maxBtn.type = 'button';
     maxBtn.className = 'visual-tool-btn';
@@ -5623,40 +5582,37 @@ function addVisualToolbar(card) {
         e.stopPropagation();
         toggleVisualMaximize(card, maxBtn);
     });
-
     toolbar.appendChild(maxBtn);
     card.appendChild(toolbar);
 }
-
 function toggleVisualMaximize(card, button) {
     if (_maximizedVisualCard && _maximizedVisualCard !== card) {
         closeMaximizedVisual();
     }
-
     const isOpening = !card.classList.contains('visual-maximized');
     if (!isOpening) {
         closeMaximizedVisual();
         return;
     }
-
     _maximizedVisualCard = card;
     // Teleport card to <body> so position:fixed anchors to viewport regardless of
     // any CSS transform/contain on ancestor elements in the portal layout.
     card._maxOriginalParent = card.parentElement;
-    card._maxNextSibling    = card.nextSibling;
-
+    card._maxNextSibling = card.nextSibling;
     // Capture inherited design tokens before teleporting outside container/page DOM hierarchy
     const computed = typeof getComputedStyle === 'function' ? getComputedStyle(card) : null;
     card._maxOrigTokens = {};
     const tokenProps = new Set(ALLOWED_TOKEN_NAMES);
     for (let i = 0; i < card.style.length; i++) {
         const p = card.style[i];
-        if (isAllowedTokenName(p)) tokenProps.add(p);
+        if (isAllowedTokenName(p))
+            tokenProps.add(p);
     }
     if (computed) {
         for (let i = 0; i < computed.length; i++) {
             const p = computed[i];
-            if (isAllowedTokenName(p)) tokenProps.add(p);
+            if (isAllowedTokenName(p))
+                tokenProps.add(p);
         }
     }
     for (const token of tokenProps) {
@@ -5669,11 +5625,10 @@ function toggleVisualMaximize(card, button) {
             card.style.setProperty(token, effVal.trim());
         }
     }
-
     document.body.appendChild(card);
     card.classList.add('visual-maximized');
     // Override any transparent/glass inline background so maximized card is fully opaque.
-    card._maxOrigBg      = card.style.backgroundColor;
+    card._maxOrigBg = card.style.backgroundColor;
     card._maxOrigBgImage = card.style.backgroundImage;
     card.style.backgroundColor = card.classList.contains('theme-dark') ? '#1e1e1e' : '#fff';
     card.style.backgroundImage = 'none';
@@ -5685,31 +5640,30 @@ function toggleVisualMaximize(card, button) {
     }
     setTimeout(() => resizeChartsIn(card), 50);
 }
-
 function closeMaximizedVisual() {
-    if (!_maximizedVisualCard) return;
-
+    if (!_maximizedVisualCard)
+        return;
     const card = _maximizedVisualCard;
     card.classList.remove('visual-maximized');
     document.body.classList.remove('visual-maximize-active');
-
     // Restore card to its original position in the layout
     if (card._maxOriginalParent) {
         card._maxOriginalParent.insertBefore(card, card._maxNextSibling || null);
         card._maxOriginalParent = null;
-        card._maxNextSibling    = null;
+        card._maxNextSibling = null;
     }
-
     // Restore original design tokens
     const currentTokenProps = [];
     for (let i = 0; i < card.style.length; i++) {
         const p = card.style[i];
-        if (isAllowedTokenName(p)) currentTokenProps.push(p);
+        if (isAllowedTokenName(p))
+            currentTokenProps.push(p);
     }
     for (const p of currentTokenProps) {
         if (card._maxOrigTokens && card._maxOrigTokens[p] !== undefined) {
             card.style.setProperty(p, card._maxOrigTokens[p]);
-        } else {
+        }
+        else {
             card.style.removeProperty(p);
         }
     }
@@ -5719,116 +5673,117 @@ function closeMaximizedVisual() {
         }
     }
     card._maxOrigTokens = null;
-
     // Reset inline dimensions on chart container divs to let layout reflow correctly
     card.querySelectorAll('.chart-wrapper > div').forEach(el => {
         el.style.width = '100%';
         el.style.height = '100%';
     });
-
     // Restore original background
-    card.style.backgroundColor = card._maxOrigBg      || '';
+    card.style.backgroundColor = card._maxOrigBg || '';
     card.style.backgroundImage = card._maxOrigBgImage || '';
-    card._maxOrigBg      = null;
+    card._maxOrigBg = null;
     card._maxOrigBgImage = null;
-
     const button = card.querySelector('.visual-tool-btn');
     if (button) {
         button.textContent = '[]';
         button.title = 'Maximize visual';
         button.setAttribute('aria-label', 'Maximize visual');
     }
-
     _maximizedVisualCard = null;
     setTimeout(() => resizeChartsIn(card), 50);
 }
-
 // Filter types that render without requiring rows
 const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'HTML', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX', 'IMAGE']);
-
 function renderVisual(container, visual, pageTheme, manifest, embedDepth = 0) {
     const card = document.createElement('div');
     card.className = 'visual-card';
     card.setAttribute('data-name', visual.name);
     applyDesignTokens(card, visual, false, manifest);
     card.setAttribute('data-visual-name', visual.name); // Compatibility
-
     const tag = getOption(visual.options, 'TAG');
-    if (tag) card.setAttribute('data-tag', tag);
-
+    if (tag)
+        card.setAttribute('data-tag', tag);
     const vopts = visual.options || {};
     const visibleExpr = vopts['VISIBLE'] || vopts['visible'];
     if (visibleExpr != null && !evaluateExpressionAgainstParameters(visibleExpr, parameters)) {
         card.style.display = 'none';
         card.setAttribute('aria-hidden', 'true');
     }
-
     const dependsOn = vopts['DEPENDS_ON'] || vopts['depends_on'];
-    if (dependsOn) card.setAttribute('data-depends-on', dependsOn);
-
+    if (dependsOn)
+        card.setAttribute('data-depends-on', dependsOn);
     /** @type {EtlSqlVisualHost} */ (card)._visualData = visual;
-
     // Apply WIDTH / HEIGHT / TOOLTIP from styles
     const vstyles = visual.styles || {};
-    const width   = getStyle(vstyles, 'WIDTH');
-    const height  = getStyle(vstyles, 'HEIGHT');
+    const width = getStyle(vstyles, 'WIDTH');
+    const height = getStyle(vstyles, 'HEIGHT');
     const styleTooltip = getStyle(vstyles, 'TOOLTIP');
     const tooltip = visual.tooltip;
-
     const opacity = getStyle(vstyles, 'OPACITY');
     const bgColor = getStyle(vstyles, 'BACKGROUND-COLOR') || getStyle(vstyles, 'BACKGROUND');
     const border = getStyle(vstyles, 'BORDER');
     const borderRadius = getStyle(vstyles, 'BORDER-RADIUS') || getStyle(vstyles, 'BORDER_RADIUS');
     const shadow = getStyle(vstyles, 'SHADOW');
-
-    if (width)   card.style.width   = width;
-    if (height)  card.style.height  = height;
-    if (opacity) card.style.opacity = opacity;
-    if (border) card.style.border = border;
-    if (borderRadius) card.style.borderRadius = borderRadius;
-    if (isOn(shadow)) card.style.boxShadow = '0 6px 18px rgba(15, 23, 42, 0.16)';
-    else if (shadow && !isOff(shadow)) card.style.boxShadow = shadow;
+    if (width)
+        card.style.width = width;
+    if (height)
+        card.style.height = height;
+    if (opacity)
+        card.style.opacity = opacity;
+    if (border)
+        card.style.border = border;
+    if (borderRadius)
+        card.style.borderRadius = borderRadius;
+    if (isOn(shadow))
+        card.style.boxShadow = '0 6px 18px rgba(15, 23, 42, 0.16)';
+    else if (shadow && !isOff(shadow))
+        card.style.boxShadow = shadow;
     if (bgColor) {
         const normalized = bgColor.trim().toLowerCase();
         const isTransparent = normalized === 'transparent' || normalized === 'rgba(0,0,0,0)' || normalized === 'rgba(0, 0, 0, 0)';
         if (isTransparent) {
             card.style.backgroundColor = 'transparent';
             card.style.backgroundImage = 'none';
-        } else {
+        }
+        else {
             // Layer over the CSS theme base color; keeps #1e1e1e dark base intact for dark-themed cards.
             card.style.backgroundImage = `linear-gradient(${bgColor}, ${bgColor})`;
         }
     }
     const tooltipText = styleTooltip || (tooltip && tooltip.type === 'text' ? tooltip.text : null);
-    if (tooltipText) card.title = tooltipText;
+    if (tooltipText)
+        card.title = tooltipText;
     if (isOff(getOption(visual.options, 'VISIBLE'))) {
         card.style.display = 'none';
     }
-
     const title = document.createElement('h3');
     const customTitle = getOption(visual.options, 'TITLE') || getOption(visual.options, 'title');
     if (customTitle) {
         if (visual.titleIsMarkdown) {
             title.innerHTML = renderInlineMarkdown(customTitle);
-        } else {
+        }
+        else {
             title.textContent = customTitle;
         }
-    } else {
+    }
+    else {
         title.textContent = visual.name;
     }
-
     const tColor = getStyle(vstyles, 'TITLE_COLOR');
     const tSize = getStyle(vstyles, 'TITLE_SIZE');
     const tWeight = getStyle(vstyles, 'TITLE_WEIGHT');
     const tFont = getStyle(vstyles, 'TITLE_FONT');
     const tAlign = getStyle(vstyles, 'TITLE_ALIGN');
-
-    if (tColor) title.style.color = tColor;
-    if (tSize) title.style.fontSize = tSize.includes('px') || tSize.includes('rem') || tSize.includes('em') || tSize.includes('%') ? tSize : (tSize + 'px');
-    if (tWeight) title.style.fontWeight = tWeight;
-    if (tFont) title.style.fontFamily = tFont;
-    if (tAlign) title.style.textAlign = tAlign.toLowerCase();
-
+    if (tColor)
+        title.style.color = tColor;
+    if (tSize)
+        title.style.fontSize = tSize.includes('px') || tSize.includes('rem') || tSize.includes('em') || tSize.includes('%') ? tSize : (tSize + 'px');
+    if (tWeight)
+        title.style.fontWeight = tWeight;
+    if (tFont)
+        title.style.fontFamily = tFont;
+    if (tAlign)
+        title.style.textAlign = tAlign.toLowerCase();
     const customSubtitle = getOption(visual.options, 'SUBTITLE') || getOption(visual.options, 'subtitle');
     let subtitleEl = null;
     if (customSubtitle) {
@@ -5836,7 +5791,8 @@ function renderVisual(container, visual, pageTheme, manifest, embedDepth = 0) {
         subtitleEl.className = 'card-subtitle visual-subtitle';
         if (visual.subtitleIsMarkdown) {
             subtitleEl.innerHTML = renderInlineMarkdown(customSubtitle);
-        } else {
+        }
+        else {
             subtitleEl.textContent = customSubtitle;
         }
         const sColor = getStyle(vstyles, 'SUBTITLE_COLOR');
@@ -5844,34 +5800,36 @@ function renderVisual(container, visual, pageTheme, manifest, embedDepth = 0) {
         const sWeight = getStyle(vstyles, 'SUBTITLE_WEIGHT');
         const sFont = getStyle(vstyles, 'SUBTITLE_FONT');
         const sAlign = getStyle(vstyles, 'SUBTITLE_ALIGN') || tAlign;
-
-        if (sColor) subtitleEl.style.color = sColor;
-        if (sSize) subtitleEl.style.fontSize = sSize.includes('px') || sSize.includes('rem') || sSize.includes('em') || sSize.includes('%') ? sSize : (sSize + 'px');
-        if (sWeight) subtitleEl.style.fontWeight = sWeight;
-        if (sFont) subtitleEl.style.fontFamily = sFont;
-        if (sAlign) subtitleEl.style.textAlign = sAlign.toLowerCase();
+        if (sColor)
+            subtitleEl.style.color = sColor;
+        if (sSize)
+            subtitleEl.style.fontSize = sSize.includes('px') || sSize.includes('rem') || sSize.includes('em') || sSize.includes('%') ? sSize : (sSize + 'px');
+        if (sWeight)
+            subtitleEl.style.fontWeight = sWeight;
+        if (sFont)
+            subtitleEl.style.fontFamily = sFont;
+        if (sAlign)
+            subtitleEl.style.textAlign = sAlign.toLowerCase();
     }
-
     const type = (visual.visualType || '').toUpperCase();
     // Hide outer redundant header if CARD has its own internal card-label or mapping:label
     const isCardType = type === 'CARD' || type === 'KPI' || Boolean(getOption(visual.options, 'mapping:label'));
-    if (isCardType) title.style.display = 'none';
-
+    if (isCardType)
+        title.style.display = 'none';
     card.appendChild(title);
-    if (subtitleEl && !isCardType) card.appendChild(subtitleEl);
+    if (subtitleEl && !isCardType)
+        card.appendChild(subtitleEl);
     if (type === 'HTML') {
         card.id = htmlVisualContainerId(visual.name);
     }
     if (shouldShowVisualToolbar(type, vstyles)) {
         addVisualToolbar(card);
     }
-
     if (visual.error) {
         card.appendChild(errorEl(visual.error));
         container.appendChild(card);
         return;
     }
-
     // Deferred ON_RUN visuals show a placeholder until the paginated page is run.
     if (visual.isHidden) {
         card.classList.add('deferred-visual');
@@ -5882,71 +5840,98 @@ function renderVisual(container, visual, pageTheme, manifest, embedDepth = 0) {
         container.appendChild(card);
         return;
     }
-
     if (hasDeferredRows(visual)) {
         const loading = document.createElement('div');
         loading.className = 'empty-state';
         const count = visual.rowsSource && visual.rowsSource.rowCount ? Number(visual.rowsSource.rowCount).toLocaleString() : '';
         loading.innerHTML = '<div class="empty-icon">...</div>' +
-                            '<p>Loading' + (count ? ' ' + escHtml(count) : '') + ' rows.</p>';
+            '<p>Loading' + (count ? ' ' + escHtml(count) : '') + ' rows.</p>';
         card.appendChild(loading);
         container.appendChild(card);
-
         const nextSibling = card.nextSibling;
         loadVisualRows(visual)
             .then(() => {
-                const parent = card.parentElement;
-                if (!parent) return;
-                card.remove();
-                renderVisual(parent, visual, pageTheme, manifest, embedDepth);
-                const rendered = parent.lastElementChild;
-                if (nextSibling && rendered) parent.insertBefore(rendered, nextSibling);
-            })
+            const parent = card.parentElement;
+            if (!parent)
+                return;
+            card.remove();
+            renderVisual(parent, visual, pageTheme, manifest, embedDepth);
+            const rendered = parent.lastElementChild;
+            if (nextSibling && rendered)
+                parent.insertBefore(rendered, nextSibling);
+        })
             .catch(e => {
-                loading.replaceChildren(errorEl(e.message || 'Failed to load visual rows.'));
-                publishExportState('error', { reason: 'lazy-rows-failed', message: e.message });
-            });
+            loading.replaceChildren(errorEl(e.message || 'Failed to load visual rows.'));
+            publishExportState('error', { reason: 'lazy-rows-failed', message: e.message });
+        });
         return;
     }
-
     // Empty state handling: If not a filter/text type and no data rows, show "No Data" icon + message.
     if (!FILTER_TYPES.has(type) && (!visual.rows || visual.rows.length === 0)) {
         const empty = document.createElement('div');
         empty.className = 'empty-state';
         empty.innerHTML = '<div class="empty-icon">\u2205</div>' +
-                          '<p>No data matches the current filters.</p>';
+            '<p>No data matches the current filters.</p>';
         card.appendChild(empty);
         container.appendChild(card);
         return;
     }
-
     // Resolve effective theme: visual-level overrides page-level
-    const effectiveTheme = getStyle(vstyles, 'THEME') || pageTheme || null;
-    if (effectiveTheme) card.classList.add('theme-' + effectiveTheme.toLowerCase());
-
+    const effectiveTheme = (getStyle(vstyles, 'THEME') || pageTheme || null);
+    if (effectiveTheme)
+        card.classList.add('theme-' + effectiveTheme.toLowerCase());
     switch (type) {
-        case 'TABLE':       renderTable(card, visual, manifest);              break;
-        case 'CARD':        renderCard(card, visual);                         break;
+        case 'TABLE':
+            renderTable(card, visual, manifest);
+            break;
+        case 'CARD':
+            renderCard(card, visual);
+            break;
         case 'SLICER':
-        case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
-        case 'TEXT':        renderText(card, visual);                         break;
-        case 'HTML':        renderHtmlVisual(card, visual, manifest, embedDepth); break;
-        case 'DATEPICKER':    renderDatePicker(card, visual, manifest);        break;
-        case 'RELDATEPICKER': renderRelDatePicker(card, visual, manifest);     break;
-        case 'SLIDER':      renderSlider(card, visual, manifest);             break;
-        case 'SEARCH':      renderSearch(card, visual, manifest);             break;
-        case 'CHECKBOX':    renderCheckbox(card, visual, manifest);           break;
-        case 'TEXTBOX':     renderTextbox(card, visual, manifest);            break;
-        case 'NUMBERBOX':   renderNumberbox(card, visual, manifest);          break;
-        case 'IMAGE':       renderImage(card, visual);                        break;
+        case 'MULTISELECT':
+            renderSlicer(card, visual, manifest);
+            break;
+        case 'TEXT':
+            renderText(card, visual);
+            break;
+        case 'HTML':
+            renderHtmlVisual(card, visual, manifest, embedDepth);
+            break;
+        case 'DATEPICKER':
+            renderDatePicker(card, visual, manifest);
+            break;
+        case 'RELDATEPICKER':
+            renderRelDatePicker(card, visual, manifest);
+            break;
+        case 'SLIDER':
+            renderSlider(card, visual, manifest);
+            break;
+        case 'SEARCH':
+            renderSearch(card, visual, manifest);
+            break;
+        case 'CHECKBOX':
+            renderCheckbox(card, visual, manifest);
+            break;
+        case 'TEXTBOX':
+            renderTextbox(card, visual, manifest);
+            break;
+        case 'NUMBERBOX':
+            renderNumberbox(card, visual, manifest);
+            break;
+        case 'IMAGE':
+            renderImage(card, visual);
+            break;
         // MATRIX is an interactive pivot table, not a chart. Its HTML renderer preserves
         // nested headers, subtotals, scrolling, and expand/collapse behavior.
-        case 'MATRIX':      renderMatrix(card, visual);                       break;
-        default:            visual.nativeSvg
-                                ? renderNativeSvg(card, visual, manifest, effectiveTheme)
-                                : renderMissingChartPayload(card, visual); break;
+        case 'MATRIX':
+            renderMatrix(card, visual);
+            break;
+        default:
+            visual.nativeSvg
+                ? renderNativeSvg(card, visual, manifest, effectiveTheme)
+                : renderMissingChartPayload(card, visual);
+            break;
     }
-
     // DRILL_IN breadcrumb: shown when visual has an active drill state
     if (visual.drillState?.hierarchy?.length > 0) {
         const bc = document.createElement('div');
@@ -5972,9 +5957,8 @@ function renderVisual(container, visual, pageTheme, manifest, embedDepth = 0) {
         });
         card.insertBefore(bc, card.firstChild);
     }
-
     // Drill-through affordance: cursor + badge when visual has DRILL_DOWN actions
-    if ((visual.actions || []).some(a => a.type === 'DRILL_DOWN')) {
+    if ((visual.actions || []).some((a) => a.type === 'DRILL_DOWN')) {
         card.classList.add('has-drill-down');
         const badge = document.createElement('span');
         badge.className = 'drill-badge';
@@ -5982,9 +5966,8 @@ function renderVisual(container, visual, pageTheme, manifest, embedDepth = 0) {
         badge.textContent = '⬇';
         card.appendChild(badge);
     }
-
     // Drill-in affordance: cursor + badge when visual has DRILL_IN actions
-    if ((visual.actions || []).some(a => a.type === 'DRILL_IN')) {
+    if ((visual.actions || []).some((a) => a.type === 'DRILL_IN')) {
         card.classList.add('has-drill-in');
         const badge = document.createElement('span');
         badge.className = 'drill-badge';
@@ -5992,10 +5975,8 @@ function renderVisual(container, visual, pageTheme, manifest, embedDepth = 0) {
         badge.textContent = '↧';
         card.appendChild(badge);
     }
-
     container.appendChild(card);
 }
-
 const HTML_VISUAL_ELEMENTS = new Set([
     'DIV', 'SPAN', 'SECTION', 'ARTICLE', 'ASIDE', 'HEADER', 'FOOTER', 'NAV', 'MAIN',
     'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P', 'BR', 'HR', 'PRE', 'CODE', 'BLOCKQUOTE',
@@ -6021,98 +6002,107 @@ const HTML_VISUAL_ELEMENT_ATTRIBUTES = {
     BLOCKQUOTE: new Set(['cite']), Q: new Set(['cite']),
     SOURCE: new Set(['srcset', 'type', 'media']), DETAILS: new Set(['open'])
 };
-
 function htmlVisualContainerId(name) {
     return 'etl-v-' + String(name || '').toLowerCase().replaceAll(' ', '-');
 }
-
 function isSafeHtmlVisualUrl(value) {
     const url = String(value || '').trim();
-/* eslint-disable-next-line no-control-regex -- matching control characters is the point:
-       a URL carrying one is how a javascript: scheme gets past a prefix check. */
-    if (/[\u0000-\u001f\u007f]/.test(url)) return false;
-    if (/^(https?:|mailto:|tel:|#)/i.test(url)) return true;
-    if (/^data:image\/(png|jpeg|gif|webp)(;|,)/i.test(url)) return true;
-    if (!/^data:image\/svg\+xml(?:;charset=[^;,]+)?(?:;base64)?,/i.test(url)) return false;
+    /* eslint-disable-next-line no-control-regex -- matching control characters is the point:
+           a URL carrying one is how a javascript: scheme gets past a prefix check. */
+    if (/[\u0000-\u001f\u007f]/.test(url))
+        return false;
+    if (/^(https?:|mailto:|tel:|#)/i.test(url))
+        return true;
+    if (/^data:image\/(png|jpeg|gif|webp)(;|,)/i.test(url))
+        return true;
+    if (!/^data:image\/svg\+xml(?:;charset=[^;,]+)?(?:;base64)?,/i.test(url))
+        return false;
     try {
         const comma = url.indexOf(',');
         const header = url.slice(0, comma);
         const payload = url.slice(comma + 1);
         const svg = /;base64/i.test(header) ? atob(payload) : decodeURIComponent(payload);
         return !/<\s*(?:script|foreignObject)\b|\bon[a-z]+\s*=|(?:href|src)\s*=\s*['"]?\s*javascript:/i.test(svg);
-    } catch {
+    }
+    catch {
         return false;
     }
 }
-
 function copyHtmlVisualNode(source, ownerDocument) {
-    if (source.nodeType === Node.TEXT_NODE) return ownerDocument.createTextNode(source.nodeValue || '');
-    if (source.nodeType !== Node.ELEMENT_NODE || !HTML_VISUAL_ELEMENTS.has(source.tagName)) return null;
-
-    const target = ownerDocument.createElement(source.tagName.toLowerCase());
-    const elementAttributes = HTML_VISUAL_ELEMENT_ATTRIBUTES[source.tagName] || new Set();
-    for (const attribute of source.attributes) {
+    if (source.nodeType === Node.TEXT_NODE)
+        return ownerDocument.createTextNode(source.nodeValue || '');
+    if (source.nodeType !== Node.ELEMENT_NODE)
+        return null;
+    const sourceElement = source;
+    if (!HTML_VISUAL_ELEMENTS.has(sourceElement.tagName))
+        return null;
+    const target = ownerDocument.createElement(sourceElement.tagName.toLowerCase());
+    const elementAttributes = HTML_VISUAL_ELEMENT_ATTRIBUTES[sourceElement.tagName] || new Set();
+    for (const attribute of sourceElement.attributes) {
         const name = attribute.name.toLowerCase();
-        if (name.startsWith('on') || name === 'style') continue;
+        if (name.startsWith('on') || name === 'style')
+            continue;
         if (!HTML_VISUAL_GLOBAL_ATTRIBUTES.has(name)
             && !name.startsWith('aria-')
             && !name.startsWith('data-etl-')
-            && !elementAttributes.has(name)) continue;
-        if (['href', 'src', 'cite', 'srcset'].includes(name) && !isSafeHtmlVisualUrl(attribute.value)) continue;
-        if (source.tagName === 'BUTTON' && name === 'type' && attribute.value.toLowerCase() !== 'button') continue;
-        if (source.tagName === 'A' && name === 'target' && attribute.value !== '_blank') continue;
+            && !elementAttributes.has(name))
+            continue;
+        if (['href', 'src', 'cite', 'srcset'].includes(name) && !isSafeHtmlVisualUrl(attribute.value))
+            continue;
+        if (sourceElement.tagName === 'BUTTON' && name === 'type' && attribute.value.toLowerCase() !== 'button')
+            continue;
+        if (sourceElement.tagName === 'A' && name === 'target' && attribute.value !== '_blank')
+            continue;
         target.setAttribute(name, attribute.value);
     }
-
-    if (source.tagName === 'A' && target.getAttribute('target') === '_blank') {
+    if (sourceElement.tagName === 'A' && target.getAttribute('target') === '_blank') {
         target.setAttribute('rel', 'noopener noreferrer');
     }
-    if (source.tagName === 'IMG' && !target.hasAttribute('alt')) return null;
-    for (const child of source.childNodes) {
+    if (sourceElement.tagName === 'IMG' && !target.hasAttribute('alt'))
+        return null;
+    for (const child of sourceElement.childNodes) {
         const copied = copyHtmlVisualNode(child, ownerDocument);
-        if (copied) target.appendChild(copied);
+        if (copied)
+            target.appendChild(copied);
     }
     return target;
 }
-
 function renderHtmlVisual(container, visual, manifest, embedDepth) {
     const wrapper = document.createElement('div');
     wrapper.className = 'html-visual-content';
     const fallback = String(visual.htmlFallback || visual.name || 'HTML visual');
     wrapper.setAttribute('aria-label', fallback);
-
     if (visual.htmlCss) {
         const style = document.createElement('style');
         style.className = 'html-visual-scoped-style';
         style.textContent = String(visual.htmlCss);
         container.appendChild(style);
     }
-
     const parsed = new DOMParser().parseFromString(String(visual.htmlContent || ''), 'text/html');
     for (const child of parsed.body.childNodes) {
         const copied = copyHtmlVisualNode(child, document);
-        if (copied) wrapper.appendChild(copied);
+        if (copied)
+            wrapper.appendChild(copied);
     }
-
     wrapper.addEventListener('click', event => {
         const trigger = /** @type {Element} */ (event.target).closest('[data-action]');
-        if (!trigger || !wrapper.contains(trigger)) return;
+        if (!trigger || !wrapper.contains(trigger))
+            return;
         const actionType = String(/** @type {HTMLElement} */ (trigger).dataset.action || '').toUpperCase();
-        const declared = (visual.actions || []).find(action =>
-            String(action.type || '').toUpperCase() === actionType
+        const declared = (visual.actions || []).find(action => String(action.type || '').toUpperCase() === actionType
             && String(action.trigger || '').toUpperCase() === 'ON_CLICK');
-        if (!declared) return;
+        if (!declared)
+            return;
         const action = Object.assign({}, declared);
-        if (/** @type {HTMLElement} */ (trigger).dataset.param) action.parameterName = /** @type {HTMLElement} */ (trigger).dataset.param;
-        if (/** @type {HTMLElement} */ (trigger).dataset.value !== undefined) {
+        if ( /** @type {HTMLElement} */(trigger).dataset.param)
+            action.parameterName = /** @type {HTMLElement} */ (trigger).dataset.param;
+        if ( /** @type {HTMLElement} */(trigger).dataset.value !== undefined) {
             action.valueSource = 'LITERAL';
             action.literalValue = /** @type {HTMLElement} */ (trigger).dataset.value;
         }
         executeAction(action, [/** @type {HTMLElement} */ (trigger).dataset.value ?? ''], ['VALUE'], visual.name, visual);
     });
-
     container.appendChild(wrapper);
-
     const byName = new Map((manifest.visuals || [])
         .map(candidate => [String(candidate.name || '').toLowerCase(), candidate]));
     const embeds = new Map((visual.htmlEmbeds || [])
@@ -6142,7 +6132,6 @@ function renderHtmlVisual(container, visual, manifest, embedDepth) {
         }
         renderVisual(slot, target, null, manifest, embedDepth + 1);
     });
-
     const microCharts = new Map((visual.microCharts || [])
         .filter(micro => micro.role === 'html.inline')
         .map(micro => [String(micro.id || ''), micro]));
@@ -6161,94 +6150,97 @@ function renderHtmlVisual(container, visual, manifest, embedDepth) {
         slot.innerHTML = String(microChart.svg || '');
     });
 }
-
 function renderCard(container, visual) {
     const opts = visual.options || {};
-    const cardTitle    = getOption(opts, 'title') || visual.name;
+    const cardTitle = getOption(opts, 'title') || visual.name;
     const cardSubtitle = getOption(opts, 'subtitle') || '';
-
     // ── Value ──────────────────────────────────────────────────────────
     const valueColName = getOption(opts, 'mapping:value');
     const valIdx = valueColName
-        ? (visual.columns || []).findIndex(c => c.toLowerCase() === valueColName.toLowerCase())
+        ? (visual.columns || []).findIndex((c) => c.toLowerCase() === valueColName.toLowerCase())
         : 0;
     const row = visual.rows && visual.rows[0] ? visual.rows[0] : null;
     const rawCell = row ? (row[valIdx >= 0 ? valIdx : 0] ?? null) : null;
     const isNumeric = rawCell !== null && rawCell !== '' && !isNaN(Number(rawCell));
     const rawValue = isNumeric ? parseFloat(String(rawCell)) : null;
-
-    const formatOpt    = getOption(opts, 'format');
+    const formatOpt = getOption(opts, 'format');
     const doAbbreviate = isOn(getOption(opts, 'abbreviate'));
-    const prefix       = getOption(opts, 'prefix') || '';
-    const suffix       = getOption(opts, 'suffix') || '';
-
+    const prefix = getOption(opts, 'prefix') || '';
+    const suffix = getOption(opts, 'suffix') || '';
     let displayValue;
     if (rawCell === null) {
         displayValue = 'No data';
-    } else if (!isNumeric) {
+    }
+    else if (!isNumeric) {
         displayValue = prefix + String(rawCell) + suffix;
-    } else if (doAbbreviate && rawValue !== null) {
+    }
+    else if (doAbbreviate && rawValue !== null) {
         displayValue = prefix + abbreviateNumber(rawValue, formatOpt) + suffix;
-    } else if (formatOpt && rawValue !== null) {
+    }
+    else if (formatOpt && rawValue !== null) {
         displayValue = prefix + formatValue(rawValue, formatOpt) + suffix;
-    } else {
+    }
+    else {
         displayValue = prefix + String(rawValue ?? rawCell) + suffix;
     }
-
     // ── Goal ───────────────────────────────────────────────────────────
     const goalColName = getOption(opts, 'mapping:goal');
     let goalValue = null;
     if (goalColName && row) {
-        const gIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === goalColName.toLowerCase());
-        if (gIdx >= 0) goalValue = parseFloat(row[gIdx] ?? '0');
+        const gIdx = (visual.columns || []).findIndex((c) => c.toLowerCase() === goalColName.toLowerCase());
+        if (gIdx >= 0)
+            goalValue = parseFloat((row[gIdx] ?? '0'));
     }
     if (goalValue === null) {
         const goalOpt = getOption(opts, 'goal');
-        if (goalOpt !== null) goalValue = parseFloat(goalOpt);
+        if (goalOpt !== null)
+            goalValue = parseFloat(goalOpt);
     }
-
     // ── Status ─────────────────────────────────────────────────────────
     const closePct = parseFloat(getOption(opts, 'close_pct') ?? '0.80');
-    const metPct   = parseFloat(getOption(opts, 'met_pct')   ?? '1.00');
-    let status = null, ratio = null;
+    const metPct = parseFloat(getOption(opts, 'met_pct') ?? '1.00');
+    let status = null;
+    let ratio = null;
     if (goalValue !== null && rawValue !== null && goalValue !== 0) {
         ratio = rawValue / goalValue;
-        if      (ratio >= metPct)   status = 'met';
-        else if (ratio >= closePct) status = 'close';
-        else                        status = 'missed';
+        if (ratio >= metPct)
+            status = 'met';
+        else if (ratio >= closePct)
+            status = 'close';
+        else
+            status = 'missed';
     }
-
     // ── Colors & icons ─────────────────────────────────────────────────
     const colors = {
-        met:    getOption(opts, 'color_met')    || '#10b981',
-        close:  getOption(opts, 'color_close')  || '#f59e0b',
-        missed: getOption(opts, 'color_missed') || '#ef4444'
+        met: (getOption(opts, 'color_met') || '#10b981'),
+        close: (getOption(opts, 'color_close') || '#f59e0b'),
+        missed: (getOption(opts, 'color_missed') || '#ef4444')
     };
     const iconSets = {
         TRAFFIC: { met: '🟢', close: '🟡', missed: '🔴' },
-        ARROWS:  { met: '↑',  close: '→',  missed: '↓'  },
-        CHECKS:  { met: '✓',  close: '~',  missed: '✗'  }
+        ARROWS: { met: '↑', close: '→', missed: '↓' },
+        CHECKS: { met: '✓', close: '~', missed: '✗' }
     };
-    const iconSetName  = (getOption(opts, 'icon_set') || '').toUpperCase();
-    const presetIcons  = iconSets[iconSetName] || null;
+    const iconSetName = (getOption(opts, 'icon_set') || '').toUpperCase();
+    const presetIcons = iconSets[iconSetName] || null;
     const icons = {
-        met:    getOption(opts, 'icon_met')    ?? (presetIcons ? presetIcons.met    : '✓'),
-        close:  getOption(opts, 'icon_close')  ?? (presetIcons ? presetIcons.close  : '⚠'),
+        met: getOption(opts, 'icon_met') ?? (presetIcons ? presetIcons.met : '✓'),
+        close: getOption(opts, 'icon_close') ?? (presetIcons ? presetIcons.close : '⚠'),
         missed: getOption(opts, 'icon_missed') ?? (presetIcons ? presetIcons.missed : '✗')
     };
-
     // ── Delta ──────────────────────────────────────────────────────────
     const deltaColName = getOption(opts, 'mapping:delta');
     let deltaAmount = null;
     if (deltaColName && row) {
-        const dIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === deltaColName.toLowerCase());
-        if (dIdx >= 0 && rawValue !== null) deltaAmount = rawValue - parseFloat(row[dIdx] ?? '0');
+        const dIdx = (visual.columns || []).findIndex((c) => c.toLowerCase() === deltaColName.toLowerCase());
+        if (dIdx >= 0 && rawValue !== null)
+            deltaAmount = rawValue - parseFloat((row[dIdx] ?? '0'));
     }
     const deltaFormat = getOption(opts, 'delta_format') || formatOpt;
     let deltaLabel = '';
     const deltaLabelMapping = getOption(opts, 'mapping:delta_label');
     if (deltaLabelMapping && row) {
-        const dlIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === deltaLabelMapping.toLowerCase());
+        const dlIdx = (visual.columns || []).findIndex((c) => c.toLowerCase() === deltaLabelMapping.toLowerCase());
         if (dlIdx >= 0 && row[dlIdx] !== undefined && row[dlIdx] !== null) {
             deltaLabel = String(row[dlIdx]);
         }
@@ -6257,49 +6249,50 @@ function renderCard(container, visual) {
         const deltaLabelOpt = getOption(opts, 'delta_label');
         if (deltaLabelOpt) {
             if (row) {
-                const dlIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === deltaLabelOpt.toLowerCase());
+                const dlIdx = (visual.columns || []).findIndex((c) => c.toLowerCase() === deltaLabelOpt.toLowerCase());
                 if (dlIdx >= 0 && row[dlIdx] !== undefined && row[dlIdx] !== null) {
                     deltaLabel = String(row[dlIdx]);
-                } else {
+                }
+                else {
                     deltaLabel = deltaLabelOpt;
                 }
-            } else {
+            }
+            else {
                 deltaLabel = deltaLabelOpt;
             }
         }
     }
-    const trendDir    = (getOption(opts, 'trend_dir') || 'POSITIVE_UP').toUpperCase();
-
+    const trendDir = (getOption(opts, 'trend_dir') || 'POSITIVE_UP').toUpperCase();
     // ── Status label override ──────────────────────────────────────────
     let subtitleText = cardSubtitle;
-    if (status === 'met'    && getOption(opts, 'label_met'))    subtitleText = getOption(opts, 'label_met');
-    if (status === 'close'  && getOption(opts, 'label_close'))  subtitleText = getOption(opts, 'label_close');
-    if (status === 'missed' && getOption(opts, 'label_missed')) subtitleText = getOption(opts, 'label_missed');
-
+    if (status === 'met' && getOption(opts, 'label_met'))
+        subtitleText = getOption(opts, 'label_met');
+    if (status === 'close' && getOption(opts, 'label_close'))
+        subtitleText = getOption(opts, 'label_close');
+    if (status === 'missed' && getOption(opts, 'label_missed'))
+        subtitleText = getOption(opts, 'label_missed');
     // ── Build HTML ─────────────────────────────────────────────────────
     // Status badge
     let badgeHtml = '';
     if (status) {
         badgeHtml = `<span class="card-status-badge" style="background:${escHtml(colors[status])}">${escHtml(icons[status])}</span>`;
     }
-
     // Delta row
     let deltaHtml = '';
     if (deltaAmount !== null) {
-        const isPos    = deltaAmount >= 0;
-        const isGood   = trendDir === 'POSITIVE_UP' ? isPos : !isPos;
-        const arrow    = isPos ? '▲' : '▼';
-        const clr      = isGood ? '#10b981' : '#ef4444';
-        const absAmt   = Math.abs(deltaAmount);
+        const isPos = deltaAmount >= 0;
+        const isGood = trendDir === 'POSITIVE_UP' ? isPos : !isPos;
+        const arrow = isPos ? '▲' : '▼';
+        const clr = isGood ? '#10b981' : '#ef4444';
+        const absAmt = Math.abs(deltaAmount);
         const deltaStr = deltaFormat ? formatValue(absAmt, deltaFormat) : String(absAmt);
-        const sign     = isPos ? '+' : '-';
+        const sign = isPos ? '+' : '-';
         deltaHtml = `<div class="card-delta" style="color:${clr}">` +
             `<span class="card-delta-arrow">${arrow}</span>` +
             `<span class="card-delta-value">${escHtml(sign + deltaStr)}</span>` +
             (deltaLabel ? `<span class="card-delta-label">${escHtml(deltaLabel)}</span>` : '') +
             `</div>`;
     }
-
     // Goal display line
     let goalLineHtml = '';
     if (goalValue !== null && isOn(getOption(opts, 'show_goal'))) {
@@ -6308,19 +6301,17 @@ function renderCard(container, visual) {
             : (formatOpt ? formatValue(goalValue, formatOpt) : String(goalValue));
         goalLineHtml = `<div class="card-goal">Target: ${escHtml(gDisplay)}</div>`;
     }
-
     // % of goal line
     let goalPctHtml = '';
     if (ratio !== null && isOn(getOption(opts, 'show_percent_of_goal'))) {
         goalPctHtml = `<div class="card-goal-pct">${Math.round(ratio * 100)}% of target</div>`;
     }
-
     // Progress bar or ring
     let progressHtml = '';
-    const showProgress  = isOn(getOption(opts, 'show_progress'));
+    const showProgress = isOn(getOption(opts, 'show_progress'));
     const progressStyle = (getOption(opts, 'progress_style') || 'BAR').toUpperCase();
     if (showProgress && ratio !== null && status) {
-        const pct      = Math.min(ratio * 100, 100);
+        const pct = Math.min(ratio * 100, 100);
         const barColor = colors[status];
         if (progressStyle === 'RING') {
             const r = 18, circ = 2 * Math.PI * r;
@@ -6331,59 +6322,65 @@ function renderCard(container, visual) {
                 `<circle cx="24" cy="24" r="${r}" fill="none" stroke="${escHtml(barColor)}" stroke-width="4"` +
                 ` stroke-dasharray="${dash.toFixed(2)} ${circ.toFixed(2)}" transform="rotate(-90 24 24)"/>` +
                 `</svg><span class="card-ring-pct">${Math.round(pct)}%</span></div>`;
-        } else {
+        }
+        else {
             progressHtml = `<div class="card-progress">` +
                 `<div class="card-progress-fill" style="width:${pct.toFixed(1)}%;background:${escHtml(barColor)}"></div>` +
                 `</div>`;
         }
     }
-
     const vstyles = visual.styles || {};
     const tColor = getStyle(vstyles, 'TITLE_COLOR');
     const tSize = getStyle(vstyles, 'TITLE_SIZE');
     const tWeight = getStyle(vstyles, 'TITLE_WEIGHT');
     const tFont = getStyle(vstyles, 'TITLE_FONT');
     const tAlign = getStyle(vstyles, 'TITLE_ALIGN');
-
     let titleStyleAttr = '';
-    if (tColor) titleStyleAttr += `color:${escHtml(tColor)};`;
-    if (tSize) titleStyleAttr += `font-size:${escHtml(tSize.includes('px') || tSize.includes('rem') || tSize.includes('em') || tSize.includes('%') ? tSize : (tSize + 'px'))};`;
-    if (tWeight) titleStyleAttr += `font-weight:${escHtml(tWeight)};`;
-    if (tFont) titleStyleAttr += `font-family:${escHtml(tFont)};`;
-
+    if (tColor)
+        titleStyleAttr += `color:${escHtml(tColor)};`;
+    if (tSize)
+        titleStyleAttr += `font-size:${escHtml(tSize.includes('px') || tSize.includes('rem') || tSize.includes('em') || tSize.includes('%') ? tSize : (tSize + 'px'))};`;
+    if (tWeight)
+        titleStyleAttr += `font-weight:${escHtml(tWeight)};`;
+    if (tFont)
+        titleStyleAttr += `font-family:${escHtml(tFont)};`;
     let headerRowStyleAttr = '';
     if (tAlign) {
         const alignLower = tAlign.toLowerCase();
         headerRowStyleAttr = `justify-content:${alignLower === 'center' ? 'center' : (alignLower === 'right' ? 'flex-end' : 'flex-start')};`;
     }
-
     const sColor = getStyle(vstyles, 'SUBTITLE_COLOR');
     const sSize = getStyle(vstyles, 'SUBTITLE_SIZE');
     const sWeight = getStyle(vstyles, 'SUBTITLE_WEIGHT');
     const sFont = getStyle(vstyles, 'SUBTITLE_FONT');
-    const sAlign = getStyle(vstyles, 'SUBTITLE_ALIGN') || tAlign;
-
+    const sAlign = (getStyle(vstyles, 'SUBTITLE_ALIGN') || tAlign);
     let subStyleAttr = '';
-    if (sColor) subStyleAttr += `color:${escHtml(sColor)};`;
-    if (sSize) subStyleAttr += `font-size:${escHtml(sSize.includes('px') || sSize.includes('rem') || sSize.includes('em') || sSize.includes('%') ? sSize : (sSize + 'px'))};`;
-    if (sWeight) subStyleAttr += `font-weight:${escHtml(sWeight)};`;
-    if (sFont) subStyleAttr += `font-family:${escHtml(sFont)};`;
-    if (sAlign) subStyleAttr += `text-align:${escHtml(sAlign.toLowerCase())};`;
-
+    if (sColor)
+        subStyleAttr += `color:${escHtml(sColor)};`;
+    if (sSize)
+        subStyleAttr += `font-size:${escHtml(sSize.includes('px') || sSize.includes('rem') || sSize.includes('em') || sSize.includes('%') ? sSize : (sSize + 'px'))};`;
+    if (sWeight)
+        subStyleAttr += `font-weight:${escHtml(sWeight)};`;
+    if (sFont)
+        subStyleAttr += `font-family:${escHtml(sFont)};`;
+    if (sAlign)
+        subStyleAttr += `text-align:${escHtml(sAlign.toLowerCase())};`;
     const titleInner = visual.titleIsMarkdown ? renderInlineMarkdown(cardTitle) : escHtml(cardTitle);
     const subInner = visual.subtitleIsMarkdown ? renderInlineMarkdown(subtitleText) : escHtml(subtitleText);
-
     // ── Value Color ──────────────────────────────────────────────────
     let valueColor = null;
     if (visual.rowFontStyles && visual.rowFontStyles.length > 0 && visual.rowFontStyles[0]) {
         valueColor = visual.rowFontStyles[0];
-    } else if (visual.rowStyles && visual.rowStyles.length > 0 && visual.rowStyles[0]) {
+    }
+    else if (visual.rowStyles && visual.rowStyles.length > 0 && visual.rowStyles[0]) {
         valueColor = visual.rowStyles[0];
-    } else if (visual.formattingRules && visual.formattingRules.length > 0 && rawValue !== null && !isNaN(rawValue)) {
+    }
+    else if (visual.formattingRules && visual.formattingRules.length > 0 && rawValue !== null && !isNaN(rawValue)) {
         for (let i = 0; i < visual.formattingRules.length; i++) {
             const rule = visual.formattingRules[i];
             const cond = (rule.condition || rule.Condition || '').trim();
-            if (!cond) continue;
+            if (!cond)
+                continue;
             if (matchesCondition(cond, rawValue, 'VALUE')) {
                 valueColor = rule.fontColor || rule.FontColor || rule.color || rule.Color;
                 break;
@@ -6393,14 +6390,13 @@ function renderCard(container, visual) {
     if (!valueColor) {
         valueColor = getOption(opts, 'value_color') || getStyle(vstyles, 'VALUE_COLOR') || null;
     }
-
     const cardEl = document.createElement('div');
     cardEl.className = 'card-value' + (status ? ` card-status-${status}` : '');
     cardEl.innerHTML =
         `<div class="card-header-row"${headerRowStyleAttr ? ` style="${headerRowStyleAttr}"` : ''}><div class="card-label"${titleStyleAttr ? ` style="${titleStyleAttr}"` : ''}>${titleInner}</div>${badgeHtml}</div>` +
-        (subtitleText ? `<div class="card-subtitle"${subStyleAttr ? ` style="${subStyleAttr}"` : ''}>${subInner}</div>` : '') +
-        `<div class="card-number"${valueColor ? ` style="color:${escHtml(valueColor)};"` : ''}>${escHtml(String(displayValue))}</div>` +
-        goalLineHtml + goalPctHtml + deltaHtml + progressHtml;
+            (subtitleText ? `<div class="card-subtitle"${subStyleAttr ? ` style="${subStyleAttr}"` : ''}>${subInner}</div>` : '') +
+            `<div class="card-number"${valueColor ? ` style="color:${escHtml(valueColor)};"` : ''}>${escHtml(String(displayValue))}</div>` +
+            goalLineHtml + goalPctHtml + deltaHtml + progressHtml;
     const sparkline = Array.isArray(visual.microCharts)
         ? visual.microCharts.find(micro => micro.role === 'card.sparkline')
         : null;
@@ -6414,17 +6410,15 @@ function renderCard(container, visual) {
     }
     container.appendChild(cardEl);
 }
-
 // ── Text ────────────────────────────────────────────────────────────────
-
 function renderText(container, visual) {
     // Static content from CONTENT/DEFAULT clause; fall back to MAPPINGS(CONTENT=col) first row
     let content = visual.defaultValue || '';
     if (!content && visual.columns && visual.rows && visual.rows.length > 0) {
         const idx = visual.columns.findIndex(c => c.toLowerCase() === 'content');
-        if (idx >= 0 && visual.rows[0][idx] != null) content = String(visual.rows[0][idx]);
+        if (idx >= 0 && visual.rows[0][idx] != null)
+            content = String(visual.rows[0][idx]);
     }
-
     // Inline column interpolation: {column FORMAT '...'}
     if (content && visual.columns && visual.rows && visual.rows.length > 0) {
         const row = visual.rows[0];
@@ -6440,7 +6434,6 @@ function renderText(container, visual) {
             return match;
         });
     }
-
     const opts = visual.options || {};
     const align = (opts['ALIGN'] || opts['align'] || 'left').toLowerCase();
     const useMd = (opts['MARKDOWN'] || opts['markdown'] || 'ON').toUpperCase() !== 'OFF';
@@ -6449,28 +6442,28 @@ function renderText(container, visual) {
     const fontSize = opts['FONT_SIZE'] || opts['font_size'];
     const fontColor = opts['FONT_COLOR'] || opts['font_color'];
     const fontWeight = opts['FONT_WEIGHT'] || opts['font_weight'];
-
     const div = document.createElement('div');
     div.className = 'text-visual';
     div.style.textAlign = align;
-
     if (maxLines > 0) {
         div.style.display = '-webkit-box';
         div.style.webkitLineClamp = String(maxLines);
         div.style.webkitBoxOrient = 'vertical';
         div.style.overflow = 'hidden';
     }
-
-    if (overflow === 'CLIP') div.classList.add('overflow-clip');
-    else if (overflow === 'SCROLL') div.classList.add('overflow-scroll');
-    else if (overflow === 'ELLIPSIS') div.classList.add('overflow-ellipsis');
-
-    if (fontSize) div.style.fontSize = (fontSize.includes('px') || fontSize.includes('rem') || fontSize.includes('em') || fontSize.includes('pt')) ? fontSize : (fontSize + 'px');
-    if (fontColor) div.style.color = fontColor;
-    if (fontWeight) div.style.fontWeight = fontWeight;
-
+    if (overflow === 'CLIP')
+        div.classList.add('overflow-clip');
+    else if (overflow === 'SCROLL')
+        div.classList.add('overflow-scroll');
+    else if (overflow === 'ELLIPSIS')
+        div.classList.add('overflow-ellipsis');
+    if (fontSize)
+        div.style.fontSize = (fontSize.includes('px') || fontSize.includes('rem') || fontSize.includes('em') || fontSize.includes('pt')) ? fontSize : (fontSize + 'px');
+    if (fontColor)
+        div.style.color = fontColor;
+    if (fontWeight)
+        div.style.fontWeight = fontWeight;
     div.innerHTML = useMd ? simpleMarkdown(content) : escHtml(content).replace(/\n/g, '<br>');
-
     const clickActions = actionsFor(visual, 'ON_CLICK');
     if (clickActions.length > 0) {
         div.style.cursor = 'pointer';
@@ -6479,40 +6472,34 @@ function renderText(container, visual) {
             clickActions.forEach(a => executeAction(a, row, visual.columns || [], visual.name, visual));
         });
     }
-
     container.appendChild(div);
 }
-
 // ── Image ───────────────────────────────────────────────────────────────
-
 function renderImage(container, visual) {
     const opts = visual.options || {};
-    const src  = opts['SRC'] || opts['src'] || '';
-    const alt  = opts['ALT'] || opts['alt'] || '';
-    const fit  = (opts['FIT'] || opts['fit'] || 'contain').toLowerCase();
+    const src = opts['SRC'] || opts['src'] || '';
+    const alt = opts['ALT'] || opts['alt'] || '';
+    const fit = (opts['FIT'] || opts['fit'] || 'contain').toLowerCase();
     const mode = (opts['MODE'] || opts['mode'] || 'SINGLE').toUpperCase();
     const cols = parseInt(opts['COLUMNS'] || opts['columns'] || '3', 10);
     const aspect = opts['ASPECT_RATIO'] || opts['aspect_ratio'];
     const fallback = opts['FALLBACK'] || opts['fallback'];
-
     const clickActions = actionsFor(visual, 'ON_CLICK');
-
     if (mode === 'GALLERY' && visual.rows && visual.rows.length > 0) {
         const gallery = document.createElement('div');
         gallery.className = 'image-gallery';
         gallery.style.gridTemplateColumns = `repeat(${cols > 0 ? cols : 3}, 1fr)`;
         gallery.style.gap = '8px';
-
         const srcIdx = visual.columns ? visual.columns.findIndex(c => c.toLowerCase() === 'src' || c.toLowerCase() === 'url' || c.toLowerCase() === 'image') : 0;
         const useIdx = srcIdx >= 0 ? srcIdx : 0;
-
         visual.rows.forEach(row => {
             const rawUrl = String(row[useIdx] ?? '');
             const img = document.createElement('img');
             img.src = safeUrl(rawUrl || fallback || '');
             img.alt = alt;
             img.style.objectFit = fit;
-            if (aspect) img.style.aspectRatio = aspect.replace(':', '/');
+            if (aspect)
+                img.style.aspectRatio = aspect.replace(':', '/');
             if (fallback) {
                 img.onerror = () => { img.src = safeUrl(fallback); img.onerror = null; };
             }
@@ -6527,26 +6514,24 @@ function renderImage(container, visual) {
         container.appendChild(gallery);
         return;
     }
-
     const wrapper = document.createElement('div');
-    wrapper.style.width  = '100%';
+    wrapper.style.width = '100%';
     wrapper.style.height = '100%';
     wrapper.style.display = 'flex';
     wrapper.style.alignItems = 'center';
     wrapper.style.justifyContent = 'center';
-
     const finalSrc = src || (visual.rows && visual.rows.length > 0 && visual.rows[0][0] != null ? String(visual.rows[0][0]) : '') || fallback || '';
     const img = document.createElement('img');
-    img.src   = safeUrl(finalSrc);
-    img.alt   = alt;
-    img.style.maxWidth  = '100%';
+    img.src = safeUrl(finalSrc);
+    img.alt = alt;
+    img.style.maxWidth = '100%';
     img.style.maxHeight = '100%';
     img.style.objectFit = fit;
-    if (aspect) img.style.aspectRatio = aspect.replace(':', '/');
+    if (aspect)
+        img.style.aspectRatio = aspect.replace(':', '/');
     if (fallback) {
         img.onerror = () => { img.src = safeUrl(fallback); img.onerror = null; };
     }
-
     if (clickActions.length > 0) {
         wrapper.style.cursor = 'pointer';
         wrapper.addEventListener('click', () => {
@@ -6554,7 +6539,6 @@ function renderImage(container, visual) {
             clickActions.forEach(a => executeAction(a, row, visual.columns || [], visual.name, visual));
         });
     }
-
     wrapper.appendChild(img);
     container.appendChild(wrapper);
 }
@@ -7247,138 +7231,141 @@ function renderAccordionContainer(container, containerDef, manifest, pageTheme) 
 
 
 // ─── rt-actions.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-actions.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Actions, navigation, drill, cross-filtering, and export.
  */
-
 let _drillInFlight = false;
-
 // ── Native SVG chart — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL / BUBBLE / RADAR / CANDLESTICK / MAP / GANTT / SANKEY / SUNBURST / NETWORK / TRELLIS) ──
-
 // Cross-filter state: { filterValue, filterColumn }. Stored per page section.
 function getPageState(container) {
     let el = container;
-    while (el && !el.classList.contains('page')) el = el.parentElement;
+    while (el && !el.classList.contains('page'))
+        el = el.parentElement;
     return el;
 }
-
 function applyPageCrossFilter(container, filterValue, filterColumn, sourceVisualName, event) {
     const pageEl = getPageState(container);
-    if (!pageEl) return;
-
+    if (!pageEl)
+        return;
     // Use module-level state keyed by page ID so it survives renderManifest DOM rebuilds
     const pageKey = pageEl.id || 'default';
     const state = _crossFilterStates[pageKey] || (_crossFilterStates[pageKey] = { selections: [] });
     const isMulti = event && (event.ctrlKey || event.metaKey);
-
     // Update state
     if (isMulti) {
         const idx = state.selections.findIndex(s => s.value === filterValue && s.column === filterColumn);
-        if (idx >= 0) state.selections.splice(idx, 1);
-        else state.selections.push({ value: filterValue, column: filterColumn, visual: sourceVisualName });
-    } else {
+        if (idx >= 0)
+            state.selections.splice(idx, 1);
+        else
+            state.selections.push({ value: filterValue, column: filterColumn, visual: sourceVisualName });
+    }
+    else {
         if (state.selections.length === 1 && state.selections[0].value === filterValue && state.selections[0].visual === sourceVisualName) {
             state.selections = [];
-        } else {
+        }
+        else {
             state.selections = [{ value: filterValue, column: filterColumn, visual: sourceVisualName }];
         }
     }
-
     // Mark the source card with a border indicator; strip the marker from all others.
     pageEl.querySelectorAll('.visual-card').forEach(card => {
-        const v = card._visualData;
-        if (!v) return;
+        const v = /** @type {EtlSqlVisualHost} */ (card)._visualData;
+        if (!v)
+            return;
         if (state.selections.length > 0 && state.selections.some(s => s.visual === v.name)) {
             card.classList.add('cross-filter-source');
-        } else {
+        }
+        else {
             card.classList.remove('cross-filter-source');
         }
     });
-
     if (state.selections.length === 0) {
         // Deselect: post an empty non-interaction batch to force the server to re-evaluate
         // without any interactionValues, returning a clean manifest with no highlightRows.
         state.lastBatch = {};
-        postParameters({}, false, null, sourceVisualName).then(m => { if (m) renderManifest(m); });
+        postParameters({}, false, null, sourceVisualName).then(m => { if (m)
+            renderManifest(m); });
         return;
     }
-
     // Build interaction batch for the active selection
     const batch = {};
     const groups = {};
     state.selections.forEach(s => {
         const k = '@' + s.column;
-        if (!groups[k]) groups[k] = [];
+        if (!groups[k])
+            groups[k] = [];
         groups[k].push(s.value);
     });
     Object.keys(groups).forEach(k => { batch[k] = groups[k].join(','); });
     state.lastBatch = batch;
-
-    postParameters(batch, true, null, sourceVisualName).then(m => { if (m) renderManifest(m); });
+    postParameters(batch, true, null, sourceVisualName).then(m => { if (m)
+        renderManifest(m); });
 }
-
 function reApplyCrossFilterStyling() {
     document.querySelectorAll('.page').forEach(pageEl => {
         const state = _crossFilterStates[pageEl.id];
-        if (!state || state.selections.length === 0) return;
+        if (!state || state.selections.length === 0)
+            return;
         const activeVisuals = new Set(state.selections.map(s => s.visual));
         pageEl.querySelectorAll('.visual-card').forEach(card => {
             const v = /** @type {EtlSqlVisualHost} */ (card)._visualData;
-            if (!v) return;
+            if (!v)
+                return;
             if (activeVisuals.has(v.name)) {
                 card.classList.add('cross-filter-source');
-            } else {
+            }
+            else {
                 card.classList.remove('cross-filter-source');
             }
         });
     });
 }
-
 // ── CSV export ──────────────────────────────────────────────────────────
-
 function exportCsv(visual) {
     const cols = visual.columns || [];
-    const rows = visual.rows    || [];
-    const escape = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
-    const lines  = [cols.map(escape).join(',')];
+    const rows = visual.rows || [];
+    const escape = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const lines = [cols.map(escape).join(',')];
     rows.forEach(r => lines.push(cols.map((_, i) => escape(r[i])).join(',')));
     const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
     a.download = (visual.name || 'export') + '.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
-
 function exportExcel(visual) {
     const cols = visual.columns || [];
-    const rows = visual.rows    || [];
-    const esc  = v => escHtml(String(v ?? ''));
+    const rows = visual.rows || [];
+    const esc = (v) => escHtml(String(v ?? ''));
     let html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
-               'xmlns:x="urn:schemas-microsoft-com:office:excel">' +
-               '<head><meta charset="UTF-8"></head><body><table>';
+        'xmlns:x="urn:schemas-microsoft-com:office:excel">' +
+        '<head><meta charset="UTF-8"></head><body><table>';
     html += '<tr>' + cols.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
     rows.forEach(r => {
         html += '<tr>' + cols.map((_, i) => `<td>${esc(r[i])}</td>`).join('') + '</tr>';
     });
     html += '</table></body></html>';
     const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
     a.download = (visual.name || 'export') + '.xls';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
-
 // Prefer a real .xlsx from the server (typed cells, one sheet, no "format
 // mismatch" warning). Falls back to the lightweight client-side .xls when no
 // export API is reachable (e.g. VS Code preview or a host without the endpoint).
@@ -7389,9 +7376,9 @@ async function exportExcelDownload(visual) {
             const res = await fetch(base + '/export/xlsx?visual=' + encodeURIComponent(visual.name || ''));
             if (res.ok) {
                 const blob = await res.blob();
-                const url  = URL.createObjectURL(blob);
-                const a    = document.createElement('a');
-                a.href     = url;
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
                 a.download = (visual.name || 'export') + '.xlsx';
                 document.body.appendChild(a);
                 a.click();
@@ -7399,16 +7386,15 @@ async function exportExcelDownload(visual) {
                 URL.revokeObjectURL(url);
                 return;
             }
-        } catch { /* fall through to client-side export */ }
+        }
+        catch { /* fall through to client-side export */ }
     }
     exportExcel(visual);
 }
-
 function findVisualData(targetName) {
     const el = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`);
     return el ? /** @type {EtlSqlVisualHost} */ (el)._visualData : null;
 }
-
 // Drill-through back-navigation stack
 function showDrillBackButton() {
     let btn = document.getElementById('drill-back-btn');
@@ -7417,19 +7403,25 @@ function showDrillBackButton() {
         btn.id = 'drill-back-btn';
         btn.className = 'drill-back-btn';
         btn.addEventListener('click', () => {
-            if (_drillHistory.length === 0) return;
+            if (_drillHistory.length === 0)
+                return;
             const prevParams = _drillHistory.pop();
             // Restore all previous params; blank out any keys added by the drill
             const restoreBatch = Object.assign({}, prevParams);
             Object.keys(parameters).forEach(k => {
-                if (!(k in prevParams)) restoreBatch[k] = '';
+                if (!(k in prevParams))
+                    restoreBatch[k] = '';
             });
-            if (_drillHistory.length === 0) hideDrillBackButton();
-            else btn.innerHTML = '← Back' + (_drillHistory.length > 1 ? ` (${_drillHistory.length})` : '');
+            if (_drillHistory.length === 0)
+                hideDrillBackButton();
+            else
+                btn.innerHTML = '← Back' + (_drillHistory.length > 1 ? ` (${_drillHistory.length})` : '');
             if (vscode) {
                 vscode.postMessage({ type: 'refreshReport', parameters: restoreBatch });
-            } else {
-                postParameters(restoreBatch).then(m => { if (m) renderManifest(m); });
+            }
+            else {
+                postParameters(restoreBatch).then(m => { if (m)
+                    renderManifest(m); });
             }
         });
         document.body.appendChild(btn);
@@ -7437,12 +7429,11 @@ function showDrillBackButton() {
     btn.innerHTML = '← Back' + (_drillHistory.length > 1 ? ` (${_drillHistory.length})` : '');
     btn.style.display = 'flex';
 }
-
 function hideDrillBackButton() {
     const btn = document.getElementById('drill-back-btn');
-    if (btn) btn.style.display = 'none';
+    if (btn)
+        btn.style.display = 'none';
 }
-
 // Lightweight singleton context menu for DRILL_DOWN and Export
 let _ctxMenu = null;
 function showCtxMenu(x, y, visual, rowData) {
@@ -7450,11 +7441,9 @@ function showCtxMenu(x, y, visual, rowData) {
     const menu = document.createElement('div');
     menu.className = 'report-ctx-menu';
     menu.style.left = x + 'px';
-    menu.style.top  = y + 'px';
-
+    menu.style.top = y + 'px';
     const drillDowns = (visual.actions || []).filter(a => a.type === 'DRILL_DOWN');
     const drillReports = (visual.actions || []).filter(a => a.type === 'DRILL_REPORT');
-
     drillDowns.forEach(action => {
         const item = document.createElement('div');
         item.className = 'ctx-item';
@@ -7466,7 +7455,6 @@ function showCtxMenu(x, y, visual, rowData) {
         });
         menu.appendChild(item);
     });
-
     drillReports.forEach(action => {
         const item = document.createElement('div');
         item.className = 'ctx-item';
@@ -7480,36 +7468,32 @@ function showCtxMenu(x, y, visual, rowData) {
         });
         menu.appendChild(item);
     });
-
     if (drillDowns.length > 0 || drillReports.length > 0) {
         const sep = document.createElement('div');
         sep.className = 'ctx-sep';
         menu.appendChild(sep);
     }
-
     const exportItem = document.createElement('div');
     exportItem.className = 'ctx-item';
     exportItem.innerHTML = `<span>&#x2913;</span> Export to CSV`;
     exportItem.addEventListener('click', () => { exportCsv(visual); hideCtxMenu(); });
     menu.appendChild(exportItem);
-
     const excelItem = document.createElement('div');
     excelItem.className = 'ctx-item';
     excelItem.innerHTML = `<span>&#x2913;</span> Export to Excel`;
     excelItem.addEventListener('click', () => { exportExcelDownload(visual); hideCtxMenu(); });
     menu.appendChild(excelItem);
-
     document.body.appendChild(menu);
     _ctxMenu = menu;
-
     // Close on any outside click
     setTimeout(() => document.addEventListener('click', hideCtxMenu, { once: true }), 10);
 }
-
 function hideCtxMenu() {
-    if (_ctxMenu) { _ctxMenu.remove(); _ctxMenu = null; }
+    if (_ctxMenu) {
+        _ctxMenu.remove();
+        _ctxMenu = null;
+    }
 }
-
 function matchesCondition(cond, val, colName) {
     let expr = (cond || '').trim();
     while (expr.startsWith('(') && expr.endsWith(')')) {
@@ -7521,7 +7505,6 @@ function matchesCondition(cond, val, colName) {
         const high = parseFloat(betweenMatch[2]);
         return val >= low && val <= high;
     }
-
     const andParts = expr.split(/\s+AND\s+/i);
     if (andParts.length > 1) {
         return andParts.every(part => matchesCondition(part, val, colName));
@@ -7530,25 +7513,24 @@ function matchesCondition(cond, val, colName) {
     if (orParts.length > 1) {
         return orParts.some(part => matchesCondition(part, val, colName));
     }
-
-    const bareMatch = expr.match(/^([<>!=]=?|<>)\s*(-?[\d.]+)$/);
+    const bareMatch = expr.match(/^(<>|[<>!=]=?)\s*(-?[\d.]+)$/);
     if (bareMatch) {
         return compareValues(val, bareMatch[1], parseFloat(bareMatch[2]));
     }
-
-    const compMatch = expr.match(/^(.*?)\s*([<>!=]=?|<>)\s*(.*?)$/);
+    const compMatch = expr.match(/^(.*?)\s*(<>|[<>!=]=?)\s*(.*?)$/);
     if (compMatch) {
         const leftStr = compMatch[1].trim().replace(/^[(["]+|[)\]"]+$/g, '');
         const op = compMatch[2];
         const rightStr = compMatch[3].trim().replace(/^[(["]+|[)\]"]+$/g, '');
         const rNum = parseFloat(rightStr);
         const lNum = parseFloat(leftStr);
-        if (!isNaN(rNum)) return compareValues(val, op, rNum);
-        if (!isNaN(lNum)) return compareValues(lNum, op, val);
+        if (!isNaN(rNum))
+            return compareValues(val, op, rNum);
+        if (!isNaN(lNum))
+            return compareValues(lNum, op, val);
     }
     return false;
 }
-
 function compareValues(a, op, b) {
     switch (op) {
         case '>': return a > b;
@@ -7562,19 +7544,21 @@ function compareValues(a, op, b) {
         default: return false;
     }
 }
-
 function evaluateExpressionAgainstParameters(expr, currentParams) {
-    if (!expr) return false;
+    if (!expr)
+        return false;
     const s = String(expr).trim();
-    if (/^(true|1|on)$/i.test(s)) return true;
-    if (/^(false|0|off)$/i.test(s)) return false;
-
+    if (/^(true|1|on)$/i.test(s))
+        return true;
+    if (/^(false|0|off)$/i.test(s))
+        return false;
     function resolveToken(token) {
         token = token.trim();
         if (token.startsWith('@')) {
             const pKey = token.toLowerCase();
             for (const k in currentParams) {
-                if (k.toLowerCase() === pKey) return String(currentParams[k] ?? '');
+                if (k.toLowerCase() === pKey)
+                    return String(currentParams[k] ?? '');
             }
             return '';
         }
@@ -7583,17 +7567,14 @@ function evaluateExpressionAgainstParameters(expr, currentParams) {
         }
         return token;
     }
-
-    const m = s.match(/^(.*?)\s*([<>!=]=?|<>)\s*(.*?)$/);
+    const m = s.match(/^(.*?)\s*(<>|[<>!=]=?)\s*(.*?)$/);
     if (m) {
         const left = resolveToken(m[1]);
         const op = m[2];
         const right = resolveToken(m[3]);
-
         const lNum = Number(left);
         const rNum = Number(right);
         const bothNum = !isNaN(lNum) && !isNaN(rNum) && left !== '' && right !== '';
-
         switch (op) {
             case '=':
             case '==':
@@ -7611,118 +7592,122 @@ function evaluateExpressionAgainstParameters(expr, currentParams) {
                 return bothNum ? lNum <= rNum : left <= right;
         }
     }
-
     if (s.startsWith('@')) {
         const val = resolveToken(s);
         return !!val && !/^(false|0|off)$/i.test(val);
     }
-
     return false;
 }
-
 // ── Actions ─────────────────────────────────────────────────────────────
-
 function actionsFor(visual, trigger) {
-    return (visual.actions || []).filter(a => a.trigger === trigger);
+    return (visual.actions || []).filter((a) => a.trigger === trigger);
 }
-
 function resolveActionValue(action, rowData, columns, controlValue) {
     const source = (action.valueSource || '').toUpperCase();
-    if (source === 'CONTROL_VALUE') return controlValue ?? '';
+    if (source === 'CONTROL_VALUE')
+        return controlValue ?? '';
     if (source === 'COLUMN') {
-        const colIdx = columns.findIndex(
-            c => c.toLowerCase() === (action.valueColumn || '').toLowerCase());
+        const colIdx = columns.findIndex(c => c.toLowerCase() === (action.valueColumn || '').toLowerCase());
         return colIdx >= 0 ? rowData[colIdx] : '';
     }
-    if (source === 'LITERAL') return action.literalValue ?? '';
+    if (source === 'LITERAL')
+        return action.literalValue ?? '';
     return action.literalValue ?? '';
 }
-
 function resolveActionParameters(action, rowData, columns) {
     const result = {};
     const columnParams = action.parameterColumns || {};
     const literalParams = action.literalParameters || {};
-
     Object.entries(columnParams).forEach(([name, column]) => {
         const colIdx = columns.findIndex(c => c.toLowerCase() === String(column).toLowerCase());
         result[name] = colIdx >= 0 ? String(rowData[colIdx] ?? '') : '';
     });
-
     Object.entries(literalParams).forEach(([name, value]) => {
         result[name] = String(value ?? '');
     });
-
     return result;
 }
-
 function navigateToPage(pageName) {
-    if (!pageName) return;
-
+    if (!pageName)
+        return;
     try {
         const navItem = document.querySelector(`[data-page="${CSS.escape(pageName)}"]`);
         if (navItem) {
             /** @type {HTMLElement} */ (navItem).click();
             return;
         }
-    } catch (e) { console.error(e); }
-
+    }
+    catch (e) {
+        console.error(e);
+    }
     const targetPage = document.getElementById('page-' + String(pageName).toLowerCase());
-    if (!targetPage) return;
-
+    if (!targetPage)
+        return;
     try {
-        document.querySelectorAll('.page').forEach(page => {
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.page')).forEach(page => {
             const isTarget = (page === targetPage);
-            /** @type {HTMLElement} */ (page).style.display = isTarget ? 'block' : 'none';
-            if (isTarget) page.classList.add('active');
-            else page.classList.remove('active');
+            page.style.display = isTarget ? 'block' : 'none';
+            if (isTarget)
+                page.classList.add('active');
+            else
+                page.classList.remove('active');
         });
-    } catch (e) { console.error(e); }
-
+    }
+    catch (e) {
+        console.error(e);
+    }
     try {
-        document.querySelectorAll('[data-page]').forEach(item => {
-            if (/** @type {HTMLElement} */ (item).dataset.page === pageName) item.classList.add('active');
-            else item.classList.remove('active');
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-page]')).forEach(item => {
+            if (item.dataset.page === pageName)
+                item.classList.add('active');
+            else
+                item.classList.remove('active');
         });
-    } catch (e) { console.error(e); }
+    }
+    catch (e) {
+        console.error(e);
+    }
     setLastActivePage(pageName);
-
     try {
         resizeChartsIn(targetPage);
-    } catch (e) { console.error(e); }
-
+    }
+    catch (e) {
+        console.error(e);
+    }
     try {
         if (window.parent && window.parent !== window) {
             window.parent.postMessage({ type: 'etl-page-changed', page: pageName, userTriggered: true }, '*');
         }
-    } catch (e) { console.error(e); }
+    }
+    catch (e) {
+        console.error(e);
+    }
 }
-
 function getActivePage() {
-    return Array.from(document.querySelectorAll('.page'))
-        .find(page => /** @type {HTMLElement} */ (page).style.display !== 'none' && page.classList.contains('active')) ||
-        Array.from(document.querySelectorAll('.page'))
-        .find(page => /** @type {HTMLElement} */ (page).style.display !== 'none') || null;
+    return Array.from(/** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.page')))
+        .find(page => page.style.display !== 'none' && page.classList.contains('active')) ||
+        Array.from(/** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.page')))
+            .find(page => page.style.display !== 'none') || null;
 }
-
 function getActivePageName() {
     const page = getActivePage();
-    return page ? (/** @type {HTMLElement} */ (page).dataset.pageName || null) : null;
+    return page ? (page.dataset.pageName || null) : null;
 }
-
 function isActivePagePaginated() {
     const page = getActivePage();
-    return !!page && (/** @type {HTMLElement} */ (page).dataset.pageMode || '').toUpperCase() === 'PAGINATED';
+    return !!page && (page.dataset.pageMode || '').toUpperCase() === 'PAGINATED';
 }
-
 function executeAction(action, rowData, columns, visualName, visualCtx) {
     if (action.type === 'DRILL_IN') {
         const hierarchy = action.hierarchy || [];
-        if (!hierarchy.length || !visualName) return;
+        if (!hierarchy.length || !visualName)
+            return;
         // Current level comes from the server-stamped drillState; fall back to hierarchy root.
         const curLevel = visualCtx?.drillState?.currentLevel || hierarchy[0];
-        const colIdx   = columns.findIndex(c => c.toLowerCase() === curLevel.toLowerCase());
-        const clicked  = colIdx >= 0 ? String(rowData?.[colIdx] ?? '') : '';
-        if (!clicked) return;
+        const colIdx = columns.findIndex(c => c.toLowerCase() === curLevel.toLowerCase());
+        const clicked = colIdx >= 0 ? String(rowData?.[colIdx] ?? '') : '';
+        if (!clicked)
+            return;
         postDrillIn(visualName, clicked);
         return;
     }
@@ -7731,69 +7716,76 @@ function executeAction(action, rowData, columns, visualName, visualCtx) {
         const params = {};
         for (const key of keyColumns) {
             const colIdx = columns.findIndex(c => c.toLowerCase() === key.toLowerCase());
-            const value  = colIdx >= 0 ? rowData[colIdx] : null;
-            if (value != null) params['@' + key] = String(value);
+            const value = colIdx >= 0 ? rowData[colIdx] : null;
+            if (value != null)
+                params['@' + key] = String(value);
         }
-        if (Object.keys(params).length === 0) return;
-
+        if (Object.keys(params).length === 0)
+            return;
         // Push current parameter snapshot onto back-navigation stack
         _drillHistory.push(Object.assign({}, parameters));
         showDrillBackButton();
-
         // Visual feedback: pulse target or entire page if navigating
         const targetName = action.target || action.targetVisual || action.targetPage;
         if (targetName) {
             const targetEl = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`)
-                          || document.getElementById('page-' + targetName.toLowerCase());
+                || document.getElementById('page-' + targetName.toLowerCase());
             if (targetEl) {
                 targetEl.classList.add('drilled-down');
                 setTimeout(() => targetEl.classList.remove('drilled-down'), 1500);
-
                 // If it's on the same page, scroll to it
                 targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
                 // If it's a page, navigate to it
                 const navBtn = document.querySelector(`.nav-tab[data-page="${CSS.escape(targetName)}"]`);
-                if (navBtn) /** @type {HTMLElement} */ (navBtn).click();
+                if (navBtn) /** @type {HTMLElement} */
+                    (navBtn).click();
             }
         }
-
         if (vscode) {
             vscode.postMessage({ type: 'refreshReport', parameters: params });
-        } else {
-            postParameters(params).then(manifest => { if (manifest) renderManifest(manifest); });
         }
-
-    } else if (action.type === 'SET_PARAMETER') {
+        else {
+            postParameters(params).then(manifest => { if (manifest)
+                renderManifest(manifest); });
+        }
+    }
+    else if (action.type === 'SET_PARAMETER') {
         const value = resolveActionValue(action, rowData, columns);
         const params = { [action.parameterName]: String(value ?? '') };
         if (vscode) {
             vscode.postMessage({ type: 'refreshReport', parameters: params });
-        } else {
-            postParameters(params).then(manifest => { if (manifest) renderManifest(manifest); });
         }
-    } else if (action.type === 'RUN_SCRIPT') {
+        else {
+            postParameters(params).then(manifest => { if (manifest)
+                renderManifest(manifest); });
+        }
+    }
+    else if (action.type === 'RUN_SCRIPT') {
         const scriptPath = action.scriptPath;
         const finalParams = resolveActionParameters(action, rowData, columns);
-
         if (isInteractive) {
             postRunScript(scriptPath, finalParams).then(res => {
-                if (res && res.message) feedback.notify(res.message, { title: 'Script action', tone: 'success', auditAction: 'report.script.run' });
+                if (res && res.message)
+                    feedback.notify(res.message, { title: 'Script action', tone: 'success', auditAction: 'report.script.run' });
                 if (res && res.refresh) {
                     // `fetchManifest` was never defined, so a RUN_SCRIPT action that asked for a
                     // refresh threw instead of refreshing — after the script had already run.
                     // Re-posting an empty parameter set is how the two branches above refresh;
                     // `isInteraction` keeps a paginated page from staging the empty set and
                     // handing back null, and keeps the report's parameter state untouched.
-                    postParameters({}, true).then(m => { if (m) renderManifest(m); });
+                    postParameters({}, true).then(m => { if (m)
+                        renderManifest(m); });
                 }
             });
-        } else {
+        }
+        else {
             console.warn('RUN_SCRIPT is only supported in web mode.');
         }
-    } else if (action.type === 'CLEAR_FILTERS') {
+    }
+    else if (action.type === 'CLEAR_FILTERS') {
         // Reset all cross-filter states on all pages
-        for (let k in _crossFilterStates) delete _crossFilterStates[k];
+        for (let k in _crossFilterStates)
+            delete _crossFilterStates[k];
         document.querySelectorAll('.page').forEach(pageEl => {
             pageEl.querySelectorAll('.visual-card').forEach(card => {
                 card.classList.remove('cross-filter-source');
@@ -7805,82 +7797,104 @@ function executeAction(action, rowData, columns, visualName, visualCtx) {
             Object.keys(getBaselineManifest().parameters).forEach(k => {
                 resetBatch[k] = getBaselineManifest().parameters[k];
             });
-            postParameters(resetBatch).then(m => { if (m) renderManifest(m); });
-        } else {
-            if (vscode) vscode.postMessage({ type: 'refreshReport', parameters: {} });
-            else postParameters({}).then(m => { if (m) renderManifest(m); });
+            postParameters(resetBatch).then(m => { if (m)
+                renderManifest(m); });
         }
-    } else if (action.type === 'APPLY_PARAMETERS') {
+        else {
+            if (vscode)
+                vscode.postMessage({ type: 'refreshReport', parameters: {} });
+            else
+                postParameters({}).then(m => { if (m)
+                    renderManifest(m); });
+        }
+    }
+    else if (action.type === 'APPLY_PARAMETERS') {
         const batch = { ...pendingParameters };
         // Clear pending
-        for (let k in pendingParameters) delete pendingParameters[k];
+        for (let k in pendingParameters)
+            delete pendingParameters[k];
         updateStagedUI();
-
         // Flush to server
-        _postParametersInternal(batch, false, getActivePageName()).then(m => { if (m) renderManifest(m); });
-    } else if (action.type === 'BACK') {
+        _postParametersInternal(batch, false, getActivePageName()).then(m => { if (m)
+            renderManifest(m); });
+    }
+    else if (action.type === 'BACK') {
         window.history.back();
-    } else if (action.type === 'REFRESH') {
+    }
+    else if (action.type === 'REFRESH') {
         if (isInteractive) {
             fetch(apiBase + '/manifest')
                 .then(r => r.json())
                 .then(m => renderManifest(m))
                 .catch(e => console.error('Refresh failed:', e));
         }
-    } else if (action.type === 'REFRESH_VISUALS') {
+    }
+    else if (action.type === 'REFRESH_VISUALS') {
         const targets = (action.targets || []).filter(Boolean);
-        if (targets.length === 0) return;
+        if (targets.length === 0)
+            return;
         if (vscode) {
             vscode.postMessage({ type: 'refreshVisuals', visuals: targets });
-        } else {
-            postRefreshVisuals(targets).then(m => { if (m) renderManifest(m); });
         }
-    } else if (action.type === 'EXPORT_CSV' || action.type === 'EXPORT_EXCEL') {
+        else {
+            postRefreshVisuals(targets).then(m => { if (m)
+                renderManifest(m); });
+        }
+    }
+    else if (action.type === 'EXPORT_CSV' || action.type === 'EXPORT_EXCEL') {
         const targetName = action.targetVisual || (visualCtx && visualCtx.options && visualCtx.options.TARGET);
         const visual = targetName ? findVisualData(targetName) : null;
-        if (!visual) { console.warn('EXPORT action: no target visual found:', targetName); return; }
-        if (action.type === 'EXPORT_CSV') exportCsv(visual);
-        else exportExcelDownload(visual);
-    } else if (action.type === 'EXPORT_PDF') {
+        if (!visual) {
+            console.warn('EXPORT action: no target visual found:', targetName);
+            return;
+        }
+        if (action.type === 'EXPORT_CSV')
+            exportCsv(visual);
+        else
+            exportExcelDownload(visual);
+    }
+    else if (action.type === 'EXPORT_PDF') {
         window.print();
-    } else if (action.type === 'NAVIGATE_PAGE') {
+    }
+    else if (action.type === 'NAVIGATE_PAGE') {
         navigateToPage(action.targetPage);
-    } else if (action.type === 'DRILL_REPORT') {
+    }
+    else if (action.type === 'DRILL_REPORT') {
         const targetReport = resolveActionValue(action, rowData, columns) || action.targetReport;
-        if (!targetReport) return;
-
+        if (!targetReport)
+            return;
         const finalParams = resolveActionParameters(action, rowData, columns);
-
         // Build query string
         const qs = Object.entries(finalParams)
             .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
             .join('&');
-
         if (vscode) {
             vscode.postMessage({
                 type: 'drillReport',
                 targetReport: targetReport,
                 parameters: finalParams
             });
-        } else {
+        }
+        else {
             // Determine target URL based on current environment
             let targetUrl;
             const reportName = targetReport.replace(/\.[^/.]+$/, "").replace(/^.*[\\/]/, '');
-
             if (window.__API_BASE__) {
                 // Portal mode: navigate to sibling report
                 const parts = window.__API_BASE__.split('/'); // e.g. ["", "reports", "Summary", "api"]
                 if (parts.length >= 3) {
                     targetUrl = `/${parts[1]}/${encodeURIComponent(reportName)}`;
-                } else {
+                }
+                else {
                     targetUrl = `/reports/${encodeURIComponent(reportName)}`;
                 }
-            } else {
+            }
+            else {
                 // Standalone mode: assume sibling file on same server
                 targetUrl = `/${encodeURIComponent(reportName)}`;
             }
-
-            if (qs) targetUrl += (targetUrl.includes('?') ? '&' : '?') + qs;
+            if (qs)
+                targetUrl += (targetUrl.includes('?') ? '&' : '?') + qs;
             // Only navigate to a local, same-origin path: must start with a single '/'
             // (reject '//host' / '/\host' protocol-relative targets) so a crafted report
             // name can never redirect off-site.
@@ -7888,69 +7902,82 @@ function executeAction(action, rowData, columns, visualName, visualCtx) {
                 window.location.href = targetUrl;
             }
         }
-    } else if (action.type === 'SET_UI_STATE') {
+    }
+    else if (action.type === 'SET_UI_STATE') {
         const targets = action.targets || [];
         const key = (action.key || '').toUpperCase();
         const value = action.value;
-
         // Resolve target elements
         const elements = [];
         targets.forEach(t => {
             if (t.startsWith('TAG:')) {
                 const tagName = t.substring(4);
-                document.querySelectorAll(`[data-tag="${tagName}"]`).forEach(el => elements.push(el));
-            } else {
+                /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(`[data-tag="${tagName}"]`)).forEach(el => elements.push(el));
+            }
+            else {
                 const el = document.getElementById(t) || document.querySelector(`[data-name="${t}"]`);
-                if (el) elements.push(el);
+                if (el)
+                    elements.push /** @type {HTMLElement} */((el));
             }
         });
-
         elements.forEach(el => {
             if (key === 'VISIBLE') {
                 const isVisible = isOn(value);
                 el.style.display = isVisible ? '' : 'none';
                 const name = el.getAttribute('data-name') || el.id;
-                if (name) _uiStates[name] = Object.assign({}, _uiStates[name], { visible: isVisible });
-            } else if (key === 'COLLAPSED') {
+                if (name)
+                    _uiStates[name] = Object.assign({}, _uiStates[name], { visible: isVisible });
+            }
+            else if (key === 'COLLAPSED') {
                 const isCollapsed = isOn(value);
                 const container = el.closest('.collapsible-drawer') || el.closest('.collapsible-inline') || el.closest('.report-container') || el;
-
                 const name = container.getAttribute('data-name');
-                if (name) _uiStates[name] = Object.assign({}, _uiStates[name], { collapsed: isCollapsed });
-
-                if (isCollapsed) container.classList.add('collapsed');
-                else container.classList.remove('collapsed');
-
+                if (name)
+                    _uiStates[name] = Object.assign({}, _uiStates[name], { collapsed: isCollapsed });
+                if (isCollapsed)
+                    container.classList.add('collapsed');
+                else
+                    container.classList.remove('collapsed');
                 // Update chevrons for inline collapsible
                 if (container.classList.contains('collapsible-inline')) {
                     const chevron = container.querySelector('.container-chevron');
-                    if (chevron) chevron.innerHTML = isCollapsed ? '&#x25BC;' : '&#x25B2;';
+                    if (chevron)
+                        chevron.innerHTML = isCollapsed ? '&#x25BC;' : '&#x25B2;';
                 }
-
                 // Specific logic for drawers
                 if (container.classList.contains('collapsible-drawer')) {
-                    if (isCollapsed) container.classList.remove('open');
-                    else container.classList.add('open');
+                    if (isCollapsed)
+                        container.classList.remove('open');
+                    else
+                        container.classList.add('open');
                 }
-
                 // Trigger resize to handle grid reflow
                 setTimeout(() => {
-                    const pageGrid = document.querySelector('.page-grid');
-                    if (pageGrid) resizeChartsIn(pageGrid);
+                    const pageGrid = /** @type {HTMLElement | null} */ (document.querySelector('.page-grid'));
+                    if (pageGrid)
+                        resizeChartsIn(pageGrid);
                 }, 350);
-            } else if (key === 'BACKGROUND-COLOR') {
+            }
+            else if (key === 'BACKGROUND-COLOR') {
                 el.style.backgroundColor = value;
-            } else if (key === 'COLOR') {
+            }
+            else if (key === 'COLOR') {
                 el.style.color = value;
-            } else if (key === 'CLASS') {
-                if (value.startsWith('+')) el.classList.add(value.substring(1));
-                else if (value.startsWith('-')) el.classList.remove(value.substring(1));
-                else el.className = value;
+            }
+            else if (key === 'CLASS') {
+                if (value.startsWith('+'))
+                    el.classList.add(value.substring(1));
+                else if (value.startsWith('-'))
+                    el.classList.remove(value.substring(1));
+                else
+                    el.className = value;
             }
         });
-    } else if (action.type === 'APPLY_BOOKMARK') {
+    }
+    else if (action.type === 'APPLY_BOOKMARK') {
         applyBookmark(action.bookmarkName);
-    } else if (action.type === 'RESET_PARAMETERS') {
+    }
+    else if (action.type === 'RESET_PARAMETERS') {
         const targets = action.resetParameters || [];
         const resetBatch = {};
         if (getBaselineManifest() && getBaselineManifest().parameters) {
@@ -7966,12 +7993,14 @@ function executeAction(action, rowData, columns, visualName, visualCtx) {
                     }
                     resetBatch[cleanP] = foundVal;
                 });
-            } else {
+            }
+            else {
                 Object.keys(getBaselineManifest().parameters).forEach(k => {
                     resetBatch[k] = getBaselineManifest().parameters[k];
                 });
             }
-        } else {
+        }
+        else {
             if (targets.length > 0) {
                 targets.forEach(p => {
                     const cleanP = p.startsWith('@') ? p : ('@' + p);
@@ -7979,14 +8008,18 @@ function executeAction(action, rowData, columns, visualName, visualCtx) {
                 });
             }
         }
-        for (let k in pendingParameters) delete pendingParameters[k];
+        for (let k in pendingParameters)
+            delete pendingParameters[k];
         updateStagedUI();
         if (vscode) {
             vscode.postMessage({ type: 'refreshReport', parameters: resetBatch });
-        } else {
-            _postParametersInternal(resetBatch, false, getActivePageName()).then(m => { if (m) renderManifest(m); });
         }
-    } else if (action.type === 'OPEN_URL') {
+        else {
+            _postParametersInternal(resetBatch, false, getActivePageName()).then(m => { if (m)
+                renderManifest(m); });
+        }
+    }
+    else if (action.type === 'OPEN_URL') {
         const rawUrl = action.urlTemplate
             ? interpolateUrlTemplate(action, rowData, columns)
             : (action.url || resolveActionValue(action, rowData, columns));
@@ -7995,55 +8028,63 @@ function executeAction(action, rowData, columns, visualName, visualCtx) {
             const target = action.target || '_blank';
             window.open(url, target);
         }
-    } else if (action.type === 'SHOW_MODAL') {
+    }
+    else if (action.type === 'SHOW_MODAL') {
         showModalDialog(action.modalName, getLastManifest());
-    } else if (action.type === 'HIDE_MODAL') {
+    }
+    else if (action.type === 'HIDE_MODAL') {
         hideModalDialog(action.modalName);
     }
 }
-
 function getDrillInFlight() { return _drillInFlight; }
 function setDrillInFlight(value) { _drillInFlight = value; }
 
 
-
 // ─── rt-views.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-views.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Bookmarks, saved views, and offline state restoration.
  */
-
-
 // Parses an identifier-only state hash. Returns { bookmark, view } with at most one set.
 function parseStateHash(hash) {
     const result = { bookmark: null, view: null };
-    if (!hash) return result;
+    if (!hash)
+        return result;
     const bm = hash.match(/[#&]bookmark=([^&]+)/);
     if (bm) {
-        try { result.bookmark = decodeURIComponent(bm[1]); } catch { /* malformed hash: ignore */ }
+        try {
+            result.bookmark = decodeURIComponent(bm[1]);
+        }
+        catch { /* malformed hash: ignore */ }
         return result;
     }
     const vw = hash.match(/[#&]view=([^&]+)/);
     if (vw) {
-        try { result.view = decodeURIComponent(vw[1]); } catch { /* malformed hash: ignore */ }
+        try {
+            result.view = decodeURIComponent(vw[1]);
+        }
+        catch { /* malformed hash: ignore */ }
     }
     return result;
 }
-
 async function applyBookmark(bookmarkName) {
-    if (!bookmarkName || !getLastManifest()) return false;
-    const bookmarks = getLastManifest().bookmarks || [];
-    const bm = bookmarks.find(b => b.name.toLowerCase() === bookmarkName.toLowerCase());
+    if (!bookmarkName || !getLastManifest())
+        return false;
+    const bookmarks = (getLastManifest().bookmarks || []);
+    const bm = bookmarks.find((b) => b.name.toLowerCase() === bookmarkName.toLowerCase());
     if (!bm) {
         console.warn('Bookmark not found:', bookmarkName);
-        if (feedback) feedback.notify('Bookmark not found: ' + bookmarkName, { title: 'Bookmark', tone: 'error' });
+        if (feedback)
+            feedback.notify('Bookmark not found: ' + bookmarkName, { title: 'Bookmark', tone: 'error' });
         return false;
     }
-
     const hash = '#bookmark=' + encodeURIComponent(bm.name);
-
     // Web mode: apply through the server-side atomic operation. The server resolves, validates,
     // reconciles, refreshes affected visuals through the cascading-parameter engine, and publishes
     // ONE manifest carrying the resolved `appliedState`. The client applies that state as one swap.
@@ -8055,50 +8096,55 @@ async function applyBookmark(bookmarkName) {
                 body: JSON.stringify({ bookmarkName: bm.name })
             });
             if (!res.ok) {
-                if (feedback) feedback.notify('Could not apply bookmark.', { title: 'Bookmark', tone: 'error' });
+                if (feedback)
+                    feedback.notify('Could not apply bookmark.', { title: 'Bookmark', tone: 'error' });
                 return false;
             }
-            const manifest = await res.json();
+            const manifest = (await res.json());
             if (manifest && manifest.error) {
-                if (feedback) feedback.notify(manifest.error, { title: 'Bookmark not applied', tone: 'error' });
+                if (feedback)
+                    feedback.notify(manifest.error, { title: 'Bookmark not applied', tone: 'error' });
                 return false;
             }
             renderManifest(manifest);
-            if (manifest && manifest.appliedState) commitResolvedState(manifest.appliedState, { hash });
-            else if (window.history && window.history.replaceState) window.history.replaceState(null, '', hash);
+            if (manifest && manifest.appliedState)
+                commitResolvedState(manifest.appliedState, { hash });
+            else if (window.history && window.history.replaceState)
+                window.history.replaceState(null, '', hash);
             if (manifest && manifest.stateWarnings && feedback) {
-                manifest.stateWarnings.forEach(w => feedback.notify(w, { title: 'Saved view', tone: 'warning' }));
+                manifest.stateWarnings.forEach((w) => feedback.notify(w, { title: 'Saved view', tone: 'warning' }));
             }
             return true;
-        } catch (e) {
+        }
+        catch (e) {
             console.warn('Bookmark application request failed:', e && e.message);
-            if (feedback) feedback.notify('Could not apply bookmark.', { title: 'Bookmark', tone: 'error' });
+            if (feedback)
+                feedback.notify('Could not apply bookmark.', { title: 'Bookmark', tone: 'error' });
             return false;
         }
     }
-
     // VS Code preview / offline snapshot: apply the manifest-carried envelope through the shared
     // client-side atomic contract (no server available).
     return applyResolvedState(bm.state || {}, { hash });
 }
-
 // Applies the active page + presentation state from a resolved envelope and writes the
 // identifier-only hash. Used after both the server-side and client-side application paths.
 function commitResolvedState(state, opts) {
     opts = opts || {};
-    if (state.activePage) navigateToPage(state.activePage);
+    if (state.activePage)
+        navigateToPage(state.activePage);
     applyPresentationState(state);
     if (opts.hash && window.history && window.history.replaceState) {
         // A snapshot opened from disk has an opaque origin, where replaceState throws. The hash is
         // a convenience for sharing a link; failing to write it must not abort the application.
         try {
             window.history.replaceState(null, '', opts.hash);
-        } catch (e) {
+        }
+        catch (e) {
             console.debug('State hash not written:', e && e.message);
         }
     }
 }
-
 // Reads a named-object VISIBLE/COLLAPSED map from the shared envelope onto the DOM.
 function applyPresentationState(state) {
     if (state.visible) {
@@ -8113,18 +8159,21 @@ function applyPresentationState(state) {
     if (state.collapsed) {
         Object.entries(state.collapsed).forEach(([objName, on]) => {
             const el = document.getElementById(objName) || document.querySelector(`[data-name="${objName}"]`);
-            if (!el) return;
+            if (!el)
+                return;
             const container = el.closest('.collapsible-drawer')
-                           || el.closest('.collapsible-inline')
-                           || el.closest('.report-container') || el;
+                || el.closest('.collapsible-inline')
+                || el.closest('.report-container') || el;
             const name = container.getAttribute('data-name');
-            if (name) _uiStates[name] = Object.assign({}, _uiStates[name], { collapsed: !!on });
-            if (on) container.classList.add('collapsed');
-            else container.classList.remove('collapsed');
+            if (name)
+                _uiStates[name] = Object.assign({}, _uiStates[name], { collapsed: !!on });
+            if (on)
+                container.classList.add('collapsed');
+            else
+                container.classList.remove('collapsed');
         });
     }
 }
-
 // The single atomic application contract shared by author bookmarks, saved views, buttons, and
 // URL replay. Parameters are staged and committed as one request; the active page and
 // presentation state are applied ONLY after that request succeeds. On failure nothing is
@@ -8139,45 +8188,40 @@ async function applyResolvedState(state, opts) {
             batch[paramName] = (v === null || v === undefined) ? '' : String(v);
         });
     }
-
     const commit = () => commitResolvedState(state, opts);
-
     if (Object.keys(batch).length === 0) {
         commit();
         return true;
     }
-
     // Offline snapshot / VS Code preview: apply parameters locally, then commit page/state.
     if (typeof applyParametersOffline === 'function' && isOfflineSnapshot()) {
         const ok = await applyParametersOffline(batch);
         if (!ok) {
             console.warn('Offline parameter application failed; bookmark not applied.');
-            if (feedback) feedback.notify('Could not apply bookmark offline.', { title: 'Bookmark', tone: 'error' });
+            if (feedback)
+                feedback.notify('Could not apply bookmark offline.', { title: 'Bookmark', tone: 'error' });
             return false;
         }
         commit();
         return true;
     }
-
     const manifest = await _postParametersInternal(batch, false, getActivePageName());
     if (manifest) {
         renderManifest(manifest);
         commit();
         return true;
     }
-
     if (vscode) {
         // VS Code host applies parameters and re-renders asynchronously; commit page/state after.
         commit();
         return true;
     }
-
     // Web mode: the parameter request failed — do not partially apply the bookmark.
     console.warn('Parameter application failed; bookmark/view not applied.');
-    if (feedback) feedback.notify('Could not apply the requested state.', { title: 'Bookmark', tone: 'error' });
+    if (feedback)
+        feedback.notify('Could not apply the requested state.', { title: 'Bookmark', tone: 'error' });
     return false;
 }
-
 // Offline snapshots set window.__ETLSNAP__; overridden by the snapshot bootstrap when present.
 // Re-read rather than returning the boot-time `isOfflineHost`, so a host that sets the flag after
 // the runtime script has been parsed still gets offline behaviour from every later decision.
@@ -8185,7 +8229,6 @@ function isOfflineSnapshot() {
     return isOfflineHost
         || !!(window.__ETLSNAP__ || (typeof window.__OFFLINE__ !== 'undefined' && window.__OFFLINE__));
 }
-
 /**
  * Applies a bookmark's parameter values inside an offline snapshot.
  *
@@ -8209,7 +8252,8 @@ function isOfflineSnapshot() {
  * bookmark announces itself to the reader and an ordinary control change must not.
  */
 function recordParametersOffline(batch) {
-    if (!getLastManifest()) return false;
+    if (!getLastManifest())
+        return false;
     getLastManifest().parameters = getLastManifest().parameters || {};
     for (const [name, value] of Object.entries(batch || {})) {
         getLastManifest().parameters[name] = value;
@@ -8217,49 +8261,47 @@ function recordParametersOffline(batch) {
     }
     return true;
 }
-
 async function applyParametersOffline(batch) {
-    if (!getLastManifest()) return false;
+    if (!getLastManifest())
+        return false;
     const entries = Object.entries(batch || {});
-    if (entries.length === 0) return true;
-
-    if (!recordParametersOffline(batch)) return false;
-
+    if (entries.length === 0)
+        return true;
+    if (!recordParametersOffline(batch))
+        return false;
     // Re-render from the snapshot in memory so the controls reflect the bookmarked values.
     renderManifest(getLastManifest());
-
     if (feedback) {
-        feedback.notify(
-            'Applied the bookmark’s filters. Figures come from the saved snapshot and do not change offline.',
-            { title: 'Offline snapshot', tone: 'info' });
+        feedback.notify('Applied the bookmark’s filters. Figures come from the saved snapshot and do not change offline.', { title: 'Offline snapshot', tone: 'info' });
     }
     return true;
 }
-
 // Saved views are a Portal-only, per-user feature. The Portal hosts the runtime with
 // __API_BASE__ = '/api/reports/{id}'; the ReportPlayer uses '/reports/{name}/api' and has no
 // saved-view API at all. Addressing off the host base (rather than rebuilding '/api/reports/{id}'
 // by hand) is what keeps the URL correct in both hosts. Returns null wherever saved views do not
 // exist — VS Code preview, the Player, and offline snapshots.
 function savedViewsBase() {
-    if (vscode || isOfflineSnapshot()) return null;
+    if (vscode || isOfflineSnapshot())
+        return null;
     const base = (window.__API_BASE__ || '').replace(/\/$/, '');
     return /^\/api\/reports\/\d+$/.test(base) ? base + '/saved-views' : null;
 }
-
 // Applies one Portal saved view by identifier. Portal mode only. Returns true on success.
 // Unknown/unauthorized identifiers resolve to a graceful no-op (base report still opens) and
 // never reveal whether another user's view exists.
 async function applySavedView(viewId) {
     const base = savedViewsBase();
-    if (!base) return false;
+    if (!base)
+        return false;
     try {
         const res = await fetch(`${base}/${encodeURIComponent(viewId)}/apply`, {
             method: 'POST',
             headers: { 'Accept': 'application/json' }
         });
-        if (!res.ok) return false;
-        const manifest = await res.json();
+        if (!res.ok)
+            return false;
+        const manifest = (await res.json());
         if (!manifest || manifest.error) {
             if (manifest && manifest.error && feedback)
                 feedback.notify(manifest.error, { title: 'Saved view not applied', tone: 'error' });
@@ -8269,32 +8311,35 @@ async function applySavedView(viewId) {
         if (manifest.appliedState)
             commitResolvedState(manifest.appliedState, { hash: '#view=' + encodeURIComponent(viewId) });
         if (manifest.stateWarnings && feedback)
-            manifest.stateWarnings.forEach(w => feedback.notify(w, { title: 'Saved view', tone: 'warning' }));
+            manifest.stateWarnings.forEach((w) => feedback.notify(w, { title: 'Saved view', tone: 'warning' }));
         return true;
-    } catch (e) {
+    }
+    catch (e) {
         console.warn('Saved view could not be applied:', e && e.message);
         return false;
     }
 }
-
 // Applies the current user's default saved view, if any. Returns true when one was applied.
 async function applyUserDefaultSavedView() {
     const base = savedViewsBase();
-    if (!base) return false;
+    if (!base)
+        return false;
     try {
         const res = await fetch(`${base}/default`, {
             headers: { 'Accept': 'application/json' }
         });
-        if (res.status === 204 || !res.ok) return false;
-        const view = await res.json();
-        if (!view || view.id == null) return false;
+        if (res.status === 204 || !res.ok)
+            return false;
+        const view = (await res.json());
+        if (!view || view.id == null)
+            return false;
         return await applySavedView(view.id);
-    } catch (e) {
+    }
+    catch (e) {
         console.warn('Default saved view could not be applied:', e && e.message);
         return false;
     }
 }
-
 // Captures the current report state into a resolved-state envelope for saving as a view.
 // Only identifiers/values needed for replay are captured; the ScriptHash is stamped server-side.
 function captureResolvedState() {
@@ -8309,7 +8354,7 @@ function captureResolvedState() {
     const metadata = (getLastManifest() && getLastManifest().parameterMetadata) || {};
     Object.entries(params).forEach(([k, v]) => {
         const name = k.startsWith('@') ? k : '@' + k;
-        const metaKey = Object.keys(metadata).find(m => m.toLowerCase() === name.toLowerCase());
+        const metaKey = Object.keys(metadata).find((m) => m.toLowerCase() === name.toLowerCase());
         const type = metaKey && metadata[metaKey] ? String(metadata[metaKey].type || '').toUpperCase() : '';
         if (/^(BIT|BOOL|BOOLEAN)$/.test(type) && /^(TRUE|FALSE)$/i.test(String(v)))
             state.parameters[name] = String(v).toUpperCase() === 'TRUE';
@@ -8321,17 +8366,17 @@ function captureResolvedState() {
     });
     // Presentation state is tracked as actions/bookmarks are applied.
     Object.entries(_uiStates || {}).forEach(([name, s]) => {
-        if (s && typeof s.visible === 'boolean') state.visible[name] = s.visible;
-        if (s && typeof s.collapsed === 'boolean') state.collapsed[name] = s.collapsed;
+        if (s && typeof s.visible === 'boolean')
+            state.visible[name] = s.visible;
+        if (s && typeof s.collapsed === 'boolean')
+            state.collapsed[name] = s.collapsed;
     });
     return state;
 }
-
 function listSavedViews() {
     return savedViewsRequest('', { headers: { 'Accept': 'application/json' } })
-        .then(r => Array.isArray(r) ? r : []);
+        .then((r) => Array.isArray(r) ? r : []);
 }
-
 function saveCurrentAsView(name, isDefault) {
     return savedViewsRequest('', {
         method: 'POST',
@@ -8343,7 +8388,6 @@ function saveCurrentAsView(name, isDefault) {
         })
     });
 }
-
 // Upserts the caller's single default view. Distinct from save-as: the server replaces whatever
 // default already exists rather than accumulating duplicates named "My Default View".
 function saveDefaultView() {
@@ -8353,7 +8397,6 @@ function saveDefaultView() {
         body: JSON.stringify({ state: captureResolvedState() })
     });
 }
-
 function updateSavedView(viewId, patch) {
     return savedViewsRequest('/' + encodeURIComponent(viewId), {
         method: 'PUT',
@@ -8361,36 +8404,36 @@ function updateSavedView(viewId, patch) {
         body: JSON.stringify(patch)
     });
 }
-
 async function deleteSavedView(viewId) {
     const base = savedViewsBase();
-    if (!base) return false;
+    if (!base)
+        return false;
     try {
         const res = await fetch(base + '/' + encodeURIComponent(viewId), { method: 'DELETE' });
         return res.ok;
-    } catch (e) {
+    }
+    catch (e) {
         console.warn('Saved-view delete failed:', e && e.message);
         return false;
     }
 }
-
 // Drops the caller's personal default (so the report stops opening on it) and returns the canvas
 // to what the author declared: the DEFAULT = ON bookmark when one exists, otherwise a clean reload.
 async function resetToReportDefault(views) {
-    const personalDefault = (views || []).find(v => v.isDefault);
-    if (personalDefault) await updateSavedView(personalDefault.id, { isDefault: false });
-    const authorDefault = ((getLastManifest() && getLastManifest().bookmarks) || []).find(b => b.isDefault);
+    const personalDefault = (views || []).find((v) => v.isDefault);
+    if (personalDefault)
+        await updateSavedView(personalDefault.id, { isDefault: false });
+    const authorDefault = ((getLastManifest() && getLastManifest().bookmarks) || []).find((b) => b.isDefault);
     if (authorDefault) {
         await applyBookmark(authorDefault.name);
-    } else if (!vscode) {
+    }
+    else if (!vscode) {
         window.location.hash = '';
         window.location.reload();
     }
     return true;
 }
-
 // ── Views menu ──────────────────────────────────────────────────────────────────────────────
-
 function styleMenuItem(el) {
     el.type = 'button';
     el.setAttribute('role', 'menuitem');
@@ -8406,7 +8449,6 @@ function styleMenuItem(el) {
     el.addEventListener('blur', () => { el.style.background = 'none'; });
     return el;
 }
-
 function menuHeading(text) {
     const h = document.createElement('div');
     // Presentational: the accessible name of the group comes from the group's aria-label, so the
@@ -8420,7 +8462,6 @@ function menuHeading(text) {
     h.style.opacity = '0.65';
     return h;
 }
-
 /**
  * Builds the header "Views" menu. Returns null when there is nothing to show — no author
  * bookmarks and no Portal saved-view API (VS Code preview, ReportPlayer, offline snapshot).
@@ -8432,13 +8473,12 @@ function menuHeading(text) {
 function buildViewsPicker(manifest) {
     const bookmarks = (manifest && manifest.bookmarks) || [];
     const supportsSavedViews = !!savedViewsBase();
-    if (bookmarks.length === 0 && !supportsSavedViews) return null;
-
+    if (bookmarks.length === 0 && !supportsSavedViews)
+        return null;
     const container = document.createElement('div');
     container.className = 'bookmark-picker';
     container.style.position = 'relative';
     container.style.display = 'inline-block';
-
     const menuId = 'etlsql-views-menu';
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -8449,7 +8489,6 @@ function buildViewsPicker(manifest) {
     btn.setAttribute('aria-haspopup', 'menu');
     btn.setAttribute('aria-expanded', 'false');
     btn.setAttribute('aria-controls', menuId);
-
     const menu = document.createElement('div');
     menu.id = menuId;
     menu.className = 'bookmark-menu';
@@ -8467,37 +8506,34 @@ function buildViewsPicker(manifest) {
     menu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
     menu.style.minWidth = '260px';
     menu.style.padding = '4px 0';
-
     const items = () => Array.from(menu.querySelectorAll('[role="menuitem"]:not([disabled])'));
-
     function close(restoreFocus) {
         menu.hidden = true;
         menu.style.display = 'none';
         btn.setAttribute('aria-expanded', 'false');
-        if (restoreFocus) btn.focus();
+        if (restoreFocus)
+            btn.focus();
     }
-
     async function open(focusLast) {
         await renderMenu();
         menu.hidden = false;
         menu.style.display = 'block';
         btn.setAttribute('aria-expanded', 'true');
         const all = items();
-        if (all.length) /** @type {HTMLElement} */ (all[focusLast ? all.length - 1 : 0]).focus();
+        if (all.length) /** @type {HTMLElement} */
+            (all[focusLast ? all.length - 1 : 0]).focus();
     }
-
     function isOpen() { return !menu.hidden; }
-
     // ── Menu content ────────────────────────────────────────────────────────────────────────
     let savedViews = [];
-
     function addBookmarkSection() {
-        if (bookmarks.length === 0) return;
+        if (bookmarks.length === 0)
+            return;
         const group = document.createElement('div');
         group.setAttribute('role', 'group');
         group.setAttribute('aria-label', 'Report bookmarks');
         group.appendChild(menuHeading('Report bookmarks'));
-        bookmarks.forEach(bm => {
+        bookmarks.forEach((bm) => {
             const item = styleMenuItem(document.createElement('button'));
             item.className = 'bookmark-menu-item';
             item.style.display = 'block';
@@ -8514,7 +8550,6 @@ function buildViewsPicker(manifest) {
         });
         menu.appendChild(group);
     }
-
     function savedViewRow(view) {
         const row = document.createElement('div');
         row.setAttribute('role', 'group');
@@ -8523,7 +8558,6 @@ function buildViewsPicker(manifest) {
         row.style.alignItems = 'center';
         row.style.gap = '2px';
         row.style.padding = '0 8px 0 0';
-
         const apply = styleMenuItem(document.createElement('button'));
         apply.className = 'saved-view-menu-item';
         apply.style.flex = '1';
@@ -8531,10 +8565,10 @@ function buildViewsPicker(manifest) {
         apply.style.padding = '8px 8px 8px 16px';
         apply.textContent = view.isDefault ? '★ ' + view.name : view.name;
         apply.setAttribute('aria-label', view.isDefault ? view.name + ' (your default)' : view.name);
-        if (view.driftWarning) apply.title = view.driftWarning;
+        if (view.driftWarning)
+            apply.title = view.driftWarning;
         apply.addEventListener('click', () => { close(true); applySavedView(view.id); });
         row.appendChild(apply);
-
         const iconBtn = (glyph, label, handler) => {
             const b = styleMenuItem(document.createElement('button'));
             b.textContent = glyph;
@@ -8544,40 +8578,37 @@ function buildViewsPicker(manifest) {
             b.addEventListener('click', handler);
             return b;
         };
-
         row.appendChild(iconBtn('⟳', 'Update ' + view.name + ' to the current state', async () => {
             const ok = await updateSavedView(view.id, { stateJson: JSON.stringify(captureResolvedState()) });
-            feedback.notify(ok ? `Updated '${view.name}'.` : `Could not update '${view.name}'.`,
-                { title: 'Saved views', tone: ok ? 'success' : 'error', auditAction: 'report.saved-view.update' });
-            if (ok) await renderMenu();
+            feedback.notify(ok ? `Updated '${view.name}'.` : `Could not update '${view.name}'.`, { title: 'Saved views', tone: ok ? 'success' : 'error', auditAction: 'report.saved-view.update' });
+            if (ok)
+                await renderMenu();
         }));
-
         if (!view.isDefault) {
             row.appendChild(iconBtn('☆', 'Make ' + view.name + ' my default view', async () => {
                 const ok = await updateSavedView(view.id, { isDefault: true });
-                feedback.notify(ok ? `'${view.name}' is now your default view.` : 'Could not set the default view.',
-                    { title: 'Saved views', tone: ok ? 'success' : 'error', auditAction: 'report.saved-view.update' });
-                if (ok) await renderMenu();
+                feedback.notify(ok ? `'${view.name}' is now your default view.` : 'Could not set the default view.', { title: 'Saved views', tone: ok ? 'success' : 'error', auditAction: 'report.saved-view.update' });
+                if (ok)
+                    await renderMenu();
             }));
         }
-
         row.appendChild(iconBtn('✕', 'Delete ' + view.name, async () => {
             close(true);
             const confirmed = await feedback.confirm(`Delete the saved view '${view.name}'?`, {
                 title: 'Delete saved view', confirmLabel: 'Delete', danger: true
             });
-            if (!confirmed) return;
+            if (!confirmed)
+                return;
             const ok = await deleteSavedView(view.id);
-            feedback.notify(ok ? `Deleted '${view.name}'.` : `Could not delete '${view.name}'.`,
-                { title: 'Saved views', tone: ok ? 'success' : 'error', auditAction: 'report.saved-view.delete' });
-            if (ok) await open(false);
+            feedback.notify(ok ? `Deleted '${view.name}'.` : `Could not delete '${view.name}'.`, { title: 'Saved views', tone: ok ? 'success' : 'error', auditAction: 'report.saved-view.delete' });
+            if (ok)
+                await open(false);
         }));
-
         return row;
     }
-
     function addSavedViewSection() {
-        if (!supportsSavedViews) return;
+        if (!supportsSavedViews)
+            return;
         const group = document.createElement('div');
         group.setAttribute('role', 'group');
         group.setAttribute('aria-label', 'My saved views');
@@ -8590,21 +8621,21 @@ function buildViewsPicker(manifest) {
             empty.style.fontSize = '0.8rem';
             empty.style.opacity = '0.7';
             group.appendChild(empty);
-        } else {
-            savedViews.forEach(v => group.appendChild(savedViewRow(v)));
+        }
+        else {
+            savedViews.forEach((v) => group.appendChild(savedViewRow(v)));
         }
         menu.appendChild(group);
     }
-
     function addActionsSection() {
-        if (!supportsSavedViews) return;
+        if (!supportsSavedViews)
+            return;
         const group = document.createElement('div');
         group.setAttribute('role', 'group');
         group.setAttribute('aria-label', 'Saved view actions');
         group.style.borderTop = '1px solid var(--border, #ddd)';
         group.style.marginTop = '4px';
         group.style.paddingTop = '4px';
-
         const action = (label, handler) => {
             const b = styleMenuItem(document.createElement('button'));
             b.style.display = 'block';
@@ -8615,66 +8646,85 @@ function buildViewsPicker(manifest) {
             b.addEventListener('click', handler);
             group.appendChild(b);
         };
-
         action('Save current view as…', async () => {
             close(true);
             const name = await feedback.prompt('Name this view so you can return to it later.', {
                 title: 'Save current view', label: 'View name', confirmLabel: 'Save',
                 required: true, requiredMessage: 'Enter a name for the view.'
             });
-            if (!name) return;
+            if (!name)
+                return;
             const created = await saveCurrentAsView(name, false);
-            feedback.notify(created ? `Saved '${name}'.` : `Could not save '${name}'.`,
-                { title: 'Saved views', tone: created ? 'success' : 'error', auditAction: 'report.saved-view.create' });
+            feedback.notify(created ? `Saved '${name}'.` : `Could not save '${name}'.`, { title: 'Saved views', tone: created ? 'success' : 'error', auditAction: 'report.saved-view.create' });
         });
-
         action('Save as my default view', async () => {
             close(true);
             const saved = await saveDefaultView();
-            feedback.notify(saved ? 'Saved as your default view.' : 'Could not save your default view.',
-                { title: 'Saved views', tone: saved ? 'success' : 'error', auditAction: 'report.saved-view.update' });
+            feedback.notify(saved ? 'Saved as your default view.' : 'Could not save your default view.', { title: 'Saved views', tone: saved ? 'success' : 'error', auditAction: 'report.saved-view.update' });
         });
-
         action('Reset to report default', async () => {
             close(true);
             await resetToReportDefault(savedViews);
         });
-
         menu.appendChild(group);
     }
-
     async function renderMenu() {
-        if (supportsSavedViews) savedViews = await listSavedViews();
+        if (supportsSavedViews)
+            savedViews = await listSavedViews();
         menu.textContent = '';
         addBookmarkSection();
         addSavedViewSection();
         addActionsSection();
     }
-
-    btn.addEventListener('click', () => { if (isOpen()) close(false); else open(false); });
-    btn.addEventListener('keydown', e => {
-        if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(false); }
-        else if (e.key === 'ArrowUp') { e.preventDefault(); open(true); }
+    btn.addEventListener('click', () => { if (isOpen())
+        close(false);
+    else
+        open(false); });
+    btn.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open(false);
+        }
+        else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            open(true);
+        }
     });
-
-    menu.addEventListener('keydown', e => {
+    menu.addEventListener('keydown', (e) => {
         const all = items();
         const index = all.indexOf(document.activeElement);
-        if (e.key === 'Escape') { e.preventDefault(); close(true); }
-        else if (e.key === 'Tab') { close(false); }
-        else if (e.key === 'ArrowDown') { e.preventDefault(); /** @type {HTMLElement} */ (all[(index + 1) % all.length])?.focus(); }
-        else if (e.key === 'ArrowUp') { e.preventDefault(); /** @type {HTMLElement} */ (all[(index - 1 + all.length) % all.length])?.focus(); }
-        else if (e.key === 'Home') { e.preventDefault(); /** @type {HTMLElement} */ (all[0])?.focus(); }
-        else if (e.key === 'End') { e.preventDefault(); /** @type {HTMLElement} */ (all[all.length - 1])?.focus(); }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            close(true);
+        }
+        else if (e.key === 'Tab') {
+            close(false);
+        }
+        else if (e.key === 'ArrowDown') {
+            e.preventDefault(); /** @type {HTMLElement} */
+            (all[(index + 1) % all.length])?.focus();
+        }
+        else if (e.key === 'ArrowUp') {
+            e.preventDefault(); /** @type {HTMLElement} */
+            (all[(index - 1 + all.length) % all.length])?.focus();
+        }
+        else if (e.key === 'Home') {
+            e.preventDefault(); /** @type {HTMLElement} */
+            (all[0])?.focus();
+        }
+        else if (e.key === 'End') {
+            e.preventDefault(); /** @type {HTMLElement} */
+            (all[all.length - 1])?.focus();
+        }
     });
-
     // The header is rebuilt on every manifest render, so this listener must go inert once its
     // picker has been detached rather than accumulating one live handler per render.
-    document.addEventListener('click', e => {
-        if (!container.isConnected) return;
-        if (isOpen() && !container.contains(/** @type {Node} */ (e.target))) close(false);
+    document.addEventListener('click', (e) => {
+        if (!container.isConnected)
+            return;
+        if (isOpen() && !container.contains(/** @type {Node} */ (e.target)))
+            close(false);
     });
-
     container.appendChild(btn);
     container.appendChild(menu);
     return container;
@@ -8682,55 +8732,50 @@ function buildViewsPicker(manifest) {
 
 
 // ─── rt-chrome.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-chrome.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Report header, navigation, footer, dialogs, and staged controls.
  */
-
-
 function showRequiredParametersModal(requiredList, manifest) {
     const modal = document.createElement('div');
     modal.className = 'required-params-modal';
-
     const content = document.createElement('div');
     content.className = 'modal-content';
-
     const title = document.createElement('h2');
     title.textContent = 'Required Parameters';
     content.appendChild(title);
-
     const desc = document.createElement('p');
     desc.textContent = 'Please provide values for the following mandatory fields to run this report:';
     content.appendChild(desc);
-
     const grid = document.createElement('div');
     grid.className = 'params-grid';
-
     const inputs = {};
-    requiredList.forEach(meta => {
+    requiredList.forEach((meta) => {
         const label = document.createElement('label');
         label.textContent = meta.name.startsWith('@') ? meta.name.substring(1) : meta.name;
-
         const input = document.createElement('input');
         input.setAttribute('aria-label', label.textContent);
         input.type = inputTypeForParameter(meta);
         const currentValue = getParam(manifest.parameters, meta.name) || '';
-        if (input.type === 'checkbox') input.checked = isOn(currentValue);
-        else input.value = currentValue;
+        if (input.type === 'checkbox')
+            input.checked = isOn(currentValue);
+        else
+            input.value = currentValue;
         input.placeholder = meta.defaultValue || '';
         input.className = 'modal-input';
-
         grid.appendChild(label);
         grid.appendChild(input);
         inputs[meta.name] = input;
     });
     content.appendChild(grid);
-
     const footer = document.createElement('div');
     footer.className = 'modal-footer';
-
     const runBtn = document.createElement('button');
     runBtn.className = 'header-btn primary';
     runBtn.textContent = 'Run Report';
@@ -8746,98 +8791,88 @@ function showRequiredParametersModal(requiredList, manifest) {
             if (meta.isRequired && !val) {
                 input.classList.add('error');
                 allOk = false;
-            } else {
+            }
+            else {
                 input.classList.remove('error');
                 updates[name] = val;
             }
         }
-
         if (allOk) {
             modal.remove();
             postParameters(updates, false).then(m => {
-                if (m) renderManifest(m);
+                if (m)
+                    renderManifest(m);
             });
         }
     };
-
     footer.appendChild(runBtn);
     content.appendChild(footer);
     modal.appendChild(content);
     document.body.appendChild(modal);
 }
-
 function renderAutoPanel(container, manifest) {
-    if (!manifest.parameterMetadata) return;
-
+    if (!manifest.parameterMetadata)
+        return;
     // Identify parameters that are marked as INPUT but don't have a corresponding visual SLICER
     const visuals = manifest.visuals || [];
     const visualParams = new Set();
-    visuals.forEach(v => {
+    visuals.forEach((v) => {
         const type = (v.visualType || '').toUpperCase();
         if ([
             'SLICER', 'MULTISELECT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER',
             'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'
         ].includes(type)) {
             const p = v.options && (v.options['data-parameter'] || v.options['PARAMETER'] || v.options['parameter']);
-            if (p) visualParams.add(p.toLowerCase());
-
+            if (p)
+                visualParams.add(p.toLowerCase());
             // Also check ACTIONS for SET_PARAMETER
-            (v.actions || []).forEach(a => {
+            (v.actions || []).forEach((a) => {
                 if (a.type === 'SET_PARAMETER' && a.parameterName) {
                     visualParams.add(a.parameterName.toLowerCase());
                 }
             });
         }
     });
-
     const autoParams = [];
     for (const name in manifest.parameterMetadata) {
         if (!visualParams.has(name.toLowerCase())) {
             autoParams.push(manifest.parameterMetadata[name]);
         }
     }
-
-    if (autoParams.length === 0) return;
-
+    if (autoParams.length === 0)
+        return;
     const panel = document.createElement('div');
     panel.className = 'auto-parameter-panel collapsed';
-
     const toggle = document.createElement('div');
     toggle.className = 'panel-toggle';
     toggle.innerHTML = '<span>&#x2699;</span>';
     toggle.onclick = () => panel.classList.toggle('collapsed');
     panel.appendChild(toggle);
-
     const content = document.createElement('div');
     content.className = 'panel-content';
-
     const title = document.createElement('h4');
     title.textContent = 'Report Parameters';
     content.appendChild(title);
-
     const list = document.createElement('div');
     list.className = 'panel-list';
-
-    autoParams.forEach(meta => {
+    autoParams.forEach((meta) => {
         const item = document.createElement('div');
         item.className = 'panel-item';
-
         const label = document.createElement('label');
         label.textContent = meta.name.startsWith('@') ? meta.name.substring(1) : meta.name;
         item.appendChild(label);
-
         const inputGroup = document.createElement('div');
         inputGroup.className = 'input-group';
-
         const input = document.createElement('input');
         input.setAttribute('aria-label', label.textContent);
         input.type = inputTypeForParameter(meta);
         const currentValue = getParam(manifest.parameters, meta.name) || '';
-        if (input.type === 'checkbox') input.checked = isOn(currentValue);
-        else input.value = currentValue;
+        if (input.type === 'checkbox')
+            input.checked = isOn(currentValue);
+        else
+            input.value = currentValue;
         input.placeholder = meta.defaultValue || '';
         inputGroup.appendChild(input);
-
         const applyBtn = document.createElement('button');
         applyBtn.innerHTML = '&#x2713;';
         applyBtn.onclick = () => {
@@ -8846,49 +8881,46 @@ function renderAutoPanel(container, manifest) {
                 ? (input.checked ? 'TRUE' : 'FALSE')
                 : input.value;
             postParameters(updates, false).then(m => {
-                if (m) renderManifest(m);
+                if (m)
+                    renderManifest(m);
             });
         };
         inputGroup.appendChild(applyBtn);
-
         item.appendChild(inputGroup);
         list.appendChild(item);
     });
-
     content.appendChild(list);
     panel.appendChild(content);
     container.appendChild(panel);
 }
-
 // ── Header & Actions ──────────────────────────────────────────────────
-
 function renderHeader(container, manifest) {
     const header = document.createElement('header');
     header.className = 'report-header';
-
     const left = document.createElement('div');
     left.className = 'header-left';
     left.innerHTML = `
             <div class="header-title">${escHtml(manifest.title || 'ETL-SQL Report')}</div>
             <div class="header-subtitle">${escHtml(manifest.description || 'Interactive Data Insight')}</div>
         `;
-
     const badges = [];
     badges.push(`<span class="header-badge owner" title="Owner">👤 ${escHtml(manifest.owner || 'Owner unknown')}</span>`);
-    if (manifest.steward) badges.push(`<span class="header-badge steward" title="Steward">🛡️ ${escHtml(manifest.steward)}</span>`);
-    if (manifest.certification) badges.push(`<span class="header-badge cert" title="Certification">⭐ ${escHtml(manifest.certification)}</span>`);
+    if (manifest.steward)
+        badges.push(`<span class="header-badge steward" title="Steward">🛡️ ${escHtml(manifest.steward)}</span>`);
+    if (manifest.certification)
+        badges.push(`<span class="header-badge cert" title="Certification">⭐ ${escHtml(manifest.certification)}</span>`);
     const rawFreshnessStatus = String(manifest.freshnessStatus || (manifest.lastRefreshed || manifest.builtAt ? 'fresh' : 'unknown')).toLowerCase();
     const freshnessStatus = ['fresh', 'stale', 'unknown'].includes(rawFreshnessStatus) ? rawFreshnessStatus : 'unknown';
     const freshnessText = manifest.lastRefreshed || manifest.builtAt || 'Freshness unknown';
     badges.push(`<span class="header-badge fresh ${freshnessStatus}" title="Freshness: ${escHtml(freshnessStatus)}">🕒 ${escHtml(freshnessText)}</span>`);
     if (manifest.tags) {
         const tagList = Array.isArray(manifest.tags) ? manifest.tags : String(manifest.tags).split(',');
-        tagList.forEach(t => {
+        tagList.forEach((t) => {
             const tagStr = t.trim();
-            if (tagStr) badges.push(`<a class="header-badge tag" title="Search tag '${escHtml(tagStr)}'" href="#" data-tag="${escHtml(tagStr)}">🏷️ ${escHtml(tagStr)}</a>`);
+            if (tagStr)
+                badges.push(`<a class="header-badge tag" title="Search tag '${escHtml(tagStr)}'" href="#" data-tag="${escHtml(tagStr)}">🏷️ ${escHtml(tagStr)}</a>`);
         });
     }
-
     if (badges.length > 0) {
         const badgeContainer = document.createElement('div');
         badgeContainer.className = 'header-badges';
@@ -8897,24 +8929,24 @@ function renderHeader(container, manifest) {
             el.addEventListener('click', (ev) => {
                 ev.preventDefault();
                 const tagVal = el.getAttribute('data-tag');
-                if (!tagVal) return;
+                if (!tagVal)
+                    return;
                 if (window.parent && window.parent !== window) {
                     window.parent.postMessage({ type: 'etl-catalog-search', tag: tagVal, query: tagVal }, window.location.origin);
                     return;
                 }
                 try {
                     window.top.location.href = '/?search=' + encodeURIComponent(tagVal);
-                } catch {
+                }
+                catch {
                     window.location.href = '/?search=' + encodeURIComponent(tagVal);
                 }
             });
         });
         left.appendChild(badgeContainer);
     }
-
     const actions = document.createElement('div');
     actions.className = 'header-actions';
-
     // Offline: a snapshot can be stale, and saying so is useful, but the button that asks the
     // server to refresh it has nothing to ask.
     if (freshnessStatus === 'stale' && !isOfflineHost) {
@@ -8924,25 +8956,26 @@ function renderHeader(container, manifest) {
         refreshBtn.textContent = '🔄 Request Refresh';
         refreshBtn.addEventListener('click', async () => {
             const reportId = manifest.id || window.__REPORT_ID__;
-            if (!reportId) return;
+            if (!reportId)
+                return;
             try {
                 const base = window.__API_BASE__ || '';
                 const res = await fetch(`${base}/api/reports/${reportId}/request-refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
                 const data = await res.json().catch(() => ({}));
                 feedback.notify(data.message || 'Data refresh requested.', { title: 'Refresh requested', tone: 'success', auditAction: 'report.refresh.request' });
-            } catch (e) {
+            }
+            catch (e) {
                 feedback.notify('Request failed: ' + e.message, { title: 'Refresh request failed', tone: 'error' });
             }
         });
         actions.appendChild(refreshBtn);
     }
-
     // Views picker: author bookmarks (shared, source-controlled) plus the caller's private
     // "My saved views" when the Portal saved-view API is reachable. Both live in one menu so a
     // reader picks a view without having to know which of the two kinds it is.
     const viewsPicker = buildViewsPicker(manifest);
-    if (viewsPicker) actions.appendChild(viewsPicker);
-
+    if (viewsPicker)
+        actions.appendChild(viewsPicker);
     if (vscode) {
         const openBtn = document.createElement('button');
         openBtn.className = 'header-btn primary';
@@ -8952,7 +8985,6 @@ function renderHeader(container, manifest) {
             vscode.postMessage({ type: 'serve' });
         });
         actions.appendChild(openBtn);
-
         const pdfBtn = document.createElement('button');
         pdfBtn.className = 'header-btn';
         pdfBtn.title = 'Export to PDF';
@@ -8961,7 +8993,6 @@ function renderHeader(container, manifest) {
             vscode.postMessage({ type: 'exportReport', format: 'pdf' });
         });
         actions.appendChild(pdfBtn);
-
         const mdBtn = document.createElement('button');
         mdBtn.className = 'header-btn';
         mdBtn.title = 'Export to Markdown';
@@ -8970,7 +9001,6 @@ function renderHeader(container, manifest) {
             vscode.postMessage({ type: 'exportReport', format: 'markdown' });
         });
         actions.appendChild(mdBtn);
-
         const publishBtn = document.createElement('button');
         publishBtn.className = 'header-btn';
         publishBtn.title = 'Publish to Portal';
@@ -8978,12 +9008,10 @@ function renderHeader(container, manifest) {
         publishBtn.addEventListener('click', () => vscode.postMessage({ type: 'publish' }));
         actions.appendChild(publishBtn);
     }
-
     header.appendChild(left);
     header.appendChild(actions);
     container.appendChild(header);
 }
-
 /**
  * @param {HTMLElement | DocumentFragment} container The nav is prepended or inserted before
  *   the first page, so anything that can take a child works. `renderManifest` builds into a
@@ -8998,7 +9026,6 @@ function renderHeader(container, manifest) {
 function renderNavBar(container, navDef, pageSections, pages, manifest) {
     const nav = document.createElement('nav');
     nav.className = 'nav-bar';
-
     // Apply nav styling
     if (navDef.styles) {
         for (const [k, v] of Object.entries(navDef.styles)) {
@@ -9006,46 +9033,44 @@ function renderNavBar(container, navDef, pageSections, pages, manifest) {
             nav.style[key] = v;
         }
     }
-
     // Insert nav before the first page section
     const firstPage = pages.length > 0 ? pageSections[pages[0].name] : null;
     if (firstPage) {
         container.insertBefore(nav, firstPage);
-    } else {
+    }
+    else {
         container.prepend(nav);
     }
-
     const defaultPageName = navDef.defaultPage || (pages.length > 0 ? pages[0].name : null);
-    const requestedPage  = (getLastActivePage() || window.__INITIAL_PAGE__ || '').trim();
-    const pageToShow     = (requestedPage && pageSections[requestedPage]) ? requestedPage : defaultPageName;
+    const requestedPage = (getLastActivePage() || window.__INITIAL_PAGE__ || '').trim();
+    const pageToShow = (requestedPage && pageSections[requestedPage]) ? requestedPage : defaultPageName;
     const itemClass = navDef.navType === 'TAB' ? 'nav-tab' :
-                      navDef.navType === 'BUTTON' ? 'nav-btn' : 'nav-link';
+        navDef.navType === 'BUTTON' ? 'nav-btn' : 'nav-link';
     const isLink = navDef.navType === 'LINK';
     const hideInvisible = isOn(navDef.options?.['HIDE_INVISIBLE'] || navDef.options?.['hide_invisible']);
-
     function applyActiveStyles(element, isActive) {
-        if (!navDef.activeStyles) return;
+        if (!navDef.activeStyles)
+            return;
         for (const [k, v] of Object.entries(navDef.activeStyles)) {
             const key = k.toLowerCase().replace(/_/g, '-');
-            if (isActive) element.style[key] = v;
-            else element.style.removeProperty(key);
+            if (isActive)
+                element.style[key] = v;
+            else
+                element.style.removeProperty(key);
         }
     }
-
     function createNavItem(item, idx, parent) {
-        const pageName = item.pageName || item;
+        const pageName = (item.pageName || item);
         const targetPage = pages.find(p => p.name === pageName);
         if (hideInvisible && targetPage && !isPageVisible(targetPage)) {
             return;
         }
-
         if (isLink && idx > 0) {
             const sep = document.createElement('span');
             sep.className = 'nav-sep';
             sep.textContent = ' | ';
             parent.appendChild(sep);
         }
-
         if (item.isExternalLink || item.externalUrl) {
             const el = document.createElement('a');
             el.className = itemClass + ' nav-link-external';
@@ -9071,7 +9096,6 @@ function renderNavBar(container, navDef, pageSections, pages, manifest) {
             parent.appendChild(el);
             return;
         }
-
         const el = document.createElement('span');
         el.className = itemClass;
         if (item.icon) {
@@ -9090,13 +9114,11 @@ function renderNavBar(container, navDef, pageSections, pages, manifest) {
             badgeSpan.textContent = item.badge;
             el.appendChild(badgeSpan);
         }
-
         const isActive = (pageName === pageToShow);
         if (isActive) {
             el.classList.add('active');
             applyActiveStyles(el, true);
         }
-
         el.dataset.page = pageName;
         el.addEventListener('click', () => {
             try {
@@ -9112,70 +9134,72 @@ function renderNavBar(container, navDef, pageSections, pages, manifest) {
                             if (trans === 'FADE') {
                                 s.style.opacity = '0';
                                 safeRequestAnimationFrame(() => { s.style.opacity = '1'; });
-                            } else if (trans === 'SLIDE') {
+                            }
+                            else if (trans === 'SLIDE') {
                                 s.style.transform = 'translateX(20px)';
                                 s.style.opacity = '0';
                                 safeRequestAnimationFrame(() => { s.style.transform = 'translateX(0)'; s.style.opacity = '1'; });
                             }
-                        } else {
+                        }
+                        else {
                             s.style.display = 'none';
                             s.classList.remove('active');
                         }
                     }
                 });
-            } catch (e) {
+            }
+            catch (e) {
                 console.error('Error switching page visibility:', e);
             }
-
             try {
-                document.querySelectorAll('[data-page]').forEach(it => {
-                    const match = (/** @type {HTMLElement} */ (it).dataset.page === pageName);
+                /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-page]')).forEach(it => {
+                    const match = it.dataset.page === pageName;
                     if (match) {
                         it.classList.add('active');
                         applyActiveStyles(it, true);
-                    } else {
+                    }
+                    else {
                         it.classList.remove('active');
                         applyActiveStyles(it, false);
                     }
                 });
-            } catch (e) {
+            }
+            catch (e) {
                 console.error('Error updating active page classes:', e);
             }
-
             setLastActivePage(pageName);
-
             try {
                 const target = pageSections[pageName];
-                if (target) safeRequestAnimationFrame(() => resizeChartsIn(target));
-            } catch (e) {
+                if (target)
+                    safeRequestAnimationFrame(() => resizeChartsIn(target));
+            }
+            catch (e) {
                 console.error('Error resizing charts:', e);
             }
-
             try {
                 updateBodyTheme(manifest, pageName);
-            } catch (e) {
+            }
+            catch (e) {
                 console.error('Error updating body theme:', e);
             }
-
             try {
                 const pDef = pages.find(p => p.name === pageName);
                 executePageOnLoad(pDef);
-            } catch (e) {
+            }
+            catch (e) {
                 console.error('Error executing page actions:', e);
             }
-
             try {
                 if (window.parent && window.parent !== window) {
                     window.parent.postMessage({ type: 'etl-page-changed', page: pageName, userTriggered: true }, '*');
                 }
-            } catch (e) {
+            }
+            catch (e) {
                 console.error('Error posting message to parent window:', e);
             }
         });
-
         parent.appendChild(el);
     }
-
     if (navDef.groups && navDef.groups.length > 0) {
         navDef.groups.forEach(group => {
             const grpDiv = document.createElement('div');
@@ -9192,64 +9216,56 @@ function renderNavBar(container, navDef, pageSections, pages, manifest) {
             grpDiv.appendChild(grpItems);
             nav.appendChild(grpDiv);
         });
-    } else if (navDef.items && navDef.items.length > 0) {
+    }
+    else if (navDef.items && navDef.items.length > 0) {
         navDef.items.forEach((item, idx) => createNavItem(item, idx, nav));
-    } else {
+    }
+    else {
         navDef.pages.forEach((pageName, idx) => createNavItem({ pageName: pageName }, idx, nav));
     }
-
     // Execute initial page onLoad
     const initPg = pages.find(p => p.name === pageToShow);
     executePageOnLoad(initPg);
 }
-
 function showModalDialog(modalName, manifest) {
-    if (!modalName) return;
+    if (!modalName)
+        return;
     hideModalDialog(modalName);
-
     const containerDef = (manifest?.containers || []).find(c => c.name.toLowerCase() === modalName.toLowerCase());
     if (!containerDef) {
         console.warn('Modal container not found:', modalName);
         return;
     }
-
     const overlay = document.createElement('div');
     overlay.className = 'report-modal-overlay';
     overlay.id = 'modal-overlay-' + modalName.toLowerCase();
-
     const dialog = document.createElement('div');
     dialog.className = 'report-modal-dialog';
     dialog.setAttribute('role', 'dialog');
     dialog.setAttribute('aria-modal', 'true');
-
     const header = document.createElement('div');
     header.className = 'report-modal-header';
-
     const title = document.createElement('span');
     title.textContent = containerDef.title || containerDef.name;
     header.appendChild(title);
-
     const closeBtn = document.createElement('button');
     closeBtn.className = 'report-modal-close';
     closeBtn.innerHTML = '&times;';
     closeBtn.setAttribute('aria-label', 'Close dialog');
     closeBtn.onclick = () => hideModalDialog(modalName);
     header.appendChild(closeBtn);
-
     dialog.appendChild(header);
-
     const body = document.createElement('div');
     body.className = 'report-modal-body';
     const styles = containerDef.styles || {};
     const containerTheme = getStyle(styles, 'THEME');
     renderLayout(body, containerDef, manifest, containerTheme);
     dialog.appendChild(body);
-
     overlay.appendChild(dialog);
     overlay.addEventListener('click', e => {
-        if (e.target === overlay) hideModalDialog(modalName);
+        if (e.target === overlay)
+            hideModalDialog(modalName);
     });
-
     const onKeyDown = (e) => {
         if (e.key === 'Escape') {
             hideModalDialog(modalName);
@@ -9257,44 +9273,38 @@ function showModalDialog(modalName, manifest) {
         }
     };
     document.addEventListener('keydown', onKeyDown);
-
     document.body.appendChild(overlay);
     setTimeout(() => resizeChartsIn(dialog), 50);
 }
-
 function hideModalDialog(modalName) {
-    if (!modalName) return;
+    if (!modalName)
+        return;
     const overlay = document.getElementById('modal-overlay-' + modalName.toLowerCase());
-    if (overlay) overlay.remove();
+    if (overlay)
+        overlay.remove();
 }
-
-
 // ── Footer ──────────────────────────────────────────────────────────────
-
 function renderFooter(container, manifest) {
     const footer = document.createElement('footer');
-    const built  = manifest.builtAt ? new Date(manifest.builtAt).toLocaleString() : '';
+    const built = manifest.builtAt ? new Date(manifest.builtAt).toLocaleString() : '';
     footer.innerHTML = '<small>Built: ' + escHtml(built) + '</small>';
     container.appendChild(footer);
 }
-
 function renderPipelineConsole(root, manifest) {
-    if (window.__IS_PREVIEW__ || vscode) return;
-    if (!manifest.messages?.length && !manifest.executionTree?.length && !manifest.error) return;
-
+    if (window.__IS_PREVIEW__ || vscode)
+        return;
+    if (!manifest.messages?.length && !manifest.executionTree?.length && !manifest.error)
+        return;
     const consoleWrapper = document.createElement('div');
     consoleWrapper.className = 'pipeline-console collapsed';
-
     const header = document.createElement('div');
     header.className = 'pipeline-header';
-
     let statusColor = 'gray';
     let statusText = 'Completed';
     if (manifest.error) {
         statusColor = 'red';
         statusText = 'Failed';
     }
-
     header.innerHTML = `
             <span>Pipeline Console</span>
             <span style="color: ${statusColor}; font-weight: normal;">
@@ -9302,52 +9312,41 @@ function renderPipelineConsole(root, manifest) {
                 <span class="toggle-icon" style="margin-left: 8px;">&#x25B2;</span>
             </span>
         `;
-
     const body = document.createElement('div');
     body.className = 'pipeline-body';
-
     const leftPane = document.createElement('div');
     leftPane.className = 'pipeline-pane left-pane';
     leftPane.innerHTML = '<div class="pane-title">Execution Tree</div>';
-
     const rightPane = document.createElement('div');
     rightPane.className = 'pipeline-pane';
     rightPane.innerHTML = '<div class="pane-title">Messages</div>';
-
     body.appendChild(leftPane);
     body.appendChild(rightPane);
-
     consoleWrapper.appendChild(header);
     consoleWrapper.appendChild(body);
-
     let isCollapsed = true;
     header.addEventListener('click', () => {
         isCollapsed = !isCollapsed;
         consoleWrapper.classList.toggle('collapsed', isCollapsed);
-        const icon = header.querySelector('.toggle-icon');
+        const icon = /** @type {HTMLElement | null} */ (header.querySelector('.toggle-icon'));
         icon.innerHTML = isCollapsed ? '&#x25B2;' : '&#x25BC;';
     });
-
     // Render Execution Tree
     if (manifest.executionTree) {
         const treeRoot = document.createElement('div');
-
         function renderNode(node, container) {
             const el = document.createElement('div');
             el.className = 'tree-node';
-
             const content = document.createElement('div');
             content.className = 'tree-node-content';
-
             const hasChildren = node.children && node.children.length > 0;
             const iconStr = hasChildren ? '&#x25BC;' : '&nbsp;';
-
             let timeStr = '';
-            if (node.durationMs != null) timeStr = `[${escHtml(node.durationMs)}ms]`;
-
+            if (node.durationMs != null)
+                timeStr = `[${escHtml(node.durationMs)}ms]`;
             let rowsStr = '';
-            if (node.rowsProcessed != null) rowsStr = `(${escHtml(node.rowsProcessed)} rows)`;
-
+            if (node.rowsProcessed != null)
+                rowsStr = `(${escHtml(node.rowsProcessed)} rows)`;
             const status = node.status || 'Completed';
             const statusClass = cssClassToken(status, 'completed');
             content.innerHTML = `
@@ -9358,16 +9357,13 @@ function renderPipelineConsole(root, manifest) {
                         ${timeStr} ${rowsStr}
                     </span>
                 `;
-
             el.appendChild(content);
-
             if (hasChildren) {
                 const childrenContainer = document.createElement('div');
                 childrenContainer.className = 'tree-children';
-                node.children.forEach(child => renderNode(child, childrenContainer));
+                node.children.forEach((child) => renderNode(child, childrenContainer));
                 el.appendChild(childrenContainer);
-
-                content.querySelector('.tree-icon').addEventListener('click', (e) => {
+                /** @type {HTMLElement | null} */ (content.querySelector('.tree-icon')).addEventListener('click', (e) => {
                     e.stopPropagation();
                     const isHidden = childrenContainer.style.display === 'none';
                     childrenContainer.style.display = isHidden ? 'block' : 'none';
@@ -9376,68 +9372,61 @@ function renderPipelineConsole(root, manifest) {
             }
             container.appendChild(el);
         }
-
         if (Array.isArray(manifest.executionTree)) {
-            manifest.executionTree.forEach(rootNode => renderNode(rootNode, treeRoot));
-        } else {
+            manifest.executionTree.forEach((rootNode) => renderNode(rootNode, treeRoot));
+        }
+        else {
             renderNode(manifest.executionTree, treeRoot);
         }
-
         leftPane.appendChild(treeRoot);
-    } else {
+    }
+    else {
         leftPane.innerHTML += '<div class="no-data">No execution tree available.</div>';
     }
-
     // Render Messages
     if (manifest.messages && manifest.messages.length > 0) {
         manifest.messages.forEach(msg => {
             const entry = document.createElement('div');
             entry.className = 'log-entry';
-
             const time = new Date(msg.timestamp).toLocaleTimeString();
             const colorClass = `log-${cssClassToken(msg.color, 'white')}`;
-
             entry.innerHTML = `
                     <span class="log-time">[${time}]</span>
                     <span class="${colorClass}">${escHtml(msg.message)}</span>
                 `;
             rightPane.appendChild(entry);
         });
-    } else {
+    }
+    else {
         rightPane.innerHTML += '<div class="no-data">No messages recorded.</div>';
     }
-
     if (manifest.error) {
         const errEntry = document.createElement('div');
         errEntry.className = 'log-entry log-red';
         errEntry.innerHTML = `<br/><b>Fatal Error:</b><br/><pre>${escHtml(manifest.error)}</pre>`;
         rightPane.appendChild(errEntry);
-
         // Auto-expand if there's an error
         isCollapsed = false;
         consoleWrapper.classList.remove('collapsed');
-        header.querySelector('.toggle-icon').innerHTML = '&#x25BC;';
+        /** @type {HTMLElement | null} */ (header.querySelector('.toggle-icon')).innerHTML = '&#x25BC;';
     }
-
     root.appendChild(consoleWrapper);
 }
-
 function updateStagedUI() {
     const hasPending = Object.keys(pendingParameters).length > 0;
-
     // 1. Update only RUN buttons (tagged with data-is-run-btn during renderButton)
-    document.querySelectorAll('[data-is-run-btn]').forEach(btn => {
+    /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-is-run-btn]')).forEach(btn => {
         if (hasPending) {
             btn.classList.add('pending-changes');
-        } else {
+        }
+        else {
             btn.classList.remove('pending-changes');
         }
     });
-
     // 2. Add/Update a "Pending" badge in the header if it exists
-    const header = document.querySelector('.report-header');
+    const header = /** @type {HTMLElement | null} */ (document.querySelector('.report-header'));
     if (header) {
-        let badge = header.querySelector('.pending-badge');
+        let badge = /** @type {HTMLElement | null} */ (header.querySelector('.pending-badge'));
         if (hasPending) {
             if (!badge) {
                 badge = document.createElement('div');
@@ -9451,7 +9440,8 @@ function updateStagedUI() {
                 /** @type {HTMLElement} */ (badge).style.fontWeight = 'bold';
                 header.appendChild(badge);
             }
-        } else if (badge) {
+        }
+        else if (badge) {
             badge.remove();
         }
     }
