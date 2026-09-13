@@ -706,6 +706,10 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   maximization, KPI formatting, text interpolation, and URL rejection. Runtime asset assertions
   tolerate compiler whitespace while retaining the MATRIX dispatch and chart fallback checks.
   All six runtime asset tests and all 60 consumer checks pass; type/lint and asset drift are clean.
+  **Shared feedback migrated:** `feedback.ts` reuses the existing toast, confirmation, and prompt
+  interfaces while retaining classic-script loading. Executable AST is unchanged apart from a
+  redundant strict-mode directive and parentheses. Checks cover installation, repeated loading,
+  no-document fallbacks, and loading contracts across ten host surfaces; 37 files now compile.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned

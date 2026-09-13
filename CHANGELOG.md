@@ -18,6 +18,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Shared toast, confirmation, and prompt dialogs now compile from strict TypeScript
+  (`feedback.ts`), preserving classic-script loading and existing behavior.
 - Shared report visuals now compile from strict TypeScript (`rt-visual.ts`), including visual
   dispatch, maximization, KPI cards, text, images, and HTML sanitization.
 - Report headers, navigation, parameter prompts, dialogs, and pipeline consoles now compile from
