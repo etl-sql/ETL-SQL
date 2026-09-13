@@ -1,7 +1,3 @@
-/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
- * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-controls-date.ts
- * Run: node scripts/sync-assets.js
- */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -14,105 +10,129 @@ import { applyControlState, setParameterAccessibleName } from './rt-controls-inp
 import { isWebMode } from './rt-state.js';
 import { postParameters } from './rt-transport.js';
 import { renderManifest } from './report-runtime.js';
+
+interface DateAction {
+    type?: string;
+    parameterName?: string;
+    secondaryParameterName?: string;
+    [key: string]: unknown;
+}
+
+interface DateVisual {
+    options?: Record<string, string>;
+    defaultValue?: unknown;
+    name?: string;
+    title?: string;
+    [key: string]: unknown;
+}
+
+interface DateManifest {
+    parameters?: Record<string, unknown>;
+    [key: string]: unknown;
+}
+
+interface DateBox {
+    box: HTMLDivElement;
+    textInput: HTMLInputElement;
+    datePicker: HTMLInputElement;
+}
+
+interface QuickPick { label: string; value: string }
+
 // ── DatePicker ──────────────────────────────────────────────────────────
-export function renderDatePicker(container, visual, manifest) {
-    const opts = visual.options || {};
-    const changeActions = actionsFor(visual, 'ON_CHANGE').filter((a) => a.type === 'SET_PARAMETER');
-    const startAction = changeActions.length > 0 ? changeActions[0] : null;
-    const param = startAction ? startAction.parameterName : null;
+
+export function renderDatePicker(container: HTMLElement, visual: DateVisual, manifest: DateManifest | null): void {
+    const opts          = visual.options || {};
+    const changeActions: DateAction[] = actionsFor(visual, 'ON_CHANGE').filter((a: DateAction) => a.type === 'SET_PARAMETER');
+    const startAction   = changeActions.length > 0 ? changeActions[0] : null;
+    const param         = startAction ? startAction.parameterName : null;
     const secondaryParam = (startAction && startAction.secondaryParameterName) || (changeActions.length > 1 ? changeActions[1].parameterName : null);
-    const min = opts['MIN'] || opts['min'] || '';
-    const max = opts['MAX'] || opts['max'] || '';
-    const mode = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
-    const isRange = mode === 'RANGE';
-    const formatOpt = getOption(opts, 'format') || '';
-    const weekStart = (getOption(opts, 'week_start') || 'SUN').toUpperCase();
-    const displayOpt = (getOption(opts, 'display') || 'DROPDOWN').toUpperCase();
-    const isInline = displayOpt === 'INLINE';
-    function parseArrayOption(opt) {
-        if (!opt)
-            return [];
-        if (Array.isArray(opt))
-            return opt.map(s => String(s).trim().toUpperCase());
+    const min           = opts['MIN'] || opts['min'] || '';
+    const max           = opts['MAX'] || opts['max'] || '';
+    const mode          = (getOption(opts, 'mode') as string || 'SINGLE').toUpperCase();
+    const isRange       = mode === 'RANGE';
+    const formatOpt     = getOption(opts, 'format') as string || '';
+    const weekStart     = (getOption(opts, 'week_start') as string || 'SUN').toUpperCase();
+    const displayOpt    = (getOption(opts, 'display') as string || 'DROPDOWN').toUpperCase();
+    const isInline      = displayOpt === 'INLINE';
+
+    function parseArrayOption(opt: unknown): string[] {
+        if (!opt) return [];
+        if (Array.isArray(opt)) return opt.map(s => String(s).trim().toUpperCase());
         if (typeof opt === 'string' && opt.startsWith('[')) {
             try {
                 const parsed = JSON.parse(opt);
-                if (Array.isArray(parsed))
-                    return parsed.map(s => String(s).trim().toUpperCase());
-            }
-            catch {
+                if (Array.isArray(parsed)) return parsed.map(s => String(s).trim().toUpperCase());
+            } catch {
                 // Not JSON after all, so fall through to the comma-separated form below.
             }
         }
         return String(opt).split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
     }
+
     const disabledDates = parseArrayOption(opts['DISABLED_DATES'] || opts['disabled_dates']);
-    const disabledDays = parseArrayOption(opts['DISABLED_DAYS'] || opts['disabled_days']);
-    function isDateDisabled(dateStr) {
-        if (!dateStr)
-            return false;
+    const disabledDays  = parseArrayOption(opts['DISABLED_DAYS']  || opts['disabled_days']);
+
+    function isDateDisabled(dateStr: string): boolean {
+        if (!dateStr) return false;
         const norm = dateStr.trim().toUpperCase();
-        if (disabledDates.includes(norm))
-            return true;
+        if (disabledDates.includes(norm)) return true;
         if (disabledDays.length > 0) {
             const dt = new Date(dateStr + 'T00:00:00Z');
             if (!isNaN(dt.getTime())) {
                 const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
                 const dName = dayNames[dt.getUTCDay()];
-                if (disabledDays.includes(dName))
-                    return true;
+                if (disabledDays.includes(dName)) return true;
             }
         }
         return false;
     }
+
     const wrapper = document.createElement('div');
     wrapper.className = 'filter-wrapper' + (isInline ? ' datepicker-inline' : '');
-    if (weekStart)
-        wrapper.setAttribute('data-week-start', weekStart);
+    if (weekStart) wrapper.setAttribute('data-week-start', weekStart);
+
     const errorEl = document.createElement('div');
     errorEl.className = 'filter-error';
     errorEl.style.display = 'none';
+
     if (isRange) {
         let startVal = '';
         let endVal = '';
         if (manifest && manifest.parameters) {
-            if (param)
-                startVal = getParam(manifest.parameters, param) ?? '';
-            if (secondaryParam)
-                endVal = getParam(manifest.parameters, secondaryParam) ?? '';
+            if (param) startVal = (getParam(manifest.parameters, param) as string) ?? '';
+            if (secondaryParam) endVal = (getParam(manifest.parameters, secondaryParam) as string) ?? '';
         }
         if (!startVal && !endVal) {
             const def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
             const parts = parseMultiParameter(def);
-            if (parts.length > 0)
-                startVal = parts[0];
-            if (parts.length > 1)
-                endVal = parts[1];
+            if (parts.length > 0) startVal = parts[0] as string;
+            if (parts.length > 1) endVal = parts[1] as string;
         }
+
         const rangeWrapper = document.createElement('div');
         rangeWrapper.className = 'datepicker-range-wrapper';
-        function createDateBox(initialVal, pName, qualifier, onValChange) {
+
+        function createDateBox(initialVal: string, pName: string | null, qualifier: string, onValChange: () => void): DateBox {
             const box = document.createElement('div');
             box.className = 'reldate-wrapper';
+
             const textInput = document.createElement('input');
             textInput.type = 'text';
             setParameterAccessibleName(textInput, visual, pName, qualifier);
             textInput.placeholder = formatOpt || 'YYYY-MM-DD';
             textInput.value = initialVal;
-            if (pName)
-                textInput.setAttribute('data-parameter', pName);
+            if (pName) textInput.setAttribute('data-parameter', pName);
+
             const datePicker = document.createElement('input');
             datePicker.type = 'date';
             setParameterAccessibleName(datePicker, visual, pName, `${qualifier} picker`);
             datePicker.className = 'reldate-native-picker';
-            if (min)
-                datePicker.min = min;
-            if (max)
-                datePicker.max = max;
-            if (initialVal && /^\d{4}-\d{2}-\d{2}$/.test(initialVal))
-                datePicker.value = initialVal;
-            if (pName)
-                datePicker.setAttribute('data-parameter', pName);
+            if (min) datePicker.min = min;
+            if (max) datePicker.max = max;
+            if (initialVal && /^\d{4}-\d{2}-\d{2}$/.test(initialVal)) datePicker.value = initialVal;
+            if (pName) datePicker.setAttribute('data-parameter', pName);
+
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'reldate-btn';
@@ -120,21 +140,22 @@ export function renderDatePicker(container, visual, manifest) {
             btn.setAttribute('aria-label', `Pick ${qualifier}`);
             btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
             btn.addEventListener('click', () => {
-                if (typeof datePicker.showPicker === 'function')
-                    datePicker.showPicker();
-                else
-                    datePicker.focus();
+                if (typeof datePicker.showPicker === 'function') datePicker.showPicker();
+                else datePicker.focus();
             });
+
             datePicker.addEventListener('change', () => {
                 textInput.value = datePicker.value;
                 textInput.dispatchEvent(new Event('change'));
             });
+
             textInput.addEventListener('change', () => {
                 if (/^\d{4}-\d{2}-\d{2}$/.test(textInput.value)) {
                     datePicker.value = textInput.value;
                 }
                 onValChange();
             });
+
             const actions = document.createElement('div');
             actions.className = 'reldate-actions';
             const pickerSlot = document.createElement('span');
@@ -142,6 +163,7 @@ export function renderDatePicker(container, visual, manifest) {
             pickerSlot.appendChild(btn);
             pickerSlot.appendChild(datePicker);
             actions.appendChild(pickerSlot);
+
             box.appendChild(textInput);
             box.appendChild(actions);
             applyControlState(textInput, visual, box);
@@ -151,89 +173,91 @@ export function renderDatePicker(container, visual, manifest) {
             }
             return { box, textInput, datePicker };
         }
-        function validateAndPostRange() {
+
+        function validateAndPostRange(): void {
             const sVal = startBox.textInput.value.trim();
             const eVal = endBox.textInput.value.trim();
             let errMsg = null;
+
             if (isDateDisabled(sVal)) {
                 errMsg = 'Start date is disabled';
                 startBox.box.classList.add('is-invalid');
-            }
-            else {
+            } else {
                 startBox.box.classList.remove('is-invalid');
             }
+
             if (isDateDisabled(eVal)) {
                 errMsg = errMsg ? (errMsg + '; End date is disabled') : 'End date is disabled';
                 endBox.box.classList.add('is-invalid');
-            }
-            else {
+            } else {
                 endBox.box.classList.remove('is-invalid');
             }
+
             if (!errMsg && sVal && eVal && sVal > eVal) {
                 errMsg = 'Start date cannot be after end date';
                 startBox.box.classList.add('is-invalid');
                 endBox.box.classList.add('is-invalid');
             }
+
             if (errMsg) {
                 errorEl.textContent = errMsg;
                 errorEl.style.display = 'block';
                 return;
             }
+
             errorEl.style.display = 'none';
             startBox.box.classList.remove('is-invalid');
             endBox.box.classList.remove('is-invalid');
+
             if (isWebMode && changeActions.length > 0) {
-                const batch = {};
-                if (param)
-                    batch[param] = sVal;
-                if (secondaryParam)
-                    batch[secondaryParam] = eVal;
+                const batch: Record<string, string> = {};
+                if (param) batch[param] = sVal;
+                if (secondaryParam) batch[secondaryParam] = eVal;
                 if (Object.keys(batch).length > 0) {
-                    postParameters(batch).then(m => { if (m)
-                        renderManifest(m); });
+                    postParameters(batch).then(m => { if (m) renderManifest(m); });
                 }
             }
         }
-        const startBox = createDateBox(startVal, param, 'start date', validateAndPostRange);
+
+        const startBox = createDateBox(startVal as string, param as string | null, 'start date', validateAndPostRange);
         const sep = document.createElement('span');
         sep.textContent = '–';
         sep.style.fontWeight = 'bold';
-        const endBox = createDateBox(endVal, secondaryParam, 'end date', validateAndPostRange);
+        const endBox = createDateBox(endVal as string, secondaryParam as string | null, 'end date', validateAndPostRange);
+
         rangeWrapper.appendChild(startBox.box);
         rangeWrapper.appendChild(sep);
         rangeWrapper.appendChild(endBox.box);
         wrapper.appendChild(rangeWrapper);
         wrapper.appendChild(errorEl);
-    }
-    else {
+
+    } else {
         // SINGLE mode
-        let def = (visual.defaultValue || opts['DEFAULT'] || opts['default'] || '');
+        let def = (visual.defaultValue || opts['DEFAULT'] || opts['default'] || '') as string;
         if (param && manifest && manifest.parameters) {
             const current = getParam(manifest.parameters, param);
-            if (current !== undefined)
-                def = current;
+            if (current !== undefined) def = current as string;
         }
+
         const inputRow = document.createElement('div');
         inputRow.className = 'reldate-wrapper';
+
         const textInput = document.createElement('input');
         textInput.type = 'text';
         setParameterAccessibleName(textInput, visual, param, 'date');
         textInput.placeholder = formatOpt || 'YYYY-MM-DD or T-1…';
         textInput.value = def;
-        if (param)
-            textInput.setAttribute('data-parameter', param);
+        if (param) textInput.setAttribute('data-parameter', param);
+
         const datePicker = document.createElement('input');
         datePicker.type = 'date';
         setParameterAccessibleName(datePicker, visual, param, 'native date picker');
         datePicker.className = 'reldate-native-picker';
-        if (min)
-            datePicker.min = min;
-        if (max)
-            datePicker.max = max;
-        if (def && /^\d{4}-\d{2}-\d{2}$/.test(def))
-            datePicker.value = def;
-        if (param)
-            datePicker.setAttribute('data-parameter', param);
+        if (min) datePicker.min = min;
+        if (max) datePicker.max = max;
+        if (def && /^\d{4}-\d{2}-\d{2}$/.test(def)) datePicker.value = def;
+        if (param) datePicker.setAttribute('data-parameter', param);
+
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'reldate-btn';
@@ -241,15 +265,15 @@ export function renderDatePicker(container, visual, manifest) {
         btn.setAttribute('aria-label', 'Pick a date');
         btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
         btn.addEventListener('click', () => {
-            if (typeof datePicker.showPicker === 'function')
-                datePicker.showPicker();
-            else
-                datePicker.focus();
+            if (typeof datePicker.showPicker === 'function') datePicker.showPicker();
+            else datePicker.focus();
         });
+
         datePicker.addEventListener('change', () => {
             textInput.value = datePicker.value;
             textInput.dispatchEvent(new Event('change'));
         });
+
         const actions = document.createElement('div');
         actions.className = 'reldate-actions';
         const pickerSlot = document.createElement('span');
@@ -257,15 +281,18 @@ export function renderDatePicker(container, visual, manifest) {
         pickerSlot.appendChild(btn);
         pickerSlot.appendChild(datePicker);
         actions.appendChild(pickerSlot);
+
         inputRow.appendChild(textInput);
         inputRow.appendChild(actions);
         wrapper.appendChild(inputRow);
         wrapper.appendChild(errorEl);
+
         applyControlState(textInput, visual, inputRow);
         if (textInput.disabled) {
             datePicker.disabled = true;
             btn.disabled = true;
         }
+
         if (isWebMode && changeActions.length > 0) {
             const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
             const onDateChange = () => {
@@ -281,34 +308,41 @@ export function renderDatePicker(container, visual, manifest) {
                 }
                 inputRow.classList.remove('is-invalid');
                 errorEl.style.display = 'none';
-                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = textInput.value; return o; }, {});
-                postParameters(batch).then(m => { if (m)
-                    renderManifest(m); });
+
+                const batch = changeActions.reduce<Record<string, string>>((o, a) => { o[a.parameterName as string] = textInput.value; return o; }, {});
+                postParameters(batch).then(m => { if (m) renderManifest(m); });
             };
+
             if (debounceOpt != null) {
-                let dTimer = null;
+                let dTimer: ReturnType<typeof setTimeout> | null = null;
                 const dMs = parseInt(debounceOpt, 10) || 300;
                 textInput.addEventListener('input', () => {
-                    clearTimeout(dTimer);
+                    clearTimeout(dTimer!);
                     dTimer = setTimeout(onDateChange, dMs);
                 });
             }
             textInput.addEventListener('change', onDateChange);
         }
     }
+
     container.appendChild(wrapper);
 }
+
 // ── RelDatePicker ────────────────────────────────────────────────────────
+
 function showRelDateHelpModal() {
     const modal = document.createElement('div');
     modal.className = 'required-params-modal'; // recycle the overlay styling
     modal.style.zIndex = '30000'; // above everything
+
     const content = document.createElement('div');
     content.className = 'modal-content';
     content.style.width = '550px';
+
     const title = document.createElement('h2');
     title.textContent = 'Relative Date Syntax';
     title.style.marginTop = '0';
+
     const desc = document.createElement('div');
     desc.style.fontSize = '14px';
     desc.style.lineHeight = '1.5';
@@ -345,15 +379,18 @@ function showRelDateHelpModal() {
             </ul>
             <p style="margin-top: 12px; font-size: 12px; color: #667085;">Fiscal anchors evaluate with <code>FISCAL_YEAR_START = month</code> (default 1 = January).</p>
         `;
+
     const footer = document.createElement('div');
     footer.className = 'modal-footer';
     footer.style.marginTop = '24px';
+
     const closeBtn = document.createElement('button');
     closeBtn.className = 'header-btn primary';
     closeBtn.textContent = 'Got it';
     closeBtn.addEventListener('click', () => {
         document.body.removeChild(modal);
     });
+
     footer.appendChild(closeBtn);
     content.appendChild(title);
     content.appendChild(desc);
@@ -361,80 +398,82 @@ function showRelDateHelpModal() {
     modal.appendChild(content);
     document.body.appendChild(modal);
 }
-export function renderRelDatePicker(container, visual, manifest) {
-    const opts = visual.options || {};
-    const changeActions = actionsFor(visual, 'ON_CHANGE').filter((a) => a.type === 'SET_PARAMETER');
-    const startAction = changeActions.length > 0 ? changeActions[0] : null;
-    const param = startAction ? startAction.parameterName : null;
+
+export function renderRelDatePicker(container: HTMLElement, visual: DateVisual, manifest: DateManifest | null): void {
+    const opts          = visual.options || {};
+    const changeActions: DateAction[] = actionsFor(visual, 'ON_CHANGE').filter((a: DateAction) => a.type === 'SET_PARAMETER');
+    const startAction   = changeActions.length > 0 ? changeActions[0] : null;
+    const param         = startAction ? startAction.parameterName : null;
     const secondaryParam = (startAction && startAction.secondaryParameterName) || (changeActions.length > 1 ? changeActions[1].parameterName : null);
-    const min = opts['MIN'] || opts['min'] || '';
-    const max = opts['MAX'] || opts['max'] || '';
-    const mode = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
-    const isRange = mode === 'RANGE';
+    const min           = opts['MIN'] || opts['min'] || '';
+    const max           = opts['MAX'] || opts['max'] || '';
+    const mode          = (getOption(opts, 'mode') as string || 'SINGLE').toUpperCase();
+    const isRange       = mode === 'RANGE';
+
     const relDateRegex = /^\s*(D|W|WS|WE|M|MS|ME|Y|YS|YE|FQ|FQS|FQE|FY|FYS|FYE|N)([-+]\d+[DHIMS]?)?\s*$/i;
     const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    function isValidRelDate(expr) {
-        if (!expr || !expr.trim())
-            return false;
+    function isValidRelDate(expr: string): boolean {
+        if (!expr || !expr.trim()) return false;
         const s = expr.trim();
         return relDateRegex.test(s) || isoDateRegex.test(s);
     }
-    let quickPicks = [
-        { label: 'D', value: 'D-0' },
-        { label: 'D-1', value: 'D-1' },
-        { label: 'M', value: 'M-0' },
-        { label: 'M-1', value: 'M-1' },
-        { label: 'Y', value: 'Y-0' },
-        { label: 'Y-1', value: 'Y-1' },
+
+    let quickPicks: QuickPick[] = [
+        { label: 'D',    value: 'D-0'  },
+        { label: 'D-1',  value: 'D-1'  },
+        { label: 'M',    value: 'M-0'  },
+        { label: 'M-1',  value: 'M-1'  },
+        { label: 'Y',    value: 'Y-0'  },
+        { label: 'Y-1',  value: 'Y-1'  },
     ];
     const qpOpt = opts['QUICK_PICKS'] || opts['quick_picks'];
     if (qpOpt) {
         try {
             const customQp = typeof qpOpt === 'string' ? JSON.parse(qpOpt) : qpOpt;
             if (Array.isArray(customQp) && customQp.length > 0) {
-                quickPicks = customQp;
+                quickPicks = customQp as QuickPick[];
             }
-        }
-        catch {
+        } catch {
             // QUICK_PICKS is author-supplied; unparseable leaves the built-in picks.
         }
     }
+
     const wrapper = document.createElement('div');
     wrapper.className = 'filter-wrapper';
+
     const errorEl = document.createElement('div');
     errorEl.className = 'filter-error';
     errorEl.style.display = 'none';
-    function createRelDateRow(initialVal, pName, qualifier, onValChange) {
+
+    function createRelDateRow(initialVal: string, pName: string | null, qualifier: string, onValChange: () => void): { rowWrapper: HTMLDivElement; inputRow: HTMLDivElement; textInput: HTMLInputElement; quickRow: HTMLDivElement } {
         const rowWrapper = document.createElement('div');
         rowWrapper.style.display = 'flex';
         rowWrapper.style.flexDirection = 'column';
         rowWrapper.style.gap = '6px';
+
         const inputRow = document.createElement('div');
         inputRow.className = 'reldate-wrapper';
+
         const textInput = document.createElement('input');
         textInput.type = 'text';
         if (qualifier === 'relative date') {
             setParameterAccessibleName(textInput, visual, param, 'relative date');
-        }
-        else {
+        } else {
             setParameterAccessibleName(textInput, visual, pName, qualifier);
         }
         textInput.placeholder = 'D-7, M-1, Y-1 or YYYY-MM-DD';
         textInput.value = initialVal;
-        if (pName)
-            textInput.setAttribute('data-parameter', pName);
+        if (pName) textInput.setAttribute('data-parameter', pName);
+
         const hiddenDate = document.createElement('input');
         hiddenDate.type = 'date';
         setParameterAccessibleName(hiddenDate, visual, pName, `${qualifier} native date picker`);
         hiddenDate.className = 'reldate-native-picker';
-        if (min)
-            hiddenDate.min = min;
-        if (max)
-            hiddenDate.max = max;
-        if (initialVal && /^\d{4}-\d{2}-\d{2}$/.test(initialVal))
-            hiddenDate.value = initialVal;
-        if (pName)
-            hiddenDate.setAttribute('data-parameter', pName);
+        if (min) hiddenDate.min = min;
+        if (max) hiddenDate.max = max;
+        if (initialVal && /^\d{4}-\d{2}-\d{2}$/.test(initialVal)) hiddenDate.value = initialVal;
+        if (pName) hiddenDate.setAttribute('data-parameter', pName);
+
         const calBtn = document.createElement('button');
         calBtn.type = 'button';
         calBtn.className = 'reldate-btn';
@@ -442,11 +481,10 @@ export function renderRelDatePicker(container, visual, manifest) {
         calBtn.title = 'Pick a date (writes ISO date)';
         calBtn.setAttribute('aria-label', 'Pick a date');
         calBtn.addEventListener('click', () => {
-            if (typeof hiddenDate.showPicker === 'function')
-                hiddenDate.showPicker();
-            else
-                hiddenDate.focus();
+            if (typeof hiddenDate.showPicker === 'function') hiddenDate.showPicker();
+            else hiddenDate.focus();
         });
+
         const infoBtn = document.createElement('button');
         infoBtn.type = 'button';
         infoBtn.className = 'reldate-btn';
@@ -454,10 +492,12 @@ export function renderRelDatePicker(container, visual, manifest) {
         infoBtn.title = 'View Relative Date Syntax Help';
         infoBtn.setAttribute('aria-label', 'View relative date syntax help');
         infoBtn.addEventListener('click', showRelDateHelpModal);
+
         hiddenDate.addEventListener('change', () => {
             textInput.value = hiddenDate.value;
             textInput.dispatchEvent(new Event('change'));
         });
+
         const actions = document.createElement('div');
         actions.className = 'reldate-actions';
         const pickerSlot = document.createElement('span');
@@ -466,12 +506,15 @@ export function renderRelDatePicker(container, visual, manifest) {
         pickerSlot.appendChild(hiddenDate);
         actions.appendChild(pickerSlot);
         actions.appendChild(infoBtn);
+
         inputRow.appendChild(textInput);
         inputRow.appendChild(actions);
+
         // Quick-pick buttons
         const quickRow = document.createElement('div');
         quickRow.className = 'reldate-quick';
-        quickPicks.forEach((qp) => {
+
+        quickPicks.forEach((qp: QuickPick) => {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'reldate-quick-btn' + (initialVal === qp.value ? ' active' : '');
@@ -484,93 +527,96 @@ export function renderRelDatePicker(container, visual, manifest) {
             });
             quickRow.appendChild(btn);
         });
+
         textInput.addEventListener('change', () => {
             if (/^\d{4}-\d{2}-\d{2}$/.test(textInput.value)) {
                 hiddenDate.value = textInput.value;
             }
             onValChange();
         });
+
         rowWrapper.appendChild(inputRow);
         rowWrapper.appendChild(quickRow);
         return { rowWrapper, inputRow, textInput, quickRow };
     }
+
     if (isRange) {
         let startVal = '';
         let endVal = '';
         if (manifest && manifest.parameters) {
-            if (param)
-                startVal = getParam(manifest.parameters, param) ?? '';
-            if (secondaryParam)
-                endVal = getParam(manifest.parameters, secondaryParam) ?? '';
+            if (param) startVal = (getParam(manifest.parameters, param) as string) ?? '';
+            if (secondaryParam) endVal = (getParam(manifest.parameters, secondaryParam) as string) ?? '';
         }
         if (!startVal && !endVal) {
-            const def = (visual.defaultValue || opts['DEFAULT'] || opts['default'] || '');
+            const def = (visual.defaultValue || opts['DEFAULT'] || opts['default'] || '') as string;
             const parts = parseMultiParameter(def);
-            if (parts.length > 0)
-                startVal = parts[0];
-            if (parts.length > 1)
-                endVal = parts[1];
+            if (parts.length > 0) startVal = parts[0] as string;
+            if (parts.length > 1) endVal = parts[1] as string;
         }
-        function validateAndPostRange() {
+
+        function validateAndPostRange(): void {
             const sVal = startRow.textInput.value.trim();
             const eVal = endRow.textInput.value.trim();
             let errMsg = null;
+
             if (!isValidRelDate(sVal)) {
                 errMsg = 'Invalid start relative date expression';
                 startRow.inputRow.classList.add('is-invalid');
-            }
-            else {
+            } else {
                 startRow.inputRow.classList.remove('is-invalid');
             }
+
             if (!isValidRelDate(eVal)) {
                 errMsg = errMsg ? (errMsg + '; Invalid end relative date expression') : 'Invalid end relative date expression';
                 endRow.inputRow.classList.add('is-invalid');
-            }
-            else {
+            } else {
                 endRow.inputRow.classList.remove('is-invalid');
             }
+
             if (errMsg) {
                 errorEl.textContent = errMsg;
                 errorEl.style.display = 'block';
                 return;
             }
+
             errorEl.style.display = 'none';
             startRow.inputRow.classList.remove('is-invalid');
             endRow.inputRow.classList.remove('is-invalid');
+
             if (isWebMode && changeActions.length > 0) {
-                const batch = {};
-                if (param)
-                    batch[param] = sVal;
-                if (secondaryParam)
-                    batch[secondaryParam] = eVal;
+                const batch: Record<string, string> = {};
+                if (param) batch[param] = sVal;
+                if (secondaryParam) batch[secondaryParam] = eVal;
                 if (Object.keys(batch).length > 0) {
-                    postParameters(batch).then(m => { if (m)
-                        renderManifest(m); });
+                    postParameters(batch).then(m => { if (m) renderManifest(m); });
                 }
             }
         }
+
         const rangeContainer = document.createElement('div');
         rangeContainer.className = 'datepicker-range-wrapper';
-        const startRow = createRelDateRow(startVal, param, 'start date', validateAndPostRange);
+
+        const startRow = createRelDateRow(startVal as string, param as string | null, 'start date', validateAndPostRange);
         const sep = document.createElement('span');
         sep.textContent = '–';
         sep.style.fontWeight = 'bold';
-        const endRow = createRelDateRow(endVal, secondaryParam, 'end date', validateAndPostRange);
+        const endRow = createRelDateRow(endVal as string, secondaryParam as string | null, 'end date', validateAndPostRange);
+
         rangeContainer.appendChild(startRow.rowWrapper);
         rangeContainer.appendChild(sep);
         rangeContainer.appendChild(endRow.rowWrapper);
         wrapper.appendChild(rangeContainer);
         wrapper.appendChild(errorEl);
-    }
-    else {
+
+    } else {
         // SINGLE mode
-        let def = (visual.defaultValue || opts['DEFAULT'] || opts['default'] || '');
+        let def = (visual.defaultValue || opts['DEFAULT'] || opts['default'] || '') as string;
         if (param && manifest && manifest.parameters) {
             const current = getParam(manifest.parameters, param);
-            if (current !== undefined)
-                def = current;
+            if (current !== undefined) def = current as string;
         }
-        function validateAndPostSingle() {
+
+        function validateAndPostSingle(): void {
             const val = singleRow.textInput.value.trim();
             if (!isValidRelDate(val)) {
                 singleRow.inputRow.classList.add('is-invalid');
@@ -578,17 +624,20 @@ export function renderRelDatePicker(container, visual, manifest) {
                 errorEl.style.display = 'block';
                 return;
             }
+
             singleRow.inputRow.classList.remove('is-invalid');
             errorEl.style.display = 'none';
+
             if (isWebMode && changeActions.length > 0) {
-                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = val; return o; }, {});
-                postParameters(batch).then(m => { if (m)
-                    renderManifest(m); });
+                const batch = changeActions.reduce<Record<string, string>>((o, a) => { o[a.parameterName as string] = val; return o; }, {});
+                postParameters(batch).then(m => { if (m) renderManifest(m); });
             }
         }
-        const singleRow = createRelDateRow(def, param, 'relative date', validateAndPostSingle);
+
+        const singleRow = createRelDateRow(def as string, param as string | null, 'relative date', validateAndPostSingle);
         wrapper.appendChild(singleRow.rowWrapper);
         wrapper.appendChild(errorEl);
     }
+
     container.appendChild(wrapper);
 }

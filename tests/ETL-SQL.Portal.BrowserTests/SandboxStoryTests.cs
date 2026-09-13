@@ -2172,6 +2172,36 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task DateControls_ValidateRangesAndRelativeExpressions()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/date-controls.html");
+        var range = page.Locator(".visual-card[data-name='DateRange']");
+        var start = range.Locator("input[type=text]").Nth(0);
+        var end = range.Locator("input[type=text]").Nth(1);
+        await start.FillAsync("2026-09-14");
+        await start.DispatchEventAsync("change");
+        Assert.Contains("Start date is disabled", await range.Locator(".filter-error").InnerTextAsync());
+        await start.FillAsync("2026-09-20");
+        await start.DispatchEventAsync("change");
+        Assert.Contains("Start date cannot be after end date", await range.Locator(".filter-error").InnerTextAsync());
+        await end.FillAsync("2026-09-21");
+        await end.DispatchEventAsync("change");
+        Assert.False(await range.Locator(".filter-error").IsVisibleAsync());
+
+        var relative = page.Locator(".visual-card[data-name='RelativeDate']");
+        var expression = relative.Locator("input[type=text]");
+        await expression.FillAsync("invalid");
+        await expression.DispatchEventAsync("change");
+        Assert.True(await relative.Locator(".filter-error").IsVisibleAsync());
+        await relative.GetByRole(AriaRole.Button, new() { Name = "D-1", Exact = true }).ClickAsync();
+        Assert.Equal("D-1", await expression.InputValueAsync());
+        Assert.False(await relative.Locator(".filter-error").IsVisibleAsync());
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task DesignTokenRuntime_CascadesSafelyAcrossCustomLayerAndMaximizedScopes()
     {
         await using var session = await fixture.NewSessionAsync();

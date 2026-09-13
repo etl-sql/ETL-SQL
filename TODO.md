@@ -46,30 +46,34 @@ typing changes, and product behavior changes in separate reviewable batches.
    for checks and environment limits. Stateful closure refactors remain deferred.
 2. **§3's tracked repairs are implemented.** The late document-open continuation now checks that
    its document is still active before hiding Home or updating editor state.
-3. **Execute §5 incrementally.** Twenty-eight modules are migrated through `rt-data.ts`;
+3. **Execute §5 incrementally.** Thirty-one modules are migrated through `rt-controls-date.ts`;
    the per-module ledger is in §5. Continue with another bounded module, retaining mixed-source
    checks and verifying generated output, sandbox, hosts, and offline delivery for each batch.
 4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
    a prerequisite for §5. The stateful closure extractions deferred from §2 remain separate
    refactors; do not silently add them to either the mechanical split or the type migration.
 
-**Session handoff — 2026-09-12:** The connection-wizard migration is complete. Generated-output tests,
-browser type/lint gates (0 findings), asset sync (0 drift), 50 consumer contract checks, and fast
-pre-push validation passed (142 fast tests). Full delivery certification remains open in §5; these
-focused checks do not close that item.
+**Session handoff — 2026-09-13:** Resume with incremental module batches. `rt-controls-date.ts` is migrated;
+its generated executable AST matches the previous JavaScript after ignoring redundant expression
+and arrow-parameter parentheses added by TypeScript. Focused checks cover disabled dates/days,
+range ordering, relative expressions, quick picks, and parameter batches. The filter-controls sandbox
+now includes a date-controls fixture and a focused Chromium regression test. Type/lint and asset
+checks pass, along with 56 consumer checks, 142 fast tests, and the Chromium date-controls test.
+Full delivery certification remains open in §5; these focused checks do not close that item.
 
-For the next batch, inspect `designer/studio-authoring.js`
-before choosing scope. Do not expand the stateful Studio closure refactors into this migration.
+The broad unfinished draft is preserved locally under `artifacts/typescript-migration-drafts-20260912/`
+with its original repository-relative paths: 53 TypeScript drafts and copies of the compiler,
+compiler tests, and Portal designer preview HTML. These files are outside active compiler roots and
+are not committed. The Studio draft still has unresolved types. Do not restore the whole draft at once.
+For the next batch, inspect `rt-controls-input.js` and its saved draft before choosing scope.
+Do not expand the stateful Studio closure refactors into this migration.
 
 Keep the authored `.ts` files under `Resources/TypeScript/`, then run asset sync. The generated
 JavaScript is also checked: retain necessary JSDoc for remaining JS callers after type erasure.
 Use `ETLSQL_PLAYWRIGHT_SKIP_INSTALL=1` for browser tests when Chromium is already cached; an earlier
 install-enabled run stalled. Detailed evidence is in the verification record linked above.
 
-At handoff, unrelated comment-checker work remained uncommitted in `.github/workflows/ci.yml`,
-`scripts/README.md`, `scripts/Test-PrePush.ps1`, `scripts/check-ai-slop-comments.mjs`, and
-`scripts/test-check-ai-slop-comments.mjs`. Recheck status before resuming and preserve that work.
-Nothing from this migration session was pushed.
+Nothing from this migration session was pushed. Recheck status before resuming and preserve other work.
 
 ---
 
@@ -660,6 +664,19 @@ to that delivery pipeline; it must not introduce a second competing bundler or r
   lazy row tracking counters, image settle detection, and export promise accessors. Preserves single-line
   `INTRA_IMPORT` and inline `EXPORT_DECL` patterns required by the single-file offline bundle
   concatenator (`report-runtime.bundle.js`). Emitted executable syntax is unchanged.
+  **Report theme module migrated:** `rt-theme.ts` types design-token maps, style inputs, custom themes,
+  manifest pages, CSS safety checks, and scoped DOM application. Generated-output tests cover token
+  allow-lists, unsafe CSS rejection, border/radius projection, and clearing obsolete series colors.
+  The executable AST is unchanged; the existing design-token Chromium sandbox test passes.
+  **Report layout module migrated:** `rt-layout.ts` types pages, containers, physical page dimensions,
+  sliced visual rows, actions, slot mappings, and responsive layouts. Removed the saved draft's
+  `as never` casts and executable changes before generating the output. Existing page-options and
+  mobile-layout checks pass; generated executable syntax is unchanged apart from arrow parentheses.
+  **Date controls module migrated:** `rt-controls-date.ts` types date actions, parameter stores,
+  DOM controls, validation callbacks, quick picks, and debounce timers. Generated code retains the
+  prior executable AST apart from redundant parentheses. Focused checks cover disabled dates/days,
+  absolute range ordering, relative expressions, quick picks, and parameter batches; the sandbox
+  date fixture exercises errors and recovery through the full report runtime.
 - [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
   inline-script lines instead of treating that number as current. Extract any remaining page
   behavior into checked modules and include it in the migration inventory. Cover Portal-owned

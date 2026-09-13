@@ -441,16 +441,17 @@ function setRefreshTimers(value) { _refreshTimers = value; }
 
 
 // ─── rt-theme.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-theme.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Design tokens, theme resolution, and scoped CSS application.
  */
-
-
 // ── Design Tokens Contract ─────────────────────────────────────────────
-
 const DESIGN_TOKENS = {
     SURFACE_CARD: '--etl-surface-card',
     SURFACE: '--etl-surface',
@@ -473,68 +474,64 @@ const DESIGN_TOKENS = {
     FONT_FAMILY: '--etl-font-family',
     FONT_MONO: '--etl-font-mono'
 };
-
 const ALLOWED_TOKEN_NAMES = new Set(Object.values(DESIGN_TOKENS));
-
 /* eslint-disable-next-line no-control-regex --   is listed deliberately; a NUL
    inside a declaration is one of the ways a value smuggles CSS past this guard. */
 const UNSAFE_CSS_PATTERN = /@import|@font-face|expression\s*\(|-moz-binding|behavior\s*:|javascript\s*:|vbscript\s*:|data\s*:|url\s*\(|var\s*\(\s*--(?!etl-)|[;{}\\\u0000\r\n\f\v<>/*]/i;
-
 const BORDER_STYLES = new Set(['none', 'hidden', 'solid', 'dashed', 'dotted', 'double', 'groove', 'ridge', 'inset', 'outset']);
 const BORDER_WIDTHS = new Set(['thin', 'medium', 'thick']);
-
 const DYNAMIC_TOKEN_PATTERN = /^--etl-(?:color-\d+|palette-\d+|series-[a-z0-9_-]+|color-series-[a-z0-9_-]+)$/i;
-
 function isAllowedTokenName(name) {
-    if (!name || typeof name !== 'string') return false;
+    if (!name || typeof name !== 'string')
+        return false;
     const trimmed = name.trim().toLowerCase();
-    if (ALLOWED_TOKEN_NAMES.has(trimmed)) return true;
+    if (ALLOWED_TOKEN_NAMES.has(trimmed))
+        return true;
     return DYNAMIC_TOKEN_PATTERN.test(trimmed);
 }
-
 function isSafeCssValue(value) {
-    if (value == null) return false;
+    if (value == null)
+        return false;
     const str = String(value).trim();
-    if (str.length === 0 || str.length > 256) return false;
-    if (UNSAFE_CSS_PATTERN.test(str)) return false;
+    if (str.length === 0 || str.length > 256)
+        return false;
+    if (UNSAFE_CSS_PATTERN.test(str))
+        return false;
     return true;
 }
-
 const COLOR_FUNC_REGEX = /\b(?:rgb|rgba|hsl|hsla)\s*\([^)]+\)/i;
 const HEX_COLOR_REGEX = /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/;
-
 function extractBorderColor(value) {
-    if (value == null) return null;
+    if (value == null)
+        return null;
     const trimmed = String(value).trim().replace(/^['"]|['"]$/g, '').trim();
     if (trimmed.toLowerCase() === 'none' || trimmed === '0' || trimmed.toLowerCase() === 'hidden') {
         return 'transparent';
     }
-
     const funcMatch = COLOR_FUNC_REGEX.exec(trimmed);
-    if (funcMatch && isSafeCssValue(funcMatch[0])) return funcMatch[0];
-
+    if (funcMatch && isSafeCssValue(funcMatch[0]))
+        return funcMatch[0];
     const hexMatch = HEX_COLOR_REGEX.exec(trimmed);
-    if (hexMatch && isSafeCssValue(hexMatch[0])) return hexMatch[0];
-
+    if (hexMatch && isSafeCssValue(hexMatch[0]))
+        return hexMatch[0];
     const parts = trimmed.split(/\s+/).filter(Boolean);
     if (parts.length === 1) {
         return isSafeCssValue(trimmed) ? trimmed : null;
     }
-
     for (const part of parts) {
         if (!BORDER_STYLES.has(part.toLowerCase()) &&
             !BORDER_WIDTHS.has(part.toLowerCase()) &&
             !/^\s*(\d+(?:\.\d+)?)\s*(px|em|rem|pt|%)?\s*$/i.test(part)) {
-            if (isSafeCssValue(part)) return part;
+            if (isSafeCssValue(part))
+                return part;
         }
     }
     return isSafeCssValue(trimmed) ? trimmed : null;
 }
-
 function resolveDesignTokens(styles, isPageOrReportLevel = false) {
     const tokens = {};
-    if (!styles || typeof styles !== 'object') return tokens;
-
+    if (!styles || typeof styles !== 'object')
+        return tokens;
     if (Array.isArray(styles.palette)) {
         styles.palette.forEach((color, i) => {
             const c = String(color).trim();
@@ -544,14 +541,14 @@ function resolveDesignTokens(styles, isPageOrReportLevel = false) {
             }
         });
     }
-
     for (const rawKey in styles) {
         const rawValue = styles[rawKey];
-        if (rawValue == null) continue;
+        if (rawValue == null)
+            continue;
         const key = String(rawKey).trim();
         const value = String(rawValue).trim();
-        if (!key || !value) continue;
-
+        if (!key || !value)
+            continue;
         if (key.toLowerCase().startsWith('--etl-')) {
             const normKey = key.toLowerCase();
             if (isAllowedTokenName(normKey) && isSafeCssValue(value)) {
@@ -559,7 +556,6 @@ function resolveDesignTokens(styles, isPageOrReportLevel = false) {
             }
             continue;
         }
-
         if (key.toUpperCase().startsWith('COLOR:')) {
             const seriesName = key.substring(6).trim();
             if (seriesName && isSafeCssValue(value)) {
@@ -571,7 +567,6 @@ function resolveDesignTokens(styles, isPageOrReportLevel = false) {
             }
             continue;
         }
-
         const upperKey = key.toUpperCase();
         switch (upperKey) {
             case 'BACKGROUND':
@@ -584,7 +579,8 @@ function resolveDesignTokens(styles, isPageOrReportLevel = false) {
                 if (isSafeCssValue(value)) {
                     tokens[DESIGN_TOKENS.SURFACE_CARD] = value;
                     tokens[DESIGN_TOKENS.SURFACE] = value;
-                    if (isPageOrReportLevel) tokens[DESIGN_TOKENS.BG] = value;
+                    if (isPageOrReportLevel)
+                        tokens[DESIGN_TOKENS.BG] = value;
                 }
                 break;
             case 'BG':
@@ -734,7 +730,7 @@ function resolveDesignTokens(styles, isPageOrReportLevel = false) {
             case 'ETL_SHADOW':
             case 'ETL-SHADOW': {
                 const shadowVal = isOn(value) ? '0 6px 18px rgba(15, 23, 42, 0.16)' :
-                                  (isOff(value) || value.toUpperCase() === 'NONE') ? 'none' : value;
+                    (isOff(value) || value.toUpperCase() === 'NONE') ? 'none' : value;
                 if (isSafeCssValue(shadowVal)) {
                     tokens[DESIGN_TOKENS.SHADOW] = shadowVal;
                 }
@@ -759,16 +755,16 @@ function resolveDesignTokens(styles, isPageOrReportLevel = false) {
                 break;
         }
     }
-
     return tokens;
 }
-
 function isDarkColor(colorStr) {
-    if (!colorStr || typeof colorStr !== 'string') return false;
+    if (!colorStr || typeof colorStr !== 'string')
+        return false;
     const s = colorStr.trim().toLowerCase();
     if (s.startsWith('#')) {
         let hex = s.substring(1);
-        if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+        if (hex.length === 3)
+            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
         if (hex.length >= 6) {
             const r = parseInt(hex.substring(0, 2), 16);
             const g = parseInt(hex.substring(2, 4), 16);
@@ -789,23 +785,26 @@ function isDarkColor(colorStr) {
     }
     return s.includes('dark') || s === 'black' || s.includes('midnight') || s.includes('charcoal');
 }
-
 function isCustomThemeDark(themeDef) {
-    if (!themeDef) return false;
+    if (!themeDef)
+        return false;
     const name = (themeDef.name || '').toLowerCase();
-    if (name.includes('dark')) return true;
+    if (name.includes('dark'))
+        return true;
     if (themeDef.designTokens) {
         const bg = themeDef.designTokens[DESIGN_TOKENS.BG] || themeDef.designTokens[DESIGN_TOKENS.SURFACE_CARD];
-        if (bg && isDarkColor(bg)) return true;
+        if (bg && isDarkColor(bg))
+            return true;
     }
     if (themeDef.config && themeDef.config.backgroundColor) {
-        if (isDarkColor(themeDef.config.backgroundColor)) return true;
+        if (isDarkColor(themeDef.config.backgroundColor))
+            return true;
     }
     return false;
 }
-
 function clearDynamicTokens(element) {
-    if (!element || !element.style) return;
+    if (!element || !element.style)
+        return;
     const toRemove = [];
     for (let i = 0; i < element.style.length; i++) {
         const prop = element.style[i];
@@ -817,13 +816,12 @@ function clearDynamicTokens(element) {
         element.style.removeProperty(prop);
     }
 }
-
 function applyDesignTokens(element, itemOrTokens, isPageOrReportLevel = false, manifest = null) {
-    if (!element || !element.style) return;
-    if (!itemOrTokens) return;
-
+    if (!element || !element.style)
+        return;
+    if (!itemOrTokens)
+        return;
     clearDynamicTokens(element);
-
     // If item specifies a custom theme and manifest is provided, project custom theme tokens first
     if (manifest && manifest.customThemes && itemOrTokens.styles) {
         const themeName = getStyle(itemOrTokens.styles, 'THEME');
@@ -834,21 +832,22 @@ function applyDesignTokens(element, itemOrTokens, isPageOrReportLevel = false, m
             }
         }
     }
-
     let tokenDict;
     if (itemOrTokens.designTokens) {
         tokenDict = itemOrTokens.designTokens;
-    } else if (itemOrTokens.styles) {
+    }
+    else if (itemOrTokens.styles) {
         tokenDict = resolveDesignTokens(itemOrTokens.styles, isPageOrReportLevel);
-    } else {
+    }
+    else {
         tokenDict = resolveDesignTokens(itemOrTokens, isPageOrReportLevel);
     }
-
-    if (!tokenDict || typeof tokenDict !== 'object') return;
-
+    if (!tokenDict || typeof tokenDict !== 'object')
+        return;
     for (const token in tokenDict) {
         const val = tokenDict[token];
-        if (val == null) continue;
+        if (val == null)
+            continue;
         const normToken = String(token).toLowerCase();
         const normVal = String(val).trim();
         if (isAllowedTokenName(normToken) && isSafeCssValue(normVal)) {
@@ -856,16 +855,18 @@ function applyDesignTokens(element, itemOrTokens, isPageOrReportLevel = false, m
         }
     }
 }
-
 function getDefaultTheme(manifest) {
-    if (manifest && manifest.theme) return manifest.theme;
-    if (document.body.classList.contains('vscode-dark')) return 'dark';
-    if (document.body.classList.contains('vscode-light')) return 'light';
+    if (manifest && manifest.theme)
+        return manifest.theme;
+    if (document.body.classList.contains('vscode-dark'))
+        return 'dark';
+    if (document.body.classList.contains('vscode-light'))
+        return 'light';
     return null;
 }
-
 function updateBodyTheme(manifest, activePageName) {
-    if (!manifest) return;
+    if (!manifest)
+        return;
     let activeTheme = null;
     let activePage = null;
     if (manifest.pages && activePageName) {
@@ -885,22 +886,22 @@ function updateBodyTheme(manifest, activePageName) {
             if (pDoc && pDoc.body && pDoc.body.classList.contains('theme-dark')) {
                 activeTheme = 'dark';
             }
-        } catch { /* cross-origin fallback */ }
+        }
+        catch { /* cross-origin fallback */ }
     }
-
     const customTheme = (manifest.customThemes || []).find(t => t.name && activeTheme && t.name.toLowerCase() === activeTheme.toLowerCase());
     const isCustomDark = customTheme && isCustomThemeDark(customTheme);
     const isDark = (activeTheme && activeTheme.toLowerCase() === 'dark') || isCustomDark;
-
     if (isDark) {
         document.body.classList.add('theme-dark');
-    } else {
+    }
+    else {
         document.body.classList.remove('theme-dark');
     }
-
     // Page navigation can change the effective theme. Clear tokens written for the prior
     // page, then rebuild the body scope in cascade order for the active page.
-    for (const token of ALLOWED_TOKEN_NAMES) document.body.style.removeProperty(token);
+    for (const token of ALLOWED_TOKEN_NAMES)
+        document.body.style.removeProperty(token);
     applyDesignTokens(document.body, manifest, true);
     if (customTheme && customTheme.designTokens)
         applyDesignTokens(document.body, customTheme.designTokens, true);
@@ -3612,108 +3613,115 @@ function findMicroChart(visual, rowIndex, columnIndex, sourceValue) {
 
 
 // ─── rt-controls-date.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-controls-date.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Absolute and relative date parameter controls.
  */
-
-
 // ── DatePicker ──────────────────────────────────────────────────────────
-
 function renderDatePicker(container, visual, manifest) {
-    const opts          = visual.options || {};
-    const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
-    const startAction   = changeActions.length > 0 ? changeActions[0] : null;
-    const param         = startAction ? startAction.parameterName : null;
+    const opts = visual.options || {};
+    const changeActions = actionsFor(visual, 'ON_CHANGE').filter((a) => a.type === 'SET_PARAMETER');
+    const startAction = changeActions.length > 0 ? changeActions[0] : null;
+    const param = startAction ? startAction.parameterName : null;
     const secondaryParam = (startAction && startAction.secondaryParameterName) || (changeActions.length > 1 ? changeActions[1].parameterName : null);
-    const min           = opts['MIN'] || opts['min'] || '';
-    const max           = opts['MAX'] || opts['max'] || '';
-    const mode          = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
-    const isRange       = mode === 'RANGE';
-    const formatOpt     = getOption(opts, 'format') || '';
-    const weekStart     = (getOption(opts, 'week_start') || 'SUN').toUpperCase();
-    const displayOpt    = (getOption(opts, 'display') || 'DROPDOWN').toUpperCase();
-    const isInline      = displayOpt === 'INLINE';
-
+    const min = opts['MIN'] || opts['min'] || '';
+    const max = opts['MAX'] || opts['max'] || '';
+    const mode = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
+    const isRange = mode === 'RANGE';
+    const formatOpt = getOption(opts, 'format') || '';
+    const weekStart = (getOption(opts, 'week_start') || 'SUN').toUpperCase();
+    const displayOpt = (getOption(opts, 'display') || 'DROPDOWN').toUpperCase();
+    const isInline = displayOpt === 'INLINE';
     function parseArrayOption(opt) {
-        if (!opt) return [];
-        if (Array.isArray(opt)) return opt.map(s => String(s).trim().toUpperCase());
+        if (!opt)
+            return [];
+        if (Array.isArray(opt))
+            return opt.map(s => String(s).trim().toUpperCase());
         if (typeof opt === 'string' && opt.startsWith('[')) {
             try {
                 const parsed = JSON.parse(opt);
-                if (Array.isArray(parsed)) return parsed.map(s => String(s).trim().toUpperCase());
-            } catch {
+                if (Array.isArray(parsed))
+                    return parsed.map(s => String(s).trim().toUpperCase());
+            }
+            catch {
                 // Not JSON after all, so fall through to the comma-separated form below.
             }
         }
         return String(opt).split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
     }
-
     const disabledDates = parseArrayOption(opts['DISABLED_DATES'] || opts['disabled_dates']);
-    const disabledDays  = parseArrayOption(opts['DISABLED_DAYS']  || opts['disabled_days']);
-
+    const disabledDays = parseArrayOption(opts['DISABLED_DAYS'] || opts['disabled_days']);
     function isDateDisabled(dateStr) {
-        if (!dateStr) return false;
+        if (!dateStr)
+            return false;
         const norm = dateStr.trim().toUpperCase();
-        if (disabledDates.includes(norm)) return true;
+        if (disabledDates.includes(norm))
+            return true;
         if (disabledDays.length > 0) {
             const dt = new Date(dateStr + 'T00:00:00Z');
             if (!isNaN(dt.getTime())) {
                 const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
                 const dName = dayNames[dt.getUTCDay()];
-                if (disabledDays.includes(dName)) return true;
+                if (disabledDays.includes(dName))
+                    return true;
             }
         }
         return false;
     }
-
     const wrapper = document.createElement('div');
     wrapper.className = 'filter-wrapper' + (isInline ? ' datepicker-inline' : '');
-    if (weekStart) wrapper.setAttribute('data-week-start', weekStart);
-
+    if (weekStart)
+        wrapper.setAttribute('data-week-start', weekStart);
     const errorEl = document.createElement('div');
     errorEl.className = 'filter-error';
     errorEl.style.display = 'none';
-
     if (isRange) {
         let startVal = '';
         let endVal = '';
         if (manifest && manifest.parameters) {
-            if (param) startVal = getParam(manifest.parameters, param) ?? '';
-            if (secondaryParam) endVal = getParam(manifest.parameters, secondaryParam) ?? '';
+            if (param)
+                startVal = getParam(manifest.parameters, param) ?? '';
+            if (secondaryParam)
+                endVal = getParam(manifest.parameters, secondaryParam) ?? '';
         }
         if (!startVal && !endVal) {
             const def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
             const parts = parseMultiParameter(def);
-            if (parts.length > 0) startVal = parts[0];
-            if (parts.length > 1) endVal = parts[1];
+            if (parts.length > 0)
+                startVal = parts[0];
+            if (parts.length > 1)
+                endVal = parts[1];
         }
-
         const rangeWrapper = document.createElement('div');
         rangeWrapper.className = 'datepicker-range-wrapper';
-
         function createDateBox(initialVal, pName, qualifier, onValChange) {
             const box = document.createElement('div');
             box.className = 'reldate-wrapper';
-
             const textInput = document.createElement('input');
             textInput.type = 'text';
             setParameterAccessibleName(textInput, visual, pName, qualifier);
             textInput.placeholder = formatOpt || 'YYYY-MM-DD';
             textInput.value = initialVal;
-            if (pName) textInput.setAttribute('data-parameter', pName);
-
+            if (pName)
+                textInput.setAttribute('data-parameter', pName);
             const datePicker = document.createElement('input');
             datePicker.type = 'date';
             setParameterAccessibleName(datePicker, visual, pName, `${qualifier} picker`);
             datePicker.className = 'reldate-native-picker';
-            if (min) datePicker.min = min;
-            if (max) datePicker.max = max;
-            if (initialVal && /^\d{4}-\d{2}-\d{2}$/.test(initialVal)) datePicker.value = initialVal;
-            if (pName) datePicker.setAttribute('data-parameter', pName);
-
+            if (min)
+                datePicker.min = min;
+            if (max)
+                datePicker.max = max;
+            if (initialVal && /^\d{4}-\d{2}-\d{2}$/.test(initialVal))
+                datePicker.value = initialVal;
+            if (pName)
+                datePicker.setAttribute('data-parameter', pName);
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'reldate-btn';
@@ -3721,22 +3729,21 @@ function renderDatePicker(container, visual, manifest) {
             btn.setAttribute('aria-label', `Pick ${qualifier}`);
             btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
             btn.addEventListener('click', () => {
-                if (typeof datePicker.showPicker === 'function') datePicker.showPicker();
-                else datePicker.focus();
+                if (typeof datePicker.showPicker === 'function')
+                    datePicker.showPicker();
+                else
+                    datePicker.focus();
             });
-
             datePicker.addEventListener('change', () => {
                 textInput.value = datePicker.value;
                 textInput.dispatchEvent(new Event('change'));
             });
-
             textInput.addEventListener('change', () => {
                 if (/^\d{4}-\d{2}-\d{2}$/.test(textInput.value)) {
                     datePicker.value = textInput.value;
                 }
                 onValChange();
             });
-
             const actions = document.createElement('div');
             actions.className = 'reldate-actions';
             const pickerSlot = document.createElement('span');
@@ -3744,7 +3751,6 @@ function renderDatePicker(container, visual, manifest) {
             pickerSlot.appendChild(btn);
             pickerSlot.appendChild(datePicker);
             actions.appendChild(pickerSlot);
-
             box.appendChild(textInput);
             box.appendChild(actions);
             applyControlState(textInput, visual, box);
@@ -3754,91 +3760,89 @@ function renderDatePicker(container, visual, manifest) {
             }
             return { box, textInput, datePicker };
         }
-
         function validateAndPostRange() {
             const sVal = startBox.textInput.value.trim();
             const eVal = endBox.textInput.value.trim();
             let errMsg = null;
-
             if (isDateDisabled(sVal)) {
                 errMsg = 'Start date is disabled';
                 startBox.box.classList.add('is-invalid');
-            } else {
+            }
+            else {
                 startBox.box.classList.remove('is-invalid');
             }
-
             if (isDateDisabled(eVal)) {
                 errMsg = errMsg ? (errMsg + '; End date is disabled') : 'End date is disabled';
                 endBox.box.classList.add('is-invalid');
-            } else {
+            }
+            else {
                 endBox.box.classList.remove('is-invalid');
             }
-
             if (!errMsg && sVal && eVal && sVal > eVal) {
                 errMsg = 'Start date cannot be after end date';
                 startBox.box.classList.add('is-invalid');
                 endBox.box.classList.add('is-invalid');
             }
-
             if (errMsg) {
                 errorEl.textContent = errMsg;
                 errorEl.style.display = 'block';
                 return;
             }
-
             errorEl.style.display = 'none';
             startBox.box.classList.remove('is-invalid');
             endBox.box.classList.remove('is-invalid');
-
             if (isWebMode && changeActions.length > 0) {
                 const batch = {};
-                if (param) batch[param] = sVal;
-                if (secondaryParam) batch[secondaryParam] = eVal;
+                if (param)
+                    batch[param] = sVal;
+                if (secondaryParam)
+                    batch[secondaryParam] = eVal;
                 if (Object.keys(batch).length > 0) {
-                    postParameters(batch).then(m => { if (m) renderManifest(m); });
+                    postParameters(batch).then(m => { if (m)
+                        renderManifest(m); });
                 }
             }
         }
-
         const startBox = createDateBox(startVal, param, 'start date', validateAndPostRange);
         const sep = document.createElement('span');
         sep.textContent = '–';
         sep.style.fontWeight = 'bold';
         const endBox = createDateBox(endVal, secondaryParam, 'end date', validateAndPostRange);
-
         rangeWrapper.appendChild(startBox.box);
         rangeWrapper.appendChild(sep);
         rangeWrapper.appendChild(endBox.box);
         wrapper.appendChild(rangeWrapper);
         wrapper.appendChild(errorEl);
-
-    } else {
+    }
+    else {
         // SINGLE mode
-        let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+        let def = (visual.defaultValue || opts['DEFAULT'] || opts['default'] || '');
         if (param && manifest && manifest.parameters) {
             const current = getParam(manifest.parameters, param);
-            if (current !== undefined) def = current;
+            if (current !== undefined)
+                def = current;
         }
-
         const inputRow = document.createElement('div');
         inputRow.className = 'reldate-wrapper';
-
         const textInput = document.createElement('input');
         textInput.type = 'text';
         setParameterAccessibleName(textInput, visual, param, 'date');
         textInput.placeholder = formatOpt || 'YYYY-MM-DD or T-1…';
         textInput.value = def;
-        if (param) textInput.setAttribute('data-parameter', param);
-
+        if (param)
+            textInput.setAttribute('data-parameter', param);
         const datePicker = document.createElement('input');
         datePicker.type = 'date';
         setParameterAccessibleName(datePicker, visual, param, 'native date picker');
         datePicker.className = 'reldate-native-picker';
-        if (min) datePicker.min = min;
-        if (max) datePicker.max = max;
-        if (def && /^\d{4}-\d{2}-\d{2}$/.test(def)) datePicker.value = def;
-        if (param) datePicker.setAttribute('data-parameter', param);
-
+        if (min)
+            datePicker.min = min;
+        if (max)
+            datePicker.max = max;
+        if (def && /^\d{4}-\d{2}-\d{2}$/.test(def))
+            datePicker.value = def;
+        if (param)
+            datePicker.setAttribute('data-parameter', param);
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'reldate-btn';
@@ -3846,15 +3850,15 @@ function renderDatePicker(container, visual, manifest) {
         btn.setAttribute('aria-label', 'Pick a date');
         btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
         btn.addEventListener('click', () => {
-            if (typeof datePicker.showPicker === 'function') datePicker.showPicker();
-            else datePicker.focus();
+            if (typeof datePicker.showPicker === 'function')
+                datePicker.showPicker();
+            else
+                datePicker.focus();
         });
-
         datePicker.addEventListener('change', () => {
             textInput.value = datePicker.value;
             textInput.dispatchEvent(new Event('change'));
         });
-
         const actions = document.createElement('div');
         actions.className = 'reldate-actions';
         const pickerSlot = document.createElement('span');
@@ -3862,18 +3866,15 @@ function renderDatePicker(container, visual, manifest) {
         pickerSlot.appendChild(btn);
         pickerSlot.appendChild(datePicker);
         actions.appendChild(pickerSlot);
-
         inputRow.appendChild(textInput);
         inputRow.appendChild(actions);
         wrapper.appendChild(inputRow);
         wrapper.appendChild(errorEl);
-
         applyControlState(textInput, visual, inputRow);
         if (textInput.disabled) {
             datePicker.disabled = true;
             btn.disabled = true;
         }
-
         if (isWebMode && changeActions.length > 0) {
             const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
             const onDateChange = () => {
@@ -3889,11 +3890,10 @@ function renderDatePicker(container, visual, manifest) {
                 }
                 inputRow.classList.remove('is-invalid');
                 errorEl.style.display = 'none';
-
                 const batch = changeActions.reduce((o, a) => { o[a.parameterName] = textInput.value; return o; }, {});
-                postParameters(batch).then(m => { if (m) renderManifest(m); });
+                postParameters(batch).then(m => { if (m)
+                    renderManifest(m); });
             };
-
             if (debounceOpt != null) {
                 let dTimer = null;
                 const dMs = parseInt(debounceOpt, 10) || 300;
@@ -3905,25 +3905,19 @@ function renderDatePicker(container, visual, manifest) {
             textInput.addEventListener('change', onDateChange);
         }
     }
-
     container.appendChild(wrapper);
 }
-
 // ── RelDatePicker ────────────────────────────────────────────────────────
-
 function showRelDateHelpModal() {
     const modal = document.createElement('div');
     modal.className = 'required-params-modal'; // recycle the overlay styling
     modal.style.zIndex = '30000'; // above everything
-
     const content = document.createElement('div');
     content.className = 'modal-content';
     content.style.width = '550px';
-
     const title = document.createElement('h2');
     title.textContent = 'Relative Date Syntax';
     title.style.marginTop = '0';
-
     const desc = document.createElement('div');
     desc.style.fontSize = '14px';
     desc.style.lineHeight = '1.5';
@@ -3960,18 +3954,15 @@ function showRelDateHelpModal() {
             </ul>
             <p style="margin-top: 12px; font-size: 12px; color: #667085;">Fiscal anchors evaluate with <code>FISCAL_YEAR_START = month</code> (default 1 = January).</p>
         `;
-
     const footer = document.createElement('div');
     footer.className = 'modal-footer';
     footer.style.marginTop = '24px';
-
     const closeBtn = document.createElement('button');
     closeBtn.className = 'header-btn primary';
     closeBtn.textContent = 'Got it';
     closeBtn.addEventListener('click', () => {
         document.body.removeChild(modal);
     });
-
     footer.appendChild(closeBtn);
     content.appendChild(title);
     content.appendChild(desc);
@@ -3979,33 +3970,31 @@ function showRelDateHelpModal() {
     modal.appendChild(content);
     document.body.appendChild(modal);
 }
-
 function renderRelDatePicker(container, visual, manifest) {
-    const opts          = visual.options || {};
-    const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
-    const startAction   = changeActions.length > 0 ? changeActions[0] : null;
-    const param         = startAction ? startAction.parameterName : null;
+    const opts = visual.options || {};
+    const changeActions = actionsFor(visual, 'ON_CHANGE').filter((a) => a.type === 'SET_PARAMETER');
+    const startAction = changeActions.length > 0 ? changeActions[0] : null;
+    const param = startAction ? startAction.parameterName : null;
     const secondaryParam = (startAction && startAction.secondaryParameterName) || (changeActions.length > 1 ? changeActions[1].parameterName : null);
-    const min           = opts['MIN'] || opts['min'] || '';
-    const max           = opts['MAX'] || opts['max'] || '';
-    const mode          = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
-    const isRange       = mode === 'RANGE';
-
+    const min = opts['MIN'] || opts['min'] || '';
+    const max = opts['MAX'] || opts['max'] || '';
+    const mode = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
+    const isRange = mode === 'RANGE';
     const relDateRegex = /^\s*(D|W|WS|WE|M|MS|ME|Y|YS|YE|FQ|FQS|FQE|FY|FYS|FYE|N)([-+]\d+[DHIMS]?)?\s*$/i;
     const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
     function isValidRelDate(expr) {
-        if (!expr || !expr.trim()) return false;
+        if (!expr || !expr.trim())
+            return false;
         const s = expr.trim();
         return relDateRegex.test(s) || isoDateRegex.test(s);
     }
-
     let quickPicks = [
-        { label: 'D',    value: 'D-0'  },
-        { label: 'D-1',  value: 'D-1'  },
-        { label: 'M',    value: 'M-0'  },
-        { label: 'M-1',  value: 'M-1'  },
-        { label: 'Y',    value: 'Y-0'  },
-        { label: 'Y-1',  value: 'Y-1'  },
+        { label: 'D', value: 'D-0' },
+        { label: 'D-1', value: 'D-1' },
+        { label: 'M', value: 'M-0' },
+        { label: 'M-1', value: 'M-1' },
+        { label: 'Y', value: 'Y-0' },
+        { label: 'Y-1', value: 'Y-1' },
     ];
     const qpOpt = opts['QUICK_PICKS'] || opts['quick_picks'];
     if (qpOpt) {
@@ -4014,47 +4003,47 @@ function renderRelDatePicker(container, visual, manifest) {
             if (Array.isArray(customQp) && customQp.length > 0) {
                 quickPicks = customQp;
             }
-        } catch {
+        }
+        catch {
             // QUICK_PICKS is author-supplied; unparseable leaves the built-in picks.
         }
     }
-
     const wrapper = document.createElement('div');
     wrapper.className = 'filter-wrapper';
-
     const errorEl = document.createElement('div');
     errorEl.className = 'filter-error';
     errorEl.style.display = 'none';
-
     function createRelDateRow(initialVal, pName, qualifier, onValChange) {
         const rowWrapper = document.createElement('div');
         rowWrapper.style.display = 'flex';
         rowWrapper.style.flexDirection = 'column';
         rowWrapper.style.gap = '6px';
-
         const inputRow = document.createElement('div');
         inputRow.className = 'reldate-wrapper';
-
         const textInput = document.createElement('input');
         textInput.type = 'text';
         if (qualifier === 'relative date') {
             setParameterAccessibleName(textInput, visual, param, 'relative date');
-        } else {
+        }
+        else {
             setParameterAccessibleName(textInput, visual, pName, qualifier);
         }
         textInput.placeholder = 'D-7, M-1, Y-1 or YYYY-MM-DD';
         textInput.value = initialVal;
-        if (pName) textInput.setAttribute('data-parameter', pName);
-
+        if (pName)
+            textInput.setAttribute('data-parameter', pName);
         const hiddenDate = document.createElement('input');
         hiddenDate.type = 'date';
         setParameterAccessibleName(hiddenDate, visual, pName, `${qualifier} native date picker`);
         hiddenDate.className = 'reldate-native-picker';
-        if (min) hiddenDate.min = min;
-        if (max) hiddenDate.max = max;
-        if (initialVal && /^\d{4}-\d{2}-\d{2}$/.test(initialVal)) hiddenDate.value = initialVal;
-        if (pName) hiddenDate.setAttribute('data-parameter', pName);
-
+        if (min)
+            hiddenDate.min = min;
+        if (max)
+            hiddenDate.max = max;
+        if (initialVal && /^\d{4}-\d{2}-\d{2}$/.test(initialVal))
+            hiddenDate.value = initialVal;
+        if (pName)
+            hiddenDate.setAttribute('data-parameter', pName);
         const calBtn = document.createElement('button');
         calBtn.type = 'button';
         calBtn.className = 'reldate-btn';
@@ -4062,10 +4051,11 @@ function renderRelDatePicker(container, visual, manifest) {
         calBtn.title = 'Pick a date (writes ISO date)';
         calBtn.setAttribute('aria-label', 'Pick a date');
         calBtn.addEventListener('click', () => {
-            if (typeof hiddenDate.showPicker === 'function') hiddenDate.showPicker();
-            else hiddenDate.focus();
+            if (typeof hiddenDate.showPicker === 'function')
+                hiddenDate.showPicker();
+            else
+                hiddenDate.focus();
         });
-
         const infoBtn = document.createElement('button');
         infoBtn.type = 'button';
         infoBtn.className = 'reldate-btn';
@@ -4073,12 +4063,10 @@ function renderRelDatePicker(container, visual, manifest) {
         infoBtn.title = 'View Relative Date Syntax Help';
         infoBtn.setAttribute('aria-label', 'View relative date syntax help');
         infoBtn.addEventListener('click', showRelDateHelpModal);
-
         hiddenDate.addEventListener('change', () => {
             textInput.value = hiddenDate.value;
             textInput.dispatchEvent(new Event('change'));
         });
-
         const actions = document.createElement('div');
         actions.className = 'reldate-actions';
         const pickerSlot = document.createElement('span');
@@ -4087,15 +4075,12 @@ function renderRelDatePicker(container, visual, manifest) {
         pickerSlot.appendChild(hiddenDate);
         actions.appendChild(pickerSlot);
         actions.appendChild(infoBtn);
-
         inputRow.appendChild(textInput);
         inputRow.appendChild(actions);
-
         // Quick-pick buttons
         const quickRow = document.createElement('div');
         quickRow.className = 'reldate-quick';
-
-        quickPicks.forEach(qp => {
+        quickPicks.forEach((qp) => {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'reldate-quick-btn' + (initialVal === qp.value ? ' active' : '');
@@ -4108,95 +4093,92 @@ function renderRelDatePicker(container, visual, manifest) {
             });
             quickRow.appendChild(btn);
         });
-
         textInput.addEventListener('change', () => {
             if (/^\d{4}-\d{2}-\d{2}$/.test(textInput.value)) {
                 hiddenDate.value = textInput.value;
             }
             onValChange();
         });
-
         rowWrapper.appendChild(inputRow);
         rowWrapper.appendChild(quickRow);
         return { rowWrapper, inputRow, textInput, quickRow };
     }
-
     if (isRange) {
         let startVal = '';
         let endVal = '';
         if (manifest && manifest.parameters) {
-            if (param) startVal = getParam(manifest.parameters, param) ?? '';
-            if (secondaryParam) endVal = getParam(manifest.parameters, secondaryParam) ?? '';
+            if (param)
+                startVal = getParam(manifest.parameters, param) ?? '';
+            if (secondaryParam)
+                endVal = getParam(manifest.parameters, secondaryParam) ?? '';
         }
         if (!startVal && !endVal) {
-            const def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+            const def = (visual.defaultValue || opts['DEFAULT'] || opts['default'] || '');
             const parts = parseMultiParameter(def);
-            if (parts.length > 0) startVal = parts[0];
-            if (parts.length > 1) endVal = parts[1];
+            if (parts.length > 0)
+                startVal = parts[0];
+            if (parts.length > 1)
+                endVal = parts[1];
         }
-
         function validateAndPostRange() {
             const sVal = startRow.textInput.value.trim();
             const eVal = endRow.textInput.value.trim();
             let errMsg = null;
-
             if (!isValidRelDate(sVal)) {
                 errMsg = 'Invalid start relative date expression';
                 startRow.inputRow.classList.add('is-invalid');
-            } else {
+            }
+            else {
                 startRow.inputRow.classList.remove('is-invalid');
             }
-
             if (!isValidRelDate(eVal)) {
                 errMsg = errMsg ? (errMsg + '; Invalid end relative date expression') : 'Invalid end relative date expression';
                 endRow.inputRow.classList.add('is-invalid');
-            } else {
+            }
+            else {
                 endRow.inputRow.classList.remove('is-invalid');
             }
-
             if (errMsg) {
                 errorEl.textContent = errMsg;
                 errorEl.style.display = 'block';
                 return;
             }
-
             errorEl.style.display = 'none';
             startRow.inputRow.classList.remove('is-invalid');
             endRow.inputRow.classList.remove('is-invalid');
-
             if (isWebMode && changeActions.length > 0) {
                 const batch = {};
-                if (param) batch[param] = sVal;
-                if (secondaryParam) batch[secondaryParam] = eVal;
+                if (param)
+                    batch[param] = sVal;
+                if (secondaryParam)
+                    batch[secondaryParam] = eVal;
                 if (Object.keys(batch).length > 0) {
-                    postParameters(batch).then(m => { if (m) renderManifest(m); });
+                    postParameters(batch).then(m => { if (m)
+                        renderManifest(m); });
                 }
             }
         }
-
         const rangeContainer = document.createElement('div');
         rangeContainer.className = 'datepicker-range-wrapper';
-
         const startRow = createRelDateRow(startVal, param, 'start date', validateAndPostRange);
         const sep = document.createElement('span');
         sep.textContent = '–';
         sep.style.fontWeight = 'bold';
         const endRow = createRelDateRow(endVal, secondaryParam, 'end date', validateAndPostRange);
-
         rangeContainer.appendChild(startRow.rowWrapper);
         rangeContainer.appendChild(sep);
         rangeContainer.appendChild(endRow.rowWrapper);
         wrapper.appendChild(rangeContainer);
         wrapper.appendChild(errorEl);
-
-    } else {
+    }
+    else {
         // SINGLE mode
-        let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+        let def = (visual.defaultValue || opts['DEFAULT'] || opts['default'] || '');
         if (param && manifest && manifest.parameters) {
             const current = getParam(manifest.parameters, param);
-            if (current !== undefined) def = current;
+            if (current !== undefined)
+                def = current;
         }
-
         function validateAndPostSingle() {
             const val = singleRow.textInput.value.trim();
             if (!isValidRelDate(val)) {
@@ -4205,21 +4187,18 @@ function renderRelDatePicker(container, visual, manifest) {
                 errorEl.style.display = 'block';
                 return;
             }
-
             singleRow.inputRow.classList.remove('is-invalid');
             errorEl.style.display = 'none';
-
             if (isWebMode && changeActions.length > 0) {
                 const batch = changeActions.reduce((o, a) => { o[a.parameterName] = val; return o; }, {});
-                postParameters(batch).then(m => { if (m) renderManifest(m); });
+                postParameters(batch).then(m => { if (m)
+                    renderManifest(m); });
             }
         }
-
         const singleRow = createRelDateRow(def, param, 'relative date', validateAndPostSingle);
         wrapper.appendChild(singleRow.rowWrapper);
         wrapper.appendChild(errorEl);
     }
-
     container.appendChild(wrapper);
 }
 
@@ -6576,26 +6555,29 @@ function renderImage(container, visual) {
 
 
 // ─── rt-layout.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-layout.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Pages, containers, tabs, accordions, and physical layouts.
  */
-
-
-
 function isPageVisible(page, params) {
-    if (!page) return false;
-    if (page.isHidden) return false;
+    if (!page)
+        return false;
+    if (page.isHidden)
+        return false;
     if (page.visibleExpression) {
         return evaluateExpressionAgainstParameters(page.visibleExpression, params || parameters);
     }
     return true;
 }
-
 function executePageOnLoad(page) {
-    if (!page || !page.actions) return;
+    if (!page || !page.actions)
+        return;
     page.actions.forEach(action => {
         const trigger = (action.trigger || 'ON_LOAD').toUpperCase();
         if (trigger === 'ON_LOAD') {
@@ -6606,19 +6588,19 @@ function executePageOnLoad(page) {
                     // rendered with the old value. This is the same call the drill-down and
                     // SET_PARAMETER action branches make.
                     postParameters({ [action.parameterName]: String(action.value ?? '') })
-                        .then(m => { if (m) renderManifest(m); });
+                        .then(m => { if (m)
+                        renderManifest(m); });
                 }
             }
         }
     });
 }
-
 // PAGE OPTIONS reached the manifest but nothing ever read them, so every option below was
 // parsed, serialized, asserted in a test, and then silently dropped before it reached a pixel.
 function applyPageOptions(pageDiv, contentDiv, page) {
     const opts = page.options;
-    if (!opts) return;
-
+    if (!opts)
+        return;
     const backgroundImage = getOption(opts, 'BACKGROUND_IMAGE');
     if (backgroundImage) {
         const raw = String(backgroundImage).trim();
@@ -6631,43 +6613,38 @@ function applyPageOptions(pageDiv, contentDiv, page) {
         pageDiv.style.backgroundPosition = 'center';
         pageDiv.style.backgroundSize = (getOption(opts, 'BACKGROUND_SIZE') || 'cover').toLowerCase();
     }
-
     const overflow = getOption(opts, 'OVERFLOW');
-    if (overflow) pageDiv.style.overflow = String(overflow).toLowerCase();
-
+    if (overflow)
+        pageDiv.style.overflow = String(overflow).toLowerCase();
     const maxWidth = toCssLength(getOption(opts, 'MAX_WIDTH'));
-    if (maxWidth) contentDiv.style.maxWidth = maxWidth;
-
+    if (maxWidth)
+        contentDiv.style.maxWidth = maxWidth;
     if ((getOption(opts, 'ALIGN_CONTENT') || '').toUpperCase() === 'CENTER') {
         contentDiv.style.marginLeft = 'auto';
         contentDiv.style.marginRight = 'auto';
     }
 }
-
 function renderPage(manifest, page, pageSections, pageTheme) {
     const div = document.createElement('div');
     div.className = 'page';
-    if (page.name) div.id = 'page-' + page.name.toLowerCase();
+    if (page.name)
+        div.id = 'page-' + page.name.toLowerCase();
     div.dataset.pageName = page.name || '';
     div.dataset.pageMode = (page.mode || 'DASHBOARD').toUpperCase();
     applyDesignTokens(div, page, true, manifest);
-
     const content = document.createElement('div');
     content.className = 'page-grid';
     div.appendChild(content);
     applyPageOptions(div, content, page);
-
     pageSections[page.name] = div;
-
     if (page.mode === 'PAGINATED' && page.physicalPages && page.physicalPages.length > 0) {
         renderPhysicalPages(content, page, manifest, pageTheme);
-    } else {
+    }
+    else {
         renderResponsiveLayout(content, page, manifest, pageTheme);
     }
-
     return div;
 }
-
 // MOBILE_LAYOUT is an alternate structure, not a style: below the breakpoint the page is laid
 // out from the mobile structure and slot map instead of the desktop pair. Crossing the
 // breakpoint re-renders, because the two layouts place different visuals in different slots.
@@ -6678,7 +6655,6 @@ function renderResponsiveLayout(content, page, manifest, pageTheme) {
         renderLayout(content, page, manifest, pageTheme);
         return;
     }
-
     const query = window.matchMedia(`(max-width: ${breakpoint}px)`);
     const draw = () => {
         const layoutDef = query.matches
@@ -6691,13 +6667,13 @@ function renderResponsiveLayout(content, page, manifest, pageTheme) {
         applyPageOptions(content.parentElement, content, page);
         renderLayout(content, layoutDef, manifest, pageTheme);
     };
-
     draw();
     const onChange = () => draw();
-    if (typeof query.addEventListener === 'function') query.addEventListener('change', onChange);
-    else if (typeof query.addListener === 'function') query.addListener(onChange);
+    if (typeof query.addEventListener === 'function')
+        query.addEventListener('change', onChange);
+    else if (typeof query.addListener === 'function')
+        query.addListener(onChange);
 }
-
 function renderPhysicalPages(container, pageDef, manifest, pageTheme) {
     container.style.display = 'flex';
     container.style.flexDirection = 'column';
@@ -6705,36 +6681,30 @@ function renderPhysicalPages(container, pageDef, manifest, pageTheme) {
     container.style.gap = '20px';
     container.style.padding = '20px';
     container.style.backgroundColor = '#f0f0f0';
-
     pageDef.physicalPages.forEach(pPage => {
         const sheet = document.createElement('div');
         sheet.className = 'physical-page-sheet';
         applyDesignTokens(sheet, pageDef, true, manifest);
-        
         const layout = pPage.layout || {};
         const width = layout.customWidth || (layout.orientation === 'Landscape' ? 11.0 : 8.5);
         const height = layout.customHeight || (layout.orientation === 'Landscape' ? 8.5 : 11.0);
         const unit = layout.units || 'in';
-
         sheet.style.width = width + unit;
         sheet.style.height = height + unit;
         sheet.style.backgroundColor = 'white';
         sheet.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
         sheet.style.position = 'relative';
         sheet.style.overflow = 'hidden';
-
         const marginT = (layout.marginTop ?? 1.0) + unit;
         const marginR = (layout.marginRight ?? 1.0) + unit;
         const marginB = (layout.marginBottom ?? 1.0) + unit;
         const marginL = (layout.marginLeft ?? 1.0) + unit;
-
         const printArea = document.createElement('div');
         printArea.style.position = 'absolute';
         printArea.style.top = marginT;
         printArea.style.right = marginR;
         printArea.style.bottom = marginB;
         printArea.style.left = marginL;
-
         (pPage.visuals || []).forEach(pv => {
             const wrapper = document.createElement('div');
             wrapper.style.position = 'absolute';
@@ -6742,7 +6712,6 @@ function renderPhysicalPages(container, pageDef, manifest, pageTheme) {
             wrapper.style.left = '0';
             wrapper.style.right = '0';
             wrapper.style.height = pv.height + unit;
-            
             if (pv.visual) {
                 let visToRender = pv.visual;
                 if (pv.startRowIndex !== undefined && pv.endRowIndex !== undefined && visToRender.visualType === 'TABLE') {
@@ -6755,12 +6724,10 @@ function renderPhysicalPages(container, pageDef, manifest, pageTheme) {
             }
             printArea.appendChild(wrapper);
         });
-
         sheet.appendChild(printArea);
         container.appendChild(sheet);
     });
 }
-
 function renderContainer(container, containerDef, manifest, pageTheme) {
     const containerTypeName = (containerDef.containerType || '').toUpperCase();
     if (containerTypeName === 'MODAL') {
@@ -6774,18 +6741,17 @@ function renderContainer(container, containerDef, manifest, pageTheme) {
         renderAccordionContainer(container, containerDef, manifest, pageTheme);
         return;
     }
-
     const div = document.createElement('div');
     const isScroll = containerTypeName === 'SCROLL';
-    const isLayer  = containerTypeName === 'LAYER';
+    const isLayer = containerTypeName === 'LAYER';
     div.className = isScroll ? 'container-scroll' : isLayer ? 'container-layer' : 'container-box';
-
     // LAYER: stack children as absolutely-positioned overlapping panels
     if (isLayer) {
         div.setAttribute('data-name', containerDef.name);
         applyDesignTokens(div, containerDef, false, manifest);
         const height = (containerDef.styles || {})['HEIGHT'] || (containerDef.styles || {})['height'];
-        if (height) div.style.height = height;
+        if (height)
+            div.style.height = height;
         const slotMap = containerDef.slotMap || {};
         const uniqueItems = [...new Set(Object.values(slotMap))];
         uniqueItems.forEach((item, i) => {
@@ -6795,9 +6761,11 @@ function renderContainer(container, containerDef, manifest, pageTheme) {
             const visual = (manifest.visuals || []).find(v => v.name.toLowerCase() === item.toLowerCase());
             if (visual) {
                 renderVisual(wrapper, visual, pageTheme, manifest);
-            } else {
+            }
+            else {
                 const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
-                if (nested) renderContainer(wrapper, nested, manifest, pageTheme);
+                if (nested)
+                    renderContainer(wrapper, nested, manifest, pageTheme);
             }
             div.appendChild(wrapper);
         });
@@ -6807,49 +6775,49 @@ function renderContainer(container, containerDef, manifest, pageTheme) {
     }
     div.setAttribute('data-name', containerDef.name);
     applyDesignTokens(div, containerDef, false, manifest);
-
     const tag = getOption(containerDef.options, 'TAG') || getStyle(containerDef.styles, 'TAG');
-    if (tag) div.setAttribute('data-tag', tag);
+    if (tag)
+        div.setAttribute('data-tag', tag);
     const styles = containerDef.styles || {};
     const opts = containerDef.options || {};
     const containerTheme = getStyle(styles, 'THEME') || pageTheme;
-
     const collapsibleOpt = getOption(opts, 'COLLAPSIBLE');
     const isCollapsible = containerDef.isCollapsible || isOn(collapsibleOpt);
     const defaultState = (getOption(opts, 'DEFAULT') || 'OPEN').toUpperCase();
-
     if (containerDef.refresh && containerDef.refresh > 0) {
         const rId = setInterval(() => {
             const visualNames = [];
             const slotMap = containerDef.slotMap || {};
             Object.values(slotMap).forEach(target => {
                 const v = (manifest?.visuals || []).find(x => x.name.toLowerCase() === target.toLowerCase());
-                if (v) visualNames.push(v.name);
+                if (v)
+                    visualNames.push(v.name);
             });
             if (visualNames.length > 0) {
-                if (vscode) vscode.postMessage({ type: 'refreshVisuals', visuals: visualNames });
-                else postRefreshVisuals(visualNames).then(m => { if (m) renderManifest(m); });
+                if (vscode)
+                    vscode.postMessage({ type: 'refreshVisuals', visuals: visualNames });
+                else
+                    postRefreshVisuals(visualNames).then(m => { if (m)
+                        renderManifest(m); });
             }
         }, containerDef.refresh * 1000);
         getRefreshTimers().push(rId);
     }
-
     if (isScroll) {
         const height = getStyle(styles, 'HEIGHT') || '400px';
         div.style.maxHeight = height;
     }
-
     if (isCollapsible) {
         div.classList.add('collapsible-inline');
         const header = document.createElement('div');
         header.className = 'container-header';
-
         const title = document.createElement('span');
         title.className = 'container-title';
         const cTitleText = containerDef.title || containerDef.name;
         if (containerDef.titleIsMarkdown && containerDef.title) {
             title.innerHTML = renderInlineMarkdown(cTitleText);
-        } else {
+        }
+        else {
             title.textContent = cTitleText;
         }
         const cStyles = containerDef.styles || {};
@@ -6858,13 +6826,17 @@ function renderContainer(container, containerDef, manifest, pageTheme) {
         const ctWeight = getStyle(cStyles, 'TITLE_WEIGHT');
         const ctFont = getStyle(cStyles, 'TITLE_FONT');
         const ctAlign = getStyle(cStyles, 'TITLE_ALIGN');
-        if (ctColor) title.style.color = ctColor;
-        if (ctSize) title.style.fontSize = ctSize.includes('px') || ctSize.includes('rem') || ctSize.includes('em') || ctSize.includes('%') ? ctSize : (ctSize + 'px');
-        if (ctWeight) title.style.fontWeight = ctWeight;
-        if (ctFont) title.style.fontFamily = ctFont;
-        if (ctAlign) title.style.textAlign = ctAlign.toLowerCase();
+        if (ctColor)
+            title.style.color = ctColor;
+        if (ctSize)
+            title.style.fontSize = ctSize.includes('px') || ctSize.includes('rem') || ctSize.includes('em') || ctSize.includes('%') ? ctSize : (ctSize + 'px');
+        if (ctWeight)
+            title.style.fontWeight = ctWeight;
+        if (ctFont)
+            title.style.fontFamily = ctFont;
+        if (ctAlign)
+            title.style.textAlign = ctAlign.toLowerCase();
         header.appendChild(title);
-
         const showActiveCount = isOn(getOption(opts, 'SHOW_ACTIVE_COUNT'));
         if (showActiveCount) {
             const count = calculateContainerActiveCount(containerDef, manifest);
@@ -6875,12 +6847,10 @@ function renderContainer(container, containerDef, manifest, pageTheme) {
                 header.appendChild(countBadge);
             }
         }
-
         const chevron = document.createElement('span');
         chevron.className = 'container-chevron';
         chevron.innerHTML = '&#x25B2;'; // UP
         header.appendChild(chevron);
-
         const name = containerDef.name;
         const persisted = _uiStates[name];
         const startCollapsed = (persisted && persisted.collapsed) || (!persisted && defaultState === 'CLOSED');
@@ -6888,35 +6858,32 @@ function renderContainer(container, containerDef, manifest, pageTheme) {
             div.classList.add('collapsed');
             chevron.innerHTML = '&#x25BC;'; // DOWN
         }
-
         header.onclick = () => {
             const isCollapsed = div.classList.toggle('collapsed');
             chevron.innerHTML = isCollapsed ? '&#x25BC;' : '&#x25B2;'; // DOWN : UP
             setTimeout(() => {
                 resizeChartsIn(div);
                 const grid = getPageContainer(div)?.querySelector('.page-grid');
-                if (grid) resizeChartsIn(grid);
+                if (grid)
+                    resizeChartsIn(grid);
             }, 350);
         };
-
         div.appendChild(header);
-
         const content = document.createElement('div');
         content.className = 'container-content';
         renderLayout(content, containerDef, manifest, containerTheme);
         div.appendChild(content);
-    } else {
+    }
+    else {
         renderLayout(div, containerDef, manifest, containerTheme);
     }
-
     container.appendChild(div);
 }
-
 function getPageContainer(el) {
-    while (el && el !== document.body && !el.classList.contains('page')) el = el.parentElement;
+    while (el && el !== document.body && !el.classList.contains('page'))
+        el = el.parentElement;
     return el;
 }
-
 function renderCollapsibleContainer(gridContainer, containerDef, manifest, pageTheme, slotWrapper) {
     const page = getPageContainer(gridContainer);
     if (!page) {
@@ -6924,7 +6891,6 @@ function renderCollapsibleContainer(gridContainer, containerDef, manifest, pageT
         renderContainer(slotWrapper, containerDef, manifest, pageTheme);
         return;
     }
-
     // 1. Create Rail if not exists
     let rail = page.querySelector('.drawer-rail-left');
     if (!rail) {
@@ -6932,47 +6898,47 @@ function renderCollapsibleContainer(gridContainer, containerDef, manifest, pageT
         rail.className = 'drawer-rail-left';
         page.appendChild(rail);
     }
-
     // 2. Create Trigger
     const trigger = document.createElement('div');
     trigger.className = 'drawer-trigger';
     trigger.title = containerDef.title || containerDef.name;
-
     let iconHtml = '&#x2699;'; // Default GEAR
     if (containerDef.icon) {
         const icon = containerDef.icon.toUpperCase();
-        if (icon === 'GEAR') iconHtml = '&#x2699;';
-        else if (icon === 'FILTER') iconHtml = '&#x1F50D;';
-        else if (icon === 'INFO') iconHtml = '&#x2139;';
+        if (icon === 'GEAR')
+            iconHtml = '&#x2699;';
+        else if (icon === 'FILTER')
+            iconHtml = '&#x1F50D;';
+        else if (icon === 'INFO')
+            iconHtml = '&#x2139;';
         else if (containerDef.icon.includes('.') || containerDef.icon.includes('/')) {
             iconHtml = `<img src="${escHtml(safeUrl(containerDef.icon))}" style="width:24px;height:24px;">`;
-        } else {
+        }
+        else {
             iconHtml = escHtml(containerDef.icon);
         }
     }
     trigger.innerHTML = iconHtml;
     rail.appendChild(trigger);
-
     // 3. Create Drawer
     const drawer = document.createElement('div');
     drawer.className = 'collapsible-drawer';
     drawer.setAttribute('data-name', containerDef.name);
     applyDesignTokens(drawer, containerDef, false, manifest);
     const tag = getOption(containerDef.options, 'TAG') || getStyle(containerDef.styles, 'TAG');
-    if (tag) drawer.setAttribute('data-tag', tag);
-
+    if (tag)
+        drawer.setAttribute('data-tag', tag);
     const styles = containerDef.styles || {};
     const containerTheme = getStyle(styles, 'THEME') || pageTheme;
-
     const header = document.createElement('div');
     header.className = 'drawer-header';
-
     const title = document.createElement('div');
     title.className = 'drawer-title';
     const dTitleText = containerDef.title || containerDef.name;
     if (containerDef.titleIsMarkdown && containerDef.title) {
         title.innerHTML = renderInlineMarkdown(dTitleText);
-    } else {
+    }
+    else {
         title.textContent = dTitleText;
     }
     const dtColor = getStyle(styles, 'TITLE_COLOR');
@@ -6980,16 +6946,19 @@ function renderCollapsibleContainer(gridContainer, containerDef, manifest, pageT
     const dtWeight = getStyle(styles, 'TITLE_WEIGHT');
     const dtFont = getStyle(styles, 'TITLE_FONT');
     const dtAlign = getStyle(styles, 'TITLE_ALIGN');
-    if (dtColor) title.style.color = dtColor;
-    if (dtSize) title.style.fontSize = dtSize.includes('px') || dtSize.includes('rem') || dtSize.includes('em') || dtSize.includes('%') ? dtSize : (dtSize + 'px');
-    if (dtWeight) title.style.fontWeight = dtWeight;
-    if (dtFont) title.style.fontFamily = dtFont;
-    if (dtAlign) title.style.textAlign = dtAlign.toLowerCase();
+    if (dtColor)
+        title.style.color = dtColor;
+    if (dtSize)
+        title.style.fontSize = dtSize.includes('px') || dtSize.includes('rem') || dtSize.includes('em') || dtSize.includes('%') ? dtSize : (dtSize + 'px');
+    if (dtWeight)
+        title.style.fontWeight = dtWeight;
+    if (dtFont)
+        title.style.fontFamily = dtFont;
+    if (dtAlign)
+        title.style.textAlign = dtAlign.toLowerCase();
     header.appendChild(title);
-
     const actions = document.createElement('div');
     actions.className = 'drawer-actions';
-
     if (containerDef.isPinnable !== false) {
         const pinBtn = document.createElement('span');
         pinBtn.className = 'drawer-action-btn';
@@ -7000,12 +6969,12 @@ function renderCollapsibleContainer(gridContainer, containerDef, manifest, pageT
             const isPinned = drawer.classList.toggle('pinned');
             pinBtn.classList.toggle('active');
             gridContainer.classList.toggle('has-pinned-left');
-            if (isPinned) drawer.classList.add('open');
+            if (isPinned)
+                drawer.classList.add('open');
             setTimeout(() => resizeChartsIn(gridContainer), 350);
         };
         actions.appendChild(pinBtn);
     }
-
     const closeBtn = document.createElement('span');
     closeBtn.className = 'drawer-action-btn';
     closeBtn.innerHTML = '&times;';
@@ -7014,40 +6983,34 @@ function renderCollapsibleContainer(gridContainer, containerDef, manifest, pageT
         if (drawer.classList.contains('pinned')) {
             drawer.classList.remove('pinned');
             const pinBtn = actions.querySelector('.drawer-action-btn');
-            if (pinBtn) pinBtn.classList.remove('active');
+            if (pinBtn)
+                pinBtn.classList.remove('active');
             gridContainer.classList.remove('has-pinned-left');
             setTimeout(() => resizeChartsIn(gridContainer), 350);
         }
     };
     actions.appendChild(closeBtn);
-
     header.appendChild(actions);
     drawer.appendChild(header);
-
     const content = document.createElement('div');
     content.className = 'drawer-content';
     renderLayout(content, containerDef, manifest, containerTheme);
     drawer.appendChild(content);
-
     page.appendChild(drawer);
-
     const drawerDefault = (getOption(containerDef.options, 'DEFAULT') || 'CLOSED').toUpperCase();
     if (drawerDefault === 'OPEN') {
         drawer.classList.add('open');
     }
-
     trigger.onclick = () => {
         drawer.classList.toggle('open');
         if (!drawer.classList.contains('open') && drawer.classList.contains('pinned')) {
-             // If closing while pinned, unpin
-             closeBtn.click();
+            // If closing while pinned, unpin
+            closeBtn.click();
         }
     };
-
-    if (slotWrapper) slotWrapper.classList.add('grid-slot-collapsed');
+    if (slotWrapper)
+        slotWrapper.classList.add('grid-slot-collapsed');
 }
-
-
 function renderLayout(container, layoutDef, manifest, pageTheme) {
     if (layoutDef.structure) {
         container.style.display = 'grid';
@@ -7055,86 +7018,89 @@ function renderLayout(container, layoutDef, manifest, pageTheme) {
         const rows = layoutDef.structure.split('/')
             .map(r => r.trim().split(/\s+/).filter(s => s))
             .filter(r => r.length > 0);
-
         const maxCols = Math.max(...rows.map(r => r.length));
         const normalizedRows = rows.map(r => {
-            while (r.length < maxCols) r.push('.');
+            while (r.length < maxCols)
+                r.push('.');
             return r.join(' ');
         });
-
         container.style.gridTemplateAreas = normalizedRows.map(r => `"${r}"`).join(' ');
-
         if (rows.length > 0) {
             container.style.gridTemplateRows = `repeat(${rows.length}, auto)`;
             container.style.gridTemplateColumns = `repeat(${maxCols}, 1fr)`;
         }
-
         const slotMap = layoutDef.slotMap || {};
         Object.keys(slotMap).forEach(slotLetter => {
             const item = slotMap[slotLetter];
-            if (!item) return;
-
+            if (!item)
+                return;
             const wrapper = document.createElement('div');
             wrapper.style.gridArea = slotLetter;
-
             // Item could be a visual or another container
             const visual = (manifest.visuals || []).find(v => v.name.toLowerCase() === item.toLowerCase());
             if (visual) {
                 renderVisual(wrapper, visual, pageTheme, manifest);
-            } else {
+            }
+            else {
                 const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
                 if (nested) {
                     const mode = (getStyle(nested.styles, 'COLLAPSE_MODE') || 'DRAWER').toUpperCase();
                     if (nested.isCollapsible && mode === 'DRAWER') {
                         renderCollapsibleContainer(container, nested, manifest, pageTheme, wrapper);
-                    } else {
+                    }
+                    else {
                         renderContainer(wrapper, nested, manifest, pageTheme);
                     }
-                } else {
-
+                }
+                else {
                     const btn = (manifest.buttons || []).find(b => b.name.toLowerCase() === item.toLowerCase());
-                    if (btn) renderButton(wrapper, btn);
+                    if (btn)
+                        renderButton(wrapper, btn);
                 }
             }
             container.appendChild(wrapper);
         });
-    } else {
+    }
+    else {
         const slotMap = layoutDef.slotMap || {};
         const uniqueItems = [...new Set(Object.values(slotMap))];
         uniqueItems.forEach(item => {
             const visual = (manifest.visuals || []).find(v => v.name.toLowerCase() === item.toLowerCase());
             if (visual) {
                 renderVisual(container, visual, pageTheme, manifest);
-            } else {
+            }
+            else {
                 const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
                 if (nested) {
                     const mode = (getStyle(nested.styles, 'COLLAPSE_MODE') || 'DRAWER').toUpperCase();
                     if (nested.isCollapsible && mode === 'DRAWER') {
                         renderCollapsibleContainer(container, nested, manifest, pageTheme, null);
-                    } else {
+                    }
+                    else {
                         renderContainer(container, nested, manifest, pageTheme);
                     }
-                } else {
-
+                }
+                else {
                     const btn = (manifest.buttons || []).find(b => b.name.toLowerCase() === item.toLowerCase());
-                    if (btn) renderButton(container, btn);
+                    if (btn)
+                        renderButton(container, btn);
                 }
             }
         });
     }
 }
-
 function calculateContainerActiveCount(containerDef, manifest) {
-    if (!containerDef || !getBaselineManifest() || !getBaselineManifest().parameters) return 0;
+    if (!containerDef || !getBaselineManifest() || !getBaselineManifest().parameters)
+        return 0;
     const slotMap = containerDef.slotMap || {};
     const items = Object.values(slotMap);
     let activeCount = 0;
     const countedParams = new Set();
-
     items.forEach(itemName => {
         const v = (manifest?.visuals || []).find(vis => vis.name.toLowerCase() === itemName.toLowerCase());
         if (v) {
-            const changeActions = actionsFor(v, 'ON_CHANGE').concat(actionsFor(v, 'ON_SUBMIT')).filter(a => a.type === 'SET_PARAMETER');
+            const changeActions = actionsFor(v, 'ON_CHANGE').concat(actionsFor(v, 'ON_SUBMIT'))
+                .filter((a) => a.type === 'SET_PARAMETER');
             changeActions.forEach(a => {
                 const p = a.parameterName;
                 if (p && !countedParams.has(p.toLowerCase())) {
@@ -7150,7 +7116,6 @@ function calculateContainerActiveCount(containerDef, manifest) {
     });
     return activeCount;
 }
-
 function renderTabsContainer(container, containerDef, manifest, pageTheme) {
     const div = document.createElement('div');
     div.setAttribute('data-name', containerDef.name);
@@ -7158,10 +7123,8 @@ function renderTabsContainer(container, containerDef, manifest, pageTheme) {
     const styles = containerDef.styles || {};
     const opts = containerDef.options || {};
     const containerTheme = getStyle(styles, 'THEME') || pageTheme;
-
     const tabPosition = (getOption(opts, 'TAB_POSITION') || getStyle(styles, 'TAB_POSITION') || 'TOP').toUpperCase();
     div.className = `report-container container-tabs tabs-position-${tabPosition.toLowerCase()}`;
-
     const slotMap = containerDef.slotMap || {};
     const slotDetails = containerDef.slotDetails || {};
     const slotKeys = Object.keys(slotMap);
@@ -7169,39 +7132,34 @@ function renderTabsContainer(container, containerDef, manifest, pageTheme) {
         container.appendChild(div);
         return;
     }
-
     const nav = document.createElement('div');
     nav.className = 'tabs-nav';
-
     const content = document.createElement('div');
     content.className = 'tabs-content';
-
     slotKeys.forEach((key, idx) => {
         const itemName = slotMap[key];
         const detail = slotDetails[key] || {};
         const tabBtn = document.createElement('div');
         tabBtn.className = 'tabs-tab' + (idx === 0 ? ' active' : '');
         tabBtn.setAttribute('data-slot', key);
-
         const iconVal = detail.icon;
         if (iconVal) {
             const iconEl = document.createElement('span');
             iconEl.className = 'tab-icon';
             if (iconVal.includes('.') || iconVal.includes('/')) {
                 iconEl.innerHTML = `<img src="${escHtml(safeUrl(iconVal))}" style="width:16px;height:16px;vertical-align:middle;">`;
-            } else {
+            }
+            else {
                 iconEl.textContent = iconVal;
             }
             tabBtn.appendChild(iconEl);
             tabBtn.appendChild(document.createTextNode(' '));
         }
-
         const labelSpan = document.createElement('span');
         labelSpan.className = 'tab-label';
         const targetVisual = (manifest?.visuals || []).find(v => v.name.toLowerCase() === itemName.toLowerCase());
         labelSpan.textContent = (targetVisual && targetVisual.title) ? targetVisual.title : itemName;
         tabBtn.appendChild(labelSpan);
-
         const badgeVal = detail.badge;
         if (badgeVal != null && badgeVal !== '') {
             const badgeEl = document.createElement('span');
@@ -7209,18 +7167,17 @@ function renderTabsContainer(container, containerDef, manifest, pageTheme) {
             badgeEl.textContent = badgeVal;
             tabBtn.appendChild(badgeEl);
         }
-
         const panel = document.createElement('div');
         panel.className = 'tabs-panel' + (idx === 0 ? ' active' : '');
         panel.setAttribute('data-slot', key);
-
         if (targetVisual) {
             renderVisual(panel, targetVisual, containerTheme, manifest);
-        } else {
-            const nested = (manifest?.containers || []).find(c => c.name.toLowerCase() === itemName.toLowerCase());
-            if (nested) renderContainer(panel, nested, manifest, containerTheme);
         }
-
+        else {
+            const nested = (manifest?.containers || []).find(c => c.name.toLowerCase() === itemName.toLowerCase());
+            if (nested)
+                renderContainer(panel, nested, manifest, containerTheme);
+        }
         tabBtn.addEventListener('click', () => {
             nav.querySelectorAll('.tabs-tab').forEach(t => t.classList.remove('active'));
             content.querySelectorAll('.tabs-panel').forEach(p => p.classList.remove('active'));
@@ -7228,65 +7185,56 @@ function renderTabsContainer(container, containerDef, manifest, pageTheme) {
             panel.classList.add('active');
             setTimeout(() => resizeChartsIn(panel), 50);
         });
-
         nav.appendChild(tabBtn);
         content.appendChild(panel);
     });
-
     div.appendChild(nav);
     div.appendChild(content);
     container.appendChild(div);
     setTimeout(() => resizeChartsIn(content), 50);
 }
-
 function renderAccordionContainer(container, containerDef, manifest, pageTheme) {
     const div = document.createElement('div');
     div.setAttribute('data-name', containerDef.name);
     applyDesignTokens(div, containerDef, false, manifest);
     div.className = 'report-container container-accordion';
-
     const styles = containerDef.styles || {};
     const opts = containerDef.options || {};
     const containerTheme = getStyle(styles, 'THEME') || pageTheme;
     const defaultOpen = (getOption(opts, 'DEFAULT_OPEN') || '').toLowerCase();
-
     const slotMap = containerDef.slotMap || {};
     const slotKeys = Object.keys(slotMap);
-
     slotKeys.forEach(key => {
         const itemName = slotMap[key];
         const targetVisual = (manifest?.visuals || []).find(v => v.name.toLowerCase() === itemName.toLowerCase());
         const sectionTitle = (targetVisual && targetVisual.title) ? targetVisual.title : itemName;
-
         const itemEl = document.createElement('div');
         itemEl.className = 'accordion-item';
         const isOpen = defaultOpen && (key.toLowerCase() === defaultOpen || itemName.toLowerCase() === defaultOpen);
-        if (isOpen) itemEl.classList.add('open');
-
+        if (isOpen)
+            itemEl.classList.add('open');
         const headerEl = document.createElement('div');
         headerEl.className = 'accordion-header';
         headerEl.innerHTML = `<span>${escHtml(sectionTitle)}</span><span class="accordion-chevron">&#x25BC;</span>`;
-
         const contentEl = document.createElement('div');
         contentEl.className = 'accordion-content';
-
         if (targetVisual) {
             renderVisual(contentEl, targetVisual, containerTheme, manifest);
-        } else {
-            const nested = (manifest?.containers || []).find(c => c.name.toLowerCase() === itemName.toLowerCase());
-            if (nested) renderContainer(contentEl, nested, manifest, containerTheme);
         }
-
+        else {
+            const nested = (manifest?.containers || []).find(c => c.name.toLowerCase() === itemName.toLowerCase());
+            if (nested)
+                renderContainer(contentEl, nested, manifest, containerTheme);
+        }
         headerEl.addEventListener('click', () => {
             const opened = itemEl.classList.toggle('open');
-            if (opened) setTimeout(() => resizeChartsIn(contentEl), 50);
+            if (opened)
+                setTimeout(() => resizeChartsIn(contentEl), 50);
         });
-
         itemEl.appendChild(headerEl);
         itemEl.appendChild(contentEl);
         div.appendChild(itemEl);
     });
-
     container.appendChild(div);
     setTimeout(() => resizeChartsIn(div), 50);
 }

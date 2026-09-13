@@ -18,6 +18,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Changed
 
+- Absolute and relative date controls now compile from strict TypeScript (`rt-controls-date.ts`).
+  Date restrictions, range validation, quick picks, and parameter updates retain their existing behavior.
+- Shared report page and container layouts now compile from strict TypeScript (`rt-layout.ts`).
+  Responsive layouts, physical pages, tabs, accordions, and drawers retain their existing behavior.
+- Shared report theme resolution and scoped design tokens now compile from strict TypeScript
+  (`rt-theme.ts`). CSS safety rules, theme selection, and generated executable behavior are unchanged.
 - Shared report runtime data loading and export readiness (`rt-data.ts`) now compiles from strict
   TypeScript. Row loading, binary Apache Arrow IPC stream parsing with automatic JSON fallback,
   deferred row detection, image settle waiting, export readiness lifecycle signalling, and lazy row
