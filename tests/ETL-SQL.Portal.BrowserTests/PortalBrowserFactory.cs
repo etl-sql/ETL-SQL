@@ -102,9 +102,12 @@ public sealed class PortalBrowserFactory : PortalWebFactory
     {
         host.Start();
 
-        // Bounded, so a host that never starts fails this run with a named cause instead of hanging
-        // it or handing back a half-started host for 178 tests to misreport.
+        // This waits on ApplicationStarted, the observable condition itself: it returns the instant
+        // the host signals. The sixty seconds is only the ceiling past which the run fails with a
+        // named cause, rather than hanging or handing back a half-started host for 178 tests to
+        // misreport. Nothing here sleeps and then asserts.
         var started = host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStarted;
+        // flaky-wait-budget-ok: a ceiling on an observable signal, not a budget guessed for a sleep.
         if (!started.WaitHandle.WaitOne(TimeSpan.FromSeconds(60)))
         {
             throw new TimeoutException(

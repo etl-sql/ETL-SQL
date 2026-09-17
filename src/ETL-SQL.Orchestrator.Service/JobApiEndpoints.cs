@@ -66,6 +66,39 @@ namespace ETL_SQL.Orchestrator.Service
     {
         private static readonly ConcurrentDictionary<string, JobEntry> _jobs = new();
         private static readonly DateTime _startTime = DateTime.UtcNow;
+        private static readonly TimeSpan AdHocJobTtl = TimeSpan.FromHours(1);
+
+        private static void EvictStaleAdHocJobs()
+        {
+            var cutoff = DateTimeOffset.UtcNow - AdHocJobTtl;
+            foreach (var kvp in _jobs)
+            {
+                if (kvp.Value.CompletedAt.HasValue && kvp.Value.CompletedAt.Value < cutoff)
+                {
+                    if (_jobs.TryRemove(kvp.Key, out var removed))
+                    {
+                        try { removed.Cts.Dispose(); } catch (ObjectDisposedException) { }
+                    }
+                }
+            }
+
+            if (_jobs.Count > 1000)
+            {
+                var excess = _jobs.Values
+                    .Where(j => j.CompletedAt.HasValue)
+                    .OrderBy(j => j.CompletedAt!.Value)
+                    .Take(_jobs.Count - 1000)
+                    .ToList();
+
+                foreach (var old in excess)
+                {
+                    if (_jobs.TryRemove(old.JobId, out var removed))
+                    {
+                        try { removed.Cts.Dispose(); } catch (ObjectDisposedException) { }
+                    }
+                }
+            }
+        }
 
         public static void MapJobApi(this IEndpointRouteBuilder app)
         {
@@ -181,6 +214,7 @@ namespace ETL_SQL.Orchestrator.Service
             app.MapPost("/jobs", (HttpContext ctx, IConfiguration cfg, JobSubmitRequest request, IServiceScopeFactory scopeFactory, ILogger<Program> logger) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
+                EvictStaleAdHocJobs();
 
                 var caller = RequestCaller(ctx);
                 var jobId = Guid.NewGuid().ToString("N")[..8];
@@ -190,7 +224,16 @@ namespace ETL_SQL.Orchestrator.Service
 
                 logger.LogInformation("Job {JobId} submitted by {Actor} (label={Label})", jobId,
                     caller.AuditActor, ETL_SQL.Core.Common.LogSanitizer.Clean(request.Label));
-                _ = RunJobAsync(entry, request, ToExecutionIdentity(caller), scopeFactory, logger, cts.Token);
+                _ = RunJobAsync(entry, request, ToExecutionIdentity(caller), scopeFactory, logger, cts.Token)
+                    .ContinueWith(t =>
+                    {
+                        if (t.IsFaulted)
+                        {
+                            entry.Status = JobRunStatus.Failed;
+                            entry.ErrorMessage = t.Exception?.InnerException?.Message ?? "Unexpected fault before job execution started.";
+                            logger.LogError(t.Exception, "Job {JobId} faulted before execution started.", entry.JobId);
+                        }
+                    }, TaskContinuationOptions.OnlyOnFaulted);
 
                 return Results.Accepted($"/jobs/{jobId}", new { JobId = jobId });
             }).WithName("submitJob");
@@ -206,8 +249,11 @@ namespace ETL_SQL.Orchestrator.Service
 
                 logger.LogInformation("Cancelling job {JobId} by {Actor}",
                     ETL_SQL.Core.Common.LogSanitizer.Clean(id), RequestActor(ctx));
-                entry.Cts.Cancel();
-                entry.Status = JobRunStatus.Cancelled;
+                if (entry.Status is JobRunStatus.Queued or JobRunStatus.Running)
+                {
+                    try { entry.Cts.Cancel(); } catch (ObjectDisposedException) { }
+                    entry.Status = JobRunStatus.Cancelled;
+                }
                 return Results.Ok(new { JobId = id, Status = "Cancelled" });
             }).WithName("cancelJob");
 
@@ -2870,6 +2916,8 @@ namespace ETL_SQL.Orchestrator.Service
                     entry.RowsProcessed,
                     entry.PeakMemoryBytes,
                     entry.CpuTimeSeconds);
+                entry.CompletedAt = DateTimeOffset.UtcNow;
+                try { entry.Cts.Dispose(); } catch (ObjectDisposedException) { }
             }
         }
 
@@ -3193,6 +3241,7 @@ namespace ETL_SQL.Orchestrator.Service
             public double CpuTimeSeconds { get; set; }
             public string? ErrorMessage { get; set; }
             public string? ReportManifestJson { get; set; }
+            public DateTimeOffset? CompletedAt { get; set; }
         }
     }
 }

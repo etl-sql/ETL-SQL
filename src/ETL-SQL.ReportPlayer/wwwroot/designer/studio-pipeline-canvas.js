@@ -4,6 +4,10 @@
  * Edit the canonical source, then run: node .\scripts\sync-assets.js
  */
 
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-pipeline-canvas.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -22,9 +26,28 @@
  * It obeys the authoring component contract (see studio-authoring.js): host-neutral, no network of
  * its own, and it never writes to the document — it reports intent through the injected callbacks.
  */
-
 import { escapeHtml, noteMarkup } from './studio-authoring-ui.js';
-
+/**
+ * @param {*} el
+ * @returns {HTMLElement}
+ */
+function asHtml(el) {
+    return el;
+}
+/**
+ * @param {*} el
+ * @returns {HTMLInputElement | HTMLTextAreaElement}
+ */
+function asInput(el) {
+    return el;
+}
+/**
+ * @param {*} el
+ * @returns {HTMLSelectElement}
+ */
+function asSelect(el) {
+    return el;
+}
 /**
  * The palette, grouped the way an author looks for something.
  *
@@ -41,24 +64,6 @@ import { escapeHtml, noteMarkup } from './studio-authoring-ui.js';
  * `needsLoop` marks the two entries the engine only accepts inside a loop. They are still shown —
  * finding out BREAK exists is the point of a palette — and they say so on the chip rather than
  * appearing to work and failing at run time.
- */
-/**
- * One chip in the palette. `id` is a task kind the host can write, not a free string.
- *
- * `container` marks a kind that holds other tasks; `needsLoop` marks one the engine refuses
- * outside a loop. Both mirror the predicates in PipelineTaskKinds.
- *
- * @typedef {{ id: PipelineTaskKind, label: string, glyph: string, hint: string, container?: boolean, needsLoop?: boolean }} PipelineTaskChip
- */
-
-/**
- * One drawer of the palette.
- *
- * @typedef {{ id: string, label: string, hint: string, kinds: ReadonlyArray<PipelineTaskChip> }} PipelineTaskGroup
- */
-
-/**
- * The palette, and the vocabulary the host can write, held to being the same list.
  *
  * `PipelineTaskKind` is generated from the C# enum (types/etlsql-contracts.generated.d.ts), so a
  * chip naming a kind no host can write now fails the type gate on the line that wrote it rather
@@ -66,6 +71,8 @@ import { escapeHtml, noteMarkup } from './studio-authoring-ui.js';
  * the host can write with no chip to create it — is not something a type can state about an array,
  * and stays a test: see PipelineTaskAuthoringService's palette contract tests.
  *
+ * @typedef {{ id: PipelineTaskKind, label: string, glyph: string, hint: string, container?: boolean, needsLoop?: boolean }} PipelineTaskChip
+ * @typedef {{ id: string, label: string, hint: string, kinds: ReadonlyArray<PipelineTaskChip> }} PipelineTaskGroup
  * @type {ReadonlyArray<PipelineTaskGroup>}
  */
 export const PIPELINE_TASK_GROUPS = Object.freeze([
@@ -244,21 +251,17 @@ export const PIPELINE_TASK_GROUPS = Object.freeze([
         ]),
     }),
 ]);
-
 /**
  * Every palette entry, flat.
  *
  * Kept as the exported name it has always had, because other modules look a kind up by id and do
  * not care which drawer it is filed under.
  */
-export const PIPELINE_TASK_KINDS = Object.freeze(
-    PIPELINE_TASK_GROUPS.flatMap(group => group.kinds));
-
+export const PIPELINE_TASK_KINDS = Object.freeze(PIPELINE_TASK_GROUPS.flatMap(group => group.kinds));
 /** The palette entry for a kind, or null when this build does not offer it. */
 export function taskKind(kind) {
     return PIPELINE_TASK_KINDS.find(entry => entry.id === String(kind || '').toLowerCase()) ?? null;
 }
-
 /**
  * The drag format a palette chip carries.
  *
@@ -267,7 +270,6 @@ export function taskKind(kind) {
  * has no such type and is left alone rather than being guessed at.
  */
 export const PALETTE_DRAG_TYPE = 'application/x-etlsql-task-kind';
-
 /** One drawer of the palette. */
 function paletteGroupMarkup(group) {
     return `<section class="etlsql-studio-palette-group" data-palette-group="${escapeHtml(group.id)}">
@@ -277,7 +279,6 @@ function paletteGroupMarkup(group) {
         </div>
     </section>`;
 }
-
 /**
  * One chip.
  *
@@ -295,12 +296,10 @@ function paletteChipMarkup(kind) {
         ${kind.needsLoop ? '<span class="etlsql-studio-task-chip-tag">in a loop</span>' : ''}
     </button>`;
 }
-
 /** True when this kind holds other tasks. */
 export function isContainerKind(kind) {
     return Boolean(PIPELINE_TASK_KINDS.find(entry => entry.id === String(kind || '').toLowerCase())?.container);
 }
-
 /**
  * When an edge hands over.
  *
@@ -308,14 +307,10 @@ export function isContainerKind(kind) {
  * the file as real control flow — a `BEGIN TRY` guard around the task being watched and an `IF`
  * around the task that waits — which is why each one says what it does to the script rather than
  * only what it means on the diagram.
- */
-/**
- * One edge condition offer.
  *
  * @typedef {{ id: PipelineEdgeCondition, label: string, summary: string, hint: string }} PipelineEdgeConditionOffer
+ * @type {ReadonlyArray<PipelineEdgeConditionOffer>}
  */
-
-/** @type {ReadonlyArray<PipelineEdgeConditionOffer>} */
 export const PIPELINE_EDGE_CONDITIONS = Object.freeze([
     Object.freeze({
         id: 'always',
@@ -348,22 +343,18 @@ export const PIPELINE_EDGE_CONDITIONS = Object.freeze([
         hint: 'Runs when your own condition is true, checked after that task.',
     }),
 ]);
-
 function edgeCondition(id) {
     return PIPELINE_EDGE_CONDITIONS.find(entry => entry.id === String(id || 'always').toLowerCase())
         ?? PIPELINE_EDGE_CONDITIONS[0];
 }
-
 /** What to call a kind the host reported, so a card can say what it is. */
 export function taskKindLabel(kind) {
     return taskKind(kind)?.label ?? 'Task';
 }
-
 /** True when the engine only accepts this kind inside a loop. */
 export function needsALoop(kind) {
     return Boolean(taskKind(kind)?.needsLoop);
 }
-
 /**
  * Renders the task toolbar and inspector into `host`, and makes labelled cards inside `canvas`
  * draggable.
@@ -395,38 +386,19 @@ export function needsALoop(kind) {
  * @param {*} [options.runtime] `{ rows, durationMs, note }` the last run reported for it.
  * @returns {{dispose: () => void}}
  */
-export function attachPipelineTaskEditing(host, canvas, {
-    tasks = [],
-    selectedId = null,
-    onSelect = () => {},
-    onAdd = async () => {},
-    onEdit = async () => {},
-    onConnect = async () => {},
-    onSetEdge = async () => {},
-    onDisconnect = async () => {},
-    onMove = async () => {},
-    onNest = async () => {},
-    onRemove = async () => {},
-    onRunTo = null,
-    onOpenLine = () => {},
-    scope = null,
-    runtime = null,
-} = {}) {
+export function attachPipelineTaskEditing(host, canvas, { tasks = [], selectedId = null, onSelect = () => { }, onAdd = async () => { }, onEdit = async () => { }, onConnect = async () => { }, onSetEdge = async () => { }, onDisconnect = async () => { }, onMove = async () => { }, onNest = async () => { }, onRemove = async () => { }, onRunTo = null, onOpenLine = () => { }, scope = null, runtime = null, } = {}) {
     const selected = tasks.find(task => sameId(task.id, selectedId)) || null;
-
     // What is being dragged, and what the gesture means: a palette chip being added, a card being
     // reordered, or a connector declaring a dependency. Held here rather than read back off the
     // document, because the drag payload is deliberately unreadable during dragover and a component
     // that queries the shell to find out what it is dragging has reached outside its own host.
     let dragging = null;
     let draggingKind = null;
-
     const listeners = [];
     const on = (element, type, handler) => {
         element.addEventListener(type, handler);
         listeners.push(() => element.removeEventListener(type, handler));
     };
-
     host.innerHTML = `
         <div class="etlsql-studio-pipeline-tools">
             <aside class="etlsql-studio-pipeline-palette" data-task-palette aria-label="Statements you can add">
@@ -437,22 +409,24 @@ export function attachPipelineTaskEditing(host, canvas, {
             <span class="etlsql-studio-pipeline-hint">${escapeHtml(hint(tasks, selected))}</span>
         </div>
         <div class="etlsql-studio-pipeline-inspector" data-task-inspector>${inspectorMarkup(selected, Boolean(onRunTo))}</div>`;
-
     // A click adds beside the selection; a drag decides where from where it lands. Both are kept:
     // the drag is the gesture the canvas is for, and the click is the one that works from a keyboard.
     for (const chip of host.querySelectorAll('[data-task-kind]')) {
-        const kind = taskKind(/** @type {HTMLElement} */ (chip).dataset.taskKind)?.id ?? null;
-        if (!kind) continue;
+        const kind = taskKind(asHtml(chip).dataset.taskKind)?.id ?? null;
+        if (!kind)
+            continue;
         on(chip, 'click', () => onAdd({ kind, after: selected?.id ?? null }));
-        on(chip, 'dragstart', event => {
+        on(chip, 'dragstart', (event) => {
             dragging = kind;
             draggingKind = 'palette';
-            event.dataTransfer.effectAllowed = 'copy';
-            // Both formats on purpose. The custom type is what the canvas tests for during dragover,
-            // where the payload itself is unreadable; the plain text is what makes the chip mean
-            // something when it is dropped into the script pane or another editor.
-            event.dataTransfer.setData(PALETTE_DRAG_TYPE, kind);
-            event.dataTransfer.setData('text/plain', kind);
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = 'copy';
+                // Both formats on purpose. The custom type is what the canvas tests for during dragover,
+                // where the payload itself is unreadable; the plain text is what makes the chip mean
+                // something when it is dropped into the script pane or another editor.
+                event.dataTransfer.setData(PALETTE_DRAG_TYPE, kind);
+                event.dataTransfer.setData('text/plain', kind);
+            }
             chip.classList.add('is-dragging-chip');
         });
         on(chip, 'dragend', () => {
@@ -460,94 +434,90 @@ export function attachPipelineTaskEditing(host, canvas, {
             draggingKind = null;
             chip.classList.remove('is-dragging-chip');
             canvas.classList.remove('is-drop-target');
-            for (const card of canvas.querySelectorAll('[data-task-key]')) card.classList.remove('is-drop-target');
+            for (const card of canvas.querySelectorAll('[data-task-key]'))
+                card.classList.remove('is-drop-target');
         });
     }
-
     const inspector = host.querySelector('[data-task-inspector]');
-    if (selected) {
+    if (selected && inspector) {
         inspector.insertAdjacentHTML('beforeend', scopeMarkup(scope, runtime));
         for (const link of inspector.querySelectorAll('[data-scope-line]')) {
-            on(link, 'click', () => onOpenLine(Number(/** @type {HTMLElement} */ (link).dataset.scopeLine) || 0));
+            on(link, 'click', () => onOpenLine(Number(asHtml(link).dataset.scopeLine) || 0));
         }
     }
-
-    const edit = inspector.querySelector('[data-task-edit]');
-    if (edit) on(edit, 'click', () => onEdit({ id: selected.id }));
-
-    const remove = inspector.querySelector('[data-task-remove]');
-    if (remove) on(remove, 'click', () => onRemove({ id: selected.id }));
-
-    // Absent rather than disabled on a host that does not offer it: a greyed-out Run is a promise
-    // the canvas cannot keep, and there is nothing the author could do here to earn it.
-    const runTo = inspector.querySelector('[data-task-run-to]');
-    if (runTo) on(runTo, 'click', () => onRunTo({ id: selected.id }));
-
-    const reveal = inspector.querySelector('[data-task-reveal]');
-    if (reveal) on(reveal, 'click', () => onOpenLine(selected.line));
-
-    const first = inspector.querySelector('[data-task-first]');
-    if (first) on(first, 'click', () => onMove({ id: selected.id, after: null }));
-
-    const unnest = inspector.querySelector('[data-task-unnest]');
-    if (unnest) on(unnest, 'click', () => onNest({ id: selected.id, container: null }));
-
-    for (const chip of inspector.querySelectorAll('[data-task-disconnect]')) {
-        on(chip, 'click', () => onDisconnect({ from: /** @type {HTMLElement} */ (chip).dataset.taskDisconnect, to: selected.id }));
+    if (inspector && selected) {
+        const edit = inspector.querySelector('[data-task-edit]');
+        if (edit)
+            on(edit, 'click', () => onEdit({ id: selected.id }));
+        const remove = inspector.querySelector('[data-task-remove]');
+        if (remove)
+            on(remove, 'click', () => onRemove({ id: selected.id }));
+        // Absent rather than disabled on a host that does not offer it: a greyed-out Run is a promise
+        // the canvas cannot keep, and there is nothing the author could do here to earn it.
+        const runTo = inspector.querySelector('[data-task-run-to]');
+        if (runTo && onRunTo)
+            on(runTo, 'click', () => onRunTo({ id: selected.id }));
+        const reveal = inspector.querySelector('[data-task-reveal]');
+        if (reveal)
+            on(reveal, 'click', () => onOpenLine(selected.line || 0));
+        const first = inspector.querySelector('[data-task-first]');
+        if (first)
+            on(first, 'click', () => onMove({ id: selected.id, after: null }));
+        const unnest = inspector.querySelector('[data-task-unnest]');
+        if (unnest)
+            on(unnest, 'click', () => onNest({ id: selected.id, container: null }));
+        for (const chip of inspector.querySelectorAll('[data-task-disconnect]')) {
+            on(chip, 'click', () => onDisconnect({ from: asHtml(chip).dataset.taskDisconnect, to: selected.id }));
+        }
+        // ── Edge conditions ──────────────────────────────────────────────────────
+        // Choosing `When…` does not send anything: the edge is not describable until the expression is
+        // typed, and writing a gate on an empty condition would be a change the author did not make.
+        for (const picker of inspector.querySelectorAll('[data-task-edge]')) {
+            const from = asHtml(picker).dataset.taskEdge;
+            const field = inspector.querySelector(`[data-task-expression="${cssEscape(from)}"]`);
+            on(picker, 'change', () => {
+                const chosen = edgeCondition(asSelect(picker).value).id;
+                if (chosen !== 'expression') {
+                    void onSetEdge({ from, to: selected.id, edge: chosen });
+                    return;
+                }
+                if (field) {
+                    asHtml(field).hidden = false;
+                    asHtml(field).focus();
+                    asInput(field).select();
+                }
+            });
+        }
+        for (const field of inspector.querySelectorAll('[data-task-expression]')) {
+            const from = asHtml(field).dataset.taskExpression;
+            const commit = () => {
+                const expression = asInput(field).value.trim();
+                if (!expression || expression === asHtml(field).dataset.taskExpressionValue)
+                    return;
+                void onSetEdge({ from, to: selected.id, edge: 'expression', expression });
+            };
+            on(field, 'keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commit();
+                }
+            });
+            on(field, 'blur', commit);
+        }
     }
-
-    // ── Edge conditions ──────────────────────────────────────────────────────
-    // Choosing `When…` does not send anything: the edge is not describable until the expression is
-    // typed, and writing a gate on an empty condition would be a change the author did not make.
-    for (const picker of inspector.querySelectorAll('[data-task-edge]')) {
-        const from = /** @type {HTMLElement} */ (picker).dataset.taskEdge;
-        const field = inspector.querySelector(`[data-task-expression="${cssEscape(from)}"]`);
-        on(picker, 'change', () => {
-            const chosen = edgeCondition(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (picker).value).id;
-            if (chosen !== 'expression') {
-                void onSetEdge({ from, to: selected.id, edge: chosen });
-                return;
-            }
-            if (field) {
-                /** @type {HTMLElement} */ (field).hidden = false;
-                /** @type {HTMLElement} */ (field).focus();
-                /** @type {HTMLInputElement | HTMLTextAreaElement} */ (field).select();
-            }
-        });
-    }
-
-    for (const field of inspector.querySelectorAll('[data-task-expression]')) {
-        const from = /** @type {HTMLElement} */ (field).dataset.taskExpression;
-        const commit = () => {
-            const expression = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (field).value.trim();
-            if (!expression || expression === /** @type {HTMLElement} */ (field).dataset.taskExpressionValue) return;
-            void onSetEdge({ from, to: selected.id, edge: 'expression', expression });
-        };
-        on(field, 'keydown', event => {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                commit();
-            }
-        });
-        on(field, 'blur', commit);
-    }
-
     // ── The cards ────────────────────────────────────────────────────────────
     // Only labelled cards take part. Everything else on the map is a projection stage: real, and
     // deliberately not draggable, because the canvas cannot edit it losslessly yet.
-
     const containers = new Set(tasks
         .filter(task => isContainerKind(task.kind))
         .map(task => String(task.id).toLowerCase()));
-
     const cards = [...canvas.querySelectorAll('[data-task-key]')];
     for (const card of cards) {
-        const id = /** @type {HTMLElement} */ (card).dataset.taskKey;
+        const id = asHtml(card).dataset.taskKey;
         card.classList.add('is-editable-task');
-        /** @type {HTMLElement} */ (card).draggable = true;
+        asHtml(card).draggable = true;
         card.classList.toggle('is-selected-task', sameId(id, selectedId));
         card.classList.toggle('is-container-task', containers.has(String(id).toLowerCase()));
-
         // Dragging the card body reorders; dragging this handle declares a dependency. Two gestures
         // because they mean different things: one moves a statement, the other writes a declaration
         // about what has to finish first.
@@ -563,22 +533,24 @@ export function attachPipelineTaskEditing(host, canvas, {
             handle.classList.add('etlsql-dag-connector');
             // The map paints a port the colour of the node type. A control is not decoration, so it
             // drops the inline colour and takes the accent every other control on this surface uses.
-            /** @type {HTMLElement} */ (handle).style.background = '';
-            /** @type {HTMLElement} */ (handle).dataset.taskConnector = id;
-            /** @type {HTMLElement} */ (handle).draggable = true;
-            /** @type {HTMLElement} */ (handle).tabIndex = 0;
+            asHtml(handle).style.background = '';
+            asHtml(handle).dataset.taskConnector = String(id ?? '');
+            asHtml(handle).draggable = true;
+            asHtml(handle).tabIndex = 0;
             handle.setAttribute('role', 'button');
-            /** @type {HTMLElement} */ (handle).title = `Drag onto another task to make it run after ${id}`;
+            asHtml(handle).title = `Drag onto another task to make it run after ${id}`;
             handle.setAttribute('aria-label', `Connect ${id} to another task`);
-            if (!existing) card.appendChild(handle);
-
-            on(handle, 'click', event => event.stopPropagation());
-            on(handle, 'dragstart', event => {
+            if (!existing)
+                card.appendChild(handle);
+            on(handle, 'click', (event) => event.stopPropagation());
+            on(handle, 'dragstart', (event) => {
                 event.stopPropagation();
                 dragging = id;
                 draggingKind = 'connect';
-                event.dataTransfer.effectAllowed = 'link';
-                event.dataTransfer.setData('text/plain', id);
+                if (event.dataTransfer) {
+                    event.dataTransfer.effectAllowed = 'link';
+                    event.dataTransfer.setData('text/plain', String(id ?? ''));
+                }
                 card.classList.add('is-connecting-task');
             });
             on(handle, 'dragend', () => {
@@ -588,13 +560,14 @@ export function attachPipelineTaskEditing(host, canvas, {
                 cards.forEach(other => other.classList.remove('is-drop-target'));
             });
         }
-
         on(card, 'click', () => onSelect(id));
-        on(card, 'dragstart', event => {
+        on(card, 'dragstart', (event) => {
             dragging = id;
             draggingKind = 'move';
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', id);
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', String(id ?? ''));
+            }
             card.classList.add('is-dragging-task');
         });
         on(card, 'dragend', () => {
@@ -603,53 +576,57 @@ export function attachPipelineTaskEditing(host, canvas, {
             card.classList.remove('is-dragging-task');
             cards.forEach(other => other.classList.remove('is-drop-target'));
         });
-        on(card, 'dragover', event => {
-            if (!dragging) return;
-            if (draggingKind !== 'palette' && sameId(id, dragging)) return;
+        on(card, 'dragover', (event) => {
+            if (!dragging)
+                return;
+            if (draggingKind !== 'palette' && sameId(id, dragging))
+                return;
             event.preventDefault();
             event.stopPropagation();
-            event.dataTransfer.dropEffect = draggingKind === 'connect' ? 'link'
-                : draggingKind === 'palette' ? 'copy' : 'move';
+            if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = draggingKind === 'connect' ? 'link'
+                    : draggingKind === 'palette' ? 'copy' : 'move';
+            }
             card.classList.add('is-drop-target');
         });
         on(card, 'dragleave', () => card.classList.remove('is-drop-target'));
-        on(card, 'drop', event => {
+        on(card, 'drop', (event) => {
             event.preventDefault();
             event.stopPropagation();
             card.classList.remove('is-drop-target');
-
             // A chip dropped on a container goes inside it and one dropped on a task goes after it.
             // Both are one request: where it was dropped decides where in the script it is written,
             // and nothing else about the drop is remembered.
             if (draggingKind === 'palette') {
-                const kind = event.dataTransfer.getData(PALETTE_DRAG_TYPE) || dragging;
-                if (!kind) return;
-                onAdd(containers.has(String(id).toLowerCase())
+                const kind = (event.dataTransfer?.getData(PALETTE_DRAG_TYPE) || dragging);
+                if (!kind)
+                    return;
+                void onAdd(containers.has(String(id).toLowerCase())
                     ? { kind, into: id, after: null }
                     : { kind, after: id, into: null });
                 return;
             }
-
-            const moved = event.dataTransfer.getData('text/plain') || dragging;
-            if (!moved || sameId(moved, id)) return;
-
+            const moved = event.dataTransfer?.getData('text/plain') || dragging;
+            if (!moved || sameId(moved, id))
+                return;
             if (draggingKind === 'connect') {
                 // Dropping a connector onto a task declares that the task waits for the one the drag
                 // started from. Several of those on one task is a join, never concurrency.
-                onConnect({ from: moved, to: id });
-            } else if (containers.has(String(id).toLowerCase())) {
+                void onConnect({ from: moved, to: id });
+            }
+            else if (containers.has(String(id).toLowerCase())) {
                 // Dropping a task into a container puts it inside — the gesture matches the picture.
                 // To make a task run *after* a container instead, drag its connector onto it: that
                 // says "wait for this", which is the thing a container can actually be waited on for.
-                onNest({ id: moved, container: id });
-            } else {
+                void onNest({ id: moved, container: id });
+            }
+            else {
                 // Dropping a task onto another means "run after this one". Order in the script is the
                 // dependency; nothing here implies concurrency either.
-                onMove({ id: moved, after: id });
+                void onMove({ id: moved, after: id });
             }
         });
     }
-
     // Every other card on the map is a projection stage the canvas cannot author. It keeps its shape
     // and its position — it is a true picture of the script — and its round dots stop pretending to
     // be controls. They looked exactly like the handle that does something, and dragging one was the
@@ -661,44 +638,47 @@ export function attachPipelineTaskEditing(host, canvas, {
     for (const card of canvas.querySelectorAll('.etlsql-dag-card:not([data-task-key])')) {
         for (const port of card.querySelectorAll('.card-port-left, .card-port-right')) {
             port.classList.add('is-anchor-port');
-            /** @type {HTMLElement} */ (port).style.background = '';
+            asHtml(port).style.background = '';
         }
         card.classList.add('is-projection-stage');
-        if (!/** @type {HTMLElement} */ (card).title) {
-            /** @type {HTMLElement} */ (card).title = 'This statement is on the map because the script has it. The canvas cannot '
+        if (!asHtml(card).title) {
+            asHtml(card).title = 'This statement is on the map because the script has it. The canvas cannot '
                 + 'author this one yet, so it is shown rather than editable.';
         }
     }
-
     // An editable card's left dot is an anchor too — the point an incoming line meets it — so it is
     // drawn the same muted way. After this, the only filled dot anywhere on the map is the connector
     // handle, and a dot that looks like a control is one.
     for (const card of cards) {
         const inbound = card.querySelector('.card-port-left');
-        if (!inbound) continue;
+        if (!inbound)
+            continue;
         inbound.classList.add('is-anchor-port');
-        /** @type {HTMLElement} */ (inbound).style.background = '';
+        asHtml(inbound).style.background = '';
     }
-
     // A chip dropped on empty canvas goes at the end of the script. That is the one place on the map
     // with no statement under the cursor, so it is the only drop that can mean "just add it".
-    on(canvas, 'dragover', event => {
-        if (draggingKind !== 'palette' || !dragging) return;
+    on(canvas, 'dragover', (event) => {
+        if (draggingKind !== 'palette' || !dragging)
+            return;
         event.preventDefault();
-        event.dataTransfer.dropEffect = 'copy';
+        if (event.dataTransfer)
+            event.dataTransfer.dropEffect = 'copy';
         canvas.classList.add('is-drop-target');
     });
-    on(canvas, 'dragleave', event => {
-        if (event.target === canvas) canvas.classList.remove('is-drop-target');
+    on(canvas, 'dragleave', (event) => {
+        if (event.target === canvas)
+            canvas.classList.remove('is-drop-target');
     });
-    on(canvas, 'drop', event => {
+    on(canvas, 'drop', (event) => {
         canvas.classList.remove('is-drop-target');
-        if (draggingKind !== 'palette') return;
+        if (draggingKind !== 'palette')
+            return;
         event.preventDefault();
-        const kind = event.dataTransfer.getData(PALETTE_DRAG_TYPE) || dragging;
-        if (kind) onAdd({ kind, after: null, into: null });
+        const kind = (event.dataTransfer?.getData(PALETTE_DRAG_TYPE) || dragging);
+        if (kind)
+            void onAdd({ kind, after: null, into: null });
     });
-
     return {
         dispose: () => {
             listeners.forEach(off => off());
@@ -706,11 +686,9 @@ export function attachPipelineTaskEditing(host, canvas, {
         },
     };
 }
-
 function sameId(left, right) {
     return String(left ?? '').toLowerCase() === String(right ?? '').toLowerCase();
 }
-
 function hint(tasks, selected) {
     if (!tasks.length) {
         return 'Nothing on the map yet. Drag a statement from the palette onto it — the script it writes '
@@ -722,18 +700,16 @@ function hint(tasks, selected) {
     }
     return `${selected.id} selected. Drag it onto another task to run it after that one, then set when the edge hands over.`;
 }
-
 function inspectorMarkup(task, runnable) {
     if (!task) {
         return noteMarkup([
             'Pick a task to edit it, or add one from the palette. Every task is one labelled statement, '
-            + 'so the label — like ',
+                + 'so the label — like ',
             { code: 'load_orders:' },
             ' — is what the canvas tracks it by. Other stages on this map come from statements the '
-            + 'canvas does not edit yet, so they are shown but not draggable.',
+                + 'canvas does not edit yet, so they are shown but not draggable.',
         ], 'info');
     }
-
     const detail = task.kind === 'execution' && task.connection
         ? [{ strong: taskKindLabel(task.kind) }, ' on ', { code: task.connection }]
         : task.kind === 'foreach' && task.collection
@@ -741,11 +717,9 @@ function inspectorMarkup(task, runnable) {
             : task.kind === 'for' && task.variable
                 ? [{ strong: taskKindLabel(task.kind) }, ' on ', { code: task.variable }]
                 : [{ strong: taskKindLabel(task.kind) }];
-
     if (task.container) {
         detail.push(' · inside ', { code: task.container });
     }
-
     return `
         <div class="etlsql-studio-pipeline-selected">
             <span class="etlsql-studio-pipeline-selected-name">${escapeHtml(task.id)}</span>
@@ -765,7 +739,6 @@ function inspectorMarkup(task, runnable) {
             <button type="button" class="etlsql-studio-btn is-danger" data-task-remove>Delete</button>
         </div>`;
 }
-
 /**
  * What the selected task waits for, each one removable.
  *
@@ -779,36 +752,32 @@ function dependencyMarkup(task) {
         return `<p class="etlsql-studio-pipeline-deps-empty">Runs in script order. Drag another task's
             connector onto this one to make it wait for that task.</p>`;
     }
-
     // Read as a list of prerequisites, each with the condition it hands over on. Several of them is
     // a join — this task runs when all of them are satisfied — and never an instruction to run
     // anything at the same time.
-
     return `<div class="etlsql-studio-pipeline-deps">
         <span>${dependencies.length === 1 ? 'Waits for' : `Waits for all ${dependencies.length}`}</span>
         ${dependencies.map(dependencyRow).join('')}
     </div>`;
 }
-
 /**
  * The host reports a dependency as an object, but an older host — or a cached response written
  * before conditional edges existed — reports a bare label. Both mean "waits for this task", so both
  * are read; guessing a condition for the bare form would put a gate in the script nobody asked for.
  */
 function normalizeDependency(entry) {
-    if (typeof entry === 'string') return { id: entry, condition: 'always', expression: null };
+    if (typeof entry === 'string')
+        return { id: entry, condition: 'always', expression: null };
     return {
         id: String(entry?.id ?? ''),
         condition: String(entry?.condition ?? 'always').toLowerCase(),
         expression: entry?.expression ?? null,
     };
 }
-
 function dependencyRow(dependency) {
     const condition = edgeCondition(dependency.condition);
     const expression = dependency.expression ?? '';
     const isExpression = condition.id === 'expression';
-
     return `<span class="etlsql-studio-dep-chip is-${escapeHtml(condition.id)}">
         <code>${escapeHtml(dependency.id)}</code>
         <select data-task-edge="${escapeHtml(dependency.id)}"
@@ -827,7 +796,6 @@ function dependencyRow(dependency) {
             aria-label="Stop waiting for ${escapeHtml(dependency.id)}" title="Remove this dependency">&times;</button>
     </span>`;
 }
-
 /**
  * What the selected task can see from where it sits, and what the last run said about it.
  *
@@ -845,17 +813,14 @@ function scopeMarkup(scope, runtime) {
             <p class="etlsql-studio-pipeline-scope-empty">Reading the script…</p>
         </div>`;
     }
-
     if (scope.resolved === false) {
         return `<div class="etlsql-studio-pipeline-scope" data-task-scope>
             <span class="etlsql-studio-pipeline-scope-head">In scope here</span>
             ${noteMarkup([scope.error || 'The script could not be read.'], 'warning')}
         </div>`;
     }
-
     const variables = scope.variables ?? [];
     const tempTables = scope.tempTables ?? [];
-
     const body = !variables.length && !tempTables.length
         ? `<p class="etlsql-studio-pipeline-scope-empty">Nothing yet. Everything this task reads has to be
             declared or staged above it — the engine runs the script top to bottom.</p>`
@@ -865,18 +830,15 @@ function scopeMarkup(scope, runtime) {
            ${tempTables.length ? `<ul class="etlsql-studio-scope-list">
                 ${tempTables.map(scopeTempRow).join('')}
             </ul>` : ''}`;
-
     return `<div class="etlsql-studio-pipeline-scope" data-task-scope>
         <span class="etlsql-studio-pipeline-scope-head">In scope here</span>
         ${body}
         ${runtimeMarkup(runtime)}
     </div>`;
 }
-
 function scopeVariableRow(variable) {
     const origin = variable.origin === 'loop' ? 'per item'
         : variable.origin === 'assigned' ? 'set' : 'declared';
-
     return `<li class="etlsql-studio-scope-item is-variable">
         <button type="button" class="etlsql-studio-scope-name" data-scope-line="${escapeHtml(String(variable.line ?? 0))}"
             title="Show line ${escapeHtml(String(variable.line ?? 0))} in the script"><code>${escapeHtml(variable.name)}</code></button>
@@ -885,20 +847,17 @@ function scopeVariableRow(variable) {
         <span class="etlsql-studio-scope-origin">${escapeHtml(origin)}</span>
     </li>`;
 }
-
 function scopeTempRow(table) {
     const columns = table.columns ?? [];
-
     return `<li class="etlsql-studio-scope-item is-temp">
         <button type="button" class="etlsql-studio-scope-name" data-scope-line="${escapeHtml(String(table.line ?? 0))}"
             title="Show line ${escapeHtml(String(table.line ?? 0))} in the script"><code>${escapeHtml(table.name)}</code></button>
         ${columns.length
-            ? `<span class="etlsql-studio-scope-type">${escapeHtml(columns.map(column => column.name).join(', '))}</span>`
-            : ''}
+        ? `<span class="etlsql-studio-scope-type">${escapeHtml(columns.map(column => column.name).join(', '))}</span>`
+        : ''}
         <span class="etlsql-studio-scope-origin">${escapeHtml(table.origin || '')}</span>
     </li>`;
 }
-
 /**
  * What the last run measured here.
  *
@@ -910,18 +869,20 @@ function runtimeMarkup(runtime) {
         return `<p class="etlsql-studio-pipeline-scope-empty">Row counts and spill appear here after a run
             reports them for this task.</p>`;
     }
-
     const parts = [];
-    if (Number.isFinite(runtime.rows)) parts.push(`${runtime.rows.toLocaleString()} row${runtime.rows === 1 ? '' : 's'}`);
-    if (Number.isFinite(runtime.durationMs)) parts.push(`${Math.round(runtime.durationMs)} ms`);
-    if (runtime.status) parts.push(String(runtime.status));
-
+    if (typeof runtime.rows === 'number' && Number.isFinite(runtime.rows)) {
+        parts.push(`${runtime.rows.toLocaleString()} row${runtime.rows === 1 ? '' : 's'}`);
+    }
+    if (typeof runtime.durationMs === 'number' && Number.isFinite(runtime.durationMs)) {
+        parts.push(`${Math.round(runtime.durationMs)} ms`);
+    }
+    if (runtime.status)
+        parts.push(String(runtime.status));
     return `<p class="etlsql-studio-pipeline-scope-runtime">
         <span>Last run</span> ${escapeHtml(parts.join(' · '))}
         ${runtime.note ? `<em>${escapeHtml(runtime.note)}</em>` : ''}
     </p>`;
 }
-
 /**
  * What a container is, said where the author is looking at one.
  *
@@ -930,15 +891,14 @@ function runtimeMarkup(runtime) {
  * container cannot express.
  */
 function containerNote(task) {
-    if (!isContainerKind(task.kind)) return '';
-
+    if (!task.kind || !isContainerKind(task.kind))
+        return '';
     if (task.kind === 'parallel') {
         return noteMarkup([
             'Everything dropped in here starts at the same time. That means branches cannot wait for '
-            + 'each other — to order two of them, move one out of the block.',
+                + 'each other — to order two of them, move one out of the block.',
         ], 'warning');
     }
-
     if (task.kind === 'foreach') {
         return noteMarkup([
             'Everything dropped in here runs once per item, in order, with ',
@@ -946,7 +906,6 @@ function containerNote(task) {
             ' bound to the current one. BREAK leaves the loop; CONTINUE starts the next item.',
         ], 'info');
     }
-
     if (task.kind === 'for') {
         return noteMarkup([
             'Everything dropped in here runs once per number, with ',
@@ -954,29 +913,25 @@ function containerNote(task) {
             ' holding it. BREAK leaves the loop; CONTINUE starts the next number.',
         ], 'info');
     }
-
     if (task.kind === 'while') {
         return noteMarkup([
             'Everything dropped in here runs again for as long as the condition holds — so something '
-            + 'inside has to change what the condition reads, or the loop never ends. BREAK leaves it.',
+                + 'inside has to change what the condition reads, or the loop never ends. BREAK leaves it.',
         ], 'info');
     }
-
     if (task.kind === 'if') {
         return noteMarkup([
             'Everything dropped in here runs only when the condition is true. An ',
             { code: 'ELSE' },
             ' branch is written in the script rather than on the canvas: the canvas tracks one block '
-            + 'per label, so it would have no way to say which of two you dropped into.',
+                + 'per label, so it would have no way to say which of two you dropped into.',
         ], 'info');
     }
-
     return noteMarkup([
         'Everything dropped in here commits as one unit. If any of it fails, the whole scope is '
-        + 'rolled back and the error is re-thrown.',
+            + 'rolled back and the error is re-thrown.',
     ], 'info');
 }
-
 /** `CSS.escape` where the host has it, and a conservative fallback where it does not. */
 function cssEscape(value) {
     const text = String(value ?? '');

@@ -16,7 +16,143 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - The browser sources are linted. `eslint.config.mjs` at the repository root points `eslint:recommended` at the canonical shared assets and the Portal's own modules — the same sources the type gate covers — and `node scripts/lint-browser.mjs` gates them from pre-push and CI against `browser-lint-baseline.txt`, on the same shrink-only ratchet as the type baseline. A file ESLint cannot parse is never baselined.
 
+### Changed
+
+- Shared toast, confirmation, and prompt dialogs now compile from strict TypeScript
+  (`feedback.ts`), preserving classic-script loading and existing behavior.
+- Shared report visuals now compile from strict TypeScript (`rt-visual.ts`), including visual
+  dispatch, maximization, KPI cards, text, images, and HTML sanitization.
+- Report headers, navigation, parameter prompts, dialogs, and pipeline consoles now compile from
+  strict TypeScript (`rt-chrome.ts`) with unchanged executable behavior.
+- Shared report actions now compile from strict TypeScript (`rt-actions.ts`). Parameter updates,
+  navigation, visual refresh, and script execution preserve their existing executable behavior.
+- Slicer, slider, search, checkbox, textbox, numberbox, and button controls now compile from strict
+  TypeScript (`rt-controls-input.ts`). Parameter updates, validation, and accessible state retain
+  their existing behavior.
+- Absolute and relative date controls now compile from strict TypeScript (`rt-controls-date.ts`).
+  Date restrictions, range validation, quick picks, and parameter updates retain their existing behavior.
+- Shared report page and container layouts now compile from strict TypeScript (`rt-layout.ts`).
+  Responsive layouts, physical pages, tabs, accordions, and drawers retain their existing behavior.
+- Shared report theme resolution and scoped design tokens now compile from strict TypeScript
+  (`rt-theme.ts`). CSS safety rules, theme selection, and generated executable behavior are unchanged.
+- Shared report runtime data loading and export readiness (`rt-data.ts`) now compiles from strict
+  TypeScript. Row loading, binary Apache Arrow IPC stream parsing with automatic JSON fallback,
+  deferred row detection, image settle waiting, export readiness lifecycle signalling, and lazy row
+  counters retain their existing behavior while maintaining full compatibility with the single-file
+  offline bundle concatenator.
+- Shared report runtime network transport and parameter updates (`rt-transport.ts`) now compiles
+  from strict TypeScript. Network requests (`fetchJson`, `fetchText`), streaming responses (`fetchStream`),
+  interactive parameter updates (`updateParameters`), and live data export readiness callbacks (`whenExportReady`)
+  retain their existing behavior while maintaining full compatibility with the single-file offline bundle
+  concatenator and zero production debug logging.
+- Shared report runtime host mode and session state (`rt-state.ts`) now compiles from strict
+  TypeScript. Offline host detection, web mode, VS Code webview integration, interactive state,
+  frame scheduling, API base path normalization, parameter stores, and manifest lifecycle accessors
+  retain their existing behavior while maintaining full compatibility with the single-file offline bundle
+  concatenator.
+- Studio's guided authoring surfaces and wizard dialogs (`designer/studio-authoring.ts`) now
+  compile from strict TypeScript. Guided authoring dialogs, pipeline task editors, run plan confirmation,
+  chart builders, step-by-step authoring wizards (choose data, parameters, details, totals, furniture,
+  preview, export, visuals, cross-filter), data sampling checks, and visual source bindings retain their
+  existing behavior while enforcing host neutrality, canonical `mutate` mechanics, pre-sanitized HTML
+  guarantees, and JSDoc typedef blocks.
+- Studio's connection authoring wizard (`designer/connection-wizard.ts`) now compiles from strict
+  TypeScript. Connector schemas, option descriptors, gateway resource discovery, shared connections,
+  reachability diagnostics, connection string parsing, Zero-Trust path security guardrails, and
+  client-side AES-GCM (v2) password encryption retain their existing behavior while maintaining
+  JSDoc typedef blocks for downstream callers.
+- Studio's pipeline execution map and canvas editing service (`designer/studio-pipeline-canvas.ts`)
+  now compiles from strict TypeScript. Task palette drawers, chips, loop/container predicates,
+  edge conditions, dependency joins, scope inspection, and drag-and-drop editing handles retain
+  their existing behavior while preserving JSDoc typedef blocks for remaining callers.
+- Studio's script workbench service (`designer/script-workbench.ts`) now compiles from strict
+  TypeScript. The workbench container, sidebar sections, schema tree explorer, session variables,
+  git actions, execution controls, flow/preview overlays, and formatter settings drawer retain
+  their existing behavior while maintaining JSDoc typedef contracts for downstream callers.
+- Studio's script editor service (`designer/script-editor.ts`) now compiles from strict TypeScript.
+  CodeMirror integration, editor handles, options, diagnostics, spans, completion items, and hover
+  information retain their existing behavior while preserving JSDoc typedef comments for downstream
+  JavaScript callers.
+- Studio's lineage DAG layout and rendering service (`designer/dag.ts`) now compiles from strict
+  TypeScript. Layered Sugiyama-inspired graph layout, lineage reach, conditional edge styling,
+  swimlane flattening, compact DAG rendering, and connecting lines retain their existing behavior.
+- Studio's visual format inspector service (`designer/visual-format-inspector.ts`) now compiles
+  from strict TypeScript. Title, subtitle, axis, conditional rule, field format, and visual formatting
+  options retain their existing behavior.
+- Studio's run results and execution trace service (`designer/run-results.ts`) now compiles
+  from strict TypeScript. Secret redaction, trace event normalization, diagnostic guidance,
+  result grid pagination, and CSV/XLSX export retain their existing behavior.
+- Studio's visual preview and role mapping service (`designer/visual-preview.ts`) now compiles
+  from strict TypeScript. Visual roles, palette grouping, aggregate expressions, source generation,
+  sample grouping, and sample rendering across chart types retain their existing behavior.
+- Studio's document context and workbench state module (`designer/studio-state.ts`) now compiles
+  from strict TypeScript. Document contexts, workspace file tracking, catalog reports, capability sets,
+  and context store resolution retain their existing behavior.
+- Studio's SQL mutation and filter persistence service (`designer/studio-sql-mutations.ts`) now
+  compiles from strict TypeScript. Filter contracts, target resolution, query composition, patch queues,
+  and canonical report/pipeline mutations retain their existing behavior.
+- Studio's data sampling and package hydration helpers (`designer/studio-data.ts`) now compile
+  from strict TypeScript. Column resolution, active filtering, manifest canvas hydration, and sample
+  loading retain their existing behavior.
+- The rptsql CodeMirror language definition (`designer/rptsql-language.ts`) now compiles from
+  strict TypeScript. Keyword classification sets, stream tokenizer matching, and theme highlight
+  styles retain their existing behavior.
+- Studio's embedded query workbench now compiles from strict TypeScript, using generated
+  parse/run contracts and typed editor callbacks. Query and preview behavior is preserved.
+- Studio's recipe catalogue, route constants, and starter templates now compile from strict
+  TypeScript. Exported values and template text are unchanged.
+- Studio's shared SQL-preview, inline-note, and sample-grid helpers now compile from strict
+  TypeScript with typed presentation inputs. Existing markup and escaping behavior are preserved.
+- The designer's HTML-preview sanitizer now compiles from strict TypeScript with typed DOM
+  inputs and attribute rules. Existing preview sanitization behavior is preserved.
+- Studio's credential-save helper now compiles from strict TypeScript with typed detection
+  findings and encryption callbacks. Secret detection and save behavior are unchanged.
+- Studio's document lease lifecycle now compiles from strict TypeScript. Renewal, lease-loss
+  handling, release flags, and disposal behavior remain unchanged.
+
+- Studio's host adapter now compiles from strict TypeScript with typed host options and capability
+  state. Existing fetch overrides, header precedence, and host availability decisions are preserved.
+
+- Studio's side-by-side Git diff helper now compiles from strict TypeScript with typed operations
+  and output rows. Alignment and the large-file fallback retain their existing behavior.
+
+- Editor toolbar helpers now compile from strict TypeScript, including their import of the migrated
+  designer helpers. Existing button markup, accessibility labels, and JavaScript URLs are preserved.
+
+- The designer's shared escaping helpers now compile from strict TypeScript at the same JavaScript
+  URL. Both existing escaping behaviors are preserved.
+
+- The report runtime's utility module is now authored in strict TypeScript. Asset sync compiles it
+  to the existing JavaScript URL before generating the offline bundle and host copies. Drift checks
+  reject stale output; .NET builds still consume checked-in assets without Node.
+
+- Browser sources are split by concern. The designer has 11 modules, and the report runtime has
+  a 356-line entry plus 16 parts. Online hosts load ES modules; offline snapshots embed a
+  generated, drift-gated bundle. The VS Code preview CSP permits sibling modules. The runtime
+  payload budget counts all parts: separate gzip compression adds 10,787 bytes (11.3%) while raw
+  JavaScript shrinks by 27,271 bytes. Stateful designer and Studio closures remain unchanged.
+
 ### Fixed
+
+- Browser action expressions and conditional formatting now parse `<>` as inequality. Equal values
+  no longer produce an incorrect result because the operator was split into `<` and `>`.
+- Orchestrator ad-hoc job execution disposes cancellation tokens on completion, evicts stale completed jobs via a 1-hour retention policy, and handles pre-try faults so submissions do not hang in queued state.
+- FlatFile and SMTP connectors enforce execution context presence during path resolution, preventing unvalidated path access when context is missing.
+- Live TUI visualizer and execution tree demo cancel and dispose cancellation token sources cleanly, including on evaluation failure.
+- Governance script analysis logs exceptions when linting instead of silently swallowing errors.
+- Portal storage usage sampler catches and records unexpected sampling failures, preventing unhandled background service faults.
+- Admin catalog and dataset management UIs validate and coerce numeric pagination and profiling statistics before inserting into the DOM.
+- Removed extraneous debug traces from the production report transport and layout modules.
+
+- Closing a Studio report while its workflow detection is pending no longer lets the late response
+  hide Home or repaint the editor for the closed document.
+
+- Browser tests wait for the designer's initial fixture before switching to the custom chart,
+  then wait for rendered controls instead of fixed delays. Desktop journey fixture commits
+  disable signing only in their temporary repository, avoiding dependency on developer keys.
+
+- Pre-push builds the selected configuration before running fast tests, preventing stale test
+  binaries from producing a false pass or failure.
 
 - Orchestrator host and engine logs now share configured application log paths, rolling limits, retention, minimum levels, and text or JSON formatting.
 - Operational metrics aggregate audit backlog sizes and execution timings in the database, avoiding payload-sized allocations during collector outages.

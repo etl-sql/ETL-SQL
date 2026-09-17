@@ -1,3 +1,7 @@
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/run-results.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -5,27 +9,25 @@
  * run-results.js — split out of designer.js, TODO.md §2.
  * Script run results: trace normalization, the results panel, and CSV/XLSX export.
  */
-
 import { escapeHtml } from './designer-util.js';
 import { renderCompactDag, updateDagLines } from './dag.js';
-
 export function redactSecrets(text) {
-    if (!text || typeof text !== 'string') return text;
+    if (!text || typeof text !== 'string')
+        return text;
     return text
         .replace(/\b(USE\s+PASSWORD|PASSWORD|PWD|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCESS_KEY|ACCESSKEY|ACCOUNT_KEY|ACCOUNTKEY|SAS_TOKEN|PASSPHRASE|KEY_FILE)\s*=\s*(['"]?)[^'"\s,;)]*\2/gi, '$1 = $2********$2')
         .replace(/\bUSE\s+PASSWORD\s+(?!PROMPT\b)(['"])[^'"\s;]+\1/gi, 'USE PASSWORD $1********$1')
         .replace(/\b(ENC|DPAPI-M|DPAPI|MACHINE|SECRET|CAPABILITY|SHARED):[A-Za-z0-9+/=_:.-]+/gi, '$1:********')
         .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer ********');
 }
-
 export function normalizeRunTrace(result, script) {
-    if (Array.isArray(result?.trace)) return result.trace;
+    if (Array.isArray(result?.trace))
+        return result.trace;
     const isSuccess = result?.success !== false;
     const rows = Array.isArray(result?.rows) ? result.rows : [];
     const columns = Array.isArray(result?.columns) ? result.columns : [];
-    const elapsedMs = Number.isFinite(result?.elapsedMs) ? result.elapsedMs : 0;
+    const elapsedMs = Number.isFinite(result?.elapsedMs) ? result?.elapsedMs : 0;
     const message = redactSecrets(result?.message || (rows.length ? `Returned ${rows.length} rows.` : 'No rows returned.'));
-
     // Annotated, not inferred: TypeScript would otherwise take the union of these three literals
     // as the element type and report every later `push` of a different event shape as an error.
     /** @type {Array<{type: string, [key: string]: *}>} */
@@ -34,50 +36,45 @@ export function normalizeRunTrace(result, script) {
         { type: 'status', status: isSuccess ? 'running' : 'failed' },
         { type: 'message', level: 'sys', text: 'Designer run started.' }
     ];
-
     if (Array.isArray(result?.messages)) {
         result.messages.forEach(m => {
             const raw = typeof m === 'string' ? m : (m.text || m.message || '');
             trace.push({ type: 'message', level: 'info', text: redactSecrets(raw) });
         });
     }
-
     if (Array.isArray(result?.diagnostics)) {
         result.diagnostics.forEach(d => {
             const rawMsg = redactSecrets(d.message || '');
-            trace.push({ type: 'message', level: d.severity?.toLowerCase() === 'error' ? 'error' : 'warn', text: `[${d.code || 'Error'}] Line ${d.line || 0}: ${rawMsg}` });
+            trace.push({ type: 'message', level: d.severity?.toString().toLowerCase() === 'error' ? 'error' : 'warn', text: `[${d.code || 'Error'}] Line ${d.line || 0}: ${rawMsg}` });
         });
     }
-
     // Prefer the engine's real execution tree (ExecutionResult.ExecutionTree snapshot);
     // fall back to a single summary node for hosts that don't return one yet.
     const pipeline = Array.isArray(result?.pipeline) && result.pipeline.length
         ? result.pipeline
         : [{ id: '1', name: 'Execute script', status: isSuccess ? 'Completed' : 'Failed', rowsProcessed: rows.length, durationMs: elapsedMs, isParallelBlock: false, children: [] }];
     trace.push({ type: 'progress', data: pipeline });
-
     if (Array.isArray(result?.lineage)) {
         trace.push({ type: 'lineage', data: result.lineage });
     }
-
     if (isSuccess) {
         trace.push({ type: 'message', level: rows.length ? 'info' : 'warn', text: message });
         trace.push({ type: 'message', level: 'sys', text: redactSecrets(String(script || '').trim().replace(/\s+/g, ' ')).slice(0, 180) });
         trace.push({ type: 'results', columns, rows });
         trace.push({ type: 'performance', metrics: {
-            executionMs: elapsedMs,
-            rowsProcessed: rows.length,
-            memoryMb: 0,
-            statements: [{ type: 'SELECT', totalMs: elapsedMs }],
-        } });
+                executionMs: elapsedMs,
+                rowsProcessed: rows.length,
+                memoryMb: 0,
+                statements: [{ type: 'SELECT', totalMs: elapsedMs }],
+            } });
         trace.push({ type: 'done', exitCode: 0 });
-    } else {
+    }
+    else {
         trace.push({ type: 'message', level: 'error', text: message });
         trace.push({ type: 'done', exitCode: 1 });
     }
     return trace;
 }
-
 function toXlsxXml(columns, rows) {
     let xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:html="http://www.w3.org/TR/REC-html40"><Worksheet ss:Name="Sheet1"><Table>`;
     // Header Row
@@ -99,7 +96,6 @@ function toXlsxXml(columns, rows) {
     xml += '</Table></Worksheet></Workbook>';
     return xml;
 }
-
 export function createScriptResultsPanel(container, { onNavigate = null } = {}) {
     let navigate = onNavigate;
     let applyFix = null;
@@ -111,7 +107,6 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
     let activeTab = 'results';
     let status = 'idle';
     let resultFilter = '';
-
     container.className = 'etlsql-script-results';
     container.innerHTML = `
         <div class="etlsql-script-results-tabs">
@@ -128,68 +123,65 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
             <span class="etlsql-script-results-status" data-status>Idle</span>
         </div>
         <div class="etlsql-script-results-body" data-body></div>`;
-
     const body = container.querySelector('[data-body]');
     const statusEl = container.querySelector('[data-status]');
     const filterEl = container.querySelector('[data-result-filter]');
     const toolsEl = container.querySelector('[data-result-tools]');
-
     // A diagnostic that names a line but cannot take you there makes the reader do the lookup by
     // hand. Hosts supply onNavigate; without one the entries stay inert rather than pretending.
     function onDiagnosticActivate(event) {
         // A repair button sits inside the diagnostic row, so it has to be handled before the jump:
         // otherwise clicking "Close the quote" would scroll to the line and change nothing.
-        const fixTarget = event.target.closest?.('[data-quick-fix]');
+        const target = event.target;
+        const fixTarget = target?.closest?.('[data-quick-fix]');
         if (fixTarget) {
-            if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+            if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ')
+                return;
             event.preventDefault();
             event.stopPropagation();
             try {
-                applyFix?.(JSON.parse(fixTarget.dataset.quickFix));
-            } catch {
+                applyFix?.(JSON.parse(fixTarget.dataset.quickFix || ''));
+            }
+            catch {
                 // A malformed payload is a bug here, not something the author can act on. Leaving
                 // the row alone is the honest outcome; the diagnostic it explains is still on screen.
             }
             return;
         }
-        const target = event.target.closest?.('[data-jump-line]');
-        if (!target) return;
-        if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') return;
+        const jumpTarget = target?.closest?.('[data-jump-line]');
+        if (!jumpTarget)
+            return;
+        if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ')
+            return;
         event.preventDefault();
-        navigate?.(Number(target.dataset.jumpLine) || 1, Number(target.dataset.jumpColumn) || 1);
+        navigate?.(Number(jumpTarget.dataset.jumpLine) || 1, Number(jumpTarget.dataset.jumpColumn) || 1);
     }
     container.addEventListener('click', onDiagnosticActivate);
     container.addEventListener('keydown', onDiagnosticActivate);
-
     function setTab(tab) {
         activeTab = tab;
         render();
         if (tab === 'pipeline') {
             setTimeout(() => {
                 const dagCont = body.querySelector('.etlsql-compact-dag');
-                if (dagCont) updateDagLines(dagCont);
+                if (dagCont)
+                    updateDagLines(dagCont);
             }, 50);
         }
     }
-
     function escape(value) {
         return escapeHtml(value);
     }
-
     let activeLineageColumn = null;
     let lineageData = [];
-
     function renderLineageBar() {
-        if (!activeLineageColumn) return '';
+        if (!activeLineageColumn)
+            return '';
         // A column name appears once per hop (m.Users.UserID -> #staging.UserID -> RESULTSET.UserID).
         // The grid shows the final result set, so prefer that entry; a plain find() would report
         // the first intermediate hop instead of the lineage of the column actually clicked.
-        const columnMatches = lineageData.filter(e =>
-            String(e.targetColumn || e.TargetColumn || '').toLowerCase() === String(activeLineageColumn).toLowerCase()
-        );
-        const match = columnMatches.find(e =>
-            String(e.targetTable || e.TargetTable || '').toUpperCase() === 'RESULTSET'
-        ) ?? columnMatches[0];
+        const columnMatches = lineageData.filter(e => String(e.targetColumn || e.TargetColumn || '').toLowerCase() === String(activeLineageColumn).toLowerCase());
+        const match = columnMatches.find(e => String(e.targetTable || e.TargetTable || '').toUpperCase() === 'RESULTSET') ?? columnMatches[0];
         let pathStr;
         if (match) {
             const srcT = match.sourceTables || match.SourceTables || 'source';
@@ -198,7 +190,8 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
             const kind = match.transformationKind || match.TransformationKind ? ` [${match.transformationKind || match.TransformationKind}]` : '';
             const desc = match.description || match.Description ? ` — ${match.description || match.Description}` : '';
             pathStr = `${escape(srcT)}.${escape(srcC)} ➔ ${escape(tgtT)}.${escape(activeLineageColumn)}${escape(kind)}${escape(desc)}`;
-        } else {
+        }
+        else {
             // Say so rather than drawing a plausible-looking path. A guessed
             // source.db ➔ #staging ➔ result chain reads as recorded lineage and would be
             // trusted as such — the whole point of the panel is that it reflects the run.
@@ -210,13 +203,14 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
                 <button type="button" data-close-lineage style="background:none; border:none; color:var(--portal-text-muted, #9da7b1); cursor:pointer; font-size:11px; font-weight:bold;">✕</button>
             </div>`;
     }
-
     function renderResults() {
         const latest = resultSets[resultSets.length - 1];
-        if (!latest) return '<div class="etlsql-script-results-empty">No results yet.</div>';
+        if (!latest)
+            return '<div class="etlsql-script-results-empty">No results yet.</div>';
         const columns = Array.isArray(latest.columns) ? latest.columns : [];
         const rows = Array.isArray(latest.rows) ? latest.rows : [];
-        if (!columns.length) return '<div class="etlsql-script-results-empty">No result grid.</div>';
+        if (!columns.length)
+            return '<div class="etlsql-script-results-empty">No result grid.</div>';
         const filteredRows = filterRows(rows, columns, resultFilter);
         // Bounded so an uncapped producer cannot hang the panel; the label says when it truncated.
         const { visible, label: count } = resultRenderWindow(filteredRows, rows.length, !!resultFilter);
@@ -231,12 +225,10 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
         </div>` : '';
         return `${renderLineageBar()}${contextBar}<div class="etlsql-script-results-count">${escape(count)}</div><table><thead><tr>${head}</tr></thead><tbody>${dataRows || `<tr><td colspan="${columns.length}">No rows</td></tr>`}</tbody></table>`;
     }
-
     function diagnosticLevel(d) {
         const severity = String(d?.severity ?? '').toLowerCase();
         return (severity.includes('error') || d?.severity === 0) ? 'error' : 'warn';
     }
-
     /**
      * The beginner-facing half of a diagnostic: what went wrong in a sentence, what to do about it,
      * the card it belongs to, a reference page, and — where exactly one repair is correct — a button
@@ -249,7 +241,8 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
      */
     function renderGuidanceBlock(d) {
         const guidance = d?.guidance;
-        if (!guidance) return '';
+        if (!guidance)
+            return '';
         const anchor = guidance.anchor
             ? `<span class="etlsql-script-guidance-anchor">${escape(`${(guidance.anchorKind || 'object').toLowerCase()} ${guidance.anchor}`)}</span>`
             : '';
@@ -265,9 +258,9 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
                 <div class="etlsql-script-guidance-actions">${fix}${doc}</div>
             </div>`;
     }
-
     function renderDiagnosticsBlock() {
-        if (!diagnostics.length) return '';
+        if (!diagnostics.length)
+            return '';
         const rows = diagnostics.map(d => {
             // Analyzer positions are 0-based; the editor gutter shows them 1-based.
             const line = (Number.isFinite(d.startLine) ? d.startLine : 0) + 1;
@@ -276,15 +269,14 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
         }).join('');
         return `<div class="etlsql-script-message-group"><div class="etlsql-script-message-group-title">Diagnostics</div>${rows}</div>`;
     }
-
     function renderMessages() {
-        if (!messages.length && !diagnostics.length) return '<div class="etlsql-script-results-empty">No messages yet.</div>';
+        if (!messages.length && !diagnostics.length)
+            return '<div class="etlsql-script-results-empty">No messages yet.</div>';
         const runMessages = messages.length
             ? `<div class="etlsql-script-message-list">${messages.map(m => `<div class="etlsql-script-message" data-level="${escape(m.level || 'info')}"><span>${escape(m.level || 'info')}</span>${escape(m.text || '')}</div>`).join('')}</div>`
             : '';
         return `${renderDiagnosticsBlock()}${runMessages}`;
     }
-
     function renderPipelineRows(nodes, depth = 0) {
         return (nodes || []).map(node => `
             <tr>
@@ -294,9 +286,9 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
                 <td>${Number(node.durationMs || 0).toLocaleString()} ms</td>
             </tr>${renderPipelineRows(node.children, depth + 1)}`).join('');
     }
-
     function renderPipeline() {
-        if (!progress.length) return '<div class="etlsql-script-results-empty">No pipeline events yet.</div>';
+        if (!progress.length)
+            return '<div class="etlsql-script-results-empty">No pipeline events yet.</div>';
         const latest = progress[progress.length - 1] || [];
         const dagHtml = renderCompactDag(latest);
         const tableHtml = `<table><thead><tr><th>Step</th><th>Status</th><th>Rows</th><th>Duration</th></tr></thead><tbody>${renderPipelineRows(latest)}</tbody></table>`;
@@ -309,10 +301,10 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
             </div>
         `;
     }
-
     function renderPerformance() {
         const metrics = performance?.metrics || performance;
-        if (!metrics) return '<div class="etlsql-script-results-empty">No performance metrics yet.</div>';
+        if (!metrics)
+            return '<div class="etlsql-script-results-empty">No performance metrics yet.</div>';
         const statements = Array.isArray(metrics.statements) ? metrics.statements : [];
         return `
             <div class="etlsql-script-perf-summary">
@@ -322,82 +314,83 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
             </div>
             <table><thead><tr><th>Statement</th><th>Total</th></tr></thead><tbody>${statements.map(s => `<tr><td>${escape(s.type || 'Statement')}</td><td>${Number(s.totalMs || 0).toLocaleString()} ms</td></tr>`).join('')}</tbody></table>`;
     }
-
     // Elapsed time ticks next to the status while a run is in flight, so a long run looks
     // busy rather than hung.
     let elapsedTimer = null;
     let elapsedStart = 0;
-
     function formatElapsed(ms) {
         const seconds = ms / 1000;
         return seconds < 10 ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`;
     }
-
     function paintStatus() {
-        if (!statusEl) return;
+        if (!statusEl)
+            return;
         statusEl.textContent = elapsedTimer
             ? `${status} · ${formatElapsed(Date.now() - elapsedStart)}`
             : status;
     }
-
     function renderMessagesTabLabel() {
         const tab = container.querySelector('[data-tab="messages"]');
-        if (!tab) return;
+        if (!tab)
+            return;
         const errors = diagnostics.filter(d => diagnosticLevel(d) === 'error').length;
         tab.textContent = diagnostics.length ? `Messages (${diagnostics.length})` : 'Messages';
         tab.dataset.badge = errors ? 'error' : (diagnostics.length ? 'warn' : '');
     }
-
     function render() {
         container.querySelectorAll('[data-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === activeTab));
         renderMessagesTabLabel();
         paintStatus();
-        if (toolsEl) toolsEl.hidden = activeTab !== 'results';
-        if (activeTab === 'messages') body.innerHTML = renderMessages();
-        else if (activeTab === 'pipeline') body.innerHTML = renderPipeline();
-        else if (activeTab === 'performance') body.innerHTML = renderPerformance();
-        else body.innerHTML = renderResults();
+        if (toolsEl)
+            toolsEl.hidden = activeTab !== 'results';
+        if (activeTab === 'messages')
+            body.innerHTML = renderMessages();
+        else if (activeTab === 'pipeline')
+            body.innerHTML = renderPipeline();
+        else if (activeTab === 'performance')
+            body.innerHTML = renderPerformance();
+        else
+            body.innerHTML = renderResults();
     }
-
     function clear() {
         messages = [];
         progress = [];
         resultSets = [];
         performance = null;
         resultFilter = '';
-        if (filterEl) filterEl.value = '';
+        if (filterEl)
+            filterEl.value = '';
         status = 'Idle';
         render();
     }
-
     function latestResults() {
         const latest = resultSets[resultSets.length - 1];
         const columns = Array.isArray(latest?.columns) ? latest.columns : [];
         const rows = Array.isArray(latest?.rows) ? latest.rows : [];
         return { columns, rows: filterRows(rows, columns, resultFilter) };
     }
-
     function exportResults(format) {
         const { columns, rows } = latestResults();
-        if (!columns.length) return;
+        if (!columns.length)
+            return;
         let text;
         let mime;
         let ext;
-
         if (format === 'json') {
             text = JSON.stringify(rows, null, 2);
             mime = 'application/json';
             ext = 'json';
-        } else if (format === 'xlsx') {
+        }
+        else if (format === 'xlsx') {
             text = toXlsxXml(columns, rows);
             mime = 'application/vnd.ms-excel';
             ext = 'xls';
-        } else {
+        }
+        else {
             text = toCsv(columns, rows);
             mime = 'text/csv';
             ext = 'csv';
         }
-
         const blob = new Blob([text], { type: `${mime};charset=utf-8` });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -408,7 +401,6 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
         link.remove();
         URL.revokeObjectURL(url);
     }
-
     function post(message) {
         switch (message?.type) {
             case 'clear':
@@ -431,7 +423,11 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
                 lineageData = Array.isArray(message.data) ? message.data : [];
                 break;
             case 'results':
-                resultSets.push({ columns: message.columns || [], rows: message.rows || [], context: message.context || null });
+                resultSets.push({
+                    columns: message.columns || [],
+                    rows: message.rows || [],
+                    context: message.context || null
+                });
                 // Focus results tab on success
                 activeTab = 'results';
                 break;
@@ -452,45 +448,46 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
         if (activeTab === 'pipeline') {
             setTimeout(() => {
                 const dagCont = body.querySelector('.etlsql-compact-dag');
-                if (dagCont) updateDagLines(dagCont);
+                if (dagCont)
+                    updateDagLines(dagCont);
             }, 50);
         }
     }
-
     // Delegated: the results grid is re-rendered on every trace message, so binding a listener
     // per cell would re-attach hundreds of them per run.
     body.addEventListener('click', (event) => {
-        if (event.target.closest('[data-close-lineage]')) {
+        const target = event.target;
+        if (target?.closest?.('[data-close-lineage]')) {
             activeLineageColumn = null;
             render();
             return;
         }
-        const cell = event.target.closest('[data-column]');
-        if (!cell) return;
-        activeLineageColumn = cell.dataset.column;
+        const cell = target?.closest?.('[data-column]');
+        if (!cell)
+            return;
+        activeLineageColumn = cell.dataset.column || null;
         render();
     });
-
-    container.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => setTab(btn.dataset.tab)));
+    container.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => setTab(btn.dataset.tab || '')));
     filterEl?.addEventListener('input', () => {
         resultFilter = filterEl.value || '';
         render();
     });
     container.querySelectorAll('[data-export]').forEach(btn => btn.addEventListener('click', () => exportResults(btn.dataset.export)));
-
     // Window resize handler for SVG updating
     const onResize = () => {
         if (activeTab === 'pipeline') {
             const dagCont = body.querySelector('.etlsql-compact-dag');
-            if (dagCont) updateDagLines(dagCont);
+            if (dagCont)
+                updateDagLines(dagCont);
         }
     };
     window.addEventListener('resize', onResize);
-
     clear();
     return {
         replay(trace) {
-            for (const message of (Array.isArray(trace) ? trace : [])) post(message);
+            for (const message of (Array.isArray(trace) ? trace : []))
+                post(message);
         },
         // Linter/parser diagnostics belong to the buffer, not to a run, so they are
         // held separately from run messages and survive clear().
@@ -500,12 +497,14 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
         },
         startElapsed() {
             elapsedStart = Date.now();
-            clearInterval(elapsedTimer);
+            if (elapsedTimer !== null)
+                clearInterval(elapsedTimer);
             elapsedTimer = setInterval(paintStatus, 100);
             paintStatus();
         },
         stopElapsed() {
-            clearInterval(elapsedTimer);
+            if (elapsedTimer !== null)
+                clearInterval(elapsedTimer);
             elapsedTimer = null;
             paintStatus();
         },
@@ -523,7 +522,8 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
             applyFix = typeof handler === 'function' ? handler : null;
         },
         dispose() {
-            clearInterval(elapsedTimer);
+            if (elapsedTimer !== null)
+                clearInterval(elapsedTimer);
             elapsedTimer = null;
             window.removeEventListener('resize', onResize);
             container.removeEventListener('click', onDiagnosticActivate);
@@ -531,9 +531,7 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
             container.replaceChildren();
         },
     };
-
 }
-
 /**
  * Rows the grid will build DOM for in one pass.
  *
@@ -543,7 +541,6 @@ export function createScriptResultsPanel(container, { onNavigate = null } = {}) 
  * reads the filtered rows directly rather than what was drawn.
  */
 export const MAX_RENDERED_ROWS = 5000;
-
 /**
  * Splits filtered rows into what to draw and what to say about it. Pure so the cap is testable
  * without a DOM — the point is that a truncated grid says so rather than quietly showing less.
@@ -552,32 +549,30 @@ export function resultRenderWindow(filteredRows, totalRows, isFiltered, cap = MA
     const filtered = Array.isArray(filteredRows) ? filteredRows : [];
     const total = Number.isFinite(totalRows) ? totalRows : filtered.length;
     const truncated = filtered.length > cap;
-    const visible = truncated ? filtered.slice(0, cap) : filtered;
-
-    const plural = n => `${n.toLocaleString()} row${n === 1 ? '' : 's'}`;
+    const visible = truncated ? filtered.slice(0, cap) : [...filtered];
+    const plural = (n) => `${n.toLocaleString()} row${n === 1 ? '' : 's'}`;
     let label;
     if (truncated) {
         label = isFiltered
             ? `showing first ${plural(visible.length)} of ${filtered.length.toLocaleString()} matched (${plural(total)} total)`
             : `showing first ${plural(visible.length)} of ${plural(total)}`;
-    } else {
+    }
+    else {
         label = isFiltered ? `${filtered.length.toLocaleString()} of ${plural(total)}` : plural(total);
     }
-
     return { visible, truncated, label };
 }
-
 // Exported for scripts/test-result-grid-ui.mjs. These carry the result grid's behaviour — what the
 // filter box matches, how a value becomes display text, what CSV export writes, and how many rows
 // are drawn — and are pure, so they are testable without a DOM. The rendering around them is not.
 export function filterRows(rows, columns, filter) {
     const term = String(filter || '').trim().toLowerCase();
-    if (!term) return rows;
+    if (!term)
+        return rows;
     return rows.filter(row => columns.some(c => formatResultCell(row?.[c]).toLowerCase().includes(term)));
 }
-
 export function toCsv(columns, rows) {
-    const escapeCsv = value => {
+    const escapeCsv = (value) => {
         const text = formatResultCell(value);
         return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
     };
@@ -586,13 +581,13 @@ export function toCsv(columns, rows) {
         ...rows.map(row => columns.map(c => escapeCsv(row?.[c])).join(',')),
     ].join('\r\n');
 }
-
 export function formatResultCell(value) {
-    if (value == null) return '';
-    if (typeof value === 'object') return JSON.stringify(value);
+    if (value == null)
+        return '';
+    if (typeof value === 'object')
+        return JSON.stringify(value);
     return String(value);
 }
-
 export function buildDataPreviewPayload(source, script, documentUri) {
     const kind = source?.sourceKind;
     return {
@@ -604,9 +599,9 @@ export function buildDataPreviewPayload(source, script, documentUri) {
         documentUri: documentUri || 'portal-designer',
     };
 }
-
 export function editLeaseRetryDelay(expiresAt, now = Date.now()) {
     const expiry = new Date(expiresAt).valueOf();
-    if (!Number.isFinite(expiry)) return 30_000;
+    if (!Number.isFinite(expiry))
+        return 30_000;
     return Math.min(60_000, Math.max(5_000, expiry - now + 1_000));
 }

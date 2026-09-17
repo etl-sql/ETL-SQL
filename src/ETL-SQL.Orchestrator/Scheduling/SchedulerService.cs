@@ -109,6 +109,16 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 TaskContinuationOptions.OnlyOnFaulted);
         }
 
+        /// <summary>
+        /// Stops the scheduler by cancelling the background task and waiting up to 5 seconds for
+        /// it to terminate.
+        /// </summary>
+        /// <remarks>
+        /// This method intentionally uses <c>Task.Wait</c> (sync-over-async) so that it can be
+        /// called from non-async teardown paths such as <see cref="System.IDisposable.Dispose"/>.
+        /// In async contexts, prefer <see cref="StopAsync"/> to avoid blocking a thread-pool
+        /// thread during shutdown.
+        /// </remarks>
         public void Stop()
         {
             _cts?.Cancel();

@@ -1,4 +1,4 @@
-﻿# Report Runtime Asset Standards
+# Report Runtime Asset Standards
 
 This document establishes the official development rules and synchronization protocols for shared frontend browser assets (JavaScript, CSS, themes, and UI modules) used across **ETL-SQL** visual hosts.
 
@@ -12,7 +12,9 @@ To prevent code drift and duplication, all browser-based report player and catal
 src/ETL-SQL.ReportRuntime/Resources/Shared/
 ```
 
-- **Rule**: Any change to shared JavaScript logic (e.g. `designer.js`, `chart-rendering.js`), visual styles (`theme-dark.css`), or third-party web libraries must be made **exclusively** inside this folder.
+- **Rule**: Edit authored JavaScript, styles, and vendor assets here. All 44 shared runtime and
+  designer modules are authored under `Resources/TypeScript/`; their corresponding JavaScript here is
+  generated. Follow the generated banner to its source.
 - **Strictly Prohibited**: Never edit files directly inside the generated target directories of host applications. Any direct edits in host directories will be flagged as drift and overwritten by the asset synchronizer.
 
 ---
@@ -22,6 +24,7 @@ src/ETL-SQL.ReportRuntime/Resources/Shared/
 The canonical shared assets are compiled and synchronized into these specific host directories:
 
 - **Report Player**: `src/ETL-SQL.ReportPlayer/wwwroot/`
+- **Workstation Editor**: `src/ETL-SQL.WorkstationEditor/wwwroot/`
 - **Portal**: `src/ETL-SQL.Portal/wwwroot/js/` and `src/ETL-SQL.Portal/wwwroot/css/`
 - **VS Code Extension**: `src/etl-sql-vscode/media/`
 
@@ -30,6 +33,10 @@ The canonical shared assets are compiled and synchronized into these specific ho
 ## 3. The Synchronization Workflow
 
 After modifying files inside the canonical `Shared` directory, you must run the asset synchronizer to update the host applications:
+
+For migrated modules, edit `Resources/TypeScript/` instead. Install the pinned compiler once with
+`npm ci --prefix scripts/typecheck`. Sync compiles TypeScript before bundling and copying assets;
+check mode fails on stale compilation without writing files. .NET builds consume checked-in assets.
 
 1. **Synchronize Assets**:
    Run the sync script from the repository root:
@@ -45,6 +52,104 @@ After modifying files inside the canonical `Shared` directory, you must run the 
 
 ---
 
+### Runtime module and offline bundle ownership
+
+`report-runtime.js` and the sibling `rt-*.js` files are ES modules; `rt-util.js` is generated from
+`Resources/TypeScript/rt-util.ts`, while the other parts remain authored JavaScript. Keep part imports
+as single-line named imports with no aliases, and export declarations directly. The entry's
+hoisted `renderManifest` participates in the rendering cycle; do not call across that cycle at
+module initialization time.
+
+`report-runtime.bundle.js` is generated, including the copy under `Resources/Shared`. Never edit
+it by hand. Add each new part to `RUNTIME_PARTS` in `sync-assets.js`; an unlisted part fails sync.
+The generator strips supported module syntax, checks that the result parses, and wraps it in a
+classic-script IIFE for `OfflineSnapshotViewer`. Online hosts use `type="module"` on the entry.
+
+### Planned TypeScript compilation and ownership
+
+This is the implementation design for TODO §5, recorded on 2026-09-08. The shared `rt-util` pilot
+and designer utility now use this pipeline. Portal conversion and broader migration remain pending. The source roots,
+compiler, drift checks, sync integration, and sandbox startup compilation are implemented; the
+remaining acceptance steps apply to each subsequent conversion.
+
+Preserve browser URLs and the existing offline concatenator. Use the pinned TypeScript toolchain
+under `scripts/typecheck`; do not add another bundler or a Node invocation to the .NET build.
+
+| Surface | Authored TypeScript | Generated JavaScript |
+| :--- | :--- | :--- |
+| Shared runtime and designer | `src/ETL-SQL.ReportRuntime/Resources/TypeScript/` | Matching relative path under `Resources/Shared/` |
+| Portal-owned pages and modules | `src/ETL-SQL.Portal/BrowserSources/` | Matching relative path under `wwwroot/js/` |
+
+Keep unmigrated JavaScript where it is. A migrated module has exactly one authored implementation:
+its `.ts` file. Its old `.js` path becomes checked-in generated output, with a banner identifying
+the TypeScript source. Shared host copies and `report-runtime.bundle.js` remain checked-in outputs.
+Portal's generated shared copies must never become Portal-owned TypeScript inputs.
+
+Keep `.ts` sources outside served asset directories. Do not emit source maps or declarations in
+the pilot: no `.map`, `.d.ts`, or `sourceMappingURL` is shipped. Source-level debugging can be added
+later with an explicit development-only map delivery decision. Preserve copyright/license comments,
+emit LF, and retain comments needed by consumer checks. No minification or formatting cleanup is
+part of a conversion.
+
+#### Mixed-source compilation
+
+Use separate strict compiler programs for shared assets and Portal-owned modules. Each uses its
+TypeScript and JavaScript directories as `rootDirs`, with relative `.js` import specifiers preserved
+in emitted code. The compiler host must hide known generated JavaScript implementations during
+source resolution so an existing output cannot shadow its TypeScript owner. Read ownership from
+the discovered `.ts` paths, not hand-maintained parallel lists. Reject output collisions and any
+attempt to emit outside the corresponding JavaScript root.
+
+The installed TypeScript 6.0.3 resolver supports mixed siblings with `.js` specifiers.
+`scripts/test-browser-compiler.mjs` exercises the compiler host with stale generated files present,
+unmigrated JS imports, strict errors, idempotence, orphan rejection, and unchanged outputs on failure.
+
+Use `strict`, `noEmitOnError`, ES2022, ESNext modules, Bundler resolution, DOM libraries,
+`verbatimModuleSyntax`, `erasableSyntaxOnly`, and `allowJs`. Keep `checkJs` off in the strict migration program and run
+the existing JavaScript gate separately over remaining authored JS. Do not relax that gate or add
+baseline entries. Resolve shared TypeScript dependencies from Portal through the same ownership
+mapping; do not create a second compiled copy of shared modules.
+
+Emit into memory or a temporary directory and select only outputs belonging to authored TypeScript
+inputs. Never overwrite an unmigrated JS file emitted incidentally by `allowJs`. Check all diagnostics
+before writing any output. Add strict unused-local/parameter checks and keep existing ESLint checks
+over the emitted JS, including unsupported globals and duplicate keys. Evaluate a TypeScript-aware
+lint parser separately if source-only rules become necessary; any new dependency follows the
+repository license policy.
+
+#### Compilation, sync, and verification order
+
+The shared compiler is `scripts/compile-browser.mjs`. Normal mode writes
+generated JS; `--check` computes expected output without repairing the checkout and fails on missing,
+stale, or orphaned outputs. Track generated ownership so removing or renaming a source cannot leave
+a silently served old implementation. Fail with the exact path and regeneration command.
+
+`sync-assets.js` compiles first, builds the existing offline bundle second, and copies shared
+assets to hosts last. Its check mode must validate compilation before comparing bundle and host
+outputs. Stop before downstream writes on compiler errors. The constrained concatenator continues
+to consume JavaScript: named imports, direct exports, and the existing cycle rules still apply.
+Reject TypeScript constructs whose emitted helpers or module syntax violate those constraints;
+do not silently strip unsupported output or introduce a second bundle path.
+
+The UI sandbox continues serving the same JavaScript paths. Use
+`node scripts/compile-browser.mjs --watch` for source editing; sandbox startup compiles once.
+Reload alone cannot compile `.ts`.
+CI and pre-push must run compilation drift checks before type/lint and consumer checks. Published
+.NET hosts consume checked-in generated assets and require no Node installation. Update `AGENTS.md`
+and these current-workflow instructions in the implementation commit, not before the pipeline exists.
+
+#### Pilot acceptance
+
+Start with `rt-util`: it is a stateless runtime leaf and exercises both online modules and offline
+delivery without moving a stateful closure. Preserve its exports, coercions, HTML escaping, and URL
+handling. Use typed boundaries without narrowing away input cases supported by the JavaScript.
+
+Verify current-source diagnostics, unchanged output on a second compile, stale/missing/orphan output
+rejection, mixed imports with generated files present, and no writes after a failed compilation.
+Then run existing utility behavior tests, bundle rejection tests, asset drift, browser lint/type,
+consumer checks, payload budget, sandbox, Portal preview, real VS Code preview/CSP, and an offline
+snapshot from disk with networking blocked. Record results before expanding to another module.
+
 ## 4. UI Sandbox Prototyping
 
 Before committing a user interface or charting change, you should prototype and verify the layout inside the dev-only **UI Sandbox**:
@@ -52,7 +157,8 @@ Before committing a user interface or charting change, you should prototype and 
 - **Location**: `tools/ui-sandbox/`
 - **Command**: Run `pwsh -File tools\ui-sandbox\serve.ps1` to launch the local sandbox development server.
 - **Workflow**:
-  - The UI Sandbox imports canonical JavaScript/CSS files directly and bypasses compilation cache layers.
+  - The UI Sandbox imports served JavaScript/CSS files directly. For migrated TypeScript, run the
+    compiler watcher and reload after successful compilation.
   - Develop your dashboard features in the sandbox using isolated mock datasets (`mockApi.js`) and story scenarios (`tools/ui-sandbox/stories/`).
   - This avoids the overhead of launching docker containers, databases, or web servers just to verify visual components.
 
@@ -67,9 +173,9 @@ Gated figures:
 
 | Figure | What it covers |
 | :--- | :--- |
-| `report-runtime.js` | Raw and gzip bytes of the shared report runtime script |
+| `report-runtime.js` | Sum of raw and separately compressed gzip bytes of the entry and all `rt-*.js` modules |
 | `report-runtime.css` | Raw and gzip bytes of the shared report runtime stylesheet |
-| `shared-runtime-total` | Raw and gzip bytes of everything under `Resources/Shared/`, vendor bundles included |
+| `shared-runtime-total` | Raw and gzip bytes of viewer assets, vendor bundles included; excludes authoring assets, map data, and the alternative offline bundle |
 | `page-weight:<fixture>` | End-to-end page weight of the heaviest representative report: shared assets plus that report's delivered browser manifest |
 
 Tolerance is 3% plus a 2,048-byte floor, applied per figure. Shrink never fails.

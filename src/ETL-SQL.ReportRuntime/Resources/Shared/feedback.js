@@ -1,3 +1,8 @@
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/feedback.ts
+ * Run: node scripts/sync-assets.js
+ */
+"use strict";
 /*
  * ETL-SQL shared feedback system.
  * Loaded as a classic script so Portal, ReportPlayer, Workstation, and editor webviews can share
@@ -5,14 +10,14 @@
  */
 (function installFeedback(global) {
     'use strict';
-    if (global.ETLSQLFeedback) return;
-
+    if (global.ETLSQLFeedback)
+        return;
     const doc = global.document;
     let sequence = 0;
     let toastRegion;
-
     function ensureStyles() {
-        if (!doc || doc.getElementById('etlsql-feedback-styles')) return;
+        if (!doc || doc.getElementById('etlsql-feedback-styles'))
+            return;
         const style = doc.createElement('style');
         style.id = 'etlsql-feedback-styles';
         style.textContent = `
@@ -29,18 +34,17 @@
 @media(prefers-reduced-motion:no-preference){.etlsql-feedback-toast{animation:etlsql-feedback-in .18s ease-out}.etlsql-feedback-dialog{animation:etlsql-dialog-in .16s ease-out}@keyframes etlsql-feedback-in{from{opacity:0;transform:translateY(8px)}}@keyframes etlsql-dialog-in{from{opacity:0;transform:translateY(10px) scale(.985)}}}`;
         doc.head.appendChild(style);
     }
-
     function emit(kind, detail) {
         doc?.dispatchEvent(new CustomEvent('etlsql:feedback', { detail: { kind, ...detail } }));
     }
-
     /**
      * Shows a toast. Returns a function that dismisses it, so a caller whose action repeats — one
      * undo offer per click in a filter list — can replace its own previous toast instead of stacking
      * a column of them over the panel the reader is working in.
      */
     function notify(message, options = {}) {
-        if (!doc) return () => {};
+        if (!doc)
+            return () => { };
         ensureStyles();
         if (!toastRegion) {
             toastRegion = doc.createElement('div');
@@ -56,10 +60,21 @@
         toast.dataset.tone = tone;
         toast.setAttribute('role', tone === 'error' ? 'alert' : 'status');
         const content = doc.createElement('div');
-        if (options.title) { const title = doc.createElement('strong'); title.textContent = options.title; content.appendChild(title); }
-        const text = doc.createElement('p'); text.textContent = String(message ?? ''); content.appendChild(text);
-        const close = doc.createElement('button'); close.type = 'button'; close.className = 'etlsql-feedback-close'; close.setAttribute('aria-label', 'Dismiss notification'); close.textContent = '×';
-        const remove = () => toast.remove(); close.addEventListener('click', remove);
+        if (options.title) {
+            const title = doc.createElement('strong');
+            title.textContent = options.title;
+            content.appendChild(title);
+        }
+        const text = doc.createElement('p');
+        text.textContent = String(message ?? '');
+        content.appendChild(text);
+        const close = doc.createElement('button');
+        close.type = 'button';
+        close.className = 'etlsql-feedback-close';
+        close.setAttribute('aria-label', 'Dismiss notification');
+        close.textContent = '×';
+        const remove = () => toast.remove();
+        close.addEventListener('click', remove);
         // An offer the reader can act on — Undo, most of all — has to be a real focusable button in
         // the toast, not a sentence telling them where to look for one. It is dismissible either
         // way: taking the action and ignoring it both end with the toast gone.
@@ -72,64 +87,130 @@
             button.addEventListener('click', () => { remove(); action.onSelect(); });
             content.appendChild(button);
         }
-        toast.append(doc.createElement('span'), content, close); toastRegion.appendChild(toast);
+        toast.append(doc.createElement('span'), content, close);
+        toastRegion.appendChild(toast);
         // An actionable toast that vanishes on the usual timer is an offer nobody can accept, so it
         // stays until it is used or dismissed unless the caller names its own duration.
         const duration = Number.isFinite(options.duration) ? options.duration : (action ? 12000 : tone === 'error' ? 8000 : 4500);
-        if (duration > 0) global.setTimeout(remove, duration);
+        if (duration > 0)
+            global.setTimeout(remove, duration);
         emit('notification', { tone, action: options.auditAction || null });
         return remove;
     }
-
     function openDialog(message, options = {}, promptOptions = null) {
-        if (!doc) return Promise.resolve(promptOptions ? null : false);
+        if (!doc)
+            return Promise.resolve(promptOptions ? null : false);
         ensureStyles();
         return new Promise(resolve => {
             const id = `etlsql-feedback-${++sequence}`;
             const previousFocus = doc.activeElement;
-            const backdrop = doc.createElement('div'); backdrop.className = 'etlsql-feedback-backdrop';
-            const dialog = doc.createElement('section'); dialog.className = 'etlsql-feedback-dialog'; dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', `${id}-title`); dialog.setAttribute('aria-describedby', `${id}-message`);
-            const header = doc.createElement('div'); header.className = 'etlsql-feedback-header';
-            const title = doc.createElement('h2'); title.id = `${id}-title`; title.textContent = options.title || (promptOptions ? 'Provide details' : 'Confirm action'); header.appendChild(title);
-            const body = doc.createElement('div'); body.className = 'etlsql-feedback-body';
-            const text = doc.createElement('p'); text.id = `${id}-message`; text.textContent = String(message ?? ''); body.appendChild(text);
-            if (options.impact) { const impact = doc.createElement('p'); impact.className = 'etlsql-feedback-impact'; impact.textContent = options.impact; body.appendChild(impact); }
-            let input = null; let error = null;
-            if (promptOptions) {
-                const field = doc.createElement('label'); field.className = 'etlsql-feedback-field'; field.textContent = promptOptions.label || 'Value';
-                input = doc.createElement(promptOptions.multiline ? 'textarea' : 'input');
-                if (!promptOptions.multiline) /** @type {HTMLInputElement} */ (input).type = promptOptions.secret ? 'password' : 'text';
-                input.value = promptOptions.value || ''; input.autocomplete = promptOptions.autocomplete || 'off';
-                field.appendChild(input); body.appendChild(field);
-                error = doc.createElement('div'); error.className = 'etlsql-feedback-error'; error.setAttribute('role', 'alert'); body.appendChild(error);
+            const backdrop = doc.createElement('div');
+            backdrop.className = 'etlsql-feedback-backdrop';
+            const dialog = doc.createElement('section');
+            dialog.className = 'etlsql-feedback-dialog';
+            dialog.setAttribute('role', 'dialog');
+            dialog.setAttribute('aria-modal', 'true');
+            dialog.setAttribute('aria-labelledby', `${id}-title`);
+            dialog.setAttribute('aria-describedby', `${id}-message`);
+            const header = doc.createElement('div');
+            header.className = 'etlsql-feedback-header';
+            const title = doc.createElement('h2');
+            title.id = `${id}-title`;
+            title.textContent = options.title || (promptOptions ? 'Provide details' : 'Confirm action');
+            header.appendChild(title);
+            const body = doc.createElement('div');
+            body.className = 'etlsql-feedback-body';
+            const text = doc.createElement('p');
+            text.id = `${id}-message`;
+            text.textContent = String(message ?? '');
+            body.appendChild(text);
+            if (options.impact) {
+                const impact = doc.createElement('p');
+                impact.className = 'etlsql-feedback-impact';
+                impact.textContent = options.impact;
+                body.appendChild(impact);
             }
-            const actions = doc.createElement('div'); actions.className = 'etlsql-feedback-actions';
-            const cancel = doc.createElement('button'); cancel.type = 'button'; cancel.className = 'etlsql-feedback-btn'; cancel.textContent = options.cancelLabel || 'Cancel';
-            const accept = doc.createElement('button'); accept.type = 'button'; accept.className = `etlsql-feedback-btn ${options.danger ? 'etlsql-feedback-btn-danger' : 'etlsql-feedback-btn-primary'}`; accept.textContent = options.confirmLabel || 'Continue';
-            actions.append(cancel, accept); dialog.append(header, body, actions); backdrop.appendChild(dialog); doc.body.appendChild(backdrop);
-            const finish = value => { backdrop.remove(); /** @type {HTMLElement} */ (previousFocus)?.focus?.(); emit(promptOptions ? 'prompt' : 'confirmation', { accepted: value !== false && value !== null, action: options.auditAction || null }); resolve(value); };
+            let input = null;
+            let error = null;
+            if (promptOptions) {
+                const field = doc.createElement('label');
+                field.className = 'etlsql-feedback-field';
+                field.textContent = promptOptions.label || 'Value';
+                input = doc.createElement(promptOptions.multiline ? 'textarea' : 'input');
+                if (!promptOptions.multiline) /** @type {HTMLInputElement} */
+                    (input).type = promptOptions.secret ? 'password' : 'text';
+                input.value = promptOptions.value || '';
+                input.autocomplete = (promptOptions.autocomplete || 'off');
+                field.appendChild(input);
+                body.appendChild(field);
+                error = doc.createElement('div');
+                error.className = 'etlsql-feedback-error';
+                error.setAttribute('role', 'alert');
+                body.appendChild(error);
+            }
+            const actions = doc.createElement('div');
+            actions.className = 'etlsql-feedback-actions';
+            const cancel = doc.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'etlsql-feedback-btn';
+            cancel.textContent = options.cancelLabel || 'Cancel';
+            const accept = doc.createElement('button');
+            accept.type = 'button';
+            accept.className = `etlsql-feedback-btn ${options.danger ? 'etlsql-feedback-btn-danger' : 'etlsql-feedback-btn-primary'}`;
+            accept.textContent = options.confirmLabel || 'Continue';
+            actions.append(cancel, accept);
+            dialog.append(header, body, actions);
+            backdrop.appendChild(dialog);
+            doc.body.appendChild(backdrop);
+            const finish = (value) => { backdrop.remove(); /** @type {HTMLElement} */ /** @type {HTMLElement} */ (previousFocus)?.focus?.(); emit(promptOptions ? 'prompt' : 'confirmation', { accepted: value !== false && value !== null, action: options.auditAction || null }); resolve(value); };
             cancel.addEventListener('click', () => finish(promptOptions ? null : false));
             accept.addEventListener('click', () => {
-                if (!promptOptions) { finish(true); return; }
+                if (!promptOptions) {
+                    finish(true);
+                    return;
+                }
                 const value = input.value.trim();
-                if (promptOptions.required && !value) { error.textContent = promptOptions.requiredMessage || 'This field is required.'; input.focus(); return; }
-                if (promptOptions.minLength && value.length < promptOptions.minLength) { error.textContent = `Enter at least ${promptOptions.minLength} characters.`; input.focus(); return; }
-                if (promptOptions.pattern && !promptOptions.pattern.test(value)) { error.textContent = promptOptions.patternMessage || 'Enter a valid value.'; input.focus(); return; }
+                if (promptOptions.required && !value) {
+                    error.textContent = promptOptions.requiredMessage || 'This field is required.';
+                    input.focus();
+                    return;
+                }
+                if (promptOptions.minLength && value.length < promptOptions.minLength) {
+                    error.textContent = `Enter at least ${promptOptions.minLength} characters.`;
+                    input.focus();
+                    return;
+                }
+                if (promptOptions.pattern && !promptOptions.pattern.test(value)) {
+                    error.textContent = promptOptions.patternMessage || 'Enter a valid value.';
+                    input.focus();
+                    return;
+                }
                 finish(value);
             });
-            backdrop.addEventListener('click', event => { if (event.target === backdrop) finish(promptOptions ? null : false); });
+            backdrop.addEventListener('click', event => { if (event.target === backdrop)
+                finish(promptOptions ? null : false); });
             backdrop.addEventListener('keydown', event => {
-                if (event.key === 'Escape') { event.preventDefault(); finish(promptOptions ? null : false); return; }
-                if (event.key !== 'Tab') return;
-                const focusable = [...dialog.querySelectorAll('button,input,textarea')].filter(element => !/** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (element).disabled);
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    finish(promptOptions ? null : false);
+                    return;
+                }
+                if (event.key !== 'Tab')
+                    return;
+                const focusable = [...dialog.querySelectorAll('button,input,textarea')].filter(element => !/** @type {HTMLButtonElement | HTMLInputElement | HTMLTextAreaElement} */ (element).disabled);
                 const first = focusable[0], last = focusable[focusable.length - 1];
-                if (event.shiftKey && doc.activeElement === first) { event.preventDefault(); /** @type {HTMLElement} */ (last).focus(); }
-                else if (!event.shiftKey && doc.activeElement === last) { event.preventDefault(); /** @type {HTMLElement} */ (first).focus(); }
+                if (event.shiftKey && doc.activeElement === first) {
+                    event.preventDefault(); /** @type {HTMLElement} */
+                    (last).focus();
+                }
+                else if (!event.shiftKey && doc.activeElement === last) {
+                    event.preventDefault(); /** @type {HTMLElement} */
+                    (first).focus();
+                }
             });
             global.setTimeout(() => (input || (options.danger ? cancel : accept)).focus(), 0);
         });
     }
-
     global.ETLSQLFeedback = Object.freeze({
         notify,
         confirm: (message, options = {}) => openDialog(message, options, null),

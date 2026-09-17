@@ -271,6 +271,31 @@ public sealed class WorkstationEditorTests
     }
 
     [Fact]
+    public async Task SessionRegistry_TreatsAReusedProcessIdAsGoneRatherThanAsTheSession()
+    {
+        // Liveness is not identity: operating systems reuse process IDs. This record claims to have
+        // started long before this process did, so whatever now holds that PID cannot be the session
+        // it describes. Keeping it would leave a bearer token on disk mapped to a stranger, and
+        // StudioUrl would offer that token to whatever answers on the recorded port.
+        using var workspace = new TempWorkspace();
+        using var registryStorage = new TempWorkspace();
+        using var httpClient = new HttpClient(new AlwaysHealthyHandler());
+        var registry = new StudioSessionRegistry(registryStorage.Root, httpClient);
+
+        var reusedPid = new StudioSessionRecord(
+            Guid.NewGuid().ToString("D"), workspace.Root, Environment.ProcessId, 41020,
+            DateTimeOffset.UtcNow.AddYears(-1),
+            new StudioAuthenticationMetadata("X-ETLSQL-EDITOR-TOKEN", "stale-token"));
+        await registry.WriteAsync(reusedPid);
+
+        // The handler answers every probe successfully, so only the identity check can reject this.
+        Assert.Equal(StudioSessionHealth.Gone, await registry.CheckHealthAsync(reusedPid));
+
+        Assert.Empty(await registry.ListHealthyAsync());
+        Assert.Empty(Directory.EnumerateFiles(registryStorage.Root, "*.json"));
+    }
+
+    [Fact]
     public async Task SessionRegistry_KeepsDifferentProjectsAndSameProjectInstancesSeparate()
     {
         using var firstWorkspace = new TempWorkspace();

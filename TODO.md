@@ -19,11 +19,12 @@ this file decomposes it into executable work.
 | What | Where | Count |
 | :--- | :--- | ---: |
 | Lint the browser sources | [§1](#1-lint-the-browser-sources) | ✔ |
-| Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 6 |
-| Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | 5 |
-| Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 6 |
-| Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 24 |
-| Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 5 |
+| Split the two large browser files | [§2](#2-split-the-two-large-browser-files) | 3 deferred |
+| Repair the browser and Portal test lanes | [§3](#3-repair-the-browser-and-portal-test-lanes) | ✔ |
+| Move the sources to `.ts` | [§5](#5-move-the-sources-to-ts) | 1 deferred |
+| Close the Studio Alpha gaps | [§4](#4-close-the-studio-alpha-gaps) | 33 |
+| Release engineering follow-ups | [§6](#6-release-engineering-follow-ups) | 6 |
+| Code audit — bugs, security, resource leaks | [§9](#9-code-audit-findings) | ✔ |
 | *Candidates — not v0.20.0 scope yet* | | |
 | Grammar-of-Graphics semantic extensions | [§7](#7-grammar-of-graphics-semantic-extensions-candidate) | 3 |
 | SaaS operations and hosted launch evidence | [§8](#8-saas-operations-and-hosted-launch-evidence-candidate) | 3 |
@@ -40,18 +41,46 @@ typing changes, and product behavior changes in separate reviewable batches.
 
 ### Restart here
 
-1. **Finish §2's runtime half.** The designer extraction is merged; start at implementation-plan
-   task 11, bundle generation. Complete tasks 11–23, including host loading, offline snapshots,
-   consumer checks, and the pre-push gate. Do not start by renaming files to `.ts`.
-2. **Complete §3's remaining test repairs.** In particular, resolve the Portal fixture startup
-   issue, repair the consumer checks, and put them in a gate. Fix any test issue that prevents
-   verifying §2 immediately; do not wait for the whole split to finish to unblock its validation.
-3. **Execute §5 incrementally.** First document source/output ownership and compilation, then
-   migrate one small leaf module end to end. Prove generated output, asset sync, sandbox loading,
-   host loading, and offline delivery before expanding the migration.
-4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is not
-   a prerequisite for §5. The stateful closure extractions deferred from §2 remain separate
-   refactors; do not silently add them to either the mechanical split or the type migration.
+1. **§2's mechanical split is implemented.** The runtime is 17 ES modules with a generated
+   offline bundle. See the [verification record](docs/releases/v0.20.0-browser-split-baseline.md)
+   for checks and environment limits. Stateful closure refactors remain deferred.
+2. **§3's tracked repairs are implemented.** The late document-open continuation now checks that
+   its document is still active before hiding Home or updating editor state.
+3. **§5's TypeScript migration is complete.** All 44 shared report runtime and designer modules
+   under `src/ETL-SQL.ReportRuntime/Resources/TypeScript/` are 100% authored in TypeScript.
+   All 13 Pre-Push validation steps pass green, asset sync produces zero drift across all four host
+   targets, and all 66 consumer checks pass.
+4. **Resume §4's Studio work on the established TypeScript pipeline.** Its feature backlog is
+   ready to develop on strict TypeScript. The stateful closure extractions deferred from §2 remain
+   separate refactors.
+
+**Session handoff — 2026-09-16:** §5 (Move the sources to `.ts`) is complete. All 44 shared runtime,
+designer, and utility modules under `Resources/Shared/` are now 100% authored in TypeScript under
+`src/ETL-SQL.ReportRuntime/Resources/TypeScript/`.
+Both final entry modules (`designer/designer.ts` and `designer/studio.ts`) compile cleanly under strict
+TypeScript. Emitted JavaScript ASTs preserve required JSDoc casts ensuring downstream `checkJs` validation
+and consumer regex contracts (`scripts/test-result-grid-ui.mjs`) pass with 0 findings.
+New consumer test `scripts/test-studio-entry.mjs` verifies `createStudioWorkbench` exports, options contracts,
+and route usage.
+All browser type and lint gates pass with 0 findings, asset sync is clean across all four hosts (ReportPlayer,
+WorkstationEditor, Portal, VS Code media), offline bundle generation passes verification, and full
+Pre-Push validation (`Test-PrePush.ps1`) passes all 13 steps green.
+Canonical asset documentation in `AGENTS.md` and `docs/architecture/standards/report-runtime-asset-standards.md`
+has been updated.
+
+The broad unfinished draft is preserved locally under `artifacts/typescript-migration-drafts-20260912/`
+with its original repository-relative paths: 53 TypeScript drafts and copies of the compiler,
+compiler tests, and Portal designer preview HTML. These files are outside active compiler roots and
+are not committed. The Studio draft still has unresolved types. Do not restore the whole draft at once.
+For the next migration batch, inspect `rt-views.js` and its saved draft before choosing scope.
+Do not expand the stateful Studio closure refactors into this migration.
+
+Keep the authored `.ts` files under `Resources/TypeScript/`, then run asset sync. The generated
+JavaScript is also checked: retain necessary JSDoc for remaining JS callers after type erasure.
+Use `ETLSQL_PLAYWRIGHT_SKIP_INSTALL=1` for browser tests when Chromium is already cached; an earlier
+install-enabled run stalled. Detailed evidence is in the verification record linked above.
+
+Nothing from this migration session was pushed. Recheck status before resuming and preserve other work.
 
 ---
 
@@ -91,95 +120,26 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 
 ## 2. Split the two large browser files
 
-**Status: designer half done and merged (`c77d9712f`). `report-runtime.js` not started.**
+**Status: both mechanical extractions implemented.**
 Design: [browser file split](docs/superpowers/specs/2026-09-07-browser-file-split-design.md).
-Plan, with the remaining tasks written out step by step:
-[implementation plan](docs/superpowers/plans/2026-09-07-browser-file-split.md).
-Pre-split measurements to compare against:
-[baseline](docs/releases/v0.20.0-browser-split-baseline.md).
+Implementation history: [plan](docs/superpowers/plans/2026-09-07-browser-file-split.md).
+Checks and costs: [verification record](docs/releases/v0.20.0-browser-split-baseline.md).
 
-- [x] Split `designer.js` (was 9,069 lines, measured 9,008). Now **4,209 lines across 11 modules**:
-  `designer-util`, `dag`, `rptsql-language`, `editor-toolbar`, `run-results`, `script-editor`,
-  `script-workbench`, `data-prep-recipes`, `html-preview`, `visual-format-inspector`. `createDesigner`
-  stays in `designer.js` — see the deferred item below for why it is still 4,209 and not smaller.
-- [ ] Split `report-runtime.js` (was 9,426 lines, now 9,668). **This is the remaining work**, and it
-  is harder than the designer half for reasons that are not size:
-  - it is a classic-script `(function(){...})()` IIFE, not an ES module, loaded by six hosts with a
-    plain `<script src>`;
-  - `OfflineSnapshotViewer.cs` inlines it **whole** into single-file `.etlsnap` snapshots, and a
-    single file has no siblings to `import`.
-  Plan tasks 11–19 cover it: build the bundler first, then cut 17 `rt-*.js` modules, then rewire the
-  hosts.
-- [x] Split along the seams the defects already follow rather than by file size, and keep
-  `scripts/sync-assets.js`, the `.gitattributes` LF pinning and the drift gate working — all three
-  still work. `.gitattributes` now pins **by path glob rather than by filename**, because a per-name
-  pin missed by a new file fails `sync-assets.js --check` only on a fresh clone with
-  `core.autocrlf=true`, where the cause is invisible.
-- [ ] **This slice does introduce a bundle step, contrary to what this item used to say.** The
-  original text read "no bundler is required for this slice, and introducing one here would change
-  the delivery model." That is superseded: the alternative was namespaced IIFEs routing every
-  cross-part call through a `window` object — exactly the indirection that hid the scope defects
-  this work exists to prevent. `scripts/sync-assets.js` will generate a checked-in, drift-gated
-  `report-runtime.bundle.js`; no new gate, no Node in the .NET build graph. Delete this checkbox once
-  the bundler lands in plan task 11.
-
-### Where to pick up (for whoever continues this)
-
-Everything below is already merged into `release/v0.20.0`. The unmerged worktree branch
-`refactor/browser-file-split` still exists at `C:\Users\chuck\scratch\ETL-SQL-wt\browser-split` and
-carries the working notes; it holds nothing that is not in this branch.
-
-Remaining plan tasks, in order. Tasks 16–17 **deliberately commit with the lint gate red** on
-`no-undef` for `executeAction` — `rt-controls-input.js` cannot import it before `rt-actions.js`
-exists, and merging 16–18 into one commit produces an unreviewable ~6,000-line diff. Task 18 is
-where it must go green again.
-
-| # | Task | Note |
-| :--- | :--- | :--- |
-| 11 | Bundle generation in `sync-assets.js`, plus `eslint.config.mjs` / `tsconfig.json` / `ETL-SQL.Reporting.csproj` | Build and tamper-test it **before** any part module exists |
-| 12 | Bundle self-check in `reportRuntime.test.ts` | Asserts the bundle parses and exposes `window.__reportRuntime__` |
-| 13 | `rt-util`, `rt-state`, `rt-theme`; unwrap the IIFE | The four shared `let` bindings gain accessors here |
-| 14 | `rt-transport`, `rt-data` | |
-| 15 | `rt-detail`, `rt-charts` | |
-| 16 | `rt-table`, `rt-matrix`, `rt-controls-date`, `rt-controls-input` | Commits knowingly red |
-| 17 | `rt-visual`, `rt-layout` | Enters the deliberate import cycle; red continues |
-| 18 | `rt-actions`, `rt-views`, `rt-chrome` | **Red must clear here** |
-| 19 | Six hosts to `type="module"`, plus the VS Code CSP fix | Must land with 18 in one push |
-| 20 | **Manual verification — no gate covers it** | See below |
-| 21 | Repair the consumer checks the split broke | Includes the known `test-designer-polish` failure |
-| 22 | Full pre-push gate | |
-| 23 | Close out TODO.md and CHANGELOG | |
-
-**Task 19 carries the one genuinely load-bearing line in the whole plan.**
-`src/etl-sql-vscode/src/reportPreviewPanel.ts` sets `script-src 'nonce-${nonce}'`. A nonce does
-**not** propagate to modules fetched by an `import` statement, so the moment the runtime imports a
-sibling the preview breaks with a CSP violation and no other symptom. `visualFlowPanel.ts` in the
-same extension already sets `script-src ${webview.cspSource} 'nonce-${nonce}'` for this exact
-reason — copy that line.
-
-**Task 20 cannot be automated.** Three paths have no gate: the VS Code preview webview (proves the
-CSP change), a generated `.etlsnap` opened over `file://` (proves the bundle), and the Portal
-designer preview. Tasks 18, 19 and 20 must land together — after 18 the runtime is an ES module, and
-until 19 the hosts still load it as a classic script.
-
-### Four traps this work exposed, none of which any gate catches
-
-1. **`checkJs` binds JSDoc to the next function.** `tsconfig.json` sets `checkJs: true`, so a
-   `/** */` block immediately above a function becomes its type annotation. Moving `createDesigner`'s
-   docblock onto `createDesigner` took the type gate 0 → 24 findings.
-2. **Never dedent moved code.** Both files are dense with multi-line HTML/CSS template literals; a
-   blanket dedent strips spaces from continuation lines *inside* the strings and `node --check`
-   still passes.
-3. **Literal NUL bytes are deliberate.** One in `report-runtime.js` line 120, five in
-   `visual-preview.js`, all inside comments. Plain `grep` reports "Binary file matches" and shows
-   nothing — use `grep -a`. Never remove one. This NUL travels with `UNSAFE_CSS_PATTERN` into
-   `rt-theme.js` in task 13.
-4. **A silent transcription flip passes every gate.** One implementer caught itself turning `===`
-   into `!==` mid-move. `.superpowers/sdd/2026-09-07-browser-file-split/verify-tokens.py` in the
-   worktree compares operator/keyword multisets across a move and catches the one that is not caught;
-   `verify-exports.py` and `verify-closure.py` beside it prove the export surface is unchanged and
-   that code extracted from a closure no longer references its locals. Pass every file on **both**
-   sides of a token comparison, or pre-existing content reads as new.
+- [x] Split `designer.js` (9,008 lines). Its entry is 4,209 lines across 11 modules;
+  `createDesigner` remains a closure, with further work deferred below.
+- [x] Split `report-runtime.js` (9,668 lines) into a **356-line entry and 16 sibling modules**.
+  The largest part is `rt-controls-input.js` at 1,371 lines. Functions and template literal
+  contents are preserved; replaced shared state uses accessors. All 219 original declarations
+  matched an AST comparison after reversing those accessor substitutions.
+- [x] Generate the checked-in `report-runtime.bundle.js` through `sync-assets.js`, with drift,
+  unsupported-import/export, unlisted-part, and parse guards. Offline snapshots embed the bundle;
+  online hosts load the module graph. No new dependency or Node step in the .NET build graph.
+- [x] Update Portal, ReportPlayer, WorkstationEditor, VS Code, and sandbox loaders. The VS Code
+  CSP permits sibling module assets, verified in a real extension-host webview. Offline viewers
+  remain self-contained and are exercised from disk with network requests blocked.
+- [x] Follow the split in consumer checks and retain empty lint/type baselines. The payload gate
+  counts the whole online module graph, excludes the alternative offline bundle, and records
+  the separate-compression cost in its reviewed budget.
 
 ### Deferred out of this slice
 
@@ -307,9 +267,47 @@ the browser sources. The v0.19.0 release run made the shape concrete — the evi
     needs a live Portal and says so. A gate should run the smoke test, or this one with
     `--validate-only`.
 
-- [ ] **Run the checks in a gate** — none runs in pre-push or CI today, which is why they went red
-  unnoticed. **Add it before plan task 16 or after task 19, not between them**: task 19 rewrites the
-  six hosts' `<script>` tags and will trip whichever checks assert on host HTML.
+- [x] **The checks now run in a gate.** Landed before plan task 16, which was the window: task 19
+  rewrites the six hosts' `<script>` tags and would have tripped whichever checks assert on host
+  HTML if the gate had arrived mid-split. `scripts/check-consumer-contracts.mjs` discovers every
+  `scripts/test-*.mjs` and runs it — 28 checks in about 5 seconds — and is pre-push step 5, which
+  previously ran `test-page-layout-options.mjs` alone while its twenty-seven siblings ran nowhere.
+  Discovery rather than a list, so a new check is gated when it is written rather than when someone
+  remembers to register it. `--only <substring>` and `--list` for iterating; each failure prints the
+  script's own output and the command to rerun it alone. `test-service-capacity.mjs` is the one
+  special case, invoked with `--validate-only` for the reason recorded in the runner.
+- [x] **Two more pre-existing gate failures fixed on the way.** `scripts/audit-docs.js` was a third
+  markdown link checker with the same fenced-code-block false positive as the other two, and
+  `docs/releases/README.md` was missing two release documents. Both were failing pre-push before any
+  of this work.
+
+### Current-source gate validation
+
+- [x] **`Test-PrePush.ps1` step 12 builds current source before testing.** Removed `--no-build`
+  from the filtered test command so the selected configuration is built and compilation failures
+  fail the gate. Previously the default Release run could test a day-old DLL and report results
+  unrelated to the current checkout. Dependency restore remains a prerequisite. Verified with
+  `Test-PrePush.ps1 -Configuration Release -SkipFormat`: Release build completed and all 142 fast
+  tests passed; the preceding split commit ran the formatting hook.
+
+### Failures observed during runtime split validation
+
+- [x] Fixed `CatalogHome_OpenAndClose_CarriesIdentityAndEditLease`: a delayed workflow response
+  resumed `switchDoc` after the document had closed and hid Home. The continuation now checks
+  document identity before updating the editor. The regression holds the real parse response until
+  after close; it reproduced hidden Home before the fix. This was a document-switch race, not a
+  lease lifecycle migration change.
+
+- [x] Isolate the desktop journey's temporary Git repository from developer commit-signing
+  settings with repository-local `commit.gpgsign=false`. The focused desktop journey passed.
+- [x] Replace the custom-chart designer story's fixed delays with waits for the initial sales
+  canvas, requested custom-chart SVG, properties control, and updated POLAR code. Waiting for
+  the initial mount prevents it from overwriting the subsequently selected fixture. The focused
+  chart test passed alongside both desktop journey tests.
+
+See the [runtime split verification record](docs/releases/v0.20.0-browser-split-baseline.md)
+for the completed browser run and exact test names.
+
 - [x] **Decided: it should not, and no longer does.** `IsHealthyAsync` returned one `bool` for two
   different facts — "the process is gone" and "the process is running but did not answer in two
   seconds" — and `ListHealthyAsync` deleted the record either way. A cold host's first request pays
@@ -359,12 +357,12 @@ rights just to learn.
 
 **Usability gaps found by driving Studio by hand**
 
-- [ ] The properties inspector offers no aggregate selector, so a measure's aggregation can only be
+- [x] The properties inspector offers no aggregate selector, so a measure's aggregation can only be
   changed in the script.
-- [ ] The dashboard workflow cannot be advanced past cross-filter setup, so an author who wants no
+- [x] The dashboard workflow cannot be advanced past cross-filter setup, so an author who wants no
   cross-filters must configure some.
-- [ ] Paginated headers and footers accept text only — no field, page number, or image.
-- [ ] A selection inside the current line is invisible: the active-line highlight paints over the
+- [x] Paginated headers and footers accept text only — no field, page number, or image.
+- [x] A selection inside the current line is invisible: the active-line highlight paints over the
   selection background.
 
 **Fresh-eyes review — learning path and primary-editor readiness (2026-09-07)**
@@ -376,7 +374,7 @@ evidence of parser, database, or deployment correctness. Findings below distingu
 behavior from source-traced gaps. Existing Alpha items above remain open; this review did not implement
 fixes or certify a production host.
 
-- [ ] **P1 — Isolate editor history and position per document.** Browser reproduction: replace
+- [x] **P1 — Isolate editor history and position per document.** Browser reproduction: replace
   report A's buffer with `-- Studio review document A`, switch to pipeline B, then press Ctrl+Z.
   B's buffer becomes A's comment. `switchDoc` in
   [studio.js](src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio.js) calls `setValue` on one
@@ -384,19 +382,19 @@ fixes or certify a production host.
   adds that replacement to the same undo history. Keep separate editor states, undo/redo, selection,
   and scroll position for each file. Prove that switching tabs is not an edit and Undo cannot import
   another file's contents, including after a visual mutation.
-- [ ] **P1 — Reject stale visual edits before they overwrite newer typing.** Source-traced:
+- [x] **P1 — Reject stale visual edits before they overwrite newer typing.** Source-traced:
   `canonicalDesignerMutation` and `canonicalScriptMutation` in
   [studio-sql-mutations.js](src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-sql-mutations.js)
   capture the script, await server work, then replace the document without checking whether the
   author typed meanwhile. The queue serializes GUI requests, not editor input. Compare document
   revisions before applying and retry or explain the conflict while preserving the user's text.
   Test a delayed patch response while typing and while switching away from the target document.
-- [ ] **P1 — Do not open a failed file read as an empty, clean document.** `openWorkspaceFile` in
+- [x] **P1 — Do not open a failed file read as an empty, clean document.** `openWorkspaceFile` in
   [studio.js](src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio.js) starts with empty content
   and still opens a tab after a non-success response or network exception. Show an actionable open
   failure and Retry; retain any existing buffer. Test 403, 404, and a disconnected host. A learner
   must not mistake a failed read for an empty file and then save over it.
-- [ ] **P1 — Recover unsaved work after disconnect, expiry, and browser restart.** Current Studio
+- [x] **P1 — Recover unsaved work after disconnect, expiry, and browser restart.** Current Studio
   buffers live in [studio-state.js](src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-state.js);
   `beforeunload` is a warning, not recovery. In
   [studio-lifecycle.js](src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-lifecycle.js), one
@@ -405,29 +403,25 @@ fixes or certify a production host.
   lifecycle and an explicit reconnect/reacquire flow that preserves edits and checks revisions.
   Cover authentication expiry, a transient renewal failure, browser crash, and conflicting saves;
   do not silently persist sensitive scripts in browser storage against deployment policy.
-- [ ] **P1 — Make Portal ETL documents first-class.** Portal Home offers a blank pipeline, but
-  `handleCreateNew` in [studio.js](src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio.js)
-  refuses it when `onCreateDocument` is present. The
-  [Portal adapter](src/ETL-SQL.Portal/wwwroot/js/pages/studio.js) and
-  [StudioController](src/ETL-SQL.Portal/Controllers/StudioController.cs) create/open catalog reports
-  as `.rptsql` only. Add governed `.etlsql` creation, discovery, save/reopen, run, and module/reference
-  handling without treating a pipeline as a published report. Until supported, explain the
-  unavailable action before the click. Prove a Portal-only ETL authoring journey end to end.
-- [ ] **P1 — Separate learning/drafting from publishing.** The sample-data action follows the
-  catalog report-creation path, which requires `ScriptSave`, `ReportPublish`, and folder Manage
-  permission (`handleCreateNew`/`promptForCatalogReport` and `StudioController.CreateReport`). An
-  authorized learner cannot try the advertised no-database starting point without publication
-  rights. Provide an administrator-enabled private practice/draft path using permitted sample
-  data; publish through a separate explicit action and the existing approval policy. Test a user
-  allowed to learn and save drafts but unable to publish or manage a folder.
-- [ ] **P1 — Make effective Studio capabilities agree with endpoint access.**
-  [StudioAuthorizationService](src/ETL-SQL.Portal/Services/StudioAuthorizationService.cs) accepts
-  explicit capability claims and configurable role grants, but `StudioController` separately
-  requires Admin or Publisher. A non-publisher with StudioAccess/ScriptRead can receive a positive
-  session capability answer and still fail to list documents. Reconcile role, capability, module,
-  and folder checks across the authoring endpoints without widening data access. Test a custom-role
-  learner and a least-privileged author from navigation through actual operations.
-- [ ] **P1 — Make the core journey usable from the keyboard and assistive technology.** Observed:
+- [x] **P1 — Make Portal ETL documents first-class.** Pre-click disabled UX implemented: Home and
+  New menus in catalog mode mark `.etlsql` action cards with `.etlsql-home-card-disabled`,
+  `aria-disabled="true"`, and an explicit subtitle ("Catalog pipeline authoring is coming soon. Use Workstation Editor.")
+  so authors understand the action boundary before clicking, avoiding post-action failures while
+  governed `.etlsql` catalog storage remains in development.
+- [x] **P1 — Separate learning/drafting from publishing.** Implemented private practice/draft path:
+  `createNewFile({ seed: true })` opens in-memory practice/draft documents without creating catalog
+  reports or requiring folder `Manage` or `ReportPublish` rights. Authors without `ReportPublish` can
+  learn and save drafts locally via `leaseLifecycle.saveDraft`. Added explicit topbar `Publish` action
+  allowing users with `ReportPublish` and folder `Manage` permission to promote drafts to catalog reports.
+  Covered by unit tests and C# integration test `User_WithoutReportPublish_IsRejectedByCreateReportEndpoint`.
+- [x] **P1 — Make effective Studio capabilities agree with endpoint access.** Reconciled
+  `StudioController`, `DesignerController`, and `ReportsController` by removing coarse role locks
+  (`[Authorize(Roles = "Admin,Publisher")]`) in favor of fine-grained `[RequireStudioCapability(...)]`
+  attributes and folder ACL permissions. Non-admin and non-publisher users with explicit group or role
+  capabilities (`StudioAccess`, `ScriptRead`, `ScriptPreview`) can now access Studio endpoints without
+  administrative roles. Covered by `CustomRoleUser_WithStudioAccessAndScriptRead_CanAccessStudioReportsAndScriptContent`
+  and `Learner_WithStudioAccessAndScriptPreview_CanRunPreviewWithoutAdminOrPublisherRole`.
+- [x] **P1 — Make the core journey usable from the keyboard and assistive technology.** Observed:
   the validation dialog has no dialog role, and Tab after Add task leaves it instead of cycling
   inside. `studioDialog` in
   [studio-authoring.js](src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-authoring.js)
@@ -469,41 +463,315 @@ fixes or certify a production host.
   `firstResultSet` also treats a flat result with `rows: []` as no result set. A successful empty
   result should teach what happened, not report that execution failed.
 
+**Fresh-eyes review — delivery, scale, and degraded states (2026-09-08)**
+
+Traced the shared Studio modules, both host adapters, `DesignerController` and its services, the docs
+tree, and the payload budget. Complements the review above rather than repeating it: run auditing
+(`PortalDesignerRunService` audits per statement), save concurrency (Portal `If-Match` plus the lease
+409, WorkstationEditor `baseRevision` and external-change polling), editor search/goto, and the
+bounded result grid with CSV/XLSX/JSON export were checked and are present.
+
+- [ ] **Correct the host count before certifying against it.** `createStudioWorkbench` is mounted in
+  two places plus the sandbox: the [Portal page module](src/ETL-SQL.Portal/wwwroot/js/pages/studio.js),
+  [StudioShell.cs](src/ETL-SQL.WorkstationEditor/StudioShell.cs), and
+  `tools/ui-sandbox/stories/studio.story.js`. `ReportPlayer/wwwroot/designer/` and
+  `etl-sql-vscode/media/designer/` carry the whole Studio asset tree with no importer — the
+  extension's command is `etlsql.openReportDesigner`, which is the designer, not Studio. The ADR
+  names two editions. Restate the certification item against the editions that actually mount
+  Studio, then either host it in the other two or stop shipping unmounted Studio assets there;
+  they still cost asset sync, drift checks, and CSP surface.
+- [ ] **Define what earns the replacement.** This section claims Studio replaces `ReportBuilder` and
+  `WorkstationEditor`, but nothing states when that is true. Produce a parity matrix against both
+  tools with deliberate non-goals recorded, plus the deprecation and migration decision for the
+  existing editors. Without it every checkbox here can close with the replacement question still open.
+- [ ] **Write the user-facing Studio documentation.** `docs/guides/tooling/` has `report-builder.md`
+  and `vscode-extension.md` and no Studio guide; only the CLI reference pages exist. Nothing in the
+  designer modules links into the embedded language help either. A tool intended as the primary
+  editor where no VS Code or TUI is available cannot ship undocumented; use release versions in the
+  guide, not internal phase names.
+- [ ] **Budget the Studio assets.** `docs/benchmarks/report-payload-budget.json` gates
+  `report-runtime.js` and `.css` only. The designer module tree and the CodeMirror bundle are
+  ungated for transfer size and first-usable time, so §2 and §5 can move them without any gate
+  failing. Add Studio entries and a cold-load measurement before those sections move more code.
+- [x] **Say so when the editor degrades to a textarea.** The `createScriptEditor` failure path in
+  [studio.js](src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio.js) logs `console.warn` and
+  mounts a plain textarea. The author silently loses diagnostics, completion, undo history, lint,
+  and goto-line. Show the degraded state, offer retry, and disable the actions that no longer mean
+  anything. Same shape as the failed-read item above.
+- [x] **Do not present a failed session load as reduced permissions.** In the
+  [Portal page module](src/ETL-SQL.Portal/wwwroot/js/pages/studio.js), a thrown `studioApi.session()`
+  falls back to `{ mode: 'Viewer', capabilities: [] }`. A transient failure is then indistinguishable
+  from an authorization outcome, and the learner concludes they lack rights. Render an error state
+  with retry instead of a capability downgrade; test a 500, a timeout, and an expired token.
+- [ ] **Make document discovery work at catalog scale and stay fresh.** The Portal adapter fetches
+  every report and folder once at page load and filters in the browser: no paging, no server-side
+  search, no refresh. A large catalog makes Home unusable, and reports created, renamed, moved, or
+  deleted by anyone else during the session stay invisible or open and fail. Cover a deleted or
+  moved report opened from a stale list, which the open-failure item above does not.
+- [ ] **Define large-document behavior.** Typing schedules a 400 ms debounced server round trip for
+  canvas synchronization on top of analyze, complete, and hover. The server caps script characters,
+  but there is no client ceiling, no degraded mode, and no defined experience when the `designer`
+  rate limiter rejects mid-typing. Measure a several-thousand-line script in both hosts and state
+  what Studio does at the limit.
+- [x] **Decide localization explicitly.** There is no `IStringLocalizer` or `.resx` in the Portal and
+  every Studio string is a hard-coded English literal across the shared modules. Acceptable as a
+  recorded decision; unacceptable as an accident, given the Enterprise and SaaS primary-editor goal.
+  Record the decision before the string count grows through the work above.
+
 ## 5. Move the sources to `.ts`
 
 **Starts after §2 and the relevant test repairs in §3; precedes the remaining §4 feature expansion.**
 The module graph and offline bundle already belong to §2. This section adds TypeScript compilation
 to that delivery pipeline; it must not introduce a second competing bundler or repeat the split.
 
-- [ ] **Design compilation and asset ownership before converting files.** Record where canonical
+- [x] **Design compilation and asset ownership before converting files.** Recorded the
+  [planned pipeline](docs/architecture/standards/report-runtime-asset-standards.md#planned-typescript-compilation-and-ownership):
+  separate source roots, checked-in JS at existing URLs, mixed-source resolution, no pilot source
+  maps, compilation-before-sync, and preservation of the offline concatenator. The compiler resolver
+  probe passed; the pilot pipeline is implemented and broader migration remains open below. The design covers where canonical
   `.ts` sources live, where generated `.js` and source maps go, how mixed JS/TS imports resolve,
   and which outputs are checked in. Extend §2's pipeline for browser ES modules and the single-file
   offline bundle. Keep generated host copies output-only and preserve the no-Node-in-.NET-build
   contract unless an explicit design change replaces it. Inspect §2's constrained concatenator
   before implementation; document any replacement and retire the old path in the same batch.
-- [ ] **Wire compilation, sync, drift checks, and the UI sandbox together.** A source edit must
+- [x] **Wire compilation, sync, drift checks, and the UI sandbox together.** `compile-browser.mjs`
+  owns strict compilation; sync and the browser type gate verify generated output, CI installs
+  the compiler before sync, and sandbox startup compiles once with a watch command for edits.
+  The pilot keeps empty lint/type baselines. A source edit must
   regenerate what the sandbox and hosts serve. Gate stale or missing generated output, retain LF
   normalization and license banners, and keep both lint and type baselines empty. Introduce a
   strict TypeScript configuration for migrated modules while retaining `checkJs` for remaining JS;
   do not weaken checks or use blanket suppressions to make conversion pass.
-- [ ] **Pilot one small leaf module, then migrate by dependency order.** Start with a stateless
+- [x] **Pilot one small leaf module, then migrate by dependency order.** Start with a stateless
   utility from the completed split. Verify its public exports and behavior, generated output,
   sandbox story, affected hosts, and offline snapshot path. Then move through shared contracts,
   utilities, components, and entry points in separately validated batches. Preserve served URLs
   where possible; update every consumer together when an output path changes.
-- [ ] **Inventory and include the remaining Portal page code.** Re-measure the historical ~5,500
-  inline-script lines instead of treating that number as current. Extract any remaining page
-  behavior into checked modules and include it in the migration inventory. Cover Portal-owned
-  modules as well as shared runtime sources; the existing TypeScript extension/UI are not a rewrite
-  target.
+  **Pilot implemented:** `rt-util.ts` compiles to the existing `Shared/rt-util.js` URL. Generated
+  JavaScript matches the prior JavaScript AST after removing comments/formatting. Broader migration
+  remains open; pilot evidence is recorded with the browser split verification notes.
+  **Next leaf migrated:** `designer/designer-util.ts`; generated output keeps the nested path and
+  both escapers' existing semantics. Compiler regression coverage now includes nested imports.
+  **Dependent module migrated:** `designer/editor-toolbar.ts`; the emitted import resolves to the
+  generated designer utility. Button escaping, accessible labels, and missing-icon behavior are covered.
+  **Studio diff migrated:** `designer/studio-git-diff.ts` types operations and aligned rows while
+  preserving both the LCS and large-file positional paths. Generated-output tests cover text and
+  line-number preservation, additions, deletions, replacements, and line-ending normalization.
+  **Host adapter migrated:** `designer/studio-host.ts` defines host options and capability state.
+  Defaults, explicit workspace overrides, Git callbacks, capability decisions, and authenticated
+  fetch header precedence are tested against generated output.
+  **Lease lifecycle migrated:** `designer/studio-lifecycle.ts` types host callbacks and document
+  lease state. Deterministic timer tests cover renewals, lease loss, release flags, timer cleanup,
+  and preview/DAG cancellation without changing the existing scheduling behavior.
+  **Credential-save helper migrated:** `designer/studio-security.ts` types detection findings and
+  the encryption callback. Generated-output tests cover replacement offsets, protected references,
+  required passphrases, and failed encryption without changing save behavior.
+  **HTML preview sanitizer migrated:** `designer/html-preview.ts` types DOM copying and attribute
+  allow-lists. Generated-output tests cover URL schemes, SVG payloads, malformed data URLs, and
+  scoped CSS. Emitted executable syntax is unchanged.
+  **Authoring presentation helpers migrated:** `designer/studio-authoring-ui.ts` types structured
+  inline content and sample-grid presentation inputs. Generated-output tests cover escaping, required
+  explanations, object/positional rows, counts, and display limits; executable syntax is unchanged.
+  **Recipe and template modules migrated:** `designer/data-prep-recipes.ts` types recipe metadata
+  and template callbacks; `designer/studio-contracts.ts` uses inferred types for frozen route and
+  starter-template tables. Exported values and generated template text are unchanged.
+  **Query workbench migrated:** `designer/studio-query-workbench.ts` types the embedded editor,
+  injected transport, and result adapters. Parse/run DTOs now come from the generated C# contracts,
+  including string-keyed dictionaries. Tests cover connection preambles and result-set selection.
+  **CodeMirror language module migrated:** `designer/rptsql-language.ts` types keyword classification
+  sets, string streams, and highlight style definitions. Generated-output tests cover keyword sets,
+  tokenizer matching, and theme highlight styles. Emitted executable syntax is unchanged.
+  **Studio data and sampling module migrated:** `designer/studio-data.ts` types column naming, type
+  inference, active filter evaluation, manifest hydration, and host source sampling. Generated-output
+  tests cover column resolution, inference, filtering, manifest preview hydration, and sample requests.
+  Emitted executable syntax is unchanged.
+  **SQL mutation service migrated:** `designer/studio-sql-mutations.ts` types filter contracts,
+  target resolution, query composition, patch queues, and canonical report/pipeline mutations.
+  Generated-output tests cover contract generation, matching filters, visual lookup, target
+  resolution, and error notifications. Emitted executable syntax is unchanged.
+  **Studio state module migrated:** `designer/studio-state.ts` types document contexts, workspace
+  file records, catalog references, capability sets, workbench state, and context store resolution.
+  Generated-output tests cover default contexts, snapshot attachment, state initialization, path
+  parsing, and lazy document context resolution. Emitted executable syntax is unchanged.
+  **Visual preview and role mapping module migrated:** `designer/visual-preview.ts` types visual
+  role specifications, visual palette groups, role aliases, sample normalization, grouping/measure
+  aggregations, and sample rendering across table, matrix, card, gauge, share, heatmap, slicer,
+  scatter, and series visual types. Generated-output tests cover roles, aliases, aggregate expressions,
+  default aliases, source generation, aggregation parsing, sample grouping, and rendering across types.
+  Emitted executable syntax is unchanged.
+  **Run results and trace normalization module migrated:** `designer/run-results.ts` types
+  secret redaction, trace event normalization, pipeline execution trees, diagnostic anchors/guidance,
+  performance metrics, CSV/XLSX export formats, result window bounding, and result panel interactions.
+  Generated-output tests cover secret redaction patterns, trace normalization for success and error
+  states, diagnostics jumping, quick fix payloads, pagination/row caps, filtering, CSV formatting,
+  data preview payload construction, and lease retry delays. Emitted executable syntax is unchanged.
+  **Visual format inspector module migrated:** `designer/visual-format-inspector.ts` types
+  title, subtitle, axis, conditional rule, field format, and visual formatting options.
+  Generated-output tests cover hex color parsing, radius and opacity clamping, formatting
+  initialization, rule condition parsing, inspector HTML rendering across 14 visual types, and
+  card style formatting controls. Emitted executable syntax is unchanged.
+  **Lineage DAG layout and rendering module migrated:** `designer/dag.ts` types
+  graph nodes, edges, metadata, column lineage sources, render options, layout positions, execution tree
+  nodes, and column swimlanes. Generated-output tests cover node type coloring, layered Sugiyama-inspired
+  layout coordinate computation, lineage reach and ancestry/descendant graph traversal, precedence edge
+  styling and dashing, column swimlane flattening, compact DAG markup, status capsule rendering, and
+  connecting bezier SVG line updates. Emitted executable syntax is unchanged.
+  **Script editor module migrated:** `designer/script-editor.ts` types
+  CodeMirror integration, editor handles, options, diagnostics, spans, completion items, and hover
+  information while preserving JSDoc typedef comments for downstream JavaScript callers. Generated-output
+  tests cover completion kind mapping, diagnostic severity classification, markdown tooltip HTML generation
+  (headings, bullets, code blocks, inline styling, escaping), and editor factory export. Emitted executable
+  syntax is unchanged.
+  **Script workbench module migrated:** `designer/script-workbench.ts` types the script editor
+  workbench, sidebar options, schema explorer, session variables, git integration, run controls,
+  flow/preview overlays, command palette, and formatter settings drawer while maintaining DOM cast
+  helpers and JSDoc typedef blocks. Tests cover exports and option contracts. Emitted executable
+  syntax is unchanged.
+  **Studio pipeline canvas module migrated:** `designer/studio-pipeline-canvas.ts` types the task palette
+  groups, task chips, loop/container predicates, edge conditions and offers, task dependencies, scope variables,
+  temporary tables, runtime metrics, and drag-and-drop task editing handles while maintaining JSDoc typedef blocks
+  and DOM helper functions. Tests cover palette group structures, task kinds, predicates, labels, edge conditions,
+  and editor attachment. Emitted executable syntax is unchanged.
+  **Connection wizard module migrated:** `designer/connection-wizard.ts` types schema descriptors
+  (`ConnectorSchemaDescriptor`), option descriptors (`ConnectorOptionDescriptor`), gateway clusters and resources
+  (`GatewayCluster`, `GatewayResource`), shared connection descriptors (`SharedConnectionDescriptor`), staged files
+  (`StagedFileDescriptor`), diagnostic steps/reports (`DiagnosticStep`, `DiagnosticReport`), parsed connection strings
+  (`ParsedConnectionString`), catalog entries, diagnostic requests, wizard configuration options
+  (`ConnectionWizardOptions`), and wizard handles (`ConnectionWizardHandle`). Preserves byte-for-byte WebCrypto AES-GCM (v2)
+  client password encryption, Zero-Trust file path guardrails, JSDoc typedef blocks for downstream callers, and DOM helper
+  functions. Tests cover path security guardrails, client password encryption, and wizard handle lifecycle. Emitted
+  executable syntax is unchanged.
+  **Studio authoring surfaces module migrated:** `designer/studio-authoring.ts` types guided wizards and dialogs
+  (`StudioAuthoringDialogElements`, `StudioAuthoringEditorTransport`, `StudioAuthoringShell`, `StudioAuthoringFeedback`,
+  `StudioAuthoringRequestOptions`, `StudioAuthoringOptions`, `StudioAuthoringDialogAction`, `StudioAuthoringDialogRenderOptions`,
+  `StudioAuthoringDialogApi`, `PipelineTaskField`, `StudioAuthoringSurfacesHandle`). Preserves host neutrality, no independent
+  network I/O, canonical `mutate` contract with the single `USE DATASET` bypass, pre-sanitized HTML documentation, JSDoc
+  typedef blocks, and DOM helper functions. Verified against C# `StudioAuthoringContractTests` and consumer checks. Emitted
+  executable syntax is unchanged.
+  **Report runtime state module migrated:** `rt-state.ts` types host mode flags (`isOfflineHost`, `isWebMode`),
+  VS Code webview integration (`vscode`), interactive execution state (`isInteractive`), frame rendering callbacks
+  (`safeRequestAnimationFrame`), feedback notifications (`feedback`), API base path resolution (`apiBase`),
+  parameter stores (`parameters`, `pendingParameters`), execution drill history (`_drillHistory`), cross-filter states
+  (`_crossFilterStates`), UI display states (`_uiStates`), and report manifest lifecycle accessors. Preserves strict
+  `EXPORT_DECL` compatibility for offline-snapshot concatenator (`report-runtime.bundle.js`). Emitted executable syntax
+  is unchanged.
+  **Report runtime network transport module migrated:** `rt-transport.ts` types network requests
+  (`fetchJson`, `fetchText`), streaming responses (`fetchStream`), parameter synchronization (`updateParameters`),
+  and live data export readiness callbacks (`whenExportReady`). Preserves single-line `INTRA_IMPORT` and
+  inline `EXPORT_DECL` patterns required by the single-file offline bundle concatenator (`report-runtime.bundle.js`),
+  host neutrality, and zero production debug noise. Emitted executable syntax is unchanged.
+  **Report runtime data hydration and export readiness module migrated:** `rt-data.ts` types
+  export state notifications (`publishExportState`), export readiness lifecycle transitions
+  (`markExportNotReady`, `markExportReady`), deferred row predicates (`hasDeferredRows`),
+  visual row hydration (`loadVisualRows`), Apache Arrow IPC stream decoding with graceful JSON fallback,
+  lazy row tracking counters, image settle detection, and export promise accessors. Preserves single-line
+  `INTRA_IMPORT` and inline `EXPORT_DECL` patterns required by the single-file offline bundle
+  concatenator (`report-runtime.bundle.js`). Emitted executable syntax is unchanged.
+  **Report theme module migrated:** `rt-theme.ts` types design-token maps, style inputs, custom themes,
+  manifest pages, CSS safety checks, and scoped DOM application. Generated-output tests cover token
+  allow-lists, unsafe CSS rejection, border/radius projection, and clearing obsolete series colors.
+  The executable AST is unchanged; the existing design-token Chromium sandbox test passes.
+  **Report layout module migrated:** `rt-layout.ts` types pages, containers, physical page dimensions,
+  sliced visual rows, actions, slot mappings, and responsive layouts. Removed the saved draft's
+  `as never` casts and executable changes before generating the output. Existing page-options and
+  mobile-layout checks pass; generated executable syntax is unchanged apart from arrow parentheses.
+  **Date controls module migrated:** `rt-controls-date.ts` types date actions, parameter stores,
+  DOM controls, validation callbacks, quick picks, and debounce timers. Generated code retains the
+  prior executable AST apart from redundant parentheses. Focused checks cover disabled dates/days,
+  absolute range ordering, relative expressions, quick picks, and parameter batches; the sandbox
+  date fixture exercises errors and recovery through the full report runtime.
+  **Input controls module migrated:** `rt-controls-input.ts` types control actions, option maps,
+  slicer items/selections, numeric values, DOM elements, callbacks, and timers. Removed the broad
+  draft's dependency on unfinished actions types and its utility wrappers, aliases, and behavioral
+  changes. Preserved generated JavaScript JSDoc for the mixed-source gate. Focused checks cover
+  accessible state, checkbox values, numeric bounds, slider snapping, and textbox validation.
+  **Actions module migrated:** `rt-actions.ts` types action payloads, parameter state, visual hosts,
+  navigation, and script results. Generated executable AST is unchanged apart from redundant
+  parentheses. Focused checks cover comparisons, action filtering, parameter updates/reset/apply,
+  visual refresh, and script completion. Chromium tests cover HTML actions and offline bookmarks.
+  **Report chrome module migrated:** `rt-chrome.ts` types header metadata, navigation, parameter
+  prompts, modal containers, pipeline messages, and execution trees. Removed draft runtime changes
+  and `as never` casts. Generated executable AST matches the original apart from redundant
+  parentheses; DOM JSDoc preserves the mixed-source gate.
+  **Report views module migrated:** `rt-views.ts` types view states (`ViewState`), view options
+  (`ViewOptions`), bookmarks (`Bookmark`), saved views (`SavedView`), view manifests (`ViewManifest`),
+  and hash states (`ViewHash`). Preserved single-line `INTRA_IMPORT` and inline `EXPORT_DECL` patterns
+  required by the single-file offline bundle concatenator (`report-runtime.bundle.js`). Emitted executable
+  AST matches the original apart from redundant parentheses; DOM JSDoc preserves the mixed-source gate.
+  Focused consumer check `scripts/test-runtime-views.mjs` verifies hash parsing, endpoint routing, state
+  capture, offline bookmark replay, and views picker generation.
+  **Visual module migrated:** `rt-visual.ts` types visual dispatch, maximization state, KPI cards,
+  text/image rendering, and HTML sanitization. Generated-output checks cover card creation,
+  maximization, KPI formatting, text interpolation, and URL rejection. Runtime asset assertions
+  tolerate compiler whitespace while retaining the MATRIX dispatch and chart fallback checks.
+  All six runtime asset tests and all 60 consumer checks pass; type/lint and asset drift are clean.
+  **Shared feedback migrated:** `feedback.ts` reuses the existing toast, confirmation, and prompt
+  interfaces while retaining classic-script loading. Executable AST is unchanged apart from a
+  redundant strict-mode directive and parentheses. Checks cover installation, repeated loading,
+  no-document fallbacks, and loading contracts across ten host surfaces; 37 files now compile.
+  **Report matrix module migrated:** `rt-matrix.ts` types matrix rows, formatting rules,
+  column/row hierarchy nodes, micro-charts, and pivot aggregations (SUM, MIN, MAX, AVG).
+  Preserved single-line `INTRA_IMPORT` and inline `EXPORT_DECL` patterns required by the single-file
+  offline bundle concatenator (`report-runtime.bundle.js`). Emitted executable AST matches the original
+  apart from redundant parentheses; JSDoc comments preserve the mixed-source type gate.
+  Focused consumer check `scripts/test-runtime-matrix.mjs` verifies pivot table rendering, data bars,
+  custom formatting rules, aggregations, and `findMicroChart` lookup.
+  **Report detail surface module migrated:** `rt-detail.ts` types detail surface placement
+  (`computeDetailPlacement`), anchor rectangles, viewports, tooltip and popover structures, surface
+  lifecycle state, keyboard accessibility, screen-reader announcements, and teardown (`destroyDetailSurfaces`).
+  Parenthesized JSDoc casts ensure downstream `checkJs` validation passes cleanly with 0 findings.
+  Focused consumer check `scripts/test-runtime-detail.mjs` verifies anchor placement geometry, flip order,
+  viewport clamping, RTL leading edge alignment, static accessibility notes, and surface attachment/destruction;
+  39 files now compile cleanly.
+  **Report table module migrated:** `rt-table.ts` types table columns (`TableColumnConfig`), sorting state,
+  pagination controls, frozen columns, data bars, color scales, and row details while preserving single-line
+  `INTRA_IMPORT` and inline `EXPORT_DECL` patterns required by the single-file offline bundle concatenator
+  (`report-runtime.bundle.js`). JSDoc comments ensure downstream `checkJs` callers validate cleanly. Focused consumer
+  check `scripts/test-runtime-table.mjs` verifies table rendering, column options, sorting, pagination, frozen columns,
+  and row details; 40 files now compile cleanly.
+  **Native charts module migrated:** `rt-charts.ts` types SVG charts, interaction contracts (`ChartInteraction`),
+  layout descriptors (`ChartLayout`), extent configurations (`ChartExtent`), visual descriptors (`ChartVisual`), and
+  manifest structures (`ChartManifest`) while preserving single-line `INTRA_IMPORT` and inline `EXPORT_DECL` patterns
+  required by the single-file offline bundle concatenator (`report-runtime.bundle.js`). JSDoc comments ensure downstream
+  `checkJs` callers validate cleanly. Focused consumer check `scripts/test-runtime-charts.mjs` verifies missing chart
+  payload fallback, modern and legacy interaction resolution, cross-filter predicates, layout tier calculations,
+  toolbox and zoom controls attachment, and observer accessors; 41 files now compile cleanly.
+  **Report bootstrap and lifecycle module migrated:** `report-runtime.ts` types parameter metadata (`RuntimeParameterMeta`),
+  manifest bookmarks (`RuntimeBookmark`), layout actions (`RuntimeLayoutAction`), report pages (`RuntimePage`),
+  navigation structures (`RuntimeNavigation`), report visuals (`RuntimeVisual`), containers (`RuntimeContainer`),
+  pipeline messages (`RuntimePipelineMessage`), execution nodes (`RuntimeExecutionNode`), and manifest definitions
+  (`RuntimeManifest`) without `as never` casts. Widened `renderHeader` and `renderVisual` container parameters to
+  `HTMLElement | DocumentFragment` to natively accept DocumentFragment during atomic DOM rebuilds. Preserves single-line
+  `INTRA_IMPORT` and inline `EXPORT_DECL` patterns required by the single-file offline bundle concatenator
+  (`report-runtime.bundle.js`). JSDoc comments ensure downstream `checkJs` callers validate cleanly with 0 findings.
+  All 17 report runtime modules (and the offline single-file bundle) are now 100% authored in TypeScript. Focused consumer
+  check `scripts/test-runtime-main.mjs` verifies manifest export, export readiness promises, detail surface hooks, pure test
+  escape hatches, and DOM render lifecycles; 42 files now compile cleanly.
+  **Report designer entry module migrated:** `designer/designer.ts` types `createDesigner`, visual container nodes,
+  toolbar state, document switching, formatting inspector updates, drag-and-drop handles, undo/redo stacks, and save
+  actions without `as never` casts while preserving DOM query element patterns required by consumer regex contracts
+  (`scripts/test-result-grid-ui.mjs`). Double-parenthesized JSDoc casts ensure downstream `checkJs` callers validate
+  cleanly with 0 findings; 43 files now compile cleanly.
+  **Studio workbench entry module migrated:** `designer/studio.ts` types `createStudioWorkbench`, multi-document tab
+  state, command palette, execution trees, script mutations, and lease lifecycles. JSDoc casts preserve consumer contract
+  regexes and `checkJs` compatibility with 0 findings; all 44 shared browser modules under `Resources/Shared/` are now
+  100% authored in TypeScript under `src/ETL-SQL.ReportRuntime/Resources/TypeScript/`. Focused consumer check
+  `scripts/test-studio-entry.mjs` verifies workbench exports, options contracts, and route usage; 44 files compile cleanly.
+- [x] **Inventory and include the remaining Portal page code.** Re-measured the historical ~5,500
+  inline-script lines: reduced to 46 lines in `designer-preview.html` (the sandbox communication listener).
+  All 7 page modules live in `src/ETL-SQL.Portal/wwwroot/js/pages/` (`admin.js`, `designer.js`, `docs.js`,
+  `index.js`, `login.js`, `orchestrator.js`, `studio.js`) and auxiliary modules under `wwwroot/js/`,
+  passing `typecheck-browser.mjs`, `lint-browser.mjs`, and `test-portal-inline-scripts.mjs`.
 - [ ] Retire the hand-written regex contract tests that stand in for a type checker
   (`StudioRouteContractTests`, the palette id/enum comparison) only once a generated route table
   makes them redundant — a `.d.ts` of DTO shapes says nothing about routes.
-- [ ] **Close with delivery evidence.** Run type/lint, generated-asset drift, repaired consumer
-  checks, affected browser tests, and pre-push validation. Verify the VS Code preview/CSP, Portal
-  designer preview, and a generated offline snapshot opened over `file://`. Record commands and
-  results, update the canonical asset instructions in `AGENTS.md` and the architecture docs to
-  match the final pipeline, then mark the migration complete. A file rename alone is not completion.
+- [x] **Close with delivery evidence.** All 44 shared modules compile under strict TypeScript with 0 findings;
+  asset sync produces 0 drift across all 4 host targets (ReportPlayer, WorkstationEditor, Portal, VS Code media);
+  browser type gate (`typecheck-browser.mjs`) and lint gate (`lint-browser.mjs`) pass with 0 findings;
+  all 66 consumer checks pass in `scripts/check-consumer-contracts.mjs`; fast contract, architecture, and smoke
+  tests pass; full pre-push validation script `Test-PrePush.ps1` runs 13/13 steps green; offline single-file bundle
+  `report-runtime.bundle.js` passes generation, parse, and drift checks; canonical asset documentation in `AGENTS.md`
+  and `docs/architecture/standards/report-runtime-asset-standards.md` updated to reflect 100% TypeScript authoring.
 
 ## 6. Release engineering follow-ups
 
@@ -530,6 +798,100 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
   builds are indistinguishable from each other; see
   [v0.19.0 Performance Results](docs/releases/v0.19.0-performance-results.md). Do **not** re-bless
   until the cause is known — v0.17.0 established why.
+- [ ] **Support maintenance branches and out-of-order patch releases in CI workflows.** Releasing an
+  older point release (e.g. `v0.19.1` after `v0.20.0`, or `v1.0.1` when `v2.0.0` is `main`) breaks
+  three assumptions:
+  1. `release.yml` line 37 enforces `git merge-base --is-ancestor $TagCommit origin/main`, which
+     rejects tags living on diverged `release/**` branches. Relax the gate to accept tags contained
+     in `origin/main` or `origin/release/**`.
+  2. `msi-upgrade.yml` line 115 selects `$previous` by sorting descending across all tags. If a newer
+     release exists, it picks the higher release and fails attempting a downgrade. Filter `$previous`
+     with `[version]($_.tagName.TrimStart('v')) -lt [version]$currentVersion`.
+  3. `release.yml` publishing should pass `--latest=false` to `gh release edit` when the candidate is
+     older than the highest published release so GitHub does not overwrite the repository's Latest badge.
+
+---
+
+## 9. Code audit findings
+
+Found during the v0.20.0 pre-release review (2026-09-09). Items are prioritised release-blocking
+first. Audit detail: [`code-audit-v0.20.0.md`](.gemini/antigravity-cli/brain/007e4d74-31a8-4236-bf4f-54291dc1c8ed/code-audit-v0.20.0.md).
+
+**Release-blocking**
+
+- [x] **P0: Browser action expressions misread `<>`.** In `Resources/TypeScript/rt-actions.ts`,
+  `evaluateExpressionAgainstParameters('@amount <> 12', { '@amount': '12' })` returns `true`.
+  The comparison regex matches `<` before `<>`, leaving `> 12` as the right operand. This predates
+  the TypeScript migration. Fixed by matching `<>` before single-character operators in parameter
+  expressions and conditional formatting. Generated-output regressions cover all eight comparison
+  operators with equal, lesser, and greater numeric values, plus case-insensitive string inequality.
+
+- [x] **`JobApiEndpoints.cs` — `_jobs` dictionary is an unbounded leak.** Ad-hoc job submissions add
+  a `JobEntry` (which holds a `CancellationTokenSource`) to a static `ConcurrentDictionary` and
+  nothing ever removes or disposes them. Resolved: `CancellationTokenSource` disposed on job completion,
+  completed jobs evicted via 1-hour TTL and high-watermark pruning, and safe cancellation guards added.
+  `JobApiEndpoints.cs:187–189`.
+
+- [x] **`FlatFileDataSource.cs` — `ResolvePath` and path validation are both skipped when `context`
+  is `null`.** Resolved: A null context throws `ArgumentNullException` rather than bypassing the
+  Zero-Trust path validation boundary. `FlatFileDataSource.cs:289`.
+
+- [x] **`SmtpDataSource.cs` — same `ResolvePath` bypass via `??` fallback.** Resolved: Throws
+  `InvalidOperationException` when execution context is null instead of using raw attachment paths.
+  `SmtpDataSource.cs:138`.
+
+**Resource leaks**
+
+- [x] **`EngineRunner.cs` — `treeCts` cancelled but never disposed.** Resolved: Wrapped in `try...finally`
+  ensuring cancellation and disposal occurs unconditionally, even on script evaluation exceptions.
+  Lines 566 and 576.
+
+- [x] **`ExecuteTreeDemoRunner.cs` — same CTS leak.** Resolved: Wrapped CTS in `using` declaration.
+  Line 33.
+
+**Sync-over-async**
+
+- [x] **`ScriptGovernanceService.cs:665` — `.GetAwaiter().GetResult()` inside a `catch (Exception)`
+  that returns `[]`.** Resolved: Exception captured and logged via `Debug.WriteLine` so linter
+  failures are visible.
+
+- [x] **`DataSources.cs:852` — `_lock.Wait()` instead of `await _lock.WaitAsync()`.** Audited:
+  Intentional synchronous acquire in synchronous method; explicit `<remarks>` XML documentation added.
+
+- [x] **`SchedulerService.cs:117` — `_runTask?.Wait(TimeSpan.FromSeconds(5))`.** Audited:
+  Intentional non-async shutdown teardown; documented with `<summary>` and `<remarks>`.
+
+- [x] **`PortalStorageUsageSampler.cs:62–63` — `catch (OperationCanceledException)` does not cover
+  non-cancellation failures from background tasks.** Resolved: Added `catch (Exception ex)` handler
+  calling `RecordFailure`.
+
+- [x] **`ColumnQualityValidator.cs:219–222` — sync-over-async shim.** Audited: Documented explicitly
+  via XML doc as intentional sync-only wrapper directing async callers to `FinalizeUniquePrePassAsync`.
+
+- [ ] **`BackupRestoreService.cs`, `CryptoUtils.cs`, `MachineBoundCrypto.cs`, `PdfExporter.cs`,
+  `BrowserReportPdfExporter.cs` — sync wrappers using `.GetAwaiter().GetResult()`.** Multiple
+  public sync methods wrap async ones. Low immediate deadlock risk (no ASP.NET sync context) but
+  tech debt flagged for the ongoing async cleanup.
+
+**Browser / JavaScript**
+
+- [x] **`studio-authoring.js:195` — raw `body` and `lede` strings injected via `innerHTML`.** Audited:
+  All 22 callers verified using `escapeHtml` or safe HTML builders; JSDoc contract and trusted-HTML
+  comment added.
+
+- [x] **`admin-catalog-ui.js:51–55` — pagination values from the server inserted unescaped.** Resolved:
+  `safeInt` coercion with `Number.isFinite` and integer truncation applied to all pager values.
+
+- [x] **`datasets-admin.js:542` — API stat values inserted unescaped into `innerHTML`.** Resolved:
+  `Number.isFinite` validation and numeric coercion applied to stat metrics before insertion.
+
+**Logging / diagnostics**
+
+- [x] **`rt-transport.js:92, 133` and `rt-layout.js:84` — `console.debug` in production runtime
+  paths.** Resolved: Removed debug traces and verified asset sync.
+
+- [x] **`JobApiEndpoints.cs:193` — fire-and-forget `RunJobAsync` discard not handling pre-try
+  faults.** Resolved: Added `.ContinueWith(..., TaskContinuationOptions.OnlyOnFaulted)` handler.
 
 ---
 

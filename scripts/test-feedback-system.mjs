@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createContext, Script } from 'node:vm';
 
 const roots = [
   'src/ETL-SQL.ReportRuntime/Resources/Shared',
@@ -62,6 +63,18 @@ for (const file of embeddedHostSources) {
 assert.deepEqual(violations, [], violations.join('\n'));
 
 const feedback = await readFile('src/ETL-SQL.ReportRuntime/Resources/Shared/feedback.js', 'utf8');
+// Loading without a module loader must install once and retain the no-document fallback.
+const classicScript = new Script(feedback);
+const context = createContext({});
+classicScript.runInContext(context);
+const api = context.ETLSQLFeedback;
+assert.ok(Object.isFrozen(api));
+assert.equal(typeof api.notify('No document'), 'function');
+api.notify('No document')();
+assert.equal(await api.confirm('Continue?'), false);
+assert.equal(await api.prompt('Name?'), null);
+classicScript.runInContext(context);
+assert.equal(context.ETLSQLFeedback, api, 'Repeated loading must preserve the installed API');
 assert.match(feedback, /aria-modal/);
 assert.match(feedback, /aria-live/);
 assert.match(feedback, /event\.key === 'Escape'/);

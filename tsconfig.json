@@ -1,5 +1,7 @@
 {
   // Browser-side type gate.
+  // Migrated TypeScript is compiled strictly through tsconfig.browser-build.json first by
+  // scripts/typecheck-browser.mjs; this config continues checking the JavaScript surface.
   //
   // The shipped browser code stays plain `.js` and is served verbatim — nothing here emits,
   // bundles or rewrites a single file. This config only points a checker at the sources that
@@ -35,6 +37,7 @@
     "types/**/*.d.ts"
   ],
   "exclude": [
+    "**/report-runtime.bundle.js",
     "**/node_modules",
     "**/bin",
     "**/obj",
@@ -43,6 +46,7 @@
 
     // Generated host copies of the canonical shared assets. See scripts/sync-assets.js.
     "src/ETL-SQL.Portal/wwwroot/js/report-runtime.js",
+    "src/ETL-SQL.Portal/wwwroot/js/rt-*.js",
     "src/ETL-SQL.Portal/wwwroot/js/feedback.js"
   ]
 }

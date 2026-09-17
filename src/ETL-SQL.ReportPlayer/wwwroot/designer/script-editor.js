@@ -4,6 +4,10 @@
  * Edit the canonical source, then run: node .\scripts\sync-assets.js
  */
 
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/script-editor.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -11,10 +15,82 @@
  * script-editor.js — split out of designer.js, TODO.md §2.
  * The CodeMirror-backed rptsql script editor.
  */
-
 import { escapeHtml } from './designer-util.js';
 import { _loadCm, _getRptsqlLang, _getRptsqlHighlightStyle } from './rptsql-language.js';
-
+export function completionKind(kind) {
+    switch (String(kind ?? '').toLowerCase()) {
+        case 'keyword': return 'keyword';
+        case 'function': return 'function';
+        case 'table': return 'class';
+        case 'column': return 'property';
+        case 'variable': return 'variable';
+        case 'alias': return 'variable';
+        case 'connection': return 'namespace';
+        case 'connector': return 'namespace';
+        case 'path': return 'file';
+        case 'optionname': return 'property';
+        case 'optionvalue': return 'constant';
+        case 'snippet': return 'text';
+        default: return 'text';
+    }
+}
+export function markdownToTooltipHtml(markdown) {
+    const lines = String(markdown || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    const html = [];
+    let inCode = false;
+    let codeLines = [];
+    const renderInline = (value) => escapeHtml(value)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    const flushCode = () => {
+        html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+        codeLines = [];
+    };
+    for (const line of lines) {
+        if (line.trimStart().startsWith('```')) {
+            if (inCode) {
+                flushCode();
+                inCode = false;
+            }
+            else {
+                inCode = true;
+                codeLines = [];
+            }
+            continue;
+        }
+        if (inCode) {
+            codeLines.push(line);
+            continue;
+        }
+        const heading = line.match(/^(#{1,6})\s+(.+)$/);
+        if (heading) {
+            const level = Math.min(6, heading[1].length);
+            html.push(`<div class="etlsql-editor-hover-heading etlsql-editor-hover-heading-${level}">${renderInline(heading[2].trim())}</div>`);
+            continue;
+        }
+        const bullet = line.match(/^\s*[-*]\s+(.+)$/);
+        if (bullet) {
+            html.push(`<div class="etlsql-editor-hover-bullet">${renderInline(bullet[1].trim())}</div>`);
+            continue;
+        }
+        if (!line.trim()) {
+            html.push('<div class="etlsql-editor-hover-gap"></div>');
+            continue;
+        }
+        html.push(`<div class="etlsql-editor-hover-line">${renderInline(line.trim())}</div>`);
+    }
+    if (inCode)
+        flushCode();
+    return html.join('');
+}
+export function diagnosticSeverity(d) {
+    const severity = String(d?.severity ?? '').toLowerCase();
+    if (severity.includes('error') || d?.severity === 0)
+        return 'error';
+    if (severity.includes('info') || severity.includes('hint'))
+        return 'info';
+    return 'warning';
+}
 /**
  * What a caller may hand `createScriptEditor`.
  *
@@ -39,7 +115,6 @@ import { _loadCm, _getRptsqlLang, _getRptsqlHighlightStyle } from './rptsql-lang
  * @property {boolean}  [analyzeOnLoad=true]    Analyse the initial content as well as later edits.
  * @property {boolean}  [diagnosticsPanel=true] Mount the diagnostics gutter and panel.
  */
-
 /**
  * The editor handle `createScriptEditor` hands back.
  *
@@ -62,8 +137,12 @@ import { _loadCm, _getRptsqlLang, _getRptsqlHighlightStyle } from './rptsql-lang
  * @property {() => void} undo
  * @property {() => void} redo
  * @property {() => void} dispose
+ * @property {() => *} [getState]
+ * @property {(state: *) => void} [setState]
+ * @property {(text: string) => *} [createDocState]
+ * @property {() => { top: number, left: number }} [getScrollPosition]
+ * @property {(pos: { top?: number, left?: number }) => void} [setScrollPosition]
  */
-
 /**
  * Mount a CodeMirror 6 rptsql editor into `container`.
  *
@@ -79,16 +158,7 @@ import { _loadCm, _getRptsqlLang, _getRptsqlHighlightStyle } from './rptsql-lang
 export async function createScriptEditor(container, opts = {}) {
     container.classList.add('etlsql-editor-container');
     const cm = await _loadCm();
-    const {
-        EditorState,
-        EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection,
-        defaultKeymap, history, historyKeymap, indentWithTab,
-        syntaxHighlighting, bracketMatching,
-        searchKeymap, highlightSelectionMatches,
-        autocompletion, completionKeymap,
-        linter, lintGutter,
-    } = cm;
-
+    const { EditorState, EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, defaultKeymap, history, historyKeymap, indentWithTab, syntaxHighlighting, bracketMatching, searchKeymap, highlightSelectionMatches, autocompletion, completionKeymap, linter, lintGutter, } = cm;
     const analyzeUrl = opts.analyzeUrl || null;
     const completeUrl = opts.completeUrl || null;
     const hoverUrl = opts.hoverUrl || null;
@@ -113,22 +183,23 @@ export async function createScriptEditor(container, opts = {}) {
         ...(Array.isArray(historyKeymap) ? historyKeymap : []),
         ...(Array.isArray(searchKeymap) ? searchKeymap : []),
     ];
-
     function etlSqlTokenRange(state, pos) {
         const line = state.doc.lineAt(pos);
         const text = line.text;
         let offset = Math.max(0, Math.min(text.length, pos - line.from));
-        const isTokenCharacter = character => /[\w@#&$]/.test(character || '');
-        if (!isTokenCharacter(text[offset]) && offset > 0 && isTokenCharacter(text[offset - 1])) offset--;
-        if (!isTokenCharacter(text[offset])) return null;
-
+        const isTokenCharacter = (character) => /[\w@#&$]/.test(character || '');
+        if (!isTokenCharacter(text[offset]) && offset > 0 && isTokenCharacter(text[offset - 1]))
+            offset--;
+        if (!isTokenCharacter(text[offset]))
+            return null;
         let from = offset;
         let to = offset + 1;
-        while (from > 0 && isTokenCharacter(text[from - 1])) from--;
-        while (to < text.length && isTokenCharacter(text[to])) to++;
+        while (from > 0 && isTokenCharacter(text[from - 1]))
+            from--;
+        while (to < text.length && isTokenCharacter(text[to]))
+            to++;
         return { from: line.from + from, to: line.from + to };
     }
-
     const extensions = [
         lineNumbers(),
         highlightActiveLine(),
@@ -140,35 +211,40 @@ export async function createScriptEditor(container, opts = {}) {
         highlightSelectionMatches(),
         keymap.of(keymaps),
         _getRptsqlLang(cm),
-        ...(opts.onCursorActivity ? [cm.EditorView.updateListener.of(update => {
-            if (update.selectionSet || update.focusChanged) {
-                const pos = update.state.selection.main.head;
-                opts.onCursorActivity(pos, update.state.doc.toString());
-            }
-        })] : []),
+        ...(opts.onCursorActivity ? [cm.EditorView.updateListener.of((update) => {
+                if (update.selectionSet || update.focusChanged) {
+                    const pos = update.state.selection.main.head;
+                    opts.onCursorActivity(pos, update.state.doc.toString());
+                }
+            })] : []),
         // Accept schema/session explorer drags. Scoped to our private MIME type so
         // ordinary text drag-and-drop keeps CodeMirror's default behaviour.
         EditorView.domEventHandlers({
             mousedown(event, view) {
-                if (event.button !== 0 || event.detail !== 2) return false;
+                if (event.button !== 0 || event.detail !== 2)
+                    return false;
                 const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-                if (pos == null) return false;
+                if (pos == null)
+                    return false;
                 const range = etlSqlTokenRange(view.state, pos);
-                if (!range) return false;
+                if (!range)
+                    return false;
                 event.preventDefault();
                 view.dispatch({ selection: { anchor: range.from, head: range.to } });
                 view.focus();
                 return true;
             },
             dragover(event) {
-                if (!event.dataTransfer?.types?.includes('application/x-etlsql-snippet')) return false;
+                if (!event.dataTransfer?.types?.includes('application/x-etlsql-snippet'))
+                    return false;
                 event.preventDefault();
                 event.dataTransfer.dropEffect = 'copy';
                 return true;
             },
             drop(event, view) {
                 const snippet = event.dataTransfer?.getData('application/x-etlsql-snippet');
-                if (!snippet) return false;
+                if (!snippet)
+                    return false;
                 event.preventDefault();
                 const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
                     ?? view.state.selection.main.head;
@@ -182,8 +258,8 @@ export async function createScriptEditor(container, opts = {}) {
         }),
         EditorState.readOnly.of(opts.readOnly ?? false),
     ];
-    if (hasCmLint && typeof lintGutter === 'function') extensions.push(lintGutter());
-
+    if (hasCmLint && typeof lintGutter === 'function')
+        extensions.push(lintGutter());
     let analyzeTimer = null;
     let analyzeAbort = null;
     let analyzeRequest = null;
@@ -195,38 +271,18 @@ export async function createScriptEditor(container, opts = {}) {
     let hoverAbort = null;
     let hoverTip = null;
     let hoverKey = '';
-
-    function completionKind(kind) {
-        switch (String(kind ?? '').toLowerCase()) {
-            case 'keyword': return 'keyword';
-            case 'function': return 'function';
-            case 'table': return 'class';
-            case 'column': return 'property';
-            case 'variable': return 'variable';
-            case 'alias': return 'variable';
-            case 'connection': return 'namespace';
-            case 'connector': return 'namespace';
-            case 'path': return 'file';
-            case 'optionname': return 'property';
-            case 'optionvalue': return 'constant';
-            case 'snippet': return 'text';
-            default: return 'text';
-        }
-    }
-
     function cursorLineColumn(state, pos) {
         const line = state.doc.lineAt(pos);
         return { line: line.number - 1, column: pos - line.from };
     }
-
     function currentDocumentUri() {
         return typeof opts.documentUri === 'function'
             ? opts.documentUri()
             : (opts.documentUri || 'portal-designer');
     }
-
     function currentStatement() {
-        if (!view) return '';
+        if (!view)
+            return '';
         const script = view.state.doc.toString();
         const pos = view.state.selection.main.head;
         let start = script.lastIndexOf(';', Math.max(0, pos - 1));
@@ -237,9 +293,9 @@ export async function createScriptEditor(container, opts = {}) {
         end = end < 0 ? script.length : end + 1;
         return script.slice(start, end).trim();
     }
-
     function createCompletionSource() {
-        if (!completeUrl || typeof autocompletion !== 'function') return null;
+        if (!completeUrl || typeof autocompletion !== 'function')
+            return null;
         return async (context) => {
             let word = context.matchBefore(/[\w@#&$.*]+/);
             const previous = context.state.sliceDoc(Math.max(0, context.pos - 1), context.pos);
@@ -252,7 +308,6 @@ export async function createScriptEditor(container, opts = {}) {
             if (word && word.from === word.to && !context.explicit && !/[\s.]/.test(previous)) {
                 return null;
             }
-
             const { line, column } = cursorLineColumn(context.state, context.pos);
             const res = await completeFetch(completeUrl, {
                 method: 'POST',
@@ -265,8 +320,8 @@ export async function createScriptEditor(container, opts = {}) {
                     documentUri: currentDocumentUri(),
                 }),
             });
-            if (!res?.ok) return null;
-
+            if (!res?.ok)
+                return null;
             const data = await res.json();
             const items = Array.isArray(data?.items) ? data.items : [];
             const defaultFrom = word?.from ?? context.pos;
@@ -295,116 +350,56 @@ export async function createScriptEditor(container, opts = {}) {
             };
         };
     }
-
-    function markdownToTooltipHtml(markdown) {
-        const lines = String(markdown || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-        const html = [];
-        let inCode = false;
-        let codeLines = [];
-
-        const renderInline = value => escapeHtml(value)
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-        const flushCode = () => {
-            html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
-            codeLines = [];
-        };
-
-        for (const line of lines) {
-            if (line.trimStart().startsWith('```')) {
-                if (inCode) {
-                    flushCode();
-                    inCode = false;
-                } else {
-                    inCode = true;
-                    codeLines = [];
-                }
-                continue;
-            }
-
-            if (inCode) {
-                codeLines.push(line);
-                continue;
-            }
-
-            const heading = line.match(/^(#{1,6})\s+(.+)$/);
-            if (heading) {
-                const level = Math.min(6, heading[1].length);
-                html.push(`<div class="etlsql-editor-hover-heading etlsql-editor-hover-heading-${level}">${renderInline(heading[2].trim())}</div>`);
-                continue;
-            }
-
-            const bullet = line.match(/^\s*[-*]\s+(.+)$/);
-            if (bullet) {
-                html.push(`<div class="etlsql-editor-hover-bullet">${renderInline(bullet[1].trim())}</div>`);
-                continue;
-            }
-
-            if (!line.trim()) {
-                html.push('<div class="etlsql-editor-hover-gap"></div>');
-                continue;
-            }
-
-            html.push(`<div class="etlsql-editor-hover-line">${renderInline(line.trim())}</div>`);
-        }
-
-        if (inCode) flushCode();
-        return html.join('');
-    }
-
     function wordAtPosition(state, pos) {
         const line = state.doc.lineAt(pos);
         const text = line.text;
         let offset = Math.max(0, Math.min(text.length, pos - line.from));
-        const isWord = ch => /[\w@#&$]/.test(ch || '');
-        if (!isWord(text[offset]) && offset > 0 && isWord(text[offset - 1])) offset--;
-        if (!isWord(text[offset])) return null;
-
+        const isWord = (ch) => /[\w@#&$]/.test(ch || '');
+        if (!isWord(text[offset]) && offset > 0 && isWord(text[offset - 1]))
+            offset--;
+        if (!isWord(text[offset]))
+            return null;
         let start = offset;
         let end = offset + 1;
-        while (start > 0 && isWord(text[start - 1])) start--;
-        while (end < text.length && isWord(text[end])) end++;
-
+        while (start > 0 && isWord(text[start - 1]))
+            start--;
+        while (end < text.length && isWord(text[end]))
+            end++;
         return {
             word: text.slice(start, end),
             line: line.number - 1,
             column: start,
         };
     }
-
     function hideHover() {
         clearTimeout(hoverHideTimer);
         hoverTip?.remove();
         hoverTip = null;
         hoverKey = '';
     }
-
     function scheduleHideHover(delay = 180) {
         clearTimeout(hoverHideTimer);
         hoverHideTimer = setTimeout(() => hideHover(), delay);
     }
-
     async function showHover(evt) {
-        if (!hoverUrl || !view) return;
+        if (!hoverUrl || !view)
+            return;
         const pos = view.posAtCoords({ x: evt.clientX, y: evt.clientY });
         if (pos == null) {
             hideHover();
             return;
         }
-
         const word = wordAtPosition(view.state, pos);
         if (!word) {
             hideHover();
             return;
         }
-
         const nextKey = `${word.word}:${word.line}:${word.column}`;
-        if (nextKey === hoverKey) return;
+        if (nextKey === hoverKey)
+            return;
         hoverKey = nextKey;
         hoverAbort?.abort();
         hoverAbort = new AbortController();
-
         try {
             const res = await hoverFetch(hoverUrl, {
                 method: 'POST',
@@ -422,13 +417,11 @@ export async function createScriptEditor(container, opts = {}) {
                 hideHover();
                 return;
             }
-
             const data = await res.json();
             if (!data?.markdown) {
                 hideHover();
                 return;
             }
-
             if (!hoverTip) {
                 hoverTip = document.createElement('div');
                 hoverTip.addEventListener('mouseenter', () => clearTimeout(hoverHideTimer));
@@ -437,7 +430,6 @@ export async function createScriptEditor(container, opts = {}) {
             hoverTip.className = 'etlsql-editor-hover';
             hoverTip.innerHTML = markdownToTooltipHtml(data.markdown);
             document.body.appendChild(hoverTip);
-
             // Intelligent collision avoidance: if CodeMirror's lint diagnostic tooltip is open,
             // stack hover documentation neatly below (or above) it instead of overlapping.
             const lintTooltip = view?.dom?.querySelector('.cm-tooltip-lint, .cm-tooltip-hover, .cm-tooltip');
@@ -448,48 +440,46 @@ export async function createScriptEditor(container, opts = {}) {
                     const tipHeight = hoverTip.offsetHeight || 180;
                     const spaceBelow = window.innerHeight - lintRect.bottom;
                     const spaceAbove = lintRect.top;
-
                     let left = Math.max(12, Math.min(window.innerWidth - tipWidth - 16, lintRect.left));
                     let top;
-
                     if (spaceBelow >= tipHeight + 12 || spaceBelow >= spaceAbove) {
                         top = Math.min(window.innerHeight - tipHeight - 12, lintRect.bottom + 6);
-                    } else if (spaceAbove >= tipHeight + 12) {
+                    }
+                    else if (spaceAbove >= tipHeight + 12) {
                         top = Math.max(12, lintRect.top - tipHeight - 6);
-                    } else {
+                    }
+                    else {
                         left = Math.min(window.innerWidth - tipWidth - 16, lintRect.right + 10);
                         top = Math.max(12, Math.min(window.innerHeight - tipHeight - 16, lintRect.top));
                     }
-
                     hoverTip.style.left = `${left}px`;
                     hoverTip.style.top = `${top}px`;
                     return;
                 }
             }
-
             // Normal cursor positioning with viewport bounds protection
             const tipWidth = hoverTip.offsetWidth || 340;
             const tipHeight = hoverTip.offsetHeight || 180;
             let left = evt.clientX + 14;
             let top = evt.clientY + 18;
-
             if (left + tipWidth > window.innerWidth - 16) {
                 left = Math.max(12, evt.clientX - tipWidth - 14);
             }
             if (top + tipHeight > window.innerHeight - 16) {
                 top = Math.max(12, evt.clientY - tipHeight - 14);
             }
-
             hoverTip.style.left = `${left}px`;
             hoverTip.style.top = `${top}px`;
-        } catch (err) {
-            if (err?.name !== 'AbortError') hideHover();
+        }
+        catch (err) {
+            if (err?.name !== 'AbortError')
+                hideHover();
         }
     }
-
     function attachHover() {
-        if (!hoverUrl) return;
-        container.addEventListener('mousemove', evt => {
+        if (!hoverUrl)
+            return;
+        container.addEventListener('mousemove', (evt) => {
             clearTimeout(hoverTimer);
             hoverTimer = setTimeout(() => showHover(evt), 450);
         });
@@ -499,33 +489,27 @@ export async function createScriptEditor(container, opts = {}) {
             scheduleHideHover();
         });
     }
-
     function setDiagnosticsStatus(text, kind = 'neutral') {
-        if (!diagPanel) return;
+        if (!diagPanel)
+            return;
         const status = diagPanel.querySelector('.etlsql-editor-diagnostics-status');
-        status.textContent = text;
-        status.dataset.kind = kind;
+        if (status) {
+            status.textContent = text;
+            status.dataset.kind = kind;
+        }
     }
-
-    function diagnosticSeverity(d) {
-        const severity = String(d?.severity ?? '').toLowerCase();
-        if (severity.includes('error') || d?.severity === 0) return 'error';
-        if (severity.includes('info') || severity.includes('hint')) return 'info';
-        return 'warning';
-    }
-
     function diagnosticOffset(doc, line, column) {
         const safeLine = Math.max(1, Math.min(doc.lines, (Number.isFinite(line) ? line : 0) + 1));
         const docLine = doc.line(safeLine);
         return Math.min(docLine.to, docLine.from + Math.max(0, Number.isFinite(column) ? column : 0));
     }
-
     function toCodeMirrorDiagnostic(doc, d) {
         const from = diagnosticOffset(doc, d.startLine, d.startColumn);
         const endLine = Number.isFinite(d.endLine) ? d.endLine : d.startLine;
-        const endColumn = Number.isFinite(d.endColumn) ? d.endColumn : d.startColumn + 1;
+        const endColumn = Number.isFinite(d.endColumn) ? d.endColumn : ((d.startColumn !== undefined) ? d.startColumn + 1 : 1);
         let to = diagnosticOffset(doc, endLine, endColumn);
-        if (to <= from) to = Math.min(doc.length, from + 1);
+        if (to <= from)
+            to = Math.min(doc.length, from + 1);
         return {
             from,
             to,
@@ -534,11 +518,13 @@ export async function createScriptEditor(container, opts = {}) {
             message: d.message || d.code || 'Diagnostic',
         };
     }
-
     function renderDiagnostics(diagnostics) {
         opts.onDiagnostics?.(diagnostics);
-        if (!diagPanel) return;
+        if (!diagPanel)
+            return;
         const list = diagPanel.querySelector('.etlsql-editor-diagnostics-list');
+        if (!list)
+            return;
         list.innerHTML = '';
         if (!diagnostics.length) {
             setDiagnosticsStatus('No diagnostics', 'ok');
@@ -555,7 +541,8 @@ export async function createScriptEditor(container, opts = {}) {
             const column = Number.isFinite(d.startColumn) ? d.startColumn + 1 : 1;
             item.innerHTML = `<span class="etlsql-editor-diagnostic-code">${escapeHtml(d.code || d.source || 'diagnostic')}</span><span class="etlsql-editor-diagnostic-pos">${line}:${column}</span><span class="etlsql-editor-diagnostic-msg">${escapeHtml(d.message || '')}</span>`;
             item.addEventListener('click', () => {
-                if (!view) return;
+                if (!view)
+                    return;
                 const safeLine = Math.max(1, Math.min(view.state.doc.lines, line));
                 const docLine = view.state.doc.line(safeLine);
                 const pos = Math.min(docLine.to, docLine.from + Math.max(0, column - 1));
@@ -565,11 +552,11 @@ export async function createScriptEditor(container, opts = {}) {
             list.appendChild(item);
         }
     }
-
     async function fetchDiagnostics(script) {
-        if (!analyzeUrl) return [];
-        if (analyzeRequest && analyzeRequestScript === script) return await analyzeRequest;
-
+        if (!analyzeUrl)
+            return [];
+        if (analyzeRequest && analyzeRequestScript === script)
+            return await analyzeRequest;
         analyzeAbort?.abort();
         const controller = new AbortController();
         analyzeAbort = controller;
@@ -581,54 +568,59 @@ export async function createScriptEditor(container, opts = {}) {
                 body: JSON.stringify({ script, documentUri: currentDocumentUri() }),
                 signal: controller.signal,
             });
-            if (!res?.ok) throw new Error(res?.statusText || 'Analyze request failed');
+            if (!res?.ok)
+                throw new Error(res?.statusText || 'Analyze request failed');
             const data = await res.json();
             return data?.diagnostics ?? [];
         })();
-
         try {
             return await analyzeRequest;
-        } finally {
-            if (analyzeAbort === controller) analyzeAbort = null;
+        }
+        finally {
+            if (analyzeAbort === controller)
+                analyzeAbort = null;
             if (analyzeRequestScript === script) {
                 analyzeRequest = null;
                 analyzeRequestScript = null;
             }
         }
     }
-
     async function runAnalysis(script) {
-        if (!analyzeUrl) return;
+        if (!analyzeUrl)
+            return;
         setDiagnosticsStatus('Analyzing...', 'neutral');
         try {
             renderDiagnostics(await fetchDiagnostics(script));
-        } catch (err) {
-            if (err?.name === 'AbortError') return;
+        }
+        catch (err) {
+            if (err?.name === 'AbortError')
+                return;
             renderDiagnostics([{
-                startLine: 0,
-                startColumn: 0,
-                severity: 'Error',
-                code: 'ANALYZE_REQUEST',
-                source: 'Portal editor',
-                message: err?.message || 'Analyze request failed',
-            }]);
+                    startLine: 0,
+                    startColumn: 0,
+                    severity: 'Error',
+                    code: 'ANALYZE_REQUEST',
+                    source: 'Portal editor',
+                    message: err?.message || 'Analyze request failed',
+                }]);
         }
     }
-
     function scheduleAnalysis(script) {
-        if (!analyzeUrl) return;
+        if (!analyzeUrl)
+            return;
         clearTimeout(analyzeTimer);
         analyzeTimer = setTimeout(() => runAnalysis(script), debounceMs);
     }
-
     if (hasCmLint) {
-        extensions.push(linter(async editorView => {
+        extensions.push(linter(async (editorView) => {
             try {
                 const diagnostics = await fetchDiagnostics(editorView.state.doc.toString());
                 renderDiagnostics(diagnostics);
                 return diagnostics.map(d => toCodeMirrorDiagnostic(editorView.state.doc, d));
-            } catch (err) {
-                if (err?.name === 'AbortError') return [];
+            }
+            catch (err) {
+                if (err?.name === 'AbortError')
+                    return [];
                 const diagnostic = {
                     startLine: 0,
                     startColumn: 0,
@@ -642,28 +634,28 @@ export async function createScriptEditor(container, opts = {}) {
             }
         }, { delay: debounceMs }));
     }
-
     const completionSource = createCompletionSource();
     if (completionSource) {
         extensions.push(autocompletion({ override: [completionSource] }));
     }
-
     if (opts.onChange) {
-        extensions.push(EditorView.updateListener.of(update => {
-            if (!update.docChanged) return;
+        extensions.push(EditorView.updateListener.of((update) => {
+            if (!update.docChanged)
+                return;
             const text = update.state.doc.toString();
             opts.onChange(text);
-            if (!hasCmLint) scheduleAnalysis(text);
-        }));
-    } else if (analyzeUrl && !hasCmLint) {
-        extensions.push(EditorView.updateListener.of(update => {
-            if (update.docChanged) scheduleAnalysis(update.state.doc.toString());
+            if (!hasCmLint)
+                scheduleAnalysis(text);
         }));
     }
-
+    else if (analyzeUrl && !hasCmLint) {
+        extensions.push(EditorView.updateListener.of((update) => {
+            if (update.docChanged)
+                scheduleAnalysis(update.state.doc.toString());
+        }));
+    }
     const state = EditorState.create({ doc: opts.value ?? '', extensions });
     view = new EditorView({ state, parent: container });
-
     // The inline diagnostics list is for hosts with nowhere else to put diagnostics
     // (e.g. orchestrator.html). Hosts that own a Messages surface pass
     // `diagnosticsPanel: false` and consume opts.onDiagnostics instead — the lint
@@ -673,32 +665,34 @@ export async function createScriptEditor(container, opts = {}) {
         diagPanel = document.createElement('div');
         diagPanel.className = 'etlsql-editor-diagnostics';
         diagPanel.innerHTML = '<div class="etlsql-editor-diagnostics-status" data-kind="neutral" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;"><span>Diagnostics pending</span><span style="font-size:10px; color:var(--portal-text-muted, #9da7b1); padding-left:8px;">Toggle ▼</span></div><div class="etlsql-editor-diagnostics-list"></div>';
-
         const statusHeader = diagPanel.querySelector('.etlsql-editor-diagnostics-status');
-        statusHeader.addEventListener('click', () => {
-            const isCollapsed = diagPanel.classList.toggle('collapsed');
-            container.classList.toggle('diagnostics-collapsed', isCollapsed);
-            const arrow = statusHeader.querySelector('span:last-child');
-            if (arrow) arrow.textContent = isCollapsed ? 'Toggle ▶' : 'Toggle ▼';
-        });
-
+        if (statusHeader) {
+            statusHeader.addEventListener('click', () => {
+                const isCollapsed = diagPanel.classList.toggle('collapsed');
+                container.classList.toggle('diagnostics-collapsed', isCollapsed);
+                const arrow = statusHeader.querySelector('span:last-child');
+                if (arrow)
+                    arrow.textContent = isCollapsed ? 'Toggle ▶' : 'Toggle ▼';
+            });
+        }
         container.appendChild(diagPanel);
     }
-    if (analyzeUrl && opts.analyzeOnLoad !== false) scheduleAnalysis(opts.value ?? '');
+    if (analyzeUrl && opts.analyzeOnLoad !== false)
+        scheduleAnalysis(opts.value ?? '');
     attachHover();
-
     return {
         getValue: () => view.state.doc.toString(),
         getSelection: () => {
             const ranges = view.state.selection.ranges
-                .filter(range => !range.empty)
-                .map(range => view.state.doc.sliceString(range.from, range.to));
+                .filter((range) => !range.empty)
+                .map((range) => view.state.doc.sliceString(range.from, range.to));
             return ranges.join('\n');
         },
         getCurrentStatement: () => currentStatement(),
         hasCompletion: Boolean(completeUrl),
         triggerCompletion: () => {
-            if (!startCompletionKey || !view) return false;
+            if (!startCompletionKey || !view)
+                return false;
             view.focus();
             return startCompletionKey.run(view);
         },
@@ -718,23 +712,20 @@ export async function createScriptEditor(container, opts = {}) {
         replaceAll: (text) => {
             const current = view.state.doc.toString();
             const next = String(text ?? '');
-            if (current === next) return null;
-
+            if (current === next)
+                return null;
             let prefix = 0;
             const maxPrefix = Math.min(current.length, next.length);
-            while (prefix < maxPrefix && current[prefix] === next[prefix]) prefix++;
-
+            while (prefix < maxPrefix && current[prefix] === next[prefix])
+                prefix++;
             let suffix = 0;
             const maxSuffix = Math.min(current.length - prefix, next.length - prefix);
-            while (
-                suffix < maxSuffix
-                && current[current.length - 1 - suffix] === next[next.length - 1 - suffix]
-            ) suffix++;
-
+            while (suffix < maxSuffix
+                && current[current.length - 1 - suffix] === next[next.length - 1 - suffix])
+                suffix++;
             const from = prefix;
             const to = current.length - suffix;
             const insert = next.slice(prefix, next.length - suffix);
-
             // Keep the caret where it was; CodeMirror maps it through the change for us, and
             // clamping guards the case where the caret sat inside the replaced span.
             const anchor = Math.min(view.state.selection.main.anchor, from);
@@ -747,7 +738,8 @@ export async function createScriptEditor(container, opts = {}) {
         },
         /** Scrolls a document range into view without stealing focus from the canvas. */
         revealRange: (from, to) => {
-            if (!view) return;
+            if (!view)
+                return;
             const length = view.state.doc.length;
             const start = Math.max(0, Math.min(length, Number(from) || 0));
             const end = Math.max(start, Math.min(length, Number(to) || start));
@@ -770,7 +762,8 @@ export async function createScriptEditor(container, opts = {}) {
          * @param toLine   1-based last line; defaults to `fromLine`.
          */
         revealLines: (fromLine, toLine = fromLine) => {
-            if (!view) return null;
+            if (!view)
+                return null;
             const lines = view.state.doc.lines;
             const first = Math.max(1, Math.min(lines, Number(fromLine) || 1));
             const last = Math.max(first, Math.min(lines, Number(toLine) || first));
@@ -784,7 +777,8 @@ export async function createScriptEditor(container, opts = {}) {
             return { from, to };
         },
         gotoLine: (line, column = 1) => {
-            if (!view) return;
+            if (!view)
+                return;
             const safeLine = Math.max(1, Math.min(view.state.doc.lines, Number(line) || 1));
             const docLine = view.state.doc.line(safeLine);
             const pos = Math.min(docLine.to, docLine.from + Math.max(0, (Number(column) || 1) - 1));
@@ -793,7 +787,8 @@ export async function createScriptEditor(container, opts = {}) {
         },
         /** The 1-based line the caret sits on; 1 before the view exists. The mirror of gotoLine. */
         getCursorLine: () => {
-            if (!view) return 1;
+            if (!view)
+                return 1;
             return view.state.doc.lineAt(view.state.selection.main.head).number;
         },
         analyze: () => runAnalysis(view.state.doc.toString()),
@@ -806,11 +801,11 @@ export async function createScriptEditor(container, opts = {}) {
          * working undo for palette and filter actions, not just for typing.
          */
         undo: () => {
-            const binding = historyKeys.find(entry => entry?.key === 'Mod-z');
+            const binding = historyKeys.find((entry) => entry?.key === 'Mod-z');
             return binding?.run ? binding.run(view) : false;
         },
         redo: () => {
-            const binding = historyKeys.find(entry => entry?.key === 'Mod-y' || entry?.key === 'Mod-Shift-z');
+            const binding = historyKeys.find((entry) => entry?.key === 'Mod-y' || entry?.key === 'Mod-Shift-z');
             return binding?.run ? binding.run(view) : false;
         },
         /**
@@ -818,6 +813,27 @@ export async function createScriptEditor(container, opts = {}) {
          * it never threw and never focused anything either. It is a real member now.
          */
         focus: () => view.focus(),
+        getState: () => view?.state,
+        setState: (newState) => {
+            if (view && newState) {
+                view.setState(newState);
+            }
+        },
+        createDocState: (text) => {
+            return EditorState.create({ doc: text ?? '', extensions });
+        },
+        getScrollPosition: () => ({
+            top: view?.scrollDOM?.scrollTop ?? 0,
+            left: view?.scrollDOM?.scrollLeft ?? 0,
+        }),
+        setScrollPosition: (pos) => {
+            if (view?.scrollDOM) {
+                if (pos?.top != null)
+                    view.scrollDOM.scrollTop = pos.top;
+                if (pos?.left != null)
+                    view.scrollDOM.scrollLeft = pos.left;
+            }
+        },
         dispose: () => {
             clearTimeout(analyzeTimer);
             clearTimeout(hoverTimer);

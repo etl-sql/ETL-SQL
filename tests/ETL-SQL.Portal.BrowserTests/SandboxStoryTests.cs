@@ -319,8 +319,10 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await page.WaitForSelectorAsync("#fixtureSel", new PageWaitForSelectorOptions { Timeout = 30_000 });
 
         // 1. Mount the custom-chart fixture
+        // Let the initial asynchronous mount finish before requesting another fixture.
+        await page.Locator(".etlsql-dsgn-visual-card[data-vid='salesBar']").WaitForAsync();
         await page.SelectOptionAsync("#fixtureSel", "custom-chart");
-        await page.WaitForTimeoutAsync(300);
+        await page.Locator(".etlsql-dsgn-visual-card[data-vid='customGog'] svg").First.WaitForAsync();
 
         // 2. Visual card on canvas must be rendered with SVG preview
         var card = page.Locator(".etlsql-dsgn-visual-card");
@@ -331,7 +333,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         // 3. Click the visual to select and open Properties panel
         await card.ClickAsync();
-        await page.WaitForTimeoutAsync(200);
+        await page.Locator("#pp-chart-coord").WaitForAsync();
 
         // 4. Grammar of Graphics (CHART) controls must be visible in properties panel
         var chartSection = page.Locator(".etlsql-dsgn-chart-editor-section");
@@ -350,7 +352,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         // 5. Modify coordinate to POLAR
         await coordSelect.SelectOptionAsync("POLAR");
-        await page.WaitForTimeoutAsync(200);
+        await page.WaitForFunctionAsync("() => document.querySelector('#pp-chart-code')?.value.includes('COORDINATE (TYPE = POLAR)')");
         var updatedCode = await chartCode.InputValueAsync();
         Assert.Contains("COORDINATE (TYPE = POLAR)", updatedCode);
 
@@ -2166,6 +2168,68 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         await page.EmulateMediaAsync(new() { Media = Media.Print });
         Assert.True(await frame.Locator(".html-visual-content").IsVisibleAsync());
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task InputControls_ClearSearchValidateNumbersAndRetainControlState()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/filter-controls.html");
+        var search = page.GetByRole(AriaRole.Searchbox, new() { Name = "CustomerSearch", Exact = true });
+        await search.WaitForAsync();
+        Assert.Equal("Quarterly sales", await search.InputValueAsync());
+        await page.GetByRole(AriaRole.Button, new() { Name = "Clear Customer search", Exact = true }).ClickAsync();
+        Assert.Equal("", await search.InputValueAsync());
+        Assert.True(await search.EvaluateAsync<bool>("element => element === document.activeElement"));
+
+        var note = page.GetByRole(AriaRole.Textbox, new() { Name = "AnalystNote", Exact = true });
+        Assert.Equal("12", await note.GetAttributeAsync("maxlength"));
+        var quantity = page.GetByRole(AriaRole.Spinbutton, new() { Name = "Quantity", Exact = true });
+        await quantity.FillAsync("20");
+        await quantity.DispatchEventAsync("change");
+        Assert.Equal("8", await quantity.InputValueAsync());
+        var enabled = page.GetByRole(AriaRole.Checkbox, new() { Name = "Enabled", Exact = true });
+        Assert.True(await enabled.IsCheckedAsync());
+        await enabled.UncheckAsync();
+        Assert.False(await enabled.IsCheckedAsync());
+        var slider = page.GetByRole(AriaRole.Slider, new() { Name = "Threshold", Exact = true });
+        Assert.Equal("8", await slider.InputValueAsync());
+        await slider.FillAsync("24");
+        await slider.DispatchEventAsync("input");
+        Assert.Equal("30", await page.Locator(".visual-card[data-name='Threshold'] .range-value").InnerTextAsync());
+        Assert.Contains("interactive in ReportPlayer", await page.Locator(".visual-card[data-name='Region'] .slicer-note").InnerTextAsync());
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task DateControls_ValidateRangesAndRelativeExpressions()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/date-controls.html");
+        var range = page.Locator(".visual-card[data-name='DateRange']");
+        var start = range.Locator("input[type=text]").Nth(0);
+        var end = range.Locator("input[type=text]").Nth(1);
+        await start.FillAsync("2026-09-14");
+        await start.DispatchEventAsync("change");
+        Assert.Contains("Start date is disabled", await range.Locator(".filter-error").InnerTextAsync());
+        await start.FillAsync("2026-09-20");
+        await start.DispatchEventAsync("change");
+        Assert.Contains("Start date cannot be after end date", await range.Locator(".filter-error").InnerTextAsync());
+        await end.FillAsync("2026-09-21");
+        await end.DispatchEventAsync("change");
+        Assert.False(await range.Locator(".filter-error").IsVisibleAsync());
+
+        var relative = page.Locator(".visual-card[data-name='RelativeDate']");
+        var expression = relative.Locator("input[type=text]");
+        await expression.FillAsync("invalid");
+        await expression.DispatchEventAsync("change");
+        Assert.True(await relative.Locator(".filter-error").IsVisibleAsync());
+        await relative.GetByRole(AriaRole.Button, new() { Name = "D-1", Exact = true }).ClickAsync();
+        Assert.Equal("D-1", await expression.InputValueAsync());
+        Assert.False(await relative.Locator(".filter-error").IsVisibleAsync());
         Assert.Empty(session.PageErrors);
     }
 

@@ -1,0 +1,9802 @@
+// @ts-nocheck — generated copy; check the canonical source.
+/* GENERATED FILE - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.bundle.js
+ * Edit the canonical source, then run: node .\scripts\sync-assets.js
+ */
+
+// @ts-nocheck — generated bundle; check the canonical parts.
+/* GENERATED FILE - DO NOT EDIT.
+ * Built from the rt-*.js parts by: node .\scripts\sync-assets.js
+ * Consumed by src/ETL-SQL.Reporting for single-file .etlsnap snapshots.
+ */
+
+(function () {
+    'use strict';
+
+// ─── rt-util.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-util.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Escaping, formatting, URL safety, and option lookup.
+ */
+// escHtml (defined below) escapes &<>"' for safe interpolation into innerHTML.
+// Manifest-derived strings (titles, icons, names, error text) are treated as
+// untrusted: a report author or a crafted server response must not be able to
+// inject markup/script.
+// Returns the URL only if it uses a safe scheme; otherwise returns '#'. Blocks
+// javascript:, data:, vbscript: and similar from reaching href/src or location.
+function safeUrl(value) {
+    const raw = String(value == null ? '' : value).trim();
+    // Allow relative URLs (no scheme) and explicit http(s)/mailto.
+    if (/^(?:https?:|mailto:)/i.test(raw))
+        return raw;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(raw))
+        return '#'; // some other scheme — reject
+    return raw; // scheme-less (relative) URL
+}
+/**
+ * Fills an `OPEN_URL(TEMPLATE = ...)` template from the clicked row. Only the fields the author
+ * declared in `PARAMS` may be interpolated, and every value is URL-encoded, so a row value can
+ * never introduce a query parameter, a path segment, or a scheme of its own. A placeholder that
+ * names an undeclared or missing field resolves to the empty string rather than being left in
+ * the URL.
+ * @param {{url?: string, urlParams?: string[]}} action
+ * @param {any[]} rowData
+ * @param {string[]} columns
+ * @returns {string}
+ */
+function interpolateUrlTemplate(action, rowData, columns) {
+    const template = String(action.url || '');
+    const allowed = new Set((action.urlParams || []).map(name => String(name).toLowerCase()));
+    const cols = columns || [];
+    const row = rowData || [];
+    return template.replace(/\{([^{}]+)\}/g, (_match, name) => {
+        const field = String(name).trim();
+        if (!allowed.has(field.toLowerCase()))
+            return '';
+        const index = cols.findIndex(col => String(col).toLowerCase() === field.toLowerCase());
+        if (index < 0)
+            return '';
+        const value = row[index];
+        return value == null ? '' : encodeURIComponent(String(value));
+    });
+}
+function getOption(options, key) {
+    if (!options)
+        return null;
+    const lookup = key.toLowerCase();
+    for (let k in options) {
+        if (k.toLowerCase() === lookup)
+            return options[k];
+    }
+    return null;
+}
+function getStyle(styles, key) {
+    if (!styles)
+        return null;
+    const lookup = key.toLowerCase();
+    for (let k in styles) {
+        if (k.toLowerCase() === lookup)
+            return styles[k];
+    }
+    return null;
+}
+function getParam(params, name) {
+    if (!params || !name)
+        return undefined;
+    const lookup = name.toLowerCase();
+    for (let k in params) {
+        if (k.toLowerCase() === lookup)
+            return params[k];
+    }
+    return undefined;
+}
+function parseMultiParameter(value) {
+    if (value == null || String(value).trim() === '')
+        return [];
+    const text = String(value).trim();
+    if (text.startsWith('[')) {
+        try {
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed))
+                return parsed.map(v => String(v));
+        }
+        catch { /* accept legacy comma-separated values below */ }
+    }
+    return text.split(',').map(v => v.trim()).filter(Boolean);
+}
+function noDataEl(msg) {
+    const div = document.createElement('div');
+    div.className = 'no-data';
+    div.textContent = msg;
+    return div;
+}
+// Accepts "ON", "TRUE", "1" (case-insensitive) — mirrors server-side IsOn()
+function isOn(val) {
+    if (!val)
+        return false;
+    const v = String(val).toUpperCase();
+    return v === 'ON' || v === 'TRUE' || v === '1';
+}
+function isOff(val) {
+    if (val === null || val === undefined)
+        return false;
+    const v = String(val).toUpperCase();
+    return v === 'OFF' || v === 'FALSE' || v === '0';
+}
+function inputTypeForParameter(meta) {
+    const type = (meta && meta.type ? String(meta.type) : '').toUpperCase();
+    if (['INT', 'INTEGER', 'BIGINT', 'SMALLINT', 'TINYINT', 'DECIMAL', 'NUMERIC', 'FLOAT', 'DOUBLE', 'REAL', 'MONEY'].includes(type)) {
+        return 'number';
+    }
+    if (['BOOL', 'BOOLEAN', 'BIT'].includes(type)) {
+        return 'checkbox';
+    }
+    if (['DATE', 'DATETIME', 'DATETIME2', 'DATETIMEOFFSET'].includes(type)) {
+        return 'date';
+    }
+    return 'text';
+}
+// `MAX_WIDTH = 1440` and `BREAKPOINT = 768` are written unitless as often as they are written
+// '1440px', and both reach here as strings. A bare number is pixels.
+function toCssLength(value) {
+    const text = String(value == null ? '' : value).trim();
+    if (!text)
+        return null;
+    return /^-?\d+(\.\d+)?$/.test(text) ? text + 'px' : text;
+}
+function toPixels(value) {
+    const length = toCssLength(value);
+    if (!length)
+        return 0;
+    const parsed = parseFloat(length);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+// Dims non-selected bars in the source chart while keeping selected bars at full opacity.
+// Operates on per-item itemStyle.opacity so original colors are always preserved.
+// ── Card ────────────────────────────────────────────────────────────────
+function abbreviateNumber(num, formatHint) {
+    const abs = Math.abs(num);
+    let suffix = '', divisor = 1;
+    if (abs >= 1e9) {
+        suffix = 'B';
+        divisor = 1e9;
+    }
+    else if (abs >= 1e6) {
+        suffix = 'M';
+        divisor = 1e6;
+    }
+    else if (abs >= 1e3) {
+        suffix = 'K';
+        divisor = 1e3;
+    }
+    const isCurrency = formatHint && formatHint.charAt(0).toUpperCase() === 'C';
+    const prefix = isCurrency ? '$' : '';
+    const abbreviated = num / divisor;
+    const decimals = suffix ? 2 : 0;
+    const sign = num < 0 ? '-' : '';
+    return sign + prefix + abbreviated.toFixed(decimals) + suffix;
+}
+// Markdown → HTML renderer supporting: headers, bold, italic, inline code, links,
+// fenced code blocks, blockquotes, unordered/ordered lists, tables, horizontal rules.
+/**
+ * Inline markdown only — bold, italic, code and safe links — with everything else escaped.
+ *
+ * Six call sites (card, chart and visual titles and subtitles) already called this by name and
+ * it existed only as a function nested inside `simpleMarkdown`, so every one of them threw a
+ * ReferenceError and took the rest of that render with it. A title wants inline formatting and
+ * nothing else: `simpleMarkdown` would wrap it in block elements. So this is the shared one and
+ * `simpleMarkdown` uses it for its own inline runs.
+ *
+ * @param {string} text
+ * @returns {string} HTML. The input is escaped first, so only the markup produced here is live.
+ */
+function renderInlineMarkdown(text) {
+    return escHtml(text)
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/`(.+?)`/g, '<code>$1</code>')
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
+        // Only allow safe protocols
+        const safe = /^(https?:|mailto:|\/)/i.test(url.trim());
+        if (!safe)
+            return escHtml(label);
+        return `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">${escHtml(label)}</a>`;
+    });
+}
+function simpleMarkdown(src) {
+    if (!src)
+        return '';
+    // Unescape ETL-SQL escaped newlines
+    const raw = String(src).replace(/\\n/g, '\n');
+    // Phase 1: extract fenced code blocks to protect them from other processing
+    const codeBlocks = [];
+    const withoutCode = raw.replace(/```([^\n]*)\n([\s\S]*?)```/g, (_, lang, code) => {
+        const escaped = escHtml(code.replace(/\n$/, ''));
+        const cls = lang.trim() ? ` class="language-${escHtml(lang.trim())}"` : '';
+        codeBlocks.push(`<pre><code${cls}>${escaped}</code></pre>`);
+        return `\x00CODE${codeBlocks.length - 1}\x00`;
+    });
+    // Phase 2: process line-by-line blocks
+    const lines = withoutCode.split('\n');
+    const out = [];
+    let i = 0;
+    const inlineFormat = renderInlineMarkdown;
+    while (i < lines.length) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        // Code block placeholder
+        /* eslint-disable no-control-regex -- \x00 is the sentinel this renderer wraps
+           extracted code blocks in, chosen because markdown source cannot contain it. */
+        if (/^\x00CODE\d+\x00$/.test(trimmed)) {
+            const idx = parseInt(trimmed.replace(/\x00CODE(\d+)\x00/, '$1'), 10);
+            /* eslint-enable no-control-regex */
+            out.push(codeBlocks[idx]);
+            i++;
+            continue;
+        }
+        // Horizontal rule: --- or *** or ___ (3+ chars, only that char)
+        if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+            out.push('<hr>');
+            i++;
+            continue;
+        }
+        // ATX headings
+        const hMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+        if (hMatch) {
+            const level = hMatch[1].length;
+            out.push(`<h${level}>${inlineFormat(hMatch[2])}</h${level}>`);
+            i++;
+            continue;
+        }
+        // Blockquote: collect consecutive > lines
+        if (trimmed.startsWith('> ')) {
+            const bqLines = [];
+            while (i < lines.length && lines[i].trim().startsWith('> ')) {
+                bqLines.push(inlineFormat(lines[i].trim().replace(/^>\s?/, '')));
+                i++;
+            }
+            out.push(`<blockquote>${bqLines.join('<br>')}</blockquote>`);
+            continue;
+        }
+        // Unordered list: collect consecutive - or * lines
+        if (/^[-*]\s/.test(trimmed)) {
+            const items = [];
+            while (i < lines.length && /^[-*]\s/.test(lines[i].trim())) {
+                items.push(`<li>${inlineFormat(lines[i].trim().replace(/^[-*]\s/, ''))}</li>`);
+                i++;
+            }
+            out.push(`<ul>${items.join('')}</ul>`);
+            continue;
+        }
+        // Ordered list: collect consecutive N. lines
+        if (/^\d+\.\s/.test(trimmed)) {
+            const items = [];
+            while (i < lines.length && /^\d+\.\s/.test(lines[i].trim())) {
+                items.push(`<li>${inlineFormat(lines[i].trim().replace(/^\d+\.\s/, ''))}</li>`);
+                i++;
+            }
+            out.push(`<ol>${items.join('')}</ol>`);
+            continue;
+        }
+        // Markdown table: lines starting with |
+        if (trimmed.startsWith('|') && trimmed.includes('|', 1)) {
+            const tableLines = [];
+            while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().includes('|', 1)) {
+                tableLines.push(lines[i]);
+                i++;
+            }
+            let tableHtml = '<div class="md-table-wrapper"><table class="md-table">';
+            tableLines.forEach((tl, idx) => {
+                if (/^\s*\|[\s|:-]+\|\s*$/.test(tl))
+                    return; // separator row
+                const cells = tl.split('|').map(s => s.trim()).filter((_, ci, a) => ci > 0 && ci < a.length - 1);
+                const tag = idx === 0 ? 'th' : 'td';
+                tableHtml += '<tr>' + cells.map(c => `<${tag}>${inlineFormat(c)}</${tag}>`).join('') + '</tr>';
+            });
+            tableHtml += '</table></div>';
+            out.push(tableHtml);
+            continue;
+        }
+        // Blank line → paragraph break
+        if (trimmed === '') {
+            out.push('<br>');
+            i++;
+            continue;
+        }
+        // Plain text line with inline formatting
+        out.push(inlineFormat(trimmed) + '<br>');
+        i++;
+    }
+    return out.join('\n');
+}
+// ── Helpers ─────────────────────────────────────────────────────────────
+function errorEl(detail) {
+    const el = document.createElement('details');
+    el.className = 'error-card';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Error loading data';
+    el.appendChild(summary);
+    if (detail) {
+        const pre = document.createElement('pre');
+        pre.textContent = detail;
+        el.appendChild(pre);
+    }
+    return el;
+}
+function escHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+function cssClassToken(value, fallback) {
+    const token = String(value == null ? '' : value)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    return token || fallback;
+}
+function parseHexColor(hex) {
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    return [parseInt(full.slice(0, 2), 16), parseInt(full.slice(2, 4), 16), parseInt(full.slice(4, 6), 16)];
+}
+function interpolateColor(fromHex, toHex, t) {
+    const [r1, g1, b1] = parseHexColor(fromHex);
+    const [r2, g2, b2] = parseHexColor(toHex);
+    const r = Math.round(r1 + (r2 - r1) * t);
+    const g = Math.round(g1 + (g2 - g1) * t);
+    const b = Math.round(b1 + (b2 - b1) * t);
+    return `rgb(${r},${g},${b})`;
+}
+function formatValue(value, format) {
+    if (value == null || value === '' || !format)
+        return value;
+    const num = parseFloat(value);
+    if (isNaN(num))
+        return value;
+    const type = format.charAt(0).toUpperCase();
+    const prec = parseInt(format.substring(1));
+    const precision = isNaN(prec) ? undefined : prec;
+    try {
+        switch (type) {
+            case 'C':
+                return new Intl.NumberFormat('en-US', {
+                    style: 'currency', currency: 'USD',
+                    minimumFractionDigits: precision, maximumFractionDigits: precision
+                }).format(num);
+            case 'N':
+                return new Intl.NumberFormat('en-US', {
+                    minimumFractionDigits: precision, maximumFractionDigits: precision
+                }).format(num);
+            case 'P':
+                // If the value is > 1.0, it might be already in percent (e.g. 85 instead of 0.85)
+                // But standard C# P format for 0.85 is 85%.
+                // We'll follow C# behavior: num * 100.
+                return new Intl.NumberFormat('en-US', {
+                    style: 'percent',
+                    minimumFractionDigits: precision, maximumFractionDigits: precision
+                }).format(num);
+            default:
+                return value;
+        }
+    }
+    catch {
+        return value;
+    }
+}
+
+
+// ─── rt-state.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-state.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Host mode and shared report session state.
+ */
+// Web mode  (single or multi-report server): window.__IS_WEB__ = true
+// VS Code mode (webview preview):           window.__MANIFEST__ set, no __IS_WEB__
+// Offline snapshot (.etlsnap viewer):       window.__ETLSNAP__ = true, manifest inlined
+//
+// The offline host is decided before web mode, not after it. A snapshot viewer is a single file
+// that carries its own manifest and has no server behind it, but it is often opened over http —
+// off a file share, a static site, an artifact server — and protocol alone would then class it
+// as web mode and start it polling an API that does not exist. Everything that reads the
+// manifest (pages, bookmarks, detail popovers) works either way; everything that would reach for
+// a network is what has to stay off.
+const isOfflineHost = !!(typeof window !== 'undefined' && (window.__ETLSNAP__ || window.__OFFLINE__));
+const isWebMode = !isOfflineHost && (typeof window !== 'undefined' && Boolean(window.__IS_WEB__ || window.location.protocol.startsWith('http')));
+const vscode = (typeof acquireVsCodeApi === 'function') ? acquireVsCodeApi() : null;
+const isInteractive = isWebMode || vscode;
+const safeRequestAnimationFrame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
+const feedback = typeof window !== 'undefined' ? window.ETLSQLFeedback : undefined;
+let baselineManifest = null;
+// In multi-report mode the server injects window.__API_BASE__ = '/reports/{name}/api'.
+// Single-report and VS Code modes default to '/api'.
+const apiBase = ((typeof window !== 'undefined' && window.__API_BASE__) || '/api').replace(/\/$/, '');
+// Current report parameters (for interactive controls)
+const parameters = {};
+const pendingParameters = {}; // Paginated page staged parameters
+let _refreshTimers = [];
+let _lastActivePage = null;
+const _drillHistory = [];
+const _crossFilterStates = {}; // Keyed by page element ID; persists across renderManifest re-builds
+const _uiStates = {}; // Keyed by object name; persists across re-renders (e.g. collapsed: true)
+let _lastManifest = null;
+function getBaselineManifest() { return baselineManifest; }
+function setBaselineManifest(value) { baselineManifest = value; }
+function getLastManifest() { return _lastManifest; }
+function setLastManifest(value) { _lastManifest = value; }
+function getLastActivePage() { return _lastActivePage; }
+function setLastActivePage(value) { _lastActivePage = value; }
+function getRefreshTimers() { return _refreshTimers; }
+function setRefreshTimers(value) { _refreshTimers = value; }
+
+
+// ─── rt-theme.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-theme.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Design tokens, theme resolution, and scoped CSS application.
+ */
+// ── Design Tokens Contract ─────────────────────────────────────────────
+const DESIGN_TOKENS = {
+    SURFACE_CARD: '--etl-surface-card',
+    SURFACE: '--etl-surface',
+    BG: '--etl-bg',
+    TEXT_PRIMARY: '--etl-text-primary',
+    TEXT_MUTED: '--etl-text-muted',
+    TEXT: '--etl-text',
+    TEXT_SECONDARY: '--etl-text-secondary',
+    BORDER: '--etl-border',
+    SHADOW: '--etl-shadow',
+    ACCENT: '--etl-accent',
+    SUCCESS: '--etl-success',
+    WARNING: '--etl-warning',
+    DANGER: '--etl-danger',
+    INFO: '--etl-info',
+    RADIUS_SM: '--etl-radius-sm',
+    RADIUS_MD: '--etl-radius-md',
+    RADIUS_LG: '--etl-radius-lg',
+    RADIUS: '--etl-radius',
+    FONT_FAMILY: '--etl-font-family',
+    FONT_MONO: '--etl-font-mono'
+};
+const ALLOWED_TOKEN_NAMES = new Set(Object.values(DESIGN_TOKENS));
+/* eslint-disable-next-line no-control-regex --   is listed deliberately; a NUL
+   inside a declaration is one of the ways a value smuggles CSS past this guard. */
+const UNSAFE_CSS_PATTERN = /@import|@font-face|expression\s*\(|-moz-binding|behavior\s*:|javascript\s*:|vbscript\s*:|data\s*:|url\s*\(|var\s*\(\s*--(?!etl-)|[;{}\\\u0000\r\n\f\v<>/*]/i;
+const BORDER_STYLES = new Set(['none', 'hidden', 'solid', 'dashed', 'dotted', 'double', 'groove', 'ridge', 'inset', 'outset']);
+const BORDER_WIDTHS = new Set(['thin', 'medium', 'thick']);
+const DYNAMIC_TOKEN_PATTERN = /^--etl-(?:color-\d+|palette-\d+|series-[a-z0-9_-]+|color-series-[a-z0-9_-]+)$/i;
+function isAllowedTokenName(name) {
+    if (!name || typeof name !== 'string')
+        return false;
+    const trimmed = name.trim().toLowerCase();
+    if (ALLOWED_TOKEN_NAMES.has(trimmed))
+        return true;
+    return DYNAMIC_TOKEN_PATTERN.test(trimmed);
+}
+function isSafeCssValue(value) {
+    if (value == null)
+        return false;
+    const str = String(value).trim();
+    if (str.length === 0 || str.length > 256)
+        return false;
+    if (UNSAFE_CSS_PATTERN.test(str))
+        return false;
+    return true;
+}
+const COLOR_FUNC_REGEX = /\b(?:rgb|rgba|hsl|hsla)\s*\([^)]+\)/i;
+const HEX_COLOR_REGEX = /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/;
+function extractBorderColor(value) {
+    if (value == null)
+        return null;
+    const trimmed = String(value).trim().replace(/^['"]|['"]$/g, '').trim();
+    if (trimmed.toLowerCase() === 'none' || trimmed === '0' || trimmed.toLowerCase() === 'hidden') {
+        return 'transparent';
+    }
+    const funcMatch = COLOR_FUNC_REGEX.exec(trimmed);
+    if (funcMatch && isSafeCssValue(funcMatch[0]))
+        return funcMatch[0];
+    const hexMatch = HEX_COLOR_REGEX.exec(trimmed);
+    if (hexMatch && isSafeCssValue(hexMatch[0]))
+        return hexMatch[0];
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) {
+        return isSafeCssValue(trimmed) ? trimmed : null;
+    }
+    for (const part of parts) {
+        if (!BORDER_STYLES.has(part.toLowerCase()) &&
+            !BORDER_WIDTHS.has(part.toLowerCase()) &&
+            !/^\s*(\d+(?:\.\d+)?)\s*(px|em|rem|pt|%)?\s*$/i.test(part)) {
+            if (isSafeCssValue(part))
+                return part;
+        }
+    }
+    return isSafeCssValue(trimmed) ? trimmed : null;
+}
+function resolveDesignTokens(styles, isPageOrReportLevel = false) {
+    const tokens = {};
+    if (!styles || typeof styles !== 'object')
+        return tokens;
+    if (Array.isArray(styles.palette)) {
+        styles.palette.forEach((color, i) => {
+            const c = String(color).trim();
+            if (isSafeCssValue(c)) {
+                tokens[`--etl-color-${i + 1}`] = c;
+                tokens[`--etl-palette-${i + 1}`] = c;
+            }
+        });
+    }
+    for (const rawKey in styles) {
+        const rawValue = styles[rawKey];
+        if (rawValue == null)
+            continue;
+        const key = String(rawKey).trim();
+        const value = String(rawValue).trim();
+        if (!key || !value)
+            continue;
+        if (key.toLowerCase().startsWith('--etl-')) {
+            const normKey = key.toLowerCase();
+            if (isAllowedTokenName(normKey) && isSafeCssValue(value)) {
+                tokens[normKey] = value;
+            }
+            continue;
+        }
+        if (key.toUpperCase().startsWith('COLOR:')) {
+            const seriesName = key.substring(6).trim();
+            if (seriesName && isSafeCssValue(value)) {
+                const sanitized = seriesName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+                const seriesToken = `--etl-series-${sanitized}`;
+                if (isAllowedTokenName(seriesToken)) {
+                    tokens[seriesToken] = value;
+                }
+            }
+            continue;
+        }
+        const upperKey = key.toUpperCase();
+        switch (upperKey) {
+            case 'BACKGROUND':
+            case 'BACKGROUND_COLOR':
+            case 'BACKGROUND-COLOR':
+            case 'SURFACE_CARD':
+            case 'SURFACE-CARD':
+            case 'ETL_SURFACE_CARD':
+            case 'ETL-SURFACE-CARD':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.SURFACE_CARD] = value;
+                    tokens[DESIGN_TOKENS.SURFACE] = value;
+                    if (isPageOrReportLevel)
+                        tokens[DESIGN_TOKENS.BG] = value;
+                }
+                break;
+            case 'BG':
+            case 'BG_COLOR':
+            case 'PAGE_BACKGROUND':
+            case 'REPORT_BACKGROUND':
+            case 'ETL_BG':
+            case 'ETL-BG':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.BG] = value;
+                }
+                break;
+            case 'COLOR':
+            case 'FONT_COLOR':
+            case 'FONT-COLOR':
+            case 'TEXT_COLOR':
+            case 'TEXT-COLOR':
+            case 'TEXT_PRIMARY':
+            case 'TEXT-PRIMARY':
+            case 'ETL_TEXT_PRIMARY':
+            case 'ETL-TEXT-PRIMARY':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.TEXT_PRIMARY] = value;
+                    tokens[DESIGN_TOKENS.TEXT] = value;
+                }
+                break;
+            case 'MUTED_COLOR':
+            case 'MUTED-COLOR':
+            case 'TEXT_MUTED':
+            case 'TEXT-MUTED':
+            case 'SECONDARY_COLOR':
+            case 'SUBTITLE_COLOR':
+            case 'ETL_TEXT_MUTED':
+            case 'ETL-TEXT-MUTED':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.TEXT_MUTED] = value;
+                    tokens[DESIGN_TOKENS.TEXT_SECONDARY] = value;
+                }
+                break;
+            case 'BORDER':
+            case 'BORDER_COLOR':
+            case 'BORDER-COLOR':
+            case 'ETL_BORDER':
+            case 'ETL-BORDER': {
+                const borderColor = extractBorderColor(value);
+                if (borderColor && isSafeCssValue(borderColor)) {
+                    tokens[DESIGN_TOKENS.BORDER] = borderColor;
+                }
+                break;
+            }
+            case 'ACCENT':
+            case 'ACCENT_COLOR':
+            case 'ACCENT-COLOR':
+            case 'PRIMARY':
+            case 'PRIMARY_COLOR':
+            case 'BRAND_PRIMARY':
+            case 'ETL_ACCENT':
+            case 'ETL-ACCENT':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.ACCENT] = value;
+                }
+                break;
+            case 'SUCCESS':
+            case 'SUCCESS_COLOR':
+            case 'SUCCESS-COLOR':
+            case 'ETL_SUCCESS':
+            case 'ETL-SUCCESS':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.SUCCESS] = value;
+                }
+                break;
+            case 'WARNING':
+            case 'WARNING_COLOR':
+            case 'WARNING-COLOR':
+            case 'ETL_WARNING':
+            case 'ETL-WARNING':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.WARNING] = value;
+                }
+                break;
+            case 'DANGER':
+            case 'DANGER_COLOR':
+            case 'DANGER-COLOR':
+            case 'ERROR_COLOR':
+            case 'ETL_DANGER':
+            case 'ETL-DANGER':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.DANGER] = value;
+                }
+                break;
+            case 'INFO':
+            case 'INFO_COLOR':
+            case 'INFO-COLOR':
+            case 'ETL_INFO':
+            case 'ETL-INFO':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.INFO] = value;
+                }
+                break;
+            case 'BORDER_RADIUS':
+            case 'BORDER-RADIUS':
+            case 'RADIUS':
+            case 'ETL_RADIUS':
+            case 'ETL-RADIUS':
+            case 'ETL_RADIUS_MD':
+            case 'ETL-RADIUS-MD':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.RADIUS_MD] = value;
+                    tokens[DESIGN_TOKENS.RADIUS] = value;
+                    const match = /^\s*(\d+(?:\.\d+)?)\s*px\s*$/i.exec(value);
+                    if (match) {
+                        const px = parseFloat(match[1]);
+                        tokens[DESIGN_TOKENS.RADIUS_SM] = `${Math.max(0, Math.round(px * 0.5))}px`;
+                        tokens[DESIGN_TOKENS.RADIUS_LG] = `${Math.round(px * 1.5)}px`;
+                    }
+                }
+                break;
+            case 'RADIUS_SM':
+            case 'RADIUS-SM':
+            case 'BORDER_RADIUS_SM':
+            case 'ETL_RADIUS_SM':
+            case 'ETL-RADIUS-SM':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.RADIUS_SM] = value;
+                }
+                break;
+            case 'RADIUS_MD':
+            case 'RADIUS-MD':
+            case 'BORDER_RADIUS_MD':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.RADIUS_MD] = value;
+                    tokens[DESIGN_TOKENS.RADIUS] = value;
+                }
+                break;
+            case 'RADIUS_LG':
+            case 'RADIUS-LG':
+            case 'BORDER_RADIUS_LG':
+            case 'ETL_RADIUS_LG':
+            case 'ETL-RADIUS-LG':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.RADIUS_LG] = value;
+                }
+                break;
+            case 'SHADOW':
+            case 'BOX_SHADOW':
+            case 'BOX-SHADOW':
+            case 'ETL_SHADOW':
+            case 'ETL-SHADOW': {
+                const shadowVal = isOn(value) ? '0 6px 18px rgba(15, 23, 42, 0.16)' :
+                    (isOff(value) || value.toUpperCase() === 'NONE') ? 'none' : value;
+                if (isSafeCssValue(shadowVal)) {
+                    tokens[DESIGN_TOKENS.SHADOW] = shadowVal;
+                }
+                break;
+            }
+            case 'FONT':
+            case 'FONT_FAMILY':
+            case 'FONT-FAMILY':
+            case 'ETL_FONT_FAMILY':
+            case 'ETL-FONT-FAMILY':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.FONT_FAMILY] = value;
+                }
+                break;
+            case 'FONT_MONO':
+            case 'FONT-MONO':
+            case 'ETL_FONT_MONO':
+            case 'ETL-FONT-MONO':
+                if (isSafeCssValue(value)) {
+                    tokens[DESIGN_TOKENS.FONT_MONO] = value;
+                }
+                break;
+        }
+    }
+    return tokens;
+}
+function isDarkColor(colorStr) {
+    if (!colorStr || typeof colorStr !== 'string')
+        return false;
+    const s = colorStr.trim().toLowerCase();
+    if (s.startsWith('#')) {
+        let hex = s.substring(1);
+        if (hex.length === 3)
+            hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+        if (hex.length >= 6) {
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            return lum < 0.5;
+        }
+    }
+    if (s.startsWith('rgb')) {
+        const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(s);
+        if (m) {
+            const r = parseInt(m[1], 10);
+            const g = parseInt(m[2], 10);
+            const b = parseInt(m[3], 10);
+            const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            return lum < 0.5;
+        }
+    }
+    return s.includes('dark') || s === 'black' || s.includes('midnight') || s.includes('charcoal');
+}
+function isCustomThemeDark(themeDef) {
+    if (!themeDef)
+        return false;
+    const name = (themeDef.name || '').toLowerCase();
+    if (name.includes('dark'))
+        return true;
+    if (themeDef.designTokens) {
+        const bg = themeDef.designTokens[DESIGN_TOKENS.BG] || themeDef.designTokens[DESIGN_TOKENS.SURFACE_CARD];
+        if (bg && isDarkColor(bg))
+            return true;
+    }
+    if (themeDef.config && themeDef.config.backgroundColor) {
+        if (isDarkColor(themeDef.config.backgroundColor))
+            return true;
+    }
+    return false;
+}
+function clearDynamicTokens(element) {
+    if (!element || !element.style)
+        return;
+    const toRemove = [];
+    for (let i = 0; i < element.style.length; i++) {
+        const prop = element.style[i];
+        if (DYNAMIC_TOKEN_PATTERN.test(prop)) {
+            toRemove.push(prop);
+        }
+    }
+    for (const prop of toRemove) {
+        element.style.removeProperty(prop);
+    }
+}
+function applyDesignTokens(element, itemOrTokens, isPageOrReportLevel = false, manifest = null) {
+    if (!element || !element.style)
+        return;
+    if (!itemOrTokens)
+        return;
+    clearDynamicTokens(element);
+    // If item specifies a custom theme and manifest is provided, project custom theme tokens first
+    if (manifest && manifest.customThemes && itemOrTokens.styles) {
+        const themeName = getStyle(itemOrTokens.styles, 'THEME');
+        if (themeName) {
+            const customTheme = manifest.customThemes.find(t => t.name && t.name.toLowerCase() === themeName.toLowerCase());
+            if (customTheme && customTheme.designTokens) {
+                applyDesignTokens(element, customTheme.designTokens, isPageOrReportLevel);
+            }
+        }
+    }
+    let tokenDict;
+    if (itemOrTokens.designTokens) {
+        tokenDict = itemOrTokens.designTokens;
+    }
+    else if (itemOrTokens.styles) {
+        tokenDict = resolveDesignTokens(itemOrTokens.styles, isPageOrReportLevel);
+    }
+    else {
+        tokenDict = resolveDesignTokens(itemOrTokens, isPageOrReportLevel);
+    }
+    if (!tokenDict || typeof tokenDict !== 'object')
+        return;
+    for (const token in tokenDict) {
+        const val = tokenDict[token];
+        if (val == null)
+            continue;
+        const normToken = String(token).toLowerCase();
+        const normVal = String(val).trim();
+        if (isAllowedTokenName(normToken) && isSafeCssValue(normVal)) {
+            element.style.setProperty(normToken, normVal);
+        }
+    }
+}
+function getDefaultTheme(manifest) {
+    if (manifest && manifest.theme)
+        return manifest.theme;
+    if (document.body.classList.contains('vscode-dark'))
+        return 'dark';
+    if (document.body.classList.contains('vscode-light'))
+        return 'light';
+    return null;
+}
+function updateBodyTheme(manifest, activePageName) {
+    if (!manifest)
+        return;
+    let activeTheme = null;
+    let activePage = null;
+    if (manifest.pages && activePageName) {
+        activePage = manifest.pages.find(p => p.name === activePageName) || null;
+        if (activePage) {
+            const reportStyles = manifest.styles || {};
+            const pageStyles = activePage.styles || {};
+            activeTheme = getStyle(pageStyles, 'THEME') || getStyle(reportStyles, 'THEME') || null;
+        }
+    }
+    if (!activeTheme) {
+        activeTheme = getDefaultTheme(manifest);
+    }
+    if (!activeTheme && typeof window !== 'undefined') {
+        try {
+            const pDoc = (window.parent && window.parent !== window) ? window.parent.document : null;
+            if (pDoc && pDoc.body && pDoc.body.classList.contains('theme-dark')) {
+                activeTheme = 'dark';
+            }
+        }
+        catch { /* cross-origin fallback */ }
+    }
+    const customTheme = (manifest.customThemes || []).find(t => t.name && activeTheme && t.name.toLowerCase() === activeTheme.toLowerCase());
+    const isCustomDark = customTheme && isCustomThemeDark(customTheme);
+    const isDark = (activeTheme && activeTheme.toLowerCase() === 'dark') || isCustomDark;
+    if (isDark) {
+        document.body.classList.add('theme-dark');
+    }
+    else {
+        document.body.classList.remove('theme-dark');
+    }
+    // Page navigation can change the effective theme. Clear tokens written for the prior
+    // page, then rebuild the body scope in cascade order for the active page.
+    for (const token of ALLOWED_TOKEN_NAMES)
+        document.body.style.removeProperty(token);
+    applyDesignTokens(document.body, manifest, true);
+    if (customTheme && customTheme.designTokens)
+        applyDesignTokens(document.body, customTheme.designTokens, true);
+    if (activePage)
+        applyDesignTokens(document.body, activePage, true, manifest);
+}
+
+
+// ─── rt-transport.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-transport.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Network transport and VS Code messages.
+ */
+// ── Portal saved views: per-user CRUD over the shared resolved-state envelope ───────────────
+// Every write sends the envelope; the server stamps the script hash it was captured against so a
+// later republish of the report surfaces as a drift warning instead of a silently partial view.
+async function savedViewsRequest(path, init) {
+    const base = savedViewsBase();
+    if (!base)
+        return null;
+    try {
+        const res = await fetch(base + (path || ''), init);
+        if (!res.ok)
+            return null;
+        if (res.status === 204)
+            return true;
+        return await res.json();
+    }
+    catch (e) {
+        console.warn('Saved-view request failed:', e?.message);
+        return null;
+    }
+}
+function postDrillIn(visualName, clickedValue) {
+    if (getDrillInFlight())
+        return;
+    setDrillInFlight(true);
+    if (vscode) {
+        setDrillInFlight(false);
+        vscode.postMessage({ type: 'drillIn', visualName, clickedValue });
+        return;
+    }
+    fetch(apiBase + '/drill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visualName, direction: 'IN', clickedValue })
+    }).then(r => r.ok ? r.json() : null).then(m => {
+        setDrillInFlight(false);
+        if (m)
+            renderManifest(m);
+    }).catch(() => { setDrillInFlight(false); });
+}
+function postDrillUp(visualName, targetDepth) {
+    if (vscode) {
+        vscode.postMessage({ type: 'drillUp', visualName, targetDepth });
+        return;
+    }
+    fetch(apiBase + '/drill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visualName, direction: 'UP', targetDepth })
+    }).then(r => r.ok ? r.json() : null).then(m => { if (m)
+        renderManifest(m); });
+}
+// Batch-update multiple parameters in a single server round-trip.
+async function postParameters(params, isInteraction = false, stage = null, sourceVisual = null) {
+    const shouldStage = stage === null
+        ? (!isInteraction && isActivePagePaginated())
+        : Boolean(stage);
+    if (shouldStage && !isInteraction) {
+        // Paginated pages stage prompt changes until APPLY_PARAMETERS.
+        // Dashboard pages post immediately.
+        Object.assign(pendingParameters, params);
+        updateStagedUI();
+        return null;
+    }
+    return _postParametersInternal(params, isInteraction, getActivePageName(), sourceVisual);
+}
+async function _postParametersInternal(params, isInteraction = false, pageName = null, sourceVisual = null) {
+    // Convert dictionary to required List<ParameterUpdateRequest> format
+    const paramList = Object.entries(params).map(([name, value]) => ({
+        name: name,
+        value: String(value ?? '')
+    }));
+    // Offline snapshot: the manifest in memory is the entire report, so every consumer of this
+    // function is answered from it rather than from an API that is not there. Detail popovers
+    // are the reason this matters — they refresh through here on every open, so without this
+    // branch a popover in a snapshot viewer showed "could not be loaded" and the offline claim
+    // in the tooltip documentation was false. An interaction (`@hover_value`) is transient and
+    // must not be written into the report's parameter state.
+    if (isOfflineSnapshot()) {
+        if (!isInteraction)
+            recordParametersOffline(params);
+        return getLastManifest();
+    }
+    if (vscode) {
+        vscode.postMessage({
+            type: 'refreshReport',
+            parameters: params, // VS Code extension handles the dictionary
+            isInteraction: isInteraction,
+            pageName: pageName,
+            sourceVisual: sourceVisual
+        });
+        return null;
+    }
+    try {
+        const res = await fetch(apiBase + '/parameters', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                params: paramList,
+                isInteraction: isInteraction,
+                pageName: pageName,
+                // Gates EMIT_FILTER: the server narrows the receivers to the source's TARGETS.
+                sourceVisual: sourceVisual
+            })
+        });
+        if (!res.ok) {
+            console.error('Parameter update failed:', res.status, await res.text());
+            return null;
+        }
+        const manifest = await res.json();
+        return manifest;
+    }
+    catch (e) {
+        console.error('Parameter update request failed:', e);
+        return null;
+    }
+}
+async function postRunScript(scriptPath, parameters) {
+    try {
+        const res = await fetch(apiBase + '/run-script', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scriptPath, parameters })
+        });
+        if (!res.ok)
+            return { message: `Server error: ${res.status}` };
+        return await res.json();
+    }
+    catch (e) {
+        return { message: `Request failed: ${e?.message}` };
+    }
+}
+async function postRefreshVisuals(visuals) {
+    try {
+        const res = await fetch(apiBase + '/refresh-visuals', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visuals })
+        });
+        if (!res.ok) {
+            console.error('Visual refresh failed:', res.status, await res.text());
+            return null;
+        }
+        return await res.json();
+    }
+    catch (e) {
+        console.error('Visual refresh request failed:', e);
+        return null;
+    }
+}
+
+
+// ─── rt-data.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-data.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Row loading and export readiness.
+ */
+let _exportReadyGeneration = 0;
+let _exportReadyPromise = Promise.resolve();
+let _exportReadyResolve = null;
+let _pendingLazyRows = 0;
+function publishExportState(status, detail) {
+    const state = {
+        status,
+        ready: status === 'ready',
+        timestamp: new Date().toISOString(),
+        ...(detail || {})
+    };
+    window.__etlSqlReportExportReady = state.ready;
+    window.__etlSqlReportExportState = state;
+    window.dispatchEvent(new CustomEvent('etl-sql-report-export-state', { detail: state }));
+    if (state.ready) {
+        window.dispatchEvent(new CustomEvent('etl-sql-report-export-ready', { detail: state }));
+    }
+    return state;
+}
+function markExportNotReady(reason, detail) {
+    _exportReadyGeneration++;
+    _exportReadyPromise = new Promise(resolve => {
+        _exportReadyResolve = resolve;
+    });
+    publishExportState('rendering', { reason, ...(detail || {}) });
+}
+function waitForImagesToSettle() {
+    const images = Array.from(document.images || []);
+    const pending = images
+        .filter(img => !img.complete)
+        .map(img => {
+        if (typeof img.decode === 'function') {
+            return img.decode().catch(() => { });
+        }
+        return new Promise(resolve => {
+            img.addEventListener('load', () => resolve(), { once: true });
+            img.addEventListener('error', () => resolve(), { once: true });
+        });
+    });
+    return Promise.all(pending);
+}
+function markExportReady(manifest) {
+    const generation = _exportReadyGeneration;
+    safeRequestAnimationFrame(() => {
+        safeRequestAnimationFrame(() => {
+            waitForImagesToSettle().then(() => {
+                if (generation !== _exportReadyGeneration)
+                    return;
+                const pageCount = manifest && manifest.pages ? manifest.pages.length : 0;
+                const visualCount = manifest && manifest.visuals ? manifest.visuals.length : 0;
+                const state = publishExportState('ready', { pageCount, visualCount });
+                if (_exportReadyResolve)
+                    _exportReadyResolve(state);
+                _exportReadyResolve = null;
+            });
+        });
+    });
+}
+function hasDeferredRows(visual) {
+    return !!(visual && visual.rowsSource && visual.rowsSource.url && (!visual.rows || visual.rows.length === 0));
+}
+function beginLazyRows() {
+    _pendingLazyRows++;
+    markExportNotReady('lazy-rows', { pendingLazyRows: _pendingLazyRows });
+}
+function finishLazyRows(completed) {
+    _pendingLazyRows = Math.max(0, _pendingLazyRows - 1);
+    if (completed && _pendingLazyRows === 0 && getLastManifest()) {
+        markExportReady(getLastManifest());
+    }
+    else if (completed) {
+        publishExportState('rendering', { reason: 'lazy-rows', pendingLazyRows: _pendingLazyRows });
+    }
+}
+let _arrowLibraryPromise = null;
+function ensureArrowLibrary() {
+    if (window.arrow)
+        return Promise.resolve(window.arrow);
+    if (_arrowLibraryPromise)
+        return _arrowLibraryPromise;
+    _arrowLibraryPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        let baseUrl;
+        if (window.__IS_WEB__) {
+            baseUrl = "";
+        }
+        else if (window.__API_BASE__) {
+            baseUrl = "/js";
+        }
+        else {
+            baseUrl = "/js";
+        }
+        script.src = baseUrl + "/arrow.min.js";
+        script.onload = () => {
+            if (window.arrow) {
+                resolve(window.arrow);
+            }
+            else {
+                reject(new Error("Apache Arrow library failed to initialize."));
+            }
+        };
+        script.onerror = () => reject(new Error("Failed to load Apache Arrow library script."));
+        document.head.appendChild(script);
+    });
+    return _arrowLibraryPromise;
+}
+function fetchJsonRows(source) {
+    return fetch(source.url, { credentials: 'same-origin' })
+        .then(res => {
+        if (!res.ok)
+            throw new Error('Failed to load rows.');
+        return res.json();
+    });
+}
+function loadVisualRows(visual) {
+    if (!hasDeferredRows(visual))
+        return Promise.resolve(visual);
+    if (visual.__rowsPromise)
+        return visual.__rowsPromise;
+    beginLazyRows();
+    const source = visual.rowsSource;
+    let promise;
+    if (source.arrowUrl) {
+        promise = ensureArrowLibrary()
+            .then(() => {
+            return fetch(source.arrowUrl, { credentials: 'same-origin' })
+                .then(res => {
+                if (!res.ok)
+                    throw new Error('Failed to load binary Arrow stream.');
+                return res.arrayBuffer();
+            })
+                .then(buffer => {
+                const arrow = window.arrow;
+                const table = arrow.tableFromIPC(new Uint8Array(buffer));
+                const columns = table.schema.fields.map((f) => f.name);
+                const rows = [];
+                for (let i = 0; i < table.numRows; i++) {
+                    const row = [];
+                    for (let j = 0; j < table.numCols; j++) {
+                        const child = table.getChildAt(j);
+                        const cell = child ? child.get(i) : null;
+                        row.push(cell === null ? null : String(cell));
+                    }
+                    rows.push(row);
+                }
+                return { columns, rows };
+            });
+        })
+            .catch((err) => {
+            console.warn("Client-side Arrow parsing failed, falling back to JSON: ", err);
+            return fetchJsonRows(source);
+        });
+    }
+    else {
+        promise = fetchJsonRows(source);
+    }
+    visual.__rowsPromise = promise
+        .then((payload) => {
+        visual.columns = payload.columns || source.columns || visual.columns || [];
+        visual.rows = payload.rows || [];
+        visual.rowsSource = null;
+        visual.__rowsLoaded = true;
+        return visual;
+    })
+        .then((result) => {
+        finishLazyRows(true);
+        return result;
+    }, (error) => {
+        finishLazyRows(false);
+        throw error;
+    });
+    return visual.__rowsPromise;
+}
+function getExportReadyPromise() { return _exportReadyPromise; }
+function setExportReadyPromise(value) { _exportReadyPromise = value; }
+function getPendingLazyRows() { return _pendingLazyRows; }
+function setPendingLazyRows(value) { _pendingLazyRows = value; }
+
+
+// ─── rt-detail.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-detail.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Detail surface placement, focus, announcements, and teardown.
+ */
+// ════════════════════════════════════════════════════════════════════════
+// Detail surfaces
+//
+// One controller, shared by every chart adapter. Adapters call
+// attachDetailSurface(); they never keep private tooltip state, so dismissal,
+// focus, pinning, and stale-refresh fencing behave identically everywhere.
+//
+// Two surfaces, chosen by manifest `mode` (older manifests without it fall back
+// to deriving from `type`):
+//
+//   tooltip  — transient, non-interactive text. role="tooltip" +
+//              aria-describedby on the mark. Never focusable, never contains
+//              interactive descendants, dismissed on pointer leave or blur.
+//   popover  — persistent detail carrying formatted content or visuals. A fine
+//              pointer gets an unpinned preview; click, tap, Enter, or Space
+//              pins a labelled dialog that survives pointer leave and is
+//              dismissed only by Escape, outside click, trigger toggle, opening
+//              another surface, or refresh/unmount.
+// ════════════════════════════════════════════════════════════════════════
+const DETAIL_VIEWPORT_MARGIN = 8; // px kept clear at every viewport edge
+const DETAIL_ANCHOR_GAP = 10; // px between the mark and the surface
+const DETAIL_HOVER_DELAY = 120; // ms before a hover preview requests detail
+const DETAIL_PREFERRED_SIDE = 'top';
+// Flip order per preferred side: the opposite side first, then the perpendicular
+// pair. Deterministic, so a given anchor/viewport always resolves the same way.
+const DETAIL_FLIP_ORDER = {
+    top: ['top', 'bottom', 'right', 'left'],
+    bottom: ['bottom', 'top', 'right', 'left'],
+    right: ['right', 'left', 'top', 'bottom'],
+    left: ['left', 'right', 'top', 'bottom']
+};
+/**
+ * Anchor-based placement. Pure: given an anchor rect, the surface size, and the
+ * viewport, it returns the chosen side and the clamped position. Replaces the old
+ * cursor-follow clamping so placement is reproducible in geometry fixtures.
+ *
+ * @param {{left:number,top:number,right:number,bottom:number}} anchor
+ * @param {{width:number,height:number}} size
+ * @param {{width:number,height:number}} viewport
+ * @param {{preferredSide?:string, gap?:number, margin?:number, rtl?:boolean}} [options]
+ * @returns {{side:string, left:number, top:number, flipped:boolean, shifted:boolean}}
+ */
+function computeDetailPlacement(anchor, size, viewport, options) {
+    const opts = options || {};
+    const gap = opts.gap == null ? DETAIL_ANCHOR_GAP : opts.gap;
+    const margin = opts.margin == null ? DETAIL_VIEWPORT_MARGIN : opts.margin;
+    const preferred = DETAIL_FLIP_ORDER[opts.preferredSide]
+        ? opts.preferredSide
+        : DETAIL_PREFERRED_SIDE;
+    const order = DETAIL_FLIP_ORDER[preferred];
+    const rtl = !!opts.rtl;
+    const minLeft = margin;
+    const maxLeft = Math.max(margin, viewport.width - size.width - margin);
+    const minTop = margin;
+    const maxTop = Math.max(margin, viewport.height - size.height - margin);
+    // Cross-axis alignment. Horizontally aligned surfaces align to the anchor's
+    // leading edge, which is the right edge under RTL.
+    const alignLeft = rtl
+        ? anchor.right - size.width
+        : anchor.left;
+    const alignTop = anchor.top + (anchor.bottom - anchor.top) / 2 - size.height / 2;
+    function candidate(side) {
+        switch (side) {
+            case 'top': return { left: alignLeft, top: anchor.top - size.height - gap };
+            case 'bottom': return { left: alignLeft, top: anchor.bottom + gap };
+            case 'right': return { left: anchor.right + gap, top: alignTop };
+            default: return { left: anchor.left - size.width - gap, top: alignTop };
+        }
+    }
+    function fits(side, pos) {
+        // Only the placement axis decides fit; the cross axis is always shifted
+        // into view, so a surface never leaves the viewport on that axis.
+        if (side === 'top')
+            return pos.top >= margin;
+        if (side === 'bottom')
+            return pos.top + size.height <= viewport.height - margin;
+        if (side === 'right')
+            return pos.left + size.width <= viewport.width - margin;
+        return pos.left >= margin;
+    }
+    let chosen = null;
+    for (let i = 0; i < order.length; i++) {
+        const pos = candidate(order[i]);
+        if (fits(order[i], pos)) {
+            chosen = { side: order[i], pos: pos };
+            break;
+        }
+    }
+    // Nothing fits (oversized content, or a very small viewport): keep the
+    // preferred side and let the clamp below place it deterministically.
+    if (!chosen)
+        chosen = { side: preferred, pos: candidate(preferred) };
+    const left = Math.min(Math.max(chosen.pos.left, minLeft), maxLeft);
+    const top = Math.min(Math.max(chosen.pos.top, minTop), maxTop);
+    return {
+        side: chosen.side,
+        left: left,
+        top: top,
+        flipped: chosen.side !== preferred,
+        shifted: left !== chosen.pos.left || top !== chosen.pos.top
+    };
+}
+/** Normalises the manifest tooltip into the accepted surface contract. */
+function detailSurfaceMode(tooltip) {
+    if (!tooltip || typeof tooltip !== 'object')
+        return null;
+    if (tooltip.mode === 'popover' || tooltip.mode === 'tooltip')
+        return tooltip.mode;
+    // Manifests published before `mode` existed: container and inline-with-visuals
+    // carry visuals, so they are popovers; everything else is a transient tooltip.
+    if (tooltip.type === 'container')
+        return 'popover';
+    if (tooltip.type === 'inline' && (tooltip.visuals || []).length > 0)
+        return 'popover';
+    return 'tooltip';
+}
+// ── Shared announcement region ──────────────────────────────────────────
+// One polite region for every surface. Repeated identical messages are dropped
+// so a hover sweep across many marks cannot flood a screen reader.
+let detailLiveRegion = null;
+let detailLastAnnouncement = '';
+function announceDetail(message) {
+    if (!message || message === detailLastAnnouncement)
+        return;
+    detailLastAnnouncement = message;
+    if (!detailLiveRegion) {
+        detailLiveRegion = document.createElement('div');
+        detailLiveRegion.id = 'report-detail-live';
+        detailLiveRegion.className = 'report-detail-live';
+        detailLiveRegion.setAttribute('role', 'status');
+        detailLiveRegion.setAttribute('aria-live', 'polite');
+        document.body.appendChild(detailLiveRegion);
+    }
+    detailLiveRegion.textContent = message;
+}
+// ── The single open surface ─────────────────────────────────────────────
+// Opening a surface closes whatever was open, so only one detail surface exists
+// in the document at any time.
+let openDetail = null;
+function closeOpenDetail(restoreFocus) {
+    if (!openDetail)
+        return;
+    const closing = openDetail;
+    openDetail = null;
+    closing.generation++;
+    if (closing.element && closing.element.parentNode)
+        closing.element.remove();
+    if (closing.trigger) {
+        closing.trigger.removeAttribute('aria-describedby');
+        closing.trigger.setAttribute('aria-expanded', 'false');
+    }
+    detailLastAnnouncement = '';
+    window.removeEventListener('scroll', closing.reposition, true);
+    window.removeEventListener('resize', closing.reposition);
+    if (closing.resizeObserver)
+        closing.resizeObserver.disconnect();
+    if (restoreFocus && closing.pinned && closing.trigger && document.contains(closing.trigger)) {
+        closing.trigger.focus();
+    }
+}
+/**
+ * Adds the non-hoverable fallback note for a visual's detail surface.
+ *
+ * The note is hidden on screen — the live surface is what a browser reader uses — but is
+ * present in the accessibility tree and revealed when printing, so a browser-printed PDF
+ * carries the same semantic summary the static exporters emit. The wording comes from the
+ * manifest (`staticSummary`), computed once server-side, so the two cannot drift.
+ *
+ * @param {HTMLElement} container the visual's card
+ * @param {object} visual the visual manifest entry
+ */
+function appendDetailStaticNote(container, visual) {
+    const summary = visual.tooltip && visual.tooltip.staticSummary;
+    if (!summary)
+        return;
+    const note = document.createElement('p');
+    note.className = 'report-detail-static-note';
+    note.textContent = summary;
+    container.appendChild(note);
+}
+/**
+ * Destroys every detail surface attached beneath `scope`. The surface element is
+ * appended to document.body, so clearing the report root would otherwise orphan an
+ * open popover; this must run before any bulk re-render or unmount.
+ *
+ * @param {ParentNode} scope
+ */
+function destroyDetailSurfaces(scope) {
+    if (!scope || typeof scope.querySelectorAll !== 'function')
+        return;
+    scope.querySelectorAll('.chart-wrapper').forEach(wrapper => {
+        const visualWrapper = /** @type {EtlSqlVisualHost} */ (wrapper);
+        const handle = visualWrapper._detailSurface;
+        if (handle && typeof handle.destroy === 'function')
+            handle.destroy();
+        visualWrapper._detailSurface = null;
+    });
+}
+/**
+ * Attaches the shared detail-surface controller to one rendered visual.
+ *
+ * @param {HTMLElement} wrapper   the chart wrapper containing [data-row-index] marks
+ * @param {object} visual         the visual manifest entry
+ * @param {object} manifest       the report manifest
+ * @param {string} pageTheme      resolved page theme
+ * @param {string} mappingColumn  column whose value becomes the row context
+ * @returns {{destroy: function}} handle used to tear the surface down on refresh/unmount
+ */
+function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn) {
+    const tooltipValue = visual.tooltip;
+    const mode = detailSurfaceMode(tooltipValue);
+    if (!mode)
+        return { destroy: function () { } };
+    const tooltip = tooltipValue;
+    const surfaceId = 'detail-' + Math.random().toString(36).slice(2, 10);
+    const isPopover = mode === 'popover';
+    const columns = visual.columns || [];
+    const rows = visual.rows || [];
+    const columnIndex = columns.findIndex(column => String(column).toLowerCase() === String(mappingColumn || '').toLowerCase());
+    let hoverTimer = null;
+    let localGeneration = 0;
+    let destroyed = false;
+    function rowContext(mark) {
+        const rowIndex = Number(mark.dataset.rowIndex);
+        if (!Number.isInteger(rowIndex))
+            return null;
+        const row = rows[rowIndex] || [];
+        return String(row[columnIndex >= 0 ? columnIndex : 0] ?? '');
+    }
+    // ── Marks become discoverable and focusable ─────────────────────────
+    // Hover-only detail is not acceptable, so every mark that exposes detail is
+    // reachable by keyboard and carries an accessible name.
+    function prepareMarks() {
+        wrapper.querySelectorAll('[data-row-index]').forEach(mark => {
+            const markElement = /** @type {HTMLElement} */ (mark);
+            if (markElement.dataset.detailReady === '1')
+                return;
+            markElement.dataset.detailReady = '1';
+            markElement.setAttribute('tabindex', '0');
+            markElement.setAttribute('role', 'button');
+            const context = rowContext(markElement);
+            const title = visual.title || visual.name || 'chart';
+            markElement.setAttribute('aria-label', isPopover
+                ? `${context} — show details for ${title}`
+                : `${context} — ${title}`);
+            if (isPopover) {
+                markElement.setAttribute('aria-haspopup', 'dialog');
+                markElement.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+    prepareMarks();
+    function buildSurfaceElement(pinned) {
+        const el = document.createElement('div');
+        el.className = 'report-chart-tooltip' + (pinned ? ' report-chart-detail-pinned' : '');
+        el.id = surfaceId;
+        if (isPopover && pinned) {
+            // Interactive detail is a labelled dialog, never role="tooltip":
+            // a tooltip must not contain focusable descendants.
+            el.setAttribute('role', 'dialog');
+            el.setAttribute('aria-modal', 'false');
+            el.setAttribute('aria-label', `Details for ${visual.title || visual.name || 'chart'}`);
+            el.tabIndex = -1;
+        }
+        else {
+            el.setAttribute('role', 'tooltip');
+        }
+        return el;
+    }
+    function contextElement(value) {
+        const context = document.createElement('div');
+        context.className = 'report-chart-tooltip-context';
+        context.textContent = String(value ?? '');
+        return context;
+    }
+    function reposition(state) {
+        if (!state.element || !state.trigger || !document.contains(state.trigger))
+            return;
+        const anchor = state.trigger.getBoundingClientRect();
+        const size = state.element.getBoundingClientRect();
+        const rtl = getComputedStyle(document.documentElement).direction === 'rtl' ||
+            getComputedStyle(document.body).direction === 'rtl';
+        const placement = computeDetailPlacement({ left: anchor.left, top: anchor.top, right: anchor.right, bottom: anchor.bottom }, { width: size.width, height: size.height }, { width: window.innerWidth, height: window.innerHeight }, { preferredSide: DETAIL_PREFERRED_SIDE, rtl: rtl });
+        state.element.style.left = placement.left + 'px';
+        state.element.style.top = placement.top + 'px';
+        state.element.dataset.side = placement.side;
+    }
+    function open(mark, pinned) {
+        closeOpenDetail(false);
+        if (destroyed)
+            return null;
+        const element = buildSurfaceElement(pinned);
+        document.body.appendChild(element);
+        const state = {
+            element: element,
+            trigger: mark,
+            pinned: pinned,
+            generation: ++localGeneration,
+            owner: wrapper,
+            reposition: () => { },
+            resizeObserver: null
+        };
+        state.reposition = () => reposition(state);
+        openDetail = state;
+        if (!pinned) {
+            // A transient surface describes its trigger; a pinned dialog does not,
+            // so assistive technology is not told to read a whole dialog inline.
+            mark.setAttribute('aria-describedby', surfaceId);
+        }
+        else if (isPopover) {
+            mark.setAttribute('aria-expanded', 'true');
+        }
+        window.addEventListener('scroll', state.reposition, true);
+        window.addEventListener('resize', state.reposition);
+        if (typeof ResizeObserver === 'function') {
+            // Content that grows after an async refresh must not stay mis-anchored.
+            state.resizeObserver = new ResizeObserver(state.reposition);
+            state.resizeObserver.observe(element);
+        }
+        return state;
+    }
+    function showText(mark, pinned) {
+        const state = open(mark, pinned);
+        if (!state)
+            return;
+        const value = rowContext(mark);
+        state.element.replaceChildren(contextElement(value));
+        if (tooltip.markdown || tooltip.text) {
+            const body = document.createElement('div');
+            body.className = 'report-chart-tooltip-text';
+            body.textContent = tooltip.text || tooltip.markdown || '';
+            state.element.appendChild(body);
+        }
+        // The declarative middle tier: a formatted field list read straight off the hovered
+        // row. No server round-trip, which is what keeps it lighter than a popover container.
+        const fields = tooltip.fields || [];
+        if (fields.length > 0) {
+            const rowIndex = Number(mark.dataset.rowIndex);
+            const row = Number.isInteger(rowIndex) ? (rows[rowIndex] || []) : [];
+            const list = document.createElement('dl');
+            list.className = 'report-chart-tooltip-fields';
+            fields.forEach((field) => {
+                const index = columns.findIndex(column => String(column).toLowerCase() === String(field.name).toLowerCase());
+                const term = document.createElement('dt');
+                term.textContent = String(field.name);
+                const detail = document.createElement('dd');
+                const raw = index < 0 ? null : row[index];
+                const formatted = formatValue(raw, field.format);
+                detail.textContent = formatted == null ? '' : String(formatted);
+                list.append(term, detail);
+            });
+            state.element.appendChild(list);
+        }
+        reposition(state);
+    }
+    function renderDetailContent(state, value, sourceManifest) {
+        state.element.replaceChildren(contextElement(value));
+        if (tooltip.type === 'container') {
+            const ref = String(tooltip.containerRef || '').toLowerCase();
+            const containerDef = (sourceManifest.containers || [])
+                .find(item => String(item.name).toLowerCase() === ref);
+            if (!containerDef) {
+                appendUnavailable(state, `Details for ${value} are unavailable.`);
+                return;
+            }
+            renderContainer(state.element, containerDef, sourceManifest, pageTheme);
+            announceDetail(`Details for ${value} loaded.`);
+            return;
+        }
+        // Inline form: optional markdown, then each named visual rendered in order.
+        // This is the path that previously parsed and serialized but rendered nothing.
+        if (tooltip.markdown) {
+            const md = document.createElement('div');
+            md.className = 'report-chart-tooltip-text';
+            md.textContent = tooltip.markdown;
+            state.element.appendChild(md);
+        }
+        const names = tooltip.visuals || [];
+        const byName = new Map((sourceManifest.visuals || [])
+            .map(v => [String(v.name).toLowerCase(), v]));
+        let rendered = 0;
+        names.forEach((name) => {
+            const def = byName.get(String(name).toLowerCase());
+            if (!def)
+                return;
+            renderVisual(state.element, def, pageTheme, sourceManifest);
+            rendered++;
+        });
+        if (!rendered && !tooltip.markdown) {
+            appendUnavailable(state, `Details for ${value} are unavailable.`);
+            return;
+        }
+        announceDetail(`Details for ${value} loaded.`);
+    }
+    function appendUnavailable(state, message) {
+        const unavailable = document.createElement('div');
+        unavailable.className = 'report-chart-tooltip-loading';
+        unavailable.textContent = message;
+        state.element.appendChild(unavailable);
+        announceDetail(message);
+    }
+    function showDetail(mark, pinned) {
+        const state = open(mark, pinned);
+        if (!state)
+            return;
+        const value = rowContext(mark);
+        const generation = state.generation;
+        state.element.replaceChildren(contextElement(value));
+        const loading = document.createElement('div');
+        loading.className = 'report-chart-tooltip-loading';
+        loading.textContent = 'Loading details…';
+        state.element.appendChild(loading);
+        reposition(state);
+        announceDetail(`Loading details for ${value}.`);
+        if (pinned)
+            state.element.focus();
+        // Only the explicitly mapped, non-secret row value flows into the refresh.
+        postParameters({ '@hover_value': value }, true).then(refreshed => {
+            // Generation fencing: a response for a superseded row, a closed surface,
+            // or a destroyed attachment never replaces current detail.
+            if (destroyed || openDetail !== state || state.generation !== generation)
+                return;
+            const refreshedManifest = refreshed && typeof refreshed === 'object'
+                ? refreshed
+                : manifest;
+            renderDetailContent(state, value, refreshedManifest);
+            reposition(state);
+        }).catch(() => {
+            if (destroyed || openDetail !== state || state.generation !== generation)
+                return;
+            state.element.replaceChildren(contextElement(value));
+            appendUnavailable(state, `Details for ${value} could not be loaded.`);
+            reposition(state);
+        });
+    }
+    function showFor(mark, pinned) {
+        if (isPopover)
+            showDetail(mark, pinned);
+        else
+            showText(mark, pinned);
+    }
+    function isOwnTrigger(mark) {
+        return openDetail && openDetail.trigger === mark;
+    }
+    // ── Pointer: hover previews, click pins ─────────────────────────────
+    function onPointerOver(event) {
+        // Coarse pointers get no hover preview; tap opens the pinned surface instead.
+        if (event.pointerType === 'touch')
+            return;
+        const mark = event.target?.closest('[data-row-index]');
+        if (!mark || !wrapper.contains(mark))
+            return;
+        if (openDetail && openDetail.pinned)
+            return; // a pinned surface owns the screen
+        if (isOwnTrigger(mark))
+            return;
+        if (hoverTimer)
+            clearTimeout(hoverTimer);
+        if (isPopover)
+            hoverTimer = setTimeout(() => showFor(mark, false), DETAIL_HOVER_DELAY);
+        else
+            showFor(mark, false);
+    }
+    function onPointerLeave() {
+        if (hoverTimer) {
+            clearTimeout(hoverTimer);
+            hoverTimer = null;
+        }
+        // Deterministic: an unpinned surface never bridges to the pointer, so leaving
+        // the mark always dismisses it. A pinned surface is unaffected.
+        if (openDetail && !openDetail.pinned && openDetail.owner === wrapper)
+            closeOpenDetail(false);
+    }
+    function onClick(event) {
+        const mark = event.target?.closest('[data-row-index]');
+        if (!mark || !wrapper.contains(mark))
+            return;
+        if (hoverTimer) {
+            clearTimeout(hoverTimer);
+            hoverTimer = null;
+        }
+        // Trigger reactivation toggles consistently for both surfaces.
+        if (openDetail && openDetail.pinned && openDetail.trigger === mark) {
+            closeOpenDetail(true);
+            return;
+        }
+        showFor(mark, true);
+    }
+    function onKeyDown(event) {
+        if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar')
+            return;
+        const mark = event.target?.closest('[data-row-index]');
+        if (!mark || !wrapper.contains(mark))
+            return;
+        event.preventDefault(); // Space must not scroll the page
+        if (openDetail && openDetail.pinned && openDetail.trigger === mark) {
+            closeOpenDetail(true);
+            return;
+        }
+        showFor(mark, true);
+    }
+    function onFocusIn(event) {
+        const mark = event.target?.closest('[data-row-index]');
+        if (!mark || !wrapper.contains(mark))
+            return;
+        if (openDetail && openDetail.pinned)
+            return;
+        if (isOwnTrigger(mark))
+            return;
+        // Keyboard focus shows the transient surface; activation pins it.
+        if (!isPopover)
+            showFor(mark, false);
+    }
+    function onFocusOut(event) {
+        if (!openDetail || openDetail.pinned || openDetail.owner !== wrapper)
+            return;
+        if (event.relatedTarget && wrapper.contains(event.relatedTarget))
+            return;
+        closeOpenDetail(false);
+    }
+    wrapper.addEventListener('pointerover', onPointerOver);
+    wrapper.addEventListener('pointerleave', onPointerLeave);
+    wrapper.addEventListener('click', onClick);
+    wrapper.addEventListener('keydown', onKeyDown);
+    wrapper.addEventListener('focusin', onFocusIn);
+    wrapper.addEventListener('focusout', onFocusOut);
+    return {
+        /** Closes any surface this attachment owns and detaches every listener. */
+        destroy: function () {
+            destroyed = true;
+            if (hoverTimer) {
+                clearTimeout(hoverTimer);
+                hoverTimer = null;
+            }
+            localGeneration++;
+            if (openDetail && openDetail.owner === wrapper)
+                closeOpenDetail(false);
+            wrapper.removeEventListener('pointerover', onPointerOver);
+            wrapper.removeEventListener('pointerleave', onPointerLeave);
+            wrapper.removeEventListener('click', onClick);
+            wrapper.removeEventListener('keydown', onKeyDown);
+            wrapper.removeEventListener('focusin', onFocusIn);
+            wrapper.removeEventListener('focusout', onFocusOut);
+        }
+    };
+}
+function getOpenDetail() { return openDetail; }
+function setOpenDetail(value) { openDetail = value; }
+
+
+// ─── rt-charts.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-charts.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Native SVG charts, toolbox, zoom, and responsive layout.
+ */
+let _nativeLayoutObservers = [];
+const _nativeLayoutTimers = new Map();
+const _nativeLayoutRequests = new Map();
+// Chart-type visuals are rendered server-side into `nativeSvg`. A manifest that reaches
+// the browser without one — an older snapshot, a lightweight/externalized manifest, an
+// unrecognized visual type — has no payload the runtime can draw. Degrade to an explicit,
+// announced state for that one card instead of aborting the whole page render.
+function renderMissingChartPayload(container, visual) {
+    const type = (visual.visualType || 'chart').toUpperCase();
+    const name = visual.title || visual.name || 'this visual';
+    const el = noDataEl('Chart payload missing for ' + name + ' (' + type + '). Re-run the report to regenerate it.');
+    el.classList.add('missing-chart-payload');
+    el.setAttribute('role', 'status');
+    container.appendChild(el);
+    return el;
+}
+// ── Interaction contract ──────────────────────────────────────────────
+//
+// The server resolves every interaction decision — which column a selection is keyed on, which
+// column carries its measure, and how a selection is drawn — and ships it as the compact
+// `visual.interaction` manifest. The runtime reads that and nothing else: it never re-derives a
+// filter column from `mapping:*` options, and never infers geometry from a visual's type name.
+//
+// `legacyInteraction()` is the migration path for manifests built before v0.19 — offline
+// snapshots, cached artifacts — which carry the old `visual.interactions` map instead. It is the
+// only place left that reads `visualType`, and it is reached only when `visual.interaction` is
+// absent.
+function resolveInteraction(visual) {
+    const resolved = visual && visual.interaction;
+    if (!resolved)
+        return legacyInteraction((visual || {}));
+    return {
+        key: resolved.key || null,
+        valueKey: resolved.valueKey || null,
+        select: String(resolved.select || 'NONE').toUpperCase(),
+        effect: String(resolved.effect || 'HIGHLIGHT').toUpperCase(),
+        highlight: String(resolved.highlight || 'NONE').toUpperCase(),
+        extent: null
+    };
+}
+function legacyInteraction(visual) {
+    const legacy = (visual.interactions || {});
+    const mode = String(legacy['ON_SELECT'] || '').toUpperCase();
+    const active = !!mode && mode !== 'NONE';
+    const options = (visual.options || {});
+    const key = legacy['MATCHING'] || options['mapping:x'] || options['mapping:label'] ||
+        options['mapping:name'] || options['mapping:region'] || options['mapping:y'] ||
+        (visual.columns || [])[0] || null;
+    const type = String(visual.visualType || '').toUpperCase();
+    const bar = type === 'BAR' || type === 'HBAR' || type === 'HORIZONTALBAR';
+    return {
+        key: key,
+        valueKey: options['mapping:y'] || null,
+        select: active ? 'MULTIPLE' : 'NONE',
+        effect: mode === 'FILTER' ? 'FILTER' : 'HIGHLIGHT',
+        highlight: active ? (bar ? 'PROPORTIONAL' : 'CATEGORICAL') : 'CATEGORICAL',
+        // Pre-v0.19 SVG carries no semantic extent attributes, so the shim supplies what the
+        // server now stamps on the mark itself.
+        extent: bar
+            ? { axis: type === 'BAR' ? 'y' : 'x', anchor: type === 'BAR' ? 'end' : 'start' }
+            : null
+    };
+}
+function crossFilterActive(interaction) {
+    return interaction.select !== 'NONE' && !!interaction.key;
+}
+function renderNativeSvg(container, visual, manifest, pageTheme) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'chart-wrapper native-chart-wrapper';
+    const parsed = new DOMParser().parseFromString(String(visual.nativeSvg || ''), 'image/svg+xml');
+    const svg = parsed.documentElement;
+    if (!svg || svg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
+        container.appendChild(noDataEl('Invalid native chart payload'));
+        return;
+    }
+    wrapper.appendChild(document.importNode(svg, true));
+    if (visual.layout?.tier)
+        wrapper.dataset.layoutTier = String(visual.layout.tier).toUpperCase();
+    container.appendChild(wrapper);
+    attachNativeZoomSlider(container, wrapper, visual);
+    attachNativeChartToolbox(container, wrapper, visual);
+    attachProgressiveReveal(wrapper, visual);
+    observeNativeLayout(wrapper, visual);
+    const clickActions = actionsFor(visual, 'ON_CLICK');
+    const interaction = resolveInteraction(visual);
+    const crossFilter = crossFilterActive(interaction);
+    const mappingColumn = interaction.key;
+    let activeRow = null;
+    applyNativeHighlight(wrapper, visual, interaction);
+    // The wrapper owns its detail surface: re-rendering or unmounting the visual
+    // tears it down, so a surface can never outlive the marks it is anchored to.
+    const detailSurface = attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn);
+    /** @type {EtlSqlVisualHost} */ (wrapper)._detailSurface = detailSurface;
+    appendDetailStaticNote(container, visual);
+    const vopts = visual.options || {};
+    const crosshairOpt = (vopts['CROSSHAIR'] || '').toUpperCase();
+    const crosshairAxis = (vopts['CROSSHAIR_AXIS'] || 'BOTH').toUpperCase();
+    const crosshairColor = vopts['CROSSHAIR_COLOR'] || '#94a3b8';
+    const crosshairDash = vopts['CROSSHAIR_DASH'] || '4 4';
+    const linkTooltipGroup = vopts['LINK_TOOLTIP'] ? vopts['LINK_TOOLTIP'].trim() : null;
+    if (linkTooltipGroup) {
+        wrapper.dataset.linkTooltip = linkTooltipGroup;
+    }
+    const svgEl = wrapper.querySelector('svg');
+    if (svgEl && (crosshairOpt === 'ON' || crosshairOpt === 'TRUE' || vopts['CROSSHAIR_AXIS'] || linkTooltipGroup)) {
+        const chartSvg = svgEl;
+        let crosshairG = svgEl.querySelector('.plot-crosshair-group');
+        if (!crosshairG) {
+            crosshairG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            crosshairG.setAttribute('class', 'plot-crosshair-group');
+            crosshairG.setAttribute('pointer-events', 'none');
+            /** @type {HTMLElement} */ (crosshairG).style.display = 'none';
+            svgEl.appendChild(crosshairG);
+        }
+        const lineX = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        lineX.setAttribute('class', 'plot-crosshair-x');
+        lineX.setAttribute('stroke', crosshairColor);
+        lineX.setAttribute('stroke-dasharray', crosshairDash);
+        lineX.setAttribute('stroke-width', '1');
+        if (crosshairAxis === 'X' || crosshairAxis === 'BOTH')
+            crosshairG.appendChild(lineX);
+        const lineY = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        lineY.setAttribute('class', 'plot-crosshair-y');
+        lineY.setAttribute('stroke', crosshairColor);
+        lineY.setAttribute('stroke-dasharray', crosshairDash);
+        lineY.setAttribute('stroke-width', '1');
+        if (crosshairAxis === 'Y' || crosshairAxis === 'BOTH')
+            crosshairG.appendChild(lineY);
+        function updateCrosshair(svgPoint) {
+            const bbox = chartSvg.viewBox?.baseVal || { x: 0, y: 0, width: chartSvg.clientWidth || 600, height: chartSvg.clientHeight || 400 };
+            /** @type {HTMLElement} */ (crosshairG).style.display = '';
+            if (lineX) {
+                lineX.setAttribute('x1', String(svgPoint.x));
+                lineX.setAttribute('x2', String(svgPoint.x));
+                lineX.setAttribute('y1', String(bbox.y || 0));
+                lineX.setAttribute('y2', String((bbox.y || 0) + (bbox.height || 400)));
+            }
+            if (lineY) {
+                lineY.setAttribute('y1', String(svgPoint.y));
+                lineY.setAttribute('y2', String(svgPoint.y));
+                lineY.setAttribute('x1', String(bbox.x || 0));
+                lineY.setAttribute('x2', String((bbox.x || 0) + (bbox.width || 600)));
+            }
+        }
+        function hideCrosshair() {
+            /** @type {HTMLElement} */ (crosshairG).style.display = 'none';
+        }
+        /** @type {EtlSqlVisualHost} */ (wrapper)._updateCrosshair = updateCrosshair;
+        /** @type {EtlSqlVisualHost} */ (wrapper)._hideCrosshair = hideCrosshair;
+        chartSvg.addEventListener('pointermove', event => {
+            const pt = chartSvg.createSVGPoint();
+            pt.x = event.clientX;
+            pt.y = event.clientY;
+            const ctm = chartSvg.getScreenCTM();
+            if (ctm) {
+                const svgPt = pt.matrixTransform(ctm.inverse());
+                updateCrosshair(svgPt);
+                if (linkTooltipGroup) {
+                    const linkedWrappers = document.querySelectorAll(`[data-link-tooltip="${CSS.escape(linkTooltipGroup)}"]`);
+                    linkedWrappers.forEach(w => {
+                        if (w !== wrapper && typeof /** @type {EtlSqlVisualHost} */ (w)._updateCrosshair === 'function') {
+                            /** @type {EtlSqlVisualHost} */ (w)._updateCrosshair(svgPt);
+                        }
+                    });
+                }
+            }
+        });
+        chartSvg.addEventListener('pointerleave', () => {
+            hideCrosshair();
+            if (linkTooltipGroup) {
+                const linkedWrappers = document.querySelectorAll(`[data-link-tooltip="${CSS.escape(linkTooltipGroup)}"]`);
+                linkedWrappers.forEach(w => {
+                    if (w !== wrapper && typeof /** @type {EtlSqlVisualHost} */ (w)._hideCrosshair === 'function') {
+                        /** @type {EtlSqlVisualHost} */ (w)._hideCrosshair();
+                    }
+                });
+            }
+        });
+    }
+    // Setup Hover Focus & Series Emphasis
+    const hoverFocusMode = (svgEl?.dataset?.hoverFocus || vopts['HOVER_FOCUS'] || 'NONE').toUpperCase();
+    if (svgEl && hoverFocusMode !== 'NONE') {
+        svgEl.addEventListener('pointerover', event => {
+            if (hoverFocusMode === 'SERIES') {
+                const target = /** @type {Element} */ (event.target).closest('[data-series]');
+                if (target) {
+                    const seriesKey = /** @type {HTMLElement} */ (target).dataset.series;
+                    const allSeriesMarks = svgEl.querySelectorAll('[data-series]');
+                    allSeriesMarks.forEach(m => {
+                        if ( /** @type {HTMLElement} */(m).dataset.series === seriesKey) {
+                            m.classList.add('plot-series-focused');
+                            m.classList.remove('plot-series-dimmed');
+                        }
+                        else {
+                            m.classList.add('plot-series-dimmed');
+                            m.classList.remove('plot-series-focused');
+                        }
+                    });
+                }
+            }
+            else if (hoverFocusMode === 'SELF') {
+                const mark = /** @type {Element} */ (event.target).closest('[data-row-index]');
+                if (mark) {
+                    const allMarks = svgEl.querySelectorAll('[data-row-index]');
+                    allMarks.forEach(m => {
+                        if (m === mark) {
+                            m.classList.add('plot-mark-focused');
+                            m.classList.remove('plot-mark-dimmed');
+                        }
+                        else {
+                            m.classList.add('plot-mark-dimmed');
+                            m.classList.remove('plot-mark-focused');
+                        }
+                    });
+                }
+            }
+        });
+        svgEl.addEventListener('pointerleave', () => {
+            if (hoverFocusMode === 'SERIES') {
+                svgEl.querySelectorAll('.plot-series-focused, .plot-series-dimmed').forEach(m => {
+                    m.classList.remove('plot-series-focused', 'plot-series-dimmed');
+                });
+            }
+            else if (hoverFocusMode === 'SELF') {
+                svgEl.querySelectorAll('.plot-mark-focused, .plot-mark-dimmed').forEach(m => {
+                    m.classList.remove('plot-mark-focused', 'plot-mark-dimmed');
+                });
+            }
+        });
+    }
+    // Setup Animation
+    const animOpt = (svgEl?.dataset?.animation || vopts['ANIMATION'] || 'ON').toUpperCase();
+    if (svgEl && animOpt !== 'OFF') {
+        const rawDuration = svgEl?.dataset?.animationDuration || vopts['ANIMATION_DURATION'] || '800';
+        const durationMs = parseInt(rawDuration, 10) || 800;
+        const easingOpt = (svgEl?.dataset?.animationEasing || vopts['ANIMATION_EASING'] || 'EASE_OUT').toUpperCase();
+        const easingMap = {
+            'LINEAR': 'linear',
+            'EASE_IN': 'cubic-bezier(0.4, 0, 1, 1)',
+            'EASE_OUT': 'cubic-bezier(0, 0, 0.2, 1)',
+            'ELASTIC': 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+            'BOUNCE': 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+        };
+        const easingCss = easingMap[easingOpt] || 'cubic-bezier(0, 0, 0.2, 1)';
+        wrapper.style.setProperty('--anim-duration', `${durationMs}ms`);
+        wrapper.style.setProperty('--anim-easing', easingCss);
+        wrapper.classList.add('chart-animated');
+        const updateAnimOpt = (svgEl?.dataset?.updateAnimation || vopts['UPDATE_ANIMATION'] || 'ON').toUpperCase();
+        if (updateAnimOpt !== 'OFF') {
+            wrapper.classList.add('update-animated');
+        }
+    }
+    wrapper.addEventListener('pointerover', event => {
+        const mark = /** @type {Element} */ (event.target).closest('[data-row-index]');
+        activeRow = mark ? (visual.rows || [])[Number(/** @type {HTMLElement} */ (mark).dataset.rowIndex)] || null : null;
+    });
+    wrapper.addEventListener('click', event => {
+        const mark = /** @type {Element} */ (event.target).closest('[data-row-index]');
+        if (!mark)
+            return;
+        const index = Number(/** @type {HTMLElement} */ (mark).dataset.rowIndex);
+        const row = (visual.rows || [])[index] || [];
+        const columnIndex = crossFilter && mappingColumn
+            ? (visual.columns || []).findIndex(column => column.toLowerCase() === mappingColumn.toLowerCase())
+            : -1;
+        // No positional fallback. Cross-filtering on "whatever column came first" produces a
+        // confidently wrong filter; doing nothing is the safer failure.
+        if (columnIndex >= 0) {
+            const value = row[columnIndex];
+            if (value != null)
+                applyPageCrossFilter(container, String(value), mappingColumn, visual.name, event);
+        }
+        else {
+            clickActions.forEach(action => executeAction(action, row, visual.columns || [], visual.name, visual));
+        }
+    });
+    wrapper.addEventListener('contextmenu', event => {
+        if (!(visual.actions || []).some(action => action.type === 'DRILL_DOWN'))
+            return;
+        event.preventDefault();
+        showCtxMenu(event.clientX, event.clientY, visual, activeRow);
+    });
+}
+/** @returns {boolean} whether an ON/TRUE/1 toggle is set on the visual. */
+function nativeToggleOn(visual, key) {
+    const value = String(visual.options?.[key] || '').toUpperCase();
+    return value === 'ON' || value === 'TRUE' || value === '1';
+}
+/**
+ * Per-chart toolbox: `SHOW_EXPORT = ON` adds a PNG download, `SHOW_DATA_VIEW = ON` adds a
+ * toggle between the chart and a table of its SOURCE rows. Both are chart-local — neither
+ * touches page state, and the data view is built from the visual's own columns and rows.
+ */
+function attachNativeChartToolbox(container, wrapper, visual) {
+    const wantsExport = nativeToggleOn(visual, 'SHOW_EXPORT');
+    const wantsDataView = nativeToggleOn(visual, 'SHOW_DATA_VIEW');
+    if (!wantsExport && !wantsDataView)
+        return;
+    const bar = document.createElement('div');
+    bar.className = 'native-chart-toolbox';
+    bar.setAttribute('role', 'group');
+    bar.setAttribute('aria-label', 'Chart tools');
+    if (wantsExport) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'native-chart-toolbox-button';
+        button.dataset.tool = 'save-image';
+        button.title = 'Save chart as PNG';
+        button.setAttribute('aria-label', 'Save chart as PNG');
+        button.textContent = '⤓';
+        button.addEventListener('click', () => saveChartImage(wrapper, visual));
+        bar.appendChild(button);
+    }
+    if (wantsDataView) {
+        const table = buildDataViewTable(visual);
+        table.hidden = true;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'native-chart-toolbox-button';
+        button.dataset.tool = 'data-view';
+        button.title = 'Show data table';
+        button.setAttribute('aria-label', 'Show data table');
+        button.setAttribute('aria-pressed', 'false');
+        button.textContent = '▤';
+        button.addEventListener('click', () => {
+            const showing = table.hidden;
+            table.hidden = !showing;
+            wrapper.hidden = showing;
+            button.setAttribute('aria-pressed', showing ? 'true' : 'false');
+            button.title = showing ? 'Show chart' : 'Show data table';
+        });
+        bar.appendChild(button);
+        container.appendChild(bar);
+        container.appendChild(table);
+        return;
+    }
+    container.appendChild(bar);
+}
+/** Renders the visual's SOURCE rows as an accessible table for `SHOW_DATA_VIEW`. */
+function buildDataViewTable(visual) {
+    const columns = visual.columns || [];
+    const rows = visual.rows || [];
+    const table = document.createElement('table');
+    table.className = 'native-chart-data-view';
+    table.setAttribute('aria-label', (visual.name || 'Chart') + ' data');
+    const head = document.createElement('tr');
+    columns.forEach(column => {
+        const cell = document.createElement('th');
+        cell.scope = 'col';
+        cell.textContent = String(column);
+        head.appendChild(cell);
+    });
+    const thead = document.createElement('thead');
+    thead.appendChild(head);
+    table.appendChild(thead);
+    const body = document.createElement('tbody');
+    rows.forEach(row => {
+        const tr = document.createElement('tr');
+        columns.forEach((_column, index) => {
+            const cell = document.createElement('td');
+            cell.textContent = row[index] == null ? '' : String(row[index]);
+            tr.appendChild(cell);
+        });
+        body.appendChild(tr);
+    });
+    table.appendChild(body);
+    return table;
+}
+/**
+ * Rasterises the chart's SVG through a canvas and hands the viewer a PNG. The SVG is serialized
+ * from the live DOM, so what downloads is what is on screen, including any zoom applied.
+ */
+function saveChartImage(wrapper, visual) {
+    const svg = wrapper.querySelector('svg');
+    if (!svg)
+        return;
+    const width = Number(svg.getAttribute('width')) || svg.clientWidth || 600;
+    const height = Number(svg.getAttribute('height')) || svg.clientHeight || 400;
+    const markup = new XMLSerializer().serializeToString(svg);
+    const source = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(markup);
+    const image = new Image();
+    image.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx)
+            return;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(image, 0, 0, width, height);
+        canvas.toBlob(blob => {
+            if (!blob)
+                return;
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = (visual.name || 'chart') + '.png';
+            document.body.appendChild(anchor);
+            anchor.click();
+            document.body.removeChild(anchor);
+            URL.revokeObjectURL(url);
+        }, 'image/png');
+    };
+    image.onerror = () => console.warn('Chart image export failed for', visual.name);
+    image.src = source;
+}
+/**
+ * `PROGRESSIVE = ON` reveals a dense chart's marks in `PROGRESSIVE_CHUNK` sized batches across
+ * animation frames rather than painting every mark in one layout pass. The marks are already in
+ * the served SVG, so this staggers when the browser has to composite them, which is the cost
+ * that blocks the main thread on a high-cardinality series.
+ */
+function attachProgressiveReveal(wrapper, visual) {
+    if (!nativeToggleOn(visual, 'PROGRESSIVE'))
+        return;
+    if (typeof requestAnimationFrame !== 'function')
+        return;
+    const svg = wrapper.querySelector('svg');
+    if (!svg)
+        return;
+    const marks = Array.from(svg.querySelectorAll('[data-row-index]'));
+    const chunk = Math.max(1, Number(visual.options?.['PROGRESSIVE_CHUNK']) || 200);
+    if (marks.length <= chunk)
+        return;
+    marks.forEach(mark => mark.setAttribute('visibility', 'hidden'));
+    wrapper.dataset.progressive = String(chunk);
+    let index = 0;
+    const step = () => {
+        const end = Math.min(marks.length, index + chunk);
+        for (; index < end; index++)
+            marks[index].removeAttribute('visibility');
+        if (index < marks.length)
+            requestAnimationFrame(step);
+        else
+            delete wrapper.dataset.progressive;
+    };
+    requestAnimationFrame(step);
+}
+function attachNativeZoomSlider(container, wrapper, visual) {
+    const enabled = String(visual.options?.ZOOM_SLIDER || '').toUpperCase();
+    const grouped = String(visual.options?.ZOOM_GROUP || '').trim() !== '';
+    // Naming a ZOOM_GROUP implies the slider: a chart cannot join a linked zoom without one.
+    if (!grouped && enabled !== 'ON' && enabled !== 'TRUE' && enabled !== '1')
+        return;
+    const svg = wrapper.querySelector('svg');
+    const raw = String(svg?.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number);
+    if (!svg || raw.length !== 4 || raw.some(value => !Number.isFinite(value)) || raw[2] <= 0)
+        return;
+    const [originX, originY, fullWidth, fullHeight] = raw;
+    const controls = document.createElement('div');
+    controls.className = 'native-chart-zoom-slider';
+    controls.setAttribute('role', 'group');
+    controls.setAttribute('aria-label', 'Chart zoom range');
+    const start = document.createElement('input');
+    const end = document.createElement('input');
+    for (const input of [start, end]) {
+        input.type = 'range';
+        input.min = '0';
+        input.max = '100';
+        input.step = '1';
+    }
+    start.value = '0';
+    end.value = '100';
+    start.setAttribute('aria-label', 'Visible range start');
+    end.setAttribute('aria-label', 'Visible range end');
+    const value = document.createElement('output');
+    value.textContent = '0–100%';
+    // ZOOM_GROUP links sliders: zooming one chart scrolls every chart naming the same group.
+    const group = String(visual.options?.ZOOM_GROUP || '').trim();
+    /** Applies a range to this chart without re-broadcasting, so linked charts cannot loop. */
+    const applyRange = (first, last) => {
+        start.value = String(first);
+        end.value = String(last);
+        const x = originX + fullWidth * first / 100;
+        const width = fullWidth * (last - first) / 100;
+        svg.setAttribute('viewBox', `${x} ${originY} ${width} ${fullHeight}`);
+        value.textContent = `${first}–${last}%`;
+    };
+    const update = (changed) => {
+        let first = Number(start.value);
+        let last = Number(end.value);
+        if (last - first < 5) {
+            if (changed === start)
+                first = Math.max(0, last - 5);
+            else
+                last = Math.min(100, first + 5);
+        }
+        applyRange(first, last);
+        if (group)
+            broadcastZoomRange(group, controls, first, last);
+    };
+    start.addEventListener('input', () => update(start));
+    end.addEventListener('input', () => update(end));
+    controls.append(start, end, value);
+    if (group) {
+        controls.dataset.zoomGroup = group;
+        /** @type {any} */ (controls)._applyZoomRange = applyRange;
+    }
+    container.appendChild(controls);
+}
+/**
+ * Pushes one chart's zoom range onto every other slider in its `ZOOM_GROUP`. Peers apply the
+ * range directly rather than through their own input handler, so a group never echoes.
+ */
+function broadcastZoomRange(group, origin, first, last) {
+    document.querySelectorAll('.native-chart-zoom-slider').forEach(peer => {
+        if (peer === origin)
+            return;
+        if ( /** @type {HTMLElement} */(peer).dataset.zoomGroup !== group)
+            return;
+        const apply = /** @type {any} */ (peer)._applyZoomRange;
+        if (typeof apply === 'function')
+            apply(first, last);
+    });
+}
+function nativeLayoutTier(layout, containerWidth) {
+    const width = Number(containerWidth);
+    if (!layout || !Number.isFinite(width) || width <= 0)
+        return null;
+    const compactMax = Number(layout.compactMaxWidth);
+    const standardMax = Number(layout.standardMaxWidth);
+    if (!Number.isFinite(compactMax) || !Number.isFinite(standardMax))
+        return null;
+    if (width <= compactMax)
+        return 'COMPACT';
+    if (width <= standardMax)
+        return 'STANDARD';
+    return 'WIDE';
+}
+function observeNativeLayout(wrapper, visual) {
+    if (!visual.layout || !isWebMode || vscode || isOfflineSnapshot()
+        || typeof ResizeObserver !== 'function')
+        return;
+    const visualName = String(visual.name || '');
+    if (!visualName)
+        return;
+    const layout = visual.layout;
+    const observer = new ResizeObserver(entries => {
+        const width = entries[entries.length - 1]?.contentRect?.width;
+        const tier = nativeLayoutTier(layout, width);
+        if (!tier || tier === String(layout.tier || '').toUpperCase())
+            return;
+        const pending = _nativeLayoutRequests.get(visualName);
+        if (pending?.tier === tier)
+            return;
+        const oldTimer = _nativeLayoutTimers.get(visualName);
+        if (oldTimer)
+            clearTimeout(oldTimer);
+        _nativeLayoutTimers.set(visualName, setTimeout(() => {
+            _nativeLayoutTimers.delete(visualName);
+            requestNativeLayout(visualName, tier);
+        }, 180));
+    });
+    observer.observe(wrapper);
+    _nativeLayoutObservers.push(observer);
+}
+function findVisualInManifest(m, name) {
+    if (!m || !name)
+        return null;
+    const lower = name.toLowerCase();
+    const top = (m.visuals || []).find(v => (v.name || '').toLowerCase() === lower);
+    if (top)
+        return top;
+    if (m.pages) {
+        for (const p of m.pages) {
+            const pv = (p.visuals || []).find(v => (v.name || '').toLowerCase() === lower);
+            if (pv)
+                return pv;
+        }
+    }
+    return null;
+}
+function updateNativeVisualInPlace(card, visual) {
+    const wrapper = card.querySelector('.native-chart-wrapper');
+    if (!wrapper)
+        return false;
+    const parsed = new DOMParser().parseFromString(String(visual.nativeSvg || ''), 'image/svg+xml');
+    const newSvg = parsed.documentElement;
+    if (!newSvg || newSvg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
+        return false;
+    }
+    const oldSvg = wrapper.querySelector('svg');
+    if (oldSvg) {
+        wrapper.replaceChild(document.importNode(newSvg, true), oldSvg);
+    }
+    else {
+        wrapper.appendChild(document.importNode(newSvg, true));
+    }
+    if (visual.layout?.tier) {
+        /** @type {HTMLElement} */ (wrapper).dataset.layoutTier = String(visual.layout.tier).toUpperCase();
+    }
+    const interaction = resolveInteraction(visual);
+    applyNativeHighlight(/** @type {HTMLElement} */ (wrapper), visual, interaction);
+    const vopts = visual.options || {};
+    const crosshairOpt = (vopts['CROSSHAIR'] || '').toUpperCase();
+    const linkTooltipGroup = vopts['LINK_TOOLTIP'] ? vopts['LINK_TOOLTIP'].trim() : null;
+    const svgEl = wrapper.querySelector('svg');
+    if (svgEl && (crosshairOpt === 'ON' || crosshairOpt === 'TRUE' || vopts['CROSSHAIR_AXIS'] || linkTooltipGroup)) {
+        let crosshairG = svgEl.querySelector('.plot-crosshair-group');
+        if (!crosshairG) {
+            crosshairG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            crosshairG.setAttribute('class', 'plot-crosshair-group');
+            crosshairG.setAttribute('pointer-events', 'none');
+            /** @type {HTMLElement} */ (crosshairG).style.display = 'none';
+            svgEl.appendChild(crosshairG);
+        }
+    }
+    return true;
+}
+async function requestNativeLayout(visualName, tier) {
+    const previous = _nativeLayoutRequests.get(visualName);
+    if (previous?.tier === tier)
+        return;
+    if (previous)
+        previous.controller.abort();
+    const controller = new AbortController();
+    _nativeLayoutRequests.set(visualName, { tier, controller });
+    try {
+        const response = await fetch(apiBase + '/layout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visualName, tier }),
+            signal: controller.signal
+        });
+        if (!response.ok)
+            return;
+        const manifest = (await response.json());
+        if (_nativeLayoutRequests.get(visualName)?.controller !== controller)
+            return;
+        const newVisual = findVisualInManifest(manifest, visualName);
+        const targetVisual = findVisualInManifest(getLastManifest(), visualName);
+        const cards = document.querySelectorAll('.visual-card');
+        const card = Array.from(cards).find(c => (c.getAttribute('data-name') || '').toLowerCase() === visualName.toLowerCase());
+        let updatedInPlace = false;
+        if (newVisual && targetVisual && card) {
+            targetVisual.nativeSvg = newVisual.nativeSvg;
+            if (targetVisual.layout && newVisual.layout) {
+                targetVisual.layout.tier = newVisual.layout.tier;
+            }
+            if (window.__CURRENT_MANIFEST__) {
+                const currVisual = findVisualInManifest(window.__CURRENT_MANIFEST__, visualName);
+                if (currVisual) {
+                    currVisual.nativeSvg = newVisual.nativeSvg;
+                    if (currVisual.layout && newVisual.layout) {
+                        currVisual.layout.tier = newVisual.layout.tier;
+                    }
+                }
+            }
+            updatedInPlace = updateNativeVisualInPlace(/** @type {HTMLElement} */ (card), targetVisual);
+        }
+        if (!updatedInPlace) {
+            renderManifest(manifest);
+        }
+    }
+    catch (error) {
+        if (error?.name !== 'AbortError')
+            console.warn('Native chart layout refresh failed:', error);
+    }
+    finally {
+        if (_nativeLayoutRequests.get(visualName)?.controller === controller)
+            _nativeLayoutRequests.delete(visualName);
+    }
+}
+// Draws the current selection over the unselected universe. Which treatment applies is a server
+// decision carried on `interaction.highlight`; where a mark's value extent lies is a server
+// decision carried on the mark's own `data-extent-axis`/`data-extent-anchor`. Neither is
+// inferred here from a chart type.
+function applyNativeHighlight(wrapper, visual, interaction) {
+    if (!Array.isArray(visual.highlightRows))
+        return;
+    const columns = visual.columns || [];
+    const mappingIndex = columns.findIndex(column => column.toLowerCase() === String(interaction.key || '').toLowerCase());
+    const valueIndex = columns.findIndex(column => column.toLowerCase() === String(interaction.valueKey || '').toLowerCase());
+    const rowKey = (row) => mappingIndex >= 0
+        ? String(row?.[mappingIndex] ?? '')
+        : JSON.stringify(row || []);
+    const highlighted = new Set(visual.highlightRows.map(rowKey));
+    const markExtent = (mark) => {
+        const axis = mark.dataset.extentAxis || (interaction.extent && interaction.extent.axis);
+        if (!axis)
+            return null;
+        return {
+            axis: String(axis).toLowerCase(),
+            anchor: String(mark.dataset.extentAnchor ||
+                (interaction.extent && interaction.extent.anchor) || 'start').toLowerCase()
+        };
+    };
+    if (interaction.highlight === 'PROPORTIONAL' && valueIndex >= 0) {
+        const selectedValues = new Map();
+        visual.highlightRows.forEach(row => {
+            const value = Number.parseFloat(String(row?.[valueIndex] ?? ''));
+            if (!Number.isFinite(value))
+                return;
+            const key = rowKey(row);
+            selectedValues.set(key, (selectedValues.get(key) || 0) + value);
+        });
+        let drewProportional = false;
+        wrapper.querySelectorAll('rect[data-row-index]').forEach(mark => {
+            const extent = markExtent(mark);
+            if (!extent)
+                return;
+            drewProportional = true;
+            const row = (visual.rows || [])[Number(mark.dataset.rowIndex)] || [];
+            const universeValue = Number.parseFloat(String(row?.[valueIndex] ?? ''));
+            const selectedValue = selectedValues.get(rowKey(row));
+            mark.classList.add('cross-highlight-universe');
+            if (!Number.isFinite(universeValue) || selectedValue === undefined)
+                return;
+            const ratio = universeValue === 0 ? 0 : Math.max(0, Math.min(1, selectedValue / universeValue));
+            const overlay = mark.cloneNode(false);
+            overlay.removeAttribute('data-row-index');
+            overlay.removeAttribute('data-extent-axis');
+            overlay.removeAttribute('data-extent-anchor');
+            overlay.classList.remove('cross-highlight-universe');
+            overlay.classList.add('cross-highlight-selection');
+            overlay.setAttribute('pointer-events', 'none');
+            overlay.setAttribute('aria-hidden', 'true');
+            if (extent.axis === 'y') {
+                const fullHeight = Number.parseFloat(String(mark.getAttribute('height') || '')) || 0;
+                const fullY = Number.parseFloat(String(mark.getAttribute('y') || '')) || 0;
+                overlay.setAttribute('height', String(fullHeight * ratio));
+                // An `end` anchor puts the baseline at the high edge of the axis, so the
+                // selected share hugs the far edge of the mark rather than its own origin.
+                if (extent.anchor === 'end')
+                    overlay.setAttribute('y', String(fullY + fullHeight * (1 - ratio)));
+            }
+            else {
+                const fullWidth = Number.parseFloat(String(mark.getAttribute('width') || '')) || 0;
+                const fullX = Number.parseFloat(String(mark.getAttribute('x') || '')) || 0;
+                overlay.setAttribute('width', String(fullWidth * ratio));
+                if (extent.anchor === 'end')
+                    overlay.setAttribute('x', String(fullX + fullWidth * (1 - ratio)));
+            }
+            if (mark.parentNode) {
+                mark.parentNode.insertBefore(overlay, mark.nextSibling);
+            }
+        });
+        // No mark declared a value extent, so there is nothing to draw a share inside of.
+        // Fall through to the categorical treatment rather than leaving the selection invisible.
+        if (drewProportional)
+            return;
+    }
+    wrapper.querySelectorAll('[data-row-index]').forEach(mark => {
+        const row = (visual.rows || [])[Number(mark.dataset.rowIndex)] || [];
+        const selected = highlighted.has(rowKey(row));
+        mark.classList.toggle('cross-highlighted', selected);
+        mark.classList.toggle('cross-dimmed', !selected);
+    });
+}
+function getNativeLayoutObservers() { return _nativeLayoutObservers; }
+function setNativeLayoutObservers(value) { _nativeLayoutObservers = value; }
+
+
+// ─── rt-table.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-table.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Table rendering and Tabulator integration.
+ */
+// ── Table ───────────────────────────────────────────────────────────────
+function renderTable(container, visual, manifest) {
+    if (!visual.columns || visual.columns.length === 0) {
+        container.appendChild(noDataEl('No data available'));
+        return;
+    }
+    const columns = visual.columns;
+    const opts = visual.options || {};
+    const colMeta = visual.columnMeta || [];
+    const allRows = visual.rows || [];
+    const pageSize = parseInt(opts['PAGE_SIZE'] || opts['page_size'] || '50', 10) || 50;
+    const showSearch = (opts['SEARCH'] || opts['search'] || 'ON').toUpperCase() !== 'OFF';
+    const striped = (opts['STRIPED'] || opts['striped'] || 'ON').toUpperCase() !== 'OFF';
+    const clickActions = actionsFor(visual, 'ON_CLICK');
+    const isClickable = clickActions.length > 0;
+    const interaction = resolveInteraction(visual);
+    const crossFilter = crossFilterActive(interaction);
+    const stateKey = 'table:' + (visual.name || visual.id || '');
+    const state = _uiStates[stateKey] || (_uiStates[stateKey] = { sortCol: -1, sortDir: 'asc', page: 0, search: '' });
+    const defaultSortStr = opts['DEFAULT_SORT'] || opts['default_sort'] || '';
+    const defaultSorts = [];
+    if (defaultSortStr) {
+        const rawItems = defaultSortStr.replace(/^\(|\)$/g, '').split(',');
+        rawItems.forEach(item => {
+            const parts = item.trim().split(/\s+/);
+            if (parts.length > 0 && parts[0]) {
+                const colName = parts[0].replace(/^['"[]|['"\]]$/g, '').toLowerCase();
+                const colIdx = columns.findIndex(c => c.toLowerCase() === colName);
+                if (colIdx >= 0) {
+                    const dir = parts.length > 1 && parts[1].toUpperCase() === 'DESC' ? 'desc' : 'asc';
+                    defaultSorts.push({ colIndex: colIdx, dir: dir });
+                }
+            }
+        });
+    }
+    if (crossFilter) {
+        container.setAttribute('data-cross-filter', '1');
+        container._visualData = visual;
+    }
+    function getFilteredRows() {
+        const q = state.search.toLowerCase();
+        let rows = q
+            ? allRows.filter(row => row.some(c => c != null && String(c).toLowerCase().includes(q)))
+            : allRows;
+        if (state.sortCol >= 0) {
+            rows = rows.slice().sort((a, b) => {
+                const av = a[state.sortCol] ?? '', bv = b[state.sortCol] ?? '';
+                const an = parseFloat(av), bn = parseFloat(bv);
+                const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : String(av).localeCompare(String(bv));
+                return state.sortDir === 'asc' ? cmp : -cmp;
+            });
+        }
+        else if (defaultSorts.length > 0) {
+            rows = rows.slice().sort((a, b) => {
+                for (const s of defaultSorts) {
+                    const av = a[s.colIndex] ?? '', bv = b[s.colIndex] ?? '';
+                    const an = parseFloat(av), bn = parseFloat(bv);
+                    const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : String(av).localeCompare(String(bv));
+                    if (cmp !== 0)
+                        return s.dir === 'asc' ? cmp : -cmp;
+                }
+                return 0;
+            });
+        }
+        return rows;
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-wrapper' + (isClickable ? ' clickable' : '');
+    let heightOpt = visual.styles ? (visual.styles['HEIGHT'] || visual.styles['height']) : null;
+    if (heightOpt)
+        wrapper.style.maxHeight = heightOpt;
+    // Search box
+    if (showSearch) {
+        const searchRow = document.createElement('div');
+        searchRow.className = 'table-search-row';
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Search…';
+        searchInput.className = 'table-search-input';
+        searchInput.value = state.search;
+        searchInput.addEventListener('input', () => {
+            state.search = searchInput.value;
+            state.page = 0;
+            rebuildBody();
+        });
+        searchRow.appendChild(searchInput);
+        wrapper.appendChild(searchRow);
+    }
+    let leftAccum = 0;
+    const leftOffsets = [];
+    columns.forEach((_col, ci) => {
+        const meta = colMeta[ci] || {};
+        if (meta.freeze === 'left') {
+            leftOffsets[ci] = leftAccum;
+            leftAccum += (meta.width || 120);
+        }
+    });
+    let rightAccum = 0;
+    const rightOffsets = [];
+    for (let ci = columns.length - 1; ci >= 0; ci--) {
+        const meta = colMeta[ci] || {};
+        if (meta.freeze === 'right') {
+            rightOffsets[ci] = rightAccum;
+            rightAccum += (meta.width || 120);
+        }
+    }
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    const rowDetail = visual.rowDetail;
+    const hasDetail = rowDetail != null && manifest != null;
+    if (hasDetail) {
+        const expTh = document.createElement('th');
+        expTh.className = 'expand-col sortable';
+        headerRow.appendChild(expTh);
+    }
+    columns.forEach((col, ci) => {
+        const th = document.createElement('th');
+        th.className = 'sortable';
+        const meta = colMeta[ci] || {};
+        if (meta.hidden)
+            th.style.display = 'none';
+        if (meta.align)
+            th.style.textAlign = meta.align;
+        if (meta.width) {
+            th.style.width = meta.width + 'px';
+            th.style.minWidth = meta.width + 'px';
+            th.style.maxWidth = meta.width + 'px';
+        }
+        if (meta.freeze === 'left') {
+            th.classList.add('table-cell-frozen-left');
+            th.style.left = (leftOffsets[ci] || 0) + 'px';
+        }
+        else if (meta.freeze === 'right') {
+            th.classList.add('table-cell-frozen-right');
+            th.style.right = (rightOffsets[ci] || 0) + 'px';
+        }
+        const label = document.createElement('span');
+        label.textContent = col;
+        th.appendChild(label);
+        const arrow = document.createElement('span');
+        arrow.className = 'sort-arrow';
+        th.appendChild(arrow);
+        th.addEventListener('click', () => {
+            if (state.sortCol === ci) {
+                state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+            }
+            else {
+                state.sortCol = ci;
+                state.sortDir = 'asc';
+            }
+            state.page = 0;
+            rebuildBody();
+        });
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    table.appendChild(tbody);
+    // Summary (Top or Bottom)
+    const totalPosition = (visual.summaryData?.totalPosition || opts['TOTAL_POSITION'] || opts['total_position'] || 'BOTTOM').toUpperCase();
+    const summaryData = visual.summaryData;
+    if (summaryData) {
+        let summaryRow = null;
+        const grandTotals = summaryData.grandTotals;
+        if (grandTotals) {
+            summaryRow = document.createElement('tr');
+            summaryRow.className = 'summary-row' + (totalPosition === 'TOP' ? ' summary-row-top' : '');
+            if (rowDetail && manifest) {
+                const expTd = document.createElement('td');
+                expTd.className = 'summary-cell';
+                summaryRow.appendChild(expTd);
+            }
+            columns.forEach((col, ci) => {
+                const td = document.createElement('td');
+                td.className = 'summary-cell';
+                const meta = colMeta[ci] || {};
+                const val = grandTotals[col] ?? '';
+                td.textContent = val ? formatValue(val, meta.format) : '';
+                if (meta.align)
+                    td.style.textAlign = meta.align;
+                if (meta.width) {
+                    td.style.width = meta.width + 'px';
+                    td.style.minWidth = meta.width + 'px';
+                    td.style.maxWidth = meta.width + 'px';
+                }
+                if (meta.freeze === 'left') {
+                    td.classList.add('table-cell-frozen-left');
+                    td.style.left = (leftOffsets[ci] || 0) + 'px';
+                }
+                else if (meta.freeze === 'right') {
+                    td.classList.add('table-cell-frozen-right');
+                    td.style.right = (rightOffsets[ci] || 0) + 'px';
+                }
+                summaryRow.appendChild(td);
+            });
+        }
+        let aggRow = null;
+        if (summaryData.aggregates && summaryData.aggregates.length > 0) {
+            aggRow = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = columns.length + (hasDetail ? 1 : 0);
+            td.className = 'summary-aggregates';
+            summaryData.aggregates.forEach(agg => {
+                const sp = document.createElement('span');
+                sp.textContent = (agg.alias || (agg.aggregate + '(' + agg.column + ')')) + ' = ' + agg.value;
+                td.appendChild(sp);
+            });
+            aggRow.appendChild(td);
+        }
+        if (totalPosition === 'TOP') {
+            if (summaryRow)
+                thead.appendChild(summaryRow);
+            if (aggRow)
+                thead.appendChild(aggRow);
+        }
+        else {
+            const tfoot = document.createElement('tfoot');
+            if (summaryRow)
+                tfoot.appendChild(summaryRow);
+            if (aggRow)
+                tfoot.appendChild(aggRow);
+            table.appendChild(tfoot);
+        }
+    }
+    wrapper.appendChild(table);
+    const paginationRow = document.createElement('div');
+    paginationRow.className = 'table-pagination';
+    wrapper.appendChild(paginationRow);
+    function updateSortArrows() {
+        Array.from(headerRow.children).forEach((th, ci) => {
+            const arrow = th.querySelector('.sort-arrow');
+            if (!arrow)
+                return;
+            const colIdx = hasDetail ? ci - 1 : ci;
+            if (colIdx < 0)
+                return;
+            if (state.sortCol >= 0) {
+                arrow.textContent = state.sortCol === colIdx ? (state.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+            }
+            else {
+                const match = defaultSorts.find(s => s.colIndex === colIdx);
+                arrow.textContent = match ? (match.dir === 'asc' ? ' ▲' : ' ▼') : '';
+            }
+        });
+    }
+    function rebuildBody() {
+        const filtered = getFilteredRows();
+        const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(filtered.length / pageSize)) : 1;
+        if (state.page >= totalPages)
+            state.page = Math.max(0, totalPages - 1);
+        const start = pageSize > 0 ? state.page * pageSize : 0;
+        const pageRows = pageSize > 0 ? filtered.slice(start, start + pageSize) : filtered;
+        tbody.innerHTML = '';
+        pageRows.forEach((row, localIdx) => {
+            const origIdx = allRows.indexOf(row);
+            const tr = document.createElement('tr');
+            if (isClickable)
+                tr.style.cursor = 'pointer';
+            // Striped
+            if (striped && (start + localIdx) % 2 === 1)
+                tr.classList.add('table-row-alt');
+            // Row background / font color from FORMATTING rules
+            const rowBg = Array.isArray(visual.rowStyles) ? visual.rowStyles[origIdx] : null;
+            const rowFont = Array.isArray(visual.rowFontStyles) ? visual.rowFontStyles[origIdx] : null;
+            if (rowBg)
+                tr.style.backgroundColor = rowBg;
+            if (rowFont)
+                tr.style.color = rowFont;
+            if (hasDetail) {
+                const expTd = document.createElement('td');
+                expTd.className = 'expand-cell';
+                expTd.style.width = '30px';
+                expTd.style.textAlign = 'center';
+                const expBtn = document.createElement('button');
+                expBtn.className = 'expand-btn';
+                expBtn.setAttribute('aria-label', 'Toggle row details');
+                expBtn.style.cursor = 'pointer';
+                expBtn.style.background = 'none';
+                expBtn.style.border = 'none';
+                expBtn.style.padding = '4px';
+                const rowKey = visual.rowDetailKeys ? JSON.stringify(visual.rowDetailKeys[origIdx]) : String(origIdx);
+                const expandedRowKeys = visual._expandedRowKeys ?? (visual._expandedRowKeys = new Set());
+                const initiallyExpanded = expandedRowKeys.has(rowKey);
+                expBtn.innerHTML = initiallyExpanded ? '&#9660;' : '&#9658;'; // Down : Right triangle
+                expBtn.setAttribute('aria-expanded', initiallyExpanded ? 'true' : 'false');
+                expTd.appendChild(expBtn);
+                tr.appendChild(expTd);
+                let detailTr = null;
+                const toggleDetail = (forceExpand = false) => {
+                    const isExpanded = expBtn.getAttribute('aria-expanded') === 'true';
+                    if (isExpanded && !forceExpand) {
+                        expBtn.innerHTML = '&#9658;';
+                        expBtn.setAttribute('aria-expanded', 'false');
+                        expandedRowKeys.delete(rowKey);
+                        if (detailTr)
+                            detailTr.style.display = 'none';
+                    }
+                    else if (!isExpanded || forceExpand) {
+                        expBtn.innerHTML = '&#9660;'; // Down triangle
+                        expBtn.setAttribute('aria-expanded', 'true');
+                        expandedRowKeys.add(rowKey);
+                        if (!detailTr) {
+                            detailTr = document.createElement('tr');
+                            detailTr.className = 'detail-row';
+                            const detailTd = document.createElement('td');
+                            const visibleCols = columns.filter((_c, i) => !(colMeta[i] || {}).hidden).length;
+                            detailTd.colSpan = visibleCols + 1;
+                            detailTd.className = 'nested-row-detail-td';
+                            detailTr.appendChild(detailTd);
+                            tr.parentNode?.insertBefore(detailTr, tr.nextSibling);
+                            const detailCard = document.createElement('div');
+                            detailCard.className = 'detail-container';
+                            detailTd.appendChild(detailCard);
+                            const targetName = rowDetail.targetName;
+                            // Try finding visual or container
+                            const targetVisual = (manifest.visuals || []).find(v => (v.name || '').toLowerCase() === targetName.toLowerCase());
+                            if (targetVisual) {
+                                const keys = (visual.rowDetailKeys ? visual.rowDetailKeys[origIdx] : {});
+                                const clonedVisual = JSON.parse(JSON.stringify(targetVisual));
+                                if (clonedVisual.rows && rowDetail.bindings) {
+                                    const b = rowDetail.bindings;
+                                    clonedVisual.rows = clonedVisual.rows.filter((childRow) => {
+                                        return b.every(binding => {
+                                            const childColIdx = (clonedVisual.columns || []).findIndex((_c) => _c.toLowerCase() === binding.childParameter.toLowerCase());
+                                            if (childColIdx < 0)
+                                                return false;
+                                            const pVal = keys[binding.childParameter];
+                                            const cVal = childRow[childColIdx];
+                                            return String(pVal) === String(cVal);
+                                        });
+                                    });
+                                    if (rowDetail.limit && clonedVisual.rows.length > rowDetail.limit) {
+                                        clonedVisual.rows = clonedVisual.rows.slice(0, rowDetail.limit);
+                                    }
+                                }
+                                // Ensure the cloned visual is visible when rendered as a nested detail,
+                                // since the original target visual was likely set to VISIBLE = OFF.
+                                if (clonedVisual.options) {
+                                    clonedVisual.options['VISIBLE'] = 'ON';
+                                }
+                                renderVisual(detailCard, clonedVisual, null, manifest);
+                            }
+                            else {
+                                const targetContainer = (manifest.containers || []).find(c => c.name.toLowerCase() === targetName.toLowerCase());
+                                if (targetContainer) {
+                                    detailCard.textContent = 'Container detail not fully supported in preview';
+                                }
+                                else {
+                                    detailCard.textContent = 'Detail target not found: ' + targetName;
+                                }
+                            }
+                            detailTr.style.display = 'table-row';
+                        }
+                        else {
+                            detailTr.style.display = 'table-row';
+                        }
+                    }
+                };
+                expBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleDetail();
+                });
+                if (initiallyExpanded) {
+                    toggleDetail(true);
+                }
+            }
+            columns.forEach((_col, ci) => {
+                const td = document.createElement('td');
+                const meta = colMeta[ci] || {};
+                const rawVal = row[ci] != null ? String(row[ci]) : '';
+                const fmtVal = formatValue(rawVal, meta.format || opts['FORMAT']);
+                if (meta.hidden)
+                    td.style.display = 'none';
+                if (meta.align)
+                    td.style.textAlign = meta.align;
+                if (meta.width) {
+                    td.style.width = meta.width + 'px';
+                    td.style.minWidth = meta.width + 'px';
+                    td.style.maxWidth = meta.width + 'px';
+                    td.style.overflow = 'hidden';
+                    td.style.textOverflow = 'ellipsis';
+                    td.style.whiteSpace = 'nowrap';
+                    if (rawVal)
+                        td.title = rawVal;
+                }
+                if (meta.freeze === 'left') {
+                    td.classList.add('table-cell-frozen-left');
+                    td.style.left = (leftOffsets[ci] || 0) + 'px';
+                }
+                else if (meta.freeze === 'right') {
+                    td.classList.add('table-cell-frozen-right');
+                    td.style.right = (rightOffsets[ci] || 0) + 'px';
+                }
+                // COLOR_SCALE: gradient background based on column min/max
+                if (meta.colorScaleFrom && meta.colorScaleTo && meta.colorScaleMax !== undefined) {
+                    const num = parseFloat(rawVal);
+                    if (!isNaN(num)) {
+                        const colorScaleMin = meta.colorScaleMin ?? 0;
+                        const range = (meta.colorScaleMax - colorScaleMin) || 1;
+                        const t = Math.max(0, Math.min(1, (num - colorScaleMin) / range));
+                        td.style.backgroundColor = interpolateColor(meta.colorScaleFrom, meta.colorScaleTo, t);
+                    }
+                }
+                // DATA_BAR: proportional fill bar behind cell text
+                if (meta.dataBar && meta.dataBarMax !== undefined) {
+                    const num = parseFloat(rawVal);
+                    const dataBarMin = meta.dataBarMin ?? 0;
+                    if (!isNaN(num) && meta.dataBarMax > dataBarMin) {
+                        const pct = Math.max(0, Math.min(100, (num - dataBarMin) / (meta.dataBarMax - dataBarMin) * 100));
+                        td.style.position = 'relative';
+                        td.style.padding = '0';
+                        const bar = document.createElement('div');
+                        bar.className = 'data-bar-fill';
+                        bar.style.width = pct.toFixed(1) + '%';
+                        bar.style.backgroundColor = meta.dataBarColor || '#4472C4';
+                        td.appendChild(bar);
+                        const span = document.createElement('span');
+                        span.className = 'data-bar-label';
+                        span.textContent = fmtVal;
+                        td.appendChild(span);
+                    }
+                    else {
+                        td.textContent = String(fmtVal ?? '');
+                    }
+                }
+                else if (meta.cellRenderer === 'image') {
+                    // IMAGE: render <img> from URL value
+                    if (rawVal) {
+                        const img = document.createElement('img');
+                        img.src = safeUrl(rawVal);
+                        img.alt = '';
+                        img.style.maxHeight = (meta.imageWidth || 32) + 'px';
+                        img.style.maxWidth = (meta.imageWidth ? meta.imageWidth * 3 : 96) + 'px';
+                        img.style.verticalAlign = 'middle';
+                        td.appendChild(img);
+                    }
+                }
+                else if (meta.cellRenderer === 'hyperlink') {
+                    // HYPERLINK: render <a> — only allow http/https to prevent injection
+                    const href = rawVal || '';
+                    const a = document.createElement('a');
+                    a.href = /^https?:\/\//i.test(href) ? href : '#';
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    a.textContent = meta.hyperlinkLabel || href;
+                    td.appendChild(a);
+                }
+                else if (meta.cellRenderer === 'sparkline') {
+                    // Micro-charts consume the server-resolved PlotPlan SVG; the browser does no geometry work.
+                    const micro = findMicroChart(visual, origIdx, ci, rawVal);
+                    if (micro && micro.svg) {
+                        td.innerHTML = micro.svg;
+                        td.setAttribute('aria-label', micro.accessibleLabel || micro.plainText || 'Trend');
+                        td.setAttribute('role', 'img');
+                        td.style.verticalAlign = 'middle';
+                        td.style.lineHeight = '0';
+                    }
+                    else {
+                        td.textContent = micro?.plainText ?? '';
+                    }
+                }
+                else if (meta.cellRenderer === 'progress') {
+                    const micro = findMicroChart(visual, origIdx, ci, rawVal);
+                    if (micro && micro.svg) {
+                        td.innerHTML = micro.svg;
+                        td.setAttribute('aria-label', micro.accessibleLabel || micro.plainText || 'Progress');
+                        td.setAttribute('role', 'img');
+                        td.style.verticalAlign = 'middle';
+                        td.style.lineHeight = '0';
+                    }
+                    else {
+                        td.textContent = micro?.plainText ?? String(fmtVal ?? '');
+                    }
+                }
+                else {
+                    td.textContent = fmtVal;
+                }
+                tr.appendChild(td);
+            });
+            if (isClickable || crossFilter) {
+                tr.addEventListener('click', (e) => {
+                    if (crossFilter) {
+                        const xCol = opts['mapping:x'] || columns[0];
+                        const xIdx = xCol ? columns.findIndex(c => c.toLowerCase() === xCol.toLowerCase()) : 0;
+                        applyPageCrossFilter(container, String(row[xIdx]), xCol, visual.name, e);
+                    }
+                    else {
+                        clickActions.forEach(action => executeAction(action, row, columns, visual.name, visual));
+                    }
+                });
+            }
+            tbody.appendChild(tr);
+        });
+        updateSortArrows();
+        // Pagination controls
+        paginationRow.innerHTML = '';
+        if (pageSize > 0 && totalPages > 1) {
+            const prev = document.createElement('button');
+            prev.textContent = '◀';
+            prev.disabled = state.page === 0;
+            prev.addEventListener('click', () => { state.page--; rebuildBody(); });
+            const info = document.createElement('span');
+            info.className = 'pagination-info';
+            info.textContent = `${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}`;
+            const next = document.createElement('button');
+            next.textContent = '▶';
+            next.disabled = state.page >= totalPages - 1;
+            next.addEventListener('click', () => { state.page++; rebuildBody(); });
+            paginationRow.append(prev, info, next);
+        }
+    }
+    // Right-click → Drill Down & Export
+    wrapper.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const tr = /** @type {Element | null} */ (e.target)?.closest('tr') ?? null;
+        const idx = tr ? Array.from(tbody.rows).indexOf(tr) : -1;
+        const filtered = getFilteredRows();
+        const start = pageSize > 0 ? state.page * pageSize : 0;
+        const rowData = idx >= 0 ? (pageSize > 0 ? filtered : allRows)[start + idx] : null;
+        showCtxMenu(e.clientX, e.clientY, visual, rowData);
+    });
+    rebuildBody();
+    container.appendChild(wrapper);
+}
+
+
+// ─── rt-matrix.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-matrix.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Matrix rendering and embedded micro-charts.
+ */
+// ── MATRIX (Pivot / Cross-tab) ────────────────────────────────────────────
+// chartConfig carries JSON with { __matrix, rowHeaders, colHeaders, colParts, rows, grandTotals }.
+function renderMatrix(container, visual) {
+    let meta;
+    try {
+        meta = visual.chartConfig ? JSON.parse(visual.chartConfig) : null;
+    }
+    catch {
+        meta = null;
+    }
+    if (!meta || !meta.__matrix) {
+        container.appendChild(noDataEl('No pivot data available'));
+        return;
+    }
+    const sep = '\u001F';
+    const rowHeaders = meta.rowHeaders || [];
+    const rows = meta.rows || [];
+    const grandTotals = meta.grandTotals || null;
+    const matrixAggregate = String(meta.aggregate || 'SUM').toUpperCase();
+    const colParts = Array.isArray(meta.colParts) && meta.colParts.length > 0
+        ? meta.colParts.map(p => Array.isArray(p) ? p.map(v => String(v ?? '')) : [String(p ?? '')])
+        : (meta.colValues || []).map(v => [String(v ?? '')]);
+    const colHeaders = meta.colHeaders && meta.colHeaders.length > 0
+        ? meta.colHeaders
+        : (colParts[0] || ['Column']).map((_, i) => i === 0 ? 'Column' : `Column ${i + 1}`);
+    const colDepth = Math.max(1, colHeaders.length, ...colParts.map(p => p.length));
+    const rowDepth = Math.max(1, rowHeaders.length);
+    const valueHeaders = Array.isArray(meta.valueHeaders) ? meta.valueHeaders : null;
+    const valueCount = valueHeaders ? valueHeaders.length : 1;
+    const subtotalsEnabled = !!meta.subtotalsEnabled;
+    const columnTotalsEnabled = meta.columnTotalsEnabled !== false && (!!meta.columnTotalsEnabled || (grandTotals && grandTotals.length > 0));
+    const rowTotalsEnabled = !!meta.rowTotalsEnabled;
+    const defaultExpand = String(meta.defaultExpand || (visual.options && visual.options['DEFAULT_EXPAND']) || 'ALL').toUpperCase();
+    const isDataBar = !!meta.dataBar || (visual.options && (visual.options['DATA_BAR'] === 'ON' || visual.options['DATA_BARS'] === 'ON' || visual.options['DATA_BAR'] === 'TRUE' || visual.options['DATA_BARS'] === 'TRUE'));
+    const dataBarColor = meta.dataBarColor || (visual.options && visual.options['DATA_BAR_COLOR']) || '#4472C4';
+    const dataBarMin = typeof meta.dataBarMin === 'number' ? meta.dataBarMin : 0;
+    const dataBarMax = typeof meta.dataBarMax === 'number' ? meta.dataBarMax : 0;
+    const formattingRules = Array.isArray(meta.formattingRules) ? meta.formattingRules : (Array.isArray(visual.formattingRules) ? visual.formattingRules : []);
+    const stateKey = `matrix:${visual.name || visual.id || ''}`;
+    const state = _uiStates[stateKey] || (_uiStates[stateKey] = { collapsedRows: {}, collapsedCols: {} });
+    state.collapsedRows = state.collapsedRows || {};
+    state.collapsedCols = state.collapsedCols || {};
+    const wrapper = document.createElement('div');
+    wrapper.className = 'table-wrapper';
+    let heightOpt = visual.styles ? (visual.styles['HEIGHT'] || visual.styles['height']) : null;
+    if (heightOpt)
+        wrapper.style.maxHeight = heightOpt;
+    const table = document.createElement('table');
+    table.className = 'matrix-table';
+    const leaves = colParts.map((parts, index) => ({
+        index,
+        parts: Array.from({ length: colDepth }, (_, i) => parts[i] || ''),
+        key: Array.from({ length: colDepth }, (_, i) => parts[i] || '').join(sep)
+    }));
+    function colPrefixKey(parts, level) {
+        return parts.slice(0, level + 1).join(sep);
+    }
+    function rowPrefixKey(parts, level) {
+        return parts.slice(0, level + 1).join(sep);
+    }
+    function hasColumnChildren(parts, level) {
+        if (level >= colDepth - 1)
+            return false;
+        const key = colPrefixKey(parts, level);
+        const nextValues = new Set(leaves
+            .filter(leaf => colPrefixKey(leaf.parts, level) === key)
+            .map(leaf => leaf.parts[level + 1]));
+        return nextValues.size > 0;
+    }
+    function buildColumnNodes(level, prefix, sourceLeaves) {
+        if (level >= colDepth)
+            return [];
+        const buckets = new Map();
+        sourceLeaves.forEach(leaf => {
+            const label = leaf.parts[level] || '';
+            if (!buckets.has(label))
+                buckets.set(label, []);
+            buckets.get(label).push(leaf);
+        });
+        return Array.from(buckets, ([label, bucket]) => {
+            const parts = prefix.concat(label);
+            return {
+                label,
+                level,
+                parts,
+                key: parts.join(sep),
+                leaves: bucket,
+                children: buildColumnNodes(level + 1, parts, bucket)
+            };
+        });
+    }
+    function flattenColumns(nodes, output = []) {
+        nodes.forEach(node => {
+            const hasChildren = node.children.length > 0;
+            if (!hasChildren || state.collapsedCols[node.key]) {
+                output.push(node);
+            }
+            else {
+                flattenColumns(node.children, output);
+            }
+        });
+        return output;
+    }
+    const visibleColumns = flattenColumns(buildColumnNodes(0, [], leaves));
+    // Expanded columns = visibleColumns x valueCount (interleaved: col0v0, col0v1, col1v0, col1v1, ...)
+    const expandedCols = [];
+    visibleColumns.forEach(col => {
+        for (let vi = 0; vi < valueCount; vi++)
+            expandedCols.push({ col, vi });
+    });
+    function numericCell(value) {
+        const n = parseFloat(String(value ?? '').replace(/,/g, ''));
+        return Number.isFinite(n) ? n : null;
+    }
+    function formatMatrixNumber(total, sawAny) {
+        if (!sawAny)
+            return '';
+        return Number.isInteger(total) ? String(total) : String(Number(total.toFixed(6)));
+    }
+    function aggregateNumbers(values) {
+        if (!values.length)
+            return '';
+        if (matrixAggregate === 'MIN')
+            return formatMatrixNumber(Math.min(...values), true);
+        if (matrixAggregate === 'MAX')
+            return formatMatrixNumber(Math.max(...values), true);
+        if (matrixAggregate === 'AVG')
+            return formatMatrixNumber(values.reduce((a, b) => a + b, 0) / values.length, true);
+        return formatMatrixNumber(values.reduce((a, b) => a + b, 0), true);
+    }
+    function aggregateColumn(row, col, vi) {
+        const values = [];
+        col.leaves.forEach(leaf => {
+            const n = numericCell(row[rowDepth + leaf.index * valueCount + (vi || 0)]);
+            if (n != null)
+                values.push(n);
+        });
+        return aggregateNumbers(values);
+    }
+    function aggregateRows(sourceRows, col, vi) {
+        const values = [];
+        sourceRows.forEach(row => {
+            col.leaves.forEach(leaf => {
+                const n = numericCell(row[rowDepth + leaf.index * valueCount + (vi || 0)]);
+                if (n != null)
+                    values.push(n);
+            });
+        });
+        return aggregateNumbers(values);
+    }
+    function aggregateRowTotal(sourceRows, vi) {
+        const values = [];
+        sourceRows.forEach(row => {
+            leaves.forEach(leaf => {
+                const n = numericCell(row[rowDepth + leaf.index * valueCount + (vi || 0)]);
+                if (n != null)
+                    values.push(n);
+            });
+        });
+        return aggregateNumbers(values);
+    }
+    function evaluateMatrixFormatting(numVal, colName) {
+        if (numVal == null || !Number.isFinite(numVal) || formattingRules.length === 0)
+            return null;
+        for (let i = 0; i < formattingRules.length; i++) {
+            const rule = formattingRules[i];
+            const cond = (rule.condition || rule.Condition || '').trim();
+            if (!cond)
+                continue;
+            if (matchesMatrixCondition(cond, numVal, colName)) {
+                return {
+                    color: rule.color || rule.Color,
+                    fontColor: rule.fontColor || rule.FontColor
+                };
+            }
+        }
+        return null;
+    }
+    function matchesMatrixCondition(cond, val, colName) {
+        return matchesCondition(cond, val, colName);
+    }
+    function formatAndDecorateValueCell(td, rawVal, vi, isTotal) {
+        const num = numericCell(rawVal);
+        const colName = valueHeaders ? valueHeaders[vi] || 'value' : (visual.options && visual.options['mapping:value']) || 'value';
+        const fmt = evaluateMatrixFormatting(num, colName);
+        if (fmt) {
+            if (fmt.color)
+                td.style.backgroundColor = fmt.color;
+            if (fmt.fontColor)
+                td.style.color = fmt.fontColor;
+        }
+        if (!isTotal && isDataBar && num != null && dataBarMax > dataBarMin) {
+            const range = dataBarMax - dataBarMin;
+            const pct = Math.max(0, Math.min(100, (num - dataBarMin) / range * 100));
+            td.style.position = 'relative';
+            td.style.padding = '0';
+            const bar = document.createElement('div');
+            bar.className = 'data-bar-fill';
+            bar.style.position = 'absolute';
+            bar.style.top = '0';
+            bar.style.bottom = '0';
+            bar.style.left = '0';
+            bar.style.right = 'auto';
+            bar.style.width = pct.toFixed(1) + '%';
+            bar.style.backgroundColor = dataBarColor;
+            bar.style.opacity = '0.35';
+            bar.style.pointerEvents = 'none';
+            td.appendChild(bar);
+            const span = document.createElement('span');
+            span.className = 'data-bar-label';
+            span.style.position = 'relative';
+            span.style.zIndex = '1';
+            span.style.display = 'block';
+            span.style.padding = '4px 10px';
+            span.textContent = formatValue(rawVal, null);
+            td.appendChild(span);
+        }
+        else {
+            td.textContent = formatValue(rawVal, null);
+        }
+    }
+    function buildRowNodes(level, sourceRows) {
+        const buckets = new Map();
+        sourceRows.forEach(row => {
+            const label = String(row[level] ?? '');
+            if (!buckets.has(label))
+                buckets.set(label, []);
+            buckets.get(label).push(row);
+        });
+        return Array.from(buckets, ([label, bucket]) => ({
+            label,
+            level,
+            parts: bucket[0].slice(0, level + 1).map(v => String(v ?? '')),
+            rows: bucket,
+            children: level < rowDepth - 1 ? buildRowNodes(level + 1, bucket) : []
+        }));
+    }
+    function appendToggle(cell, _key, isCollapsed, onClick) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'matrix-toggle';
+        button.textContent = isCollapsed ? '+' : '-';
+        button.setAttribute('aria-label', isCollapsed ? 'Expand' : 'Collapse');
+        button.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onClick();
+            renderManifest(getLastManifest());
+        });
+        cell.appendChild(button);
+    }
+    function appendRowNode(tbody, node) {
+        const isLeaf = node.children.length === 0;
+        const key = rowPrefixKey(node.parts, node.level);
+        let isCollapsed;
+        if (key in state.collapsedRows) {
+            isCollapsed = !!state.collapsedRows[key];
+        }
+        else {
+            if (defaultExpand === 'NONE') {
+                isCollapsed = !isLeaf;
+            }
+            else if (defaultExpand === 'LEVEL_1') {
+                isCollapsed = !isLeaf && node.level >= 1;
+            }
+            else if (defaultExpand === 'LEVEL_2') {
+                isCollapsed = !isLeaf && node.level >= 2;
+            }
+            else {
+                isCollapsed = false;
+            }
+        }
+        const tr = document.createElement('tr');
+        tr.className = isLeaf ? 'matrix-leaf-row' : 'matrix-group-row';
+        for (let i = 0; i < rowDepth; i++) {
+            const td = document.createElement('td');
+            td.className = 'matrix-dim';
+            if (i === node.level) {
+                td.style.paddingLeft = `${10 + node.level * 18}px`;
+                if (!isLeaf) {
+                    appendToggle(td, key, isCollapsed, () => {
+                        state.collapsedRows[key] = !isCollapsed;
+                    });
+                }
+                td.appendChild(document.createTextNode(node.label));
+            }
+            else if (isLeaf) {
+                td.textContent = String(node.rows[0][i] ?? '');
+            }
+            tr.appendChild(td);
+        }
+        expandedCols.forEach(({ col, vi }) => {
+            const td = document.createElement('td');
+            td.className = 'matrix-val';
+            const val = isLeaf ? aggregateColumn(node.rows[0], col, vi) : aggregateRows(node.rows, col, vi);
+            formatAndDecorateValueCell(td, val, vi, false);
+            tr.appendChild(td);
+        });
+        if (rowTotalsEnabled) {
+            for (let vi = 0; vi < valueCount; vi++) {
+                const td = document.createElement('td');
+                td.className = 'matrix-val matrix-row-total';
+                const val = isLeaf ? aggregateRowTotal([node.rows[0]], vi) : aggregateRowTotal(node.rows, vi);
+                formatAndDecorateValueCell(td, val, vi, true);
+                tr.appendChild(td);
+            }
+        }
+        tbody.appendChild(tr);
+        if (!isLeaf && !isCollapsed) {
+            node.children.forEach(child => appendRowNode(tbody, child));
+            if (subtotalsEnabled) {
+                const subtr = document.createElement('tr');
+                subtr.className = 'matrix-subtotal-row';
+                for (let i = 0; i < rowDepth; i++) {
+                    const td = document.createElement('td');
+                    td.className = i === node.level ? 'matrix-dim matrix-subtotal-label' : 'matrix-dim';
+                    if (i === node.level)
+                        td.textContent = node.label + ' Total';
+                    subtr.appendChild(td);
+                }
+                expandedCols.forEach(({ col, vi }) => {
+                    const td = document.createElement('td');
+                    td.className = 'matrix-val matrix-subtotal-val';
+                    const val = aggregateRows(node.rows, col, vi);
+                    formatAndDecorateValueCell(td, val, vi, true);
+                    subtr.appendChild(td);
+                });
+                if (rowTotalsEnabled) {
+                    for (let vi = 0; vi < valueCount; vi++) {
+                        const td = document.createElement('td');
+                        td.className = 'matrix-val matrix-subtotal-val matrix-row-total';
+                        const val = aggregateRowTotal(node.rows, vi);
+                        formatAndDecorateValueCell(td, val, vi, true);
+                        subtr.appendChild(td);
+                    }
+                }
+                tbody.appendChild(subtr);
+            }
+        }
+    }
+    function appendColumnHeaderButton(th, node) {
+        const canCollapse = node.leaves.length > 1 || hasColumnChildren(node.parts, node.level);
+        if (!canCollapse)
+            return;
+        const key = node.key;
+        appendToggle(th, key, !state.collapsedCols[key], () => {
+            state.collapsedCols[key] = !state.collapsedCols[key];
+        });
+    }
+    // Header rows
+    const thead = document.createElement('thead');
+    const totalHeaderRows = colDepth + (valueCount > 1 ? 1 : 0);
+    for (let level = 0; level < colDepth; level++) {
+        const headerRow = document.createElement('tr');
+        if (level === 0) {
+            rowHeaders.forEach(h => {
+                const th = document.createElement('th');
+                th.textContent = h;
+                th.className = 'matrix-dim-header';
+                th.rowSpan = totalHeaderRows;
+                headerRow.appendChild(th);
+            });
+        }
+        visibleColumns.forEach(col => {
+            const th = document.createElement('th');
+            th.className = 'matrix-val-header';
+            if (valueCount > 1)
+                th.colSpan = valueCount;
+            const label = col.parts[level] || '';
+            if (label) {
+                const prefixParts = col.parts.slice(0, level + 1);
+                const prefixKey = prefixParts.join(sep);
+                const headerNode = {
+                    parts: prefixParts,
+                    level,
+                    key: prefixKey,
+                    leaves: leaves.filter(leaf => colPrefixKey(leaf.parts, level) === prefixKey)
+                };
+                appendColumnHeaderButton(th, headerNode);
+                th.appendChild(document.createTextNode(label));
+            }
+            headerRow.appendChild(th);
+        });
+        if (rowTotalsEnabled && level === 0) {
+            const th = document.createElement('th');
+            th.className = 'matrix-val-header matrix-row-total-header';
+            if (valueCount > 1) {
+                th.colSpan = valueCount;
+            }
+            else {
+                th.rowSpan = totalHeaderRows;
+            }
+            th.textContent = 'Total';
+            headerRow.appendChild(th);
+        }
+        thead.appendChild(headerRow);
+    }
+    // Value sub-header row when multiple VALUE columns
+    if (valueCount > 1 && valueHeaders) {
+        const valHeaderRow = document.createElement('tr');
+        visibleColumns.forEach(() => {
+            valueHeaders.forEach(vh => {
+                const th = document.createElement('th');
+                th.className = 'matrix-val-header matrix-value-subheader';
+                th.textContent = vh;
+                valHeaderRow.appendChild(th);
+            });
+        });
+        if (rowTotalsEnabled) {
+            valueHeaders.forEach(vh => {
+                const th = document.createElement('th');
+                th.className = 'matrix-val-header matrix-value-subheader';
+                th.textContent = vh;
+                valHeaderRow.appendChild(th);
+            });
+        }
+        thead.appendChild(valHeaderRow);
+    }
+    table.appendChild(thead);
+    // Data rows
+    const tbody = document.createElement('tbody');
+    buildRowNodes(0, rows).forEach(node => appendRowNode(tbody, node));
+    // Grand total row (COLUMN_TOTAL)
+    if (columnTotalsEnabled && grandTotals && grandTotals.length > 0) {
+        const tr = document.createElement('tr');
+        tr.className = 'matrix-grand-total';
+        for (let i = 0; i < rowDepth; i++) {
+            const td = document.createElement('td');
+            td.textContent = i === 0 ? 'Grand Total' : '';
+            td.className = 'matrix-dim matrix-total-label';
+            tr.appendChild(td);
+        }
+        expandedCols.forEach(({ col, vi }) => {
+            const td = document.createElement('td');
+            const values = [];
+            col.leaves.forEach(leaf => {
+                const n = numericCell(grandTotals[rowDepth + leaf.index * valueCount + vi]);
+                if (n != null)
+                    values.push(n);
+            });
+            const val = aggregateNumbers(values);
+            formatAndDecorateValueCell(td, val, vi, true);
+            td.className = 'matrix-val matrix-total-val';
+            tr.appendChild(td);
+        });
+        if (rowTotalsEnabled) {
+            for (let vi = 0; vi < valueCount; vi++) {
+                const td = document.createElement('td');
+                td.className = 'matrix-val matrix-total-val matrix-row-total';
+                const values = [];
+                rows.forEach(row => {
+                    leaves.forEach(leaf => {
+                        const n = numericCell(row[rowDepth + leaf.index * valueCount + vi]);
+                        if (n != null)
+                            values.push(n);
+                    });
+                });
+                const val = aggregateNumbers(values);
+                formatAndDecorateValueCell(td, val, vi, true);
+                tr.appendChild(td);
+            }
+        }
+        tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+    container.appendChild(wrapper);
+}
+function findMicroChart(visual, rowIndex, columnIndex, sourceValue) {
+    if (!Array.isArray(visual.microCharts))
+        return null;
+    return visual.microCharts.find(micro => micro.role === 'table.cell' &&
+        micro.columnIndex === columnIndex && micro.rowIndex === rowIndex) ||
+        visual.microCharts.find(micro => micro.role === 'table.cell' &&
+            micro.columnIndex === columnIndex && String(micro.sourceValue ?? '') === String(sourceValue ?? '')) || null;
+}
+
+
+// ─── rt-controls-date.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-controls-date.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Absolute and relative date parameter controls.
+ */
+// ── DatePicker ──────────────────────────────────────────────────────────
+function renderDatePicker(container, visual, manifest) {
+    const opts = visual.options || {};
+    const changeActions = actionsFor(visual, 'ON_CHANGE').filter((a) => a.type === 'SET_PARAMETER');
+    const startAction = changeActions.length > 0 ? changeActions[0] : null;
+    const param = startAction ? startAction.parameterName : null;
+    const secondaryParam = (startAction && startAction.secondaryParameterName) || (changeActions.length > 1 ? changeActions[1].parameterName : null);
+    const min = opts['MIN'] || opts['min'] || '';
+    const max = opts['MAX'] || opts['max'] || '';
+    const mode = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
+    const isRange = mode === 'RANGE';
+    const formatOpt = getOption(opts, 'format') || '';
+    const weekStart = (getOption(opts, 'week_start') || 'SUN').toUpperCase();
+    const displayOpt = (getOption(opts, 'display') || 'DROPDOWN').toUpperCase();
+    const isInline = displayOpt === 'INLINE';
+    function parseArrayOption(opt) {
+        if (!opt)
+            return [];
+        if (Array.isArray(opt))
+            return opt.map(s => String(s).trim().toUpperCase());
+        if (typeof opt === 'string' && opt.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(opt);
+                if (Array.isArray(parsed))
+                    return parsed.map(s => String(s).trim().toUpperCase());
+            }
+            catch {
+                // Not JSON after all, so fall through to the comma-separated form below.
+            }
+        }
+        return String(opt).split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    }
+    const disabledDates = parseArrayOption(opts['DISABLED_DATES'] || opts['disabled_dates']);
+    const disabledDays = parseArrayOption(opts['DISABLED_DAYS'] || opts['disabled_days']);
+    function isDateDisabled(dateStr) {
+        if (!dateStr)
+            return false;
+        const norm = dateStr.trim().toUpperCase();
+        if (disabledDates.includes(norm))
+            return true;
+        if (disabledDays.length > 0) {
+            const dt = new Date(dateStr + 'T00:00:00Z');
+            if (!isNaN(dt.getTime())) {
+                const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+                const dName = dayNames[dt.getUTCDay()];
+                if (disabledDays.includes(dName))
+                    return true;
+            }
+        }
+        return false;
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'filter-wrapper' + (isInline ? ' datepicker-inline' : '');
+    if (weekStart)
+        wrapper.setAttribute('data-week-start', weekStart);
+    const errorEl = document.createElement('div');
+    errorEl.className = 'filter-error';
+    errorEl.style.display = 'none';
+    if (isRange) {
+        let startVal = '';
+        let endVal = '';
+        if (manifest && manifest.parameters) {
+            if (param)
+                startVal = getParam(manifest.parameters, param) ?? '';
+            if (secondaryParam)
+                endVal = getParam(manifest.parameters, secondaryParam) ?? '';
+        }
+        if (!startVal && !endVal) {
+            const def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+            const parts = parseMultiParameter(def);
+            if (parts.length > 0)
+                startVal = parts[0];
+            if (parts.length > 1)
+                endVal = parts[1];
+        }
+        const rangeWrapper = document.createElement('div');
+        rangeWrapper.className = 'datepicker-range-wrapper';
+        function createDateBox(initialVal, pName, qualifier, onValChange) {
+            const box = document.createElement('div');
+            box.className = 'reldate-wrapper';
+            const textInput = document.createElement('input');
+            textInput.type = 'text';
+            setParameterAccessibleName(textInput, visual, pName, qualifier);
+            textInput.placeholder = formatOpt || 'YYYY-MM-DD';
+            textInput.value = initialVal;
+            if (pName)
+                textInput.setAttribute('data-parameter', pName);
+            const datePicker = document.createElement('input');
+            datePicker.type = 'date';
+            setParameterAccessibleName(datePicker, visual, pName, `${qualifier} picker`);
+            datePicker.className = 'reldate-native-picker';
+            if (min)
+                datePicker.min = min;
+            if (max)
+                datePicker.max = max;
+            if (initialVal && /^\d{4}-\d{2}-\d{2}$/.test(initialVal))
+                datePicker.value = initialVal;
+            if (pName)
+                datePicker.setAttribute('data-parameter', pName);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'reldate-btn';
+            btn.title = `Pick ${qualifier}`;
+            btn.setAttribute('aria-label', `Pick ${qualifier}`);
+            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+            btn.addEventListener('click', () => {
+                if (typeof datePicker.showPicker === 'function')
+                    datePicker.showPicker();
+                else
+                    datePicker.focus();
+            });
+            datePicker.addEventListener('change', () => {
+                textInput.value = datePicker.value;
+                textInput.dispatchEvent(new Event('change'));
+            });
+            textInput.addEventListener('change', () => {
+                if (/^\d{4}-\d{2}-\d{2}$/.test(textInput.value)) {
+                    datePicker.value = textInput.value;
+                }
+                onValChange();
+            });
+            const actions = document.createElement('div');
+            actions.className = 'reldate-actions';
+            const pickerSlot = document.createElement('span');
+            pickerSlot.className = 'reldate-picker-slot';
+            pickerSlot.appendChild(btn);
+            pickerSlot.appendChild(datePicker);
+            actions.appendChild(pickerSlot);
+            box.appendChild(textInput);
+            box.appendChild(actions);
+            applyControlState(textInput, visual, box);
+            if (textInput.disabled) {
+                datePicker.disabled = true;
+                btn.disabled = true;
+            }
+            return { box, textInput, datePicker };
+        }
+        function validateAndPostRange() {
+            const sVal = startBox.textInput.value.trim();
+            const eVal = endBox.textInput.value.trim();
+            let errMsg = null;
+            if (isDateDisabled(sVal)) {
+                errMsg = 'Start date is disabled';
+                startBox.box.classList.add('is-invalid');
+            }
+            else {
+                startBox.box.classList.remove('is-invalid');
+            }
+            if (isDateDisabled(eVal)) {
+                errMsg = errMsg ? (errMsg + '; End date is disabled') : 'End date is disabled';
+                endBox.box.classList.add('is-invalid');
+            }
+            else {
+                endBox.box.classList.remove('is-invalid');
+            }
+            if (!errMsg && sVal && eVal && sVal > eVal) {
+                errMsg = 'Start date cannot be after end date';
+                startBox.box.classList.add('is-invalid');
+                endBox.box.classList.add('is-invalid');
+            }
+            if (errMsg) {
+                errorEl.textContent = errMsg;
+                errorEl.style.display = 'block';
+                return;
+            }
+            errorEl.style.display = 'none';
+            startBox.box.classList.remove('is-invalid');
+            endBox.box.classList.remove('is-invalid');
+            if (isWebMode && changeActions.length > 0) {
+                const batch = {};
+                if (param)
+                    batch[param] = sVal;
+                if (secondaryParam)
+                    batch[secondaryParam] = eVal;
+                if (Object.keys(batch).length > 0) {
+                    postParameters(batch).then(m => { if (m)
+                        renderManifest(m); });
+                }
+            }
+        }
+        const startBox = createDateBox(startVal, param, 'start date', validateAndPostRange);
+        const sep = document.createElement('span');
+        sep.textContent = '–';
+        sep.style.fontWeight = 'bold';
+        const endBox = createDateBox(endVal, secondaryParam, 'end date', validateAndPostRange);
+        rangeWrapper.appendChild(startBox.box);
+        rangeWrapper.appendChild(sep);
+        rangeWrapper.appendChild(endBox.box);
+        wrapper.appendChild(rangeWrapper);
+        wrapper.appendChild(errorEl);
+    }
+    else {
+        // SINGLE mode
+        let def = (visual.defaultValue || opts['DEFAULT'] || opts['default'] || '');
+        if (param && manifest && manifest.parameters) {
+            const current = getParam(manifest.parameters, param);
+            if (current !== undefined)
+                def = current;
+        }
+        const inputRow = document.createElement('div');
+        inputRow.className = 'reldate-wrapper';
+        const textInput = document.createElement('input');
+        textInput.type = 'text';
+        setParameterAccessibleName(textInput, visual, param, 'date');
+        textInput.placeholder = formatOpt || 'YYYY-MM-DD or T-1…';
+        textInput.value = def;
+        if (param)
+            textInput.setAttribute('data-parameter', param);
+        const datePicker = document.createElement('input');
+        datePicker.type = 'date';
+        setParameterAccessibleName(datePicker, visual, param, 'native date picker');
+        datePicker.className = 'reldate-native-picker';
+        if (min)
+            datePicker.min = min;
+        if (max)
+            datePicker.max = max;
+        if (def && /^\d{4}-\d{2}-\d{2}$/.test(def))
+            datePicker.value = def;
+        if (param)
+            datePicker.setAttribute('data-parameter', param);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'reldate-btn';
+        btn.title = 'Pick a date';
+        btn.setAttribute('aria-label', 'Pick a date');
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+        btn.addEventListener('click', () => {
+            if (typeof datePicker.showPicker === 'function')
+                datePicker.showPicker();
+            else
+                datePicker.focus();
+        });
+        datePicker.addEventListener('change', () => {
+            textInput.value = datePicker.value;
+            textInput.dispatchEvent(new Event('change'));
+        });
+        const actions = document.createElement('div');
+        actions.className = 'reldate-actions';
+        const pickerSlot = document.createElement('span');
+        pickerSlot.className = 'reldate-picker-slot';
+        pickerSlot.appendChild(btn);
+        pickerSlot.appendChild(datePicker);
+        actions.appendChild(pickerSlot);
+        inputRow.appendChild(textInput);
+        inputRow.appendChild(actions);
+        wrapper.appendChild(inputRow);
+        wrapper.appendChild(errorEl);
+        applyControlState(textInput, visual, inputRow);
+        if (textInput.disabled) {
+            datePicker.disabled = true;
+            btn.disabled = true;
+        }
+        if (isWebMode && changeActions.length > 0) {
+            const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
+            const onDateChange = () => {
+                const val = textInput.value.trim();
+                if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+                    datePicker.value = val;
+                }
+                if (isDateDisabled(val)) {
+                    inputRow.classList.add('is-invalid');
+                    errorEl.textContent = 'Selected date is disabled';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                inputRow.classList.remove('is-invalid');
+                errorEl.style.display = 'none';
+                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = textInput.value; return o; }, {});
+                postParameters(batch).then(m => { if (m)
+                    renderManifest(m); });
+            };
+            if (debounceOpt != null) {
+                let dTimer = null;
+                const dMs = parseInt(debounceOpt, 10) || 300;
+                textInput.addEventListener('input', () => {
+                    clearTimeout(dTimer);
+                    dTimer = setTimeout(onDateChange, dMs);
+                });
+            }
+            textInput.addEventListener('change', onDateChange);
+        }
+    }
+    container.appendChild(wrapper);
+}
+// ── RelDatePicker ────────────────────────────────────────────────────────
+function showRelDateHelpModal() {
+    const modal = document.createElement('div');
+    modal.className = 'required-params-modal'; // recycle the overlay styling
+    modal.style.zIndex = '30000'; // above everything
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    content.style.width = '550px';
+    const title = document.createElement('h2');
+    title.textContent = 'Relative Date Syntax';
+    title.style.marginTop = '0';
+    const desc = document.createElement('div');
+    desc.style.fontSize = '14px';
+    desc.style.lineHeight = '1.5';
+    desc.innerHTML = `
+            <p><code>RELDATE</code> parameters resolve to the exact local time at the moment of execution.</p>
+            <table class="md-table" style="margin-top: 12px; margin-bottom: 16px;">
+                <tr><th>Anchor</th><th>Resolves to</th></tr>
+                <tr><td><strong>D</strong></td><td>Today at midnight</td></tr>
+                <tr><td><strong>W</strong> / <strong>WS</strong></td><td>Start of current week</td></tr>
+                <tr><td><strong>WE</strong></td><td>Last day of current week</td></tr>
+                <tr><td><strong>M</strong> / <strong>MS</strong></td><td>1st of current month at midnight</td></tr>
+                <tr><td><strong>ME</strong></td><td>Last day of current month at midnight</td></tr>
+                <tr><td><strong>FQ</strong> / <strong>FQS</strong></td><td>Start of current fiscal quarter</td></tr>
+                <tr><td><strong>FQE</strong></td><td>Last day of current fiscal quarter</td></tr>
+                <tr><td><strong>FY</strong> / <strong>FYS</strong></td><td>Start of current fiscal year</td></tr>
+                <tr><td><strong>FYE</strong></td><td>Last day of current fiscal year</td></tr>
+                <tr><td><strong>Y</strong> / <strong>YS</strong></td><td>Jan 1 of current year at midnight</td></tr>
+                <tr><td><strong>YE</strong></td><td>Dec 31 of current year at midnight</td></tr>
+                <tr><td><strong>N</strong></td><td>Exact current local datetime</td></tr>
+            </table>
+            <p><strong>Arithmetic:</strong> Append <code>-n</code> or <code>+n</code> to shift by <em>n</em> periods.</p>
+            <ul>
+                <li><code>D-1</code> = Yesterday</li>
+                <li><code>D+30</code> = 30 days in future</li>
+                <li><code>FQ-1</code> = Previous fiscal quarter</li>
+                <li><code>FY+1</code> = Next fiscal year</li>
+                <li><code>M-1</code> = First day of last month</li>
+                <li><code>ME-1</code> = Last day of last month</li>
+            </ul>
+            <p style="margin-top: 12px; margin-bottom: 8px;"><strong>Time Offsets (from N):</strong> Use <code>H</code> (hours), <code>I</code> (minutes), or <code>S</code> (seconds).</p>
+            <ul style="margin-bottom: 0;">
+                <li><code>N-2H</code> = Exactly 2 hours ago</li>
+                <li><code>N+30I</code> = Exactly 30 minutes from now</li>
+            </ul>
+            <p style="margin-top: 12px; font-size: 12px; color: #667085;">Fiscal anchors evaluate with <code>FISCAL_YEAR_START = month</code> (default 1 = January).</p>
+        `;
+    const footer = document.createElement('div');
+    footer.className = 'modal-footer';
+    footer.style.marginTop = '24px';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'header-btn primary';
+    closeBtn.textContent = 'Got it';
+    closeBtn.addEventListener('click', () => {
+        document.body.removeChild(modal);
+    });
+    footer.appendChild(closeBtn);
+    content.appendChild(title);
+    content.appendChild(desc);
+    content.appendChild(footer);
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+}
+function renderRelDatePicker(container, visual, manifest) {
+    const opts = visual.options || {};
+    const changeActions = actionsFor(visual, 'ON_CHANGE').filter((a) => a.type === 'SET_PARAMETER');
+    const startAction = changeActions.length > 0 ? changeActions[0] : null;
+    const param = startAction ? startAction.parameterName : null;
+    const secondaryParam = (startAction && startAction.secondaryParameterName) || (changeActions.length > 1 ? changeActions[1].parameterName : null);
+    const min = opts['MIN'] || opts['min'] || '';
+    const max = opts['MAX'] || opts['max'] || '';
+    const mode = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
+    const isRange = mode === 'RANGE';
+    const relDateRegex = /^\s*(D|W|WS|WE|M|MS|ME|Y|YS|YE|FQ|FQS|FQE|FY|FYS|FYE|N)([-+]\d+[DHIMS]?)?\s*$/i;
+    const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    function isValidRelDate(expr) {
+        if (!expr || !expr.trim())
+            return false;
+        const s = expr.trim();
+        return relDateRegex.test(s) || isoDateRegex.test(s);
+    }
+    let quickPicks = [
+        { label: 'D', value: 'D-0' },
+        { label: 'D-1', value: 'D-1' },
+        { label: 'M', value: 'M-0' },
+        { label: 'M-1', value: 'M-1' },
+        { label: 'Y', value: 'Y-0' },
+        { label: 'Y-1', value: 'Y-1' },
+    ];
+    const qpOpt = opts['QUICK_PICKS'] || opts['quick_picks'];
+    if (qpOpt) {
+        try {
+            const customQp = typeof qpOpt === 'string' ? JSON.parse(qpOpt) : qpOpt;
+            if (Array.isArray(customQp) && customQp.length > 0) {
+                quickPicks = customQp;
+            }
+        }
+        catch {
+            // QUICK_PICKS is author-supplied; unparseable leaves the built-in picks.
+        }
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'filter-wrapper';
+    const errorEl = document.createElement('div');
+    errorEl.className = 'filter-error';
+    errorEl.style.display = 'none';
+    function createRelDateRow(initialVal, pName, qualifier, onValChange) {
+        const rowWrapper = document.createElement('div');
+        rowWrapper.style.display = 'flex';
+        rowWrapper.style.flexDirection = 'column';
+        rowWrapper.style.gap = '6px';
+        const inputRow = document.createElement('div');
+        inputRow.className = 'reldate-wrapper';
+        const textInput = document.createElement('input');
+        textInput.type = 'text';
+        if (qualifier === 'relative date') {
+            setParameterAccessibleName(textInput, visual, param, 'relative date');
+        }
+        else {
+            setParameterAccessibleName(textInput, visual, pName, qualifier);
+        }
+        textInput.placeholder = 'D-7, M-1, Y-1 or YYYY-MM-DD';
+        textInput.value = initialVal;
+        if (pName)
+            textInput.setAttribute('data-parameter', pName);
+        const hiddenDate = document.createElement('input');
+        hiddenDate.type = 'date';
+        setParameterAccessibleName(hiddenDate, visual, pName, `${qualifier} native date picker`);
+        hiddenDate.className = 'reldate-native-picker';
+        if (min)
+            hiddenDate.min = min;
+        if (max)
+            hiddenDate.max = max;
+        if (initialVal && /^\d{4}-\d{2}-\d{2}$/.test(initialVal))
+            hiddenDate.value = initialVal;
+        if (pName)
+            hiddenDate.setAttribute('data-parameter', pName);
+        const calBtn = document.createElement('button');
+        calBtn.type = 'button';
+        calBtn.className = 'reldate-btn';
+        calBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+        calBtn.title = 'Pick a date (writes ISO date)';
+        calBtn.setAttribute('aria-label', 'Pick a date');
+        calBtn.addEventListener('click', () => {
+            if (typeof hiddenDate.showPicker === 'function')
+                hiddenDate.showPicker();
+            else
+                hiddenDate.focus();
+        });
+        const infoBtn = document.createElement('button');
+        infoBtn.type = 'button';
+        infoBtn.className = 'reldate-btn';
+        infoBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+        infoBtn.title = 'View Relative Date Syntax Help';
+        infoBtn.setAttribute('aria-label', 'View relative date syntax help');
+        infoBtn.addEventListener('click', showRelDateHelpModal);
+        hiddenDate.addEventListener('change', () => {
+            textInput.value = hiddenDate.value;
+            textInput.dispatchEvent(new Event('change'));
+        });
+        const actions = document.createElement('div');
+        actions.className = 'reldate-actions';
+        const pickerSlot = document.createElement('span');
+        pickerSlot.className = 'reldate-picker-slot';
+        pickerSlot.appendChild(calBtn);
+        pickerSlot.appendChild(hiddenDate);
+        actions.appendChild(pickerSlot);
+        actions.appendChild(infoBtn);
+        inputRow.appendChild(textInput);
+        inputRow.appendChild(actions);
+        // Quick-pick buttons
+        const quickRow = document.createElement('div');
+        quickRow.className = 'reldate-quick';
+        quickPicks.forEach((qp) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'reldate-quick-btn' + (initialVal === qp.value ? ' active' : '');
+            btn.textContent = qp.label;
+            btn.addEventListener('click', () => {
+                textInput.value = qp.value;
+                Array.from(quickRow.children).forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                textInput.dispatchEvent(new Event('change'));
+            });
+            quickRow.appendChild(btn);
+        });
+        textInput.addEventListener('change', () => {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(textInput.value)) {
+                hiddenDate.value = textInput.value;
+            }
+            onValChange();
+        });
+        rowWrapper.appendChild(inputRow);
+        rowWrapper.appendChild(quickRow);
+        return { rowWrapper, inputRow, textInput, quickRow };
+    }
+    if (isRange) {
+        let startVal = '';
+        let endVal = '';
+        if (manifest && manifest.parameters) {
+            if (param)
+                startVal = getParam(manifest.parameters, param) ?? '';
+            if (secondaryParam)
+                endVal = getParam(manifest.parameters, secondaryParam) ?? '';
+        }
+        if (!startVal && !endVal) {
+            const def = (visual.defaultValue || opts['DEFAULT'] || opts['default'] || '');
+            const parts = parseMultiParameter(def);
+            if (parts.length > 0)
+                startVal = parts[0];
+            if (parts.length > 1)
+                endVal = parts[1];
+        }
+        function validateAndPostRange() {
+            const sVal = startRow.textInput.value.trim();
+            const eVal = endRow.textInput.value.trim();
+            let errMsg = null;
+            if (!isValidRelDate(sVal)) {
+                errMsg = 'Invalid start relative date expression';
+                startRow.inputRow.classList.add('is-invalid');
+            }
+            else {
+                startRow.inputRow.classList.remove('is-invalid');
+            }
+            if (!isValidRelDate(eVal)) {
+                errMsg = errMsg ? (errMsg + '; Invalid end relative date expression') : 'Invalid end relative date expression';
+                endRow.inputRow.classList.add('is-invalid');
+            }
+            else {
+                endRow.inputRow.classList.remove('is-invalid');
+            }
+            if (errMsg) {
+                errorEl.textContent = errMsg;
+                errorEl.style.display = 'block';
+                return;
+            }
+            errorEl.style.display = 'none';
+            startRow.inputRow.classList.remove('is-invalid');
+            endRow.inputRow.classList.remove('is-invalid');
+            if (isWebMode && changeActions.length > 0) {
+                const batch = {};
+                if (param)
+                    batch[param] = sVal;
+                if (secondaryParam)
+                    batch[secondaryParam] = eVal;
+                if (Object.keys(batch).length > 0) {
+                    postParameters(batch).then(m => { if (m)
+                        renderManifest(m); });
+                }
+            }
+        }
+        const rangeContainer = document.createElement('div');
+        rangeContainer.className = 'datepicker-range-wrapper';
+        const startRow = createRelDateRow(startVal, param, 'start date', validateAndPostRange);
+        const sep = document.createElement('span');
+        sep.textContent = '–';
+        sep.style.fontWeight = 'bold';
+        const endRow = createRelDateRow(endVal, secondaryParam, 'end date', validateAndPostRange);
+        rangeContainer.appendChild(startRow.rowWrapper);
+        rangeContainer.appendChild(sep);
+        rangeContainer.appendChild(endRow.rowWrapper);
+        wrapper.appendChild(rangeContainer);
+        wrapper.appendChild(errorEl);
+    }
+    else {
+        // SINGLE mode
+        let def = (visual.defaultValue || opts['DEFAULT'] || opts['default'] || '');
+        if (param && manifest && manifest.parameters) {
+            const current = getParam(manifest.parameters, param);
+            if (current !== undefined)
+                def = current;
+        }
+        function validateAndPostSingle() {
+            const val = singleRow.textInput.value.trim();
+            if (!isValidRelDate(val)) {
+                singleRow.inputRow.classList.add('is-invalid');
+                errorEl.textContent = 'Invalid relative date expression';
+                errorEl.style.display = 'block';
+                return;
+            }
+            singleRow.inputRow.classList.remove('is-invalid');
+            errorEl.style.display = 'none';
+            if (isWebMode && changeActions.length > 0) {
+                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = val; return o; }, {});
+                postParameters(batch).then(m => { if (m)
+                    renderManifest(m); });
+            }
+        }
+        const singleRow = createRelDateRow(def, param, 'relative date', validateAndPostSingle);
+        wrapper.appendChild(singleRow.rowWrapper);
+        wrapper.appendChild(errorEl);
+    }
+    container.appendChild(wrapper);
+}
+
+
+// ─── rt-controls-input.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-controls-input.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Slicer, slider, search, checkbox, textbox, numberbox, and button controls.
+ */
+function applyControlState(input, visual, wrapper) {
+    const opts = visual?.options || {};
+    const disabledExpr = opts['DISABLED'] || opts['disabled'];
+    const readOnlyExpr = opts['READ_ONLY'] || opts['read_only'] || opts['READONLY'] || opts['readonly'];
+    const isDisabled = disabledExpr != null && evaluateExpressionAgainstParameters(disabledExpr, parameters);
+    const isReadOnly = readOnlyExpr != null && evaluateExpressionAgainstParameters(readOnlyExpr, parameters);
+    if (input) {
+        if (isDisabled) {
+            input.disabled = true;
+            input.setAttribute('aria-disabled', 'true');
+        }
+        if (isReadOnly) {
+            input.readOnly = true;
+            input.setAttribute('aria-readonly', 'true');
+        }
+    }
+    if (wrapper) {
+        if (isDisabled)
+            wrapper.classList.add('is-disabled');
+        if (isReadOnly)
+            wrapper.classList.add('is-readonly');
+    }
+}
+// ── Slicer ──────────────────────────────────────────────────────────────
+function setParameterAccessibleName(control, visual, parameterName, qualifier) {
+    const visualName = String((visual && visual.name) || '').trim();
+    const normalizedParameter = String(parameterName || '').replace(/^@/, '').trim();
+    const baseName = visualName || normalizedParameter || 'Report parameter';
+    control.setAttribute('aria-label', qualifier ? `${baseName} ${qualifier}` : baseName);
+}
+function renderSlicer(container, visual, manifest) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'slicer-wrapper';
+    const opts = visual.options || {};
+    const vstyles = visual.styles || {};
+    const action = visual.actions.find((a) => a.type === 'SET_PARAMETER');
+    const paramName = action ? action.parameterName : null;
+    const typeStr = visual.visualType.toLowerCase();
+    const modeOpt = (getOption(opts, 'mode') || '').toUpperCase();
+    const isMulti = typeStr === 'multiselect' || modeOpt === 'MULTI' || isOn(opts['multiple'] || opts['MULTIPLE']);
+    const changeActions = actionsFor(visual, 'ON_CHANGE').filter((a) => a.type === 'SET_PARAMETER');
+    const isInteractive = (isWebMode || vscode) && changeActions.length > 0;
+    const valCol = (getOption(opts, 'mapping:value') || visual.columns[0] || 'value').toLowerCase();
+    const lblCol = (getOption(opts, 'mapping:label') || (visual.columns.length > 1 ? visual.columns[1] : visual.columns[0]) || 'label').toLowerCase();
+    const imgCol = (getOption(opts, 'mapping:image') || getOption(opts, 'image') || '').toLowerCase();
+    const valIdx = visual.columns.findIndex(c => c.toLowerCase() === valCol);
+    const lblIdx = visual.columns.findIndex(c => c.toLowerCase() === lblCol);
+    const imgIdx = imgCol ? visual.columns.findIndex(c => c.toLowerCase() === imgCol) : -1;
+    const finalValIdx = valIdx >= 0 ? valIdx : 0;
+    const finalLblIdx = lblIdx >= 0 ? lblIdx : (visual.columns.length > 1 ? 1 : 0);
+    // Extract options
+    const rawItems = (visual.rows || []).map((row, idx) => {
+        const val = String(row[finalValIdx] ?? '');
+        const lbl = String(row[finalLblIdx] ?? val);
+        const img = imgIdx >= 0 && row[imgIdx] != null ? String(row[imgIdx]) : null;
+        return { value: val, label: lbl, image: img, origIndex: idx };
+    });
+    // Deduplicate by value
+    const seen = new Set();
+    const items = [];
+    rawItems.forEach((it) => {
+        if (!seen.has(it.value)) {
+            seen.add(it.value);
+            items.push(it);
+        }
+    });
+    // Sorting
+    const sortOpt = (getOption(opts, 'sort') || 'SOURCE').toUpperCase();
+    if (sortOpt === 'ALPHA' || sortOpt === 'LABEL') {
+        items.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+    }
+    else if (sortOpt === 'VALUE') {
+        items.sort((a, b) => {
+            const an = parseFloat(a.value), bn = parseFloat(b.value);
+            return (!isNaN(an) && !isNaN(bn)) ? an - bn : a.value.localeCompare(b.value);
+        });
+    }
+    // Option limit
+    const maxOptions = parseInt(getOption(opts, 'max_options') || '0', 10);
+    const totalOptions = items.length;
+    const hasOverflow = maxOptions > 0 && totalOptions > maxOptions;
+    const displayedItems = hasOverflow ? items.slice(0, maxOptions) : items;
+    // Current parameter / default value
+    let currentVal = undefined;
+    if (paramName && manifest && manifest.parameters) {
+        currentVal = getParam(manifest.parameters, paramName);
+    }
+    if (currentVal === undefined || currentVal === null || currentVal === '') {
+        currentVal = visual.defaultValue || getOption(opts, 'default') || '';
+    }
+    const param = paramName;
+    let selected = isMulti
+        ? new Set(parseMultiParameter(currentVal))
+        : (currentVal !== undefined && currentVal !== '' ? String(currentVal) : (displayedItems[0]?.value ?? ''));
+    // Layout
+    let layout = (getStyle(vstyles, 'LAYOUT') || getOption(opts, 'layout') || '').toUpperCase();
+    if (!layout) {
+        layout = typeStr === 'multiselect' ? 'LIST' : 'DROPDOWN';
+    }
+    // Searchable
+    const isSearchable = isOn(getOption(opts, 'searchable'));
+    // Select All control
+    const showSelectAll = isMulti && (isOn(getOption(opts, 'show_select_all')) || isOn(getOption(opts, 'legend')));
+    const selectAllLabel = getOption(opts, 'select_all_label') || 'Select All';
+    const clearAllLabel = getOption(opts, 'clear_all_label') || 'Clear All';
+    // Image styling options
+    const imgSize = getOption(opts, 'image_size') || '24px';
+    const imgPos = (getOption(opts, 'image_position') || 'LEFT').toUpperCase();
+    const imgFit = getOption(opts, 'image_fit') || 'cover';
+    function postBatch(val) {
+        if (!isInteractive)
+            return;
+        const batch = {};
+        changeActions.forEach((a) => {
+            batch[a.parameterName] = val;
+        });
+        postParameters(batch).then(m => { if (m)
+            renderManifest(m); });
+    }
+    function createOptionImage(src) {
+        if (!src)
+            return null;
+        const img = document.createElement('img');
+        img.src = src;
+        img.className = 'slicer-option-image' + (imgPos === 'TOP' ? ' pos-top' : '');
+        img.style.width = imgSize;
+        img.style.height = imgSize;
+        img.style.objectFit = imgFit;
+        return img;
+    }
+    function createOverflowIndicator() {
+        if (!hasOverflow)
+            return null;
+        const div = document.createElement('div');
+        div.className = isMulti ? 'multiselect-overflow' : 'slicer-overflow';
+        div.textContent = `Showing first ${maxOptions} of ${totalOptions} options`;
+        return div;
+    }
+    // Render based on layout
+    if (layout === 'TILE' || layout === 'BUTTON_BAR' || layout === 'CHIPS') {
+        if (isSearchable) {
+            const searchIn = document.createElement('input');
+            searchIn.type = 'search';
+            searchIn.className = isMulti ? 'multiselect-search' : 'slicer-search';
+            searchIn.placeholder = 'Type to filter…';
+            wrapper.appendChild(searchIn);
+        }
+        if (showSelectAll) {
+            const headerActions = document.createElement('div');
+            headerActions.className = 'multiselect-header-actions';
+            const selAllBtn = document.createElement('button');
+            selAllBtn.type = 'button';
+            selAllBtn.className = 'multiselect-link';
+            selAllBtn.textContent = selectAllLabel;
+            const clrAllBtn = document.createElement('button');
+            clrAllBtn.type = 'button';
+            clrAllBtn.className = 'multiselect-link';
+            clrAllBtn.textContent = clearAllLabel;
+            headerActions.appendChild(selAllBtn);
+            headerActions.appendChild(clrAllBtn);
+            wrapper.appendChild(headerActions);
+            selAllBtn.addEventListener('click', () => {
+                displayedItems.forEach(it => selected.add(it.value));
+                tileContainer.querySelectorAll('.slicer-tile, .multiselect-chip').forEach(t => t.classList.add('active'));
+                postBatch(JSON.stringify(Array.from(selected)));
+            });
+            clrAllBtn.addEventListener('click', () => {
+                selected.clear();
+                tileContainer.querySelectorAll('.slicer-tile, .multiselect-chip').forEach(t => t.classList.remove('active'));
+                postBatch(JSON.stringify([]));
+            });
+        }
+        const tileContainer = document.createElement('div');
+        tileContainer.className = layout === 'BUTTON_BAR' ? 'slicer-button-bar' : (layout === 'CHIPS' ? 'multiselect-chips' : 'slicer-tile-container');
+        if (paramName)
+            tileContainer.setAttribute('data-parameter', paramName);
+        const tileEntries = [];
+        displayedItems.forEach((item) => {
+            const tile = document.createElement('button');
+            tile.type = 'button';
+            tile.className = (layout === 'CHIPS' ? 'multiselect-chip' : 'slicer-tile') + (imgPos === 'TOP' ? ' pos-top' : '');
+            const isSelected = isMulti ? selected.has(item.value) : (selected === item.value);
+            if (isSelected)
+                tile.classList.add('active');
+            setParameterAccessibleName(tile, visual, paramName, item.label);
+            const imgEl = createOptionImage(item.image);
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = item.label;
+            if (imgEl && imgPos === 'RIGHT') {
+                tile.appendChild(labelSpan);
+                tile.appendChild(imgEl);
+            }
+            else {
+                if (imgEl)
+                    tile.appendChild(imgEl);
+                tile.appendChild(labelSpan);
+            }
+            tile.addEventListener('click', () => {
+                if (isMulti) {
+                    if (selected.has(item.value)) {
+                        selected.delete(item.value);
+                        tile.classList.remove('active');
+                    }
+                    else {
+                        selected.add(item.value);
+                        tile.classList.add('active');
+                    }
+                    postBatch(JSON.stringify(Array.from(selected)));
+                }
+                else {
+                    tileContainer.querySelectorAll('.slicer-tile, .multiselect-chip').forEach(t => t.classList.remove('active'));
+                    tile.classList.add('active');
+                    selected = item.value;
+                    postBatch(item.value);
+                }
+            });
+            tileContainer.appendChild(tile);
+            tileEntries.push({ el: tile, item });
+        });
+        wrapper.appendChild(tileContainer);
+        if (isSearchable) {
+            const searchIn = /** @type {HTMLInputElement | null} */ (wrapper.querySelector('.slicer-search, .multiselect-search'));
+            searchIn?.addEventListener('input', () => {
+                const q = searchIn.value.toLowerCase().trim();
+                tileEntries.forEach(({ el, item }) => {
+                    const m = !q || item.label.toLowerCase().includes(q) || item.value.toLowerCase().includes(q);
+                    el.style.display = m ? '' : 'none';
+                });
+            });
+        }
+        const overflowEl = createOverflowIndicator();
+        if (overflowEl)
+            wrapper.appendChild(overflowEl);
+    }
+    else if (layout === 'LIST') {
+        if (isSearchable) {
+            const searchIn = document.createElement('input');
+            searchIn.type = 'search';
+            searchIn.className = isMulti ? 'multiselect-search' : 'slicer-search';
+            searchIn.placeholder = 'Type to filter…';
+            wrapper.appendChild(searchIn);
+        }
+        if (showSelectAll) {
+            const headerActions = document.createElement('div');
+            headerActions.className = 'multiselect-header-actions';
+            const selAllBtn = document.createElement('button');
+            selAllBtn.type = 'button';
+            selAllBtn.className = 'multiselect-link';
+            selAllBtn.textContent = selectAllLabel;
+            const clrAllBtn = document.createElement('button');
+            clrAllBtn.type = 'button';
+            clrAllBtn.className = 'multiselect-link';
+            clrAllBtn.textContent = clearAllLabel;
+            headerActions.appendChild(selAllBtn);
+            headerActions.appendChild(clrAllBtn);
+            wrapper.appendChild(headerActions);
+            selAllBtn.addEventListener('click', () => {
+                displayedItems.forEach(it => selected.add(it.value));
+                /** @type {NodeListOf<HTMLInputElement>} */ (list.querySelectorAll('input[type="checkbox"]')).forEach(cb => { cb.checked = true; });
+                postBatch(JSON.stringify(Array.from(selected)));
+            });
+            clrAllBtn.addEventListener('click', () => {
+                selected.clear();
+                /** @type {NodeListOf<HTMLInputElement>} */ (list.querySelectorAll('input[type="checkbox"]')).forEach(cb => { cb.checked = false; });
+                postBatch(JSON.stringify([]));
+            });
+        }
+        const list = document.createElement('div');
+        list.className = 'multiselect-list';
+        if (paramName)
+            list.setAttribute('data-parameter', paramName);
+        const listEntries = [];
+        displayedItems.forEach((item) => {
+            const itemEl = document.createElement('label');
+            itemEl.className = 'multiselect-item' + (imgPos === 'TOP' ? ' pos-top' : '');
+            const input = document.createElement('input');
+            input.type = isMulti ? 'checkbox' : 'radio';
+            if (!isMulti && paramName)
+                input.name = paramName;
+            input.value = item.value;
+            input.checked = isMulti ? selected.has(item.value) : (selected === item.value);
+            setParameterAccessibleName(input, visual, paramName, item.label);
+            input.addEventListener('change', () => {
+                if (isMulti) {
+                    if (input.checked)
+                        selected.add(item.value);
+                    else
+                        selected.delete(item.value);
+                    postBatch(JSON.stringify(Array.from(selected)));
+                }
+                else {
+                    selected = item.value;
+                    postBatch(item.value);
+                }
+            });
+            const imgEl = createOptionImage(item.image);
+            const span = document.createElement('span');
+            span.textContent = item.label;
+            itemEl.appendChild(input);
+            if (imgEl && imgPos === 'RIGHT') {
+                itemEl.appendChild(span);
+                itemEl.appendChild(imgEl);
+            }
+            else {
+                if (imgEl)
+                    itemEl.appendChild(imgEl);
+                itemEl.appendChild(span);
+            }
+            list.appendChild(itemEl);
+            listEntries.push({ el: itemEl, item });
+        });
+        wrapper.appendChild(list);
+        if (isSearchable) {
+            const searchIn = /** @type {HTMLInputElement | null} */ (wrapper.querySelector('.slicer-search, .multiselect-search'));
+            searchIn?.addEventListener('input', () => {
+                const q = searchIn.value.toLowerCase().trim();
+                listEntries.forEach(({ el, item }) => {
+                    const m = !q || item.label.toLowerCase().includes(q) || item.value.toLowerCase().includes(q);
+                    el.style.display = m ? '' : 'none';
+                });
+            });
+        }
+        const overflowEl = createOverflowIndicator();
+        if (overflowEl)
+            wrapper.appendChild(overflowEl);
+    }
+    else {
+        // DROPDOWN layout
+        if (isMulti) {
+            const dropWrapper = document.createElement('div');
+            dropWrapper.className = 'multiselect-dropdown';
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'multiselect-toggle';
+            const updateToggleText = () => {
+                if (selected.size === 0)
+                    toggle.innerHTML = '<span>All</span>';
+                else if (selected.size === 1)
+                    toggle.innerHTML = `<span>${escHtml(Array.from(selected)[0])}</span>`;
+                else
+                    toggle.innerHTML = `<span>${selected.size} selected</span>`;
+                toggle.innerHTML += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+            };
+            updateToggleText();
+            const popup = document.createElement('div');
+            popup.className = 'multiselect-popup';
+            if (paramName)
+                popup.setAttribute('data-parameter', paramName);
+            if (isSearchable) {
+                const searchIn = document.createElement('input');
+                searchIn.type = 'search';
+                searchIn.className = 'multiselect-search';
+                searchIn.placeholder = 'Type to filter…';
+                searchIn.addEventListener('click', e => e.stopPropagation());
+                popup.appendChild(searchIn);
+            }
+            if (showSelectAll) {
+                const headerActions = document.createElement('div');
+                headerActions.className = 'multiselect-header-actions';
+                const selAllBtn = document.createElement('button');
+                selAllBtn.type = 'button';
+                selAllBtn.className = 'multiselect-link';
+                selAllBtn.textContent = selectAllLabel;
+                const clrAllBtn = document.createElement('button');
+                clrAllBtn.type = 'button';
+                clrAllBtn.className = 'multiselect-link';
+                clrAllBtn.textContent = clearAllLabel;
+                headerActions.appendChild(selAllBtn);
+                headerActions.appendChild(clrAllBtn);
+                popup.appendChild(headerActions);
+                selAllBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    displayedItems.forEach(it => selected.add(it.value));
+                    /** @type {NodeListOf<HTMLInputElement>} */ (popup.querySelectorAll('input[type="checkbox"]')).forEach(cb => { cb.checked = true; });
+                    updateToggleText();
+                    postBatch(JSON.stringify(Array.from(selected)));
+                });
+                clrAllBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selected.clear();
+                    /** @type {NodeListOf<HTMLInputElement>} */ (popup.querySelectorAll('input[type="checkbox"]')).forEach(cb => { cb.checked = false; });
+                    updateToggleText();
+                    postBatch(JSON.stringify([]));
+                });
+            }
+            const popupEntries = [];
+            displayedItems.forEach((item) => {
+                const itemEl = document.createElement('label');
+                itemEl.className = 'multiselect-item';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.value = item.value;
+                cb.checked = selected.has(item.value);
+                const val = item.value;
+                setParameterAccessibleName(cb, visual, param, val);
+                cb.addEventListener('change', () => {
+                    if (cb.checked)
+                        selected.add(item.value);
+                    else
+                        selected.delete(item.value);
+                    updateToggleText();
+                    postBatch(JSON.stringify(Array.from(selected)));
+                });
+                const imgEl = createOptionImage(item.image);
+                const span = document.createElement('span');
+                span.textContent = item.label;
+                itemEl.appendChild(cb);
+                if (imgEl && imgPos === 'RIGHT') {
+                    itemEl.appendChild(span);
+                    itemEl.appendChild(imgEl);
+                }
+                else {
+                    if (imgEl)
+                        itemEl.appendChild(imgEl);
+                    itemEl.appendChild(span);
+                }
+                popup.appendChild(itemEl);
+                popupEntries.push({ el: itemEl, item });
+            });
+            if (isSearchable) {
+                const searchIn = /** @type {HTMLInputElement | null} */ (popup.querySelector('.multiselect-search'));
+                searchIn?.addEventListener('input', () => {
+                    const q = searchIn.value.toLowerCase().trim();
+                    popupEntries.forEach(({ el, item }) => {
+                        const m = !q || item.label.toLowerCase().includes(q) || item.value.toLowerCase().includes(q);
+                        el.style.display = m ? '' : 'none';
+                    });
+                });
+            }
+            const overflowEl = createOverflowIndicator();
+            if (overflowEl)
+                popup.appendChild(overflowEl);
+            toggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = popup.classList.contains('open');
+                document.querySelectorAll('.multiselect-popup.open').forEach(p => p.classList.remove('open'));
+                if (!isOpen)
+                    popup.classList.add('open');
+            });
+            popup.addEventListener('click', e => e.stopPropagation());
+            document.addEventListener('click', () => { popup.classList.remove('open'); });
+            dropWrapper.appendChild(toggle);
+            dropWrapper.appendChild(popup);
+            wrapper.appendChild(dropWrapper);
+        }
+        else {
+            // Single-select dropdown
+            if (isSearchable) {
+                const searchIn = document.createElement('input');
+                searchIn.type = 'search';
+                searchIn.className = 'slicer-search';
+                searchIn.placeholder = 'Type to filter…';
+                wrapper.appendChild(searchIn);
+            }
+            const select = document.createElement('select');
+            setParameterAccessibleName(select, visual, paramName);
+            if (paramName)
+                select.setAttribute('data-parameter', paramName);
+            displayedItems.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item.value;
+                opt.textContent = item.label;
+                select.appendChild(opt);
+            });
+            if (selected !== undefined && selected !== '') {
+                select.value = selected;
+            }
+            if (isInteractive) {
+                select.addEventListener('change', () => {
+                    postBatch(select.value);
+                });
+                wrapper.appendChild(select);
+            }
+            else {
+                const note = document.createElement('p');
+                note.className = 'slicer-note';
+                note.textContent = '[Slicer — interactive in ReportPlayer only]';
+                wrapper.appendChild(note);
+            }
+            if (isSearchable) {
+                const searchIn = /** @type {HTMLInputElement | null} */ (wrapper.querySelector('.slicer-search'));
+                searchIn?.addEventListener('input', () => {
+                    const q = searchIn.value.toLowerCase().trim();
+                    Array.from(select.options).forEach(opt => {
+                        const m = !q || opt.text.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q);
+                        opt.hidden = !m;
+                    });
+                });
+            }
+            const overflowEl = createOverflowIndicator();
+            if (overflowEl)
+                wrapper.appendChild(overflowEl);
+        }
+    }
+    container.appendChild(wrapper);
+}
+// ── Slider ──────────────────────────────────────────────────────────────
+function renderSlider(container, visual, manifest) {
+    const opts = visual.options || {};
+    const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+    const startAction = changeActions.length > 0 ? changeActions[0] : null;
+    const param = startAction ? startAction.parameterName : null;
+    const secondaryParam = (startAction && startAction.secondaryParameterName) || (changeActions.length > 1 ? changeActions[1].parameterName : null);
+    const mode = (getOption(opts, 'mode') || 'SINGLE').toUpperCase();
+    const isRange = mode === 'RANGE';
+    const min = parseFloat(opts['MIN'] || opts['min'] || '0');
+    const max = parseFloat(opts['MAX'] || opts['max'] || '100');
+    const step = parseFloat(opts['STEP'] || opts['step'] || '1');
+    const formatOpt = getOption(opts, 'format');
+    const fireOn = (getOption(opts, 'fire_on') || 'RELEASE').toUpperCase();
+    const showTicks = isOn(getOption(opts, 'show_ticks'));
+    const showTickLabels = isOn(getOption(opts, 'tick_labels'));
+    let dataTicks = null;
+    if (opts['DATA_TICKS']) {
+        try {
+            dataTicks = typeof opts['DATA_TICKS'] === 'string' ? JSON.parse(opts['DATA_TICKS']) : opts['DATA_TICKS'];
+        }
+        catch {
+            // DATA_TICKS is author-supplied; unparseable leaves the computed ticks.
+        }
+    }
+    function snapValue(val) {
+        if (!Array.isArray(dataTicks) || dataTicks.length === 0)
+            return val;
+        let closest = dataTicks[0];
+        let minDiff = Math.abs(val - closest);
+        for (let i = 1; i < dataTicks.length; i++) {
+            const diff = Math.abs(val - dataTicks[i]);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closest = dataTicks[i];
+            }
+        }
+        return closest;
+    }
+    function formatDisplay(val) {
+        return formatOpt ? formatValue(val, formatOpt) : String(val);
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'filter-wrapper' + (isRange ? ' slider-range-wrapper' : '');
+    const datalistId = 'ticks-' + (visual.name || Math.random().toString(36).slice(2));
+    if (showTicks) {
+        const dl = document.createElement('datalist');
+        dl.id = datalistId;
+        if (Array.isArray(dataTicks) && dataTicks.length > 0) {
+            dataTicks.forEach((t) => {
+                const opt = document.createElement('option');
+                opt.value = t;
+                if (showTickLabels)
+                    opt.label = formatDisplay(t);
+                dl.appendChild(opt);
+            });
+        }
+        else {
+            for (let v = min; v <= max; v += step) {
+                const opt = document.createElement('option');
+                opt.value = String(v);
+                if (showTickLabels)
+                    opt.label = formatDisplay(v);
+                dl.appendChild(opt);
+            }
+        }
+        wrapper.appendChild(dl);
+    }
+    if (isRange) {
+        let lowVal = min;
+        let highVal = max;
+        if (manifest && manifest.parameters) {
+            if (param) {
+                const v = parseFloat(getParam(manifest.parameters, param));
+                if (!isNaN(v))
+                    lowVal = v;
+            }
+            if (secondaryParam) {
+                const v = parseFloat(getParam(manifest.parameters, secondaryParam));
+                if (!isNaN(v))
+                    highVal = v;
+            }
+        }
+        else {
+            const def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+            const parts = parseMultiParameter(def);
+            if (parts.length > 0 && !isNaN(parseFloat(parts[0])))
+                lowVal = parseFloat(parts[0]);
+            if (parts.length > 1 && !isNaN(parseFloat(parts[1])))
+                highVal = parseFloat(parts[1]);
+        }
+        lowVal = snapValue(lowVal);
+        highVal = snapValue(highVal);
+        const rangeInputs = document.createElement('div');
+        rangeInputs.className = 'slider-range-inputs';
+        const lowInput = document.createElement('input');
+        lowInput.type = 'range';
+        setParameterAccessibleName(lowInput, visual, param, 'minimum');
+        lowInput.min = String(min);
+        lowInput.max = String(max);
+        lowInput.step = String(step);
+        lowInput.value = String(lowVal);
+        if (showTicks)
+            lowInput.setAttribute('list', datalistId);
+        if (param)
+            lowInput.setAttribute('data-parameter', param);
+        const highInput = document.createElement('input');
+        highInput.type = 'range';
+        setParameterAccessibleName(highInput, visual, secondaryParam, 'maximum');
+        highInput.min = String(min);
+        highInput.max = String(max);
+        highInput.step = String(step);
+        highInput.value = String(highVal);
+        if (showTicks)
+            highInput.setAttribute('list', datalistId);
+        if (secondaryParam)
+            highInput.setAttribute('data-parameter', secondaryParam);
+        const valueLabel = document.createElement('span');
+        valueLabel.className = 'range-value';
+        valueLabel.textContent = `${formatDisplay(lowVal)} – ${formatDisplay(highVal)}`;
+        function updateRangeDisplay() {
+            let l = snapValue(parseFloat(lowInput.value));
+            let h = snapValue(parseFloat(highInput.value));
+            if (l > h) {
+                l = h;
+                lowInput.value = l;
+            }
+            valueLabel.textContent = `${formatDisplay(l)} – ${formatDisplay(h)}`;
+        }
+        function postRangeValues() {
+            let l = snapValue(parseFloat(lowInput.value));
+            let h = snapValue(parseFloat(highInput.value));
+            if (l > h)
+                l = h;
+            if (isWebMode && changeActions.length > 0) {
+                const batch = {};
+                if (param)
+                    batch[param] = String(l);
+                if (secondaryParam)
+                    batch[secondaryParam] = String(h);
+                postParameters(batch).then(m => { if (m)
+                    renderManifest(m); });
+            }
+        }
+        lowInput.addEventListener('input', updateRangeDisplay);
+        highInput.addEventListener('input', updateRangeDisplay);
+        const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
+        const debounceMs = parseInt(debounceOpt || '200', 10);
+        if (fireOn === 'CHANGE') {
+            let timer = null;
+            const debounced = () => {
+                clearTimeout(timer);
+                timer = setTimeout(postRangeValues, debounceMs);
+            };
+            lowInput.addEventListener('input', debounced);
+            highInput.addEventListener('input', debounced);
+        }
+        else {
+            lowInput.addEventListener('change', postRangeValues);
+            highInput.addEventListener('change', postRangeValues);
+        }
+        applyControlState(lowInput, visual, wrapper);
+        if (lowInput.disabled)
+            highInput.disabled = true;
+        rangeInputs.appendChild(lowInput);
+        rangeInputs.appendChild(highInput);
+        wrapper.appendChild(rangeInputs);
+        wrapper.appendChild(valueLabel);
+    }
+    else {
+        // SINGLE mode
+        let def = min;
+        if (param && manifest && manifest.parameters) {
+            const current = parseFloat(getParam(manifest.parameters, param));
+            if (!isNaN(current))
+                def = current;
+        }
+        else {
+            const rawDef = parseFloat(visual.defaultValue || opts['DEFAULT'] || opts['default']);
+            if (!isNaN(rawDef))
+                def = rawDef;
+        }
+        def = snapValue(def);
+        const input = document.createElement('input');
+        input.type = 'range';
+        setParameterAccessibleName(input, visual, param);
+        input.min = String(min);
+        input.max = String(max);
+        input.step = String(step);
+        input.value = String(def);
+        if (showTicks)
+            input.setAttribute('list', datalistId);
+        if (param)
+            input.setAttribute('data-parameter', param);
+        applyControlState(input, visual, wrapper);
+        const valueLabel = document.createElement('span');
+        valueLabel.className = 'range-value';
+        valueLabel.textContent = formatDisplay(def);
+        function updateDisplay() {
+            const snapped = snapValue(parseFloat(input.value));
+            valueLabel.textContent = formatDisplay(snapped);
+        }
+        function postSliderValue() {
+            const snapped = snapValue(parseFloat(input.value));
+            if (isWebMode && changeActions.length > 0) {
+                const batch = changeActions.reduce((o, a) => {
+                    o[a.parameterName] = String(snapped);
+                    return o;
+                }, {});
+                postParameters(batch).then(m => { if (m)
+                    renderManifest(m); });
+            }
+        }
+        input.addEventListener('input', updateDisplay);
+        const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
+        const debounceMs = parseInt(debounceOpt || '200', 10);
+        if (fireOn === 'CHANGE') {
+            let timer = null;
+            input.addEventListener('input', () => {
+                clearTimeout(timer);
+                timer = setTimeout(postSliderValue, debounceMs);
+            });
+        }
+        else {
+            input.addEventListener('change', postSliderValue);
+        }
+        wrapper.appendChild(input);
+        wrapper.appendChild(valueLabel);
+    }
+    container.appendChild(wrapper);
+}
+// ── Search ──────────────────────────────────────────────────────────────
+function renderSearch(container, visual, manifest) {
+    const opts = visual.options || {};
+    const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+    const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
+    const placeholder = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || 'Search…';
+    const showClear = isOn(opts['SHOW_CLEAR'] ?? opts['show_clear']);
+    const matchMode = (getOption(opts, 'match_mode') || 'EXACT').toUpperCase();
+    const minChars = parseInt(getOption(opts, 'min_chars') || '0', 10);
+    function formatSearchValue(raw) {
+        if (!raw)
+            return '';
+        switch (matchMode) {
+            case 'CONTAINS': return `%${raw}%`;
+            case 'STARTS_WITH': return `${raw}%`;
+            default: return raw;
+        }
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'filter-wrapper';
+    const inputShell = document.createElement('div');
+    inputShell.className = 'search-input-shell';
+    const input = document.createElement('input');
+    input.type = 'search';
+    setParameterAccessibleName(input, visual, param);
+    input.placeholder = placeholder;
+    if (param)
+        input.setAttribute('data-parameter', param);
+    // Restore current value from manifest parameters
+    if (param && manifest && manifest.parameters) {
+        const current = getParam(manifest.parameters, param);
+        if (current)
+            input.value = current;
+    }
+    inputShell.appendChild(input);
+    let clearButton = null;
+    if (showClear) {
+        clearButton = document.createElement('button');
+        clearButton.type = 'button';
+        clearButton.className = 'search-clear-button';
+        clearButton.textContent = '×';
+        clearButton.setAttribute('aria-label', `Clear ${visual.title || visual.name || 'search'}`);
+        clearButton.hidden = input.value.length === 0;
+        clearButton.addEventListener('click', () => {
+            input.value = '';
+            clearButton.hidden = true;
+            input.focus();
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        inputShell.appendChild(clearButton);
+    }
+    wrapper.appendChild(inputShell);
+    input.addEventListener('input', () => {
+        if (clearButton)
+            clearButton.hidden = input.value.length === 0;
+    });
+    applyControlState(input, visual, wrapper);
+    if (isWebMode && changeActions.length > 0) {
+        let debounceTimer = null;
+        const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
+        const debounceMs = parseInt(debounceOpt || '350', 10);
+        input.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                const raw = input.value.trim();
+                if (raw.length > 0 && raw.length < minChars) {
+                    return; // Suppress ON_CHANGE until minimum characters typed
+                }
+                const searchVal = raw.length === 0 ? '' : formatSearchValue(raw);
+                const batch = changeActions.reduce((o, a) => {
+                    o[a.parameterName] = searchVal;
+                    return o;
+                }, {});
+                postParameters(batch).then(m => { if (m)
+                    renderManifest(m); });
+            }, debounceMs);
+        });
+    }
+    container.appendChild(wrapper);
+}
+// ── Checkbox ────────────────────────────────────────────────────────────
+function renderCheckbox(container, visual, manifest) {
+    const opts = visual.options || {};
+    const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+    const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
+    const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
+    const labelText = (opts['LABEL'] || opts['label'] || visual.title || visual.name);
+    const displayStyle = (opts['DISPLAY_STYLE'] || opts['display_style'] || 'CHECKBOX').toUpperCase();
+    const isToggle = displayStyle === 'TOGGLE';
+    const trueVal = opts['TRUE_VALUE'] ?? opts['true_value'] ?? '1';
+    const falseVal = opts['FALSE_VALUE'] ?? opts['false_value'] ?? '0';
+    let def = visual.defaultValue ?? opts['DEFAULT'] ?? opts['default'] ?? 'FALSE';
+    let currentVal = undefined;
+    if (param && manifest && manifest.parameters) {
+        currentVal = getParam(manifest.parameters, param);
+    }
+    let checked;
+    if (currentVal !== undefined) {
+        const strVal = String(currentVal).trim();
+        checked = strVal === String(trueVal) || isOn(strVal);
+    }
+    else {
+        const strDef = String(def).trim();
+        checked = strDef === String(trueVal) || isOn(strDef);
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'filter-wrapper checkbox-wrapper pos-' + labelPos.toLowerCase();
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = checked;
+    setParameterAccessibleName(input, visual, param);
+    if (param)
+        input.setAttribute('data-parameter', param);
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    if (isToggle) {
+        const toggleWrapper = document.createElement('label');
+        toggleWrapper.className = 'checkbox-toggle-wrapper';
+        const switchSpan = document.createElement('span');
+        switchSpan.className = 'checkbox-toggle-switch';
+        switchSpan.appendChild(input);
+        const sliderSpan = document.createElement('span');
+        sliderSpan.className = 'checkbox-toggle-slider';
+        switchSpan.appendChild(sliderSpan);
+        toggleWrapper.appendChild(switchSpan);
+        const toggleLabel = document.createElement('span');
+        toggleLabel.className = 'toggle-label';
+        toggleLabel.textContent = labelText;
+        toggleWrapper.appendChild(toggleLabel);
+        wrapper.appendChild(toggleWrapper);
+    }
+    else {
+        if (labelPos === 'TOP' || labelPos === 'LEFT') {
+            wrapper.appendChild(label);
+        }
+        wrapper.appendChild(input);
+        if (labelPos !== 'TOP' && labelPos !== 'LEFT' && labelPos !== 'HIDDEN') {
+            wrapper.appendChild(label);
+        }
+    }
+    if (isWebMode && changeActions.length > 0) {
+        input.addEventListener('change', () => {
+            const val = input.checked ? trueVal : falseVal;
+            const batch = changeActions.reduce((o, a) => {
+                o[a.parameterName] = String(val);
+                return o;
+            }, {});
+            postParameters(batch).then(m => { if (m)
+                renderManifest(m); });
+        });
+    }
+    applyControlState(input, visual, wrapper);
+    container.appendChild(wrapper);
+}
+// ── Textbox ─────────────────────────────────────────────────────────────
+function renderTextbox(container, visual, manifest) {
+    const opts = visual.options || {};
+    const submitActions = actionsFor(visual, 'ON_SUBMIT').filter(a => a.type === 'SET_PARAMETER');
+    const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+    const activeActions = submitActions.length > 0 ? submitActions : changeActions;
+    const param = activeActions.length > 0 ? activeActions[0].parameterName : null;
+    const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
+    const labelText = (opts['LABEL'] || opts['label'] || visual.title || visual.name);
+    const placeholder = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || '';
+    const maxLengthValue = opts['MAX_LENGTH'] ?? opts['max_length'];
+    const maxLength = typeof maxLengthValue === 'number'
+        ? maxLengthValue
+        : Number(String(maxLengthValue ?? '').trim());
+    const isMultiline = isOn(opts['MULTILINE'] ?? opts['multiline']) || opts['ROWS'] != null || opts['rows'] != null;
+    const rows = parseInt(opts['ROWS'] || opts['rows'] || '3', 10);
+    const pattern = opts['PATTERN'] || opts['pattern'] || null;
+    const validationMsg = opts['VALIDATION_MESSAGE'] || opts['validation_message'] || 'Invalid format';
+    let regex = null;
+    if (pattern) {
+        try {
+            regex = new RegExp(pattern);
+        }
+        catch (err) {
+            console.warn(`PATTERN is not a valid regular expression, so this parameter is not validated: ${pattern}`, err);
+        }
+    }
+    let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+    if (param && manifest && manifest.parameters) {
+        const current = getParam(manifest.parameters, param);
+        if (current !== undefined)
+            def = current;
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'filter-wrapper textbox-wrapper pos-' + labelPos.toLowerCase() + (isMultiline ? ' is-multiline' : '');
+    const input = isMultiline ? document.createElement('textarea') : document.createElement('input');
+    if (!isMultiline) /** @type {HTMLInputElement} */
+        (input).type = 'text';
+    else /** @type {HTMLTextAreaElement} */
+        (input).rows = rows > 0 ? rows : 3;
+    setParameterAccessibleName(input, visual, param);
+    input.value = def;
+    input.placeholder = placeholder;
+    if (Number.isSafeInteger(maxLength) && maxLength > 0)
+        input.maxLength = maxLength;
+    if (param)
+        input.setAttribute('data-parameter', param);
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    if (labelPos === 'TOP' || labelPos === 'LEFT') {
+        wrapper.appendChild(label);
+    }
+    wrapper.appendChild(input);
+    const errorEl = document.createElement('div');
+    errorEl.className = 'filter-error';
+    errorEl.textContent = validationMsg;
+    errorEl.style.display = 'none';
+    wrapper.appendChild(errorEl);
+    function validateInput() {
+        if (!regex)
+            return true;
+        const val = input.value;
+        if (val === '') {
+            input.classList.remove('is-invalid');
+            errorEl.style.display = 'none';
+            return true;
+        }
+        const valid = regex.test(val);
+        if (!valid) {
+            input.classList.add('is-invalid');
+            errorEl.style.display = 'block';
+        }
+        else {
+            input.classList.remove('is-invalid');
+            errorEl.style.display = 'none';
+        }
+        return valid;
+    }
+    input.addEventListener('input', () => {
+        if (regex)
+            validateInput();
+    });
+    function postValues(actionsList) {
+        if (!validateInput())
+            return;
+        if (isWebMode && actionsList.length > 0) {
+            const batch = actionsList.reduce((o, a) => {
+                o[a.parameterName] = input.value;
+                return o;
+            }, {});
+            postParameters(batch).then(m => { if (m)
+                renderManifest(m); });
+        }
+    }
+    applyControlState(input, visual, wrapper);
+    if (submitActions.length > 0) {
+        input.addEventListener('blur', () => postValues(submitActions));
+        input.addEventListener('keydown', (e) => {
+            if ( /** @type {KeyboardEvent} */(e).key === 'Enter' && (!isMultiline || /** @type {KeyboardEvent} */ (e).ctrlKey || /** @type {KeyboardEvent} */ (e).metaKey)) {
+                if (!isMultiline)
+                    e.preventDefault();
+                postValues(submitActions);
+            }
+        });
+    }
+    else if (changeActions.length > 0) {
+        const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
+        if (debounceOpt != null) {
+            const debounceMs = parseInt(debounceOpt, 10) || 300;
+            let timer = null;
+            input.addEventListener('input', () => {
+                clearTimeout(timer);
+                timer = setTimeout(() => postValues(changeActions), debounceMs);
+            });
+        }
+        else {
+            input.addEventListener('change', () => postValues(changeActions));
+        }
+    }
+    container.appendChild(wrapper);
+}
+// ── Numberbox ───────────────────────────────────────────────────────────
+function renderNumberbox(container, visual, manifest) {
+    const opts = visual.options || {};
+    const submitActions = actionsFor(visual, 'ON_SUBMIT').filter(a => a.type === 'SET_PARAMETER');
+    const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+    const activeActions = submitActions.length > 0 ? submitActions : changeActions;
+    const param = activeActions.length > 0 ? activeActions[0].parameterName : null;
+    const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
+    const labelText = (opts['LABEL'] || opts['label'] || visual.title || visual.name);
+    const min = visual.min != null ? visual.min : (opts['MIN'] != null ? parseFloat(opts['MIN']) : null);
+    const max = visual.max != null ? visual.max : (opts['MAX'] != null ? parseFloat(opts['MAX']) : null);
+    const decimals = visual.decimals != null ? visual.decimals : (opts['DECIMALS'] != null ? parseInt(opts['DECIMALS'], 10) : 0);
+    const stepOpt = opts['STEP'] || opts['step'];
+    const stepVal = stepOpt != null ? parseFloat(stepOpt) : (decimals > 0 ? Math.pow(10, -decimals) : 1);
+    const stepStr = stepOpt != null ? String(stepOpt) : (decimals > 0 ? Math.pow(10, -decimals).toFixed(decimals) : '1');
+    const showStepper = isOn(opts['SHOW_STEPPER'] ?? opts['show_stepper']);
+    const prefix = opts['PREFIX'] || opts['prefix'] || '';
+    const suffix = opts['SUFFIX'] || opts['suffix'] || '';
+    const formatOpt = opts['FORMAT'] || opts['format'] || null;
+    let def = visual.defaultValue ?? opts['DEFAULT'] ?? opts['default'] ?? '0';
+    let rawNum = parseFloat(def);
+    if (isNaN(rawNum))
+        rawNum = 0;
+    if (param && manifest && manifest.parameters) {
+        const current = getParam(manifest.parameters, param);
+        if (current !== undefined && !isNaN(parseFloat(current)))
+            rawNum = parseFloat(current);
+    }
+    const wrapper = document.createElement('div');
+    wrapper.className = 'filter-wrapper numberbox-wrapper pos-' + labelPos.toLowerCase();
+    const input = document.createElement('input');
+    input.type = formatOpt ? 'text' : 'number';
+    setParameterAccessibleName(input, visual, param);
+    input.placeholder = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || '';
+    if (min !== undefined && min !== null)
+        input.min = min;
+    if (max !== null && max !== undefined)
+        input.max = max;
+    input.step = stepStr;
+    if (param)
+        input.setAttribute('data-parameter', param);
+    function displayVal(val) {
+        return formatOpt ? formatValue(val, formatOpt) : String(val);
+    }
+    input.value = displayVal(rawNum);
+    if (formatOpt) {
+        input.addEventListener('focus', () => {
+            input.value = String(rawNum);
+        });
+        input.addEventListener('blur', () => {
+            const parsed = parseFloat(input.value);
+            if (!isNaN(parsed))
+                rawNum = parsed;
+            input.value = displayVal(rawNum);
+        });
+    }
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    if (labelPos === 'TOP' || labelPos === 'LEFT') {
+        wrapper.appendChild(label);
+    }
+    function setNumericValue(val) {
+        let n = val;
+        if (min !== null && min !== undefined && n < min)
+            n = min;
+        if (max !== null && max !== undefined && n > max)
+            n = max;
+        rawNum = n;
+        input.value = (document.activeElement === input && formatOpt) ? String(rawNum) : displayVal(rawNum);
+    }
+    function postValues(actionsList) {
+        const parsed = parseFloat(input.value.replace(/[^0-9.-]+/g, ''));
+        if (!isNaN(parsed))
+            setNumericValue(parsed);
+        if (isWebMode && actionsList.length > 0) {
+            const batch = actionsList.reduce((o, a) => {
+                o[a.parameterName] = String(rawNum);
+                return o;
+            }, {});
+            postParameters(batch).then(m => { if (m)
+                renderManifest(m); });
+        }
+    }
+    const hasGroup = prefix || suffix || showStepper;
+    if (hasGroup) {
+        const group = document.createElement('div');
+        group.className = 'numberbox-group';
+        if (prefix) {
+            const preSpan = document.createElement('span');
+            preSpan.className = 'numberbox-prefix';
+            preSpan.textContent = prefix;
+            group.appendChild(preSpan);
+        }
+        if (showStepper) {
+            const decBtn = document.createElement('button');
+            decBtn.type = 'button';
+            decBtn.className = 'numberbox-stepper-btn stepper-dec';
+            decBtn.textContent = '−';
+            decBtn.setAttribute('aria-label', `Decrease ${labelText}`);
+            decBtn.addEventListener('click', () => {
+                setNumericValue(rawNum - stepVal);
+                postValues(activeActions);
+            });
+            group.appendChild(decBtn);
+        }
+        group.appendChild(input);
+        if (showStepper) {
+            const incBtn = document.createElement('button');
+            incBtn.type = 'button';
+            incBtn.className = 'numberbox-stepper-btn stepper-inc';
+            incBtn.textContent = '+';
+            incBtn.setAttribute('aria-label', `Increase ${labelText}`);
+            incBtn.addEventListener('click', () => {
+                setNumericValue(rawNum + stepVal);
+                postValues(activeActions);
+            });
+            group.appendChild(incBtn);
+        }
+        if (suffix) {
+            const sufSpan = document.createElement('span');
+            sufSpan.className = 'numberbox-suffix';
+            sufSpan.textContent = suffix;
+            group.appendChild(sufSpan);
+        }
+        wrapper.appendChild(group);
+    }
+    else {
+        wrapper.appendChild(input);
+    }
+    applyControlState(input, visual, wrapper);
+    if (input.disabled) {
+        /** @type {NodeListOf<HTMLInputElement | HTMLButtonElement>} */ (wrapper.querySelectorAll('.numberbox-stepper-btn')).forEach(b => b.disabled = true);
+    }
+    if (submitActions.length > 0) {
+        input.addEventListener('blur', () => postValues(submitActions));
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                postValues(submitActions);
+            }
+        });
+    }
+    else if (changeActions.length > 0) {
+        const debounceOpt = opts['DEBOUNCE'] || opts['debounce'];
+        if (debounceOpt != null) {
+            const debounceMs = parseInt(debounceOpt, 10) || 300;
+            let timer = null;
+            input.addEventListener('input', () => {
+                clearTimeout(timer);
+                timer = setTimeout(() => postValues(changeActions), debounceMs);
+            });
+        }
+        else {
+            input.addEventListener('change', () => postValues(changeActions));
+        }
+    }
+    container.appendChild(wrapper);
+}
+// ── Button ──────────────────────────────────────────────────────────────
+function renderButton(container, btn) {
+    const styles = btn.styles || {};
+    const opts = btn.options || {};
+    const btnEl = document.createElement('button');
+    applyDesignTokens(btnEl, btn.styles, false);
+    btnEl.className = 'report-btn';
+    btnEl.setAttribute('data-name', btn.name);
+    const variant = (getOption(opts, 'VARIANT') || 'secondary').toLowerCase();
+    btnEl.classList.add('btn-' + variant);
+    const tag = getOption(opts, 'TAG') || getStyle(styles, 'TAG');
+    if (tag)
+        btnEl.setAttribute('data-tag', tag);
+    if (btn.tooltip && btn.tooltip.text)
+        btnEl.title = btn.tooltip.text;
+    // Apply inline styles from STYLE definition
+    const bg = getStyle(styles, 'BACKGROUND') || getStyle(styles, 'BACKGROUND-COLOR');
+    const fg = getStyle(styles, 'COLOR');
+    const pad = getStyle(styles, 'PADDING');
+    const rad = getStyle(styles, 'BORDER-RADIUS');
+    const fw = getStyle(styles, 'FONT-WEIGHT');
+    const fs = getStyle(styles, 'FONT-SIZE');
+    const brd = getStyle(styles, 'BORDER');
+    const shd = getStyle(styles, 'BOX-SHADOW');
+    if (bg)
+        btnEl.style.background = bg;
+    if (fg)
+        btnEl.style.color = fg;
+    if (pad)
+        btnEl.style.padding = pad;
+    if (rad)
+        btnEl.style.borderRadius = rad;
+    if (fw)
+        btnEl.style.fontWeight = fw;
+    if (fs)
+        btnEl.style.fontSize = fs;
+    if (brd)
+        btnEl.style.border = brd;
+    if (shd)
+        btnEl.style.boxShadow = shd;
+    btnEl.style.cursor = 'pointer';
+    if (!brd && !variant)
+        btnEl.style.border = 'none';
+    if (!fw)
+        btnEl.style.fontWeight = '600';
+    const icon = getOption(opts, 'ICON');
+    const iconPos = (getOption(opts, 'ICON_POSITION') || 'left').toLowerCase();
+    const baseTitle = btn.title || btn.name;
+    function updateButtonContent(titleText) {
+        btnEl.innerHTML = '';
+        const textSpan = document.createElement('span');
+        textSpan.className = 'btn-label';
+        textSpan.textContent = titleText;
+        let iconEl = null;
+        if (icon) {
+            iconEl = document.createElement('span');
+            iconEl.className = 'btn-icon';
+            if (icon.includes('.') || icon.includes('/')) {
+                iconEl.innerHTML = `<img src="${escHtml(safeUrl(icon))}" style="width:16px;height:16px;vertical-align:middle;">`;
+            }
+            else {
+                iconEl.textContent = icon;
+            }
+        }
+        if (iconEl && iconPos === 'left') {
+            btnEl.appendChild(iconEl);
+            btnEl.appendChild(document.createTextNode(' '));
+        }
+        btnEl.appendChild(textSpan);
+        if (iconEl && iconPos === 'right') {
+            btnEl.appendChild(document.createTextNode(' '));
+            btnEl.appendChild(iconEl);
+        }
+    }
+    updateButtonContent(baseTitle);
+    // Disabled expression
+    const disabledExpr = getOption(opts, 'DISABLED') || getStyle(styles, 'DISABLED');
+    if (disabledExpr != null && evaluateExpressionAgainstParameters(disabledExpr, parameters)) {
+        btnEl.disabled = true;
+        btnEl.classList.add('is-disabled');
+        btnEl.setAttribute('aria-disabled', 'true');
+    }
+    // Toggle mode support
+    const mode = (getOption(opts, 'MODE') || '').toUpperCase();
+    const isToggle = mode === 'TOGGLE';
+    const onValue = getOption(opts, 'ON_VALUE') || '1';
+    const offValue = getOption(opts, 'OFF_VALUE') || '0';
+    const defaultState = (getOption(opts, 'DEFAULT') || 'OFF').toUpperCase();
+    let isToggledOn = _uiStates[btn.name]?.toggled ?? (defaultState === 'ON');
+    if (isToggle) {
+        btnEl.classList.add('mode-toggle');
+        if (isToggledOn)
+            btnEl.classList.add('btn-active');
+    }
+    // Mark RUN buttons so updateStagedUI can target them precisely
+    if ((btn.actions || []).some((a) => a.type === 'APPLY_PARAMETERS')) {
+        btnEl.dataset.isRunBtn = 'true';
+    }
+    btnEl.addEventListener('click', async () => {
+        if (btnEl.disabled)
+            return;
+        // Confirm prompt
+        const confirmMsg = getOption(opts, 'CONFIRM');
+        if (confirmMsg) {
+            if (!await window.ETLSQLFeedback.confirm(confirmMsg, { title: 'Confirm action', confirmLabel: 'Continue', auditAction: `report.button.${btn.name}` }))
+                return;
+        }
+        // Toggle mode state flip
+        if (isToggle) {
+            isToggledOn = !isToggledOn;
+            _uiStates[btn.name] = Object.assign({}, _uiStates[btn.name], { toggled: isToggledOn });
+            if (isToggledOn)
+                btnEl.classList.add('btn-active');
+            else
+                btnEl.classList.remove('btn-active');
+            const toggleVal = isToggledOn ? onValue : offValue;
+            const setParams = (btn.actions || []).filter((a) => a.type === 'SET_PARAMETER');
+            if (setParams.length > 0 && !setParams[0].valueExpression) {
+                const batch = {};
+                setParams.forEach((a) => batch[a.parameterName] = toggleVal);
+                if (vscode)
+                    vscode.postMessage({ type: 'refreshReport', parameters: batch });
+                else
+                    postParameters(batch).then(m => { if (m)
+                        renderManifest(m); });
+                return;
+            }
+        }
+        const clickActions = actionsFor(btn, 'ON_CLICK');
+        if (clickActions.length === 0)
+            return;
+        // Spinner feedback
+        const showSpinner = isOn(getOption(opts, 'SHOW_SPINNER'));
+        let spinnerEl = null;
+        if (showSpinner) {
+            btnEl.classList.add('btn-loading');
+            spinnerEl = document.createElement('span');
+            spinnerEl.className = 'btn-spinner';
+            btnEl.prepend(spinnerEl);
+        }
+        try {
+            for (const action of clickActions) {
+                await executeAction(action, [], [], btn.name, btn);
+            }
+        }
+        finally {
+            if (spinnerEl) {
+                spinnerEl.remove();
+                btnEl.classList.remove('btn-loading');
+            }
+        }
+    });
+    container.appendChild(btnEl);
+}
+
+
+// ─── rt-visual.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-visual.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Visual dispatch, cards, text, images, HTML, and maximization.
+ */
+// Rendering, layout, actions, chrome, and the entry module deliberately form a cycle.
+// Cross-cycle functions use hoisted declarations; imported state is read only when
+// those functions run. Boot starts after the graph has evaluated. Preserve that
+// ordering when adding top-level work or changing functions to const declarations.
+let _maximizedVisualCard = null;
+function resizeChartsIn(section) {
+    section.querySelectorAll('.chart-wrapper').forEach(() => {
+    });
+}
+const NON_MAXIMIZABLE_CONTROL_TYPES = new Set([
+    'SLICER', 'MULTISELECT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER',
+    'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'
+]);
+function shouldShowVisualToolbar(type, styles) {
+    const allowMaximize = getStyle(styles, 'ALLOW_MAXIMIZE');
+    if (isOn(allowMaximize))
+        return true;
+    if (isOff(allowMaximize))
+        return false;
+    return !NON_MAXIMIZABLE_CONTROL_TYPES.has(type);
+}
+function addVisualToolbar(card) {
+    card.classList.add('has-visual-toolbar');
+    const toolbar = document.createElement('div');
+    toolbar.className = 'visual-toolbar';
+    const maxBtn = document.createElement('button');
+    maxBtn.type = 'button';
+    maxBtn.className = 'visual-tool-btn';
+    maxBtn.textContent = '[]';
+    maxBtn.title = 'Maximize visual';
+    maxBtn.setAttribute('aria-label', 'Maximize visual');
+    maxBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        toggleVisualMaximize(card, maxBtn);
+    });
+    toolbar.appendChild(maxBtn);
+    card.appendChild(toolbar);
+}
+function toggleVisualMaximize(card, button) {
+    if (_maximizedVisualCard && _maximizedVisualCard !== card) {
+        closeMaximizedVisual();
+    }
+    const isOpening = !card.classList.contains('visual-maximized');
+    if (!isOpening) {
+        closeMaximizedVisual();
+        return;
+    }
+    _maximizedVisualCard = card;
+    // Teleport card to <body> so position:fixed anchors to viewport regardless of
+    // any CSS transform/contain on ancestor elements in the portal layout.
+    card._maxOriginalParent = card.parentElement;
+    card._maxNextSibling = card.nextSibling;
+    // Capture inherited design tokens before teleporting outside container/page DOM hierarchy
+    const computed = typeof getComputedStyle === 'function' ? getComputedStyle(card) : null;
+    card._maxOrigTokens = {};
+    const tokenProps = new Set(ALLOWED_TOKEN_NAMES);
+    for (let i = 0; i < card.style.length; i++) {
+        const p = card.style[i];
+        if (isAllowedTokenName(p))
+            tokenProps.add(p);
+    }
+    if (computed) {
+        for (let i = 0; i < computed.length; i++) {
+            const p = computed[i];
+            if (isAllowedTokenName(p))
+                tokenProps.add(p);
+        }
+    }
+    for (const token of tokenProps) {
+        const inlineVal = card.style.getPropertyValue(token);
+        if (inlineVal) {
+            card._maxOrigTokens[token] = inlineVal;
+        }
+        const effVal = inlineVal || (computed ? computed.getPropertyValue(token) : '');
+        if (effVal) {
+            card.style.setProperty(token, effVal.trim());
+        }
+    }
+    document.body.appendChild(card);
+    card.classList.add('visual-maximized');
+    // Override any transparent/glass inline background so maximized card is fully opaque.
+    card._maxOrigBg = card.style.backgroundColor;
+    card._maxOrigBgImage = card.style.backgroundImage;
+    card.style.backgroundColor = card.classList.contains('theme-dark') ? '#1e1e1e' : '#fff';
+    card.style.backgroundImage = 'none';
+    document.body.classList.add('visual-maximize-active');
+    if (button) {
+        button.textContent = 'x';
+        button.title = 'Restore visual';
+        button.setAttribute('aria-label', 'Restore visual');
+    }
+    setTimeout(() => resizeChartsIn(card), 50);
+}
+function closeMaximizedVisual() {
+    if (!_maximizedVisualCard)
+        return;
+    const card = _maximizedVisualCard;
+    card.classList.remove('visual-maximized');
+    document.body.classList.remove('visual-maximize-active');
+    // Restore card to its original position in the layout
+    if (card._maxOriginalParent) {
+        card._maxOriginalParent.insertBefore(card, card._maxNextSibling || null);
+        card._maxOriginalParent = null;
+        card._maxNextSibling = null;
+    }
+    // Restore original design tokens
+    const currentTokenProps = [];
+    for (let i = 0; i < card.style.length; i++) {
+        const p = card.style[i];
+        if (isAllowedTokenName(p))
+            currentTokenProps.push(p);
+    }
+    for (const p of currentTokenProps) {
+        if (card._maxOrigTokens && card._maxOrigTokens[p] !== undefined) {
+            card.style.setProperty(p, card._maxOrigTokens[p]);
+        }
+        else {
+            card.style.removeProperty(p);
+        }
+    }
+    if (card._maxOrigTokens) {
+        for (const [token, val] of Object.entries(card._maxOrigTokens)) {
+            card.style.setProperty(token, val);
+        }
+    }
+    card._maxOrigTokens = null;
+    // Reset inline dimensions on chart container divs to let layout reflow correctly
+    card.querySelectorAll('.chart-wrapper > div').forEach(el => {
+        el.style.width = '100%';
+        el.style.height = '100%';
+    });
+    // Restore original background
+    card.style.backgroundColor = card._maxOrigBg || '';
+    card.style.backgroundImage = card._maxOrigBgImage || '';
+    card._maxOrigBg = null;
+    card._maxOrigBgImage = null;
+    const button = card.querySelector('.visual-tool-btn');
+    if (button) {
+        button.textContent = '[]';
+        button.title = 'Maximize visual';
+        button.setAttribute('aria-label', 'Maximize visual');
+    }
+    _maximizedVisualCard = null;
+    setTimeout(() => resizeChartsIn(card), 50);
+}
+// Filter types that render without requiring rows
+const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'HTML', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX', 'IMAGE']);
+function renderVisual(container, visual, pageTheme, manifest, embedDepth = 0) {
+    const card = document.createElement('div');
+    card.className = 'visual-card';
+    card.setAttribute('data-name', visual.name);
+    applyDesignTokens(card, visual, false, manifest);
+    card.setAttribute('data-visual-name', visual.name); // Compatibility
+    const tag = getOption(visual.options, 'TAG');
+    if (tag)
+        card.setAttribute('data-tag', tag);
+    const vopts = visual.options || {};
+    const visibleExpr = vopts['VISIBLE'] || vopts['visible'];
+    if (visibleExpr != null && !evaluateExpressionAgainstParameters(visibleExpr, parameters)) {
+        card.style.display = 'none';
+        card.setAttribute('aria-hidden', 'true');
+    }
+    const dependsOn = vopts['DEPENDS_ON'] || vopts['depends_on'];
+    if (dependsOn)
+        card.setAttribute('data-depends-on', dependsOn);
+    /** @type {EtlSqlVisualHost} */ (card)._visualData = visual;
+    // Apply WIDTH / HEIGHT / TOOLTIP from styles
+    const vstyles = visual.styles || {};
+    const width = getStyle(vstyles, 'WIDTH');
+    const height = getStyle(vstyles, 'HEIGHT');
+    const styleTooltip = getStyle(vstyles, 'TOOLTIP');
+    const tooltip = visual.tooltip;
+    const opacity = getStyle(vstyles, 'OPACITY');
+    const bgColor = getStyle(vstyles, 'BACKGROUND-COLOR') || getStyle(vstyles, 'BACKGROUND');
+    const border = getStyle(vstyles, 'BORDER');
+    const borderRadius = getStyle(vstyles, 'BORDER-RADIUS') || getStyle(vstyles, 'BORDER_RADIUS');
+    const shadow = getStyle(vstyles, 'SHADOW');
+    if (width)
+        card.style.width = width;
+    if (height)
+        card.style.height = height;
+    if (opacity)
+        card.style.opacity = opacity;
+    if (border)
+        card.style.border = border;
+    if (borderRadius)
+        card.style.borderRadius = borderRadius;
+    if (isOn(shadow))
+        card.style.boxShadow = '0 6px 18px rgba(15, 23, 42, 0.16)';
+    else if (shadow && !isOff(shadow))
+        card.style.boxShadow = shadow;
+    if (bgColor) {
+        const normalized = bgColor.trim().toLowerCase();
+        const isTransparent = normalized === 'transparent' || normalized === 'rgba(0,0,0,0)' || normalized === 'rgba(0, 0, 0, 0)';
+        if (isTransparent) {
+            card.style.backgroundColor = 'transparent';
+            card.style.backgroundImage = 'none';
+        }
+        else {
+            // Layer over the CSS theme base color; keeps #1e1e1e dark base intact for dark-themed cards.
+            card.style.backgroundImage = `linear-gradient(${bgColor}, ${bgColor})`;
+        }
+    }
+    const tooltipText = styleTooltip || (tooltip && tooltip.type === 'text' ? tooltip.text : null);
+    if (tooltipText)
+        card.title = tooltipText;
+    if (isOff(getOption(visual.options, 'VISIBLE'))) {
+        card.style.display = 'none';
+    }
+    const title = document.createElement('h3');
+    const customTitle = getOption(visual.options, 'TITLE') || getOption(visual.options, 'title');
+    if (customTitle) {
+        if (visual.titleIsMarkdown) {
+            title.innerHTML = renderInlineMarkdown(customTitle);
+        }
+        else {
+            title.textContent = customTitle;
+        }
+    }
+    else {
+        title.textContent = visual.name;
+    }
+    const tColor = getStyle(vstyles, 'TITLE_COLOR');
+    const tSize = getStyle(vstyles, 'TITLE_SIZE');
+    const tWeight = getStyle(vstyles, 'TITLE_WEIGHT');
+    const tFont = getStyle(vstyles, 'TITLE_FONT');
+    const tAlign = getStyle(vstyles, 'TITLE_ALIGN');
+    if (tColor)
+        title.style.color = tColor;
+    if (tSize)
+        title.style.fontSize = tSize.includes('px') || tSize.includes('rem') || tSize.includes('em') || tSize.includes('%') ? tSize : (tSize + 'px');
+    if (tWeight)
+        title.style.fontWeight = tWeight;
+    if (tFont)
+        title.style.fontFamily = tFont;
+    if (tAlign)
+        title.style.textAlign = tAlign.toLowerCase();
+    const customSubtitle = getOption(visual.options, 'SUBTITLE') || getOption(visual.options, 'subtitle');
+    let subtitleEl = null;
+    if (customSubtitle) {
+        subtitleEl = document.createElement('div');
+        subtitleEl.className = 'card-subtitle visual-subtitle';
+        if (visual.subtitleIsMarkdown) {
+            subtitleEl.innerHTML = renderInlineMarkdown(customSubtitle);
+        }
+        else {
+            subtitleEl.textContent = customSubtitle;
+        }
+        const sColor = getStyle(vstyles, 'SUBTITLE_COLOR');
+        const sSize = getStyle(vstyles, 'SUBTITLE_SIZE');
+        const sWeight = getStyle(vstyles, 'SUBTITLE_WEIGHT');
+        const sFont = getStyle(vstyles, 'SUBTITLE_FONT');
+        const sAlign = getStyle(vstyles, 'SUBTITLE_ALIGN') || tAlign;
+        if (sColor)
+            subtitleEl.style.color = sColor;
+        if (sSize)
+            subtitleEl.style.fontSize = sSize.includes('px') || sSize.includes('rem') || sSize.includes('em') || sSize.includes('%') ? sSize : (sSize + 'px');
+        if (sWeight)
+            subtitleEl.style.fontWeight = sWeight;
+        if (sFont)
+            subtitleEl.style.fontFamily = sFont;
+        if (sAlign)
+            subtitleEl.style.textAlign = sAlign.toLowerCase();
+    }
+    const type = (visual.visualType || '').toUpperCase();
+    // Hide outer redundant header if CARD has its own internal card-label or mapping:label
+    const isCardType = type === 'CARD' || type === 'KPI' || Boolean(getOption(visual.options, 'mapping:label'));
+    if (isCardType)
+        title.style.display = 'none';
+    card.appendChild(title);
+    if (subtitleEl && !isCardType)
+        card.appendChild(subtitleEl);
+    if (type === 'HTML') {
+        card.id = htmlVisualContainerId(visual.name);
+    }
+    if (shouldShowVisualToolbar(type, vstyles)) {
+        addVisualToolbar(card);
+    }
+    if (visual.error) {
+        card.appendChild(errorEl(visual.error));
+        container.appendChild(card);
+        return;
+    }
+    // Deferred ON_RUN visuals show a placeholder until the paginated page is run.
+    if (visual.isHidden) {
+        card.classList.add('deferred-visual');
+        const ph = document.createElement('div');
+        ph.className = 'deferred-placeholder';
+        ph.textContent = 'Configure parameters above and click Run to load data.';
+        card.appendChild(ph);
+        container.appendChild(card);
+        return;
+    }
+    if (hasDeferredRows(visual)) {
+        const loading = document.createElement('div');
+        loading.className = 'empty-state';
+        const count = visual.rowsSource && visual.rowsSource.rowCount ? Number(visual.rowsSource.rowCount).toLocaleString() : '';
+        loading.innerHTML = '<div class="empty-icon">...</div>' +
+            '<p>Loading' + (count ? ' ' + escHtml(count) : '') + ' rows.</p>';
+        card.appendChild(loading);
+        container.appendChild(card);
+        const nextSibling = card.nextSibling;
+        loadVisualRows(visual)
+            .then(() => {
+            const parent = card.parentElement;
+            if (!parent)
+                return;
+            card.remove();
+            renderVisual(parent, visual, pageTheme, manifest, embedDepth);
+            const rendered = parent.lastElementChild;
+            if (nextSibling && rendered)
+                parent.insertBefore(rendered, nextSibling);
+        })
+            .catch(e => {
+            loading.replaceChildren(errorEl(e.message || 'Failed to load visual rows.'));
+            publishExportState('error', { reason: 'lazy-rows-failed', message: e.message });
+        });
+        return;
+    }
+    // Empty state handling: If not a filter/text type and no data rows, show "No Data" icon + message.
+    if (!FILTER_TYPES.has(type) && (!visual.rows || visual.rows.length === 0)) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.innerHTML = '<div class="empty-icon">\u2205</div>' +
+            '<p>No data matches the current filters.</p>';
+        card.appendChild(empty);
+        container.appendChild(card);
+        return;
+    }
+    // Resolve effective theme: visual-level overrides page-level
+    const effectiveTheme = (getStyle(vstyles, 'THEME') || pageTheme || null);
+    if (effectiveTheme)
+        card.classList.add('theme-' + effectiveTheme.toLowerCase());
+    switch (type) {
+        case 'TABLE':
+            renderTable(card, visual, manifest);
+            break;
+        case 'CARD':
+            renderCard(card, visual);
+            break;
+        case 'SLICER':
+        case 'MULTISELECT':
+            renderSlicer(card, visual, manifest);
+            break;
+        case 'TEXT':
+            renderText(card, visual);
+            break;
+        case 'HTML':
+            renderHtmlVisual(card, visual, manifest, embedDepth);
+            break;
+        case 'DATEPICKER':
+            renderDatePicker(card, visual, manifest);
+            break;
+        case 'RELDATEPICKER':
+            renderRelDatePicker(card, visual, manifest);
+            break;
+        case 'SLIDER':
+            renderSlider(card, visual, manifest);
+            break;
+        case 'SEARCH':
+            renderSearch(card, visual, manifest);
+            break;
+        case 'CHECKBOX':
+            renderCheckbox(card, visual, manifest);
+            break;
+        case 'TEXTBOX':
+            renderTextbox(card, visual, manifest);
+            break;
+        case 'NUMBERBOX':
+            renderNumberbox(card, visual, manifest);
+            break;
+        case 'IMAGE':
+            renderImage(card, visual);
+            break;
+        // MATRIX is an interactive pivot table, not a chart. Its HTML renderer preserves
+        // nested headers, subtotals, scrolling, and expand/collapse behavior.
+        case 'MATRIX':
+            renderMatrix(card, visual);
+            break;
+        default:
+            visual.nativeSvg
+                ? renderNativeSvg(card, visual, manifest, effectiveTheme)
+                : renderMissingChartPayload(card, visual);
+            break;
+    }
+    // DRILL_IN breadcrumb: shown when visual has an active drill state
+    if (visual.drillState?.hierarchy?.length > 0) {
+        const bc = document.createElement('div');
+        bc.className = 'drill-breadcrumb';
+        // Segments: root label (hierarchy[0]) + each path segment
+        const segs = [{ label: visual.drillState.hierarchy[0], depth: 0 }]
+            .concat((visual.drillState.path || []).map((s, i) => ({ label: s.value, depth: i + 1 })));
+        segs.forEach((seg, i) => {
+            const sp = document.createElement('span');
+            const isActive = i === segs.length - 1;
+            sp.className = 'bc-seg' + (isActive ? ' bc-seg-active' : ' bc-seg-link');
+            sp.textContent = seg.label;
+            if (!isActive) {
+                sp.addEventListener('click', () => postDrillUp(visual.name, seg.depth));
+            }
+            bc.appendChild(sp);
+            if (!isActive) {
+                const sep = document.createElement('span');
+                sep.className = 'bc-sep';
+                sep.textContent = ' › ';
+                bc.appendChild(sep);
+            }
+        });
+        card.insertBefore(bc, card.firstChild);
+    }
+    // Drill-through affordance: cursor + badge when visual has DRILL_DOWN actions
+    if ((visual.actions || []).some((a) => a.type === 'DRILL_DOWN')) {
+        card.classList.add('has-drill-down');
+        const badge = document.createElement('span');
+        badge.className = 'drill-badge';
+        badge.title = 'Right-click to drill through';
+        badge.textContent = '⬇';
+        card.appendChild(badge);
+    }
+    // Drill-in affordance: cursor + badge when visual has DRILL_IN actions
+    if ((visual.actions || []).some((a) => a.type === 'DRILL_IN')) {
+        card.classList.add('has-drill-in');
+        const badge = document.createElement('span');
+        badge.className = 'drill-badge';
+        badge.title = 'Click to drill in';
+        badge.textContent = '↧';
+        card.appendChild(badge);
+    }
+    container.appendChild(card);
+}
+const HTML_VISUAL_ELEMENTS = new Set([
+    'DIV', 'SPAN', 'SECTION', 'ARTICLE', 'ASIDE', 'HEADER', 'FOOTER', 'NAV', 'MAIN',
+    'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'P', 'BR', 'HR', 'PRE', 'CODE', 'BLOCKQUOTE',
+    'EM', 'STRONG', 'I', 'B', 'U', 'S', 'SMALL', 'SUB', 'SUP', 'MARK', 'ABBR', 'TIME',
+    'CITE', 'Q', 'DFN', 'VAR', 'KBD', 'SAMP', 'UL', 'OL', 'LI', 'DL', 'DT', 'DD',
+    'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TH', 'TD', 'CAPTION', 'COLGROUP', 'COL',
+    'IMG', 'FIGURE', 'FIGCAPTION', 'PICTURE', 'SOURCE', 'A', 'BUTTON', 'DETAILS',
+    'SUMMARY', 'DATA', 'METER', 'PROGRESS', 'OUTPUT'
+]);
+const HTML_VISUAL_GLOBAL_ATTRIBUTES = new Set([
+    'class', 'id', 'title', 'lang', 'dir', 'role', 'tabindex', 'hidden'
+]);
+const HTML_VISUAL_ELEMENT_ATTRIBUTES = {
+    A: new Set(['href', 'target', 'rel']),
+    IMG: new Set(['src', 'alt', 'width', 'height', 'loading']),
+    BUTTON: new Set(['type', 'disabled', 'data-action', 'data-param', 'data-value']),
+    TD: new Set(['colspan', 'rowspan', 'scope', 'headers']),
+    TH: new Set(['colspan', 'rowspan', 'scope', 'headers']),
+    COL: new Set(['span']), COLGROUP: new Set(['span']),
+    OL: new Set(['start', 'type', 'reversed']), TIME: new Set(['datetime']),
+    METER: new Set(['min', 'max', 'low', 'high', 'optimum', 'value']),
+    PROGRESS: new Set(['max', 'value']), DATA: new Set(['value']), ABBR: new Set(['title']),
+    BLOCKQUOTE: new Set(['cite']), Q: new Set(['cite']),
+    SOURCE: new Set(['srcset', 'type', 'media']), DETAILS: new Set(['open'])
+};
+function htmlVisualContainerId(name) {
+    return 'etl-v-' + String(name || '').toLowerCase().replaceAll(' ', '-');
+}
+function isSafeHtmlVisualUrl(value) {
+    const url = String(value || '').trim();
+    /* eslint-disable-next-line no-control-regex -- matching control characters is the point:
+           a URL carrying one is how a javascript: scheme gets past a prefix check. */
+    if (/[\u0000-\u001f\u007f]/.test(url))
+        return false;
+    if (/^(https?:|mailto:|tel:|#)/i.test(url))
+        return true;
+    if (/^data:image\/(png|jpeg|gif|webp)(;|,)/i.test(url))
+        return true;
+    if (!/^data:image\/svg\+xml(?:;charset=[^;,]+)?(?:;base64)?,/i.test(url))
+        return false;
+    try {
+        const comma = url.indexOf(',');
+        const header = url.slice(0, comma);
+        const payload = url.slice(comma + 1);
+        const svg = /;base64/i.test(header) ? atob(payload) : decodeURIComponent(payload);
+        return !/<\s*(?:script|foreignObject)\b|\bon[a-z]+\s*=|(?:href|src)\s*=\s*['"]?\s*javascript:/i.test(svg);
+    }
+    catch {
+        return false;
+    }
+}
+function copyHtmlVisualNode(source, ownerDocument) {
+    if (source.nodeType === Node.TEXT_NODE)
+        return ownerDocument.createTextNode(source.nodeValue || '');
+    if (source.nodeType !== Node.ELEMENT_NODE)
+        return null;
+    const sourceElement = source;
+    if (!HTML_VISUAL_ELEMENTS.has(sourceElement.tagName))
+        return null;
+    const target = ownerDocument.createElement(sourceElement.tagName.toLowerCase());
+    const elementAttributes = HTML_VISUAL_ELEMENT_ATTRIBUTES[sourceElement.tagName] || new Set();
+    for (const attribute of sourceElement.attributes) {
+        const name = attribute.name.toLowerCase();
+        if (name.startsWith('on') || name === 'style')
+            continue;
+        if (!HTML_VISUAL_GLOBAL_ATTRIBUTES.has(name)
+            && !name.startsWith('aria-')
+            && !name.startsWith('data-etl-')
+            && !elementAttributes.has(name))
+            continue;
+        if (['href', 'src', 'cite', 'srcset'].includes(name) && !isSafeHtmlVisualUrl(attribute.value))
+            continue;
+        if (sourceElement.tagName === 'BUTTON' && name === 'type' && attribute.value.toLowerCase() !== 'button')
+            continue;
+        if (sourceElement.tagName === 'A' && name === 'target' && attribute.value !== '_blank')
+            continue;
+        target.setAttribute(name, attribute.value);
+    }
+    if (sourceElement.tagName === 'A' && target.getAttribute('target') === '_blank') {
+        target.setAttribute('rel', 'noopener noreferrer');
+    }
+    if (sourceElement.tagName === 'IMG' && !target.hasAttribute('alt'))
+        return null;
+    for (const child of sourceElement.childNodes) {
+        const copied = copyHtmlVisualNode(child, ownerDocument);
+        if (copied)
+            target.appendChild(copied);
+    }
+    return target;
+}
+function renderHtmlVisual(container, visual, manifest, embedDepth) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'html-visual-content';
+    const fallback = String(visual.htmlFallback || visual.name || 'HTML visual');
+    wrapper.setAttribute('aria-label', fallback);
+    if (visual.htmlCss) {
+        const style = document.createElement('style');
+        style.className = 'html-visual-scoped-style';
+        style.textContent = String(visual.htmlCss);
+        container.appendChild(style);
+    }
+    const parsed = new DOMParser().parseFromString(String(visual.htmlContent || ''), 'text/html');
+    for (const child of parsed.body.childNodes) {
+        const copied = copyHtmlVisualNode(child, document);
+        if (copied)
+            wrapper.appendChild(copied);
+    }
+    wrapper.addEventListener('click', event => {
+        const trigger = /** @type {Element} */ (event.target).closest('[data-action]');
+        if (!trigger || !wrapper.contains(trigger))
+            return;
+        const actionType = String(/** @type {HTMLElement} */ (trigger).dataset.action || '').toUpperCase();
+        const declared = (visual.actions || []).find(action => String(action.type || '').toUpperCase() === actionType
+            && String(action.trigger || '').toUpperCase() === 'ON_CLICK');
+        if (!declared)
+            return;
+        const action = Object.assign({}, declared);
+        if ( /** @type {HTMLElement} */(trigger).dataset.param)
+            action.parameterName = /** @type {HTMLElement} */ (trigger).dataset.param;
+        if ( /** @type {HTMLElement} */(trigger).dataset.value !== undefined) {
+            action.valueSource = 'LITERAL';
+            action.literalValue = /** @type {HTMLElement} */ (trigger).dataset.value;
+        }
+        executeAction(action, [/** @type {HTMLElement} */ (trigger).dataset.value ?? ''], ['VALUE'], visual.name, visual);
+    });
+    container.appendChild(wrapper);
+    const byName = new Map((manifest.visuals || [])
+        .map(candidate => [String(candidate.name || '').toLowerCase(), candidate]));
+    const embeds = new Map((visual.htmlEmbeds || [])
+        .map(embed => [String(embed.id || ''), embed]));
+    const renderedEmbedIds = new Set();
+    wrapper.querySelectorAll('[data-etl-embed-id]').forEach(slot => {
+        const embedId = String(slot.getAttribute('data-etl-embed-id') || '');
+        const descriptor = embeds.get(embedId);
+        if (!descriptor) {
+            slot.replaceChildren(errorEl('Embedded visual descriptor is unavailable.'));
+            return;
+        }
+        if (renderedEmbedIds.has(embedId)) {
+            slot.replaceChildren(errorEl('Duplicate embedded visual slot was rejected.'));
+            return;
+        }
+        renderedEmbedIds.add(embedId);
+        if (embedDepth >= 2) {
+            slot.replaceChildren(errorEl('Embedded visual depth exceeds the supported limit.'));
+            return;
+        }
+        const target = descriptor.visual
+            || byName.get(String(descriptor.targetName || '').toLowerCase());
+        if (!target) {
+            slot.replaceChildren(errorEl(`Embedded visual not found: ${descriptor.targetName || ''}`));
+            return;
+        }
+        renderVisual(slot, target, null, manifest, embedDepth + 1);
+    });
+    const microCharts = new Map((visual.microCharts || [])
+        .filter(micro => micro.role === 'html.inline')
+        .map(micro => [String(micro.id || ''), micro]));
+    const renderedMicroChartIds = new Set();
+    wrapper.querySelectorAll('[data-etl-microchart-id]').forEach(slot => {
+        const microChartId = String(slot.getAttribute('data-etl-microchart-id') || '');
+        const microChart = microCharts.get(microChartId);
+        if (!microChart || renderedMicroChartIds.has(microChartId)) {
+            slot.replaceChildren(errorEl('Inline micro-chart descriptor is unavailable.'));
+            return;
+        }
+        renderedMicroChartIds.add(microChartId);
+        slot.classList.add('html-inline-microchart');
+        slot.setAttribute('role', 'img');
+        slot.setAttribute('aria-label', microChart.accessibleLabel || microChart.plainText || 'Indicator');
+        slot.innerHTML = String(microChart.svg || '');
+    });
+}
+function renderCard(container, visual) {
+    const opts = visual.options || {};
+    const cardTitle = getOption(opts, 'title') || visual.name;
+    const cardSubtitle = getOption(opts, 'subtitle') || '';
+    // ── Value ──────────────────────────────────────────────────────────
+    const valueColName = getOption(opts, 'mapping:value');
+    const valIdx = valueColName
+        ? (visual.columns || []).findIndex((c) => c.toLowerCase() === valueColName.toLowerCase())
+        : 0;
+    const row = visual.rows && visual.rows[0] ? visual.rows[0] : null;
+    const rawCell = row ? (row[valIdx >= 0 ? valIdx : 0] ?? null) : null;
+    const isNumeric = rawCell !== null && rawCell !== '' && !isNaN(Number(rawCell));
+    const rawValue = isNumeric ? parseFloat(String(rawCell)) : null;
+    const formatOpt = getOption(opts, 'format');
+    const doAbbreviate = isOn(getOption(opts, 'abbreviate'));
+    const prefix = getOption(opts, 'prefix') || '';
+    const suffix = getOption(opts, 'suffix') || '';
+    let displayValue;
+    if (rawCell === null) {
+        displayValue = 'No data';
+    }
+    else if (!isNumeric) {
+        displayValue = prefix + String(rawCell) + suffix;
+    }
+    else if (doAbbreviate && rawValue !== null) {
+        displayValue = prefix + abbreviateNumber(rawValue, formatOpt) + suffix;
+    }
+    else if (formatOpt && rawValue !== null) {
+        displayValue = prefix + formatValue(rawValue, formatOpt) + suffix;
+    }
+    else {
+        displayValue = prefix + String(rawValue ?? rawCell) + suffix;
+    }
+    // ── Goal ───────────────────────────────────────────────────────────
+    const goalColName = getOption(opts, 'mapping:goal');
+    let goalValue = null;
+    if (goalColName && row) {
+        const gIdx = (visual.columns || []).findIndex((c) => c.toLowerCase() === goalColName.toLowerCase());
+        if (gIdx >= 0)
+            goalValue = parseFloat((row[gIdx] ?? '0'));
+    }
+    if (goalValue === null) {
+        const goalOpt = getOption(opts, 'goal');
+        if (goalOpt !== null)
+            goalValue = parseFloat(goalOpt);
+    }
+    // ── Status ─────────────────────────────────────────────────────────
+    const closePct = parseFloat(getOption(opts, 'close_pct') ?? '0.80');
+    const metPct = parseFloat(getOption(opts, 'met_pct') ?? '1.00');
+    let status = null;
+    let ratio = null;
+    if (goalValue !== null && rawValue !== null && goalValue !== 0) {
+        ratio = rawValue / goalValue;
+        if (ratio >= metPct)
+            status = 'met';
+        else if (ratio >= closePct)
+            status = 'close';
+        else
+            status = 'missed';
+    }
+    // ── Colors & icons ─────────────────────────────────────────────────
+    const colors = {
+        met: (getOption(opts, 'color_met') || '#10b981'),
+        close: (getOption(opts, 'color_close') || '#f59e0b'),
+        missed: (getOption(opts, 'color_missed') || '#ef4444')
+    };
+    const iconSets = {
+        TRAFFIC: { met: '🟢', close: '🟡', missed: '🔴' },
+        ARROWS: { met: '↑', close: '→', missed: '↓' },
+        CHECKS: { met: '✓', close: '~', missed: '✗' }
+    };
+    const iconSetName = (getOption(opts, 'icon_set') || '').toUpperCase();
+    const presetIcons = iconSets[iconSetName] || null;
+    const icons = {
+        met: getOption(opts, 'icon_met') ?? (presetIcons ? presetIcons.met : '✓'),
+        close: getOption(opts, 'icon_close') ?? (presetIcons ? presetIcons.close : '⚠'),
+        missed: getOption(opts, 'icon_missed') ?? (presetIcons ? presetIcons.missed : '✗')
+    };
+    // ── Delta ──────────────────────────────────────────────────────────
+    const deltaColName = getOption(opts, 'mapping:delta');
+    let deltaAmount = null;
+    if (deltaColName && row) {
+        const dIdx = (visual.columns || []).findIndex((c) => c.toLowerCase() === deltaColName.toLowerCase());
+        if (dIdx >= 0 && rawValue !== null)
+            deltaAmount = rawValue - parseFloat((row[dIdx] ?? '0'));
+    }
+    const deltaFormat = getOption(opts, 'delta_format') || formatOpt;
+    let deltaLabel = '';
+    const deltaLabelMapping = getOption(opts, 'mapping:delta_label');
+    if (deltaLabelMapping && row) {
+        const dlIdx = (visual.columns || []).findIndex((c) => c.toLowerCase() === deltaLabelMapping.toLowerCase());
+        if (dlIdx >= 0 && row[dlIdx] !== undefined && row[dlIdx] !== null) {
+            deltaLabel = String(row[dlIdx]);
+        }
+    }
+    if (!deltaLabel) {
+        const deltaLabelOpt = getOption(opts, 'delta_label');
+        if (deltaLabelOpt) {
+            if (row) {
+                const dlIdx = (visual.columns || []).findIndex((c) => c.toLowerCase() === deltaLabelOpt.toLowerCase());
+                if (dlIdx >= 0 && row[dlIdx] !== undefined && row[dlIdx] !== null) {
+                    deltaLabel = String(row[dlIdx]);
+                }
+                else {
+                    deltaLabel = deltaLabelOpt;
+                }
+            }
+            else {
+                deltaLabel = deltaLabelOpt;
+            }
+        }
+    }
+    const trendDir = (getOption(opts, 'trend_dir') || 'POSITIVE_UP').toUpperCase();
+    // ── Status label override ──────────────────────────────────────────
+    let subtitleText = cardSubtitle;
+    if (status === 'met' && getOption(opts, 'label_met'))
+        subtitleText = getOption(opts, 'label_met');
+    if (status === 'close' && getOption(opts, 'label_close'))
+        subtitleText = getOption(opts, 'label_close');
+    if (status === 'missed' && getOption(opts, 'label_missed'))
+        subtitleText = getOption(opts, 'label_missed');
+    // ── Build HTML ─────────────────────────────────────────────────────
+    // Status badge
+    let badgeHtml = '';
+    if (status) {
+        badgeHtml = `<span class="card-status-badge" style="background:${escHtml(colors[status])}">${escHtml(icons[status])}</span>`;
+    }
+    // Delta row
+    let deltaHtml = '';
+    if (deltaAmount !== null) {
+        const isPos = deltaAmount >= 0;
+        const isGood = trendDir === 'POSITIVE_UP' ? isPos : !isPos;
+        const arrow = isPos ? '▲' : '▼';
+        const clr = isGood ? '#10b981' : '#ef4444';
+        const absAmt = Math.abs(deltaAmount);
+        const deltaStr = deltaFormat ? formatValue(absAmt, deltaFormat) : String(absAmt);
+        const sign = isPos ? '+' : '-';
+        deltaHtml = `<div class="card-delta" style="color:${clr}">` +
+            `<span class="card-delta-arrow">${arrow}</span>` +
+            `<span class="card-delta-value">${escHtml(sign + deltaStr)}</span>` +
+            (deltaLabel ? `<span class="card-delta-label">${escHtml(deltaLabel)}</span>` : '') +
+            `</div>`;
+    }
+    // Goal display line
+    let goalLineHtml = '';
+    if (goalValue !== null && isOn(getOption(opts, 'show_goal'))) {
+        const gDisplay = doAbbreviate
+            ? abbreviateNumber(goalValue, formatOpt)
+            : (formatOpt ? formatValue(goalValue, formatOpt) : String(goalValue));
+        goalLineHtml = `<div class="card-goal">Target: ${escHtml(gDisplay)}</div>`;
+    }
+    // % of goal line
+    let goalPctHtml = '';
+    if (ratio !== null && isOn(getOption(opts, 'show_percent_of_goal'))) {
+        goalPctHtml = `<div class="card-goal-pct">${Math.round(ratio * 100)}% of target</div>`;
+    }
+    // Progress bar or ring
+    let progressHtml = '';
+    const showProgress = isOn(getOption(opts, 'show_progress'));
+    const progressStyle = (getOption(opts, 'progress_style') || 'BAR').toUpperCase();
+    if (showProgress && ratio !== null && status) {
+        const pct = Math.min(ratio * 100, 100);
+        const barColor = colors[status];
+        if (progressStyle === 'RING') {
+            const r = 18, circ = 2 * Math.PI * r;
+            const dash = (pct / 100) * circ;
+            progressHtml = `<div class="card-progress-ring">` +
+                `<svg width="48" height="48" viewBox="0 0 48 48">` +
+                `<circle cx="24" cy="24" r="${r}" fill="none" stroke="#e5e7eb" stroke-width="4"/>` +
+                `<circle cx="24" cy="24" r="${r}" fill="none" stroke="${escHtml(barColor)}" stroke-width="4"` +
+                ` stroke-dasharray="${dash.toFixed(2)} ${circ.toFixed(2)}" transform="rotate(-90 24 24)"/>` +
+                `</svg><span class="card-ring-pct">${Math.round(pct)}%</span></div>`;
+        }
+        else {
+            progressHtml = `<div class="card-progress">` +
+                `<div class="card-progress-fill" style="width:${pct.toFixed(1)}%;background:${escHtml(barColor)}"></div>` +
+                `</div>`;
+        }
+    }
+    const vstyles = visual.styles || {};
+    const tColor = getStyle(vstyles, 'TITLE_COLOR');
+    const tSize = getStyle(vstyles, 'TITLE_SIZE');
+    const tWeight = getStyle(vstyles, 'TITLE_WEIGHT');
+    const tFont = getStyle(vstyles, 'TITLE_FONT');
+    const tAlign = getStyle(vstyles, 'TITLE_ALIGN');
+    let titleStyleAttr = '';
+    if (tColor)
+        titleStyleAttr += `color:${escHtml(tColor)};`;
+    if (tSize)
+        titleStyleAttr += `font-size:${escHtml(tSize.includes('px') || tSize.includes('rem') || tSize.includes('em') || tSize.includes('%') ? tSize : (tSize + 'px'))};`;
+    if (tWeight)
+        titleStyleAttr += `font-weight:${escHtml(tWeight)};`;
+    if (tFont)
+        titleStyleAttr += `font-family:${escHtml(tFont)};`;
+    let headerRowStyleAttr = '';
+    if (tAlign) {
+        const alignLower = tAlign.toLowerCase();
+        headerRowStyleAttr = `justify-content:${alignLower === 'center' ? 'center' : (alignLower === 'right' ? 'flex-end' : 'flex-start')};`;
+    }
+    const sColor = getStyle(vstyles, 'SUBTITLE_COLOR');
+    const sSize = getStyle(vstyles, 'SUBTITLE_SIZE');
+    const sWeight = getStyle(vstyles, 'SUBTITLE_WEIGHT');
+    const sFont = getStyle(vstyles, 'SUBTITLE_FONT');
+    const sAlign = (getStyle(vstyles, 'SUBTITLE_ALIGN') || tAlign);
+    let subStyleAttr = '';
+    if (sColor)
+        subStyleAttr += `color:${escHtml(sColor)};`;
+    if (sSize)
+        subStyleAttr += `font-size:${escHtml(sSize.includes('px') || sSize.includes('rem') || sSize.includes('em') || sSize.includes('%') ? sSize : (sSize + 'px'))};`;
+    if (sWeight)
+        subStyleAttr += `font-weight:${escHtml(sWeight)};`;
+    if (sFont)
+        subStyleAttr += `font-family:${escHtml(sFont)};`;
+    if (sAlign)
+        subStyleAttr += `text-align:${escHtml(sAlign.toLowerCase())};`;
+    const titleInner = visual.titleIsMarkdown ? renderInlineMarkdown(cardTitle) : escHtml(cardTitle);
+    const subInner = visual.subtitleIsMarkdown ? renderInlineMarkdown(subtitleText) : escHtml(subtitleText);
+    // ── Value Color ──────────────────────────────────────────────────
+    let valueColor = null;
+    if (visual.rowFontStyles && visual.rowFontStyles.length > 0 && visual.rowFontStyles[0]) {
+        valueColor = visual.rowFontStyles[0];
+    }
+    else if (visual.rowStyles && visual.rowStyles.length > 0 && visual.rowStyles[0]) {
+        valueColor = visual.rowStyles[0];
+    }
+    else if (visual.formattingRules && visual.formattingRules.length > 0 && rawValue !== null && !isNaN(rawValue)) {
+        for (let i = 0; i < visual.formattingRules.length; i++) {
+            const rule = visual.formattingRules[i];
+            const cond = (rule.condition || rule.Condition || '').trim();
+            if (!cond)
+                continue;
+            if (matchesCondition(cond, rawValue, 'VALUE')) {
+                valueColor = rule.fontColor || rule.FontColor || rule.color || rule.Color;
+                break;
+            }
+        }
+    }
+    if (!valueColor) {
+        valueColor = getOption(opts, 'value_color') || getStyle(vstyles, 'VALUE_COLOR') || null;
+    }
+    const cardEl = document.createElement('div');
+    cardEl.className = 'card-value' + (status ? ` card-status-${status}` : '');
+    cardEl.innerHTML =
+        `<div class="card-header-row"${headerRowStyleAttr ? ` style="${headerRowStyleAttr}"` : ''}><div class="card-label"${titleStyleAttr ? ` style="${titleStyleAttr}"` : ''}>${titleInner}</div>${badgeHtml}</div>` +
+            (subtitleText ? `<div class="card-subtitle"${subStyleAttr ? ` style="${subStyleAttr}"` : ''}>${subInner}</div>` : '') +
+            `<div class="card-number"${valueColor ? ` style="color:${escHtml(valueColor)};"` : ''}>${escHtml(String(displayValue))}</div>` +
+            goalLineHtml + goalPctHtml + deltaHtml + progressHtml;
+    const sparkline = Array.isArray(visual.microCharts)
+        ? visual.microCharts.find(micro => micro.role === 'card.sparkline')
+        : null;
+    if (sparkline && sparkline.svg) {
+        const micro = document.createElement('div');
+        micro.className = 'card-sparkline';
+        micro.setAttribute('role', 'img');
+        micro.setAttribute('aria-label', sparkline.accessibleLabel || sparkline.plainText || 'Trend');
+        micro.innerHTML = sparkline.svg;
+        cardEl.appendChild(micro);
+    }
+    container.appendChild(cardEl);
+}
+// ── Text ────────────────────────────────────────────────────────────────
+function renderText(container, visual) {
+    // Static content from CONTENT/DEFAULT clause; fall back to MAPPINGS(CONTENT=col) first row
+    let content = visual.defaultValue || '';
+    if (!content && visual.columns && visual.rows && visual.rows.length > 0) {
+        const idx = visual.columns.findIndex(c => c.toLowerCase() === 'content');
+        if (idx >= 0 && visual.rows[0][idx] != null)
+            content = String(visual.rows[0][idx]);
+    }
+    // Inline column interpolation: {column FORMAT '...'}
+    if (content && visual.columns && visual.rows && visual.rows.length > 0) {
+        const row = visual.rows[0];
+        content = content.replace(/\{([A-Za-z0-9_]+)(?:\s+FORMAT\s+['"]([^'"]+)['"])?\}/gi, (match, colName, fmt) => {
+            const colIdx = visual.columns.findIndex(c => c.toLowerCase() === colName.toLowerCase());
+            if (colIdx >= 0 && row[colIdx] != null) {
+                const rawVal = row[colIdx];
+                if (fmt) {
+                    return formatValue(rawVal, fmt);
+                }
+                return String(rawVal);
+            }
+            return match;
+        });
+    }
+    const opts = visual.options || {};
+    const align = (opts['ALIGN'] || opts['align'] || 'left').toLowerCase();
+    const useMd = (opts['MARKDOWN'] || opts['markdown'] || 'ON').toUpperCase() !== 'OFF';
+    const maxLines = parseInt(opts['MAX_LINES'] || opts['max_lines'] || '0', 10);
+    const overflow = (opts['OVERFLOW'] || opts['overflow'] || '').toUpperCase();
+    const fontSize = opts['FONT_SIZE'] || opts['font_size'];
+    const fontColor = opts['FONT_COLOR'] || opts['font_color'];
+    const fontWeight = opts['FONT_WEIGHT'] || opts['font_weight'];
+    const div = document.createElement('div');
+    div.className = 'text-visual';
+    div.style.textAlign = align;
+    if (maxLines > 0) {
+        div.style.display = '-webkit-box';
+        div.style.webkitLineClamp = String(maxLines);
+        div.style.webkitBoxOrient = 'vertical';
+        div.style.overflow = 'hidden';
+    }
+    if (overflow === 'CLIP')
+        div.classList.add('overflow-clip');
+    else if (overflow === 'SCROLL')
+        div.classList.add('overflow-scroll');
+    else if (overflow === 'ELLIPSIS')
+        div.classList.add('overflow-ellipsis');
+    if (fontSize)
+        div.style.fontSize = (fontSize.includes('px') || fontSize.includes('rem') || fontSize.includes('em') || fontSize.includes('pt')) ? fontSize : (fontSize + 'px');
+    if (fontColor)
+        div.style.color = fontColor;
+    if (fontWeight)
+        div.style.fontWeight = fontWeight;
+    div.innerHTML = useMd ? simpleMarkdown(content) : escHtml(content).replace(/\n/g, '<br>');
+    const clickActions = actionsFor(visual, 'ON_CLICK');
+    if (clickActions.length > 0) {
+        div.style.cursor = 'pointer';
+        div.addEventListener('click', () => {
+            const row = visual.rows && visual.rows.length > 0 ? visual.rows[0] : [];
+            clickActions.forEach(a => executeAction(a, row, visual.columns || [], visual.name, visual));
+        });
+    }
+    container.appendChild(div);
+}
+// ── Image ───────────────────────────────────────────────────────────────
+function renderImage(container, visual) {
+    const opts = visual.options || {};
+    const src = opts['SRC'] || opts['src'] || '';
+    const alt = opts['ALT'] || opts['alt'] || '';
+    const fit = (opts['FIT'] || opts['fit'] || 'contain').toLowerCase();
+    const mode = (opts['MODE'] || opts['mode'] || 'SINGLE').toUpperCase();
+    const cols = parseInt(opts['COLUMNS'] || opts['columns'] || '3', 10);
+    const aspect = opts['ASPECT_RATIO'] || opts['aspect_ratio'];
+    const fallback = opts['FALLBACK'] || opts['fallback'];
+    const clickActions = actionsFor(visual, 'ON_CLICK');
+    if (mode === 'GALLERY' && visual.rows && visual.rows.length > 0) {
+        const gallery = document.createElement('div');
+        gallery.className = 'image-gallery';
+        gallery.style.gridTemplateColumns = `repeat(${cols > 0 ? cols : 3}, 1fr)`;
+        gallery.style.gap = '8px';
+        const srcIdx = visual.columns ? visual.columns.findIndex(c => c.toLowerCase() === 'src' || c.toLowerCase() === 'url' || c.toLowerCase() === 'image') : 0;
+        const useIdx = srcIdx >= 0 ? srcIdx : 0;
+        visual.rows.forEach(row => {
+            const rawUrl = String(row[useIdx] ?? '');
+            const img = document.createElement('img');
+            img.src = safeUrl(rawUrl || fallback || '');
+            img.alt = alt;
+            img.style.objectFit = fit;
+            if (aspect)
+                img.style.aspectRatio = aspect.replace(':', '/');
+            if (fallback) {
+                img.onerror = () => { img.src = safeUrl(fallback); img.onerror = null; };
+            }
+            if (clickActions.length > 0) {
+                img.style.cursor = 'pointer';
+                img.addEventListener('click', () => {
+                    clickActions.forEach(a => executeAction(a, row, visual.columns, visual.name, visual));
+                });
+            }
+            gallery.appendChild(img);
+        });
+        container.appendChild(gallery);
+        return;
+    }
+    const wrapper = document.createElement('div');
+    wrapper.style.width = '100%';
+    wrapper.style.height = '100%';
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.justifyContent = 'center';
+    const finalSrc = src || (visual.rows && visual.rows.length > 0 && visual.rows[0][0] != null ? String(visual.rows[0][0]) : '') || fallback || '';
+    const img = document.createElement('img');
+    img.src = safeUrl(finalSrc);
+    img.alt = alt;
+    img.style.maxWidth = '100%';
+    img.style.maxHeight = '100%';
+    img.style.objectFit = fit;
+    if (aspect)
+        img.style.aspectRatio = aspect.replace(':', '/');
+    if (fallback) {
+        img.onerror = () => { img.src = safeUrl(fallback); img.onerror = null; };
+    }
+    if (clickActions.length > 0) {
+        wrapper.style.cursor = 'pointer';
+        wrapper.addEventListener('click', () => {
+            const row = visual.rows && visual.rows.length > 0 ? visual.rows[0] : [];
+            clickActions.forEach(a => executeAction(a, row, visual.columns || [], visual.name, visual));
+        });
+    }
+    wrapper.appendChild(img);
+    container.appendChild(wrapper);
+}
+
+
+// ─── rt-layout.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-layout.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Pages, containers, tabs, accordions, and physical layouts.
+ */
+function isPageVisible(page, params) {
+    if (!page)
+        return false;
+    if (page.isHidden)
+        return false;
+    if (page.visibleExpression) {
+        return evaluateExpressionAgainstParameters(page.visibleExpression, params || parameters);
+    }
+    return true;
+}
+function executePageOnLoad(page) {
+    if (!page || !page.actions)
+        return;
+    page.actions.forEach(action => {
+        const trigger = (action.trigger || 'ON_LOAD').toUpperCase();
+        if (trigger === 'ON_LOAD') {
+            if (action.type === 'SET_PARAMETER' && action.parameterName) {
+                if (action.value !== undefined && action.value !== null) {
+                    // `setParameter` does not exist. An ON_LOAD SET_PARAMETER action threw
+                    // here instead of applying, so a page that sets its own parameter on load
+                    // rendered with the old value. This is the same call the drill-down and
+                    // SET_PARAMETER action branches make.
+                    postParameters({ [action.parameterName]: String(action.value ?? '') })
+                        .then(m => { if (m)
+                        renderManifest(m); });
+                }
+            }
+        }
+    });
+}
+// PAGE OPTIONS reached the manifest but nothing ever read them, so every option below was
+// parsed, serialized, asserted in a test, and then silently dropped before it reached a pixel.
+function applyPageOptions(pageDiv, contentDiv, page) {
+    const opts = page.options;
+    if (!opts)
+        return;
+    const backgroundImage = getOption(opts, 'BACKGROUND_IMAGE');
+    if (backgroundImage) {
+        const raw = String(backgroundImage).trim();
+        // Authors write either a bare path or the CSS url(...) form. Quotes and parentheses are
+        // stripped from the bare form so a value cannot close url() and start another token.
+        pageDiv.style.backgroundImage = /^url\(/i.test(raw)
+            ? raw
+            : `url("${raw.replace(/["'();\\\s]/g, '')}")`;
+        pageDiv.style.backgroundRepeat = 'no-repeat';
+        pageDiv.style.backgroundPosition = 'center';
+        pageDiv.style.backgroundSize = (getOption(opts, 'BACKGROUND_SIZE') || 'cover').toLowerCase();
+    }
+    const overflow = getOption(opts, 'OVERFLOW');
+    if (overflow)
+        pageDiv.style.overflow = String(overflow).toLowerCase();
+    const maxWidth = toCssLength(getOption(opts, 'MAX_WIDTH'));
+    if (maxWidth)
+        contentDiv.style.maxWidth = maxWidth;
+    if ((getOption(opts, 'ALIGN_CONTENT') || '').toUpperCase() === 'CENTER') {
+        contentDiv.style.marginLeft = 'auto';
+        contentDiv.style.marginRight = 'auto';
+    }
+}
+function renderPage(manifest, page, pageSections, pageTheme) {
+    const div = document.createElement('div');
+    div.className = 'page';
+    if (page.name)
+        div.id = 'page-' + page.name.toLowerCase();
+    div.dataset.pageName = page.name || '';
+    div.dataset.pageMode = (page.mode || 'DASHBOARD').toUpperCase();
+    applyDesignTokens(div, page, true, manifest);
+    const content = document.createElement('div');
+    content.className = 'page-grid';
+    div.appendChild(content);
+    applyPageOptions(div, content, page);
+    pageSections[page.name] = div;
+    if (page.mode === 'PAGINATED' && page.physicalPages && page.physicalPages.length > 0) {
+        renderPhysicalPages(content, page, manifest, pageTheme);
+    }
+    else {
+        renderResponsiveLayout(content, page, manifest, pageTheme);
+    }
+    return div;
+}
+// MOBILE_LAYOUT is an alternate structure, not a style: below the breakpoint the page is laid
+// out from the mobile structure and slot map instead of the desktop pair. Crossing the
+// breakpoint re-renders, because the two layouts place different visuals in different slots.
+function renderResponsiveLayout(content, page, manifest, pageTheme) {
+    const mobile = page.mobileLayout;
+    const breakpoint = mobile ? toPixels(mobile.breakpoint) : 0;
+    if (!mobile || !mobile.structure || breakpoint <= 0) {
+        renderLayout(content, page, manifest, pageTheme);
+        return;
+    }
+    const query = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const draw = () => {
+        const layoutDef = query.matches
+            ? { structure: mobile.structure, slotMap: mobile.slotMap || page.slotMap }
+            : page;
+        content.dataset.activeLayout = query.matches ? 'MOBILE' : 'DEFAULT';
+        content.replaceChildren();
+        content.removeAttribute('style');
+        content.className = 'page-grid';
+        applyPageOptions(content.parentElement, content, page);
+        renderLayout(content, layoutDef, manifest, pageTheme);
+    };
+    draw();
+    const onChange = () => draw();
+    if (typeof query.addEventListener === 'function')
+        query.addEventListener('change', onChange);
+    else if (typeof query.addListener === 'function')
+        query.addListener(onChange);
+}
+function renderPhysicalPages(container, pageDef, manifest, pageTheme) {
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.alignItems = 'center';
+    container.style.gap = '20px';
+    container.style.padding = '20px';
+    container.style.backgroundColor = '#f0f0f0';
+    pageDef.physicalPages.forEach(pPage => {
+        const sheet = document.createElement('div');
+        sheet.className = 'physical-page-sheet';
+        applyDesignTokens(sheet, pageDef, true, manifest);
+        const layout = pPage.layout || {};
+        const width = layout.customWidth || (layout.orientation === 'Landscape' ? 11.0 : 8.5);
+        const height = layout.customHeight || (layout.orientation === 'Landscape' ? 8.5 : 11.0);
+        const unit = layout.units || 'in';
+        sheet.style.width = width + unit;
+        sheet.style.height = height + unit;
+        sheet.style.backgroundColor = 'white';
+        sheet.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+        sheet.style.position = 'relative';
+        sheet.style.overflow = 'hidden';
+        const marginT = (layout.marginTop ?? 1.0) + unit;
+        const marginR = (layout.marginRight ?? 1.0) + unit;
+        const marginB = (layout.marginBottom ?? 1.0) + unit;
+        const marginL = (layout.marginLeft ?? 1.0) + unit;
+        const printArea = document.createElement('div');
+        printArea.style.position = 'absolute';
+        printArea.style.top = marginT;
+        printArea.style.right = marginR;
+        printArea.style.bottom = marginB;
+        printArea.style.left = marginL;
+        (pPage.visuals || []).forEach(pv => {
+            const wrapper = document.createElement('div');
+            wrapper.style.position = 'absolute';
+            wrapper.style.top = pv.topOffset + unit;
+            wrapper.style.left = '0';
+            wrapper.style.right = '0';
+            wrapper.style.height = pv.height + unit;
+            if (pv.visual) {
+                let visToRender = pv.visual;
+                if (pv.startRowIndex !== undefined && pv.endRowIndex !== undefined && visToRender.visualType === 'TABLE') {
+                    visToRender = JSON.parse(JSON.stringify(pv.visual));
+                    if (visToRender.rows) {
+                        visToRender.rows = visToRender.rows.slice(pv.startRowIndex, pv.endRowIndex + 1);
+                    }
+                }
+                renderVisual(wrapper, visToRender, pageTheme, manifest);
+            }
+            printArea.appendChild(wrapper);
+        });
+        sheet.appendChild(printArea);
+        container.appendChild(sheet);
+    });
+}
+function renderContainer(container, containerDef, manifest, pageTheme) {
+    const containerTypeName = (containerDef.containerType || '').toUpperCase();
+    if (containerTypeName === 'MODAL') {
+        return; // Modal dialogs are rendered on-demand via SHOW_MODAL
+    }
+    if (containerTypeName === 'TABS') {
+        renderTabsContainer(container, containerDef, manifest, pageTheme);
+        return;
+    }
+    if (containerTypeName === 'ACCORDION') {
+        renderAccordionContainer(container, containerDef, manifest, pageTheme);
+        return;
+    }
+    const div = document.createElement('div');
+    const isScroll = containerTypeName === 'SCROLL';
+    const isLayer = containerTypeName === 'LAYER';
+    div.className = isScroll ? 'container-scroll' : isLayer ? 'container-layer' : 'container-box';
+    // LAYER: stack children as absolutely-positioned overlapping panels
+    if (isLayer) {
+        div.setAttribute('data-name', containerDef.name);
+        applyDesignTokens(div, containerDef, false, manifest);
+        const height = (containerDef.styles || {})['HEIGHT'] || (containerDef.styles || {})['height'];
+        if (height)
+            div.style.height = height;
+        const slotMap = containerDef.slotMap || {};
+        const uniqueItems = [...new Set(Object.values(slotMap))];
+        uniqueItems.forEach((item, i) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'layer-slot';
+            wrapper.style.zIndex = String(i + 1);
+            const visual = (manifest.visuals || []).find(v => v.name.toLowerCase() === item.toLowerCase());
+            if (visual) {
+                renderVisual(wrapper, visual, pageTheme, manifest);
+            }
+            else {
+                const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
+                if (nested)
+                    renderContainer(wrapper, nested, manifest, pageTheme);
+            }
+            div.appendChild(wrapper);
+        });
+        container.appendChild(div);
+        setTimeout(() => resizeChartsIn(div), 50);
+        return;
+    }
+    div.setAttribute('data-name', containerDef.name);
+    applyDesignTokens(div, containerDef, false, manifest);
+    const tag = getOption(containerDef.options, 'TAG') || getStyle(containerDef.styles, 'TAG');
+    if (tag)
+        div.setAttribute('data-tag', tag);
+    const styles = containerDef.styles || {};
+    const opts = containerDef.options || {};
+    const containerTheme = getStyle(styles, 'THEME') || pageTheme;
+    const collapsibleOpt = getOption(opts, 'COLLAPSIBLE');
+    const isCollapsible = containerDef.isCollapsible || isOn(collapsibleOpt);
+    const defaultState = (getOption(opts, 'DEFAULT') || 'OPEN').toUpperCase();
+    if (containerDef.refresh && containerDef.refresh > 0) {
+        const rId = setInterval(() => {
+            const visualNames = [];
+            const slotMap = containerDef.slotMap || {};
+            Object.values(slotMap).forEach(target => {
+                const v = (manifest?.visuals || []).find(x => x.name.toLowerCase() === target.toLowerCase());
+                if (v)
+                    visualNames.push(v.name);
+            });
+            if (visualNames.length > 0) {
+                if (vscode)
+                    vscode.postMessage({ type: 'refreshVisuals', visuals: visualNames });
+                else
+                    postRefreshVisuals(visualNames).then(m => { if (m)
+                        renderManifest(m); });
+            }
+        }, containerDef.refresh * 1000);
+        getRefreshTimers().push(rId);
+    }
+    if (isScroll) {
+        const height = getStyle(styles, 'HEIGHT') || '400px';
+        div.style.maxHeight = height;
+    }
+    if (isCollapsible) {
+        div.classList.add('collapsible-inline');
+        const header = document.createElement('div');
+        header.className = 'container-header';
+        const title = document.createElement('span');
+        title.className = 'container-title';
+        const cTitleText = containerDef.title || containerDef.name;
+        if (containerDef.titleIsMarkdown && containerDef.title) {
+            title.innerHTML = renderInlineMarkdown(cTitleText);
+        }
+        else {
+            title.textContent = cTitleText;
+        }
+        const cStyles = containerDef.styles || {};
+        const ctColor = getStyle(cStyles, 'TITLE_COLOR');
+        const ctSize = getStyle(cStyles, 'TITLE_SIZE');
+        const ctWeight = getStyle(cStyles, 'TITLE_WEIGHT');
+        const ctFont = getStyle(cStyles, 'TITLE_FONT');
+        const ctAlign = getStyle(cStyles, 'TITLE_ALIGN');
+        if (ctColor)
+            title.style.color = ctColor;
+        if (ctSize)
+            title.style.fontSize = ctSize.includes('px') || ctSize.includes('rem') || ctSize.includes('em') || ctSize.includes('%') ? ctSize : (ctSize + 'px');
+        if (ctWeight)
+            title.style.fontWeight = ctWeight;
+        if (ctFont)
+            title.style.fontFamily = ctFont;
+        if (ctAlign)
+            title.style.textAlign = ctAlign.toLowerCase();
+        header.appendChild(title);
+        const showActiveCount = isOn(getOption(opts, 'SHOW_ACTIVE_COUNT'));
+        if (showActiveCount) {
+            const count = calculateContainerActiveCount(containerDef, manifest);
+            if (count > 0) {
+                const countBadge = document.createElement('span');
+                countBadge.className = 'container-active-count-badge';
+                countBadge.textContent = `${count} active`;
+                header.appendChild(countBadge);
+            }
+        }
+        const chevron = document.createElement('span');
+        chevron.className = 'container-chevron';
+        chevron.innerHTML = '&#x25B2;'; // UP
+        header.appendChild(chevron);
+        const name = containerDef.name;
+        const persisted = _uiStates[name];
+        const startCollapsed = (persisted && persisted.collapsed) || (!persisted && defaultState === 'CLOSED');
+        if (startCollapsed) {
+            div.classList.add('collapsed');
+            chevron.innerHTML = '&#x25BC;'; // DOWN
+        }
+        header.onclick = () => {
+            const isCollapsed = div.classList.toggle('collapsed');
+            chevron.innerHTML = isCollapsed ? '&#x25BC;' : '&#x25B2;'; // DOWN : UP
+            setTimeout(() => {
+                resizeChartsIn(div);
+                const grid = getPageContainer(div)?.querySelector('.page-grid');
+                if (grid)
+                    resizeChartsIn(grid);
+            }, 350);
+        };
+        div.appendChild(header);
+        const content = document.createElement('div');
+        content.className = 'container-content';
+        renderLayout(content, containerDef, manifest, containerTheme);
+        div.appendChild(content);
+    }
+    else {
+        renderLayout(div, containerDef, manifest, containerTheme);
+    }
+    container.appendChild(div);
+}
+function getPageContainer(el) {
+    while (el && el !== document.body && !el.classList.contains('page'))
+        el = el.parentElement;
+    return el;
+}
+function renderCollapsibleContainer(gridContainer, containerDef, manifest, pageTheme, slotWrapper) {
+    const page = getPageContainer(gridContainer);
+    if (!page) {
+        // Fallback: if no page found, render normally
+        renderContainer(slotWrapper, containerDef, manifest, pageTheme);
+        return;
+    }
+    // 1. Create Rail if not exists
+    let rail = page.querySelector('.drawer-rail-left');
+    if (!rail) {
+        rail = document.createElement('div');
+        rail.className = 'drawer-rail-left';
+        page.appendChild(rail);
+    }
+    // 2. Create Trigger
+    const trigger = document.createElement('div');
+    trigger.className = 'drawer-trigger';
+    trigger.title = containerDef.title || containerDef.name;
+    let iconHtml = '&#x2699;'; // Default GEAR
+    if (containerDef.icon) {
+        const icon = containerDef.icon.toUpperCase();
+        if (icon === 'GEAR')
+            iconHtml = '&#x2699;';
+        else if (icon === 'FILTER')
+            iconHtml = '&#x1F50D;';
+        else if (icon === 'INFO')
+            iconHtml = '&#x2139;';
+        else if (containerDef.icon.includes('.') || containerDef.icon.includes('/')) {
+            iconHtml = `<img src="${escHtml(safeUrl(containerDef.icon))}" style="width:24px;height:24px;">`;
+        }
+        else {
+            iconHtml = escHtml(containerDef.icon);
+        }
+    }
+    trigger.innerHTML = iconHtml;
+    rail.appendChild(trigger);
+    // 3. Create Drawer
+    const drawer = document.createElement('div');
+    drawer.className = 'collapsible-drawer';
+    drawer.setAttribute('data-name', containerDef.name);
+    applyDesignTokens(drawer, containerDef, false, manifest);
+    const tag = getOption(containerDef.options, 'TAG') || getStyle(containerDef.styles, 'TAG');
+    if (tag)
+        drawer.setAttribute('data-tag', tag);
+    const styles = containerDef.styles || {};
+    const containerTheme = getStyle(styles, 'THEME') || pageTheme;
+    const header = document.createElement('div');
+    header.className = 'drawer-header';
+    const title = document.createElement('div');
+    title.className = 'drawer-title';
+    const dTitleText = containerDef.title || containerDef.name;
+    if (containerDef.titleIsMarkdown && containerDef.title) {
+        title.innerHTML = renderInlineMarkdown(dTitleText);
+    }
+    else {
+        title.textContent = dTitleText;
+    }
+    const dtColor = getStyle(styles, 'TITLE_COLOR');
+    const dtSize = getStyle(styles, 'TITLE_SIZE');
+    const dtWeight = getStyle(styles, 'TITLE_WEIGHT');
+    const dtFont = getStyle(styles, 'TITLE_FONT');
+    const dtAlign = getStyle(styles, 'TITLE_ALIGN');
+    if (dtColor)
+        title.style.color = dtColor;
+    if (dtSize)
+        title.style.fontSize = dtSize.includes('px') || dtSize.includes('rem') || dtSize.includes('em') || dtSize.includes('%') ? dtSize : (dtSize + 'px');
+    if (dtWeight)
+        title.style.fontWeight = dtWeight;
+    if (dtFont)
+        title.style.fontFamily = dtFont;
+    if (dtAlign)
+        title.style.textAlign = dtAlign.toLowerCase();
+    header.appendChild(title);
+    const actions = document.createElement('div');
+    actions.className = 'drawer-actions';
+    if (containerDef.isPinnable !== false) {
+        const pinBtn = document.createElement('span');
+        pinBtn.className = 'drawer-action-btn';
+        pinBtn.innerHTML = '&#x1F4CC;'; // Pin
+        pinBtn.title = 'Pin Panel';
+        pinBtn.onclick = (e) => {
+            e.stopPropagation();
+            const isPinned = drawer.classList.toggle('pinned');
+            pinBtn.classList.toggle('active');
+            gridContainer.classList.toggle('has-pinned-left');
+            if (isPinned)
+                drawer.classList.add('open');
+            setTimeout(() => resizeChartsIn(gridContainer), 350);
+        };
+        actions.appendChild(pinBtn);
+    }
+    const closeBtn = document.createElement('span');
+    closeBtn.className = 'drawer-action-btn';
+    closeBtn.innerHTML = '&times;';
+    closeBtn.onclick = () => {
+        drawer.classList.remove('open');
+        if (drawer.classList.contains('pinned')) {
+            drawer.classList.remove('pinned');
+            const pinBtn = actions.querySelector('.drawer-action-btn');
+            if (pinBtn)
+                pinBtn.classList.remove('active');
+            gridContainer.classList.remove('has-pinned-left');
+            setTimeout(() => resizeChartsIn(gridContainer), 350);
+        }
+    };
+    actions.appendChild(closeBtn);
+    header.appendChild(actions);
+    drawer.appendChild(header);
+    const content = document.createElement('div');
+    content.className = 'drawer-content';
+    renderLayout(content, containerDef, manifest, containerTheme);
+    drawer.appendChild(content);
+    page.appendChild(drawer);
+    const drawerDefault = (getOption(containerDef.options, 'DEFAULT') || 'CLOSED').toUpperCase();
+    if (drawerDefault === 'OPEN') {
+        drawer.classList.add('open');
+    }
+    trigger.onclick = () => {
+        drawer.classList.toggle('open');
+        if (!drawer.classList.contains('open') && drawer.classList.contains('pinned')) {
+            // If closing while pinned, unpin
+            closeBtn.click();
+        }
+    };
+    if (slotWrapper)
+        slotWrapper.classList.add('grid-slot-collapsed');
+}
+function renderLayout(container, layoutDef, manifest, pageTheme) {
+    if (layoutDef.structure) {
+        container.style.display = 'grid';
+        // CSS grid-template-areas needs each row quoted: "A A" "B C"
+        const rows = layoutDef.structure.split('/')
+            .map(r => r.trim().split(/\s+/).filter(s => s))
+            .filter(r => r.length > 0);
+        const maxCols = Math.max(...rows.map(r => r.length));
+        const normalizedRows = rows.map(r => {
+            while (r.length < maxCols)
+                r.push('.');
+            return r.join(' ');
+        });
+        container.style.gridTemplateAreas = normalizedRows.map(r => `"${r}"`).join(' ');
+        if (rows.length > 0) {
+            container.style.gridTemplateRows = `repeat(${rows.length}, auto)`;
+            container.style.gridTemplateColumns = `repeat(${maxCols}, 1fr)`;
+        }
+        const slotMap = layoutDef.slotMap || {};
+        Object.keys(slotMap).forEach(slotLetter => {
+            const item = slotMap[slotLetter];
+            if (!item)
+                return;
+            const wrapper = document.createElement('div');
+            wrapper.style.gridArea = slotLetter;
+            // Item could be a visual or another container
+            const visual = (manifest.visuals || []).find(v => v.name.toLowerCase() === item.toLowerCase());
+            if (visual) {
+                renderVisual(wrapper, visual, pageTheme, manifest);
+            }
+            else {
+                const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
+                if (nested) {
+                    const mode = (getStyle(nested.styles, 'COLLAPSE_MODE') || 'DRAWER').toUpperCase();
+                    if (nested.isCollapsible && mode === 'DRAWER') {
+                        renderCollapsibleContainer(container, nested, manifest, pageTheme, wrapper);
+                    }
+                    else {
+                        renderContainer(wrapper, nested, manifest, pageTheme);
+                    }
+                }
+                else {
+                    const btn = (manifest.buttons || []).find(b => b.name.toLowerCase() === item.toLowerCase());
+                    if (btn)
+                        renderButton(wrapper, btn);
+                }
+            }
+            container.appendChild(wrapper);
+        });
+    }
+    else {
+        const slotMap = layoutDef.slotMap || {};
+        const uniqueItems = [...new Set(Object.values(slotMap))];
+        uniqueItems.forEach(item => {
+            const visual = (manifest.visuals || []).find(v => v.name.toLowerCase() === item.toLowerCase());
+            if (visual) {
+                renderVisual(container, visual, pageTheme, manifest);
+            }
+            else {
+                const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
+                if (nested) {
+                    const mode = (getStyle(nested.styles, 'COLLAPSE_MODE') || 'DRAWER').toUpperCase();
+                    if (nested.isCollapsible && mode === 'DRAWER') {
+                        renderCollapsibleContainer(container, nested, manifest, pageTheme, null);
+                    }
+                    else {
+                        renderContainer(container, nested, manifest, pageTheme);
+                    }
+                }
+                else {
+                    const btn = (manifest.buttons || []).find(b => b.name.toLowerCase() === item.toLowerCase());
+                    if (btn)
+                        renderButton(container, btn);
+                }
+            }
+        });
+    }
+}
+function calculateContainerActiveCount(containerDef, manifest) {
+    if (!containerDef || !getBaselineManifest() || !getBaselineManifest().parameters)
+        return 0;
+    const slotMap = containerDef.slotMap || {};
+    const items = Object.values(slotMap);
+    let activeCount = 0;
+    const countedParams = new Set();
+    items.forEach(itemName => {
+        const v = (manifest?.visuals || []).find(vis => vis.name.toLowerCase() === itemName.toLowerCase());
+        if (v) {
+            const changeActions = actionsFor(v, 'ON_CHANGE').concat(actionsFor(v, 'ON_SUBMIT'))
+                .filter((a) => a.type === 'SET_PARAMETER');
+            changeActions.forEach(a => {
+                const p = a.parameterName;
+                if (p && !countedParams.has(p.toLowerCase())) {
+                    countedParams.add(p.toLowerCase());
+                    const curVal = String(getParam(parameters, p) ?? '');
+                    const baseVal = String(getParam(getBaselineManifest().parameters, p) ?? '');
+                    if (curVal !== baseVal) {
+                        activeCount++;
+                    }
+                }
+            });
+        }
+    });
+    return activeCount;
+}
+function renderTabsContainer(container, containerDef, manifest, pageTheme) {
+    const div = document.createElement('div');
+    div.setAttribute('data-name', containerDef.name);
+    applyDesignTokens(div, containerDef, false, manifest);
+    const styles = containerDef.styles || {};
+    const opts = containerDef.options || {};
+    const containerTheme = getStyle(styles, 'THEME') || pageTheme;
+    const tabPosition = (getOption(opts, 'TAB_POSITION') || getStyle(styles, 'TAB_POSITION') || 'TOP').toUpperCase();
+    div.className = `report-container container-tabs tabs-position-${tabPosition.toLowerCase()}`;
+    const slotMap = containerDef.slotMap || {};
+    const slotDetails = containerDef.slotDetails || {};
+    const slotKeys = Object.keys(slotMap);
+    if (slotKeys.length === 0) {
+        container.appendChild(div);
+        return;
+    }
+    const nav = document.createElement('div');
+    nav.className = 'tabs-nav';
+    const content = document.createElement('div');
+    content.className = 'tabs-content';
+    slotKeys.forEach((key, idx) => {
+        const itemName = slotMap[key];
+        const detail = slotDetails[key] || {};
+        const tabBtn = document.createElement('div');
+        tabBtn.className = 'tabs-tab' + (idx === 0 ? ' active' : '');
+        tabBtn.setAttribute('data-slot', key);
+        const iconVal = detail.icon;
+        if (iconVal) {
+            const iconEl = document.createElement('span');
+            iconEl.className = 'tab-icon';
+            if (iconVal.includes('.') || iconVal.includes('/')) {
+                iconEl.innerHTML = `<img src="${escHtml(safeUrl(iconVal))}" style="width:16px;height:16px;vertical-align:middle;">`;
+            }
+            else {
+                iconEl.textContent = iconVal;
+            }
+            tabBtn.appendChild(iconEl);
+            tabBtn.appendChild(document.createTextNode(' '));
+        }
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'tab-label';
+        const targetVisual = (manifest?.visuals || []).find(v => v.name.toLowerCase() === itemName.toLowerCase());
+        labelSpan.textContent = (targetVisual && targetVisual.title) ? targetVisual.title : itemName;
+        tabBtn.appendChild(labelSpan);
+        const badgeVal = detail.badge;
+        if (badgeVal != null && badgeVal !== '') {
+            const badgeEl = document.createElement('span');
+            badgeEl.className = 'tab-badge';
+            badgeEl.textContent = badgeVal;
+            tabBtn.appendChild(badgeEl);
+        }
+        const panel = document.createElement('div');
+        panel.className = 'tabs-panel' + (idx === 0 ? ' active' : '');
+        panel.setAttribute('data-slot', key);
+        if (targetVisual) {
+            renderVisual(panel, targetVisual, containerTheme, manifest);
+        }
+        else {
+            const nested = (manifest?.containers || []).find(c => c.name.toLowerCase() === itemName.toLowerCase());
+            if (nested)
+                renderContainer(panel, nested, manifest, containerTheme);
+        }
+        tabBtn.addEventListener('click', () => {
+            nav.querySelectorAll('.tabs-tab').forEach(t => t.classList.remove('active'));
+            content.querySelectorAll('.tabs-panel').forEach(p => p.classList.remove('active'));
+            tabBtn.classList.add('active');
+            panel.classList.add('active');
+            setTimeout(() => resizeChartsIn(panel), 50);
+        });
+        nav.appendChild(tabBtn);
+        content.appendChild(panel);
+    });
+    div.appendChild(nav);
+    div.appendChild(content);
+    container.appendChild(div);
+    setTimeout(() => resizeChartsIn(content), 50);
+}
+function renderAccordionContainer(container, containerDef, manifest, pageTheme) {
+    const div = document.createElement('div');
+    div.setAttribute('data-name', containerDef.name);
+    applyDesignTokens(div, containerDef, false, manifest);
+    div.className = 'report-container container-accordion';
+    const styles = containerDef.styles || {};
+    const opts = containerDef.options || {};
+    const containerTheme = getStyle(styles, 'THEME') || pageTheme;
+    const defaultOpen = (getOption(opts, 'DEFAULT_OPEN') || '').toLowerCase();
+    const slotMap = containerDef.slotMap || {};
+    const slotKeys = Object.keys(slotMap);
+    slotKeys.forEach(key => {
+        const itemName = slotMap[key];
+        const targetVisual = (manifest?.visuals || []).find(v => v.name.toLowerCase() === itemName.toLowerCase());
+        const sectionTitle = (targetVisual && targetVisual.title) ? targetVisual.title : itemName;
+        const itemEl = document.createElement('div');
+        itemEl.className = 'accordion-item';
+        const isOpen = defaultOpen && (key.toLowerCase() === defaultOpen || itemName.toLowerCase() === defaultOpen);
+        if (isOpen)
+            itemEl.classList.add('open');
+        const headerEl = document.createElement('div');
+        headerEl.className = 'accordion-header';
+        headerEl.innerHTML = `<span>${escHtml(sectionTitle)}</span><span class="accordion-chevron">&#x25BC;</span>`;
+        const contentEl = document.createElement('div');
+        contentEl.className = 'accordion-content';
+        if (targetVisual) {
+            renderVisual(contentEl, targetVisual, containerTheme, manifest);
+        }
+        else {
+            const nested = (manifest?.containers || []).find(c => c.name.toLowerCase() === itemName.toLowerCase());
+            if (nested)
+                renderContainer(contentEl, nested, manifest, containerTheme);
+        }
+        headerEl.addEventListener('click', () => {
+            const opened = itemEl.classList.toggle('open');
+            if (opened)
+                setTimeout(() => resizeChartsIn(contentEl), 50);
+        });
+        itemEl.appendChild(headerEl);
+        itemEl.appendChild(contentEl);
+        div.appendChild(itemEl);
+    });
+    container.appendChild(div);
+    setTimeout(() => resizeChartsIn(div), 50);
+}
+
+
+// ─── rt-actions.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-actions.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Actions, navigation, drill, cross-filtering, and export.
+ */
+let _drillInFlight = false;
+// ── Native SVG chart — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL / BUBBLE / RADAR / CANDLESTICK / MAP / GANTT / SANKEY / SUNBURST / NETWORK / TRELLIS) ──
+// Cross-filter state: { filterValue, filterColumn }. Stored per page section.
+function getPageState(container) {
+    let el = container;
+    while (el && !el.classList.contains('page'))
+        el = el.parentElement;
+    return el;
+}
+function applyPageCrossFilter(container, filterValue, filterColumn, sourceVisualName, event) {
+    const pageEl = getPageState(container);
+    if (!pageEl)
+        return;
+    // Use module-level state keyed by page ID so it survives renderManifest DOM rebuilds
+    const pageKey = pageEl.id || 'default';
+    const state = _crossFilterStates[pageKey] || (_crossFilterStates[pageKey] = { selections: [] });
+    const isMulti = event && (event.ctrlKey || event.metaKey);
+    // Update state
+    if (isMulti) {
+        const idx = state.selections.findIndex(s => s.value === filterValue && s.column === filterColumn);
+        if (idx >= 0)
+            state.selections.splice(idx, 1);
+        else
+            state.selections.push({ value: filterValue, column: filterColumn, visual: sourceVisualName });
+    }
+    else {
+        if (state.selections.length === 1 && state.selections[0].value === filterValue && state.selections[0].visual === sourceVisualName) {
+            state.selections = [];
+        }
+        else {
+            state.selections = [{ value: filterValue, column: filterColumn, visual: sourceVisualName }];
+        }
+    }
+    // Mark the source card with a border indicator; strip the marker from all others.
+    pageEl.querySelectorAll('.visual-card').forEach(card => {
+        const v = /** @type {EtlSqlVisualHost} */ (card)._visualData;
+        if (!v)
+            return;
+        if (state.selections.length > 0 && state.selections.some(s => s.visual === v.name)) {
+            card.classList.add('cross-filter-source');
+        }
+        else {
+            card.classList.remove('cross-filter-source');
+        }
+    });
+    if (state.selections.length === 0) {
+        // Deselect: post an empty non-interaction batch to force the server to re-evaluate
+        // without any interactionValues, returning a clean manifest with no highlightRows.
+        state.lastBatch = {};
+        postParameters({}, false, null, sourceVisualName).then(m => { if (m)
+            renderManifest(m); });
+        return;
+    }
+    // Build interaction batch for the active selection
+    const batch = {};
+    const groups = {};
+    state.selections.forEach(s => {
+        const k = '@' + s.column;
+        if (!groups[k])
+            groups[k] = [];
+        groups[k].push(s.value);
+    });
+    Object.keys(groups).forEach(k => { batch[k] = groups[k].join(','); });
+    state.lastBatch = batch;
+    postParameters(batch, true, null, sourceVisualName).then(m => { if (m)
+        renderManifest(m); });
+}
+function reApplyCrossFilterStyling() {
+    document.querySelectorAll('.page').forEach(pageEl => {
+        const state = _crossFilterStates[pageEl.id];
+        if (!state || state.selections.length === 0)
+            return;
+        const activeVisuals = new Set(state.selections.map(s => s.visual));
+        pageEl.querySelectorAll('.visual-card').forEach(card => {
+            const v = /** @type {EtlSqlVisualHost} */ (card)._visualData;
+            if (!v)
+                return;
+            if (activeVisuals.has(v.name)) {
+                card.classList.add('cross-filter-source');
+            }
+            else {
+                card.classList.remove('cross-filter-source');
+            }
+        });
+    });
+}
+// ── CSV export ──────────────────────────────────────────────────────────
+function exportCsv(visual) {
+    const cols = visual.columns || [];
+    const rows = visual.rows || [];
+    const escape = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    const lines = [cols.map(escape).join(',')];
+    rows.forEach(r => lines.push(cols.map((_, i) => escape(r[i])).join(',')));
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (visual.name || 'export') + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+function exportExcel(visual) {
+    const cols = visual.columns || [];
+    const rows = visual.rows || [];
+    const esc = (v) => escHtml(String(v ?? ''));
+    let html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+        'xmlns:x="urn:schemas-microsoft-com:office:excel">' +
+        '<head><meta charset="UTF-8"></head><body><table>';
+    html += '<tr>' + cols.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
+    rows.forEach(r => {
+        html += '<tr>' + cols.map((_, i) => `<td>${esc(r[i])}</td>`).join('') + '</tr>';
+    });
+    html += '</table></body></html>';
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (visual.name || 'export') + '.xls';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+// Prefer a real .xlsx from the server (typed cells, one sheet, no "format
+// mismatch" warning). Falls back to the lightweight client-side .xls when no
+// export API is reachable (e.g. VS Code preview or a host without the endpoint).
+async function exportExcelDownload(visual) {
+    const base = window.__API_BASE__;
+    if (base) {
+        try {
+            const res = await fetch(base + '/export/xlsx?visual=' + encodeURIComponent(visual.name || ''));
+            if (res.ok) {
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = (visual.name || 'export') + '.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                return;
+            }
+        }
+        catch { /* fall through to client-side export */ }
+    }
+    exportExcel(visual);
+}
+function findVisualData(targetName) {
+    const el = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`);
+    return el ? /** @type {EtlSqlVisualHost} */ (el)._visualData : null;
+}
+// Drill-through back-navigation stack
+function showDrillBackButton() {
+    let btn = document.getElementById('drill-back-btn');
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'drill-back-btn';
+        btn.className = 'drill-back-btn';
+        btn.addEventListener('click', () => {
+            if (_drillHistory.length === 0)
+                return;
+            const prevParams = _drillHistory.pop();
+            // Restore all previous params; blank out any keys added by the drill
+            const restoreBatch = Object.assign({}, prevParams);
+            Object.keys(parameters).forEach(k => {
+                if (!(k in prevParams))
+                    restoreBatch[k] = '';
+            });
+            if (_drillHistory.length === 0)
+                hideDrillBackButton();
+            else
+                btn.innerHTML = '← Back' + (_drillHistory.length > 1 ? ` (${_drillHistory.length})` : '');
+            if (vscode) {
+                vscode.postMessage({ type: 'refreshReport', parameters: restoreBatch });
+            }
+            else {
+                postParameters(restoreBatch).then(m => { if (m)
+                    renderManifest(m); });
+            }
+        });
+        document.body.appendChild(btn);
+    }
+    btn.innerHTML = '← Back' + (_drillHistory.length > 1 ? ` (${_drillHistory.length})` : '');
+    btn.style.display = 'flex';
+}
+function hideDrillBackButton() {
+    const btn = document.getElementById('drill-back-btn');
+    if (btn)
+        btn.style.display = 'none';
+}
+// Lightweight singleton context menu for DRILL_DOWN and Export
+let _ctxMenu = null;
+function showCtxMenu(x, y, visual, rowData) {
+    hideCtxMenu();
+    const menu = document.createElement('div');
+    menu.className = 'report-ctx-menu';
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    const drillDowns = (visual.actions || []).filter(a => a.type === 'DRILL_DOWN');
+    const drillReports = (visual.actions || []).filter(a => a.type === 'DRILL_REPORT');
+    drillDowns.forEach(action => {
+        const item = document.createElement('div');
+        item.className = 'ctx-item';
+        const target = action.targetVisual || action.targetPage || 'Details';
+        item.innerHTML = `<span>&#x21AA;</span> Drill down to <b>${escHtml(target)}</b>`;
+        item.addEventListener('click', () => {
+            executeAction(action, rowData || [], visual.columns || [], visual.name, visual);
+            hideCtxMenu();
+        });
+        menu.appendChild(item);
+    });
+    drillReports.forEach(action => {
+        const item = document.createElement('div');
+        item.className = 'ctx-item';
+        const target = action.targetReport || 'Report';
+        // Clean up filename for display
+        const displayName = target.replace(/\.[^/.]+$/, "").replace(/^.*[\\/]/, '');
+        item.innerHTML = `<span>&#x2197;</span> Open <b>${escHtml(displayName)}</b>`;
+        item.addEventListener('click', () => {
+            executeAction(action, rowData || [], visual.columns || [], visual.name, visual);
+            hideCtxMenu();
+        });
+        menu.appendChild(item);
+    });
+    if (drillDowns.length > 0 || drillReports.length > 0) {
+        const sep = document.createElement('div');
+        sep.className = 'ctx-sep';
+        menu.appendChild(sep);
+    }
+    const exportItem = document.createElement('div');
+    exportItem.className = 'ctx-item';
+    exportItem.innerHTML = `<span>&#x2913;</span> Export to CSV`;
+    exportItem.addEventListener('click', () => { exportCsv(visual); hideCtxMenu(); });
+    menu.appendChild(exportItem);
+    const excelItem = document.createElement('div');
+    excelItem.className = 'ctx-item';
+    excelItem.innerHTML = `<span>&#x2913;</span> Export to Excel`;
+    excelItem.addEventListener('click', () => { exportExcelDownload(visual); hideCtxMenu(); });
+    menu.appendChild(excelItem);
+    document.body.appendChild(menu);
+    _ctxMenu = menu;
+    // Close on any outside click
+    setTimeout(() => document.addEventListener('click', hideCtxMenu, { once: true }), 10);
+}
+function hideCtxMenu() {
+    if (_ctxMenu) {
+        _ctxMenu.remove();
+        _ctxMenu = null;
+    }
+}
+function matchesCondition(cond, val, colName) {
+    let expr = (cond || '').trim();
+    while (expr.startsWith('(') && expr.endsWith(')')) {
+        expr = expr.slice(1, -1).trim();
+    }
+    const betweenMatch = expr.match(/(?:(?:[\w"[\]]+)\s+)?BETWEEN\s+(-?[\d.]+)\s+AND\s+(-?[\d.]+)/i);
+    if (betweenMatch) {
+        const low = parseFloat(betweenMatch[1]);
+        const high = parseFloat(betweenMatch[2]);
+        return val >= low && val <= high;
+    }
+    const andParts = expr.split(/\s+AND\s+/i);
+    if (andParts.length > 1) {
+        return andParts.every(part => matchesCondition(part, val, colName));
+    }
+    const orParts = expr.split(/\s+OR\s+/i);
+    if (orParts.length > 1) {
+        return orParts.some(part => matchesCondition(part, val, colName));
+    }
+    const bareMatch = expr.match(/^(<>|[<>!=]=?)\s*(-?[\d.]+)$/);
+    if (bareMatch) {
+        return compareValues(val, bareMatch[1], parseFloat(bareMatch[2]));
+    }
+    const compMatch = expr.match(/^(.*?)\s*(<>|[<>!=]=?)\s*(.*?)$/);
+    if (compMatch) {
+        const leftStr = compMatch[1].trim().replace(/^[(["]+|[)\]"]+$/g, '');
+        const op = compMatch[2];
+        const rightStr = compMatch[3].trim().replace(/^[(["]+|[)\]"]+$/g, '');
+        const rNum = parseFloat(rightStr);
+        const lNum = parseFloat(leftStr);
+        if (!isNaN(rNum))
+            return compareValues(val, op, rNum);
+        if (!isNaN(lNum))
+            return compareValues(lNum, op, val);
+    }
+    return false;
+}
+function compareValues(a, op, b) {
+    switch (op) {
+        case '>': return a > b;
+        case '>=': return a >= b;
+        case '<': return a < b;
+        case '<=': return a <= b;
+        case '=':
+        case '==': return Math.abs(a - b) < 1e-9;
+        case '!=':
+        case '<>': return Math.abs(a - b) >= 1e-9;
+        default: return false;
+    }
+}
+function evaluateExpressionAgainstParameters(expr, currentParams) {
+    if (!expr)
+        return false;
+    const s = String(expr).trim();
+    if (/^(true|1|on)$/i.test(s))
+        return true;
+    if (/^(false|0|off)$/i.test(s))
+        return false;
+    function resolveToken(token) {
+        token = token.trim();
+        if (token.startsWith('@')) {
+            const pKey = token.toLowerCase();
+            for (const k in currentParams) {
+                if (k.toLowerCase() === pKey)
+                    return String(currentParams[k] ?? '');
+            }
+            return '';
+        }
+        if ((token.startsWith("'") && token.endsWith("'")) || (token.startsWith('"') && token.endsWith('"'))) {
+            return token.slice(1, -1);
+        }
+        return token;
+    }
+    const m = s.match(/^(.*?)\s*(<>|[<>!=]=?)\s*(.*?)$/);
+    if (m) {
+        const left = resolveToken(m[1]);
+        const op = m[2];
+        const right = resolveToken(m[3]);
+        const lNum = Number(left);
+        const rNum = Number(right);
+        const bothNum = !isNaN(lNum) && !isNaN(rNum) && left !== '' && right !== '';
+        switch (op) {
+            case '=':
+            case '==':
+                return bothNum ? Math.abs(lNum - rNum) < 1e-9 : left.toLowerCase() === right.toLowerCase();
+            case '!=':
+            case '<>':
+                return bothNum ? Math.abs(lNum - rNum) >= 1e-9 : left.toLowerCase() !== right.toLowerCase();
+            case '>':
+                return bothNum ? lNum > rNum : left > right;
+            case '>=':
+                return bothNum ? lNum >= rNum : left >= right;
+            case '<':
+                return bothNum ? lNum < rNum : left < right;
+            case '<=':
+                return bothNum ? lNum <= rNum : left <= right;
+        }
+    }
+    if (s.startsWith('@')) {
+        const val = resolveToken(s);
+        return !!val && !/^(false|0|off)$/i.test(val);
+    }
+    return false;
+}
+// ── Actions ─────────────────────────────────────────────────────────────
+function actionsFor(visual, trigger) {
+    return (visual.actions || []).filter((a) => a.trigger === trigger);
+}
+function resolveActionValue(action, rowData, columns, controlValue) {
+    const source = (action.valueSource || '').toUpperCase();
+    if (source === 'CONTROL_VALUE')
+        return controlValue ?? '';
+    if (source === 'COLUMN') {
+        const colIdx = columns.findIndex(c => c.toLowerCase() === (action.valueColumn || '').toLowerCase());
+        return colIdx >= 0 ? rowData[colIdx] : '';
+    }
+    if (source === 'LITERAL')
+        return action.literalValue ?? '';
+    return action.literalValue ?? '';
+}
+function resolveActionParameters(action, rowData, columns) {
+    const result = {};
+    const columnParams = action.parameterColumns || {};
+    const literalParams = action.literalParameters || {};
+    Object.entries(columnParams).forEach(([name, column]) => {
+        const colIdx = columns.findIndex(c => c.toLowerCase() === String(column).toLowerCase());
+        result[name] = colIdx >= 0 ? String(rowData[colIdx] ?? '') : '';
+    });
+    Object.entries(literalParams).forEach(([name, value]) => {
+        result[name] = String(value ?? '');
+    });
+    return result;
+}
+function navigateToPage(pageName) {
+    if (!pageName)
+        return;
+    try {
+        const navItem = document.querySelector(`[data-page="${CSS.escape(pageName)}"]`);
+        if (navItem) {
+            /** @type {HTMLElement} */ (navItem).click();
+            return;
+        }
+    }
+    catch (e) {
+        console.error(e);
+    }
+    const targetPage = document.getElementById('page-' + String(pageName).toLowerCase());
+    if (!targetPage)
+        return;
+    try {
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.page')).forEach(page => {
+            const isTarget = (page === targetPage);
+            page.style.display = isTarget ? 'block' : 'none';
+            if (isTarget)
+                page.classList.add('active');
+            else
+                page.classList.remove('active');
+        });
+    }
+    catch (e) {
+        console.error(e);
+    }
+    try {
+        /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-page]')).forEach(item => {
+            if (item.dataset.page === pageName)
+                item.classList.add('active');
+            else
+                item.classList.remove('active');
+        });
+    }
+    catch (e) {
+        console.error(e);
+    }
+    setLastActivePage(pageName);
+    try {
+        resizeChartsIn(targetPage);
+    }
+    catch (e) {
+        console.error(e);
+    }
+    try {
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'etl-page-changed', page: pageName, userTriggered: true }, '*');
+        }
+    }
+    catch (e) {
+        console.error(e);
+    }
+}
+function getActivePage() {
+    return Array.from(/** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.page')))
+        .find(page => page.style.display !== 'none' && page.classList.contains('active')) ||
+        Array.from(/** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.page')))
+            .find(page => page.style.display !== 'none') || null;
+}
+function getActivePageName() {
+    const page = getActivePage();
+    return page ? (page.dataset.pageName || null) : null;
+}
+function isActivePagePaginated() {
+    const page = getActivePage();
+    return !!page && (page.dataset.pageMode || '').toUpperCase() === 'PAGINATED';
+}
+function executeAction(action, rowData, columns, visualName, visualCtx) {
+    if (action.type === 'DRILL_IN') {
+        const hierarchy = action.hierarchy || [];
+        if (!hierarchy.length || !visualName)
+            return;
+        // Current level comes from the server-stamped drillState; fall back to hierarchy root.
+        const curLevel = visualCtx?.drillState?.currentLevel || hierarchy[0];
+        const colIdx = columns.findIndex(c => c.toLowerCase() === curLevel.toLowerCase());
+        const clicked = colIdx >= 0 ? String(rowData?.[colIdx] ?? '') : '';
+        if (!clicked)
+            return;
+        postDrillIn(visualName, clicked);
+        return;
+    }
+    if (action.type === 'DRILL_DOWN') {
+        const keyColumns = action.keyColumns || [];
+        const params = {};
+        for (const key of keyColumns) {
+            const colIdx = columns.findIndex(c => c.toLowerCase() === key.toLowerCase());
+            const value = colIdx >= 0 ? rowData[colIdx] : null;
+            if (value != null)
+                params['@' + key] = String(value);
+        }
+        if (Object.keys(params).length === 0)
+            return;
+        // Push current parameter snapshot onto back-navigation stack
+        _drillHistory.push(Object.assign({}, parameters));
+        showDrillBackButton();
+        // Visual feedback: pulse target or entire page if navigating
+        const targetName = action.target || action.targetVisual || action.targetPage;
+        if (targetName) {
+            const targetEl = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`)
+                || document.getElementById('page-' + targetName.toLowerCase());
+            if (targetEl) {
+                targetEl.classList.add('drilled-down');
+                setTimeout(() => targetEl.classList.remove('drilled-down'), 1500);
+                // If it's on the same page, scroll to it
+                targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // If it's a page, navigate to it
+                const navBtn = document.querySelector(`.nav-tab[data-page="${CSS.escape(targetName)}"]`);
+                if (navBtn) /** @type {HTMLElement} */
+                    (navBtn).click();
+            }
+        }
+        if (vscode) {
+            vscode.postMessage({ type: 'refreshReport', parameters: params });
+        }
+        else {
+            postParameters(params).then(manifest => { if (manifest)
+                renderManifest(manifest); });
+        }
+    }
+    else if (action.type === 'SET_PARAMETER') {
+        const value = resolveActionValue(action, rowData, columns);
+        const params = { [action.parameterName]: String(value ?? '') };
+        if (vscode) {
+            vscode.postMessage({ type: 'refreshReport', parameters: params });
+        }
+        else {
+            postParameters(params).then(manifest => { if (manifest)
+                renderManifest(manifest); });
+        }
+    }
+    else if (action.type === 'RUN_SCRIPT') {
+        const scriptPath = action.scriptPath;
+        const finalParams = resolveActionParameters(action, rowData, columns);
+        if (isInteractive) {
+            postRunScript(scriptPath, finalParams).then(res => {
+                if (res && res.message)
+                    feedback.notify(res.message, { title: 'Script action', tone: 'success', auditAction: 'report.script.run' });
+                if (res && res.refresh) {
+                    // `fetchManifest` was never defined, so a RUN_SCRIPT action that asked for a
+                    // refresh threw instead of refreshing — after the script had already run.
+                    // Re-posting an empty parameter set is how the two branches above refresh;
+                    // `isInteraction` keeps a paginated page from staging the empty set and
+                    // handing back null, and keeps the report's parameter state untouched.
+                    postParameters({}, true).then(m => { if (m)
+                        renderManifest(m); });
+                }
+            });
+        }
+        else {
+            console.warn('RUN_SCRIPT is only supported in web mode.');
+        }
+    }
+    else if (action.type === 'CLEAR_FILTERS') {
+        // Reset all cross-filter states on all pages
+        for (let k in _crossFilterStates)
+            delete _crossFilterStates[k];
+        document.querySelectorAll('.page').forEach(pageEl => {
+            pageEl.querySelectorAll('.visual-card').forEach(card => {
+                card.classList.remove('cross-filter-source');
+            });
+        });
+        // Reset parameters to baseline
+        if (getBaselineManifest() && getBaselineManifest().parameters) {
+            const resetBatch = {};
+            Object.keys(getBaselineManifest().parameters).forEach(k => {
+                resetBatch[k] = getBaselineManifest().parameters[k];
+            });
+            postParameters(resetBatch).then(m => { if (m)
+                renderManifest(m); });
+        }
+        else {
+            if (vscode)
+                vscode.postMessage({ type: 'refreshReport', parameters: {} });
+            else
+                postParameters({}).then(m => { if (m)
+                    renderManifest(m); });
+        }
+    }
+    else if (action.type === 'APPLY_PARAMETERS') {
+        const batch = { ...pendingParameters };
+        // Clear pending
+        for (let k in pendingParameters)
+            delete pendingParameters[k];
+        updateStagedUI();
+        // Flush to server
+        _postParametersInternal(batch, false, getActivePageName()).then(m => { if (m)
+            renderManifest(m); });
+    }
+    else if (action.type === 'BACK') {
+        window.history.back();
+    }
+    else if (action.type === 'REFRESH') {
+        if (isInteractive) {
+            fetch(apiBase + '/manifest')
+                .then(r => r.json())
+                .then(m => renderManifest(m))
+                .catch(e => console.error('Refresh failed:', e));
+        }
+    }
+    else if (action.type === 'REFRESH_VISUALS') {
+        const targets = (action.targets || []).filter(Boolean);
+        if (targets.length === 0)
+            return;
+        if (vscode) {
+            vscode.postMessage({ type: 'refreshVisuals', visuals: targets });
+        }
+        else {
+            postRefreshVisuals(targets).then(m => { if (m)
+                renderManifest(m); });
+        }
+    }
+    else if (action.type === 'EXPORT_CSV' || action.type === 'EXPORT_EXCEL') {
+        const targetName = action.targetVisual || (visualCtx && visualCtx.options && visualCtx.options.TARGET);
+        const visual = targetName ? findVisualData(targetName) : null;
+        if (!visual) {
+            console.warn('EXPORT action: no target visual found:', targetName);
+            return;
+        }
+        if (action.type === 'EXPORT_CSV')
+            exportCsv(visual);
+        else
+            exportExcelDownload(visual);
+    }
+    else if (action.type === 'EXPORT_PDF') {
+        window.print();
+    }
+    else if (action.type === 'NAVIGATE_PAGE') {
+        navigateToPage(action.targetPage);
+    }
+    else if (action.type === 'DRILL_REPORT') {
+        const targetReport = resolveActionValue(action, rowData, columns) || action.targetReport;
+        if (!targetReport)
+            return;
+        const finalParams = resolveActionParameters(action, rowData, columns);
+        // Build query string
+        const qs = Object.entries(finalParams)
+            .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+            .join('&');
+        if (vscode) {
+            vscode.postMessage({
+                type: 'drillReport',
+                targetReport: targetReport,
+                parameters: finalParams
+            });
+        }
+        else {
+            // Determine target URL based on current environment
+            let targetUrl;
+            const reportName = targetReport.replace(/\.[^/.]+$/, "").replace(/^.*[\\/]/, '');
+            if (window.__API_BASE__) {
+                // Portal mode: navigate to sibling report
+                const parts = window.__API_BASE__.split('/'); // e.g. ["", "reports", "Summary", "api"]
+                if (parts.length >= 3) {
+                    targetUrl = `/${parts[1]}/${encodeURIComponent(reportName)}`;
+                }
+                else {
+                    targetUrl = `/reports/${encodeURIComponent(reportName)}`;
+                }
+            }
+            else {
+                // Standalone mode: assume sibling file on same server
+                targetUrl = `/${encodeURIComponent(reportName)}`;
+            }
+            if (qs)
+                targetUrl += (targetUrl.includes('?') ? '&' : '?') + qs;
+            // Only navigate to a local, same-origin path: must start with a single '/'
+            // (reject '//host' / '/\host' protocol-relative targets) so a crafted report
+            // name can never redirect off-site.
+            if (/^\/(?![/\\])/.test(targetUrl)) {
+                window.location.href = targetUrl;
+            }
+        }
+    }
+    else if (action.type === 'SET_UI_STATE') {
+        const targets = action.targets || [];
+        const key = (action.key || '').toUpperCase();
+        const value = action.value;
+        // Resolve target elements
+        const elements = [];
+        targets.forEach(t => {
+            if (t.startsWith('TAG:')) {
+                const tagName = t.substring(4);
+                /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(`[data-tag="${tagName}"]`)).forEach(el => elements.push(el));
+            }
+            else {
+                const el = document.getElementById(t) || document.querySelector(`[data-name="${t}"]`);
+                if (el)
+                    elements.push /** @type {HTMLElement} */((el));
+            }
+        });
+        elements.forEach(el => {
+            if (key === 'VISIBLE') {
+                const isVisible = isOn(value);
+                el.style.display = isVisible ? '' : 'none';
+                const name = el.getAttribute('data-name') || el.id;
+                if (name)
+                    _uiStates[name] = Object.assign({}, _uiStates[name], { visible: isVisible });
+            }
+            else if (key === 'COLLAPSED') {
+                const isCollapsed = isOn(value);
+                const container = el.closest('.collapsible-drawer') || el.closest('.collapsible-inline') || el.closest('.report-container') || el;
+                const name = container.getAttribute('data-name');
+                if (name)
+                    _uiStates[name] = Object.assign({}, _uiStates[name], { collapsed: isCollapsed });
+                if (isCollapsed)
+                    container.classList.add('collapsed');
+                else
+                    container.classList.remove('collapsed');
+                // Update chevrons for inline collapsible
+                if (container.classList.contains('collapsible-inline')) {
+                    const chevron = container.querySelector('.container-chevron');
+                    if (chevron)
+                        chevron.innerHTML = isCollapsed ? '&#x25BC;' : '&#x25B2;';
+                }
+                // Specific logic for drawers
+                if (container.classList.contains('collapsible-drawer')) {
+                    if (isCollapsed)
+                        container.classList.remove('open');
+                    else
+                        container.classList.add('open');
+                }
+                // Trigger resize to handle grid reflow
+                setTimeout(() => {
+                    const pageGrid = /** @type {HTMLElement | null} */ (document.querySelector('.page-grid'));
+                    if (pageGrid)
+                        resizeChartsIn(pageGrid);
+                }, 350);
+            }
+            else if (key === 'BACKGROUND-COLOR') {
+                el.style.backgroundColor = value;
+            }
+            else if (key === 'COLOR') {
+                el.style.color = value;
+            }
+            else if (key === 'CLASS') {
+                if (value.startsWith('+'))
+                    el.classList.add(value.substring(1));
+                else if (value.startsWith('-'))
+                    el.classList.remove(value.substring(1));
+                else
+                    el.className = value;
+            }
+        });
+    }
+    else if (action.type === 'APPLY_BOOKMARK') {
+        applyBookmark(action.bookmarkName);
+    }
+    else if (action.type === 'RESET_PARAMETERS') {
+        const targets = action.resetParameters || [];
+        const resetBatch = {};
+        if (getBaselineManifest() && getBaselineManifest().parameters) {
+            if (targets.length > 0) {
+                targets.forEach(p => {
+                    const cleanP = p.startsWith('@') ? p : ('@' + p);
+                    let foundVal = '';
+                    for (const k in getBaselineManifest().parameters) {
+                        if (k.toLowerCase() === cleanP.toLowerCase()) {
+                            foundVal = getBaselineManifest().parameters[k];
+                            break;
+                        }
+                    }
+                    resetBatch[cleanP] = foundVal;
+                });
+            }
+            else {
+                Object.keys(getBaselineManifest().parameters).forEach(k => {
+                    resetBatch[k] = getBaselineManifest().parameters[k];
+                });
+            }
+        }
+        else {
+            if (targets.length > 0) {
+                targets.forEach(p => {
+                    const cleanP = p.startsWith('@') ? p : ('@' + p);
+                    resetBatch[cleanP] = '';
+                });
+            }
+        }
+        for (let k in pendingParameters)
+            delete pendingParameters[k];
+        updateStagedUI();
+        if (vscode) {
+            vscode.postMessage({ type: 'refreshReport', parameters: resetBatch });
+        }
+        else {
+            _postParametersInternal(resetBatch, false, getActivePageName()).then(m => { if (m)
+                renderManifest(m); });
+        }
+    }
+    else if (action.type === 'OPEN_URL') {
+        const rawUrl = action.urlTemplate
+            ? interpolateUrlTemplate(action, rowData, columns)
+            : (action.url || resolveActionValue(action, rowData, columns));
+        const url = safeUrl(rawUrl);
+        if (url && url !== '#') {
+            const target = action.target || '_blank';
+            window.open(url, target);
+        }
+    }
+    else if (action.type === 'SHOW_MODAL') {
+        showModalDialog(action.modalName, getLastManifest());
+    }
+    else if (action.type === 'HIDE_MODAL') {
+        hideModalDialog(action.modalName);
+    }
+}
+function getDrillInFlight() { return _drillInFlight; }
+function setDrillInFlight(value) { _drillInFlight = value; }
+
+
+// ─── rt-views.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-views.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Bookmarks, saved views, and offline state restoration.
+ */
+// Parses an identifier-only state hash. Returns { bookmark, view } with at most one set.
+function parseStateHash(hash) {
+    const result = { bookmark: null, view: null };
+    if (!hash)
+        return result;
+    const bm = hash.match(/[#&]bookmark=([^&]+)/);
+    if (bm) {
+        try {
+            result.bookmark = decodeURIComponent(bm[1]);
+        }
+        catch { /* malformed hash: ignore */ }
+        return result;
+    }
+    const vw = hash.match(/[#&]view=([^&]+)/);
+    if (vw) {
+        try {
+            result.view = decodeURIComponent(vw[1]);
+        }
+        catch { /* malformed hash: ignore */ }
+    }
+    return result;
+}
+async function applyBookmark(bookmarkName) {
+    if (!bookmarkName || !getLastManifest())
+        return false;
+    const bookmarks = (getLastManifest().bookmarks || []);
+    const bm = bookmarks.find((b) => b.name.toLowerCase() === bookmarkName.toLowerCase());
+    if (!bm) {
+        console.warn('Bookmark not found:', bookmarkName);
+        if (feedback)
+            feedback.notify('Bookmark not found: ' + bookmarkName, { title: 'Bookmark', tone: 'error' });
+        return false;
+    }
+    const hash = '#bookmark=' + encodeURIComponent(bm.name);
+    // Web mode: apply through the server-side atomic operation. The server resolves, validates,
+    // reconciles, refreshes affected visuals through the cascading-parameter engine, and publishes
+    // ONE manifest carrying the resolved `appliedState`. The client applies that state as one swap.
+    if (isWebMode && !vscode && !isOfflineSnapshot()) {
+        try {
+            const res = await fetch(apiBase + '/bookmark', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bookmarkName: bm.name })
+            });
+            if (!res.ok) {
+                if (feedback)
+                    feedback.notify('Could not apply bookmark.', { title: 'Bookmark', tone: 'error' });
+                return false;
+            }
+            const manifest = (await res.json());
+            if (manifest && manifest.error) {
+                if (feedback)
+                    feedback.notify(manifest.error, { title: 'Bookmark not applied', tone: 'error' });
+                return false;
+            }
+            renderManifest(manifest);
+            if (manifest && manifest.appliedState)
+                commitResolvedState(manifest.appliedState, { hash });
+            else if (window.history && window.history.replaceState)
+                window.history.replaceState(null, '', hash);
+            if (manifest && manifest.stateWarnings && feedback) {
+                manifest.stateWarnings.forEach((w) => feedback.notify(w, { title: 'Saved view', tone: 'warning' }));
+            }
+            return true;
+        }
+        catch (e) {
+            console.warn('Bookmark application request failed:', e && e.message);
+            if (feedback)
+                feedback.notify('Could not apply bookmark.', { title: 'Bookmark', tone: 'error' });
+            return false;
+        }
+    }
+    // VS Code preview / offline snapshot: apply the manifest-carried envelope through the shared
+    // client-side atomic contract (no server available).
+    return applyResolvedState(bm.state || {}, { hash });
+}
+// Applies the active page + presentation state from a resolved envelope and writes the
+// identifier-only hash. Used after both the server-side and client-side application paths.
+function commitResolvedState(state, opts) {
+    opts = opts || {};
+    if (state.activePage)
+        navigateToPage(state.activePage);
+    applyPresentationState(state);
+    if (opts.hash && window.history && window.history.replaceState) {
+        // A snapshot opened from disk has an opaque origin, where replaceState throws. The hash is
+        // a convenience for sharing a link; failing to write it must not abort the application.
+        try {
+            window.history.replaceState(null, '', opts.hash);
+        }
+        catch (e) {
+            console.debug('State hash not written:', e && e.message);
+        }
+    }
+}
+// Reads a named-object VISIBLE/COLLAPSED map from the shared envelope onto the DOM.
+function applyPresentationState(state) {
+    if (state.visible) {
+        Object.entries(state.visible).forEach(([objName, on]) => {
+            const el = document.getElementById(objName) || document.querySelector(`[data-name="${objName}"]`);
+            if (el) {
+                el.style.display = on ? '' : 'none';
+                _uiStates[objName] = Object.assign({}, _uiStates[objName], { visible: !!on });
+            }
+        });
+    }
+    if (state.collapsed) {
+        Object.entries(state.collapsed).forEach(([objName, on]) => {
+            const el = document.getElementById(objName) || document.querySelector(`[data-name="${objName}"]`);
+            if (!el)
+                return;
+            const container = el.closest('.collapsible-drawer')
+                || el.closest('.collapsible-inline')
+                || el.closest('.report-container') || el;
+            const name = container.getAttribute('data-name');
+            if (name)
+                _uiStates[name] = Object.assign({}, _uiStates[name], { collapsed: !!on });
+            if (on)
+                container.classList.add('collapsed');
+            else
+                container.classList.remove('collapsed');
+        });
+    }
+}
+// The single atomic application contract shared by author bookmarks, saved views, buttons, and
+// URL replay. Parameters are staged and committed as one request; the active page and
+// presentation state are applied ONLY after that request succeeds. On failure nothing is
+// applied (no partial bookmark), the identifier-only hash is not written, and a warning is shown.
+async function applyResolvedState(state, opts) {
+    opts = opts || {};
+    const batch = {};
+    if (state.parameters) {
+        Object.entries(state.parameters).forEach(([k, v]) => {
+            const paramName = k.startsWith('@') ? k : '@' + k;
+            // Typed values arrive as JS number/boolean/string/null; project to the string the API expects.
+            batch[paramName] = (v === null || v === undefined) ? '' : String(v);
+        });
+    }
+    const commit = () => commitResolvedState(state, opts);
+    if (Object.keys(batch).length === 0) {
+        commit();
+        return true;
+    }
+    // Offline snapshot / VS Code preview: apply parameters locally, then commit page/state.
+    if (typeof applyParametersOffline === 'function' && isOfflineSnapshot()) {
+        const ok = await applyParametersOffline(batch);
+        if (!ok) {
+            console.warn('Offline parameter application failed; bookmark not applied.');
+            if (feedback)
+                feedback.notify('Could not apply bookmark offline.', { title: 'Bookmark', tone: 'error' });
+            return false;
+        }
+        commit();
+        return true;
+    }
+    const manifest = await _postParametersInternal(batch, false, getActivePageName());
+    if (manifest) {
+        renderManifest(manifest);
+        commit();
+        return true;
+    }
+    if (vscode) {
+        // VS Code host applies parameters and re-renders asynchronously; commit page/state after.
+        commit();
+        return true;
+    }
+    // Web mode: the parameter request failed — do not partially apply the bookmark.
+    console.warn('Parameter application failed; bookmark/view not applied.');
+    if (feedback)
+        feedback.notify('Could not apply the requested state.', { title: 'Bookmark', tone: 'error' });
+    return false;
+}
+// Offline snapshots set window.__ETLSNAP__; overridden by the snapshot bootstrap when present.
+// Re-read rather than returning the boot-time `isOfflineHost`, so a host that sets the flag after
+// the runtime script has been parsed still gets offline behaviour from every later decision.
+function isOfflineSnapshot() {
+    return isOfflineHost
+        || !!(window.__ETLSNAP__ || (typeof window.__OFFLINE__ !== 'undefined' && window.__OFFLINE__));
+}
+/**
+ * Applies a bookmark's parameter values inside an offline snapshot.
+ *
+ * A snapshot has no server to re-query, and its rows are frozen at capture time, so the figures
+ * cannot move. What can and must replay is everything the author bookmarked that is not data: the
+ * parameter values themselves (so the slicers show the state the bookmark describes), the active
+ * page, and the VISIBLE/COLLAPSED presentation state — all of which the manifest already carries,
+ * because ManifestBuilder resolves each bookmark's typed envelope at build time.
+ *
+ * The reader is told once, and only once per application, that the figures belong to the snapshot;
+ * silently showing bookmarked slicer positions over unchanged numbers would be the more misleading
+ * outcome.
+ *
+ * Returns true when the state was applied, so the caller can commit the page/presentation half.
+ */
+/**
+ * Records parameter values into the snapshot manifest held in memory, without re-rendering.
+ *
+ * Offline there is no server to re-resolve against, so a parameter change moves the control and
+ * leaves the figures where the capture froze them. Separated from the bookmark path because a
+ * bookmark announces itself to the reader and an ordinary control change must not.
+ */
+function recordParametersOffline(batch) {
+    if (!getLastManifest())
+        return false;
+    getLastManifest().parameters = getLastManifest().parameters || {};
+    for (const [name, value] of Object.entries(batch || {})) {
+        getLastManifest().parameters[name] = value;
+        parameters[name] = value;
+    }
+    return true;
+}
+async function applyParametersOffline(batch) {
+    if (!getLastManifest())
+        return false;
+    const entries = Object.entries(batch || {});
+    if (entries.length === 0)
+        return true;
+    if (!recordParametersOffline(batch))
+        return false;
+    // Re-render from the snapshot in memory so the controls reflect the bookmarked values.
+    renderManifest(getLastManifest());
+    if (feedback) {
+        feedback.notify('Applied the bookmark’s filters. Figures come from the saved snapshot and do not change offline.', { title: 'Offline snapshot', tone: 'info' });
+    }
+    return true;
+}
+// Saved views are a Portal-only, per-user feature. The Portal hosts the runtime with
+// __API_BASE__ = '/api/reports/{id}'; the ReportPlayer uses '/reports/{name}/api' and has no
+// saved-view API at all. Addressing off the host base (rather than rebuilding '/api/reports/{id}'
+// by hand) is what keeps the URL correct in both hosts. Returns null wherever saved views do not
+// exist — VS Code preview, the Player, and offline snapshots.
+function savedViewsBase() {
+    if (vscode || isOfflineSnapshot())
+        return null;
+    const base = (window.__API_BASE__ || '').replace(/\/$/, '');
+    return /^\/api\/reports\/\d+$/.test(base) ? base + '/saved-views' : null;
+}
+// Applies one Portal saved view by identifier. Portal mode only. Returns true on success.
+// Unknown/unauthorized identifiers resolve to a graceful no-op (base report still opens) and
+// never reveal whether another user's view exists.
+async function applySavedView(viewId) {
+    const base = savedViewsBase();
+    if (!base)
+        return false;
+    try {
+        const res = await fetch(`${base}/${encodeURIComponent(viewId)}/apply`, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!res.ok)
+            return false;
+        const manifest = (await res.json());
+        if (!manifest || manifest.error) {
+            if (manifest && manifest.error && feedback)
+                feedback.notify(manifest.error, { title: 'Saved view not applied', tone: 'error' });
+            return false;
+        }
+        renderManifest(manifest);
+        if (manifest.appliedState)
+            commitResolvedState(manifest.appliedState, { hash: '#view=' + encodeURIComponent(viewId) });
+        if (manifest.stateWarnings && feedback)
+            manifest.stateWarnings.forEach((w) => feedback.notify(w, { title: 'Saved view', tone: 'warning' }));
+        return true;
+    }
+    catch (e) {
+        console.warn('Saved view could not be applied:', e && e.message);
+        return false;
+    }
+}
+// Applies the current user's default saved view, if any. Returns true when one was applied.
+async function applyUserDefaultSavedView() {
+    const base = savedViewsBase();
+    if (!base)
+        return false;
+    try {
+        const res = await fetch(`${base}/default`, {
+            headers: { 'Accept': 'application/json' }
+        });
+        if (res.status === 204 || !res.ok)
+            return false;
+        const view = (await res.json());
+        if (!view || view.id == null)
+            return false;
+        return await applySavedView(view.id);
+    }
+    catch (e) {
+        console.warn('Default saved view could not be applied:', e && e.message);
+        return false;
+    }
+}
+// Captures the current report state into a resolved-state envelope for saving as a view.
+// Only identifiers/values needed for replay are captured; the ScriptHash is stamped server-side.
+function captureResolvedState() {
+    const state = {
+        schemaVersion: 1,
+        activePage: getActivePageName(),
+        parameters: {},
+        visible: {},
+        collapsed: {}
+    };
+    const params = (getLastManifest() && getLastManifest().parameters) || {};
+    const metadata = (getLastManifest() && getLastManifest().parameterMetadata) || {};
+    Object.entries(params).forEach(([k, v]) => {
+        const name = k.startsWith('@') ? k : '@' + k;
+        const metaKey = Object.keys(metadata).find((m) => m.toLowerCase() === name.toLowerCase());
+        const type = metaKey && metadata[metaKey] ? String(metadata[metaKey].type || '').toUpperCase() : '';
+        if (/^(BIT|BOOL|BOOLEAN)$/.test(type) && /^(TRUE|FALSE)$/i.test(String(v)))
+            state.parameters[name] = String(v).toUpperCase() === 'TRUE';
+        else if (/^(INT|INTEGER|BIGINT|SMALLINT|TINYINT|DECIMAL|NUMERIC|FLOAT|REAL|DOUBLE|MONEY|NUMBER)(\s*\(|$)/.test(type)
+            && v !== '' && Number.isFinite(Number(v)))
+            state.parameters[name] = Number(v);
+        else
+            state.parameters[name] = v == null ? null : String(v);
+    });
+    // Presentation state is tracked as actions/bookmarks are applied.
+    Object.entries(_uiStates || {}).forEach(([name, s]) => {
+        if (s && typeof s.visible === 'boolean')
+            state.visible[name] = s.visible;
+        if (s && typeof s.collapsed === 'boolean')
+            state.collapsed[name] = s.collapsed;
+    });
+    return state;
+}
+function listSavedViews() {
+    return savedViewsRequest('', { headers: { 'Accept': 'application/json' } })
+        .then((r) => Array.isArray(r) ? r : []);
+}
+function saveCurrentAsView(name, isDefault) {
+    return savedViewsRequest('', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            name,
+            stateJson: JSON.stringify(captureResolvedState()),
+            isDefault: !!isDefault
+        })
+    });
+}
+// Upserts the caller's single default view. Distinct from save-as: the server replaces whatever
+// default already exists rather than accumulating duplicates named "My Default View".
+function saveDefaultView() {
+    return savedViewsRequest('/default', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: captureResolvedState() })
+    });
+}
+function updateSavedView(viewId, patch) {
+    return savedViewsRequest('/' + encodeURIComponent(viewId), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch)
+    });
+}
+async function deleteSavedView(viewId) {
+    const base = savedViewsBase();
+    if (!base)
+        return false;
+    try {
+        const res = await fetch(base + '/' + encodeURIComponent(viewId), { method: 'DELETE' });
+        return res.ok;
+    }
+    catch (e) {
+        console.warn('Saved-view delete failed:', e && e.message);
+        return false;
+    }
+}
+// Drops the caller's personal default (so the report stops opening on it) and returns the canvas
+// to what the author declared: the DEFAULT = ON bookmark when one exists, otherwise a clean reload.
+async function resetToReportDefault(views) {
+    const personalDefault = (views || []).find((v) => v.isDefault);
+    if (personalDefault)
+        await updateSavedView(personalDefault.id, { isDefault: false });
+    const authorDefault = ((getLastManifest() && getLastManifest().bookmarks) || []).find((b) => b.isDefault);
+    if (authorDefault) {
+        await applyBookmark(authorDefault.name);
+    }
+    else if (!vscode) {
+        window.location.hash = '';
+        window.location.reload();
+    }
+    return true;
+}
+// ── Views menu ──────────────────────────────────────────────────────────────────────────────
+function styleMenuItem(el) {
+    el.type = 'button';
+    el.setAttribute('role', 'menuitem');
+    el.tabIndex = -1;
+    el.style.border = 'none';
+    el.style.background = 'none';
+    el.style.cursor = 'pointer';
+    el.style.fontSize = '0.875rem';
+    el.style.color = 'var(--text, #333)';
+    el.addEventListener('mouseenter', () => { el.style.background = 'var(--hover-bg, #f0f0f0)'; });
+    el.addEventListener('mouseleave', () => { el.style.background = 'none'; });
+    el.addEventListener('focus', () => { el.style.background = 'var(--hover-bg, #f0f0f0)'; });
+    el.addEventListener('blur', () => { el.style.background = 'none'; });
+    return el;
+}
+function menuHeading(text) {
+    const h = document.createElement('div');
+    // Presentational: the accessible name of the group comes from the group's aria-label, so the
+    // heading text must not be announced a second time as a menu item.
+    h.setAttribute('role', 'presentation');
+    h.textContent = text;
+    h.style.padding = '6px 16px 2px';
+    h.style.fontSize = '0.7rem';
+    h.style.textTransform = 'uppercase';
+    h.style.letterSpacing = '0.04em';
+    h.style.opacity = '0.65';
+    return h;
+}
+/**
+ * Builds the header "Views" menu. Returns null when there is nothing to show — no author
+ * bookmarks and no Portal saved-view API (VS Code preview, ReportPlayer, offline snapshot).
+ *
+ * Keyboard model (WAI-ARIA menu button): Enter/Space/ArrowDown open and focus the first item,
+ * ArrowUp opens on the last, Arrow keys roam, Home/End jump, Escape closes and restores focus to
+ * the button, and Tab closes without swallowing the tab stop.
+ */
+function buildViewsPicker(manifest) {
+    const bookmarks = (manifest && manifest.bookmarks) || [];
+    const supportsSavedViews = !!savedViewsBase();
+    if (bookmarks.length === 0 && !supportsSavedViews)
+        return null;
+    const container = document.createElement('div');
+    container.className = 'bookmark-picker';
+    container.style.position = 'relative';
+    container.style.display = 'inline-block';
+    const menuId = 'etlsql-views-menu';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'header-btn';
+    btn.id = menuId + '-button';
+    btn.title = supportsSavedViews ? 'Bookmarks and saved views' : 'Author bookmarks';
+    btn.textContent = 'Views';
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-controls', menuId);
+    const menu = document.createElement('div');
+    menu.id = menuId;
+    menu.className = 'bookmark-menu';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('aria-labelledby', btn.id);
+    menu.hidden = true;
+    menu.style.display = 'none';
+    menu.style.position = 'absolute';
+    menu.style.right = '0';
+    menu.style.top = '100%';
+    menu.style.zIndex = '1000';
+    menu.style.background = 'var(--card-bg, #fff)';
+    menu.style.border = '1px solid var(--border, #ddd)';
+    menu.style.borderRadius = '6px';
+    menu.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    menu.style.minWidth = '260px';
+    menu.style.padding = '4px 0';
+    const items = () => Array.from(menu.querySelectorAll('[role="menuitem"]:not([disabled])'));
+    function close(restoreFocus) {
+        menu.hidden = true;
+        menu.style.display = 'none';
+        btn.setAttribute('aria-expanded', 'false');
+        if (restoreFocus)
+            btn.focus();
+    }
+    async function open(focusLast) {
+        await renderMenu();
+        menu.hidden = false;
+        menu.style.display = 'block';
+        btn.setAttribute('aria-expanded', 'true');
+        const all = items();
+        if (all.length) /** @type {HTMLElement} */
+            (all[focusLast ? all.length - 1 : 0]).focus();
+    }
+    function isOpen() { return !menu.hidden; }
+    // ── Menu content ────────────────────────────────────────────────────────────────────────
+    let savedViews = [];
+    function addBookmarkSection() {
+        if (bookmarks.length === 0)
+            return;
+        const group = document.createElement('div');
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-label', 'Report bookmarks');
+        group.appendChild(menuHeading('Report bookmarks'));
+        bookmarks.forEach((bm) => {
+            const item = styleMenuItem(document.createElement('button'));
+            item.className = 'bookmark-menu-item';
+            item.style.display = 'block';
+            item.style.width = '100%';
+            item.style.textAlign = 'left';
+            item.style.padding = '8px 16px';
+            item.textContent = bm.title || bm.name;
+            if (bm.isDefault) {
+                item.style.fontWeight = 'bold';
+                item.setAttribute('aria-label', (bm.title || bm.name) + ' (report default)');
+            }
+            item.addEventListener('click', () => { close(true); applyBookmark(bm.name); });
+            group.appendChild(item);
+        });
+        menu.appendChild(group);
+    }
+    function savedViewRow(view) {
+        const row = document.createElement('div');
+        row.setAttribute('role', 'group');
+        row.setAttribute('aria-label', view.name);
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        row.style.gap = '2px';
+        row.style.padding = '0 8px 0 0';
+        const apply = styleMenuItem(document.createElement('button'));
+        apply.className = 'saved-view-menu-item';
+        apply.style.flex = '1';
+        apply.style.textAlign = 'left';
+        apply.style.padding = '8px 8px 8px 16px';
+        apply.textContent = view.isDefault ? '★ ' + view.name : view.name;
+        apply.setAttribute('aria-label', view.isDefault ? view.name + ' (your default)' : view.name);
+        if (view.driftWarning)
+            apply.title = view.driftWarning;
+        apply.addEventListener('click', () => { close(true); applySavedView(view.id); });
+        row.appendChild(apply);
+        const iconBtn = (glyph, label, handler) => {
+            const b = styleMenuItem(document.createElement('button'));
+            b.textContent = glyph;
+            b.setAttribute('aria-label', label);
+            b.title = label;
+            b.style.padding = '6px 6px';
+            b.addEventListener('click', handler);
+            return b;
+        };
+        row.appendChild(iconBtn('⟳', 'Update ' + view.name + ' to the current state', async () => {
+            const ok = await updateSavedView(view.id, { stateJson: JSON.stringify(captureResolvedState()) });
+            feedback.notify(ok ? `Updated '${view.name}'.` : `Could not update '${view.name}'.`, { title: 'Saved views', tone: ok ? 'success' : 'error', auditAction: 'report.saved-view.update' });
+            if (ok)
+                await renderMenu();
+        }));
+        if (!view.isDefault) {
+            row.appendChild(iconBtn('☆', 'Make ' + view.name + ' my default view', async () => {
+                const ok = await updateSavedView(view.id, { isDefault: true });
+                feedback.notify(ok ? `'${view.name}' is now your default view.` : 'Could not set the default view.', { title: 'Saved views', tone: ok ? 'success' : 'error', auditAction: 'report.saved-view.update' });
+                if (ok)
+                    await renderMenu();
+            }));
+        }
+        row.appendChild(iconBtn('✕', 'Delete ' + view.name, async () => {
+            close(true);
+            const confirmed = await feedback.confirm(`Delete the saved view '${view.name}'?`, {
+                title: 'Delete saved view', confirmLabel: 'Delete', danger: true
+            });
+            if (!confirmed)
+                return;
+            const ok = await deleteSavedView(view.id);
+            feedback.notify(ok ? `Deleted '${view.name}'.` : `Could not delete '${view.name}'.`, { title: 'Saved views', tone: ok ? 'success' : 'error', auditAction: 'report.saved-view.delete' });
+            if (ok)
+                await open(false);
+        }));
+        return row;
+    }
+    function addSavedViewSection() {
+        if (!supportsSavedViews)
+            return;
+        const group = document.createElement('div');
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-label', 'My saved views');
+        group.appendChild(menuHeading('My saved views'));
+        if (savedViews.length === 0) {
+            const empty = document.createElement('div');
+            empty.setAttribute('role', 'presentation');
+            empty.textContent = 'No saved views yet.';
+            empty.style.padding = '6px 16px';
+            empty.style.fontSize = '0.8rem';
+            empty.style.opacity = '0.7';
+            group.appendChild(empty);
+        }
+        else {
+            savedViews.forEach((v) => group.appendChild(savedViewRow(v)));
+        }
+        menu.appendChild(group);
+    }
+    function addActionsSection() {
+        if (!supportsSavedViews)
+            return;
+        const group = document.createElement('div');
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-label', 'Saved view actions');
+        group.style.borderTop = '1px solid var(--border, #ddd)';
+        group.style.marginTop = '4px';
+        group.style.paddingTop = '4px';
+        const action = (label, handler) => {
+            const b = styleMenuItem(document.createElement('button'));
+            b.style.display = 'block';
+            b.style.width = '100%';
+            b.style.textAlign = 'left';
+            b.style.padding = '8px 16px';
+            b.textContent = label;
+            b.addEventListener('click', handler);
+            group.appendChild(b);
+        };
+        action('Save current view as…', async () => {
+            close(true);
+            const name = await feedback.prompt('Name this view so you can return to it later.', {
+                title: 'Save current view', label: 'View name', confirmLabel: 'Save',
+                required: true, requiredMessage: 'Enter a name for the view.'
+            });
+            if (!name)
+                return;
+            const created = await saveCurrentAsView(name, false);
+            feedback.notify(created ? `Saved '${name}'.` : `Could not save '${name}'.`, { title: 'Saved views', tone: created ? 'success' : 'error', auditAction: 'report.saved-view.create' });
+        });
+        action('Save as my default view', async () => {
+            close(true);
+            const saved = await saveDefaultView();
+            feedback.notify(saved ? 'Saved as your default view.' : 'Could not save your default view.', { title: 'Saved views', tone: saved ? 'success' : 'error', auditAction: 'report.saved-view.update' });
+        });
+        action('Reset to report default', async () => {
+            close(true);
+            await resetToReportDefault(savedViews);
+        });
+        menu.appendChild(group);
+    }
+    async function renderMenu() {
+        if (supportsSavedViews)
+            savedViews = await listSavedViews();
+        menu.textContent = '';
+        addBookmarkSection();
+        addSavedViewSection();
+        addActionsSection();
+    }
+    btn.addEventListener('click', () => { if (isOpen())
+        close(false);
+    else
+        open(false); });
+    btn.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            open(false);
+        }
+        else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            open(true);
+        }
+    });
+    menu.addEventListener('keydown', (e) => {
+        const all = items();
+        const index = all.indexOf(document.activeElement);
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            close(true);
+        }
+        else if (e.key === 'Tab') {
+            close(false);
+        }
+        else if (e.key === 'ArrowDown') {
+            e.preventDefault(); /** @type {HTMLElement} */
+            (all[(index + 1) % all.length])?.focus();
+        }
+        else if (e.key === 'ArrowUp') {
+            e.preventDefault(); /** @type {HTMLElement} */
+            (all[(index - 1 + all.length) % all.length])?.focus();
+        }
+        else if (e.key === 'Home') {
+            e.preventDefault(); /** @type {HTMLElement} */
+            (all[0])?.focus();
+        }
+        else if (e.key === 'End') {
+            e.preventDefault(); /** @type {HTMLElement} */
+            (all[all.length - 1])?.focus();
+        }
+    });
+    // The header is rebuilt on every manifest render, so this listener must go inert once its
+    // picker has been detached rather than accumulating one live handler per render.
+    document.addEventListener('click', (e) => {
+        if (!container.isConnected)
+            return;
+        if (isOpen() && !container.contains(/** @type {Node} */ (e.target)))
+            close(false);
+    });
+    container.appendChild(btn);
+    container.appendChild(menu);
+    return container;
+}
+
+
+// ─── rt-chrome.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-chrome.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Report header, navigation, footer, dialogs, and staged controls.
+ */
+function showRequiredParametersModal(requiredList, manifest) {
+    const modal = document.createElement('div');
+    modal.className = 'required-params-modal';
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    const title = document.createElement('h2');
+    title.textContent = 'Required Parameters';
+    content.appendChild(title);
+    const desc = document.createElement('p');
+    desc.textContent = 'Please provide values for the following mandatory fields to run this report:';
+    content.appendChild(desc);
+    const grid = document.createElement('div');
+    grid.className = 'params-grid';
+    const inputs = {};
+    requiredList.forEach((meta) => {
+        const label = document.createElement('label');
+        label.textContent = meta.name.startsWith('@') ? meta.name.substring(1) : meta.name;
+        const input = document.createElement('input');
+        input.setAttribute('aria-label', label.textContent);
+        input.type = inputTypeForParameter(meta);
+        const currentValue = getParam(manifest.parameters, meta.name) || '';
+        if (input.type === 'checkbox')
+            input.checked = isOn(currentValue);
+        else
+            input.value = currentValue;
+        input.placeholder = meta.defaultValue || '';
+        input.className = 'modal-input';
+        grid.appendChild(label);
+        grid.appendChild(input);
+        inputs[meta.name] = input;
+    });
+    content.appendChild(grid);
+    const footer = document.createElement('div');
+    footer.className = 'modal-footer';
+    const runBtn = document.createElement('button');
+    runBtn.className = 'header-btn primary';
+    runBtn.textContent = 'Run Report';
+    runBtn.onclick = () => {
+        const updates = { ...parameters }; // Start with current global state
+        let allOk = true;
+        for (const name in inputs) {
+            const input = inputs[name];
+            const val = input.type === 'checkbox'
+                ? (input.checked ? 'TRUE' : 'FALSE')
+                : input.value;
+            const meta = manifest.parameterMetadata[name];
+            if (meta.isRequired && !val) {
+                input.classList.add('error');
+                allOk = false;
+            }
+            else {
+                input.classList.remove('error');
+                updates[name] = val;
+            }
+        }
+        if (allOk) {
+            modal.remove();
+            postParameters(updates, false).then(m => {
+                if (m)
+                    renderManifest(m);
+            });
+        }
+    };
+    footer.appendChild(runBtn);
+    content.appendChild(footer);
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+}
+function renderAutoPanel(container, manifest) {
+    if (!manifest.parameterMetadata)
+        return;
+    // Identify parameters that are marked as INPUT but don't have a corresponding visual SLICER
+    const visuals = manifest.visuals || [];
+    const visualParams = new Set();
+    visuals.forEach((v) => {
+        const type = (v.visualType || '').toUpperCase();
+        if ([
+            'SLICER', 'MULTISELECT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER',
+            'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'
+        ].includes(type)) {
+            const p = v.options && (v.options['data-parameter'] || v.options['PARAMETER'] || v.options['parameter']);
+            if (p)
+                visualParams.add(p.toLowerCase());
+            // Also check ACTIONS for SET_PARAMETER
+            (v.actions || []).forEach((a) => {
+                if (a.type === 'SET_PARAMETER' && a.parameterName) {
+                    visualParams.add(a.parameterName.toLowerCase());
+                }
+            });
+        }
+    });
+    const autoParams = [];
+    for (const name in manifest.parameterMetadata) {
+        if (!visualParams.has(name.toLowerCase())) {
+            autoParams.push(manifest.parameterMetadata[name]);
+        }
+    }
+    if (autoParams.length === 0)
+        return;
+    const panel = document.createElement('div');
+    panel.className = 'auto-parameter-panel collapsed';
+    const toggle = document.createElement('div');
+    toggle.className = 'panel-toggle';
+    toggle.innerHTML = '<span>&#x2699;</span>';
+    toggle.onclick = () => panel.classList.toggle('collapsed');
+    panel.appendChild(toggle);
+    const content = document.createElement('div');
+    content.className = 'panel-content';
+    const title = document.createElement('h4');
+    title.textContent = 'Report Parameters';
+    content.appendChild(title);
+    const list = document.createElement('div');
+    list.className = 'panel-list';
+    autoParams.forEach((meta) => {
+        const item = document.createElement('div');
+        item.className = 'panel-item';
+        const label = document.createElement('label');
+        label.textContent = meta.name.startsWith('@') ? meta.name.substring(1) : meta.name;
+        item.appendChild(label);
+        const inputGroup = document.createElement('div');
+        inputGroup.className = 'input-group';
+        const input = document.createElement('input');
+        input.setAttribute('aria-label', label.textContent);
+        input.type = inputTypeForParameter(meta);
+        const currentValue = getParam(manifest.parameters, meta.name) || '';
+        if (input.type === 'checkbox')
+            input.checked = isOn(currentValue);
+        else
+            input.value = currentValue;
+        input.placeholder = meta.defaultValue || '';
+        inputGroup.appendChild(input);
+        const applyBtn = document.createElement('button');
+        applyBtn.innerHTML = '&#x2713;';
+        applyBtn.onclick = () => {
+            const updates = { ...parameters }; // Batch everything
+            updates[meta.name] = input.type === 'checkbox'
+                ? (input.checked ? 'TRUE' : 'FALSE')
+                : input.value;
+            postParameters(updates, false).then(m => {
+                if (m)
+                    renderManifest(m);
+            });
+        };
+        inputGroup.appendChild(applyBtn);
+        item.appendChild(inputGroup);
+        list.appendChild(item);
+    });
+    content.appendChild(list);
+    panel.appendChild(content);
+    container.appendChild(panel);
+}
+// ── Header & Actions ──────────────────────────────────────────────────
+function renderHeader(container, manifest) {
+    const header = document.createElement('header');
+    header.className = 'report-header';
+    const left = document.createElement('div');
+    left.className = 'header-left';
+    left.innerHTML = `
+            <div class="header-title">${escHtml(manifest.title || 'ETL-SQL Report')}</div>
+            <div class="header-subtitle">${escHtml(manifest.description || 'Interactive Data Insight')}</div>
+        `;
+    const badges = [];
+    badges.push(`<span class="header-badge owner" title="Owner">👤 ${escHtml(manifest.owner || 'Owner unknown')}</span>`);
+    if (manifest.steward)
+        badges.push(`<span class="header-badge steward" title="Steward">🛡️ ${escHtml(manifest.steward)}</span>`);
+    if (manifest.certification)
+        badges.push(`<span class="header-badge cert" title="Certification">⭐ ${escHtml(manifest.certification)}</span>`);
+    const rawFreshnessStatus = String(manifest.freshnessStatus || (manifest.lastRefreshed || manifest.builtAt ? 'fresh' : 'unknown')).toLowerCase();
+    const freshnessStatus = ['fresh', 'stale', 'unknown'].includes(rawFreshnessStatus) ? rawFreshnessStatus : 'unknown';
+    const freshnessText = manifest.lastRefreshed || manifest.builtAt || 'Freshness unknown';
+    badges.push(`<span class="header-badge fresh ${freshnessStatus}" title="Freshness: ${escHtml(freshnessStatus)}">🕒 ${escHtml(freshnessText)}</span>`);
+    if (manifest.tags) {
+        const tagList = Array.isArray(manifest.tags) ? manifest.tags : String(manifest.tags).split(',');
+        tagList.forEach((t) => {
+            const tagStr = t.trim();
+            if (tagStr)
+                badges.push(`<a class="header-badge tag" title="Search tag '${escHtml(tagStr)}'" href="#" data-tag="${escHtml(tagStr)}">🏷️ ${escHtml(tagStr)}</a>`);
+        });
+    }
+    if (badges.length > 0) {
+        const badgeContainer = document.createElement('div');
+        badgeContainer.className = 'header-badges';
+        badgeContainer.innerHTML = badges.join('');
+        badgeContainer.querySelectorAll('a.header-badge.tag').forEach(el => {
+            el.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                const tagVal = el.getAttribute('data-tag');
+                if (!tagVal)
+                    return;
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'etl-catalog-search', tag: tagVal, query: tagVal }, window.location.origin);
+                    return;
+                }
+                try {
+                    window.top.location.href = '/?search=' + encodeURIComponent(tagVal);
+                }
+                catch {
+                    window.location.href = '/?search=' + encodeURIComponent(tagVal);
+                }
+            });
+        });
+        left.appendChild(badgeContainer);
+    }
+    const actions = document.createElement('div');
+    actions.className = 'header-actions';
+    // Offline: a snapshot can be stale, and saying so is useful, but the button that asks the
+    // server to refresh it has nothing to ask.
+    if (freshnessStatus === 'stale' && !isOfflineHost) {
+        const refreshBtn = document.createElement('button');
+        refreshBtn.className = 'header-btn warning';
+        refreshBtn.title = 'Request Data Refresh for Stale Report';
+        refreshBtn.textContent = '🔄 Request Refresh';
+        refreshBtn.addEventListener('click', async () => {
+            const reportId = manifest.id || window.__REPORT_ID__;
+            if (!reportId)
+                return;
+            try {
+                const base = window.__API_BASE__ || '';
+                const res = await fetch(`${base}/api/reports/${reportId}/request-refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                const data = await res.json().catch(() => ({}));
+                feedback.notify(data.message || 'Data refresh requested.', { title: 'Refresh requested', tone: 'success', auditAction: 'report.refresh.request' });
+            }
+            catch (e) {
+                feedback.notify('Request failed: ' + e.message, { title: 'Refresh request failed', tone: 'error' });
+            }
+        });
+        actions.appendChild(refreshBtn);
+    }
+    // Views picker: author bookmarks (shared, source-controlled) plus the caller's private
+    // "My saved views" when the Portal saved-view API is reachable. Both live in one menu so a
+    // reader picks a view without having to know which of the two kinds it is.
+    const viewsPicker = buildViewsPicker(manifest);
+    if (viewsPicker)
+        actions.appendChild(viewsPicker);
+    if (vscode) {
+        const openBtn = document.createElement('button');
+        openBtn.className = 'header-btn primary';
+        openBtn.title = 'Open interactive report in browser';
+        openBtn.textContent = 'Open';
+        openBtn.addEventListener('click', () => {
+            vscode.postMessage({ type: 'serve' });
+        });
+        actions.appendChild(openBtn);
+        const pdfBtn = document.createElement('button');
+        pdfBtn.className = 'header-btn';
+        pdfBtn.title = 'Export to PDF';
+        pdfBtn.textContent = 'PDF';
+        pdfBtn.addEventListener('click', () => {
+            vscode.postMessage({ type: 'exportReport', format: 'pdf' });
+        });
+        actions.appendChild(pdfBtn);
+        const mdBtn = document.createElement('button');
+        mdBtn.className = 'header-btn';
+        mdBtn.title = 'Export to Markdown';
+        mdBtn.textContent = 'MD';
+        mdBtn.addEventListener('click', () => {
+            vscode.postMessage({ type: 'exportReport', format: 'markdown' });
+        });
+        actions.appendChild(mdBtn);
+        const publishBtn = document.createElement('button');
+        publishBtn.className = 'header-btn';
+        publishBtn.title = 'Publish to Portal';
+        publishBtn.textContent = 'Publish';
+        publishBtn.addEventListener('click', () => vscode.postMessage({ type: 'publish' }));
+        actions.appendChild(publishBtn);
+    }
+    header.appendChild(left);
+    header.appendChild(actions);
+    container.appendChild(header);
+}
+/**
+ * @param {HTMLElement | DocumentFragment} container The nav is prepended or inserted before
+ *   the first page, so anything that can take a child works. `renderManifest` builds into a
+ *   DocumentFragment, which is not an HTMLElement.
+ * @param {*} navDef
+ * @param {Record<string, HTMLElement>} pageSections
+ * @param {Array<*>} pages
+ * @param {*} manifest The manifest being rendered. A nav click re-themes the body from it, and
+ *   without it in scope that call threw into the surrounding catch on every page change — the
+ *   theme silently stayed on the previous page's.
+ */
+function renderNavBar(container, navDef, pageSections, pages, manifest) {
+    const nav = document.createElement('nav');
+    nav.className = 'nav-bar';
+    // Apply nav styling
+    if (navDef.styles) {
+        for (const [k, v] of Object.entries(navDef.styles)) {
+            const key = k.toLowerCase().replace(/_/g, '-');
+            nav.style[key] = v;
+        }
+    }
+    // Insert nav before the first page section
+    const firstPage = pages.length > 0 ? pageSections[pages[0].name] : null;
+    if (firstPage) {
+        container.insertBefore(nav, firstPage);
+    }
+    else {
+        container.prepend(nav);
+    }
+    const defaultPageName = navDef.defaultPage || (pages.length > 0 ? pages[0].name : null);
+    const requestedPage = (getLastActivePage() || window.__INITIAL_PAGE__ || '').trim();
+    const pageToShow = (requestedPage && pageSections[requestedPage]) ? requestedPage : defaultPageName;
+    const itemClass = navDef.navType === 'TAB' ? 'nav-tab' :
+        navDef.navType === 'BUTTON' ? 'nav-btn' : 'nav-link';
+    const isLink = navDef.navType === 'LINK';
+    const hideInvisible = isOn(navDef.options?.['HIDE_INVISIBLE'] || navDef.options?.['hide_invisible']);
+    function applyActiveStyles(element, isActive) {
+        if (!navDef.activeStyles)
+            return;
+        for (const [k, v] of Object.entries(navDef.activeStyles)) {
+            const key = k.toLowerCase().replace(/_/g, '-');
+            if (isActive)
+                element.style[key] = v;
+            else
+                element.style.removeProperty(key);
+        }
+    }
+    function createNavItem(item, idx, parent) {
+        const pageName = (item.pageName || item);
+        const targetPage = pages.find(p => p.name === pageName);
+        if (hideInvisible && targetPage && !isPageVisible(targetPage)) {
+            return;
+        }
+        if (isLink && idx > 0) {
+            const sep = document.createElement('span');
+            sep.className = 'nav-sep';
+            sep.textContent = ' | ';
+            parent.appendChild(sep);
+        }
+        if (item.isExternalLink || item.externalUrl) {
+            const el = document.createElement('a');
+            el.className = itemClass + ' nav-link-external';
+            el.href = safeUrl(item.externalUrl);
+            el.target = item.target || '_blank';
+            el.rel = 'noopener noreferrer';
+            if (item.icon) {
+                const iconSpan = document.createElement('span');
+                iconSpan.className = 'nav-icon';
+                iconSpan.textContent = item.icon;
+                el.appendChild(iconSpan);
+            }
+            const textSpan = document.createElement('span');
+            textSpan.className = 'nav-text';
+            textSpan.textContent = item.label || 'Link';
+            el.appendChild(textSpan);
+            if (item.badge) {
+                const badgeSpan = document.createElement('span');
+                badgeSpan.className = 'nav-badge';
+                badgeSpan.textContent = item.badge;
+                el.appendChild(badgeSpan);
+            }
+            parent.appendChild(el);
+            return;
+        }
+        const el = document.createElement('span');
+        el.className = itemClass;
+        if (item.icon) {
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'nav-icon';
+            iconSpan.textContent = item.icon;
+            el.appendChild(iconSpan);
+        }
+        const textSpan = document.createElement('span');
+        textSpan.className = 'nav-text';
+        textSpan.textContent = item.label || pageName;
+        el.appendChild(textSpan);
+        if (item.badge) {
+            const badgeSpan = document.createElement('span');
+            badgeSpan.className = 'nav-badge';
+            badgeSpan.textContent = item.badge;
+            el.appendChild(badgeSpan);
+        }
+        const isActive = (pageName === pageToShow);
+        if (isActive) {
+            el.classList.add('active');
+            applyActiveStyles(el, true);
+        }
+        el.dataset.page = pageName;
+        el.addEventListener('click', () => {
+            try {
+                pages.forEach(p => {
+                    const n = p.name;
+                    const s = pageSections[n];
+                    if (s) {
+                        if (n === pageName) {
+                            s.style.display = 'block';
+                            s.classList.add('active');
+                            const pgDef = pages.find(item => item.name === n);
+                            const trans = (pgDef?.options?.TRANSITION || navDef.options?.TRANSITION || '').toUpperCase();
+                            if (trans === 'FADE') {
+                                s.style.opacity = '0';
+                                safeRequestAnimationFrame(() => { s.style.opacity = '1'; });
+                            }
+                            else if (trans === 'SLIDE') {
+                                s.style.transform = 'translateX(20px)';
+                                s.style.opacity = '0';
+                                safeRequestAnimationFrame(() => { s.style.transform = 'translateX(0)'; s.style.opacity = '1'; });
+                            }
+                        }
+                        else {
+                            s.style.display = 'none';
+                            s.classList.remove('active');
+                        }
+                    }
+                });
+            }
+            catch (e) {
+                console.error('Error switching page visibility:', e);
+            }
+            try {
+                /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-page]')).forEach(it => {
+                    const match = it.dataset.page === pageName;
+                    if (match) {
+                        it.classList.add('active');
+                        applyActiveStyles(it, true);
+                    }
+                    else {
+                        it.classList.remove('active');
+                        applyActiveStyles(it, false);
+                    }
+                });
+            }
+            catch (e) {
+                console.error('Error updating active page classes:', e);
+            }
+            setLastActivePage(pageName);
+            try {
+                const target = pageSections[pageName];
+                if (target)
+                    safeRequestAnimationFrame(() => resizeChartsIn(target));
+            }
+            catch (e) {
+                console.error('Error resizing charts:', e);
+            }
+            try {
+                updateBodyTheme(manifest, pageName);
+            }
+            catch (e) {
+                console.error('Error updating body theme:', e);
+            }
+            try {
+                const pDef = pages.find(p => p.name === pageName);
+                executePageOnLoad(pDef);
+            }
+            catch (e) {
+                console.error('Error executing page actions:', e);
+            }
+            try {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'etl-page-changed', page: pageName, userTriggered: true }, '*');
+                }
+            }
+            catch (e) {
+                console.error('Error posting message to parent window:', e);
+            }
+        });
+        parent.appendChild(el);
+    }
+    if (navDef.groups && navDef.groups.length > 0) {
+        navDef.groups.forEach(group => {
+            const grpDiv = document.createElement('div');
+            grpDiv.className = 'nav-group';
+            if (group.title) {
+                const t = document.createElement('span');
+                t.className = 'nav-group-title';
+                t.textContent = group.title;
+                grpDiv.appendChild(t);
+            }
+            const grpItems = document.createElement('div');
+            grpItems.className = 'nav-group-items';
+            (group.items || []).forEach((item, idx) => createNavItem(item, idx, grpItems));
+            grpDiv.appendChild(grpItems);
+            nav.appendChild(grpDiv);
+        });
+    }
+    else if (navDef.items && navDef.items.length > 0) {
+        navDef.items.forEach((item, idx) => createNavItem(item, idx, nav));
+    }
+    else {
+        navDef.pages.forEach((pageName, idx) => createNavItem({ pageName: pageName }, idx, nav));
+    }
+    // Execute initial page onLoad
+    const initPg = pages.find(p => p.name === pageToShow);
+    executePageOnLoad(initPg);
+}
+function showModalDialog(modalName, manifest) {
+    if (!modalName)
+        return;
+    hideModalDialog(modalName);
+    const containerDef = (manifest?.containers || []).find(c => c.name.toLowerCase() === modalName.toLowerCase());
+    if (!containerDef) {
+        console.warn('Modal container not found:', modalName);
+        return;
+    }
+    const overlay = document.createElement('div');
+    overlay.className = 'report-modal-overlay';
+    overlay.id = 'modal-overlay-' + modalName.toLowerCase();
+    const dialog = document.createElement('div');
+    dialog.className = 'report-modal-dialog';
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    const header = document.createElement('div');
+    header.className = 'report-modal-header';
+    const title = document.createElement('span');
+    title.textContent = containerDef.title || containerDef.name;
+    header.appendChild(title);
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'report-modal-close';
+    closeBtn.innerHTML = '&times;';
+    closeBtn.setAttribute('aria-label', 'Close dialog');
+    closeBtn.onclick = () => hideModalDialog(modalName);
+    header.appendChild(closeBtn);
+    dialog.appendChild(header);
+    const body = document.createElement('div');
+    body.className = 'report-modal-body';
+    const styles = containerDef.styles || {};
+    const containerTheme = getStyle(styles, 'THEME');
+    renderLayout(body, containerDef, manifest, containerTheme);
+    dialog.appendChild(body);
+    overlay.appendChild(dialog);
+    overlay.addEventListener('click', e => {
+        if (e.target === overlay)
+            hideModalDialog(modalName);
+    });
+    const onKeyDown = (e) => {
+        if (e.key === 'Escape') {
+            hideModalDialog(modalName);
+            document.removeEventListener('keydown', onKeyDown);
+        }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.body.appendChild(overlay);
+    setTimeout(() => resizeChartsIn(dialog), 50);
+}
+function hideModalDialog(modalName) {
+    if (!modalName)
+        return;
+    const overlay = document.getElementById('modal-overlay-' + modalName.toLowerCase());
+    if (overlay)
+        overlay.remove();
+}
+// ── Footer ──────────────────────────────────────────────────────────────
+function renderFooter(container, manifest) {
+    const footer = document.createElement('footer');
+    const built = manifest.builtAt ? new Date(manifest.builtAt).toLocaleString() : '';
+    footer.innerHTML = '<small>Built: ' + escHtml(built) + '</small>';
+    container.appendChild(footer);
+}
+function renderPipelineConsole(root, manifest) {
+    if (window.__IS_PREVIEW__ || vscode)
+        return;
+    if (!manifest.messages?.length && !manifest.executionTree?.length && !manifest.error)
+        return;
+    const consoleWrapper = document.createElement('div');
+    consoleWrapper.className = 'pipeline-console collapsed';
+    const header = document.createElement('div');
+    header.className = 'pipeline-header';
+    let statusColor = 'gray';
+    let statusText = 'Completed';
+    if (manifest.error) {
+        statusColor = 'red';
+        statusText = 'Failed';
+    }
+    header.innerHTML = `
+            <span>Pipeline Console</span>
+            <span style="color: ${statusColor}; font-weight: normal;">
+                ${statusText}
+                <span class="toggle-icon" style="margin-left: 8px;">&#x25B2;</span>
+            </span>
+        `;
+    const body = document.createElement('div');
+    body.className = 'pipeline-body';
+    const leftPane = document.createElement('div');
+    leftPane.className = 'pipeline-pane left-pane';
+    leftPane.innerHTML = '<div class="pane-title">Execution Tree</div>';
+    const rightPane = document.createElement('div');
+    rightPane.className = 'pipeline-pane';
+    rightPane.innerHTML = '<div class="pane-title">Messages</div>';
+    body.appendChild(leftPane);
+    body.appendChild(rightPane);
+    consoleWrapper.appendChild(header);
+    consoleWrapper.appendChild(body);
+    let isCollapsed = true;
+    header.addEventListener('click', () => {
+        isCollapsed = !isCollapsed;
+        consoleWrapper.classList.toggle('collapsed', isCollapsed);
+        const icon = /** @type {HTMLElement | null} */ (header.querySelector('.toggle-icon'));
+        icon.innerHTML = isCollapsed ? '&#x25B2;' : '&#x25BC;';
+    });
+    // Render Execution Tree
+    if (manifest.executionTree) {
+        const treeRoot = document.createElement('div');
+        function renderNode(node, container) {
+            const el = document.createElement('div');
+            el.className = 'tree-node';
+            const content = document.createElement('div');
+            content.className = 'tree-node-content';
+            const hasChildren = node.children && node.children.length > 0;
+            const iconStr = hasChildren ? '&#x25BC;' : '&nbsp;';
+            let timeStr = '';
+            if (node.durationMs != null)
+                timeStr = `[${escHtml(node.durationMs)}ms]`;
+            let rowsStr = '';
+            if (node.rowsProcessed != null)
+                rowsStr = `(${escHtml(node.rowsProcessed)} rows)`;
+            const status = node.status || 'Completed';
+            const statusClass = cssClassToken(status, 'completed');
+            content.innerHTML = `
+                    <span class="tree-icon" style="color:#888">${iconStr}</span>
+                    <span class="node-name">${escHtml(node.name || 'Unnamed')}</span>
+                    <span class="node-meta">
+                        <span class="status-${statusClass}">${escHtml(status)}</span>
+                        ${timeStr} ${rowsStr}
+                    </span>
+                `;
+            el.appendChild(content);
+            if (hasChildren) {
+                const childrenContainer = document.createElement('div');
+                childrenContainer.className = 'tree-children';
+                node.children.forEach((child) => renderNode(child, childrenContainer));
+                el.appendChild(childrenContainer);
+                /** @type {HTMLElement | null} */ (content.querySelector('.tree-icon')).addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isHidden = childrenContainer.style.display === 'none';
+                    childrenContainer.style.display = isHidden ? 'block' : 'none';
+                    /** @type {Element} */ (e.target).innerHTML = isHidden ? '&#x25BC;' : '&#x25B6;';
+                });
+            }
+            container.appendChild(el);
+        }
+        if (Array.isArray(manifest.executionTree)) {
+            manifest.executionTree.forEach((rootNode) => renderNode(rootNode, treeRoot));
+        }
+        else {
+            renderNode(manifest.executionTree, treeRoot);
+        }
+        leftPane.appendChild(treeRoot);
+    }
+    else {
+        leftPane.innerHTML += '<div class="no-data">No execution tree available.</div>';
+    }
+    // Render Messages
+    if (manifest.messages && manifest.messages.length > 0) {
+        manifest.messages.forEach(msg => {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const time = new Date(msg.timestamp).toLocaleTimeString();
+            const colorClass = `log-${cssClassToken(msg.color, 'white')}`;
+            entry.innerHTML = `
+                    <span class="log-time">[${time}]</span>
+                    <span class="${colorClass}">${escHtml(msg.message)}</span>
+                `;
+            rightPane.appendChild(entry);
+        });
+    }
+    else {
+        rightPane.innerHTML += '<div class="no-data">No messages recorded.</div>';
+    }
+    if (manifest.error) {
+        const errEntry = document.createElement('div');
+        errEntry.className = 'log-entry log-red';
+        errEntry.innerHTML = `<br/><b>Fatal Error:</b><br/><pre>${escHtml(manifest.error)}</pre>`;
+        rightPane.appendChild(errEntry);
+        // Auto-expand if there's an error
+        isCollapsed = false;
+        consoleWrapper.classList.remove('collapsed');
+        /** @type {HTMLElement | null} */ (header.querySelector('.toggle-icon')).innerHTML = '&#x25BC;';
+    }
+    root.appendChild(consoleWrapper);
+}
+function updateStagedUI() {
+    const hasPending = Object.keys(pendingParameters).length > 0;
+    // 1. Update only RUN buttons (tagged with data-is-run-btn during renderButton)
+    /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-is-run-btn]')).forEach(btn => {
+        if (hasPending) {
+            btn.classList.add('pending-changes');
+        }
+        else {
+            btn.classList.remove('pending-changes');
+        }
+    });
+    // 2. Add/Update a "Pending" badge in the header if it exists
+    const header = /** @type {HTMLElement | null} */ (document.querySelector('.report-header'));
+    if (header) {
+        let badge = /** @type {HTMLElement | null} */ (header.querySelector('.pending-badge'));
+        if (hasPending) {
+            if (!badge) {
+                badge = document.createElement('div');
+                badge.className = 'pending-badge';
+                badge.innerHTML = '&#x26A0; Changes Pending';
+                /** @type {HTMLElement} */ (badge).style.background = '#fff3cd';
+                /** @type {HTMLElement} */ (badge).style.color = '#856404';
+                /** @type {HTMLElement} */ (badge).style.padding = '4px 8px';
+                /** @type {HTMLElement} */ (badge).style.borderRadius = '4px';
+                /** @type {HTMLElement} */ (badge).style.fontSize = '0.8em';
+                /** @type {HTMLElement} */ (badge).style.fontWeight = 'bold';
+                header.appendChild(badge);
+            }
+        }
+        else if (badge) {
+            badge.remove();
+        }
+    }
+}
+
+
+// ─── report-runtime.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/report-runtime.ts
+ * Run: node scripts/sync-assets.js
+ */
+/**
+ * Copyright 2026 Charles Clemens and ETL-SQL contributors
+ * Licensed under the Apache License, Version 2.0.
+ *
+ * Report bootstrap, manifest rendering, and host event wiring.
+ */
+window.__etlSqlReportWhenExportReady = function (timeoutMs) {
+    const timeout = Number(timeoutMs || 0);
+    if (window.__etlSqlReportExportReady) {
+        return Promise.resolve(window.__etlSqlReportExportState);
+    }
+    if (timeout <= 0)
+        return getExportReadyPromise();
+    return Promise.race([
+        getExportReadyPromise(),
+        new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Report export readiness timed out.')), timeout);
+        })
+    ]);
+};
+/**
+ * Entry point: obtain manifest and render all visuals + pages.
+ */
+async function boot() {
+    markExportNotReady('boot');
+    if (window.__IS_PREVIEW__) {
+        document.body.classList.add('preview-mode');
+    }
+    let manifest;
+    if (window.__MANIFEST__) {
+        // Pre-embedded (single-report web mode or VS Code preview)
+        manifest = window.__MANIFEST__;
+    }
+    else if (isWebMode) {
+        // Multi-report web mode: fetch from API
+        try {
+            const qs = window.location.search;
+            const res = await fetch(apiBase + '/manifest' + qs);
+            manifest = (await res.json());
+        }
+        catch (e) {
+            const err = e;
+            const root = document.getElementById('root');
+            if (root) {
+                root.innerHTML = '<p class="error">Failed to load manifest: ' + escHtml(err.message || String(e)) + '</p>';
+            }
+            publishExportState('error', { reason: 'manifest-load-failed', message: err.message || String(e) });
+            return;
+        }
+    }
+    else {
+        const root = document.getElementById('root');
+        if (root) {
+            root.innerHTML = '<p class="error">No manifest available.</p>';
+        }
+        publishExportState('error', { reason: 'manifest-missing' });
+        return;
+    }
+    renderManifest(manifest);
+    // Launch precedence (exact order):
+    //   1. explicit #bookmark=Name
+    //   2. explicit #view=SavedViewId
+    //   3. user's default Portal saved view
+    //   4. author default bookmark (DEFAULT = ON)
+    //   5. declared parameter/navigation defaults (already applied by renderManifest)
+    await applyLaunchPrecedence(manifest);
+    // A launch bookmark/view may be the source of a REQUIRED parameter. Validate only after
+    // launch precedence has had the opportunity to apply it atomically.
+    const launchedManifest = getLastManifest() || manifest;
+    if (!checkRequiredParameters(launchedManifest)) {
+        publishExportState('blocked', { reason: 'required-parameters' });
+        return;
+    }
+    // Identifier-only hash replay. URLs and history carry only an identifier — never parameter,
+    // filter, search, drill, or presentation values.
+    window.addEventListener('hashchange', () => {
+        const parsed = parseStateHash(window.location.hash);
+        if (parsed.bookmark)
+            applyBookmark(parsed.bookmark);
+        else if (parsed.view)
+            applySavedView(parsed.view);
+    });
+}
+async function applyLaunchPrecedence(manifest) {
+    const parsed = parseStateHash(window.location.hash);
+    if (parsed.bookmark) {
+        if (await applyBookmark(parsed.bookmark))
+            return true;
+    }
+    if (parsed.view) {
+        if (await applySavedView(parsed.view))
+            return true;
+    }
+    // User's default Portal saved view (Portal mode only). A stale/unknown default must never
+    // prevent the base report from opening, so failure falls through to the author default.
+    if (await applyUserDefaultSavedView())
+        return true;
+    if (manifest.bookmarks) {
+        const authorDefault = manifest.bookmarks.find(b => b.isDefault);
+        if (authorDefault && await applyBookmark(authorDefault.name))
+            return true;
+    }
+    // else: declared parameter/navigation defaults already applied by renderManifest.
+    return false;
+}
+function checkRequiredParameters(manifest) {
+    if (!manifest.parameterMetadata)
+        return true;
+    const missing = [];
+    const required = [];
+    for (const name in manifest.parameterMetadata) {
+        const meta = manifest.parameterMetadata[name];
+        if (meta && meta.isRequired) {
+            required.push(meta);
+            const val = getParam(manifest.parameters, name);
+            if (val === undefined || val === null || val === "" || val === "null") {
+                missing.push(meta);
+            }
+        }
+    }
+    if (missing.length > 0) {
+        // Show all REQUIRED parameters in the modal, not just the missing ones,
+        // to provide full context to the user.
+        showRequiredParametersModal(required, manifest);
+        return false;
+    }
+    return true;
+}
+function renderManifest(inputManifest) {
+    const manifest = (inputManifest || {});
+    markExportNotReady('render-manifest');
+    setLastManifest(manifest);
+    // Cancel any running per-page auto-refresh timers before rebuilding.
+    getRefreshTimers().forEach((id) => clearInterval(id));
+    setRefreshTimers([]);
+    getNativeLayoutObservers().forEach((observer) => observer.disconnect());
+    setNativeLayoutObservers([]);
+    _nativeLayoutTimers.forEach((id) => clearTimeout(id));
+    _nativeLayoutTimers.clear();
+    const root = document.getElementById('root');
+    if (!root) {
+        publishExportState('error', { reason: 'root-missing' });
+        return;
+    }
+    const frag = document.createDocumentFragment();
+    renderHeader(frag, manifest);
+    // Cache baseline manifest (the first one with no parameters set)
+    if (!getBaselineManifest() && (!manifest.parameters || Object.keys(manifest.parameters).length === 0)) {
+        setBaselineManifest(JSON.parse(JSON.stringify(manifest)));
+    }
+    window.__CURRENT_MANIFEST__ = manifest;
+    // Update local parameters from manifest
+    if (manifest.parameters) {
+        Object.keys(manifest.parameters).forEach(k => {
+            parameters[k] = manifest.parameters[k];
+        });
+    }
+    // Navigation bar
+    const navDef = manifest.navigations && manifest.navigations.length > 0
+        ? manifest.navigations[0] : null;
+    let activePageName = null;
+    if (manifest.pages && manifest.pages.length > 0) {
+        const firstVisible = manifest.pages.find(p => !p.isHidden);
+        const defaultPage = navDef
+            ? (navDef.defaultPage || (firstVisible && firstVisible.name) || null)
+            : ((firstVisible && firstVisible.name) || null);
+        const requestedPage = String(getLastActivePage() || window.__INITIAL_PAGE__ || '').trim();
+        activePageName = (requestedPage && manifest.pages.some(p => p.name === requestedPage)) ? requestedPage : defaultPage;
+    }
+    updateBodyTheme(manifest, activePageName);
+    /** @type {Record<string, HTMLElement>} */
+    const pageSections = {};
+    let effectiveActivePage = null;
+    if (manifest.pages && manifest.pages.length > 0) {
+        const firstVisible = manifest.pages.find(p => !p.isHidden);
+        const defaultPageName = navDef
+            ? (navDef.defaultPage || (firstVisible && firstVisible.name) || null)
+            : ((firstVisible && firstVisible.name) || null);
+        effectiveActivePage = activePageName || defaultPageName;
+        manifest.pages.forEach(page => {
+            const reportStyles = manifest.styles || {};
+            const pageStyles = page.styles || {};
+            const pageTheme = getStyle(pageStyles, 'THEME') || getStyle(reportStyles, 'THEME') || getDefaultTheme(manifest);
+            const section = renderPage(manifest, page, pageSections, pageTheme);
+            frag.appendChild(section);
+            // Hidden pages start invisible; active page starts visible with active class
+            const isPageActive = !page.isHidden && (page.name === effectiveActivePage);
+            if (isPageActive) {
+                section.style.display = 'block';
+                section.classList.add('active');
+            }
+            else {
+                section.style.display = 'none';
+                section.classList.remove('active');
+            }
+        });
+        if (navDef) {
+            renderNavBar(frag, navDef, pageSections, manifest.pages, manifest);
+        }
+        else if (manifest.pages.length > 0) {
+            // No navigation — show the first page by default
+            const firstPage = manifest.pages.find(p => !p.isHidden) || manifest.pages[0];
+            const section = pageSections[firstPage.name];
+            if (section) {
+                section.style.display = 'block';
+                section.classList.add('active');
+            }
+        }
+    }
+    else {
+        (manifest.visuals || []).forEach(v => renderVisual(frag, v, getDefaultTheme(manifest), manifest));
+    }
+    destroyDetailSurfaces(root); // Close detail surfaces before their marks disappear.
+    root.replaceChildren(frag); // Atomic swap to eliminate white flash!
+    if (manifest.pages && manifest.pages.length > 0) {
+        const activeSection = effectiveActivePage ? pageSections[effectiveActivePage] : null;
+        if (activeSection) {
+            resizeChartsIn(activeSection);
+        }
+    }
+    // Synchronize parameter values to any newly rendered controls
+    if (manifest.parameters) {
+        syncParameters(manifest.parameters);
+    }
+    // Cross-filter state management across re-renders:
+    // - Non-interaction rebuild (slicer/param change): clear all selection state.
+    // - Interaction rebuild (chart click): re-apply dimming/source CSS so the visual
+    //   feedback survives the full DOM rebuild that renderManifest does.
+    const hasCrossHighlights = (manifest.visuals || []).some(visual => Array.isArray(visual.highlightRows) && visual.highlightRows.length > 0);
+    if (!manifest.isInteraction && !hasCrossHighlights) {
+        for (let k in _crossFilterStates)
+            delete _crossFilterStates[k];
+    }
+    else {
+        reApplyCrossFilterStyling();
+    }
+    // Set up per-page auto-refresh timers (web mode only; VS Code preview ignores).
+    if (isWebMode && manifest.pages) {
+        manifest.pages.forEach(page => {
+            if (!page.refreshIntervalSeconds || page.refreshIntervalSeconds <= 0)
+                return;
+            const id = setInterval(() => {
+                // Only refresh when the page section is visible.
+                const section = document.getElementById('page-' + page.name.toLowerCase());
+                if (!section || section.style.display === 'none')
+                    return;
+                fetch(apiBase + '/manifest')
+                    .then(r => r.ok ? r.json() : null)
+                    .then(m => { if (m)
+                    renderManifest(m); })
+                    .catch(() => { });
+            }, page.refreshIntervalSeconds * 1000);
+            getRefreshTimers().push(id);
+        });
+    }
+    renderFooter(root, manifest);
+    renderPipelineConsole(root, manifest);
+    renderAutoPanel(root, manifest);
+    if (getPendingLazyRows() === 0) {
+        markExportReady(manifest);
+    }
+}
+function syncParameters(params) {
+    if (!params)
+        return;
+    for (const name in params) {
+        const val = params[name];
+        const elements = document.querySelectorAll('[data-parameter]');
+        elements.forEach(el => {
+            const paramKey = el.getAttribute('data-parameter');
+            if (paramKey && paramKey.toLowerCase() === name.toLowerCase()) {
+                const targets = (el.tagName === 'SELECT' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')
+                    ? [/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (el)]
+                    : Array.from(el.querySelectorAll('select, input, textarea'));
+                targets.forEach(t => {
+                    if ( /** @type {HTMLInputElement | HTMLSelectElement} */(t).multiple && t.tagName === 'SELECT') {
+                        const csvValues = (String(val || '')).split(',').map(v => v.trim());
+                        Array.from(/** @type {HTMLSelectElement} */ (t).options).forEach(opt => {
+                            opt.selected = csvValues.includes(opt.value);
+                        });
+                    }
+                    else if ( /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */(t).value !== val) {
+                        /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (t).value = String(val ?? '');
+                    }
+                });
+            }
+        });
+    }
+}
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape')
+        closeMaximizedVisual();
+});
+// Exposed for deterministic geometry fixtures and for driving the refresh/unmount
+// teardown from a test. Reading it does not open a surface.
+window.__ETLSQL_DETAIL__ = Object.freeze({
+    computeDetailPlacement: computeDetailPlacement,
+    destroyIn: function (scope) { destroyDetailSurfaces(scope || document); },
+    preferredSide: DETAIL_PREFERRED_SIDE,
+    viewportMargin: DETAIL_VIEWPORT_MARGIN,
+    anchorGap: DETAIL_ANCHOR_GAP
+});
+// Escape and outside click are document-level and installed once.
+document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !getOpenDetail())
+        return;
+    event.stopPropagation();
+    closeOpenDetail(true);
+}, true);
+document.addEventListener('pointerdown', (event) => {
+    const openDetail = getOpenDetail();
+    if (!openDetail || !openDetail.pinned)
+        return;
+    const targetNode = event.target;
+    if (targetNode && openDetail.element && openDetail.element.contains(targetNode))
+        return;
+    if (targetNode && openDetail.trigger && openDetail.trigger.contains(targetNode))
+        return; // toggle handles this
+    closeOpenDetail(false);
+}, true);
+// Boot on DOMContentLoaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+}
+else {
+    boot();
+}
+// VS Code message listener
+if (vscode) {
+    window.addEventListener('message', (event) => {
+        const message = event.data;
+        if (message && message.type === 'reportManifest') {
+            renderManifest(message);
+        }
+    });
+}
+// Test escape hatch: exposes pure functions for automated testing.
+// Harmless in production (just sets a window property that nothing reads).
+if (typeof window !== 'undefined') {
+    window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderNativeSvg, nativeLayoutTier, observeNativeLayout, abbreviateNumber, savedViewsBase, buildViewsPicker, parseStateHash, applyBookmark, applySavedView, captureResolvedState, isOfflineSnapshot, resolveDesignTokens, applyDesignTokens, isSafeCssValue, isAllowedTokenName, DESIGN_TOKENS };
+}
+
+})();

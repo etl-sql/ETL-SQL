@@ -131,6 +131,7 @@ Checks that protect conventions the compiler cannot. Useful to run locally befor
 | Script Name | Language | Platform | Description |
 | :--- | :--- | :---: | :--- |
 | **[`audit-syntax-index.js`](./audit-syntax-index.js)** | JavaScript | Cross-platform | Audits `docs/syntax-index.md` against the reference documentation tree for broken links and unlinked pages. `--strict` fails on any finding (CI mode). |
+| **[`check-ai-slop-comments.mjs`](./check-ai-slop-comments.mjs)** | JavaScript | Cross-platform | Scans source code for AI slop comments, procedural step markers, trivial restatements, and banned buzzwords per [`AGENTS.md`](../AGENTS.md). |
 | **[`check-flaky-test-delays.mjs`](./check-flaky-test-delays.mjs)** | JavaScript | Cross-platform | Flags sleep-then-assert, unreviewed elapsed upper bounds, and bare deadline-based wait helpers. See [flaky-test policy](../docs/releases/flaky-test-stability.md). |
 | **[`Measure-TestWaitDistribution.ps1`](./Measure-TestWaitDistribution.ps1)** | PowerShell | Cross-platform | Repeats the historically timing-sensitive Portal and Orchestrator slices under deliberate CPU load and writes JSONL plus distribution summaries. |
 | **[`Test-DependencyAudit.ps1`](./Test-DependencyAudit.ps1)** | PowerShell | Cross-platform | Script-level tests for the NuGet dependency-audit helpers in `scripts/lib/DependencyAudit.ps1`. |

@@ -81,6 +81,28 @@ public sealed class ReportPayloadBudgetTests
 
     [Fact]
     [Trait("Category", "Smoke.Reporting")]
+    public void PayloadBudget_CountsEveryOnlineModuleInTheRuntimeBudget()
+    {
+        BundleAssetMeasurement[] assets =
+        [
+            new("report-runtime.js", 100, 50, 40),
+            new("rt-state.js", 200, 80, 70),
+            new("rt-table.js", 300, 90, 80),
+            new("report-runtime.css", 400, 100, 90),
+        ];
+        var measured = ReportPayloadBudget.Measure("unused", assets, [], 3, 2048, "test", "test");
+        var runtime = Assert.Single(measured.Assets, asset => asset.Name == "report-runtime.js");
+        Assert.Equal(600, runtime.RawBytes);
+        Assert.Equal(220, runtime.GzipBytes);
+        Assert.Equal(1000, measured.SharedTotal.RawBytes);
+        Assert.Equal(320, measured.SharedTotal.GzipBytes);
+
+        Assert.DoesNotContain(ReportingBaselineMeasurementHarness.MeasureBundleAssets(RepoRoot()),
+            asset => asset.RelativePath == "report-runtime.bundle.js");
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Reporting")]
     public void PayloadBudget_FailsOnGrowthPastToleranceAndPassesOnShrink()
     {
         var blessed = new ReportPayloadBudget(

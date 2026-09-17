@@ -135,8 +135,11 @@ namespace ETL_SQL.Connectors.Email
                             continue;
                         }
 
-                        var resolvedPath = _context?.ResolvePath(path) ?? path;
-                        _context?.SecurityService.ValidatePath(resolvedPath);
+                        if (_context == null)
+                            throw new InvalidOperationException("Execution context is required for attachment path resolution.");
+
+                        var resolvedPath = _context.ResolvePath(path);
+                        _context.SecurityService.ValidatePath(resolvedPath);
 
                         if (System.IO.File.Exists(resolvedPath))
                         {

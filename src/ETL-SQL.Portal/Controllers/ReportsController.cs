@@ -398,7 +398,7 @@ public class ReportsController : ControllerBase
     // ── POST /api/reports ─────────────────────────────────────────────────────
 
     [HttpPost("reports")]
-    [Authorize(Roles = "Admin,Publisher")]
+    [Authorize]
     [RequireStudioCapability(StudioCapabilities.ReportPublish, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> Publish([FromBody] PublishReportRequest req)
     {
@@ -471,7 +471,7 @@ public class ReportsController : ControllerBase
     // ── POST /api/reports/validate ───────────────────────────────────────────
 
     [HttpPost("reports/validate")]
-    [Authorize(Roles = "Admin,Publisher")]
+    [Authorize]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> ValidateScript([FromBody] ValidateReportScriptRequest req)
     {
@@ -1701,7 +1701,7 @@ public class ReportsController : ControllerBase
     // ── GET /api/reports/{id}/script-content ─────────────────────────────────
 
     [HttpGet("reports/{id:int}/script-content")]
-    [Authorize(Roles = "Admin,Publisher")]
+    [Authorize]
     [RequireStudioCapability(StudioCapabilities.ScriptRead, StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> GetScriptContent(int id)
     {
@@ -1726,7 +1726,7 @@ public class ReportsController : ControllerBase
     // ── PUT /api/reports/{id}/script-content ──────────────────────────────────
 
     [HttpPut("reports/{id:int}/script-content")]
-    [Authorize(Roles = "Admin,Publisher")]
+    [Authorize]
     [RequireStudioCapability(StudioCapabilities.ScriptSave, StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> SaveScriptContent(int id, [FromBody] ScriptContentRequest req)
     {
@@ -1746,7 +1746,7 @@ public class ReportsController : ControllerBase
     // ── POST /api/reports/{id}/script-source/commit ─────────────────────────
 
     [HttpPost("reports/{id:int}/script-source/commit")]
-    [Authorize(Roles = "Admin,Publisher")]
+    [Authorize]
     [RequireStudioCapability(StudioCapabilities.SourceCommit, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> CommitScriptSource(int id, CancellationToken cancellationToken)
     {
@@ -1815,7 +1815,7 @@ public class ReportsController : ControllerBase
     // ── POST /api/scripts/upload ──────────────────────────────────────────────
 
     [HttpPost("scripts/upload")]
-    [Authorize(Roles = "Admin,Publisher")]
+    [Authorize]
     [RequireStudioCapability(StudioCapabilities.ScriptIngress, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> UploadScript([FromBody] UploadScriptRequest req)
     {
@@ -1846,7 +1846,7 @@ public class ReportsController : ControllerBase
     // ── GET /api/reports/available-scripts ───────────────────────────────────
 
     [HttpGet("reports/available-scripts")]
-    [Authorize(Roles = "Admin,Publisher")]
+    [Authorize]
     [RequireStudioCapability(StudioCapabilities.ScriptRead, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> GetAvailableScripts()
     {

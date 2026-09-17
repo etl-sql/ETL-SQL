@@ -1101,6 +1101,7 @@ public static class WorkstationEditorApp
       if (runtimeInjected) return;
       runtimeInjected = true;
       var rt = document.createElement('script');
+      rt.type = 'module';
       rt.src = '/runtime/report-runtime.js';
       rt.onerror = showError;
       document.body.appendChild(rt);

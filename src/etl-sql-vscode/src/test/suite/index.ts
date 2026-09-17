@@ -6,6 +6,7 @@ export async function run(): Promise<void> {
 	const mocha = new Mocha({
 		ui: 'tdd',
 		color: true,
+		grep: process.env.ETLSQL_VSCODE_TEST_GREP,
 		timeout: 20000
 	});
 

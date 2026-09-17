@@ -87,11 +87,30 @@ function extractAnchors(content) {
 }
 
 /** Parse all ]( link targets from markdown content. */
+/**
+ * Blanks the contents of fenced code blocks, keeping the line count.
+ *
+ * A link inside a fence is quoted text, not a link. The case that found this is a plan carrying a
+ * block someone is meant to paste into a file elsewhere in the tree, where the relative path it
+ * contains is correct — resolving it against the plan's own directory is meaningless, and the only
+ * ways to quiet the failure were to break the text for its real destination or to delete the check.
+ * The same reasoning covers sample markup naming files deliberately not in the repository.
+ */
+function outsideCodeFences(content) {
+  return content
+    .split('\n')
+    .reduce(({ lines, inFence }, line) => {
+      if (line.trimStart().startsWith('```')) return { lines: [...lines, ''], inFence: !inFence };
+      return { lines: [...lines, inFence ? '' : line], inFence };
+    }, { lines: [], inFence: false })
+    .lines.join('\n');
+}
+
 function extractLinks(content) {
   const links = [];
   const re = /\]\(([^)]+)\)/g;
   let m;
-  while ((m = re.exec(content)) !== null) {
+  while ((m = re.exec(outsideCodeFences(content))) !== null) {
     links.push(m[1].trim());
   }
   return links;

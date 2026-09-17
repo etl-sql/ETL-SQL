@@ -89,6 +89,144 @@ interface DataModelResponse {
     relationships: DataModelRelationshipDto[];
 }
 
+interface DesignerBookmarkDto {
+    id: string;
+    name: string;
+    title?: string;
+    page?: string;
+    isDefault: boolean;
+    parameters?: DesignerBookmarkParameterDto[];
+    state?: DesignerBookmarkStateDto[];
+}
+
+interface DesignerBookmarkParameterDto {
+    name: string;
+    value: string;
+}
+
+interface DesignerBookmarkStateDto {
+    objectName: string;
+    property: string;
+    on: boolean;
+}
+
+interface DesignerConditionalFormattingRuleDto {
+    condition: string;
+    backgroundColor: string;
+    fontColor?: string;
+}
+
+interface DesignerConnectionDto {
+    name: string;
+    text: string;
+}
+
+interface DesignerDatasetDto {
+    id: string;
+    name: string;
+    query: string;
+    ttl?: string;
+}
+
+interface DesignerFieldFormattingDto {
+    format?: string;
+    align?: string;
+    displayName?: string;
+    dataBar: boolean;
+    dataBarColor?: string;
+    colorScaleFrom?: string;
+    colorScaleTo?: string;
+}
+
+interface DesignerPageDto {
+    id: string;
+    name: string;
+    mode: string;
+    visuals: DesignerVisualDto[];
+    printLayout?: DesignerPageLayoutDto;
+}
+
+interface DesignerPageLayoutDto {
+    pageSize?: string;
+    orientation?: string;
+    marginTop?: number;
+    marginRight?: number;
+    marginBottom?: number;
+    marginLeft?: number;
+    units?: string;
+    overflow?: string;
+    customWidth?: number;
+    customHeight?: number;
+}
+
+interface DesignerParameterDto {
+    name: string;
+    dataType: string;
+    initialValue?: string;
+    isInput: boolean;
+    isOutput: boolean;
+    isRequired: boolean;
+    isSensitive: boolean;
+    isBlockScoped: boolean;
+}
+
+interface DesignerReportStyleDto {
+    theme?: string;
+    accent?: string;
+    background?: string;
+    surface?: string;
+    text?: string;
+}
+
+interface DesignerStateDto {
+    pages: DesignerPageDto[];
+    datasets: DesignerDatasetDto[];
+    reportStyle?: DesignerReportStyleDto;
+    bookmarks?: DesignerBookmarkDto[];
+    parameters?: DesignerParameterDto[];
+    connections?: DesignerConnectionDto[];
+}
+
+interface DesignerTextFormattingDto {
+    text?: string;
+    color?: string;
+    font?: string;
+    size?: string;
+    weight?: string;
+    align?: string;
+}
+
+interface DesignerVisualDto {
+    id: string;
+    name: string;
+    type: string;
+    gridCol: number;
+    gridRow: number;
+    gridColSpan: number;
+    gridRowSpan: number;
+    title?: string;
+    dataset?: string;
+    mappings: Record<string, string>;
+    options: Record<string, string>;
+    containerId?: string;
+    formatting?: DesignerVisualFormattingDto;
+}
+
+interface DesignerVisualFormattingDto {
+    title?: DesignerTextFormattingDto;
+    subtitle?: DesignerTextFormattingDto;
+    xAxis?: Record<string, string>;
+    yAxis?: Record<string, string>;
+    palette?: string[];
+    conditionalRules?: DesignerConditionalFormattingRuleDto[];
+    fields?: Record<string, DesignerFieldFormattingDto>;
+}
+
+interface ParseDesignerResponse {
+    designState: DesignerStateDto;
+    error?: string;
+}
+
 interface PipelineDependencyDto {
     id: string;
     condition: PipelineEdgeCondition;
@@ -125,6 +263,33 @@ interface PipelineTaskResponse {
     script: string;
     error?: string;
     tasks: PipelineTaskDto[];
+}
+
+interface PreviewAsRequest {
+    label?: string;
+    groups?: string[];
+    roles?: string[];
+}
+
+interface RunDesignerRequest {
+    script: string;
+    selection?: string;
+    connectionRef?: string;
+    documentUri?: string;
+    parameters?: Record<string, string>;
+    previewAs?: PreviewAsRequest;
+}
+
+interface RunDesignerResponse {
+    columns: string[];
+    rows: Record<string, unknown>[];
+    rowCount: number;
+    capped: boolean;
+    elapsedMs: number;
+    message: string;
+    pipeline?: unknown;
+    byteCapped: boolean;
+    bytesReturned: number;
 }
 
 interface ScriptDagDto {

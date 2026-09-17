@@ -664,8 +664,13 @@ public sealed class ScriptGovernanceService
         {
             results = linter.AnalyzeAsync(ast, new DefaultLintContext()).GetAwaiter().GetResult();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            // No logger is available in this static context; write to debug output so the
+            // failure is not silently swallowed. Replace with a proper ILogger if one is
+            // ever threaded through to ReadFindings.
+            System.Diagnostics.Debug.WriteLine(
+                $"[ScriptGovernanceService] ReadFindings: linter threw {ex.GetType().Name}: {ex.Message}");
             return [];
         }
 

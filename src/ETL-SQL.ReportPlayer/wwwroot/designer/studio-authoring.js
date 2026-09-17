@@ -4,6 +4,10 @@
  * Edit the canonical source, then run: node .\scripts\sync-assets.js
  */
 
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-authoring.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -45,34 +49,53 @@
  * `StudioAuthoringContractTests` enforces rules 1–3 by inspection. Rules 4 and 5 are behavioural and
  * belong to the wizard test lane.
  */
-
 import { columnName, columnType, snapshotColumns, updateSnapshotPackage as writeSnapshotPackage } from './studio-data.js';
-import {
-    escapeHtml, mutationExplanationMarkup, noteMarkup as guidedNoteMarkup,
-    sampleGridMarkup as sampleRowsMarkup, sqlPreviewMarkup,
-} from './studio-authoring-ui.js';
+import { escapeHtml, mutationExplanationMarkup, noteMarkup as guidedNoteMarkup, sampleGridMarkup as sampleRowsMarkup, sqlPreviewMarkup, } from './studio-authoring-ui.js';
 import { createQueryWorkbench } from './studio-query-workbench.js';
 import { taskKindLabel } from './studio-pipeline-canvas.js';
-import {
-    CHART_AGGREGATES, STUDIO_VISUAL_GROUPS, aggregateRows, buildAggregatedSource, defaultAggregateAlias,
-    missingRequiredRoles, renderVisualSample, rolesForVisualType,
-} from './visual-preview.js';
-
+import { CHART_AGGREGATES, STUDIO_VISUAL_GROUPS, aggregateRows, buildAggregatedSource, defaultAggregateAlias, missingRequiredRoles, renderVisualSample, rolesForVisualType, } from './visual-preview.js';
+// DOM cast helpers for emitted JavaScript checkJs evaluation
+/**
+ * @param {unknown} el
+ * @returns {any}
+ */
+function asHtml(el) {
+    return el;
+}
+/**
+ * @param {unknown} el
+ * @returns {any}
+ */
+function asInput(el) {
+    return el;
+}
+/**
+ * @param {unknown} el
+ * @returns {any}
+ */
+function asSelect(el) {
+    return el;
+}
+/**
+ * @param {unknown} el
+ * @returns {any}
+ */
+function asButton(el) {
+    return el;
+}
 /** Connection aliases the script itself declares. Host-registered aliases deliberately do not count. */
 export function declaredConnectionNames(scriptText) {
     const names = [];
     const pattern = /CREATE\s+(?:OR\s+REPLACE\s+)?CONNECTION\s+(?:IF\s+NOT\s+EXISTS\s+)?\[?([A-Za-z_][A-Za-z0-9_]*)\]?/gi;
     let match;
-    while ((match = pattern.exec(String(scriptText || ''))) !== null) names.push(match[1]);
+    while ((match = pattern.exec(String(scriptText || ''))) !== null)
+        names.push(match[1]);
     return names;
 }
-
 /** Parameter data types the guided step offers; the script accepts any type the parser knows. */
 const STUDIO_PARAMETER_TYPES = ['VARCHAR', 'INT', 'DECIMAL', 'DATE', 'DATETIME', 'BOOLEAN'];
-
 /** Aggregates a TABLE's GRAND_TOTAL accepts. */
 const STUDIO_TOTAL_AGGREGATES = ['SUM', 'AVG', 'COUNT'];
-
 /**
  * Suggested format patterns. These are suggestions in a free-text field, not a closed list: the
  * renderer takes any .NET numeric or date pattern, and offering only these would make the common
@@ -89,72 +112,122 @@ const STUDIO_FORMAT_PATTERNS = Object.freeze([
     { pattern: 'MMM yyyy', label: 'Month and year — Aug 2026' },
     { pattern: 'yyyy-MM-dd', label: 'ISO date — 2026-08-23' },
 ]);
-
+/**
+ * @typedef {Object} StudioAuthoringOptions
+ * @property {{ backdrop: HTMLElement, box: HTMLElement }} dialog
+ * @property {Record<string, string>} routes
+ * @property {Record<string, string>} catalogRoutes
+ * @property {(route: string, options?: any) => Promise<any>} request
+ * @property {{ url: (route: string) => string, authFetch: any }} editorTransport
+ * @property {() => any} getActiveDocument
+ * @property {() => any} activeContext
+ * @property {(doc: any) => any} contextFor
+ * @property {(label: string, mutator: (design: any) => any) => Promise<any>} mutate
+ * @property {(design: any, base: string) => string} uniqueVisualName
+ * @property {boolean} hasWorkspaceHost
+ * @property {{ notify: Function }} feedback
+ * @property {any} shell
+ */
+/**
+ * @typedef {Object} StudioAuthoringSurfacesHandle
+ * @property {(options?: { intent?: string | null; connection?: string | null }) => Promise<string | null>} openDataWizard
+ * @property {(options?: { kind?: string; task?: any; connections?: any[]; suggestedId?: string; placement?: { after?: string; into?: string } | null }) => Promise<any>} openPipelineTaskEditor
+ * @property {(options: { taskId: string; plan: any }) => Promise<boolean | null>} openPipelineRunPlanConfirm
+ * @property {(seed?: any) => Promise<string | null>} openChartBuilder
+ * @property {() => Promise<string | null>} runChooseDataStep
+ * @property {() => Promise<void>} runParameterStep
+ * @property {() => Promise<void>} runDetailsStep
+ * @property {() => Promise<void>} runTotalsStep
+ * @property {() => Promise<void>} runFurnitureStep
+ * @property {() => Promise<void>} runPreviewStep
+ * @property {() => Promise<void>} runExportStep
+ * @property {() => Promise<void>} runVisualsStep
+ * @property {() => Promise<void>} runCrossFilterStep
+ * @property {() => boolean} hasDataSample
+ * @property {() => { dataset: string | null; options: Record<string, string> }} visualSourceBinding
+ */
 /**
  * Builds the guided authoring surfaces against one Studio workbench.
  *
- * @param dialog          `{ backdrop, box }` — the shell's modal elements.
- * @param routes          Route table; `catalogRoutes` carries the ones only a catalog host serves.
- * @param request         `(route, { method, body, query, fallbackError }) => Promise<json>`; throws
- *                        with the server's message on failure. The module's only network path.
- * @param editorTransport `{ url(route), authFetch }` handed through to the embedded script editor.
- * @param mutate          The canonical parse → mutate → patch round-trip.
- * @param shell           Callbacks into the workbench: navigation, rendering, and script access.
+ * @param {StudioAuthoringOptions} options
+ * @returns {StudioAuthoringSurfacesHandle}
  */
-export function createStudioAuthoringSurfaces({
-    dialog,
-    routes,
-    catalogRoutes,
-    request,
-    editorTransport,
-    getActiveDocument,
-    activeContext,
-    contextFor,
-    mutate,
-    uniqueVisualName,
-    hasWorkspaceHost,
-    feedback,
-    shell,
-}) {
+export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, request, editorTransport, getActiveDocument, activeContext, contextFor, mutate, uniqueVisualName, hasWorkspaceHost, feedback, shell, }) {
     /** A surface is only usable once the document has a sample to bind against. */
     function hasDataSample() {
         const snapshot = activeContext().snapshot;
         return Boolean(snapshot?.source && snapshotColumns(snapshot).length);
     }
-
     function studioDialog({ kicker, title, wide = false }, controller) {
         return new Promise(resolve => {
             let settled = false;
-            const close = value => {
-                if (settled) return;
+            const previouslyFocused = document.activeElement;
+            const close = (value) => {
+                if (settled)
+                    return;
                 settled = true;
                 document.removeEventListener('keydown', onKeyDown, true);
+                dialog.backdrop.removeEventListener('click', onBackdropClick);
                 dialog.backdrop.hidden = true;
+                dialog.box.removeAttribute('role');
+                dialog.box.removeAttribute('aria-modal');
+                dialog.box.removeAttribute('aria-labelledby');
                 dialog.box.innerHTML = '';
                 dialog.box.classList.remove('etlsql-studio-dialog-wide');
                 resolve(value === undefined ? null : value);
+                asHtml(previouslyFocused)?.focus?.();
             };
-            const onKeyDown = event => {
-                if (event.key !== 'Escape') return;
-                event.stopPropagation();
-                close(null);
+            const onKeyDown = (event) => {
+                if (event.key === 'Escape') {
+                    event.stopPropagation();
+                    event.preventDefault();
+                    close(null);
+                    return;
+                }
+                if (event.key === 'Tab') {
+                    const focusable = Array.from(dialog.box.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')).map(asHtml).filter(el => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement);
+                    if (focusable.length === 0) {
+                        event.preventDefault();
+                        return;
+                    }
+                    const first = asHtml(focusable[0]);
+                    const last = asHtml(focusable[focusable.length - 1]);
+                    if (event.shiftKey) {
+                        if (document.activeElement === first || !dialog.box.contains(document.activeElement)) {
+                            event.preventDefault();
+                            last.focus();
+                        }
+                    }
+                    else {
+                        if (document.activeElement === last || !dialog.box.contains(document.activeElement)) {
+                            event.preventDefault();
+                            first.focus();
+                        }
+                    }
+                }
             };
-
+            const onBackdropClick = (event) => {
+                if (event.target === dialog.backdrop)
+                    close(null);
+            };
+            dialog.box.setAttribute('role', 'dialog');
+            dialog.box.setAttribute('aria-modal', 'true');
+            dialog.box.setAttribute('aria-labelledby', 'etlsql-studio-dialog-title');
             dialog.box.innerHTML = `
                 <div class="etlsql-studio-modal-header">
-                    <div><span class="etlsql-studio-kicker">${escapeHtml(kicker)}</span><h2 data-dialog-title>${escapeHtml(title)}</h2></div>
+                    <div><span class="etlsql-studio-kicker">${escapeHtml(kicker)}</span><h2 data-dialog-title id="etlsql-studio-dialog-title">${escapeHtml(title)}</h2></div>
                     <button type="button" class="etlsql-studio-dialog-dismiss" data-dialog-dismiss aria-label="Close">&times;</button>
                 </div>
                 <div class="etlsql-studio-modal-body etlsql-studio-guided-body" data-dialog-body></div>
                 <footer class="etlsql-studio-dialog-actions" data-dialog-actions></footer>`;
-            if (wide) dialog.box.classList.add('etlsql-studio-dialog-wide');
+            if (wide)
+                dialog.box.classList.add('etlsql-studio-dialog-wide');
             dialog.backdrop.hidden = false;
             document.addEventListener('keydown', onKeyDown, true);
-            dialog.box.querySelector('[data-dialog-dismiss]').addEventListener('click', () => close(null));
-
-            const bodyHost = dialog.box.querySelector('[data-dialog-body]');
-            const actionHost = dialog.box.querySelector('[data-dialog-actions]');
-
+            dialog.backdrop.addEventListener('click', onBackdropClick);
+            dialog.box.querySelector('[data-dialog-dismiss]')?.addEventListener('click', () => close(null));
+            const bodyHost = asHtml(dialog.box.querySelector('[data-dialog-body]'));
+            const actionHost = asHtml(dialog.box.querySelector('[data-dialog-actions]'));
             // The footer buttons survive a re-render when the same actions are still on offer.
             //
             // A guided form repaints itself when a field changes, to keep its SQL preview and its
@@ -166,32 +239,48 @@ export function createStudioAuthoringSurfaces({
             // can stay put while what they do stays current.
             let currentActions = [];
             let actionSignature = null;
-            actionHost.addEventListener('click', async event => {
-                const button = event.target.closest('[data-dialog-action]');
-                if (!button || button.disabled) return;
+            actionHost.addEventListener('click', async (event) => {
+                const button = asButton(asHtml(event.target)?.closest('[data-dialog-action]'));
+                if (!button || button.disabled)
+                    return;
                 try {
                     await currentActions.find(action => action.id === button.dataset.dialogAction)?.run?.();
-                } catch (error) {
+                }
+                catch (error) {
                     // A dropped promise here is invisible: the mutation may already have landed
                     // while the dialog silently stops responding. Say so instead.
-                    feedback.notify(error?.message || 'That action could not be completed.',
-                        { title: 'Action failed', tone: 'error' });
+                    feedback.notify(error?.message || 'That action could not be completed.', { title: 'Action failed', tone: 'error' });
                 }
             });
             const api = {
                 close,
-                setTitle(next) { dialog.box.querySelector('[data-dialog-title]').textContent = next; },
+                setTitle(next) {
+                    const titleEl = dialog.box.querySelector('[data-dialog-title]');
+                    if (titleEl)
+                        titleEl.textContent = next;
+                },
                 // Every footer button is disabled while a request is in flight, so a slow schema read
                 // cannot be double-submitted into two datasets.
-                busy(flag) { actionHost.querySelectorAll('button').forEach(button => { button.disabled = flag; }); },
+                busy(flag) {
+                    actionHost.querySelectorAll('button').forEach(button => { asButton(button).disabled = flag; });
+                },
                 /**
                  * @param {Object} [content]
-                 * @param {string} [content.lede]
-                 * @param {string} [content.body]
+                 * @param {string} [content.lede]  Pre-sanitized HTML. Callers MUST escape any
+                 *     dynamic values with `escapeHtml` or produce markup via the safe builder
+                 *     functions from studio-authoring-ui.js. Raw user-supplied strings must never
+                 *     be passed directly.
+                 * @param {string} [content.body]  Pre-sanitized HTML. Same contract as `lede`:
+                 *     all dynamic content must go through `escapeHtml`, `sqlPreviewMarkup`,
+                 *     `sampleGridMarkup`, `mutationExplanationMarkup`, or equivalent safe builders
+                 *     before being interpolated into this string.
                  * @param {Array<*>} [content.actions]
                  * @param {Function} [content.wire] Called with the body once it is in the DOM.
                  */
                 render({ lede = '', body = '', actions = [], wire } = {}) {
+                    // Trusted-HTML insertion point. Both `lede` and `body` are pre-sanitized by
+                    // every caller in this module (dynamic values go through escapeHtml or a safe
+                    // HTML builder). Do NOT pass raw user-supplied strings here directly.
                     bodyHost.innerHTML = (lede ? `<p class="etlsql-studio-guided-lede">${lede}</p>` : '') + body;
                     currentActions = actions;
                     // Rebuilt only when the offer itself changed. `disabled` is not part of the
@@ -208,17 +297,17 @@ export function createStudioAuthoringSurfaces({
                             >${escapeHtml(action.label)}</button>`).join('');
                     }
                     for (const action of actions) {
-                        const button = [...actionHost.children].find(node => node.dataset?.dialogAction === action.id);
-                        if (button) button.disabled = Boolean(action.disabled);
+                        const button = [...actionHost.children].find(node => asHtml(node).dataset?.dialogAction === action.id);
+                        if (button)
+                            asButton(button).disabled = Boolean(action.disabled);
                     }
                     wire?.(bodyHost);
-                    bodyHost.querySelector('input:not([type=hidden]), select, textarea')?.focus();
+                    asHtml(bodyHost.querySelector('input:not([type=hidden]), select, textarea'))?.focus();
                 },
             };
             controller(api);
         });
     }
-
     /**
      * Explains why a step cannot run and offers the control that unblocks it. Returns true when the
      * author took the remedy, so the caller can retry the step.
@@ -231,11 +320,11 @@ export function createStudioAuthoringSurfaces({
                 { id: 'fix', label: remedyLabel, primary: true, run: () => api.close('fix') },
             ],
         }));
-        if (choice !== 'fix') return false;
+        if (choice !== 'fix')
+            return false;
         await remedy();
         return true;
     }
-
     /**
      * How a new visual should point at the current sample. A dataset-backed sample is referenced by
      * name so every visual shares one query; a connection-backed sample still has to inline its
@@ -243,10 +332,10 @@ export function createStudioAuthoringSurfaces({
      */
     function visualSourceBinding() {
         const source = activeContext().snapshot?.source || null;
-        if (source && String(source).startsWith('&')) return { dataset: source, options: {} };
+        if (source && String(source).startsWith('&'))
+            return { dataset: source, options: {} };
         return { dataset: null, options: source ? { inline_source: visualSourceClause(source) } : {} };
     }
-
     /**
      * A snapshot's source, written as something `SOURCE =` will actually accept.
      *
@@ -259,23 +348,22 @@ export function createStudioAuthoringSurfaces({
      */
     function visualSourceClause(source) {
         const text = String(source).trim();
-        if (text.startsWith('#') || text.startsWith('&')) return text;
-        if (text.startsWith('(') || /^select\b/i.test(text)) return text;
+        if (text.startsWith('#') || text.startsWith('&'))
+            return text;
+        if (text.startsWith('(') || /^select\b/i.test(text))
+            return text;
         return text.includes('.') ? `(SELECT * FROM ${text})` : text;
     }
-
     function guidedColumnNames() {
         return snapshotColumns(activeContext().snapshot).map(columnName);
     }
-
     function guidedNumericColumns() {
         const context = activeContext();
         const rows = context.snapshot?.rows || [];
         return snapshotColumns(context.snapshot)
-            .filter(column => columnType(column, rows) === 'number')
+            .filter((column) => columnType(column, rows) === 'number')
             .map(columnName);
     }
-
     /** Samples a named dataset so the canvas, field list, and filters all read from the same rows. */
     async function loadDatasetSample(datasetName) {
         const doc = getActiveDocument();
@@ -303,7 +391,6 @@ export function createStudioAuthoringSurfaces({
         }
         return context.snapshot;
     }
-
     // --- Step 1: the data wizard ------------------------------------------------------------------
     //
     // There are exactly three ways a report gets data, and they have different prerequisites and
@@ -323,50 +410,49 @@ export function createStudioAuthoringSurfaces({
     //
     // Host-registered aliases never count as connections here: an alias this script does not declare
     // would preview correctly and then fail for every other reader of the report.
-
     function datasetBaseName(seed) {
         const cleaned = String(seed || 'dataset').replace(/[^A-Za-z0-9_]/g, '_').replace(/^_+/, '').toLowerCase();
         return /^[a-z]/.test(cleaned) ? cleaned : `data_${cleaned || 'set'}`;
     }
-
     /** Datasets this script declares, from the canonical parse rather than a text scan. */
     async function scriptDatasetNames() {
         try {
             const parsed = await request(routes.parse, { body: { script: shell.getScriptText() } });
-            return (parsed.designState?.datasets || []).map(dataset => ({
+            return (parsed.designState?.datasets || []).map((dataset) => ({
                 name: String(dataset.name || '').startsWith('&') ? dataset.name : `&${dataset.name}`,
                 query: dataset.query || '',
             }));
-        } catch {
+        }
+        catch {
             // A document mid-keystroke does not parse; an empty list is honest, and the wizard's
             // other path still works. This catch previously swallowed a ReferenceError as well,
             // which disabled the reuse path entirely behind that same honest-looking message.
             return [];
         }
     }
-
     /**
      * Datasets the signed-in user may read from the report registry. Only the catalog host has one —
      * the desktop workspace has no registry, so it honestly reports none rather than 404ing.
      */
     async function registryDatasets() {
-        if (hasWorkspaceHost) return [];
+        if (hasWorkspaceHost)
+            return [];
         try {
             const data = await request(catalogRoutes.datasetRegistry, { method: 'GET' });
             return (Array.isArray(data) ? data : data.datasets || [])
-                .filter(dataset => dataset?.name)
-                .map(dataset => ({
-                    name: String(dataset.name).startsWith('&') ? dataset.name : `&${dataset.name}`,
-                    folderPath: dataset.folderPath || '',
-                    rowCount: dataset.rowCount ?? null,
-                    accessLevel: dataset.accessLevel || null,
-                    isStale: Boolean(dataset.isStale),
-                }));
-        } catch {
+                .filter((dataset) => dataset?.name)
+                .map((dataset) => ({
+                name: String(dataset.name).startsWith('&') ? dataset.name : `&${dataset.name}`,
+                folderPath: dataset.folderPath || '',
+                rowCount: dataset.rowCount ?? null,
+                accessLevel: dataset.accessLevel || null,
+                isStale: Boolean(dataset.isStale),
+            }));
+        }
+        catch {
             return [];
         }
     }
-
     /**
      * Connection -> table or query -> name -> CREATE DATASET, or reuse an existing dataset. This is
      * the only path that produces a named, reusable query without writing code, which is what every
@@ -374,7 +460,8 @@ export function createStudioAuthoringSurfaces({
      */
     async function openDataWizard({ intent = null, connection = null } = {}) {
         const doc = getActiveDocument();
-        if (!doc) return null;
+        if (!doc)
+            return null;
         const context = contextFor(doc);
         const wizard = {
             // Resuming after the connection wizard skips straight back to the pane the author was on.
@@ -389,8 +476,7 @@ export function createStudioAuthoringSurfaces({
             // the same list below, and without this every entry was labelled "Declared in this
             // report" - including the ones that are not, which is the difference that decides
             // whether the report still runs for anybody else.
-            scriptConnections: new Set(
-                declaredConnectionNames(shell.getScriptText()).map(alias => String(alias).toLowerCase())),
+            scriptConnections: new Set(declaredConnectionNames(shell.getScriptText()).map(alias => String(alias).toLowerCase())),
             connection: null,
             tables: null,
             table: null,
@@ -401,28 +487,28 @@ export function createStudioAuthoringSurfaces({
             error: null,
             queryWorkbench: null,
         };
-
         return await studioDialog({ kicker: 'Step 1 · Choose data', title: 'Choose data', wide: true }, api => {
-            const fail = message => { wizard.error = message; paint(); };
+            const fail = (message) => { wizard.error = message; paint(); };
             const errorMarkup = () => (wizard.error ? guidedNoteMarkup(wizard.error, 'error') : '');
-
             const disposeWorkbench = () => {
                 wizard.queryWorkbench?.dispose?.();
                 wizard.queryWorkbench = null;
             };
-            const finish = value => { disposeWorkbench(); api.close(value); };
-
+            const finish = (value) => { disposeWorkbench(); api.close(value); };
             // ── Panes ─────────────────────────────────────────────────────────────────────────────
-
             const paint = () => {
-                if (wizard.pane !== 'source' || wizard.mode !== 'query') disposeWorkbench();
-                if (wizard.pane === 'start') return paintStart();
-                if (wizard.pane === 'existing') return paintExisting();
-                if (wizard.pane === 'connection') return paintConnection();
-                if (wizard.pane === 'source') return paintSource();
+                if (wizard.pane !== 'source' || wizard.mode !== 'query')
+                    disposeWorkbench();
+                if (wizard.pane === 'start')
+                    return paintStart();
+                if (wizard.pane === 'existing')
+                    return paintExisting();
+                if (wizard.pane === 'connection')
+                    return paintConnection();
+                if (wizard.pane === 'source')
+                    return paintSource();
                 return paintName();
             };
-
             const paintStart = () => {
                 const available = (wizard.scriptDatasets?.length || 0) + (wizard.registry?.length || 0);
                 const loading = wizard.scriptDatasets === null || wizard.registry === null;
@@ -437,10 +523,10 @@ export function createStudioAuthoringSurfaces({
                         <button type="button" data-start-path="existing" ${loading || !available ? 'disabled' : ''}>
                             <strong>Use an existing dataset</strong>
                             <span>${loading
-                                ? 'Looking for datasets you can use…'
-                                : available
-                                    ? `${available} dataset${available === 1 ? '' : 's'} available · cached, refreshed on its own schedule`
-                                    : 'None available — this report declares none, and none are shared with you'}</span>
+                        ? 'Looking for datasets you can use…'
+                        : available
+                            ? `${available} dataset${available === 1 ? '' : 's'} available · cached, refreshed on its own schedule`
+                            : 'None available — this report declares none, and none are shared with you'}</span>
                         </button>
                         <button type="button" data-start-path="create">
                             <strong>Create a new dataset</strong>
@@ -454,14 +540,13 @@ export function createStudioAuthoringSurfaces({
                     actions: [{ id: 'cancel', label: 'Cancel', run: () => finish(null) }],
                     wire: host => host.querySelectorAll('[data-start-path]').forEach(button => button.addEventListener('click', () => {
                         wizard.error = null;
-                        const path = button.dataset.startPath;
+                        const path = asHtml(button).dataset.startPath;
                         wizard.intent = path === 'live' ? 'live' : 'dataset';
                         wizard.pane = path === 'existing' ? 'existing' : 'connection';
                         paint();
                     })),
                 });
             };
-
             const paintExisting = () => api.render({
                 lede: 'Pick the dataset this report should read from. A dataset already declared here is used as-is; '
                     + 'a registered one is brought in with <code>USE DATASET</code>.',
@@ -485,18 +570,15 @@ export function createStudioAuthoringSurfaces({
                     { id: 'back', label: 'Back', run: () => { wizard.pane = 'start'; wizard.error = null; paint(); } },
                     { id: 'create', label: 'Create a new dataset', primary: true, run: () => { wizard.pane = 'connection'; wizard.error = null; paint(); } },
                 ],
-                wire: host => host.querySelectorAll('[data-use-dataset]').forEach(button =>
-                    button.addEventListener('click', () => useExistingDataset(button.dataset.useDataset, button.dataset.datasetOrigin))),
+                wire: host => host.querySelectorAll('[data-use-dataset]').forEach(button => button.addEventListener('click', () => useExistingDataset(asHtml(button).dataset.useDataset || '', asHtml(button).dataset.datasetOrigin || ''))),
             });
-
             const paintConnection = () => {
                 if (!wizard.connections.length) {
                     return api.render({
                         lede: 'A new dataset reads from a connection, and this report does not declare one yet. '
                             + 'The connection wizard writes a <code>CREATE CONNECTION</code> statement into the script, '
                             + 'which is what makes the report runnable anywhere — not just in this session.',
-                        body: errorMarkup() + guidedNoteMarkup(
-                            'A report that borrows a connection from this session works for you and fails for everyone else '
+                        body: errorMarkup() + guidedNoteMarkup('A report that borrows a connection from this session works for you and fails for everyone else '
                             + 'who opens it — and for its scheduled runs — after previewing perfectly here. That is why the '
                             + 'connections your host already knows about are not offered: only a CREATE CONNECTION statement '
                             + 'inside the script travels with the report.', 'info'),
@@ -514,20 +596,18 @@ export function createStudioAuthoringSurfaces({
                         return `
                         <button type="button" data-pick-connection="${escapeHtml(alias)}" data-connection-origin="${declared ? 'script' : 'host'}" class="${wizard.connection === alias ? 'active' : ''}">
                             <strong>${escapeHtml(alias)}</strong><span>${declared
-                                ? 'Declared in this report'
-                                : 'Known to this host — not declared in this report'}</span></button>`;
+                            ? 'Declared in this report'
+                            : 'Known to this host — not declared in this report'}</span></button>`;
                     }).join('')}</div>`,
                     actions: [
                         { id: 'back', label: 'Back', run: () => { wizard.pane = 'start'; wizard.error = null; paint(); } },
                         { id: 'connect', label: 'New connection…', run: openConnectionThenReturn },
                     ],
-                    wire: host => host.querySelectorAll('[data-pick-connection]').forEach(button =>
-                        button.addEventListener('click', () => openConnection(button.dataset.pickConnection))),
+                    wire: host => host.querySelectorAll('[data-pick-connection]').forEach(button => button.addEventListener('click', () => openConnection(asHtml(button).dataset.pickConnection || ''))),
                 });
             };
-
             const paintSource = () => api.render({
-                lede: `Reading from <strong>${escapeHtml(wizard.connection)}</strong>. Pick a table to read whole, or build the query yourself.`,
+                lede: `Reading from <strong>${escapeHtml(wizard.connection || '')}</strong>. Pick a table to read whole, or build the query yourself.`,
                 body: errorMarkup() + `
                     <div class="etlsql-studio-segmented" role="group" aria-label="Dataset source">
                         <button type="button" data-source-mode="table" class="${wizard.mode === 'table' ? 'active' : ''}">Pick a table</button>
@@ -546,7 +626,7 @@ export function createStudioAuthoringSurfaces({
                                     </button>`).join('')}</div>`
                                 : guidedNoteMarkup(wizard.tablesFailed
                                     ? 'The tables for this connection could not be read, so there is nothing to pick from yet. '
-                                      + 'The reason is above. Writing the query yourself does not need this list.'
+                                        + 'The reason is above. Writing the query yourself does not need this list.'
                                     : 'This connection reported no tables you can read.', 'warning'))
                         : '<div class="etlsql-studio-query-workbench" data-query-workbench></div>')
                     + (wizard.preview ? sampleRowsMarkup(wizard.preview) : ''),
@@ -556,41 +636,41 @@ export function createStudioAuthoringSurfaces({
                 ],
                 wire: host => {
                     host.querySelectorAll('[data-source-mode]').forEach(button => button.addEventListener('click', () => {
-                        wizard.mode = button.dataset.sourceMode;
+                        wizard.mode = asHtml(button).dataset.sourceMode || 'table';
                         wizard.preview = null;
                         paint();
                     }));
                     host.querySelectorAll('[data-pick-table]').forEach(button => button.addEventListener('click', () => {
-                        wizard.table = button.dataset.pickTable;
+                        wizard.table = asHtml(button).dataset.pickTable || null;
                         wizard.preview = null;
                         paint();
                         // Seeing the rows is the point of this step, so the sample loads on selection
                         // rather than behind another button.
                         previewTable();
                     }));
-                    const filter = host.querySelector('[data-table-filter]');
+                    const filter = asInput(host.querySelector('[data-table-filter]'));
                     filter?.addEventListener('input', () => {
                         const query = filter.value.trim().toLowerCase();
                         host.querySelectorAll('[data-pick-table]').forEach(button => {
-                            button.hidden = Boolean(query) && !button.dataset.pickTable.toLowerCase().includes(query);
+                            const pickTable = asHtml(button).dataset.pickTable || '';
+                            asHtml(button).hidden = Boolean(query) && !pickTable.toLowerCase().includes(query);
                         });
                     });
-                    const workbenchHost = host.querySelector('[data-query-workbench]');
-                    if (workbenchHost) mountQueryWorkbench(workbenchHost);
+                    const workbenchHost = asHtml(host.querySelector('[data-query-workbench]'));
+                    if (workbenchHost)
+                        mountQueryWorkbench(workbenchHost);
                 },
             });
-
             const paintName = () => {
-                if (wizard.intent === 'live') return paintLive();
+                if (wizard.intent === 'live')
+                    return paintLive();
                 const base = datasetBaseName(wizard.name);
                 const collides = (wizard.scriptDatasets || []).some(dataset => dataset.name.replace(/^&/, '').toLowerCase() === base);
                 // TTL only. CREATE DATASET ... REFRESH EVERY is retired and the parser rejects it, so
                 // emitting it produced a script that would not parse — which the patcher refused
                 // wholesale, leaving the wizard reporting success while writing nothing.
                 const lifespan = wizard.ttl.trim() ? ` TTL = '${wizard.ttl.trim()}'` : '';
-                const sql = `CREATE DATASET &${base}${lifespan} AS (
-  ${wizardQuery()}
-);`;
+                const sql = `CREATE DATASET &${base}${lifespan} AS (\n  ${wizardQuery()}\n);`;
                 return api.render({
                     lede: 'Name the dataset. Visuals reference it as <code>&amp;name</code>, and the report runs its query once no matter how many visuals read from it.',
                     body: errorMarkup()
@@ -601,8 +681,7 @@ export function createStudioAuthoringSurfaces({
                         + `<label class="etlsql-studio-guided-field"><span>Keep cached rows for (TTL)</span>
                             <input type="text" data-dataset-ttl value="${escapeHtml(wizard.ttl)}" placeholder="2h" spellcheck="false"></label>
                           <p class="etlsql-studio-guided-hint">Durations like <code>30m</code>, <code>2h</code>, <code>1d</code>. Leave it blank to use the host’s default — an omitted TTL is not the same as a zero one. To refresh on a schedule, create a schedule and a job for the report; a dataset cannot carry its own refresh interval.</p>`
-                        + sqlPreviewMarkup(sql,
-                            `Adds a named dataset to the top of the script. Its query runs once per report run, `
+                        + sqlPreviewMarkup(sql, `Adds a named dataset to the top of the script. Its query runs once per report run, `
                             + `and every visual that reads &${base} shares that one result.`)
                         + (wizard.preview ? sampleRowsMarkup(wizard.preview) : ''),
                     actions: [
@@ -610,12 +689,11 @@ export function createStudioAuthoringSurfaces({
                         { id: 'create', label: 'Create dataset', primary: true, run: create },
                     ],
                     wire: host => {
-                        host.querySelector('[data-dataset-name]')?.addEventListener('change', event => { wizard.name = event.target.value; paint(); });
-                        host.querySelector('[data-dataset-ttl]')?.addEventListener('change', event => { wizard.ttl = event.target.value; paint(); });
+                        host.querySelector('[data-dataset-name]')?.addEventListener('change', event => { wizard.name = asInput(event.target).value; paint(); });
+                        host.querySelector('[data-dataset-ttl]')?.addEventListener('change', event => { wizard.ttl = asInput(event.target).value; paint(); });
                     },
                 });
             };
-
             const paintLive = () => {
                 const source = liveSourceClause();
                 return api.render({
@@ -623,13 +701,8 @@ export function createStudioAuthoringSurfaces({
                         + '<code>SOURCE</code>. Nothing is cached: every run reads the connection again, so readers always '
                         + 'see current data and every run costs a query.',
                     body: errorMarkup()
-                        + sqlPreviewMarkup(`CREATE VISUAL … (
-    SOURCE = ${source},
-    …
-);`,
-                            'Changes nothing on its own. Each visual you add next is written with this SOURCE, so each one '
-                            + 'queries the connection again when the report runs.',
-                            'Visuals will be written with this source')
+                        + sqlPreviewMarkup(`CREATE VISUAL … (\n    SOURCE = ${source},\n    …\n);`, 'Changes nothing on its own. Each visual you add next is written with this SOURCE, so each one '
+                            + 'queries the connection again when the report runs.', 'Visuals will be written with this source')
                         + guidedNoteMarkup('Nothing is written to the script yet — the source lands on each visual as you add it. '
                             + 'Switch to a dataset later if the same query starts feeding several visuals.', 'info')
                         + (wizard.preview ? sampleRowsMarkup(wizard.preview) : ''),
@@ -639,15 +712,12 @@ export function createStudioAuthoringSurfaces({
                     ],
                 });
             };
-
             // ── Actions ───────────────────────────────────────────────────────────────────────────
-
             // A table is wrapped in its own SELECT rather than named directly: SOURCE does not take a
             // qualified connection reference, so the preview above has to show what will be written.
             const liveSourceClause = () => (wizard.mode === 'table' && wizard.table
                 ? `(SELECT * FROM ${wizard.connection}.${wizard.table})`
                 : `(${wizardQuery()})`);
-
             const useLiveSource = async () => {
                 api.busy(true);
                 const source = liveSourceClause();
@@ -668,16 +738,12 @@ export function createStudioAuthoringSurfaces({
                 writeSnapshotPackage(activeContext(), context.snapshot);
                 shell.refreshSnapshot();
                 shell.renderSidebar();
-                feedback.notify(
-                    `Visuals will read live from ${source}. Nothing is cached — every run queries ${wizard.connection}.`,
-                    { title: 'Live source ready', tone: 'success' });
+                feedback.notify(`Visuals will read live from ${source}. Nothing is cached — every run queries ${wizard.connection}.`, { title: 'Live source ready', tone: 'success' });
                 finish(source);
             };
-
             const wizardQuery = () => (wizard.mode === 'table'
                 ? (wizard.connection && wizard.table ? `SELECT * FROM ${wizard.connection}.${wizard.table}` : '')
                 : (wizard.queryWorkbench?.getValue?.() ?? wizard.query).trim().replace(/;$/, ''));
-
             const openConnectionThenReturn = () => {
                 // The connection wizard owns the whole modal surface, so this one steps aside. It
                 // resumes where it left off rather than at the first pane: the author already said
@@ -689,8 +755,7 @@ export function createStudioAuthoringSurfaces({
                     onDone: alias => openDataWizard({ intent: resumeIntent, connection: alias }),
                 });
             };
-
-            const openConnection = async alias => {
+            const openConnection = async (alias) => {
                 wizard.connection = alias;
                 wizard.tables = null;
                 wizard.tablesFailed = false;
@@ -707,7 +772,8 @@ export function createStudioAuthoringSurfaces({
                     });
                     wizard.tables = schema.tables || [];
                     wizard.tablesFailed = false;
-                } catch (error) {
+                }
+                catch (error) {
                     // An empty list here is not the same claim as "this connection has no tables",
                     // but the step read it as one: the catch set tables to [], which is exactly what
                     // the zero-tables branch tests, so a failed schema read rendered as a confident
@@ -719,51 +785,53 @@ export function createStudioAuthoringSurfaces({
                 }
                 paint();
             };
-
             const previewTable = async () => {
-                if (wizard.mode !== 'table' || !wizard.table) return;
+                if (wizard.mode !== 'table' || !wizard.table || !wizard.connection)
+                    return;
                 try {
                     wizard.preview = await sampleConnectionTable(wizard.connection, wizard.table);
                     wizard.error = null;
-                } catch (error) {
+                }
+                catch (error) {
                     wizard.preview = null;
                     wizard.error = error.message;
                 }
                 paint();
             };
-
-            const mountQueryWorkbench = async host => {
-                if (wizard.queryWorkbench) return;
+            const mountQueryWorkbench = async (host) => {
+                if (wizard.queryWorkbench)
+                    return;
                 wizard.queryWorkbench = await createQueryWorkbench(host, {
-                    connection: wizard.connection,
-                    routes,
+                    connection: wizard.connection || '',
+                    routes: routes,
                     request,
                     editorTransport,
                     documentUri: () => getActiveDocument()?.path || 'untitled.rptsql',
                     scriptText: () => shell.getScriptText(),
                     value: wizard.query || `SELECT *\nFROM ${wizard.connection}.`,
-                    onChange: value => {
+                    onChange: (value) => {
                         wizard.query = value;
-                        const next = dialog.box.querySelector('[data-dialog-action="next"]');
-                        if (next) next.disabled = !wizardQuery();
+                        const next = asButton(dialog.box.querySelector('[data-dialog-action="next"]'));
+                        if (next)
+                            next.disabled = !wizardQuery();
                     },
-                    onSample: sample => { wizard.preview = sample; },
+                    onSample: (sample) => { wizard.preview = sample; },
                 });
-                const next = dialog.box.querySelector('[data-dialog-action="next"]');
-                if (next) next.disabled = !wizardQuery();
+                const next = asButton(dialog.box.querySelector('[data-dialog-action="next"]'));
+                if (next)
+                    next.disabled = !wizardQuery();
             };
-
             const goToName = async () => {
                 wizard.query = wizard.queryWorkbench?.getValue?.() ?? wizard.query;
                 // A live source is bound without ever running through the dataset sampler, so this is
                 // the last chance to prove the query returns columns the visuals can bind to.
-                if (wizard.intent === 'live' && !wizard.preview && wizard.mode === 'table') await previewTable();
+                if (wizard.intent === 'live' && !wizard.preview && wizard.mode === 'table')
+                    await previewTable();
                 wizard.pane = 'name';
                 wizard.error = null;
                 wizard.name = wizard.name || datasetBaseName(wizard.mode === 'table' ? wizard.table : `${wizard.connection}_query`);
                 paint();
             };
-
             const useExistingDataset = async (name, origin) => {
                 api.busy(true);
                 try {
@@ -774,27 +842,27 @@ export function createStudioAuthoringSurfaces({
                     }
                     const snapshot = await loadDatasetSample(name);
                     context.selectedSource = { connection: null, table: name };
-                    feedback.notify(
-                        `Reading from ${name} — ${snapshot.rowCount} row${snapshot.rowCount === 1 ? '' : 's'} sampled.`,
-                        { title: 'Dataset ready', tone: 'success' });
+                    feedback.notify(`Reading from ${name} — ${snapshot.rowCount} row${snapshot.rowCount === 1 ? '' : 's'} sampled.`, { title: 'Dataset ready', tone: 'success' });
                     finish(name);
-                } catch (error) {
+                }
+                catch (error) {
                     api.busy(false);
                     fail(error.message);
                 }
             };
-
             const create = async () => {
                 const base = datasetBaseName(wizard.name);
                 const query = wizardQuery();
-                if (!query) return fail('This dataset has no query yet.');
+                if (!query)
+                    return fail('This dataset has no query yet.');
                 api.busy(true);
                 const created = await mutate('Create dataset', design => {
                     design.datasets ||= [];
-                    const taken = new Set(design.datasets.map(item => String(item.name || '').replace(/^&/, '').toLowerCase()));
+                    const taken = new Set(design.datasets.map((item) => String(item.name || '').replace(/^&/, '').toLowerCase()));
                     let name = base;
                     let suffix = 2;
-                    while (taken.has(name.toLowerCase())) name = `${base}_${suffix++}`;
+                    while (taken.has(name.toLowerCase()))
+                        name = `${base}_${suffix++}`;
                     design.datasets.push({
                         id: `studio_ds_${Date.now().toString(36)}`,
                         name: `&${name}`,
@@ -803,64 +871,65 @@ export function createStudioAuthoringSurfaces({
                     });
                     return `&${name}`;
                 });
-                if (!created) { api.busy(false); return; }
-
+                if (!created) {
+                    api.busy(false);
+                    return;
+                }
                 context.selectedSource = { connection: wizard.connection, table: wizard.mode === 'table' ? wizard.table : created };
                 context.sourceColumns = snapshotColumns(wizard.preview);
                 try {
                     const snapshot = await loadDatasetSample(created);
-                    feedback.notify(
-                        `${created} is ready with ${snapshot.rowCount} sampled row${snapshot.rowCount === 1 ? '' : 's'}. Visuals can reference it by name.`,
-                        { title: 'Dataset created', tone: 'success' });
-                } catch (error) {
+                    feedback.notify(`${created} is ready with ${snapshot.rowCount} sampled row${snapshot.rowCount === 1 ? '' : 's'}. Visuals can reference it by name.`, { title: 'Dataset created', tone: 'success' });
+                }
+                catch (error) {
                     // The statement is in the script either way; say so rather than implying the step
                     // failed, because the author's next step depends on knowing it exists.
-                    feedback.notify(
-                        `${created} was written to the script, but its preview could not run: ${error.message}`,
-                        { title: 'Dataset created without a sample', tone: 'warning' });
+                    feedback.notify(`${created} was written to the script, but its preview could not run: ${error.message}`, { title: 'Dataset created without a sample', tone: 'warning' });
                 }
                 finish(created);
             };
-
             // A connection just created is the one the author meant to use, so open it rather than
             // making them pick it out of a list of one.
-            if (intent && connection && wizard.connections.includes(connection)) openConnection(connection);
-            else paint();
-
+            if (intent && connection && wizard.connections.includes(connection))
+                openConnection(connection);
+            else
+                paint();
             // The aliases the host offers, merged in as they arrive. The script's own come first
             // because they are the ones that make the report runnable anywhere; the host's are added
             // rather than substituted, because on the Portal they are the only ones there are.
-            Promise.resolve(shell.availableConnections?.() ?? []).then(hosted => {
+            Promise.resolve(shell.availableConnections?.() ?? []).then((hosted) => {
                 const names = (hosted || [])
-                    .map(item => (typeof item === 'string' ? item : item?.alias || item?.name))
+                    .map((item) => (typeof item === 'string' ? item : item?.alias || item?.name))
                     .filter(Boolean);
                 const seen = new Set(wizard.connections.map(alias => String(alias).toLowerCase()));
                 for (const name of names) {
-                    if (seen.has(String(name).toLowerCase())) continue;
+                    if (seen.has(String(name).toLowerCase()))
+                        continue;
                     seen.add(String(name).toLowerCase());
                     wizard.connections.push(name);
                 }
-                if (wizard.pane === 'start' || wizard.pane === 'connection') paint();
+                if (wizard.pane === 'start' || wizard.pane === 'connection')
+                    paint();
             }).catch(() => {
                 // An alias list that cannot be read leaves the script's own, which is what the
                 // wizard offered before and is still a usable answer.
             });
-
             Promise.all([scriptDatasetNames(), registryDatasets()]).then(([scripts, registry]) => {
                 wizard.scriptDatasets = scripts;
                 // A registered dataset this script already declares would be two routes to the same
                 // rows, and only one of them is editable here.
                 const declared = new Set(scripts.map(dataset => dataset.name.toLowerCase()));
                 wizard.registry = registry.filter(dataset => !declared.has(dataset.name.toLowerCase()));
-                if (wizard.pane === 'start' || wizard.pane === 'existing') paint();
+                if (wizard.pane === 'start' || wizard.pane === 'existing')
+                    paint();
             });
         });
     }
-
     /** Inserts a statement ahead of the presentation statements, leaving everything else untouched. */
     function insertScriptStatement(statement) {
         const doc = getActiveDocument();
-        if (!doc) return;
+        if (!doc)
+            return;
         const script = shell.getScriptText();
         const match = /CREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?(?:VISUAL|CONTAINER|BUTTON|PAGE)\b/i.exec(script);
         const at = match ? match.index : script.length;
@@ -870,7 +939,6 @@ export function createStudioAuthoringSurfaces({
         shell.setScriptText(next, 'Use dataset');
         shell.renderTabs();
     }
-
     /** Samples a connection table through the host's design-time preview budget. */
     async function sampleConnectionTable(connection, table) {
         const doc = getActiveDocument();
@@ -891,17 +959,15 @@ export function createStudioAuthoringSurfaces({
             rowCount: sample.rowCount ?? sample.rows?.length ?? 0,
         };
     }
-
-
     /** Step 1 for both workflows. The wizard's first pane already covers reuse vs. create. */
     async function runChooseDataStep() {
         shell.setActivity('catalog');
         return await openDataWizard();
     }
-
     /** Every step after the first needs a sample; this is the one place that says so. */
     async function requireDataSample(stepLabel) {
-        if (hasDataSample()) return true;
+        if (hasDataSample())
+            return true;
         return await guidedBlocker({
             kicker: stepLabel,
             title: 'Choose data first',
@@ -911,28 +977,26 @@ export function createStudioAuthoringSurfaces({
             remedy: () => runChooseDataStep(),
         });
     }
-
     // --- The chart builder ------------------------------------------------------------------------
     //
     // Picking a visual type and assigning fields to its roles, against the real sample, with the
     // Report-SQL it will write shown before it is written. The same builder serves the dashboard's
     // "add a visual" step, the paginated report's bands, and the sidebar's Build entry, because they
     // are the same task: bind columns to a visual's roles and see the result.
-
     /** Field kind for a column, used to suggest a sensible default per role. */
     function guidedFieldKind(name) {
         const context = activeContext();
-        const column = snapshotColumns(context.snapshot).find(item => columnName(item) === name);
+        const column = snapshotColumns(context.snapshot).find((item) => columnName(item) === name);
         return column ? columnType(column, context.snapshot?.rows || []) : 'text';
     }
-
     /**
      * Opens the builder. `seed` may carry a starting type and mappings, so callers that already know
      * what they want (the paginated detail band, say) open it pre-filled rather than blank.
      * Resolves with the created visual's name, or null.
      */
     async function openChartBuilder(seed = {}) {
-        if (!await requireDataSample(seed.kicker || 'Build a chart')) return null;
+        if (!await requireDataSample(seed.kicker || 'Build a chart'))
+            return null;
         const context = activeContext();
         const columns = snapshotColumns(context.snapshot).map(columnName);
         const draft = {
@@ -949,16 +1013,18 @@ export function createStudioAuthoringSurfaces({
             // tile, which already does the job and is opened once this visual is added.
             format: { value: '', axis: '' },
         };
-        if (!Object.keys(draft.mappings).length) autoAssignRoles(draft, columns);
-
+        if (!Object.keys(draft.mappings).length)
+            autoAssignRoles(draft, columns);
         return await studioDialog({ kicker: seed.kicker || 'Build a chart', title: 'Build a visual', wide: true }, api => {
             /** The measure role and its aggregate, when one is set. */
             const activeMeasure = () => {
                 for (const role of rolesForVisualType(draft.type)) {
-                    if (!role.measure) continue;
+                    if (!role.measure)
+                        continue;
                     const setting = draft.aggregates[role.key];
                     const column = draft.mappings[role.key];
-                    if (!setting || setting.aggregate === 'NONE' || !column) continue;
+                    if (!setting || setting.aggregate === 'NONE' || !column)
+                        continue;
                     return {
                         role: role.key,
                         column,
@@ -968,20 +1034,18 @@ export function createStudioAuthoringSurfaces({
                 }
                 return null;
             };
-
             /** Everything bound that is not the aggregated measure becomes a grouping column. */
-            const groupingColumns = measure => [...new Set(rolesForVisualType(draft.type)
-                .filter(role => role.key !== measure.role && !role.repeatable)
-                .map(role => draft.mappings[role.key])
-                .filter(Boolean))];
-
+            const groupingColumns = (measure) => [...new Set(rolesForVisualType(draft.type)
+                    .filter(role => role.key !== measure.role && !role.repeatable)
+                    .map(role => draft.mappings[role.key])
+                    .filter(Boolean))];
             /** Mappings as written: an aggregated role points at the alias, not the source column. */
             const resolvedMappings = () => {
                 const measure = activeMeasure();
-                if (!measure) return draft.mappings;
+                if (!measure)
+                    return draft.mappings;
                 return { ...draft.mappings, [measure.role]: measure.alias };
             };
-
             const sourceExpression = () => {
                 const binding = visualSourceBinding();
                 const base = binding.dataset || binding.options.inline_source || '&dataset';
@@ -990,7 +1054,6 @@ export function createStudioAuthoringSurfaces({
                     ? buildAggregatedSource({ base, groupBy: groupingColumns(measure), measure })
                     : base;
             };
-
             /** The sample shaped the way the query will shape it, so the preview cannot mislead. */
             const previewSample = () => {
                 const measure = activeMeasure();
@@ -998,7 +1061,6 @@ export function createStudioAuthoringSurfaces({
                     ? aggregateRows(context.snapshot, { groupBy: groupingColumns(measure), measure })
                     : context.snapshot;
             };
-
             const previewVisual = () => ({
                 id: 'builder_preview',
                 name: draft.title || `${draft.type.toLowerCase()}_visual`,
@@ -1007,20 +1069,19 @@ export function createStudioAuthoringSurfaces({
                 mappings: resolvedMappings(),
                 options: {},
             });
-
             /** The category axis a format can apply to; only a cartesian chart has one. */
             const axisRole = () => rolesForVisualType(draft.type).find(role => role.key === 'X') || null;
-
             /** Format patterns written the way the generator writes them, so preview and write agree. */
             const formatOptions = () => {
                 const options = [];
                 const value = draft.format.value.trim();
                 const axis = draft.format.axis.trim();
-                if (value) options.push(`FORMAT = '${value.replace(/'/g, "''")}'`);
-                if (axis && axisRole()) options.push(`X_AXIS (FORMAT = '${axis.replace(/'/g, "''")}')`);
+                if (value)
+                    options.push(`FORMAT = '${value.replace(/'/g, "''")}'`);
+                if (axis && axisRole())
+                    options.push(`X_AXIS (FORMAT = '${axis.replace(/'/g, "''")}')`);
                 return options;
             };
-
             const sql = () => {
                 const source = sourceExpression();
                 const entries = Object.entries(resolvedMappings()).filter(([, value]) => value);
@@ -1031,7 +1092,6 @@ export function createStudioAuthoringSurfaces({
                     + (draft.title ? `,\n    TITLE = '${String(draft.title).replace(/'/g, "''")}'` : '')
                     + '\n);';
             };
-
             const paint = () => api.render({
                 lede: 'Drag a field onto a role, or click a role and pick one. The preview below runs against the '
                     + `sample from <strong>${escapeHtml(context.snapshot.source)}</strong>, so it is the real shape of your data.`,
@@ -1055,7 +1115,7 @@ export function createStudioAuthoringSurfaces({
                                 <div class="etlsql-studio-builder-roles">
                                     <span>Roles</span>
                                     ${rolesForVisualType(draft.type).map(role => roleSlotMarkup(role, draft)).join('')
-                                        || '<p class="etlsql-studio-guided-hint">This visual type takes no field bindings.</p>'}
+                    || '<p class="etlsql-studio-guided-hint">This visual type takes no field bindings.</p>'}
                                 </div>
                             </div>
                             <div class="etlsql-studio-builder-preview" data-builder-preview></div>
@@ -1074,15 +1134,13 @@ export function createStudioAuthoringSurfaces({
                                 value="${escapeHtml(draft.format.axis)}" placeholder="Auto" spellcheck="false">
                         </label>` : ''}
                     </div>
-                    <datalist id="etlsql-builder-formats">${STUDIO_FORMAT_PATTERNS.map(pattern =>
-                        `<option value="${escapeHtml(pattern.pattern)}">${escapeHtml(pattern.label)}</option>`).join('')}</datalist>
+                    <datalist id="etlsql-builder-formats">${STUDIO_FORMAT_PATTERNS.map(pattern => `<option value="${escapeHtml(pattern.pattern)}">${escapeHtml(pattern.label)}</option>`).join('')}</datalist>
                     <p class="etlsql-studio-guided-hint">Number and date patterns, as .NET writes them —
                         <code>N0</code>, <code>C2</code>, <code>P1</code>, <code>$#,##0.00</code>,
                         <code>MMM yyyy</code>. Everything else about how this looks — colours, grid lines,
                         data labels, axis bounds — is in <strong>Format</strong> on the selected tile, which
                         opens on the visual as soon as it is added.</p>`
-                    + sqlPreviewMarkup(sql(),
-                        `Adds one ${draft.type} visual to the page, bound to the fields in the roles above. `
+                    + sqlPreviewMarkup(sql(), `Adds one ${draft.type} visual to the page, bound to the fields in the roles above. `
                         + 'It is appended after the statements already in the script; nothing existing is changed.'),
                 actions: [
                     { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
@@ -1093,10 +1151,9 @@ export function createStudioAuthoringSurfaces({
                     },
                 ],
                 wire: host => {
-                    renderVisualSample(host.querySelector('[data-builder-preview]'), previewVisual(), previewSample());
-
+                    renderVisualSample(asHtml(host.querySelector('[data-builder-preview]')), previewVisual(), previewSample());
                     host.querySelectorAll('[data-builder-type]').forEach(button => button.addEventListener('click', () => {
-                        draft.type = button.dataset.builderType;
+                        draft.type = asHtml(button).dataset.builderType || 'BAR';
                         // Roles differ per type, so carry over only the ones the new type accepts and
                         // fill the rest — an author switching BAR to PIE should not land on a blank.
                         // A repeatable role is a numbered family, so it is matched by prefix; keeping
@@ -1104,80 +1161,79 @@ export function createStudioAuthoringSurfaces({
                         const roles = rolesForVisualType(draft.type);
                         const exact = new Set(roles.filter(role => !role.repeatable).map(role => role.key));
                         const prefixes = roles.filter(role => role.repeatable).map(role => role.key.replace(/S$/, ''));
-                        draft.mappings = Object.fromEntries(Object.entries(draft.mappings).filter(([role]) =>
-                            exact.has(role) || prefixes.some(prefix => new RegExp(`^${prefix}\\d*$`, 'i').test(role))));
+                        draft.mappings = Object.fromEntries(Object.entries(draft.mappings).filter(([role]) => exact.has(role) || prefixes.some(prefix => new RegExp(`^${prefix}\\d*$`, 'i').test(role))));
                         autoAssignRoles(draft, columns);
                         paint();
                     }));
-
                     host.querySelectorAll('[data-builder-field]').forEach(field => {
-                        field.addEventListener('dragstart', event => {
-                            event.dataTransfer.setData('text/plain', field.dataset.builderField);
-                            event.dataTransfer.effectAllowed = 'copy';
+                        field.addEventListener('dragstart', (event) => {
+                            const dragEvent = event;
+                            dragEvent.dataTransfer?.setData('text/plain', asHtml(field).dataset.builderField || '');
+                            if (dragEvent.dataTransfer)
+                                dragEvent.dataTransfer.effectAllowed = 'copy';
                         });
                     });
-
                     host.querySelectorAll('[data-role-slot]').forEach(slot => {
-                        const role = slot.dataset.roleSlot;
-                        slot.addEventListener('dragover', event => {
-                            event.preventDefault();
-                            event.dataTransfer.dropEffect = 'copy';
+                        const role = asHtml(slot).dataset.roleSlot;
+                        slot.addEventListener('dragover', (event) => {
+                            const dragEvent = event;
+                            dragEvent.preventDefault();
+                            if (dragEvent.dataTransfer)
+                                dragEvent.dataTransfer.dropEffect = 'copy';
                             slot.classList.add('is-over');
                         });
                         slot.addEventListener('dragleave', () => slot.classList.remove('is-over'));
-                        slot.addEventListener('drop', event => {
-                            event.preventDefault();
+                        slot.addEventListener('drop', (event) => {
+                            const dragEvent = event;
+                            dragEvent.preventDefault();
                             slot.classList.remove('is-over');
-                            assignRole(role, event.dataTransfer.getData('text/plain'));
+                            assignRole(role, dragEvent.dataTransfer?.getData('text/plain') || '');
                         });
                     });
-
-                    host.querySelectorAll('[data-role-select]').forEach(select => select.addEventListener('change', () =>
-                        assignRole(select.dataset.roleSelect, select.value)));
+                    host.querySelectorAll('[data-role-select]').forEach(select => select.addEventListener('change', () => assignRole(asHtml(select).dataset.roleSelect, asSelect(select).value)));
                     host.querySelectorAll('[data-role-aggregate]').forEach(select => select.addEventListener('change', () => {
-                        const role = select.dataset.roleAggregate;
+                        const role = asHtml(select).dataset.roleAggregate;
                         const column = draft.mappings[role];
-                        draft.aggregates[role] = select.value === 'NONE'
+                        draft.aggregates[role] = asSelect(select).value === 'NONE'
                             ? { aggregate: 'NONE', alias: '' }
-                            : { aggregate: select.value, alias: defaultAggregateAlias(select.value, column) };
+                            : { aggregate: asSelect(select).value, alias: defaultAggregateAlias(asSelect(select).value, column) };
                         paint();
                     }));
                     host.querySelectorAll('[data-role-alias]').forEach(input => input.addEventListener('change', () => {
-                        const role = input.dataset.roleAlias;
+                        const role = asHtml(input).dataset.roleAlias;
                         // Renaming the alias changes both the AS in the query and what the role maps to,
                         // which is the whole point of letting it be renamed.
-                        draft.aggregates[role] = { ...draft.aggregates[role], alias: datasetBaseName(input.value) };
+                        draft.aggregates[role] = { ...draft.aggregates[role], alias: datasetBaseName(asInput(input).value) };
                         paint();
                     }));
-                    host.querySelectorAll('[data-role-clear]').forEach(button => button.addEventListener('click', () =>
-                        assignRole(button.dataset.roleClear, '')));
+                    host.querySelectorAll('[data-role-clear]').forEach(button => button.addEventListener('click', () => assignRole(asHtml(button).dataset.roleClear, '')));
                     host.querySelectorAll('[data-role-add]').forEach(button => button.addEventListener('click', () => {
-                        const next = nextRepeatableRole(draft, button.dataset.roleAdd);
+                        const next = nextRepeatableRole(draft, asHtml(button).dataset.roleAdd);
                         assignRole(next, columns.find(column => !Object.values(draft.mappings).includes(column)) || columns[0]);
                     }));
-
-                    host.querySelector('[data-builder-title]')?.addEventListener('input', event => { draft.title = event.target.value; });
+                    host.querySelector('[data-builder-title]')?.addEventListener('input', event => { draft.title = asInput(event.target).value; });
                     // Repainting on change, not on input: the preview under these fields is the SQL
                     // about to be written, and redrawing it on every keystroke makes a half-typed
                     // pattern look like the decision.
                     host.querySelector('[data-builder-format]')?.addEventListener('change', event => {
-                        draft.format.value = event.target.value;
+                        draft.format.value = asInput(event.target).value;
                         paint();
                     });
                     host.querySelector('[data-builder-axis-format]')?.addEventListener('change', event => {
-                        draft.format.axis = event.target.value;
+                        draft.format.axis = asInput(event.target).value;
                         paint();
                     });
                 },
             });
-
             const assignRole = (role, column) => {
-                if (!role) return;
-                if (column) draft.mappings[role] = column;
-                else delete draft.mappings[role];
+                if (!role)
+                    return;
+                if (column)
+                    draft.mappings[role] = column;
+                else
+                    delete draft.mappings[role];
                 paint();
             };
-
             const addVisual = async () => {
                 api.busy(true);
                 const binding = visualSourceBinding();
@@ -1221,8 +1277,7 @@ export function createStudioAuthoringSurfaces({
                 });
                 api.busy(false);
                 if (added) {
-                    feedback.notify(`Added ${type} visual ${added}. Format on the selected tile carries on from here.`,
-                        { title: 'Visual added', tone: 'success' });
+                    feedback.notify(`Added ${type} visual ${added}. Format on the selected tile carries on from here.`, { title: 'Visual added', tone: 'success' });
                     // The hand-off: the builder decides the shape of a visual once, and every later
                     // change belongs to the inspector that already edits every property. Selecting
                     // the new visual is what opens it, so the author lands on the controls that
@@ -1231,50 +1286,41 @@ export function createStudioAuthoringSurfaces({
                 }
                 api.close(added);
             };
-
             paint();
         });
     }
-
     /** Human-readable form of an aggregate, for the role hint. */
     function aggregateExpressionLabel(aggregate, column) {
         return aggregate === 'COUNT_DISTINCT' ? `a distinct count of ${column}` : `${aggregate.toLowerCase()} of ${column}`;
     }
-
     function roleSlotMarkup(role, draft) {
         const columns = snapshotColumns(activeContext().snapshot).map(columnName);
-        const options = column => `<option value="">—</option>${columns.map(item =>
-            `<option ${item === column ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}`;
-
+        const options = (column) => `<option value="">—</option>${columns.map(item => `<option ${item === column ? 'selected' : ''}>${escapeHtml(item)}</option>`).join('')}`;
         if (!role.repeatable) {
             const value = draft.mappings[role.key] || '';
             const setting = draft.aggregates?.[role.key] || { aggregate: 'NONE', alias: '' };
             const aggregated = role.measure && value && setting.aggregate !== 'NONE';
             const alias = setting.alias || (aggregated ? defaultAggregateAlias(setting.aggregate, value) : '');
-
             // Only a measure role offers an aggregate. Naming the result is part of the same decision:
             // the alias is what the query says AS, and what the role ends up mapped to.
             const aggregateControls = role.measure && value
                 ? `<label class="etlsql-studio-role-aggregate"><span>Summarise as</span>
-                        <select data-role-aggregate="${role.key}">${CHART_AGGREGATES.map(option =>
-                            `<option value="${option.id}" ${setting.aggregate === option.id ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select></label>`
+                        <select data-role-aggregate="${role.key}">${CHART_AGGREGATES.map(option => `<option value="${option.id}" ${setting.aggregate === option.id ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}</select></label>`
                     + (aggregated
                         ? `<label class="etlsql-studio-role-aggregate"><span>Call it</span>
                             <input type="text" data-role-alias="${role.key}" value="${escapeHtml(alias)}" spellcheck="false"></label>`
                         : '')
                 : '';
-
             return `<div class="etlsql-studio-role-slot${value ? ' is-bound' : ''}${role.required && !value ? ' is-required' : ''}" data-role-slot="${role.key}">
                 <span>${escapeHtml(role.label)}${role.required ? ' *' : ''}</span>
                 <div><select data-role-select="${role.key}">${options(value)}</select>
                 ${value ? `<button type="button" data-role-clear="${role.key}" aria-label="Clear ${escapeHtml(role.label)}">&times;</button>` : ''}</div>
                 ${aggregateControls}
                 <small>${escapeHtml(aggregated
-                    ? `Plots ${aggregateExpressionLabel(setting.aggregate, value)} per ${role.key === 'VALUE' ? 'group' : 'category'}`
-                    : (role.hint || ''))}</small>
+                ? `Plots ${aggregateExpressionLabel(setting.aggregate, value)} per ${role.key === 'VALUE' ? 'group' : 'category'}`
+                : (role.hint || ''))}</small>
             </div>`;
         }
-
         // A repeatable role is a numbered family (COLUMN1, COLUMN2, …); each bound entry gets its own
         // slot and there is always one more to drop onto.
         const bound = Object.entries(draft.mappings)
@@ -1293,24 +1339,22 @@ export function createStudioAuthoringSurfaces({
             <small>${escapeHtml(role.hint || '')}</small>
         </div>`;
     }
-
     function nextRepeatableRole(draft, roleKey) {
         const prefix = roleKey.replace(/S$/, '');
         let index = 1;
-        while (draft.mappings[`${prefix}${index}`]) index++;
+        while (draft.mappings[`${prefix}${index}`])
+            index++;
         return `${prefix}${index}`;
     }
-
     /** Fills unbound roles with the first column whose kind suits them, so the preview is never blank. */
     function autoAssignRoles(draft, columns) {
         const used = new Set(Object.values(draft.mappings).filter(Boolean));
         // Reusing a column across two roles is legitimate (count by the same field you group by), so
         // running out of unused columns must still bind something rather than leave the role empty.
-        const pick = kind => columns.find(column => !used.has(column) && (kind === 'any' || guidedFieldKind(column) === kind))
+        const pick = (kind) => columns.find(column => !used.has(column) && (kind === 'any' || guidedFieldKind(column) === kind))
             || columns.find(column => !used.has(column))
             || columns.find(column => kind === 'any' || guidedFieldKind(column) === kind)
             || columns[0];
-
         for (const role of rolesForVisualType(draft.type)) {
             if (role.repeatable) {
                 if (!Object.keys(draft.mappings).some(key => key.toUpperCase().startsWith(role.key.replace(/S$/, '')))) {
@@ -1318,22 +1362,21 @@ export function createStudioAuthoringSurfaces({
                 }
                 continue;
             }
-            if (draft.mappings[role.key] || !role.required) continue;
+            if (draft.mappings[role.key] || !role.required)
+                continue;
             const column = pick(role.kind);
-            if (!column) continue;
+            if (!column)
+                continue;
             draft.mappings[role.key] = column;
             used.add(column);
         }
     }
-
     // --- Steps 2-8 --------------------------------------------------------------------------------
-
     /** A parameter keeps the author's casing; only dataset names are lowercased. */
     function parameterName(seed) {
         const cleaned = String(seed || 'parameter').replace(/^@/, '').replace(/[^A-Za-z0-9_]/g, '_').replace(/^_+/, '');
         return /^[A-Za-z]/.test(cleaned) ? cleaned : `p_${cleaned || 'arameter'}`;
     }
-
     /**
      * The parameter manager: list, add, edit, delete.
      *
@@ -1346,7 +1389,7 @@ export function createStudioAuthoringSurfaces({
      * Edit on one would silently do nothing.
      */
     async function runParameterStep() {
-        const draftFor = parameter => ({
+        const draftFor = (parameter) => ({
             original: parameter?.name ?? null,
             name: parameterName(parameter?.name ?? 'region'),
             type: parameter?.dataType ?? 'VARCHAR',
@@ -1355,8 +1398,7 @@ export function createStudioAuthoringSurfaces({
             required: parameter?.isRequired ?? false,
             sensitive: parameter?.isSensitive ?? false,
         });
-
-        const declarationSql = draft => {
+        const declarationSql = (draft) => {
             const initial = draft.initial.trim() ? ` = ${draft.initial.trim()}` : '';
             const flags = [
                 draft.sensitive ? ' PASSWORD' : '',
@@ -1365,27 +1407,24 @@ export function createStudioAuthoringSurfaces({
             ].join('');
             return `DECLARE @${parameterName(draft.name)} ${draft.type.trim() || 'VARCHAR'}${initial}${flags};`;
         };
-
         await studioDialog({ kicker: 'Step 2 · Define parameters', title: 'Report parameters', wide: true }, api => {
             let parameters = null;
-
             const load = async () => {
                 try {
                     const parsed = await request(routes.parse, { body: { script: shell.getScriptText() } });
                     parameters = parsed.designState?.parameters || [];
-                } catch {
+                }
+                catch {
                     parameters = [];
                 }
                 paintList();
             };
-
-            const flagLabels = parameter => [
+            const flagLabels = (parameter) => [
                 parameter.isInput ? 'prompts' : null,
                 parameter.isRequired ? 'required' : null,
                 parameter.isSensitive ? 'sensitive' : null,
                 parameter.isOutput ? 'output' : null,
             ].filter(Boolean).join(' · ');
-
             const paintList = () => api.render({
                 lede: 'A <strong>parameter</strong> is a value supplied before the report runs. Marked as a prompt it '
                     + 'appears as a field the reader fills in; either way a dataset query can filter on it.',
@@ -1400,8 +1439,8 @@ export function createStudioAuthoringSurfaces({
                                     ${flagLabels(parameter) ? `<small>${escapeHtml(flagLabels(parameter))}</small>` : ''}
                                 </div>
                                 ${parameter.isBlockScoped
-                                    ? '<span class="etlsql-studio-parameter-locked">Declared in a block · edit it in the script</span>'
-                                    : `<div class="etlsql-studio-parameter-actions">
+                            ? '<span class="etlsql-studio-parameter-locked">Declared in a block · edit it in the script</span>'
+                            : `<div class="etlsql-studio-parameter-actions">
                                         <button type="button" class="etlsql-studio-btn" data-edit-parameter="${index}">Edit</button>
                                         <button type="button" class="etlsql-studio-btn" data-delete-parameter="${index}">Delete</button>
                                     </div>`}
@@ -1412,19 +1451,20 @@ export function createStudioAuthoringSurfaces({
                     { id: 'add', label: 'Add a parameter', primary: true, run: () => paintForm(draftFor(null)) },
                 ],
                 wire: host => {
-                    host.querySelectorAll('[data-edit-parameter]').forEach(button => button.addEventListener('click', () =>
-                        paintForm(draftFor(parameters[Number(button.dataset.editParameter)]))));
-                    host.querySelectorAll('[data-delete-parameter]').forEach(button => button.addEventListener('click', () =>
-                        paintDelete(parameters[Number(button.dataset.deleteParameter)])));
+                    host.querySelectorAll('[data-edit-parameter]').forEach(button => button.addEventListener('click', () => {
+                        if (parameters)
+                            paintForm(draftFor(parameters[Number(asHtml(button).dataset.editParameter)]));
+                    }));
+                    host.querySelectorAll('[data-delete-parameter]').forEach(button => button.addEventListener('click', () => {
+                        if (parameters)
+                            paintDelete(parameters[Number(asHtml(button).dataset.deleteParameter)]);
+                    }));
                 },
             });
-
-            const paintForm = draft => {
+            const paintForm = (draft) => {
                 const isEdit = Boolean(draft.original);
-                const collides = (parameters || []).some(parameter =>
-                    parameter.name.toLowerCase() === `@${parameterName(draft.name)}`.toLowerCase()
+                const collides = (parameters || []).some(parameter => parameter.name.toLowerCase() === `@${parameterName(draft.name)}`.toLowerCase()
                     && parameter.name !== draft.original);
-
                 api.render({
                     lede: isEdit
                         ? `Editing <strong>${escapeHtml(draft.original)}</strong>. Renaming rewrites the declaration; references elsewhere in the script are not renamed for you.`
@@ -1435,8 +1475,7 @@ export function createStudioAuthoringSurfaces({
                             <input type="text" data-parameter-name value="${escapeHtml(draft.name)}" spellcheck="false"></div></label>
                         <label class="etlsql-studio-guided-field"><span>Type</span>
                             <input type="text" data-parameter-type list="etlsql-parameter-types" value="${escapeHtml(draft.type)}" spellcheck="false">
-                            <datalist id="etlsql-parameter-types">${STUDIO_PARAMETER_TYPES.map(type =>
-                                `<option value="${type}"></option>`).join('')}</datalist></label>
+                            <datalist id="etlsql-parameter-types">${STUDIO_PARAMETER_TYPES.map(type => `<option value="${type}"></option>`).join('')}</datalist></label>
                         <p class="etlsql-studio-guided-hint">Free text, so a sized type such as <code>VARCHAR(50)</code> is kept exactly as written.</p>
                         <label class="etlsql-studio-guided-field"><span>Default value</span>
                             <input type="text" data-parameter-initial value="${escapeHtml(draft.initial)}" spellcheck="false" placeholder="'All'"></label>
@@ -1448,12 +1487,11 @@ export function createStudioAuthoringSurfaces({
                             Hide the value as a secret (PASSWORD)</label>
                         <p class="etlsql-studio-guided-hint">Text defaults need quotes, exactly as they appear in the script.</p>`
                         + (collides ? guidedNoteMarkup('Another parameter already uses that name.', 'warning') : '')
-                        + sqlPreviewMarkup(declarationSql(draft),
-                            isEdit
-                                ? `Rewrites the declaration of ${draft.name} in place. Queries and visuals that already `
-                                  + 'reference it keep working; a changed type or default takes effect on the next run.'
-                                : `Declares ${draft.name} near the top of the script. Nothing uses it until you reference `
-                                  + 'it in a dataset query, a filter, or a slicer.'),
+                        + sqlPreviewMarkup(declarationSql(draft), isEdit
+                            ? `Rewrites the declaration of ${draft.name} in place. Queries and visuals that already `
+                                + 'reference it keep working; a changed type or default takes effect on the next run.'
+                            : `Declares ${draft.name} near the top of the script. Nothing uses it until you reference `
+                                + 'it in a dataset query, a filter, or a slicer.'),
                     actions: [
                         { id: 'back', label: 'Back', run: paintList },
                         {
@@ -1465,10 +1503,13 @@ export function createStudioAuthoringSurfaces({
                         },
                     ],
                     wire: host => {
-                        const bind = (selector, read) => host.querySelector(selector)?.addEventListener('change', event => {
-                            read(event.target);
-                            paintForm(draft);
-                        });
+                        const bind = (selector, read) => {
+                            const el = host.querySelector(selector);
+                            el?.addEventListener('change', event => {
+                                read(asInput(event.target));
+                                paintForm(draft);
+                            });
+                        };
                         bind('[data-parameter-name]', input => { draft.name = input.value; });
                         bind('[data-parameter-type]', input => { draft.type = input.value; });
                         bind('[data-parameter-initial]', input => { draft.initial = input.value; });
@@ -1478,8 +1519,7 @@ export function createStudioAuthoringSurfaces({
                     },
                 });
             };
-
-            const apply = async draft => {
+            const apply = async (draft) => {
                 const name = `@${parameterName(draft.name)}`;
                 api.busy(true);
                 const written = await mutate(draft.original ? `Edit parameter ${draft.original}` : `Add parameter ${name}`, design => {
@@ -1496,51 +1536,48 @@ export function createStudioAuthoringSurfaces({
                     // Replacing in place keeps the declaration where the author put it. A rename is a
                     // replace too: the patcher removes the old name and writes the new one.
                     const at = draft.original
-                        ? design.parameters.findIndex(parameter => parameter.name === draft.original)
+                        ? design.parameters.findIndex((parameter) => parameter.name === draft.original)
                         : -1;
-                    if (at >= 0) design.parameters[at] = next;
-                    else design.parameters.push(next);
+                    if (at >= 0)
+                        design.parameters[at] = next;
+                    else
+                        design.parameters.push(next);
                     return name;
                 });
                 api.busy(false);
                 if (written) {
-                    feedback.notify(`${written} is declared. Reference it in a dataset query to filter on it.`,
-                        { title: draft.original ? 'Parameter saved' : 'Parameter added', tone: 'success' });
+                    feedback.notify(`${written} is declared. Reference it in a dataset query to filter on it.`, { title: draft.original ? 'Parameter saved' : 'Parameter added', tone: 'success' });
                 }
                 await load();
             };
-
-            const paintDelete = parameter => api.render({
+            const paintDelete = (parameter) => api.render({
                 lede: `Delete <strong>${escapeHtml(parameter.name)}</strong>? Anything still referencing it — a dataset `
                     + 'query, a slicer action — keeps that reference and will not resolve, so check those first.',
-                body: sqlPreviewMarkup(
-                    `DECLARE ${parameter.name} ${parameter.dataType}${parameter.initialValue ? ` = ${parameter.initialValue}` : ''};`,
-                    `Deletes this line from the script. Nothing else is rewritten, so any query still naming `
-                    + `${parameter.name} keeps that reference and stops resolving.`,
-                    'Removes this declaration'),
+                body: sqlPreviewMarkup(`DECLARE ${parameter.name} ${parameter.dataType}${parameter.initialValue ? ` = ${parameter.initialValue}` : ''};`, `Deletes this line from the script. Nothing else is rewritten, so any query still naming `
+                    + `${parameter.name} keeps that reference and stops resolving.`, 'Removes this declaration'),
                 actions: [
                     { id: 'back', label: 'Keep it', run: paintList },
                     { id: 'delete', label: 'Delete', primary: true, run: () => remove(parameter) },
                 ],
             });
-
-            const remove = async parameter => {
+            const remove = async (parameter) => {
                 api.busy(true);
                 const removed = await mutate(`Delete parameter ${parameter.name}`, design => {
-                    design.parameters = (design.parameters || []).filter(item => item.name !== parameter.name);
+                    design.parameters = (design.parameters || []).filter((item) => item.name !== parameter.name);
                     return parameter.name;
                 });
                 api.busy(false);
-                if (removed) feedback.notify(`${removed} was removed.`, { title: 'Parameter deleted', tone: 'success' });
+                if (removed)
+                    feedback.notify(`${removed} was removed.`, { title: 'Parameter deleted', tone: 'success' });
                 await load();
             };
-
             paintList();
             load();
         });
     }
     async function runDetailsStep() {
-        if (!await requireDataSample('Step 3 · Groups + details')) return;
+        if (!await requireDataSample('Step 3 · Groups + details'))
+            return;
         const columns = guidedColumnNames();
         const numeric = guidedNumericColumns();
         const draft = {
@@ -1560,18 +1597,15 @@ export function createStudioAuthoringSurfaces({
                     ${draft.includeMatrix ? `
                     <div class="etlsql-studio-guided-row">
                         <label class="etlsql-studio-guided-field"><span>Group by</span>
-                            <select data-details-group>${columns.map(column =>
-                                `<option ${draft.group === column ? 'selected' : ''}>${escapeHtml(column)}</option>`).join('')}</select></label>
+                            <select data-details-group>${columns.map(column => `<option ${draft.group === column ? 'selected' : ''}>${escapeHtml(column)}</option>`).join('')}</select></label>
                         <label class="etlsql-studio-guided-field"><span>Summarise</span>
-                            <select data-details-measure>${columns.map(column =>
-                                `<option ${draft.measure === column ? 'selected' : ''}>${escapeHtml(column)}</option>`).join('')}</select></label>
+                            <select data-details-measure>${columns.map(column => `<option ${draft.measure === column ? 'selected' : ''}>${escapeHtml(column)}</option>`).join('')}</select></label>
                     </div>` : ''}
                     <div class="etlsql-studio-guided-field"><span>Detail columns</span>
                         <div class="etlsql-studio-check-grid">${columns.map(column => `
                             <label><input type="checkbox" data-detail-column="${escapeHtml(column)}"
                                 ${draft.detail.includes(column) ? 'checked' : ''}>${escapeHtml(column)}</label>`).join('')}</div></div>`
-                    + mutationExplanationMarkup(
-                        `Appends ${draft.includeMatrix ? 'a matrix summarising ' + draft.measure + ' by ' + draft.group + ' and ' : ''}`
+                    + mutationExplanationMarkup(`Appends ${draft.includeMatrix ? 'a matrix summarising ' + draft.measure + ' by ' + draft.group + ' and ' : ''}`
                         + `a detail table printing ${draft.detail.length} column${draft.detail.length === 1 ? '' : 's'} `
                         + 'below whatever the page already holds. Existing visuals are not moved or rewritten.')
                     + (draft.detail.length ? '' : guidedNoteMarkup('Pick at least one detail column, or the table has nothing to print.', 'warning')),
@@ -1612,32 +1646,33 @@ export function createStudioAuthoringSurfaces({
                                 return true;
                             });
                             api.busy(false);
-                            if (added) feedback.notify('Detail rows added. Step 4 puts a total under them.', { title: 'Bands added', tone: 'success' });
+                            if (added)
+                                feedback.notify('Detail rows added. Step 4 puts a total under them.', { title: 'Bands added', tone: 'success' });
                             api.close(added);
                         },
                     },
                 ],
                 wire: host => {
-                    host.querySelector('[data-details-matrix]').addEventListener('change', event => { draft.includeMatrix = event.target.checked; paint(); });
-                    host.querySelector('[data-details-group]')?.addEventListener('change', event => { draft.group = event.target.value; });
-                    host.querySelector('[data-details-measure]')?.addEventListener('change', event => { draft.measure = event.target.value; });
+                    host.querySelector('[data-details-matrix]')?.addEventListener('change', event => { draft.includeMatrix = asInput(event.target).checked; paint(); });
+                    host.querySelector('[data-details-group]')?.addEventListener('change', event => { draft.group = asSelect(event.target).value; });
+                    host.querySelector('[data-details-measure]')?.addEventListener('change', event => { draft.measure = asSelect(event.target).value; });
                     host.querySelectorAll('[data-detail-column]').forEach(box => box.addEventListener('change', () => {
-                        const column = box.dataset.detailColumn;
-                        draft.detail = box.checked
+                        const column = asHtml(box).dataset.detailColumn;
+                        draft.detail = asInput(box).checked
                             ? [...draft.detail, column]
                             : draft.detail.filter(item => item !== column);
-                        const add = dialog.box.querySelector('[data-dialog-action="add"]');
-                        if (add) add.disabled = !draft.detail.length;
+                        const add = asButton(dialog.box.querySelector('[data-dialog-action="add"]'));
+                        if (add)
+                            add.disabled = !draft.detail.length;
                     }));
                 },
             });
             paint();
         });
     }
-
     async function runTotalsStep() {
         const designState = shell.designerState();
-        const tables = (designState?.pages || []).flatMap(page => page.visuals || []).filter(visual => visual.type === 'TABLE');
+        const tables = (designState?.pages || []).flatMap((page) => page.visuals || []).filter((visual) => visual.type === 'TABLE');
         if (!tables.length) {
             await guidedBlocker({
                 kicker: 'Step 4 · Add totals',
@@ -1649,54 +1684,52 @@ export function createStudioAuthoringSurfaces({
             });
             return;
         }
-
         const draft = { target: tables[0].name, aggregate: 'SUM' };
         await studioDialog({ kicker: 'Step 4 · Add totals', title: 'Add a grand total' }, api => {
             const paint = () => api.render({
                 lede: 'A <strong>grand total</strong> appends one footer row to a detail table, aggregating every numeric column it prints.',
                 body: `
                     <label class="etlsql-studio-guided-field"><span>Detail table</span>
-                        <select data-total-target>${tables.map(table =>
-                            `<option value="${escapeHtml(table.name)}" ${draft.target === table.name ? 'selected' : ''}>${escapeHtml(table.title || table.name)}</option>`).join('')}</select></label>
+                        <select data-total-target>${tables.map((table) => `<option value="${escapeHtml(table.name)}" ${draft.target === table.name ? 'selected' : ''}>${escapeHtml(table.title || table.name)}</option>`).join('')}</select></label>
                     <label class="etlsql-studio-guided-field"><span>Aggregate</span>
-                        <select data-total-aggregate>${STUDIO_TOTAL_AGGREGATES.map(aggregate =>
-                            `<option ${draft.aggregate === aggregate ? 'selected' : ''}>${aggregate}</option>`).join('')}</select></label>`
-                    + sqlPreviewMarkup(`OPTIONS (GRAND_TOTAL = ${draft.aggregate})`,
-                        `Adds one footer row to ${draft.target} showing the ${draft.aggregate} of each numeric column it prints. `
-                        + 'The detail rows above it are unchanged.',
-                        'Adds this option to the table'),
+                        <select data-total-aggregate>${STUDIO_TOTAL_AGGREGATES.map(aggregate => `<option ${draft.aggregate === aggregate ? 'selected' : ''}>${aggregate}</option>`).join('')}</select></label>`
+                    + sqlPreviewMarkup(`OPTIONS (GRAND_TOTAL = ${draft.aggregate})`, `Adds one footer row to ${draft.target} showing the ${draft.aggregate} of each numeric column it prints. `
+                        + 'The detail rows above it are unchanged.', 'Adds this option to the table'),
                 actions: [
                     { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
                     {
                         id: 'add', label: 'Add total', primary: true, run: async () => {
                             api.busy(true);
                             const added = await mutate('Add report totals', design => {
-                                const table = (design.pages || []).flatMap(page => page.visuals || [])
-                                    .find(visual => visual.name === draft.target);
-                                if (!table) throw new Error(`The detail table ${draft.target} is no longer in the script.`);
+                                const table = (design.pages || []).flatMap((page) => page.visuals || [])
+                                    .find((visual) => visual.name === draft.target);
+                                if (!table)
+                                    throw new Error(`The detail table ${draft.target} is no longer in the script.`);
                                 table.options ||= {};
                                 table.options.GRAND_TOTAL = draft.aggregate;
                                 return true;
                             });
                             api.busy(false);
-                            if (added) feedback.notify(`${draft.target} now prints a ${draft.aggregate} total row.`, { title: 'Total added', tone: 'success' });
+                            if (added)
+                                feedback.notify(`${draft.target} now prints a ${draft.aggregate} total row.`, { title: 'Total added', tone: 'success' });
                             api.close(added);
                         },
                     },
                 ],
                 wire: host => {
-                    host.querySelector('[data-total-target]').addEventListener('change', event => { draft.target = event.target.value; paint(); });
-                    host.querySelector('[data-total-aggregate]').addEventListener('change', event => { draft.aggregate = event.target.value; paint(); });
+                    host.querySelector('[data-total-target]')?.addEventListener('change', event => { draft.target = asSelect(event.target).value; paint(); });
+                    host.querySelector('[data-total-aggregate]')?.addEventListener('change', event => { draft.aggregate = asSelect(event.target).value; paint(); });
                 },
             });
             paint();
         });
     }
-
     async function runFurnitureStep() {
         const doc = getActiveDocument();
         const draft = {
+            headerKind: 'text',
             header: doc?.name?.replace(/\.rptsql$/i, '').replace(/[_-]+/g, ' ') || 'Report',
+            headerImage: '/images/logo.png',
             footer: 'Page {{PAGE}} of {{PAGES}}',
             addHeader: true,
             addFooter: true,
@@ -1704,23 +1737,44 @@ export function createStudioAuthoringSurfaces({
         };
         await studioDialog({ kicker: 'Step 5 · Header + footer', title: 'Add page furniture' }, api => {
             const paint = () => api.render({
-                lede: 'Page <strong>furniture</strong> is the text that frames every printed page. '
-                    + 'These are TEXT bands with a <code>KEEP_TOGETHER</code> print rule, so they never split across a page boundary.',
+                lede: 'Page <strong>furniture</strong> is the content that frames every printed page. '
+                    + 'These are TEXT and IMAGE bands with a <code>KEEP_TOGETHER</code> print rule, so they never split across a page boundary.',
                 body: `
                     <label class="etlsql-studio-guided-check">
                         <input type="checkbox" data-furniture-header ${draft.addHeader ? 'checked' : ''}> Add a page header</label>
-                    ${draft.addHeader ? `<label class="etlsql-studio-guided-field"><span>Header text</span>
-                        <input type="text" data-header-text value="${escapeHtml(draft.header)}"></label>` : ''}
-                    <label class="etlsql-studio-guided-check">
+                    ${draft.addHeader ? `
+                        <div style="display:flex;gap:12px;margin:4px 0 6px 0;">
+                            <label style="font-size:12px;"><input type="radio" name="furniture_header_kind" value="text" ${draft.headerKind === 'text' ? 'checked' : ''} data-header-kind> Text & dynamic fields</label>
+                            <label style="font-size:12px;"><input type="radio" name="furniture_header_kind" value="image" ${draft.headerKind === 'image' ? 'checked' : ''} data-header-kind> Image / Logo</label>
+                        </div>
+                        ${draft.headerKind === 'text' ? `
+                            <label class="etlsql-studio-guided-field"><span>Header text</span>
+                                <input type="text" data-header-text value="${escapeHtml(draft.header)}"></label>
+                            <div style="display:flex;gap:6px;margin:2px 0 8px 0;flex-wrap:wrap;align-items:center;">
+                                <span style="font-size:11px;color:var(--portal-muted,#7a8798);">Tokens:</span>
+                                <button type="button" class="btn btn-xs" data-insert-token="header" data-token="{{PAGE}}">+ Page #</button>
+                                <button type="button" class="btn btn-xs" data-insert-token="header" data-token="{{PAGES}}">+ Total Pages</button>
+                                <button type="button" class="btn btn-xs" data-insert-token="header" data-token="{{CURRENT_DATE}}">+ Date</button>
+                            </div>` : `
+                            <label class="etlsql-studio-guided-field"><span>Image URL or file path</span>
+                                <input type="text" data-header-image value="${escapeHtml(draft.headerImage)}" placeholder="/images/logo.png or https://..."></label>`}` : ''}
+                    <label class="etlsql-studio-guided-check" style="margin-top:8px;">
                         <input type="checkbox" data-furniture-footer ${draft.addFooter ? 'checked' : ''}> Add a page footer</label>
-                    ${draft.addFooter ? `<label class="etlsql-studio-guided-field"><span>Footer text</span>
-                        <input type="text" data-footer-text value="${escapeHtml(draft.footer)}"></label>` : ''}
-                    <label class="etlsql-studio-guided-check">
+                    ${draft.addFooter ? `
+                        <label class="etlsql-studio-guided-field"><span>Footer text</span>
+                            <input type="text" data-footer-text value="${escapeHtml(draft.footer)}"></label>
+                        <div style="display:flex;gap:6px;margin:2px 0 8px 0;flex-wrap:wrap;align-items:center;">
+                            <span style="font-size:11px;color:var(--portal-muted,#7a8798);">Tokens:</span>
+                            <button type="button" class="btn btn-xs" data-insert-token="footer" data-token="{{PAGE}}">+ Page #</button>
+                            <button type="button" class="btn btn-xs" data-insert-token="footer" data-token="{{PAGES}}">+ Total Pages</button>
+                            <button type="button" class="btn btn-xs" data-insert-token="footer" data-token="{{CURRENT_DATE}}">+ Date</button>
+                            <button type="button" class="btn btn-xs" data-insert-token="footer" data-token="Page {{PAGE}} of {{PAGES}}">Page X of Y</button>
+                        </div>` : ''}
+                    <label class="etlsql-studio-guided-check" style="margin-top:8px;">
                         <input type="checkbox" data-furniture-break ${draft.breakAfterDetails ? 'checked' : ''}>
                         Start a new page after the detail table</label>`
-                    + mutationExplanationMarkup(
-                        `Adds ${[draft.addHeader ? 'a header band' : null, draft.addFooter ? 'a footer band' : null]
-                            .filter(Boolean).join(' and ') || 'nothing yet'} to the page as TEXT visuals`
+                    + mutationExplanationMarkup(`Adds ${[draft.addHeader ? (draft.headerKind === 'image' ? 'a logo image' : 'a header band') : null, draft.addFooter ? 'a footer band' : null]
+                        .filter(Boolean).join(' and ') || 'nothing yet'} to the page`
                         + `${draft.breakAfterDetails ? ', and sets the detail table to start a new page after it' : ''}. `
                         + 'The bands print on every physical page; the data visuals are untouched.')
                     + (draft.addHeader || draft.addFooter ? '' : guidedNoteMarkup('Nothing selected — pick a header, a footer, or both.', 'warning')),
@@ -1734,8 +1788,6 @@ export function createStudioAuthoringSurfaces({
                                 page.mode = 'Paginated';
                                 page.visuals ||= [];
                                 const bottom = () => page.visuals.reduce((max, visual) => Math.max(max, visual.gridRow + visual.gridRowSpan - 1), 0);
-                                // A TEXT band carries its content in DEFAULT and reads no data, so it
-                                // gets no SOURCE — one with a source and no text prints nothing.
                                 const band = (slug, title, text) => ({
                                     id: `studio_${slug}_${Date.now().toString(36)}`,
                                     name: uniqueVisualName(design, `page_${slug}`),
@@ -1748,10 +1800,29 @@ export function createStudioAuthoringSurfaces({
                                         print_layout: 'PRINT_LAYOUT (KEEP_TOGETHER = ON)',
                                     },
                                 });
-                                if (draft.addHeader) page.visuals.push(band('header', 'Page header', draft.header));
-                                if (draft.addFooter) page.visuals.push(band('footer', 'Page footer', draft.footer));
+                                if (draft.addHeader) {
+                                    if (draft.headerKind === 'image') {
+                                        page.visuals.push({
+                                            id: `studio_header_logo_${Date.now().toString(36)}`,
+                                            name: uniqueVisualName(design, 'page_header_logo'),
+                                            type: 'IMAGE', gridCol: 1, gridRow: bottom() + 1, gridColSpan: 12, gridRowSpan: 2,
+                                            title: 'Report logo',
+                                            dataset: null,
+                                            mappings: {},
+                                            options: {
+                                                src: `'${String(draft.headerImage).replace(/'/g, "''")}'`,
+                                                print_layout: 'PRINT_LAYOUT (KEEP_TOGETHER = ON)',
+                                            },
+                                        });
+                                    }
+                                    else {
+                                        page.visuals.push(band('header', 'Page header', draft.header));
+                                    }
+                                }
+                                if (draft.addFooter)
+                                    page.visuals.push(band('footer', 'Page footer', draft.footer));
                                 if (draft.breakAfterDetails) {
-                                    const table = page.visuals.find(visual => visual.type === 'TABLE');
+                                    const table = page.visuals.find((visual) => visual.type === 'TABLE');
                                     if (table) {
                                         table.options ||= {};
                                         table.options.print_layout = 'PRINT_LAYOUT (PAGE_BREAK_AFTER = ON, KEEP_TOGETHER = ON)';
@@ -1760,23 +1831,43 @@ export function createStudioAuthoringSurfaces({
                                 return true;
                             });
                             api.busy(false);
-                            if (added) feedback.notify('Page bands added.', { title: 'Furniture added', tone: 'success' });
+                            if (added)
+                                feedback.notify('Page bands added.', { title: 'Furniture added', tone: 'success' });
                             api.close(added);
                         },
                     },
                 ],
                 wire: host => {
-                    host.querySelector('[data-furniture-header]').addEventListener('change', event => { draft.addHeader = event.target.checked; paint(); });
-                    host.querySelector('[data-furniture-footer]').addEventListener('change', event => { draft.addFooter = event.target.checked; paint(); });
-                    host.querySelector('[data-furniture-break]').addEventListener('change', event => { draft.breakAfterDetails = event.target.checked; });
-                    host.querySelector('[data-header-text]')?.addEventListener('input', event => { draft.header = event.target.value; });
-                    host.querySelector('[data-footer-text]')?.addEventListener('input', event => { draft.footer = event.target.value; });
+                    host.querySelector('[data-furniture-header]')?.addEventListener('change', event => { draft.addHeader = asInput(event.target).checked; paint(); });
+                    host.querySelector('[data-furniture-footer]')?.addEventListener('change', event => { draft.addFooter = asInput(event.target).checked; paint(); });
+                    host.querySelector('[data-furniture-break]')?.addEventListener('change', event => { draft.breakAfterDetails = asInput(event.target).checked; });
+                    host.querySelectorAll('[data-header-kind]').forEach(r => r.addEventListener('change', event => { draft.headerKind = asInput(event.target).value; paint(); }));
+                    host.querySelector('[data-header-text]')?.addEventListener('input', event => { draft.header = asInput(event.target).value; });
+                    host.querySelector('[data-header-image]')?.addEventListener('input', event => { draft.headerImage = asInput(event.target).value; });
+                    host.querySelector('[data-footer-text]')?.addEventListener('input', event => { draft.footer = asInput(event.target).value; });
+                    host.querySelectorAll('[data-insert-token]').forEach(btn => btn.addEventListener('click', () => {
+                        const target = asHtml(btn).dataset.insertToken;
+                        const token = asHtml(btn).dataset.token || '';
+                        if (target === 'header') {
+                            const input = host.querySelector('[data-header-text]');
+                            if (input) {
+                                input.value = input.value ? `${input.value} ${token}` : token;
+                                draft.header = input.value;
+                            }
+                        }
+                        else if (target === 'footer') {
+                            const input = host.querySelector('[data-footer-text]');
+                            if (input) {
+                                input.value = input.value ? `${input.value} ${token}` : token;
+                                draft.footer = input.value;
+                            }
+                        }
+                    }));
                 },
             });
             paint();
         });
     }
-
     /**
      * Runs the report and shows the pages it would print.
      *
@@ -1788,7 +1879,7 @@ export function createStudioAuthoringSurfaces({
      */
     async function runPreviewStep() {
         const designState = shell.designerState();
-        const visuals = (designState?.pages || []).flatMap(page => page.visuals || []);
+        const visuals = (designState?.pages || []).flatMap((page) => page.visuals || []);
         if (!visuals.length) {
             await guidedBlocker({
                 kicker: 'Step 7 · Preview pagination',
@@ -1799,28 +1890,24 @@ export function createStudioAuthoringSurfaces({
             });
             return;
         }
-
         const parameters = await promptForReportParameters('Step 7 · Preview pagination');
         if (parameters === null) {
             feedback.notify('Preview cancelled, so the report was not run.', { title: 'Preview', tone: 'info' });
             return;
         }
-
         shell.setProjection('split');
-        feedback.notify('Running the report. Rows and messages appear below the script.',
-            { title: 'Preview running', tone: 'info' });
+        feedback.notify('Running the report. Rows and messages appear below the script.', { title: 'Preview running', tone: 'info' });
         // The answers travel with the run, so what is previewed is the report as answered rather
         // than the defaults the script happens to declare.
         shell.runReport(Object.keys(parameters).length ? parameters : null);
-
         await showPaginationBreakdown(parameters);
     }
-
     /** One page of the compiled breakdown, described in the author's terms. */
     function physicalPageSummary(page) {
         const placements = page.visuals || [];
-        if (!placements.length) return 'nothing — this page prints empty';
-        return placements.map(placement => {
+        if (!placements.length)
+            return 'nothing — this page prints empty';
+        return placements.map((placement) => {
             const name = placement.visual?.name || 'visual';
             const rows = placement.startRowIndex != null && placement.endRowIndex != null
                 ? ` rows ${placement.startRowIndex + 1}–${placement.endRowIndex + 1}`
@@ -1828,7 +1915,6 @@ export function createStudioAuthoringSurfaces({
             return `${name}${rows}`;
         }).join(', ');
     }
-
     async function showPaginationBreakdown(parameters) {
         let manifest;
         try {
@@ -1841,20 +1927,17 @@ export function createStudioAuthoringSurfaces({
                 },
                 fallbackError: 'The pagination could not be compiled.',
             });
-        } catch (error) {
-            feedback.notify(error?.message || 'The pagination could not be compiled.',
-                { title: 'Preview failed', tone: 'error' });
+        }
+        catch (error) {
+            feedback.notify(error?.message || 'The pagination could not be compiled.', { title: 'Preview failed', tone: 'error' });
             return;
         }
-
-        const pages = (manifest?.pages || []).filter(page =>
-            String(page.mode || '').toUpperCase() === 'PAGINATED' || page.printLayout);
-
+        const pages = (manifest?.pages || []).filter((page) => String(page.mode || '').toUpperCase() === 'PAGINATED' || page.printLayout);
         await studioDialog({ kicker: 'Step 7 · Preview pagination', title: 'Pages this report prints' }, api => api.render({
             lede: 'This is the breakdown the export uses. A detail table that does not fit is split, and the '
                 + 'row numbers say where each page continues from.',
             body: pages.length
-                ? pages.map(page => {
+                ? pages.map((page) => {
                     const physical = page.physicalPages || [];
                     return `<div class="etlsql-studio-guided-group">
                         <span>${escapeHtml(page.name || 'Page')} · ${physical.length || 1} `
@@ -1862,8 +1945,7 @@ export function createStudioAuthoringSurfaces({
                         + `${page.printLayout?.pageSize ? ` · ${escapeHtml(page.printLayout.pageSize)}` : ''}`
                         + `${page.printLayout?.orientation ? ` ${escapeHtml(String(page.printLayout.orientation).toLowerCase())}` : ''}</span>
                         <ol class="etlsql-studio-guided-list">${physical.length
-                            ? physical.map(physicalPage =>
-                                `<li><strong>Page ${physicalPage.pageNumber}</strong> — ${escapeHtml(physicalPageSummary(physicalPage))}</li>`).join('')
+                            ? physical.map((physicalPage) => `<li><strong>Page ${physicalPage.pageNumber}</strong> — ${escapeHtml(physicalPageSummary(physicalPage))}</li>`).join('')
                             : '<li>Not compiled — this page declares no print layout.</li>'}</ol>
                     </div>`;
                 }).join('')
@@ -1875,7 +1957,6 @@ export function createStudioAuthoringSurfaces({
             ],
         }));
     }
-
     /**
      * Asks for the report's INPUT parameters before it runs, and returns the answers.
      *
@@ -1891,27 +1972,23 @@ export function createStudioAuthoringSurfaces({
         let parameters = [];
         try {
             const parsed = await request(routes.parse, { body: { script: shell.getScriptText() } });
-            parameters = (parsed.designState?.parameters || []).filter(parameter => parameter.isInput);
-        } catch {
+            parameters = (parsed.designState?.parameters || []).filter((parameter) => parameter.isInput);
+        }
+        catch {
             // A script that cannot be parsed has no prompts to ask about; the run itself will
             // report the syntax error, which is the more useful message.
             return {};
         }
-        if (!parameters.length) return {};
-
-        const answers = Object.fromEntries(parameters.map(parameter =>
-            [parameter.name, unquoteParameterValue(parameter.initialValue)]));
-
-        const confirmed = await studioDialog(
-            { kicker: intent, title: 'Answer the report’s prompts' },
-            api => {
-                const paint = () => {
-                    const missing = parameters.filter(parameter =>
-                        parameter.isRequired && !String(answers[parameter.name] || '').trim());
-                    api.render({
-                        lede: 'This report declares <code>INPUT</code> parameters. Your answers are used for this '
-                            + 'run only — the script keeps the defaults it declares.',
-                        body: parameters.map(parameter => `
+        if (!parameters.length)
+            return {};
+        const answers = Object.fromEntries(parameters.map((parameter) => [parameter.name, unquoteParameterValue(parameter.initialValue)]));
+        const confirmed = await studioDialog({ kicker: intent, title: 'Answer the report’s prompts' }, api => {
+            const paint = () => {
+                const missing = parameters.filter((parameter) => parameter.isRequired && !String(answers[parameter.name] || '').trim());
+                api.render({
+                    lede: 'This report declares <code>INPUT</code> parameters. Your answers are used for this '
+                        + 'run only — the script keeps the defaults it declares.',
+                    body: parameters.map((parameter) => `
                             <label class="etlsql-studio-guided-field">
                                 <span>${escapeHtml(parameter.name)}${parameter.isRequired ? ' *' : ''}
                                     <small>${escapeHtml(parameter.dataType || '')}</small></span>
@@ -1919,49 +1996,45 @@ export function createStudioAuthoringSurfaces({
                                     data-parameter-answer="${escapeHtml(parameter.name)}"
                                     value="${escapeHtml(answers[parameter.name] || '')}" spellcheck="false">
                             </label>`).join('')
-                            + (missing.length
-                                ? guidedNoteMarkup(`${missing.map(parameter => parameter.name).join(', ')} `
-                                    + `${missing.length === 1 ? 'is' : 'are'} required, so the report cannot run without `
-                                    + `${missing.length === 1 ? 'a value' : 'values'}.`, 'warning')
-                                : ''),
-                        actions: [
-                            { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
-                            {
-                                id: 'accept', label: 'Continue', primary: true, disabled: missing.length > 0,
-                                run: () => api.close(true),
-                            },
-                        ],
-                        wire: host => host.querySelectorAll('[data-parameter-answer]').forEach(input =>
-                            input.addEventListener('input', () => {
-                                const name = input.dataset.parameterAnswer;
-                                answers[name] = input.value;
-                                const blocked = parameters.some(parameter =>
-                                    parameter.isRequired && !String(answers[parameter.name] || '').trim());
-                                // Repaint only when the form crosses between "can run" and "cannot".
-                                // Repainting on every keystroke would rebuild the field under the
-                                // cursor, which is how a form starts eating characters.
-                                if (blocked === (missing.length > 0)) return;
-                                paint();
-                                const refreshed = dialog.box.querySelector(`[data-parameter-answer="${name}"]`);
-                                if (refreshed) {
-                                    refreshed.focus();
-                                    refreshed.setSelectionRange(refreshed.value.length, refreshed.value.length);
-                                }
-                            })),
-                    });
-                };
-                paint();
-            });
-
+                        + (missing.length
+                            ? guidedNoteMarkup(`${missing.map((parameter) => parameter.name).join(', ')} `
+                                + `${missing.length === 1 ? 'is' : 'are'} required, so the report cannot run without `
+                                + `${missing.length === 1 ? 'a value' : 'values'}.`, 'warning')
+                            : ''),
+                    actions: [
+                        { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
+                        {
+                            id: 'accept', label: 'Continue', primary: true, disabled: missing.length > 0,
+                            run: () => api.close(true),
+                        },
+                    ],
+                    wire: host => host.querySelectorAll('[data-parameter-answer]').forEach(input => input.addEventListener('input', () => {
+                        const name = asHtml(input).dataset.parameterAnswer;
+                        answers[name] = asInput(input).value;
+                        const blocked = parameters.some((parameter) => parameter.isRequired && !String(answers[parameter.name] || '').trim());
+                        // Repaint only when the form crosses between "can run" and "cannot".
+                        // Repainting on every keystroke would rebuild the field under the
+                        // cursor, which is how a form starts eating characters.
+                        if (blocked === (missing.length > 0))
+                            return;
+                        paint();
+                        const refreshed = asInput(dialog.box.querySelector(`[data-parameter-answer="${name}"]`));
+                        if (refreshed) {
+                            refreshed.focus();
+                            refreshed.setSelectionRange(refreshed.value.length, refreshed.value.length);
+                        }
+                    })),
+                });
+            };
+            paint();
+        });
         return confirmed ? answers : null;
     }
-
     /** A declaration's initial value is script text — `'North'` — and a prompt wants the value. */
     function unquoteParameterValue(value) {
         const text = String(value ?? '').trim();
         return /^'(?:[^']|'')*'$/.test(text) ? text.slice(1, -1).replace(/''/g, "'") : text;
     }
-
     /**
      * Exports the report in the buffer as a PDF and hands the file to the reader.
      *
@@ -1977,13 +2050,11 @@ export function createStudioAuthoringSurfaces({
             feedback.notify('There is nothing to export — the script is empty.', { title: 'Export', tone: 'warning' });
             return false;
         }
-
         const parameters = await promptForReportParameters('Step 8 · Export');
         if (parameters === null) {
             feedback.notify('Export cancelled, so nothing was written.', { title: 'Export', tone: 'info' });
             return false;
         }
-
         try {
             const blob = await request(routes.previewPdf, {
                 body: { script, page: null, parameters },
@@ -1992,16 +2063,14 @@ export function createStudioAuthoringSurfaces({
             });
             const name = String(doc?.name || 'report').replace(/\.[^.]+$/, '') || 'report';
             downloadBlob(blob, `${name}.pdf`);
-            feedback.notify(`${name}.pdf was exported with the page setup you configured.`,
-                { title: 'Export complete', tone: 'success' });
+            feedback.notify(`${name}.pdf was exported with the page setup you configured.`, { title: 'Export complete', tone: 'success' });
             return true;
-        } catch (error) {
-            feedback.notify(error?.message || 'The report could not be exported.',
-                { title: 'Export failed', tone: 'error' });
+        }
+        catch (error) {
+            feedback.notify(error?.message || 'The report could not be exported.', { title: 'Export failed', tone: 'error' });
             return false;
         }
     }
-
     /** Saves bytes as a file. A host that blocks downloads says so rather than doing nothing. */
     function downloadBlob(blob, filename) {
         const url = URL.createObjectURL(blob);
@@ -2012,12 +2081,12 @@ export function createStudioAuthoringSurfaces({
             document.body.appendChild(link);
             link.click();
             link.remove();
-        } finally {
+        }
+        finally {
             // Revoked on the next turn: revoking synchronously can cancel the download in progress.
             setTimeout(() => URL.revokeObjectURL(url), 0);
         }
     }
-
     async function runExportStep() {
         await studioDialog({ kicker: 'Step 8 · Export', title: 'Export this report' }, api => api.render({
             lede: 'A paginated report exports two different things. <strong>PDF</strong> keeps the physical pages, margins, and breaks you configured. '
@@ -2035,17 +2104,17 @@ export function createStudioAuthoringSurfaces({
                         api.busy(true);
                         const exported = await exportReportPdf();
                         api.busy(false);
-                        if (exported) api.close('export');
+                        if (exported)
+                            api.close('export');
                     },
                 },
             ],
         }));
     }
-
     // --- Dashboard steps --------------------------------------------------------------------------
-
     async function runVisualsStep() {
-        if (!await requireDataSample('Step 2 · Visuals')) return;
+        if (!await requireDataSample('Step 2 · Visuals'))
+            return;
         shell.setActivity('palette');
         await studioDialog({ kicker: 'Step 2 · Visuals', title: 'Add visuals to the canvas' }, api => api.render({
             lede: `The Visual Components panel is now open on the left, listing every visual type this report can use. `
@@ -2061,10 +2130,11 @@ export function createStudioAuthoringSurfaces({
             ],
         }));
     }
-
     async function runCrossFilterStep() {
-        if (!await requireDataSample('Step 3 · Cross-filters')) return;
+        if (!await requireDataSample('Step 3 · Cross-filters'))
+            return;
         shell.setActivity('filters');
+        const context = activeContext();
         await studioDialog({ kicker: 'Step 3 · Cross-filters', title: 'Filter across visuals' }, api => api.render({
             lede: 'A <strong>filter</strong> narrows the rows every visual sees. Promoting one to a viewer control turns it into a slicer '
                 + 'the reader can change, backed by a report parameter.',
@@ -2073,7 +2143,17 @@ export function createStudioAuthoringSurfaces({
                     <li>Choose <em>Dataset global</em> to filter every visual, or <em>Selected visual</em> for just one.</li>
                     <li>Use <em>Promote to viewer control</em> to give the reader a slicer for that field.</li>
                 </ul>`,
-            actions: [{ id: 'close', label: 'Got it', primary: true, run: () => api.close(null) }],
+            actions: [
+                {
+                    id: 'skip',
+                    label: 'Skip / No filters needed',
+                    run: () => {
+                        context.skipCrossFilters = true;
+                        api.close('skip');
+                    }
+                },
+                { id: 'close', label: 'Configure filters', primary: true, run: () => api.close(null) },
+            ],
         }));
     }
     /**
@@ -2105,7 +2185,6 @@ export function createStudioAuthoringSurfaces({
         deletefile: [
             { name: 'source', label: 'Delete', placeholder: 'C:\\data\\working\\orders.csv' },
         ],
-
         // ── Directories ──────────────────────────────────────────────────────
         createdirectory: [
             { name: 'source', label: 'Create', placeholder: 'C:\\data\\archive\\2026-09' },
@@ -2128,7 +2207,6 @@ export function createStudioAuthoringSurfaces({
         deletedirectory: [
             { name: 'source', label: 'Delete', placeholder: 'C:\\data\\working', hint: 'The folder and everything in it.' },
         ],
-
         // ── Checks and messages ──────────────────────────────────────────────
         validation: [
             { name: 'condition', label: 'Assert that', placeholder: '(SELECT COUNT(*) FROM #orders) > 0', mono: true },
@@ -2146,7 +2224,6 @@ export function createStudioAuthoringSurfaces({
         waitfor: [
             { name: 'delay', label: 'Wait for', placeholder: '00:00:30', mono: true, hint: 'hh:mm:ss.' },
         ],
-
         // ── Containers ───────────────────────────────────────────────────────
         // A parallel block and a transaction scope have nothing to fill in: they are named, and then
         // filled by dragging tasks into them.
@@ -2168,13 +2245,11 @@ export function createStudioAuthoringSurfaces({
         if: [
             { name: 'condition', label: 'Only when', placeholder: '(SELECT COUNT(*) FROM #orders) > 0', mono: true },
         ],
-
         // BREAK and CONTINUE are the whole statement. The editor still opens, because the label is
         // how the canvas will address the card afterwards, and it is the only thing to fill in.
         break: [],
         continue: [],
     };
-
     /**
      * The fields the host can rewrite in an existing task, by kind.
      *
@@ -2187,7 +2262,6 @@ export function createStudioAuthoringSurfaces({
     const PIPELINE_EDITABLE_FIELDS = {
         foreach: PIPELINE_TASK_FIELDS.foreach,
     };
-
     /**
      * Where the statement is about to be written, in the words of the script rather than the canvas.
      *
@@ -2196,14 +2270,14 @@ export function createStudioAuthoringSurfaces({
      * about where an edit lands is only worth showing while it is accurate.
      */
     function placementPhrase(placement) {
-        if (placement?.into) return `inside ${placement.into}`;
-        if (placement?.after) return `after ${placement.after}`;
+        if (placement?.into)
+            return `inside ${placement.into}`;
+        if (placement?.after)
+            return `after ${placement.after}`;
         return 'at the end of the pipeline';
     }
-
     /** Kinds that run against a connection the script declares, and so need one to exist first. */
     const PIPELINE_KINDS_NEEDING_CONNECTION = new Set(['execution', 'notification']);
-
     /**
      * The task editor behind a pipeline canvas node.
      *
@@ -2221,18 +2295,11 @@ export function createStudioAuthoringSurfaces({
      * @param placement   `{ after, into }` where the drop landed, so the dialog can say where the
      *                    statement is about to be written rather than assuming the end of the file.
      */
-    async function openPipelineTaskEditor({
-        kind = 'execution',
-        task = null,
-        connections = [],
-        suggestedId = 'task_1',
-        placement = null,
-    } = {}) {
+    async function openPipelineTaskEditor({ kind = 'execution', task = null, connections = [], suggestedId = 'task_1', placement = null, } = {}) {
         const editing = Boolean(task);
         const taskKind = String(task?.kind || kind || 'execution').toLowerCase();
-        const aliases = (connections || []).map(connection => connection?.name).filter(Boolean);
+        const aliases = (connections || []).map((connection) => connection?.name).filter(Boolean);
         const needsConnection = PIPELINE_KINDS_NEEDING_CONNECTION.has(taskKind);
-
         // A task that runs against a connection cannot be written before one is declared, and a
         // free-text alias would let the author name one the script does not declare — which previews
         // fine here and fails for every other reader. Resume in the editor rather than dropping them
@@ -2249,10 +2316,10 @@ export function createStudioAuthoringSurfaces({
                     onDone: alias => { created = alias || null; resolve(); },
                 })),
             });
-            if (!took || !created) return null;
+            if (!took || !created)
+                return null;
             return openPipelineTaskEditor({ kind, task, connections: [{ name: created }], suggestedId });
         }
-
         // What this dialog may ask about depends on whether it is writing a statement or rewriting
         // one. The host edits an existing task by replacing named token runs inside it, and today it
         // can locate those runs for an execution task's connection and body and for a loop's header.
@@ -2272,68 +2339,64 @@ export function createStudioAuthoringSurfaces({
         };
         // Prefilled from the task when there is one, so Apply on an existing loop repoints it rather
         // than clearing the header it was opened to show.
-        for (const field of fields) draft[field.name] = String(task?.[field.name] ?? '');
-
+        for (const field of fields)
+            draft[field.name] = String(task?.[field.name] ?? '');
         let workbench = null;
-        return studioDialog(
-            {
-                kicker: 'Pipeline task',
-                title: editing ? `Edit ${task.id}` : `New ${taskKindLabel(taskKind).toLowerCase()} task`,
-                wide: taskKind === 'execution',
-            },
-            api => {
-                const readFields = host => {
-                    for (const field of fields) {
-                        draft[field.name] = host.querySelector(`[data-task-field="${field.name}"]`)?.value ?? draft[field.name];
-                    }
-                };
-
-                const save = () => {
-                    const host = dialog.box;
-                    readFields(host);
-                    draft.body = taskKind === 'execution' ? (workbench?.getValue?.() ?? draft.body) : draft.body;
-
-                    const id = host.querySelector('[data-task-id]').value.trim();
-                    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(id)) {
-                        draft.id = id;
-                        draft.error = `"${id}" is not a usable label. Use letters, digits, and underscores, starting with a letter.`;
-                        return repaint();
-                    }
-                    if (taskKind === 'execution' && !draft.body.trim()) {
-                        draft.error = 'Write the SQL this task runs before adding it.';
-                        return repaint();
-                    }
-                    const blank = fields.find(field => !field.optional && !String(draft[field.name] || '').trim());
-                    if (blank) {
-                        draft.error = `${blank.label} is needed before this task can be written.`;
-                        return repaint();
-                    }
-
-                    const intent = { id, kind: taskKind };
-                    if (needsConnection) intent.connection = draft.connection;
-                    if (taskKind === 'execution') intent.body = draft.body;
-                    for (const field of fields) intent[field.name] = draft[field.name];
-                    return api.close(intent);
-                };
-
-                const paint = () => api.render({
-                    lede: `This task becomes a labelled statement in the script. The label is what the canvas `
-                        + `tracks it by, so it survives a hand edit.`,
-                    body: (draft.error ? guidedNoteMarkup(draft.error, 'error') : '')
-                        + (partiallyEditable ? guidedNoteMarkup([
-                            'Renaming is what this dialog can do to a ',
-                            { strong: taskKindLabel(taskKind).toLowerCase() },
-                            ' task. The rest of the statement is edited in the script — '
+        return studioDialog({
+            kicker: 'Pipeline task',
+            title: editing ? `Edit ${task.id}` : `New ${taskKindLabel(taskKind).toLowerCase()} task`,
+            wide: taskKind === 'execution',
+        }, api => {
+            const readFields = (host) => {
+                for (const field of fields) {
+                    draft[field.name] = asInput(host.querySelector(`[data-task-field="${field.name}"]`))?.value ?? draft[field.name];
+                }
+            };
+            const save = () => {
+                const host = dialog.box;
+                readFields(host);
+                draft.body = taskKind === 'execution' ? (workbench?.getValue?.() ?? draft.body) : draft.body;
+                const id = asInput(host.querySelector('[data-task-id]'))?.value.trim() ?? '';
+                if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(id)) {
+                    draft.id = id;
+                    draft.error = `"${id}" is not a usable label. Use letters, digits, and underscores, starting with a letter.`;
+                    return repaint();
+                }
+                if (taskKind === 'execution' && !draft.body.trim()) {
+                    draft.error = 'Write the SQL this task runs before adding it.';
+                    return repaint();
+                }
+                const blank = fields.find(field => !field.optional && !String(draft[field.name] || '').trim());
+                if (blank) {
+                    draft.error = `${blank.label} is needed before this task can be written.`;
+                    return repaint();
+                }
+                const intent = { id, kind: taskKind };
+                if (needsConnection)
+                    intent.connection = draft.connection;
+                if (taskKind === 'execution')
+                    intent.body = draft.body;
+                for (const field of fields)
+                    intent[field.name] = draft[field.name];
+                return api.close(intent);
+            };
+            const paint = () => api.render({
+                lede: `This task becomes a labelled statement in the script. The label is what the canvas `
+                    + `tracks it by, so it survives a hand edit.`,
+                body: (draft.error ? guidedNoteMarkup(draft.error, 'error') : '')
+                    + (partiallyEditable ? guidedNoteMarkup([
+                        'Renaming is what this dialog can do to a ',
+                        { strong: taskKindLabel(taskKind).toLowerCase() },
+                        ' task. The rest of the statement is edited in the script — '
                             + 'Show in script opens it at the right line — because rewriting it from these '
                             + 'fields would drop any option you added there by hand.',
-                        ], 'info') : '')
-                        + `<div class="etlsql-studio-pipeline-fields">
+                    ], 'info') : '')
+                    + `<div class="etlsql-studio-pipeline-fields">
                             <label>Label
                                 <input type="text" data-task-id value="${escapeHtml(draft.id)}" spellcheck="false">
                             </label>
                             ${needsConnection ? `<label>Connection
-                                <select data-task-connection>${aliases.map(alias =>
-                                    `<option${alias === draft.connection ? ' selected' : ''}>${escapeHtml(alias)}</option>`).join('')}</select>
+                                <select data-task-connection>${aliases.map(alias => `<option${alias === draft.connection ? ' selected' : ''}>${escapeHtml(alias)}</option>`).join('')}</select>
                             </label>` : ''}
                             ${fields.map(field => `<label>${escapeHtml(field.label)}${field.optional ? ' <em>(optional)</em>' : ''}
                                 <input type="text" data-task-field="${escapeHtml(field.name)}"
@@ -2343,62 +2406,62 @@ export function createStudioAuthoringSurfaces({
                                 ${field.hint ? `<small>${escapeHtml(field.hint)}</small>` : ''}
                             </label>`).join('')}
                         </div>`
-                        + (taskKind === 'execution'
-                            ? `<div class="etlsql-studio-workbench" data-task-workbench></div>`
-                                + guidedNoteMarkup([
-                                    'Run executes this block against ',
-                                    { code: draft.connection },
-                                    ' behind the connection declarations the script already makes, so an alias '
+                    + (taskKind === 'execution'
+                        ? `<div class="etlsql-studio-workbench" data-task-workbench></div>`
+                            + guidedNoteMarkup([
+                                'Run executes this block against ',
+                                { code: draft.connection },
+                                ' behind the connection declarations the script already makes, so an alias '
                                     + 'resolves exactly as it will at run time.',
-                                ], 'info')
-                            : '')
-                        + mutationExplanationMarkup(editing
-                            ? `Rewrites ${task.id} in place. Only that statement changes: hand edits elsewhere, and `
-                              + 'the tasks that wait for this one, are left as they are.'
-                            : `Adds one ${taskKindLabel(taskKind).toLowerCase()} task ${placementPhrase(placement)}, under the `
-                              + 'label above. Nothing already in the script is moved or rewritten, and nothing runs until '
-                              + 'you run it.'),
-                    actions: [
-                        { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
-                        { id: 'save', label: editing ? 'Apply' : 'Add task', primary: true, run: save },
-                    ],
-                    wire: async host => {
-                        host.querySelector('[data-task-id]').addEventListener('input', event => { draft.id = event.target.value; });
-                        host.querySelector('[data-task-connection]')?.addEventListener('change', event => {
-                            // The workbench binds its run and its preamble to one alias, so repointing
-                            // rebuilds it rather than leaving it running against the previous one.
-                            readFields(host);
-                            draft.body = workbench?.getValue?.() ?? draft.body;
-                            draft.connection = event.target.value;
-                            repaint();
-                        });
-                        if (taskKind !== 'execution') return;
-
-                        workbench = await createQueryWorkbench(host.querySelector('[data-task-workbench]'), {
-                            connection: draft.connection,
-                            routes,
-                            request,
-                            editorTransport,
-                            documentUri: () => getActiveDocument()?.path || 'untitled.etlsql',
-                            scriptText: () => shell.getScriptText(),
-                            value: draft.body,
-                            label: `Runs on ${draft.connection}`,
-                            runLabel: 'Run this task',
-                            onChange: value => { draft.body = value; },
-                        });
-                    },
-                });
-
-                const repaint = () => {
-                    workbench?.dispose?.();
-                    workbench = null;
-                    paint();
-                };
-
-                paint();
+                            ], 'info')
+                        : '')
+                    + mutationExplanationMarkup(editing
+                        ? `Rewrites ${task.id} in place. Only that statement changes: hand edits elsewhere, and `
+                            + 'the tasks that wait for this one, are left as they are.'
+                        : `Adds one ${taskKindLabel(taskKind).toLowerCase()} task ${placementPhrase(placement)}, under the `
+                            + 'label above. Nothing already in the script is moved or rewritten, and nothing runs until '
+                            + 'you run it.'),
+                actions: [
+                    { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
+                    { id: 'save', label: editing ? 'Apply' : 'Add task', primary: true, run: save },
+                ],
+                wire: async (host) => {
+                    host.querySelector('[data-task-id]')?.addEventListener('input', event => { draft.id = asInput(event.target).value; });
+                    host.querySelector('[data-task-connection]')?.addEventListener('change', event => {
+                        // The workbench binds its run and its preamble to one alias, so repointing
+                        // rebuilds it rather than leaving it running against the previous one.
+                        readFields(host);
+                        draft.body = workbench?.getValue?.() ?? draft.body;
+                        draft.connection = asSelect(event.target).value;
+                        repaint();
+                    });
+                    if (taskKind !== 'execution')
+                        return;
+                    const workbenchEl = host.querySelector('[data-task-workbench]');
+                    if (!workbenchEl)
+                        return;
+                    workbench = await createQueryWorkbench(workbenchEl, {
+                        connection: draft.connection,
+                        routes: routes,
+                        request,
+                        editorTransport,
+                        documentUri: () => getActiveDocument()?.path || 'untitled.etlsql',
+                        scriptText: () => shell.getScriptText(),
+                        value: draft.body,
+                        label: `Runs on ${draft.connection}`,
+                        runLabel: 'Run this task',
+                        onChange: (value) => { draft.body = value; },
+                    });
+                },
             });
+            const repaint = () => {
+                workbench?.dispose?.();
+                workbench = null;
+                paint();
+            };
+            paint();
+        });
     }
-
     /**
      * Asks whether to run to a selected task, naming everything the run would leave behind.
      *
@@ -2417,22 +2480,21 @@ export function createStudioAuthoringSurfaces({
         const effects = plan?.effects ?? [];
         const skipped = plan?.skipped ?? [];
         const included = plan?.included ?? [];
-
         // Grouped by the task that performs them, because that is the unit the author selected and
         // can go look at. An effect the planner could not attribute is ambient script, and says so
         // rather than being filed under whichever task happens to sit near it.
         const groups = new Map();
         for (const effect of effects) {
             const owner = effect?.taskId || '';
-            if (!groups.has(owner)) groups.set(owner, []);
+            if (!groups.has(owner))
+                groups.set(owner, []);
             groups.get(owner).push(effect);
         }
-
         const groupMarkup = [...groups.entries()].map(([owner, list]) => `
             <li>
                 <span class="etlsql-studio-runplan-owner">${owner
-                    ? escapeHtml(owner)
-                    : 'Script outside any task'}</span>
+            ? escapeHtml(owner)
+            : 'Script outside any task'}</span>
                 <ul class="etlsql-studio-runplan-effects">
                     ${list.map(effect => `<li>
                         <span class="etlsql-studio-runplan-action">${escapeHtml(effect.action)}</span>
@@ -2441,31 +2503,27 @@ export function createStudioAuthoringSurfaces({
                     </li>`).join('')}
                 </ul>
             </li>`).join('');
-
-        return studioDialog(
-            { kicker: 'Run to here', title: `Run the pipeline through ${taskId}` },
-            api => {
-                api.render({
-                    lede: `This runs ${included.length} task${included.length === 1 ? '' : 's'} for real, `
-                        + `against the connections the script declares. `
-                        + `${effects.length === 1 ? 'One thing' : `${effects.length} things`} below will `
-                        + `outlive the run.`,
-                    body: `<ul class="etlsql-studio-runplan">${groupMarkup}</ul>`
-                        // Named, not hidden. A skipped sibling is the most likely reason a run that
-                        // "should have worked" did not, and the author cannot guess it from the canvas.
-                        + (skipped.length
-                            ? guidedNoteMarkup(`Skipped, because ${escapeHtml(taskId)} does not declare that it `
-                                + `waits for ${skipped.length === 1 ? 'it' : 'them'}: `
-                                + skipped.map(id => `<code>${escapeHtml(id)}</code>`).join(', '), 'info')
-                            : ''),
-                    actions: [
-                        { id: 'cancel', label: 'Cancel', run: () => api.close(false) },
-                        { id: 'run', label: 'Run it', primary: true, run: () => api.close(true) },
-                    ],
-                });
+        return studioDialog({ kicker: 'Run to here', title: `Run the pipeline through ${taskId}` }, api => {
+            api.render({
+                lede: `This runs ${included.length} task${included.length === 1 ? '' : 's'} for real, `
+                    + `against the connections the script declares. `
+                    + `${effects.length === 1 ? 'One thing' : `${effects.length} things`} below will `
+                    + `outlive the run.`,
+                body: `<ul class="etlsql-studio-runplan">${groupMarkup}</ul>`
+                    // Named, not hidden. A skipped sibling is the most likely reason a run that
+                    // "should have worked" did not, and the author cannot guess it from the canvas.
+                    + (skipped.length
+                        ? guidedNoteMarkup(`Skipped, because ${escapeHtml(taskId)} does not declare that it `
+                            + `waits for ${skipped.length === 1 ? 'it' : 'them'}: `
+                            + skipped.map((id) => `<code>${escapeHtml(id)}</code>`).join(', '), 'info')
+                        : ''),
+                actions: [
+                    { id: 'cancel', label: 'Cancel', run: () => api.close(false) },
+                    { id: 'run', label: 'Run it', primary: true, run: () => api.close(true) },
+                ],
             });
+        });
     }
-
     return {
         openDataWizard,
         openPipelineTaskEditor,

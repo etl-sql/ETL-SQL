@@ -128,6 +128,147 @@ public sealed class StudioCapabilityAssignmentTests
         Assert.DoesNotContain(StudioCapabilities.SourcePush, capabilities);
     }
 
+    [Fact]
+    public async Task CustomRoleUser_WithStudioAccessAndScriptRead_CanAccessStudioReportsAndScriptContent()
+    {
+        using var factory = new NoRoleCapabilitiesFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        // Create a non-privileged user with role "Viewer" (not Admin and not Publisher)
+        var userId = await CreateUserAsync(client, adminToken, $"learner_{suffix}", "Viewer");
+        var groupId = await CreateGroupAsync(client, adminToken, $"learner_group_{suffix}");
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthPost(client, adminToken, $"/api/admin/groups/{groupId}/members", new { userId })).StatusCode);
+
+        // Grant StudioAccess and ScriptRead capabilities to the group
+        var grantRes = await SetCapabilitiesAsync(client, adminToken, groupId,
+            [StudioCapabilities.StudioAccess, StudioCapabilities.ScriptRead]);
+        Assert.Equal(HttpStatusCode.OK, grantRes.StatusCode);
+
+        // Under NoRoleCapabilitiesFactory, admin has no capabilities from role mappings.
+        // Grant ReportPublish to an admin group so admin can publish the seed report.
+        var adminGroupId = await CreateGroupAsync(client, adminToken, $"admin_grp_{suffix}");
+        Assert.Equal(HttpStatusCode.OK,
+            (await SetCapabilitiesAsync(client, adminToken, adminGroupId,
+                [StudioCapabilities.StudioAccess, StudioCapabilities.ReportPublish, StudioCapabilities.ScriptSave])).StatusCode);
+        var usersRes = await AuthGet(client, adminToken, "/api/admin/users");
+        var usersObj = await usersRes.Content.ReadFromJsonAsync<JsonObject>(Json);
+        var adminUserId = usersObj!["items"]!.AsArray().First(u => u!["userName"]!.GetValue<string>() == "admin")!["id"]!.GetValue<int>();
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthPost(client, adminToken, $"/api/admin/groups/{adminGroupId}/members", new { userId = adminUserId })).StatusCode);
+        adminToken = await LoginAsync(client, "admin", "Admin@Tests99!");
+
+        // Publish a report as Admin and grant the learner Author permission on the folder
+        var folderRes = await AuthPost(client, adminToken, "/api/folders", new { name = $"learn_folder_{suffix}" });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+
+        var scriptName = $"learn_{suffix}.rptsql";
+        var scriptPath = Path.Combine(factory.TempDir, "scripts", scriptName);
+        await File.WriteAllTextAsync(scriptPath, "SET REPORT TITLE = 'Learn';");
+
+        var reportRes = await AuthPost(client, adminToken, "/api/reports",
+            new { folderId, name = $"Learn Report {suffix}", scriptPath = scriptName });
+        Assert.Equal(HttpStatusCode.Created, reportRes.StatusCode);
+        var reportId = (await reportRes.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+
+        // Grant Author permission (2) on the folder to the learner's group
+        var aclRes = await AuthPost(client, adminToken, $"/api/folders/{folderId}/acl", new { groupId, permission = 2 });
+        Assert.Equal(HttpStatusCode.OK, aclRes.StatusCode);
+
+        // Login as the learner user
+        var userToken = await LoginAsync(client, $"learner_{suffix}", "Ready@Test2!");
+
+        // 1. Can access GET /api/studio/reports
+        var studioReportsRes = await AuthGet(client, userToken, "/api/studio/reports");
+        Assert.Equal(HttpStatusCode.OK, studioReportsRes.StatusCode);
+        var reports = await studioReportsRes.Content.ReadFromJsonAsync<JsonArray>(Json);
+        Assert.NotNull(reports);
+        Assert.Contains(reports!, r => r!["id"]!.GetValue<int>() == reportId);
+
+        // 2. Can access GET /api/reports/{id}/script-content
+        var scriptContentRes = await AuthGet(client, userToken, $"/api/reports/{reportId}/script-content");
+        Assert.Equal(HttpStatusCode.OK, scriptContentRes.StatusCode);
+        var scriptContent = await scriptContentRes.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.NotNull(scriptContent);
+        Assert.Equal("SET REPORT TITLE = 'Learn';", scriptContent!["scriptText"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Learner_WithStudioAccessAndScriptPreview_CanRunPreviewWithoutAdminOrPublisherRole()
+    {
+        using var factory = new NoRoleCapabilitiesFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        // Create learner user with non-privileged role
+        var userId = await CreateUserAsync(client, adminToken, $"preview_user_{suffix}", "Viewer");
+        var groupId = await CreateGroupAsync(client, adminToken, $"preview_group_{suffix}");
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthPost(client, adminToken, $"/api/admin/groups/{groupId}/members", new { userId })).StatusCode);
+
+        // Grant StudioAccess and ScriptPreview
+        Assert.Equal(HttpStatusCode.OK,
+            (await SetCapabilitiesAsync(client, adminToken, groupId,
+                [StudioCapabilities.StudioAccess, StudioCapabilities.ScriptPreview])).StatusCode);
+
+        var token = await LoginAsync(client, $"preview_user_{suffix}", "Ready@Test2!");
+
+        // Call /api/designer/preview
+        var previewRes = await AuthPost(client, token, "/api/designer/preview", new
+        {
+            script = "SET REPORT TITLE = 'Preview Test';",
+            runEveryPage = true
+        });
+        Assert.Equal(HttpStatusCode.OK, previewRes.StatusCode);
+        var previewBody = await previewRes.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.NotNull(previewBody);
+    }
+
+    [Fact]
+    public async Task User_WithoutReportPublish_IsRejectedByCreateReportEndpoint()
+    {
+        using var factory = new NoRoleCapabilitiesFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        // Create user with non-privileged role
+        var userId = await CreateUserAsync(client, adminToken, $"draft_only_{suffix}", "Viewer");
+        var groupId = await CreateGroupAsync(client, adminToken, $"draft_only_group_{suffix}");
+        Assert.Equal(HttpStatusCode.OK,
+            (await AuthPost(client, adminToken, $"/api/admin/groups/{groupId}/members", new { userId })).StatusCode);
+
+        // Grant StudioAccess and ScriptSave BUT NOT ReportPublish
+        Assert.Equal(HttpStatusCode.OK,
+            (await SetCapabilitiesAsync(client, adminToken, groupId,
+                [StudioCapabilities.StudioAccess, StudioCapabilities.ScriptSave])).StatusCode);
+
+        // Create a folder and grant Manage permission (permission = 3) to the user's group
+        var folderRes = await AuthPost(client, adminToken, "/api/folders", new { name = $"draft_folder_{suffix}" });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+
+        var aclRes = await AuthPost(client, adminToken, $"/api/folders/{folderId}/acl", new { groupId, permission = 3 });
+        Assert.Equal(HttpStatusCode.OK, aclRes.StatusCode);
+
+        var token = await LoginAsync(client, $"draft_only_{suffix}", "Ready@Test2!");
+
+        // Attempt to create/publish a catalog report via POST /api/studio/reports
+        var createRes = await AuthPost(client, token, "/api/studio/reports", new
+        {
+            folderId,
+            name = $"Draft Report {suffix}",
+            scriptText = "SET REPORT TITLE = 'Blocked';"
+        });
+
+        // Must be rejected with 403 Forbidden because user lacks ReportPublish capability
+        Assert.Equal(HttpStatusCode.Forbidden, createRes.StatusCode);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>Reads the <c>studio_capability</c> claims straight out of the issued JWT.</summary>

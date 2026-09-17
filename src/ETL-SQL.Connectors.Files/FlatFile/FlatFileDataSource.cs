@@ -286,15 +286,15 @@ namespace ETL_SQL.Connectors.FlatFile
             _encryption = new EncryptionOptions(options);
 
             var cleanPath = filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n');
-            var resolvedPath = context != null ? context.ResolvePath(cleanPath) : cleanPath;
+            if (context == null)
+                throw new ArgumentNullException(nameof(context), "An execution context is required for path resolution and Zero-Trust path validation.");
+
+            var resolvedPath = context.ResolvePath(cleanPath);
             _filePath = FileConnectorPathHelper.CoerceFilePathExtension(resolvedPath, _encryption.Enabled, _compress);
 
             // Security Hardening: Defense in depth
-            if (context != null)
-            {
-                context.SecurityService.ValidatePath(_filePath);
-                context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
-            }
+            context.SecurityService.ValidatePath(_filePath);
+            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
         }
 
         /// <summary>

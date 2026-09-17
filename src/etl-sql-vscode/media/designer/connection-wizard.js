@@ -4,6 +4,10 @@
  * Edit the canonical source, then run: node .\scripts\sync-assets.js
  */
 
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/connection-wizard.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -26,10 +30,9 @@
  *   - Zero-Trust security path boundary validation (guards against traversal and system directories)
  *   - AST name collision detection and one-click auto-rename
  *
- * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/designer/connection-wizard.js
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/connection-wizard.ts
  * Synchronized across Portal, Workstation Editor, Report Player, and VS Code extension.
  */
-
 function _h(str) {
     return String(str ?? '')
         .replace(/&/g, '&amp;')
@@ -37,72 +40,59 @@ function _h(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 }
-
 function _attr(str) {
     return _h(str).replace(/'/g, '&#39;');
 }
-
 function formatDate(utcStr) {
-    if (!utcStr) return 'Online';
+    if (!utcStr)
+        return 'Online';
     try {
         const d = new Date(utcStr);
         return isNaN(d.getTime()) ? String(utcStr) : d.toLocaleString();
-    } catch {
+    }
+    catch {
         return String(utcStr);
     }
 }
-
+function asHtml(el) {
+    return el;
+}
+function asInput(el) {
+    return el;
+}
+function asSelect(el) {
+    return el;
+}
 /**
  * Encrypts a plaintext password with a client passphrase using PBKDF2 + AES-GCM (version 2 format),
  * byte-for-byte compatible with C# CryptoUtils.Decrypt.
  */
 export async function encryptClientPassword(plainText, passphrase) {
-    if (!plainText || !passphrase) return null;
+    if (!plainText || !passphrase)
+        return null;
     try {
         if (!window.crypto?.subtle) {
             console.warn('Web Crypto API not available in this environment.');
             return null;
         }
-
         const enc = new TextEncoder();
         const salt = window.crypto.getRandomValues(new Uint8Array(16));
         const nonce = window.crypto.getRandomValues(new Uint8Array(12));
-
-        const keyMaterial = await window.crypto.subtle.importKey(
-            'raw',
-            enc.encode(passphrase),
-            'PBKDF2',
-            false,
-            ['deriveKey']
-        );
-
-        const derivedKey = await window.crypto.subtle.deriveKey(
-            {
-                name: 'PBKDF2',
-                salt: salt,
-                iterations: 600000,
-                hash: 'SHA-256'
-            },
-            keyMaterial,
-            { name: 'AES-GCM', length: 256 },
-            false,
-            ['encrypt']
-        );
-
-        const cipherBuffer = await window.crypto.subtle.encrypt(
-            {
-                name: 'AES-GCM',
-                iv: nonce,
-                tagLength: 128
-            },
-            derivedKey,
-            enc.encode(plainText)
-        );
-
+        const keyMaterial = await window.crypto.subtle.importKey('raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+        const derivedKey = await window.crypto.subtle.deriveKey({
+            name: 'PBKDF2',
+            salt: salt,
+            iterations: 600000,
+            hash: 'SHA-256'
+        }, keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
+        const cipherBuffer = await window.crypto.subtle.encrypt({
+            name: 'AES-GCM',
+            iv: nonce,
+            tagLength: 128
+        }, derivedKey, enc.encode(plainText));
         const cipherBytes = new Uint8Array(cipherBuffer);
         const tag = cipherBytes.slice(cipherBytes.length - 16);
         const ciphertext = cipherBytes.slice(0, cipherBytes.length - 16);
-
         // V2 layout: 1 byte version (2) + 16 byte salt + 12 byte nonce + 16 byte tag + ciphertext
         const totalLength = 1 + 16 + 12 + 16 + ciphertext.length;
         const result = new Uint8Array(totalLength);
@@ -111,19 +101,18 @@ export async function encryptClientPassword(plainText, passphrase) {
         result.set(nonce, 1 + 16);
         result.set(tag, 1 + 16 + 12);
         result.set(ciphertext, 1 + 16 + 12 + 16);
-
         let binary = '';
         const chunk = 8192;
         for (let i = 0; i < result.length; i += chunk) {
-            binary += String.fromCharCode.apply(null, result.subarray(i, i + chunk));
+            binary += String.fromCharCode.apply(null, Array.from(result.subarray(i, i + chunk)));
         }
         return 'ENC:' + btoa(binary);
-    } catch (e) {
+    }
+    catch (e) {
         console.error('Client encryption failed:', e);
         return null;
     }
 }
-
 /**
  * Validates a file path against ETL-SQL Zero-Trust security rules:
  * - No directory traversal (..)
@@ -132,78 +121,60 @@ export async function encryptClientPassword(plainText, passphrase) {
  * - No script files (.sql, .etlsql, .rptsql)
  */
 export function validatePathSecurity(pathStr) {
-    if (!pathStr || typeof pathStr !== 'string') return null;
+    if (!pathStr || typeof pathStr !== 'string')
+        return null;
     const p = pathStr.trim();
-    if (!p) return null;
-
+    if (!p)
+        return null;
     if (/\.(sql|etlsql|rptsql)$/i.test(p)) {
         return 'Zero-Trust Guardrail: Accessing .sql, .etlsql, or .rptsql script files is forbidden.';
     }
-
     if (p.includes('..') || p.startsWith('/') || p.startsWith('\\') || /^[a-zA-Z]:[\\/]/.test(p)) {
         return 'Zero-Trust Guardrail: Absolute system paths and directory traversal (..) are forbidden. Emitted paths must be workspace-relative (e.g. data/sales.csv).';
     }
-
     if (/(^|[\\/])(windows|etc|root|bin|sbin|usr|var|tmp|\.git|\.ssh)([\\/]|$)/i.test(p)) {
         return 'Zero-Trust Guardrail: Access to system directories, .git, or .ssh is strictly prohibited.';
     }
-
     return null;
 }
-
 function statusToStr(st) {
     if (typeof st === 'number') {
         return st === 0 ? 'ok' : st === 1 ? 'failed' : st === 2 ? 'skipped' : 'denied';
     }
     return String(st || 'unknown').toLowerCase();
 }
-
+/**
+ * @typedef {Object} ConnectorOptionDescriptor
+ * @property {string} name
+ * @property {number} type
+ * @property {boolean} [isMandatory]
+ * @property {string} [category]
+ * @property {string} [defaultValue]
+ * @property {string} [mutuallyExclusiveGroup]
+ * @property {string[]} [allowedValues]
+ * @property {string} [description]
+ *
+ * @typedef {Object} ConnectorSchemaDescriptor
+ * @property {string} connectorType
+ * @property {string[]} [aliases]
+ * @property {string} [description]
+ * @property {boolean} [isFileBased]
+ * @property {boolean} [isDataWarehouse]
+ * @property {number} [commandTimeoutSeconds]
+ * @property {ConnectorOptionDescriptor[]} [options]
+ *
+ * @typedef {Object} ConnectionWizardHandle
+ * @property {() => void} open
+ * @property {() => void} close
+ * @property {() => string} getGeneratedSql
+ * @property {(pathStr?: string | null) => string | null} validatePathSecurity
+ */
 /**
  * Creates and mounts an ETL-SQL Connection Wizard instance.
- *
- * @param {Object} options Configuration and injected services:
- *   - host: HTMLElement to mount the modal/wizard
- *   - mode: 'script' | 'admin' (default 'script')
- *   - initialConnector: string (default 'MSSQL')
- *   - existingNames: Array<string> (for collision detection in active script)
- *   - schemas: Array<ConnectorSchemaDescriptor> | null
- *   - sharedConnections: Array<{ alias, connectorType, description }> | null
- *   - secrets: Array<string> | null
- *   - gateways: Array<{ id, name, status, region }> | null
- *   - stagedFiles: Array<{ name, path, size, modifiedUtc }> | null
- *   - fetchSchemas: () => Promise<Array<ConnectorSchemaDescriptor>>
- *   - fetchSharedConnections: () => Promise<Array<{ alias, connectorType, description }>>
- *   - fetchSecrets: () => Promise<Array<string>>
- *   - fetchGateways: () => Promise<Array<{ id, name, status, region }>>
- *   - fetchStagedFiles: () => Promise<Array<{ name, path, size, modifiedUtc }>>
- *   - onInsert: (sql: string, meta: Object) => void
- *   - onSave: (entry: Object) => Promise<void>
- *   - onTest: (req: Object) => Promise<DiagnosticReport>
- *   - onParseString: (raw: string, hint: string) => Promise<ParsedResult>
- *   - onClose: () => void
  */
 export function createConnectionWizard(options = {}) {
-    const {
-        host = document.body,
-        mode = 'script',
-        initialConnector = 'MSSQL',
-        existingNames = [],
-        onInsert = null,
-        onSave = null,
-        onTest = null,
-        onParseString = null,
-        onClose = null,
-        fetchSchemas = null,
-        fetchSharedConnections = null,
-        fetchSecrets = null,
-        fetchGateways = null,
-        fetchGatewayResources = null,
-        fetchStagedFiles = null,
-        initialGateway = '',
-        initialResourceId = ''
-    } = options;
-
-    let state = {
+    const { host = document.body, mode = 'script', initialConnector = 'MSSQL', existingNames = [], onInsert = null, onSave = null, onTest = null, onParseString = null, onClose = null, fetchSchemas = null, fetchSharedConnections = null, fetchSecrets = null, fetchGateways = null, fetchGatewayResources = null, fetchStagedFiles = null, initialGateway = '', initialResourceId = '' } = options;
+    const state = {
         mode,
         selectedCategory: 'database',
         connectorType: initialConnector,
@@ -220,7 +191,7 @@ export function createConnectionWizard(options = {}) {
         saveError: null,
         isSaving: false,
         values: {},
-        authType: 'secret', // 'secret' | 'env' | 'enc' | 'trusted' | 'keyfile'
+        authType: 'secret',
         secretKey: '',
         envVarName: '',
         rawPassword: '',
@@ -242,7 +213,6 @@ export function createConnectionWizard(options = {}) {
         typeFilter: '',
         activeTab: 'basic'
     };
-
     // Default built-in fallback schemas if server schemas not yet loaded
     const defaultSchemas = [
         {
@@ -651,24 +621,20 @@ export function createConnectionWizard(options = {}) {
             ]
         }
     ];
-
     if (!state.schemas || state.schemas.length === 0) {
         state.schemas = defaultSchemas;
     }
-
     // Modal container creation
     const modalOverlay = document.createElement('div');
     modalOverlay.className = 'etlsql-cw-overlay';
     modalOverlay.setAttribute('role', 'dialog');
     modalOverlay.setAttribute('aria-modal', 'true');
     modalOverlay.setAttribute('aria-label', 'Connection Wizard');
-
     host.appendChild(modalOverlay);
-
     // Initialize initial field values from schema defaults
-    if (!(state.alias || '').trim()) state.alias = suggestAlias(state.connectorType);
+    if (!(state.alias || '').trim())
+        state.alias = suggestAlias(state.connectorType);
     initFieldValues();
-
     // Async loader
     Promise.all([
         fetchSchemas ? fetchSchemas() : Promise.resolve(null),
@@ -677,22 +643,28 @@ export function createConnectionWizard(options = {}) {
         fetchGateways ? fetchGateways() : Promise.resolve(null),
         fetchStagedFiles ? fetchStagedFiles() : Promise.resolve(null)
     ]).then(([schemas, shared, secrets, gateways, stagedFiles]) => {
-        if (Array.isArray(schemas) && schemas.length > 0) state.schemas = schemas;
-        else if (schemas && Array.isArray(schemas.schemas) && schemas.schemas.length > 0) state.schemas = schemas.schemas;
-        if (shared) state.sharedConnections = Array.isArray(shared) ? shared : (shared.connections || []);
-        if (secrets) state.secrets = Array.isArray(secrets) ? secrets : (secrets.secrets || []);
-        if (gateways) state.gateways = Array.isArray(gateways) ? gateways : (gateways.gateways || []);
-        if (stagedFiles) state.stagedFiles = Array.isArray(stagedFiles) ? stagedFiles : (stagedFiles.files || []);
+        if (Array.isArray(schemas) && schemas.length > 0)
+            state.schemas = schemas;
+        else if (schemas && 'schemas' in schemas && Array.isArray(schemas.schemas) && schemas.schemas.length > 0)
+            state.schemas = schemas.schemas;
+        if (shared)
+            state.sharedConnections = Array.isArray(shared) ? shared : (shared.connections || []);
+        if (secrets)
+            state.secrets = Array.isArray(secrets) ? secrets : (secrets.secrets || []);
+        if (gateways)
+            state.gateways = Array.isArray(gateways) ? gateways : (gateways.gateways || []);
+        if (stagedFiles)
+            state.stagedFiles = Array.isArray(stagedFiles) ? stagedFiles : (stagedFiles.files || []);
         initFieldValues();
         if (state.gatewayCluster) {
             loadGatewayResources(state.gatewayCluster);
-        } else {
+        }
+        else {
             render();
         }
     }).catch(err => {
         console.warn('ConnectionWizard: Failed to fetch metadata from server, using built-ins.', err);
     });
-
     async function loadGatewayResources(gatewayId) {
         if (!gatewayId) {
             state.gatewayResources = [];
@@ -703,53 +675,54 @@ export function createConnectionWizard(options = {}) {
             render();
             return;
         }
-
         state.gatewayResourcesLoading = true;
         state.gatewayResourcesError = null;
         render();
-
         try {
             let resList = null;
             if (fetchGatewayResources) {
-                resList = await fetchGatewayResources(gatewayId);
-            } else {
+                const res = await fetchGatewayResources(gatewayId);
+                resList = Array.isArray(res) ? res : (res.resources || null);
+            }
+            else {
                 const gw = (state.gateways || []).find(g => (g.name || g.id || g.gatewayId) === gatewayId);
                 if (gw && (gw.resources || gw.publishedResources)) {
-                    resList = gw.resources || gw.publishedResources;
+                    resList = gw.resources || gw.publishedResources || null;
                 }
             }
-
             if (resList && Array.isArray(resList)) {
                 state.gatewayResources = resList.filter(r => {
                     const st = String(r.state || '').toLowerCase();
                     return st === 'approved' || st === '1' || r.state === 1;
                 });
-            } else {
+            }
+            else {
                 state.gatewayResources = [];
             }
-
             if (state.selectedResourceId) {
                 const match = state.gatewayResources.find(r => r.resourceId === state.selectedResourceId);
                 if (match) {
                     state.selectedResource = match;
                     state.connectorType = match.connectorType;
-                } else {
+                }
+                else {
                     state.selectedResourceId = '';
                     state.selectedResource = null;
                 }
             }
-        } catch {
+        }
+        catch {
             console.warn('ConnectionWizard: Gateway resource discovery failed.');
             state.gatewayResourcesError = 'Failed to discover Gateway resources. Try again.';
             state.gatewayResources = [];
             state.selectedResourceId = '';
             state.selectedResource = null;
-        } finally {
+        }
+        finally {
             state.gatewayResourcesLoading = false;
             render();
         }
     }
-
     function initFieldValues() {
         const schema = getCurrentSchema();
         if (schema) {
@@ -760,104 +733,88 @@ export function createConnectionWizard(options = {}) {
             }
         }
     }
-
     function getCurrentSchema() {
-        if (state.isSharedReference) return null;
-        return state.schemas.find(s =>
-            s.connectorType.toUpperCase() === state.connectorType.toUpperCase() ||
-            (s.aliases && s.aliases.some(a => a.toUpperCase() === state.connectorType.toUpperCase()))
-        ) || state.schemas[0];
+        if (state.isSharedReference)
+            return null;
+        return state.schemas.find(s => s.connectorType.toUpperCase() === state.connectorType.toUpperCase() ||
+            (s.aliases && s.aliases.some(a => a.toUpperCase() === state.connectorType.toUpperCase()))) || state.schemas[0];
     }
-
     function getSecurityViolation() {
         const schema = getCurrentSchema();
-        if (!schema) return null;
-
+        if (!schema)
+            return null;
         for (const opt of schema.options || []) {
             if (opt.type === 4) { // FilePath
                 const val = state.values[opt.name];
                 if (val) {
                     const violation = validatePathSecurity(val);
-                    if (violation) return violation;
+                    if (violation)
+                        return violation;
                 }
             }
         }
-
         if (state.authType === 'keyfile' && state.keyFilePath) {
             const violation = validatePathSecurity(state.keyFilePath);
-            if (violation) return violation;
+            if (violation)
+                return violation;
         }
-
         return null;
     }
-
     function getNameCollision() {
-        if (!state.alias || !state.existingNames || state.existingNames.length === 0) return null;
+        if (!state.alias || !state.existingNames || state.existingNames.length === 0)
+            return null;
         const normalized = state.alias.trim().toLowerCase();
         if (state.existingNames.some(n => String(n).trim().toLowerCase() === normalized)) {
             return `An object or connection named '${state.alias}' already exists in the current script.`;
         }
         return null;
     }
-
     /**
      * A ready-to-use alias for a freshly picked connector.
-     *
-     * The alias is the one field with no sensible blank state: it is required, but a newcomer has
-     * no basis to invent a name before they know what the connection is for. Prefilling keeps the
-     * live SQL preview showing real, valid syntax from the first click instead of a `<alias>`
-     * placeholder, and the author can still overwrite it.
      */
     function suggestAlias(connectorType) {
         const base = String(connectorType || 'conn')
             .toLowerCase()
             .replace(/[^a-z0-9_]/g, '_')
             .replace(/^[^a-z_]+/, '') || 'conn';
-
-        const taken = name => (state.existingNames || [])
+        const taken = (name) => (state.existingNames || [])
             .some(existing => String(existing).trim().toLowerCase() === name.toLowerCase());
-
-        if (!taken(base)) return base;
+        if (!taken(base))
+            return base;
         let counter = 2;
-        while (taken(`${base}_${counter}`)) counter++;
+        while (taken(`${base}_${counter}`))
+            counter++;
         return `${base}_${counter}`;
     }
-
     /**
      * Switch the selected connector, keeping the suggested alias in step.
-     *
-     * Both the category buttons and the connector cards change the type, so the alias rule lives
-     * here rather than being duplicated (and drifting) at each call site.
      */
     function selectConnectorType(type) {
-        if (!type || type === state.connectorType) return;
+        if (!type || type === state.connectorType)
+            return;
         const previousSuggestion = suggestAlias(state.connectorType);
         const alias = (state.alias || '').trim();
         state.connectorType = type;
         state.values = {};
         // Never overwrite a name the author typed; only replace the suggestion we made ourselves.
-        if (!alias || alias === previousSuggestion) state.alias = suggestAlias(type);
+        if (!alias || alias === previousSuggestion)
+            state.alias = suggestAlias(type);
         initFieldValues();
     }
-
     /**
      * Why the alias cannot be used, or null when it can.
-     *
-     * Insert used to stay enabled with an empty alias, and generateSql substitutes the literal
-     * `<alias>` placeholder — so confirming the dialog wrote `CREATE CONNECTION <alias> AS ...`
-     * into the script, which does not parse.
      */
     function getAliasProblem() {
         const alias = (state.alias || '').trim();
-        if (!alias) return 'Enter a connection alias.';
+        if (!alias)
+            return 'Enter a connection alias.';
         if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) {
             return 'The alias must start with a letter or underscore and contain only letters, digits, and underscores.';
         }
         return getNameCollision();
     }
-
     function getAutoRenameSuggestion() {
-        let base = (state.alias || 'conn').replace(/_\d+$/, '');
+        const base = (state.alias || 'conn').replace(/_\d+$/, '');
         let counter = 1;
         let candidate = `${base}_${counter}`;
         while (state.existingNames.some(n => String(n).trim().toLowerCase() === candidate.toLowerCase())) {
@@ -866,14 +823,12 @@ export function createConnectionWizard(options = {}) {
         }
         return candidate;
     }
-
     function generateSql() {
         const alias = (state.alias || '').trim() || '<alias>';
         if (state.isSharedReference) {
             const sharedRef = state.sharedAlias || 'catalog_alias';
             return `CREATE CONNECTION ${alias} AS ${state.connectorType}('SHARED:${sharedRef}');`;
         }
-
         // If a specific approved Gateway resource is selected:
         if (state.selectedResourceId) {
             if (state.mode === 'admin') {
@@ -881,16 +836,13 @@ export function createConnectionWizard(options = {}) {
             }
             return `CREATE CONNECTION ${alias} AS ${state.connectorType}('SHARED:${state.alias || 'my_conn'}');\n-- Bound via Gateway: ${state.gatewayCluster} -> ${state.selectedResourceId}`;
         }
-
         const schema = getCurrentSchema();
         const type = schema ? schema.connectorType : state.connectorType;
         const optionsList = [];
-
         // Add Gateway routing if selected
         if (state.gatewayCluster && state.gatewayCluster.trim()) {
             optionsList.push(`  GATEWAY = '${state.gatewayCluster.trim().replace(/'/g, "''")}'`);
         }
-
         // Add standard form values
         for (const [key, val] of Object.entries(state.values)) {
             if (val !== undefined && val !== null && String(val).trim() !== '') {
@@ -898,85 +850,88 @@ export function createConnectionWizard(options = {}) {
                 if (optDesc && optDesc.mutuallyExclusiveGroup === 'Credentials') {
                     continue; // Handled below by auth builder
                 }
-
                 if (optDesc?.type === 1) { // Number
                     optionsList.push(`  ${key} = ${val}`);
-                } else if (optDesc?.type === 2) { // Boolean
-                    const boolVal = (val === 'ON' || val === 'TRUE' || val === true) ? 'TRUE' : 'FALSE';
+                }
+                else if (optDesc?.type === 2) { // Boolean
+                    const boolVal = (val === 'ON' || val === 'TRUE' || val === 'true') ? 'TRUE' : 'FALSE';
                     optionsList.push(`  ${key} = ${boolVal}`);
-                } else {
+                }
+                else {
                     optionsList.push(`  ${key} = '${val.replace(/'/g, "''")}'`);
                 }
             }
         }
-
         // Add Auth / Credentials
         if (state.authType === 'secret' && state.secretKey.trim()) {
             optionsList.push(`  PASSWORD = SECRET:${state.secretKey.trim()}`);
-        } else if (state.authType === 'env' && state.envVarName.trim()) {
+        }
+        else if (state.authType === 'env' && state.envVarName.trim()) {
             optionsList.push(`  PASSWORD = $ENV{${state.envVarName.trim()}}`);
-        } else if (state.authType === 'enc') {
+        }
+        else if (state.authType === 'enc') {
             if (state.encryptedCipher) {
                 optionsList.push(`  PASSWORD = '${state.encryptedCipher}'`);
-            } else if (state.rawPassword) {
+            }
+            else if (state.rawPassword) {
                 optionsList.push(`  PASSWORD = ENC:/* Encrypted Password */`);
             }
-        } else if (state.authType === 'trusted') {
+        }
+        else if (state.authType === 'trusted') {
             optionsList.push(`  TRUSTED_CONNECTION = TRUE`);
-        } else if (state.authType === 'keyfile' && state.keyFilePath.trim()) {
+        }
+        else if (state.authType === 'keyfile' && state.keyFilePath.trim()) {
             optionsList.push(`  KEY_FILE = '${state.keyFilePath.trim().replace(/'/g, "''")}'`);
         }
-
         if (optionsList.length === 0) {
             return `CREATE CONNECTION ${alias} AS ${type}();`;
         }
-
         const createStmt = `CREATE CONNECTION ${alias} AS ${type}(\n${optionsList.join(',\n')}\n);`;
         if (state.authType === 'enc' && state.encPassphrase && state.encPassphrase.trim()) {
             return `USE PASSWORD = '${state.encPassphrase.trim().replace(/'/g, "''")}';\n${createStmt}`;
         }
-
         return createStmt;
     }
-
     async function runDiagnostic() {
         state.isTesting = true;
         state.diagnosticResult = null;
         render();
-
-        // `options` is the connector's own option bag — the keys vary by connector type, and the
-        // branches below add PASSWORD or TRUSTED_CONNECTION to it. Annotated so it stays open;
-        // inferred, it would be closed to whichever of the two branches TypeScript saw first.
-        /** @type {{alias: string, connectorType: string, target: string, options: Record<string, *>, probeTimeoutSeconds: number}} */
+        const diagOptions = {};
+        if (state.selectedResourceId) {
+            diagOptions.GATEWAY = state.gatewayCluster;
+            diagOptions.RESOURCE = state.selectedResourceId;
+        }
+        else {
+            Object.assign(diagOptions, state.values);
+            if (state.gatewayCluster) {
+                diagOptions.GATEWAY = state.gatewayCluster;
+            }
+            if (state.authType === 'secret' && state.secretKey) {
+                diagOptions.PASSWORD = `SECRET:${state.secretKey}`;
+            }
+            else if (state.authType === 'env' && state.envVarName) {
+                diagOptions.PASSWORD = `$ENV{${state.envVarName}}`;
+            }
+            else if (state.authType === 'enc') {
+                diagOptions.PASSWORD = state.rawPassword || state.encryptedCipher || '';
+            }
+            else if (state.authType === 'trusted') {
+                diagOptions.TRUSTED_CONNECTION = 'ON';
+            }
+        }
         const req = {
             alias: state.alias,
             connectorType: state.connectorType,
             target: state.selectedResourceId ? '' : (state.values.SERVER || state.values.HOST || state.values.PATH || ''),
-            options: state.selectedResourceId ? { GATEWAY: state.gatewayCluster, RESOURCE: state.selectedResourceId } : { ...state.values },
+            options: diagOptions,
             probeTimeoutSeconds: 5
         };
-
-        if (!state.selectedResourceId && state.gatewayCluster) {
-            req.options.GATEWAY = state.gatewayCluster;
-        }
-
-        if (!state.selectedResourceId) {
-            if (state.authType === 'secret' && state.secretKey) {
-                req.options.PASSWORD = `SECRET:${state.secretKey}`;
-            } else if (state.authType === 'env' && state.envVarName) {
-                req.options.PASSWORD = `$ENV{${state.envVarName}}`;
-            } else if (state.authType === 'enc') {
-                req.options.PASSWORD = state.rawPassword || state.encryptedCipher || '';
-            } else if (state.authType === 'trusted') {
-                req.options.TRUSTED_CONNECTION = 'ON';
-            }
-        }
-
         try {
             if (onTest) {
                 const report = await onTest(req);
                 state.diagnosticResult = report;
-            } else {
+            }
+            else {
                 await new Promise(r => setTimeout(r, 600));
                 state.diagnosticResult = {
                     succeeded: true,
@@ -990,22 +945,23 @@ export function createConnectionWizard(options = {}) {
                     ]
                 };
             }
-        } catch (ex) {
+        }
+        catch (ex) {
             state.diagnosticResult = {
                 succeeded: false,
                 connection: state.alias,
                 connectorType: state.connectorType,
                 steps: [
                     { layer: 'POLICY', status: 'ok', detail: 'Destination permitted by active security policy.' },
-                    { layer: 'DIAGNOSTIC', status: 'failed', detail: ex.message, remedy: 'Verify endpoint address and credentials.' }
+                    { layer: 'DIAGNOSTIC', status: 'failed', detail: ex instanceof Error ? ex.message : String(ex), remedy: 'Verify endpoint address and credentials.' }
                 ]
             };
-        } finally {
+        }
+        finally {
             state.isTesting = false;
             render();
         }
     }
-
     function render() {
         const schema = getCurrentSchema();
         const sql = generateSql();
@@ -1013,7 +969,6 @@ export function createConnectionWizard(options = {}) {
         const aliasProblem = getAliasProblem();
         const nameCollision = getNameCollision();
         const autoRename = nameCollision ? getAutoRenameSuggestion() : null;
-
         modalOverlay.innerHTML = `
             <div class="etlsql-cw-modal">
                 <div class="etlsql-cw-header">
@@ -1153,10 +1108,8 @@ export function createConnectionWizard(options = {}) {
                 ${renderPassphraseModal()}
             </div>
         `;
-
         bindEvents();
     }
-
     function renderConnectorTypeList() {
         if (state.isSharedReference) {
             return `
@@ -1166,7 +1119,6 @@ export function createConnectionWizard(options = {}) {
                 </div>
             `;
         }
-
         const filtered = state.schemas.filter(s => {
             const type = (s.connectorType || '').toUpperCase();
             if (state.typeFilter) {
@@ -1174,15 +1126,14 @@ export function createConnectionWizard(options = {}) {
                 const matchName = type.toLowerCase().includes(q);
                 const matchDesc = (s.description || '').toLowerCase().includes(q);
                 const matchAlias = (s.aliases || []).some(a => a.toLowerCase().includes(q));
-                if (!matchName && !matchDesc && !matchAlias) return false;
+                if (!matchName && !matchDesc && !matchAlias)
+                    return false;
             }
             return isConnectorInCategory(s, state.selectedCategory);
         });
-
         if (filtered.length === 0) {
             return `<div class="etlsql-cw-empty-hint">No connectors match filter</div>`;
         }
-
         return filtered.map(s => `
             <button type="button" class="etlsql-cw-type-item ${s.connectorType.toUpperCase() === state.connectorType.toUpperCase() ? 'active' : ''}" data-type="${_attr(s.connectorType)}">
                 <span class="etlsql-cw-type-name">${_h(s.connectorType)}</span>
@@ -1190,22 +1141,24 @@ export function createConnectionWizard(options = {}) {
             </button>
         `).join('');
     }
-
     function isConnectorInCategory(schema, category) {
         const type = (schema.connectorType || '').toUpperCase();
         const databaseTypes = ['MSSQL', 'SQLSERVER', 'POSTGRES', 'POSTGRESQL', 'MYSQL', 'MARIADB', 'SQLITE', 'ORACLE', 'SNOWFLAKE', 'BIGQUERY', 'DUCKDB', 'ODBC', 'MONGODB', 'NEO4J'];
         const fileTypes = ['FLATFILE', 'CSV', 'PARQUET', 'EXCEL', 'JSON', 'XML', 'AVRO', 'DIRECTORY'];
         const remoteTypes = ['SFTP', 'FTP', 'FTP_CONN', 'REST', 'S3', 'AZUREBLOB', 'GCS', 'SHAREPOINT', 'KAFKA', 'WEBHOOK', 'SMTP', 'ACTIVEDIRECTORY', 'PORTAL', 'ORCHESTRATOR'];
-
-        if (category === 'all') return true;
-        if (category === 'testdata') return type === 'MOCKDB';
-        if (category === 'database') return !schema.isFileBased && databaseTypes.includes(type);
-        if (category === 'files') return schema.isFileBased || fileTypes.includes(type);
-        if (category === 'remote') return remoteTypes.includes(type)
-            || (!schema.isFileBased && !databaseTypes.includes(type) && type !== 'MOCKDB');
+        if (category === 'all')
+            return true;
+        if (category === 'testdata')
+            return type === 'MOCKDB';
+        if (category === 'database')
+            return !schema.isFileBased && databaseTypes.includes(type);
+        if (category === 'files')
+            return Boolean(schema.isFileBased || fileTypes.includes(type));
+        if (category === 'remote')
+            return remoteTypes.includes(type)
+                || (!schema.isFileBased && !databaseTypes.includes(type) && type !== 'MOCKDB');
         return true;
     }
-
     function renderSharedReferenceForm() {
         const shared = state.sharedConnections || [];
         return `
@@ -1225,15 +1178,13 @@ export function createConnectionWizard(options = {}) {
             </div>
         `;
     }
-
     function renderStandardConnectorForm(schema) {
-        if (!schema) return `<div class="etlsql-cw-empty-hint">Select a connector type</div>`;
-
+        if (!schema)
+            return `<div class="etlsql-cw-empty-hint">Select a connector type</div>`;
         const basicOptions = (schema.options || []).filter(o => o.category === 'Basic' && o.mutuallyExclusiveGroup !== 'Credentials');
         const securityOptions = (schema.options || []).filter(o => o.category === 'Security');
         const tuningOptions = (schema.options || []).filter(o => o.category === 'Tuning');
         const authOptions = (schema.options || []).filter(o => o.category === 'Auth' || o.mutuallyExclusiveGroup === 'Credentials');
-
         return `
             <!-- Basic Configuration -->
             <div class="etlsql-cw-form-section">
@@ -1267,7 +1218,7 @@ export function createConnectionWizard(options = {}) {
             </div>
 
             <!-- Zero-Trust Authentication Section (suppressed for Gateway-bound resources) -->
-            ${!state.selectedResourceId && authOptions.length > 0 ? renderAuthSection(schema, authOptions) : ''}
+            ${!state.selectedResourceId && authOptions.length > 0 ? renderAuthSection(authOptions) : ''}
 
             <!-- Advanced / Tuning Section (Collapsible) -->
             ${(securityOptions.length > 0 || tuningOptions.length > 0) ? `
@@ -1281,7 +1232,6 @@ export function createConnectionWizard(options = {}) {
             ` : ''}
         `;
     }
-
     function renderFileDropzone() {
         const staged = state.stagedFiles || [];
         return `
@@ -1309,11 +1259,10 @@ export function createConnectionWizard(options = {}) {
             </div>
         `;
     }
-
     function renderGatewayRoutingSelector() {
         const gateways = state.gateways || [];
-        if (gateways.length === 0) return '';
-
+        if (gateways.length === 0)
+            return '';
         let resourcePickerHtml = '';
         if (state.gatewayCluster) {
             const availableCount = state.gatewayResources?.length || 0;
@@ -1336,14 +1285,16 @@ export function createConnectionWizard(options = {}) {
                         <span>Discovering approved gateway resources…</span>
                     </div>
                 `;
-            } else if (state.gatewayResourcesError) {
+            }
+            else if (state.gatewayResourcesError) {
                 resourcePickerHtml = `
                     ${pickerHeader}
                     <div class="etlsql-cw-resource-error alert alert-danger" style="margin-top: 8px; font-size: 0.82rem;">
                         <strong>Discovery Error:</strong> ${_h(state.gatewayResourcesError)}
                     </div>
                 `;
-            } else if (!state.gatewayResources || state.gatewayResources.length === 0) {
+            }
+            else if (!state.gatewayResources || state.gatewayResources.length === 0) {
                 resourcePickerHtml = `
                     ${pickerHeader}
                     <div class="etlsql-cw-resource-empty alert alert-warning" id="etlsql-cw-no-resources" style="margin-top: 8px; font-size: 0.82rem;">
@@ -1351,70 +1302,68 @@ export function createConnectionWizard(options = {}) {
                         <span>No approved resources published by live session for this gateway.</span>
                     </div>
                 `;
-            } else {
+            }
+            else {
                 resourcePickerHtml = `
                     <div class="etlsql-cw-resource-picker" role="radiogroup" aria-label="Discovered Gateway Resources" style="margin-top: 10px;">
                         ${pickerHeader}
                         <div class="etlsql-cw-resource-list" style="display: flex; flex-direction: column; gap: 6px;">
                             ${state.gatewayResources.map(r => {
-                                const isSelected = state.selectedResourceId === r.resourceId;
-                                return `
+                    const isSelected = state.selectedResourceId === r.resourceId;
+                    return `
                                     <div class="etlsql-cw-resource-card ${isSelected ? 'is-selected' : ''}"
                                          data-resource-id="${_attr(r.resourceId)}"
                                          role="radio"
                                          aria-checked="${isSelected}"
                                          tabindex="0"
                                          style="border: 1px solid ${isSelected ? 'var(--portal-primary, #3b82f6)' : 'var(--portal-border, #d9e0ea)'}; background: ${isSelected ? 'rgba(59, 130, 246, 0.08)' : 'var(--portal-surface, #ffffff)'}; border-radius: 6px; padding: 8px 12px; cursor: pointer; transition: all 0.15s ease;">
-                                        <div class="etlsql-cw-resource-card-header" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-                                            <div style="display: flex; align-items: center; gap: 8px;">
-                                                <input type="radio" name="cw-gw-resource" ${isSelected ? 'checked' : ''} style="margin: 0; pointer-events: none;" />
-                                                <strong class="etlsql-cw-resource-name" style="font-size: 0.86rem; color: var(--portal-text, #1e293b);">${_h(r.resourceId)}</strong>
-                                            </div>
-                                            <span class="status-pill status-pill-type" style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: var(--portal-surface-subtle, #f1f5f9); font-weight: 700;">${_h(r.connectorType)}</span>
-                                        </div>
-                                        <div class="etlsql-cw-resource-card-details" style="display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 0.76rem; color: var(--portal-muted, #64748b);">
-                                            <span class="etlsql-cw-resource-id">ID: <code>${_h(r.resourceId)}</code></span>
-                                            <span class="etlsql-cw-resource-ops">Ops: <strong>${_h(r.allowedOperations || 'Read')}</strong></span>
-                                            <span class="status-pill status-pill-good" style="font-size: 0.7rem; padding: 1px 5px; border-radius: 3px;">Approved</span>
-                                            <span class="etlsql-cw-resource-seen">${r.lastSeenUtc ? formatDate(r.lastSeenUtc) : 'Online'}</span>
-                                            ${isSelected ? '<button type="button" class="btn btn-xs btn-outline etlsql-cw-resource-unbind" data-unbind-gateway-resource>Clear selection</button>' : ''}
-                                        </div>
-                                    </div>
+                                         <div class="etlsql-cw-resource-card-header" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                                             <div style="display: flex; align-items: center; gap: 8px;">
+                                                 <input type="radio" name="cw-gw-resource" ${isSelected ? 'checked' : ''} style="margin: 0; pointer-events: none;" />
+                                                 <strong class="etlsql-cw-resource-name" style="font-size: 0.86rem; color: var(--portal-text, #1e293b);">${_h(r.resourceId)}</strong>
+                                             </div>
+                                             <span class="status-pill status-pill-type" style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: var(--portal-surface-subtle, #f1f5f9); font-weight: 700;">${_h(r.connectorType)}</span>
+                                         </div>
+                                         <div class="etlsql-cw-resource-card-details" style="display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 0.76rem; color: var(--portal-muted, #64748b);">
+                                             <span class="etlsql-cw-resource-id">ID: <code>${_h(r.resourceId)}</code></span>
+                                             <span class="etlsql-cw-resource-ops">Ops: <strong>${_h(r.allowedOperations || 'Read')}</strong></span>
+                                             <span class="status-pill status-pill-good" style="font-size: 0.7rem; padding: 1px 5px; border-radius: 3px;">Approved</span>
+                                             <span class="etlsql-cw-resource-seen">${r.lastSeenUtc ? formatDate(r.lastSeenUtc) : 'Online'}</span>
+                                             ${isSelected ? '<button type="button" class="btn btn-xs btn-outline etlsql-cw-resource-unbind" data-unbind-gateway-resource>Clear selection</button>' : ''}
+                                         </div>
+                                     </div>
                                 `;
-                            }).join('')}
+                }).join('')}
                         </div>
                     </div>
                 `;
             }
         }
-
         return `
             <div class="form-group etlsql-cw-gateway-group">
                 <label for="etlsql-cw-gateway-select">Hybrid Data Gateway Routing</label>
                 <select id="etlsql-cw-gateway-select" class="form-control">
                     <option value="">Direct Cloud Egress (No Gateway)</option>
                     ${gateways.map(gw => {
-                        const val = gw.name || gw.id || gw.gatewayId;
-                        const status = gw.status || (gw.isOnline ? 'Online' : 'Disconnected');
-                        return `
+            const val = gw.name || gw.id || gw.gatewayId;
+            const status = gw.status || (gw.isOnline ? 'Online' : 'Disconnected');
+            return `
                             <option value="${_attr(val)}" ${state.gatewayCluster === val ? 'selected' : ''}>
                                 ⚡ ${_h(val)} (${_h(gw.region || 'On-Premises')} - ${_h(status)})
                             </option>
                         `;
-                    }).join('')}
+        }).join('')}
                 </select>
                 <span class="form-hint">Routes egress queries through live on-premises gateway daemon.</span>
                 ${resourcePickerHtml}
             </div>
         `;
     }
-
     function renderOptionField(opt) {
         const val = state.values[opt.name] ?? opt.defaultValue ?? '';
         const id = `etlsql-cw-opt-${opt.name.toLowerCase()}`;
-
         if (opt.type === 2) { // Boolean
-            const isChecked = val === 'ON' || val === 'TRUE' || val === true;
+            const isChecked = val === 'ON' || val === 'TRUE' || val === 'true';
             return `
                 <div class="form-group etlsql-cw-form-group-check">
                     <label class="etlsql-cw-checkbox-card ${isChecked ? 'is-checked' : ''}" for="${id}">
@@ -1427,7 +1376,6 @@ export function createConnectionWizard(options = {}) {
                 </div>
             `;
         }
-
         if (opt.type === 5 && opt.allowedValues && opt.allowedValues.length > 0) { // Enum
             return `
                 <div class="form-group">
@@ -1440,7 +1388,6 @@ export function createConnectionWizard(options = {}) {
                 </div>
             `;
         }
-
         return `
             <div class="form-group">
                 <label for="${id}">${_h(opt.name)} ${opt.isMandatory ? '<span class="required">*</span>' : ''}</label>
@@ -1449,11 +1396,9 @@ export function createConnectionWizard(options = {}) {
             </div>
         `;
     }
-
-    function renderAuthSection(schema, authOptions) {
+    function renderAuthSection(authOptions) {
         const hasTrusted = authOptions.some(o => o.name === 'TRUSTED_CONNECTION');
         const hasKeyFile = authOptions.some(o => o.name === 'KEY_FILE');
-
         return `
             <div class="etlsql-cw-form-section">
                 <h3>Zero-Trust Authentication</h3>
@@ -1485,7 +1430,6 @@ export function createConnectionWizard(options = {}) {
             </div>
         `;
     }
-
     function renderAuthInputs() {
         if (state.authType === 'secret') {
             const secrets = state.secrets || [];
@@ -1497,11 +1441,14 @@ export function createConnectionWizard(options = {}) {
                         ${secrets.length > 0 ? `
                             <div class="etlsql-cw-secret-hints">
                                 <span class="form-hint">Discovered Secrets:</span>
-                                ${secrets.slice(0, 4).map(s => `
-                                    <button type="button" class="etlsql-cw-chip" onclick="document.getElementById('etlsql-cw-secret-key').value='${_attr(s)}'; document.getElementById('etlsql-cw-secret-key').dispatchEvent(new Event('input'));">
-                                        ${_h(s)}
-                                    </button>
-                                `).join('')}
+                                ${secrets.slice(0, 4).map(s => {
+                const name = typeof s === 'string' ? s : (s?.name || String(s));
+                return `
+                                        <button type="button" class="etlsql-cw-chip" data-secret="${_attr(name)}">
+                                            ${_h(name)}
+                                        </button>
+                                    `;
+            }).join('')}
                             </div>
                         ` : ''}
                     </div>
@@ -1509,7 +1456,6 @@ export function createConnectionWizard(options = {}) {
                 <span class="form-hint">Secret value resolves securely at runtime from Azure KeyVault, AWS Secrets Manager, HashiCorp Vault, or encrypted local storage.</span>
             `;
         }
-
         if (state.authType === 'env') {
             return `
                 <div class="form-group">
@@ -1519,7 +1465,6 @@ export function createConnectionWizard(options = {}) {
                 <span class="form-hint">Resolved from host process environment variables at execution time.</span>
             `;
         }
-
         if (state.authType === 'enc') {
             return `
                 <div class="etlsql-cw-grid-2col">
@@ -1539,7 +1484,6 @@ export function createConnectionWizard(options = {}) {
                 ` : '<span class="form-hint">Password is encrypted with your client passphrase (PBKDF2 + AES-GCM) before being placed in script text.</span>'}
             `;
         }
-
         if (state.authType === 'trusted') {
             return `
                 <div class="etlsql-cw-info-box">
@@ -1548,7 +1492,6 @@ export function createConnectionWizard(options = {}) {
                 </div>
             `;
         }
-
         if (state.authType === 'keyfile') {
             return `
                 <div class="form-group">
@@ -1557,10 +1500,8 @@ export function createConnectionWizard(options = {}) {
                 </div>
             `;
         }
-
         return '';
     }
-
     function renderDiagnosticReport() {
         if (!state.diagnosticResult) {
             return `
@@ -1569,9 +1510,7 @@ export function createConnectionWizard(options = {}) {
                 </div>
             `;
         }
-
         const { succeeded, steps = [], error } = state.diagnosticResult;
-
         return `
             <div class="etlsql-cw-diag-result ${succeeded ? 'success' : 'failed'}">
                 <div class="etlsql-cw-diag-badge ${succeeded ? 'badge-ok' : 'badge-fail'}">
@@ -1580,8 +1519,8 @@ export function createConnectionWizard(options = {}) {
                 ${error ? `<div class="etlsql-cw-diag-err">${_h(error)}</div>` : ''}
                 <div class="etlsql-cw-diag-steps">
                     ${steps.map(s => {
-                        const status = statusToStr(s.status);
-                        return `
+            const status = statusToStr(s.status);
+            return `
                             <div class="etlsql-cw-step-item step-${status}">
                                 <span class="etlsql-cw-step-status">${status.toUpperCase()}</span>
                                 <span class="etlsql-cw-step-layer">[${_h(s.layer)}]</span>
@@ -1589,15 +1528,14 @@ export function createConnectionWizard(options = {}) {
                                 ${s.remedy ? `<div class="etlsql-cw-step-remedy">💡 <strong>Remedy:</strong> ${_h(s.remedy)}</div>` : ''}
                             </div>
                         `;
-                    }).join('')}
+        }).join('')}
                 </div>
             </div>
         `;
     }
-
     function renderPasteModal() {
-        if (!state.pasteModalOpen) return '';
-
+        if (!state.pasteModalOpen)
+            return '';
         return `
             <div class="etlsql-cw-paste-overlay">
                 <div class="etlsql-cw-paste-dialog">
@@ -1612,10 +1550,9 @@ export function createConnectionWizard(options = {}) {
             </div>
         `;
     }
-
     function renderPassphraseModal() {
-        if (!state.passphraseModalOpen) return '';
-
+        if (!state.passphraseModalOpen)
+            return '';
         return `
             <div class="etlsql-cw-paste-overlay">
                 <div class="etlsql-cw-paste-dialog">
@@ -1634,39 +1571,37 @@ export function createConnectionWizard(options = {}) {
             </div>
         `;
     }
-
     function bindEvents() {
         // Close modal
         modalOverlay.querySelector('#etlsql-cw-close')?.addEventListener('click', closeModal);
         modalOverlay.querySelector('#etlsql-cw-cancel-btn')?.addEventListener('click', closeModal);
-
         // Auto-Rename button on collision
         modalOverlay.querySelector('#etlsql-cw-autorename-btn')?.addEventListener('click', () => {
             state.alias = getAutoRenameSuggestion();
             render();
         });
-
         // Category selection
         modalOverlay.querySelectorAll('.etlsql-cw-cat-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-                const cat = /** @type {HTMLElement} */ (btn).dataset.cat;
+                const cat = asHtml(btn)?.dataset.cat;
                 if (cat === 'shared') {
                     state.isSharedReference = true;
-                } else {
+                }
+                else if (cat) {
                     state.isSharedReference = false;
                     state.selectedCategory = cat;
                     const firstInCat = state.schemas.find(s => isConnectorInCategory(s, cat));
-                    if (firstInCat) selectConnectorType(firstInCat.connectorType);
+                    if (firstInCat)
+                        selectConnectorType(firstInCat.connectorType);
                 }
                 render();
             });
         });
-
         // Connector search filter input
         const typeFilterInput = modalOverlay.querySelector('#etlsql-cw-type-filter');
         if (typeFilterInput) {
             typeFilterInput.addEventListener('input', e => {
-                state.typeFilter = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
+                state.typeFilter = asInput(e.target)?.value ?? '';
                 const typeList = modalOverlay.querySelector('.etlsql-cw-type-list');
                 if (typeList) {
                     typeList.innerHTML = renderConnectorTypeList();
@@ -1674,52 +1609,44 @@ export function createConnectionWizard(options = {}) {
                 }
             });
         }
-
         bindTypeListEvents();
-
         // Alias change
         modalOverlay.querySelector('#etlsql-cw-alias-input')?.addEventListener('input', e => {
-            state.alias = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
+            state.alias = asInput(e.target)?.value ?? '';
             updateSqlBox();
             checkAndAlertValidation();
         });
-
         // Env scope change
         modalOverlay.querySelector('#etlsql-cw-env-scope')?.addEventListener('change', e => {
-            state.environmentScope = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
+            state.environmentScope = asSelect(e.target)?.value ?? 'All';
         });
-
         // Gateway select
         modalOverlay.querySelector('#etlsql-cw-gateway-select')?.addEventListener('change', e => {
-            state.gatewayCluster = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
+            state.gatewayCluster = asSelect(e.target)?.value ?? '';
             state.selectedResourceId = '';
             state.selectedResource = null;
             loadGatewayResources(state.gatewayCluster);
         });
-
         modalOverlay.querySelector('[data-refresh-gateway-resources]')?.addEventListener('click', () => {
             loadGatewayResources(state.gatewayCluster);
         });
-
         modalOverlay.querySelector('[data-unbind-gateway-resource]')?.addEventListener('click', e => {
             e.stopPropagation();
             state.selectedResourceId = '';
             state.selectedResource = null;
             render();
         });
-
         // Gateway Resource card selection
         modalOverlay.querySelectorAll('.etlsql-cw-resource-card').forEach(card => {
             const pick = () => {
-                const resId = /** @type {HTMLElement} */ (card).dataset.resourceId;
+                const resId = asHtml(card)?.dataset.resourceId;
                 if (resId) {
                     state.selectedResourceId = resId;
                     const match = (state.gatewayResources || []).find(r => r.resourceId === resId);
                     if (match) {
                         state.selectedResource = match;
                         state.connectorType = match.connectorType;
-                        const schema = state.schemas.find(candidate =>
-                            String(candidate.connectorType).toUpperCase() === String(match.connectorType).toUpperCase());
+                        const schema = state.schemas.find(candidate => String(candidate.connectorType).toUpperCase() === String(match.connectorType).toUpperCase());
                         if (schema) {
                             state.selectedCategory = ['database', 'files', 'remote', 'testdata']
                                 .find(category => isConnectorInCategory(schema, category)) || 'all';
@@ -1730,23 +1657,22 @@ export function createConnectionWizard(options = {}) {
             };
             card.addEventListener('click', pick);
             card.addEventListener('keydown', e => {
-                if (/** @type {KeyboardEvent} */ (e).key === 'Enter' || /** @type {KeyboardEvent} */ (e).key === ' ') {
+                if (e instanceof KeyboardEvent && (e.key === 'Enter' || e.key === ' ')) {
                     e.preventDefault();
                     pick();
                 }
             });
         });
-
         // Shared connection select
         modalOverlay.querySelector('#etlsql-cw-shared-select')?.addEventListener('change', e => {
-            state.sharedAlias = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
+            state.sharedAlias = asSelect(e.target)?.value ?? '';
             const chosen = state.sharedConnections.find(c => c.alias === state.sharedAlias);
-            if (chosen) state.connectorType = chosen.connectorType;
+            if (chosen)
+                state.connectorType = chosen.connectorType;
             updateSqlBox();
         });
-
         // File dropzone events
-        const dropzone = modalOverlay.querySelector('#etlsql-cw-file-dropzone');
+        const dropzone = asHtml(modalOverlay.querySelector('#etlsql-cw-file-dropzone'));
         if (dropzone) {
             dropzone.addEventListener('dragover', e => {
                 e.preventDefault();
@@ -1758,103 +1684,116 @@ export function createConnectionWizard(options = {}) {
             dropzone.addEventListener('drop', e => {
                 e.preventDefault();
                 dropzone.classList.remove('is-dragover');
-                const file = /** @type {DragEvent} */ (e).dataTransfer?.files?.[0];
+                const file = e.dataTransfer?.files?.[0];
                 if (file) {
                     state.values['PATH'] = `data/${file.name}`;
                     render();
                 }
             });
         }
-
-        modalOverlay.querySelector('#etlsql-cw-file-input')?.addEventListener('change', e => {
-            const file = /** @type {HTMLInputElement} */ (e.target).files?.[0];
+        const fileInput = modalOverlay.querySelector('#etlsql-cw-file-input');
+        fileInput?.addEventListener('change', e => {
+            const file = asInput(e.target).files?.[0];
             if (file) {
                 state.values['PATH'] = `data/${file.name}`;
                 render();
             }
         });
-
         modalOverlay.querySelectorAll('[data-filepath]').forEach(btn => {
             btn.addEventListener('click', () => {
-                state.values['PATH'] = /** @type {HTMLElement} */ (btn).dataset.filepath;
-                render();
+                const filepath = asHtml(btn)?.dataset.filepath;
+                if (filepath) {
+                    state.values['PATH'] = filepath;
+                    render();
+                }
             });
         });
-
+        modalOverlay.querySelectorAll('[data-secret]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const secret = asHtml(btn)?.dataset.secret;
+                if (secret) {
+                    state.secretKey = secret;
+                    const secretInput = modalOverlay.querySelector('#etlsql-cw-secret-key');
+                    if (secretInput)
+                        asInput(secretInput).value = secret;
+                    updateSqlBox();
+                }
+            });
+        });
         // Dynamic form inputs
         modalOverlay.querySelectorAll('[data-opt]').forEach(input => {
-            const optName = /** @type {HTMLElement} */ (input).dataset.opt;
-            if (/** @type {HTMLInputElement | HTMLButtonElement | HTMLSelectElement | HTMLTextAreaElement} */ (input).type === 'checkbox') {
+            const optName = asHtml(input)?.dataset.opt;
+            if (!optName)
+                return;
+            if (asInput(input).type === 'checkbox') {
                 input.addEventListener('change', e => {
-                    state.values[optName] = /** @type {HTMLInputElement} */ (e.target).checked ? 'ON' : 'OFF';
+                    const checked = asInput(e.target).checked;
+                    state.values[optName] = checked ? 'ON' : 'OFF';
                     const card = input.closest('.etlsql-cw-checkbox-card');
                     if (card) {
-                        card.classList.toggle('is-checked', /** @type {HTMLInputElement} */ (e.target).checked);
+                        card.classList.toggle('is-checked', checked);
                     }
                     updateSqlBox();
                 });
-            } else {
+            }
+            else {
                 input.addEventListener('input', e => {
-                    state.values[optName] = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
+                    state.values[optName] = asInput(e.target).value;
                     updateSqlBox();
                     checkAndAlertValidation();
                 });
             }
         });
-
         // Auth Tabs
         modalOverlay.querySelectorAll('.etlsql-cw-auth-tab').forEach(tab => {
             tab.addEventListener('click', () => {
-                state.authType = /** @type {HTMLElement} */ (tab).dataset.authtype;
+                state.authType = asHtml(tab)?.dataset.authtype || 'secret';
                 render();
             });
         });
-
         // Auth Inputs
         modalOverlay.querySelector('#etlsql-cw-secret-key')?.addEventListener('input', e => {
-            state.secretKey = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
+            state.secretKey = asInput(e.target)?.value ?? '';
             updateSqlBox();
         });
         modalOverlay.querySelector('#etlsql-cw-env-key')?.addEventListener('input', e => {
-            state.envVarName = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
+            state.envVarName = asInput(e.target)?.value ?? '';
             updateSqlBox();
         });
-        modalOverlay.querySelector('#etlsql-cw-raw-pw')?.addEventListener('input', async e => {
-            state.rawPassword = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
+        modalOverlay.querySelector('#etlsql-cw-raw-pw')?.addEventListener('input', async (e) => {
+            state.rawPassword = asInput(e.target)?.value ?? '';
             if (state.authType === 'enc' && state.encPassphrase) {
-                state.encryptedCipher = await encryptClientPassword(state.rawPassword, state.encPassphrase);
+                state.encryptedCipher = (await encryptClientPassword(state.rawPassword, state.encPassphrase)) || '';
             }
             updateSqlBox();
         });
-        modalOverlay.querySelector('#etlsql-cw-enc-passphrase')?.addEventListener('input', async e => {
-            state.encPassphrase = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
+        modalOverlay.querySelector('#etlsql-cw-enc-passphrase')?.addEventListener('input', async (e) => {
+            state.encPassphrase = asInput(e.target)?.value ?? '';
             if (state.authType === 'enc' && state.rawPassword) {
-                state.encryptedCipher = await encryptClientPassword(state.rawPassword, state.encPassphrase);
+                state.encryptedCipher = (await encryptClientPassword(state.rawPassword, state.encPassphrase)) || '';
             }
             updateSqlBox();
         });
         modalOverlay.querySelector('#etlsql-cw-key-path')?.addEventListener('input', e => {
-            state.keyFilePath = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
+            state.keyFilePath = asInput(e.target)?.value ?? '';
             updateSqlBox();
             checkAndAlertValidation();
         });
-
         // Test Connection Button (Both in Header and in Right Pane)
         modalOverlay.querySelector('#etlsql-cw-test-btn')?.addEventListener('click', runDiagnostic);
         modalOverlay.querySelector('#etlsql-cw-header-test-btn')?.addEventListener('click', runDiagnostic);
-
         // Copy SQL Button
         modalOverlay.querySelector('#etlsql-cw-copy-sql')?.addEventListener('click', () => {
             const sql = generateSql();
             navigator.clipboard?.writeText(sql).then(() => {
-                const btn = modalOverlay.querySelector('#etlsql-cw-copy-sql');
-                if (btn) {
-                    btn.textContent = 'Copied!';
-                    setTimeout(() => { if (btn) btn.textContent = 'Copy SQL'; }, 1500);
+                const copyBtn = modalOverlay.querySelector('#etlsql-cw-copy-sql');
+                if (copyBtn) {
+                    copyBtn.textContent = 'Copied!';
+                    setTimeout(() => { if (copyBtn)
+                        copyBtn.textContent = 'Copy SQL'; }, 1500);
                 }
             });
         });
-
         // Paste Button / Dialog
         modalOverlay.querySelector('#etlsql-cw-paste-btn')?.addEventListener('click', () => {
             state.pasteModalOpen = true;
@@ -1865,22 +1804,21 @@ export function createConnectionWizard(options = {}) {
             render();
         });
         modalOverlay.querySelector('#etlsql-cw-paste-apply')?.addEventListener('click', async () => {
-            const txt = (/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (modalOverlay.querySelector('#etlsql-cw-paste-input'))?.value || '').trim();
-            if (!txt) return;
-
+            const txt = asInput(modalOverlay.querySelector('#etlsql-cw-paste-input'))?.value.trim() || '';
+            if (!txt)
+                return;
             let parsed = null;
             if (onParseString) {
                 try {
                     parsed = await onParseString(txt, state.connectorType);
-                } catch (e) {
+                }
+                catch (e) {
                     console.warn('Parse string failed on server, using client fallback', e);
                 }
             }
-
             if (!parsed) {
                 parsed = parseConnectionStringFallback(txt, state.connectorType);
             }
-
             if (parsed) {
                 if (parsed.detectedProvider) {
                     state.connectorType = parsed.detectedProvider;
@@ -1888,7 +1826,6 @@ export function createConnectionWizard(options = {}) {
                 for (const [k, v] of Object.entries(parsed.options || {})) {
                     state.values[k] = v;
                 }
-
                 if (parsed.extractedCredential) {
                     state.rawPassword = parsed.extractedCredential;
                     state.pendingExtractedPassword = parsed.extractedCredential;
@@ -1899,44 +1836,41 @@ export function createConnectionWizard(options = {}) {
                     return;
                 }
             }
-
             state.pasteModalOpen = false;
             render();
         });
-
         // Passphrase Prompt Dialog Buttons
         modalOverlay.querySelector('#etlsql-cw-passphrase-encrypt')?.addEventListener('click', async () => {
             const passInput = modalOverlay.querySelector('#etlsql-cw-paste-passphrase');
-            const pass = (/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (passInput)?.value || '').trim();
+            const pass = asInput(passInput)?.value.trim() || '';
             if (!pass) {
                 if (passInput) {
-                    /** @type {HTMLElement} */ (passInput).focus();
-                    passInput.classList.add('is-invalid');
+                    asHtml(passInput).focus();
+                    asHtml(passInput).classList.add('is-invalid');
                 }
                 return;
             }
             state.encPassphrase = pass;
             if (state.rawPassword) {
-                state.encryptedCipher = await encryptClientPassword(state.rawPassword, pass);
+                state.encryptedCipher = (await encryptClientPassword(state.rawPassword, pass)) || '';
             }
             state.authType = 'enc';
             state.passphraseModalOpen = false;
             render();
         });
-
         modalOverlay.querySelector('#etlsql-cw-passphrase-skip')?.addEventListener('click', () => {
             state.authType = 'secret';
             state.secretKey = state.pendingSecretKey || `${state.connectorType}_PW`;
             state.passphraseModalOpen = false;
             render();
         });
-
         // Submit Button (Insert or Save)
         modalOverlay.querySelector('#etlsql-cw-submit-btn')?.addEventListener('click', async () => {
             const violation = getSecurityViolation();
-            if (violation || state.isSaving) return;
-            if (getAliasProblem()) return;
-
+            if (violation || state.isSaving)
+                return;
+            if (getAliasProblem())
+                return;
             const sql = generateSql();
             if (state.mode === 'admin') {
                 if (onSave) {
@@ -1966,14 +1900,16 @@ export function createConnectionWizard(options = {}) {
                         };
                         await onSave(entry);
                         closeModal();
-                    } catch {
+                    }
+                    catch {
                         console.warn('ConnectionWizard: catalog save failed.');
                         state.isSaving = false;
                         state.saveError = 'Connection could not be saved. Review the entry and try again.';
                         render();
                     }
                 }
-            } else {
+            }
+            else {
                 if (onInsert) {
                     onInsert(sql, {
                         alias: state.alias,
@@ -1987,11 +1923,10 @@ export function createConnectionWizard(options = {}) {
             }
         });
     }
-
     function bindTypeListEvents() {
         modalOverlay.querySelectorAll('.etlsql-cw-type-item').forEach(btn => {
             btn.addEventListener('click', () => {
-                const type = /** @type {HTMLElement} */ (btn).dataset.type;
+                const type = asHtml(btn)?.dataset.type;
                 if (type && type !== state.connectorType) {
                     selectConnectorType(type);
                     render();
@@ -1999,11 +1934,8 @@ export function createConnectionWizard(options = {}) {
             });
         });
     }
-
     function checkAndAlertValidation() {
         const violation = getSecurityViolation();
-        // One source of truth for alias validity: empty, malformed, or colliding. This runs on every
-        // keystroke, unlike render(), so it is what actually gates the button.
         const aliasProblem = getAliasProblem();
         const isAliasMissing = !state.alias || !state.alias.trim();
         let securityAlert = modalOverlay.querySelector('.etlsql-cw-security-alert');
@@ -2014,54 +1946,51 @@ export function createConnectionWizard(options = {}) {
                 modalOverlay.querySelector('.etlsql-cw-meta-row')?.insertAdjacentElement('afterend', securityAlert);
             }
             securityAlert.textContent = violation;
-        } else {
+        }
+        else {
             securityAlert?.remove();
         }
         const submitBtn = modalOverlay.querySelector('#etlsql-cw-submit-btn');
         if (submitBtn) {
-            /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (submitBtn).disabled = Boolean(violation || aliasProblem);
-            /** @type {HTMLElement} */ (submitBtn).title = violation || aliasProblem || '';
+            asInput(submitBtn).disabled = Boolean(violation || aliasProblem);
+            asHtml(submitBtn).title = violation || aliasProblem || '';
         }
-
         const aliasInput = modalOverlay.querySelector('#etlsql-cw-alias-input');
         if (aliasInput) {
             aliasInput.classList.toggle('etlsql-cw-alias-missing', Boolean(aliasProblem));
         }
-        const missingHint = modalOverlay.querySelector('.etlsql-cw-missing-hint');
+        const missingHint = asHtml(modalOverlay.querySelector('.etlsql-cw-missing-hint'));
         if (missingHint) {
-            /** @type {HTMLElement} */ (missingHint).style.display = aliasProblem ? '' : 'none';
-            // Say which problem it is; "required" is wrong when the name is present but malformed.
+            missingHint.style.display = aliasProblem ? '' : 'none';
             missingHint.textContent = aliasProblem ? `⚠️ ${aliasProblem}` : '';
         }
-        const validHint = modalOverlay.querySelector('.etlsql-cw-valid-hint');
+        const validHint = asHtml(modalOverlay.querySelector('.etlsql-cw-valid-hint'));
         if (validHint) {
-            /** @type {HTMLElement} */ (validHint).style.display = aliasProblem ? 'none' : '';
+            validHint.style.display = aliasProblem ? 'none' : '';
             const code = validHint.querySelector('code');
-            if (code) code.textContent = (state.alias || '').trim();
+            if (code)
+                code.textContent = (state.alias || '').trim();
         }
-        const reqTag = modalOverlay.querySelector('.etlsql-cw-required-tag');
+        const reqTag = asHtml(modalOverlay.querySelector('.etlsql-cw-required-tag'));
         if (reqTag) {
-            /** @type {HTMLElement} */ (reqTag).style.display = isAliasMissing ? '' : 'none';
+            reqTag.style.display = isAliasMissing ? '' : 'none';
         }
     }
-
     function updateSqlBox() {
         const box = modalOverlay.querySelector('.etlsql-cw-sql-box code');
         if (box) {
             box.textContent = generateSql();
         }
     }
-
     function closeModal() {
-        if (onClose) onClose();
+        if (onClose)
+            onClose();
         modalOverlay.remove();
     }
-
     function parseConnectionStringFallback(raw, hint) {
         const options = {};
         let extractedCredential = null;
-        let detected = hint || 'MSSQL';
-
+        const detected = hint || 'MSSQL';
         const pairs = raw.split(';');
         for (const pair of pairs) {
             const eq = pair.indexOf('=');
@@ -2070,26 +1999,32 @@ export function createConnectionWizard(options = {}) {
                 const v = pair.substring(eq + 1).trim();
                 if (k === 'PASSWORD' || k === 'PWD') {
                     extractedCredential = v;
-                } else if (k === 'DATA_SOURCE' || k === 'SERVER') {
+                }
+                else if (k === 'DATA_SOURCE' || k === 'SERVER') {
                     if (v.includes(',')) {
                         const parts = v.split(',');
                         options['SERVER'] = parts[0].trim();
-                        if (parts.length > 1) options['PORT'] = parts[1].trim();
-                    } else {
+                        if (parts.length > 1)
+                            options['PORT'] = parts[1].trim();
+                    }
+                    else {
                         options['SERVER'] = v;
                     }
-                } else if (k === 'INITIAL_CATALOG' || k === 'DATABASE') {
+                }
+                else if (k === 'INITIAL_CATALOG' || k === 'DATABASE') {
                     options['DATABASE'] = v;
-                } else if (k === 'USER_ID' || k === 'UID' || k === 'USER') {
+                }
+                else if (k === 'USER_ID' || k === 'UID' || k === 'USER') {
                     options['USER'] = v;
-                } else if (k === 'TRUSTSERVERCERTIFICATE' || k === 'TRUST_SERVER_CERTIFICATE') {
+                }
+                else if (k === 'TRUSTSERVERCERTIFICATE' || k === 'TRUST_SERVER_CERTIFICATE') {
                     options['TRUST_SERVER_CERTIFICATE'] = v.toUpperCase() === 'TRUE' ? 'ON' : 'OFF';
-                } else {
+                }
+                else {
                     options[k] = v;
                 }
             }
         }
-
         return {
             detectedProvider: detected,
             options,
@@ -2097,9 +2032,7 @@ export function createConnectionWizard(options = {}) {
             suggestedSecretKey: extractedCredential ? `${detected}_${(options.DATABASE || 'DB').toUpperCase()}_PW` : null
         };
     }
-
     render();
-
     return {
         open: () => { modalOverlay.style.display = 'flex'; },
         close: closeModal,

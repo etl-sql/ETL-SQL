@@ -12,7 +12,7 @@ namespace ETL_SQL.Tests.Reporting
         public void SharedRuntime_IncludesInteractionLayoutAndMaximizeHooks()
         {
             var root = FindRepoRoot();
-            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.js"));
+            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.bundle.js"));
             var css = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.css"));
 
             Assert.Contains("function renderLayout", js);
@@ -22,14 +22,15 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Contains("renderNavBar", js);
             Assert.Contains("applyPageCrossFilter", js);
             Assert.Contains("ON_SELECT", js);
-            Assert.Contains("visualCanReflectSelections", js);
+
+            Assert.Contains("function crossFilterActive", js);
             Assert.Contains("toggleVisualMaximize", js);
             Assert.Contains("closeMaximizedVisual", js);
             Assert.Contains("keydown", js);
             Assert.Contains("collapsedRows", js);
             Assert.Contains("collapsedCols", js);
             Assert.Contains("matrix-toggle", js);
-            Assert.Contains("case 'MATRIX':      renderMatrix(card, visual)", js);
+            Assert.Matches(@"case 'MATRIX':\s+renderMatrix\(card, visual\);", js);
             Assert.Contains("visual.highlightRows.map(rowKey)", js);
             Assert.Contains("function applyNativeHighlight", js);
             Assert.Contains("const hasCrossHighlights", js);
@@ -55,7 +56,7 @@ namespace ETL_SQL.Tests.Reporting
         public void SharedRuntime_GivesEveryParameterControlAnAccessibleName()
         {
             var root = FindRepoRoot();
-            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.js"));
+            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.bundle.js"));
 
             Assert.Contains("function setParameterAccessibleName", js);
             Assert.Contains("setParameterAccessibleName(select, visual, paramName)", js);
@@ -76,7 +77,7 @@ namespace ETL_SQL.Tests.Reporting
         public void SharedRuntime_UsesCanonicalJsonForMultiSelectParameters()
         {
             var root = FindRepoRoot();
-            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.js"));
+            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.bundle.js"));
 
             Assert.Contains("function parseMultiParameter", js);
             Assert.Contains("JSON.stringify(Array.from(selected))", js);
@@ -88,7 +89,7 @@ namespace ETL_SQL.Tests.Reporting
         public void SharedRuntime_ConsumesResolvedMicroChartsWithoutBrowserGeometryCompiler()
         {
             var root = FindRepoRoot();
-            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.js"));
+            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.bundle.js"));
             var css = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.css"));
 
             Assert.Contains("function findMicroChart", js);
@@ -113,12 +114,12 @@ namespace ETL_SQL.Tests.Reporting
         public void SharedRuntime_HasNoUndefinedChartFallback()
         {
             var root = FindRepoRoot();
-            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.js"));
+            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.bundle.js"));
             var css = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "report-runtime.css"));
 
             Assert.DoesNotContain("renderChart(", js);
             Assert.Contains("function renderMissingChartPayload", js);
-            Assert.Contains(": renderMissingChartPayload(card, visual); break;", js);
+            Assert.Matches(@":\s+renderMissingChartPayload\(card, visual\);\s+break;", js);
             Assert.Contains("el.setAttribute('role', 'status')", js);
             Assert.Contains(".missing-chart-payload", css);
         }

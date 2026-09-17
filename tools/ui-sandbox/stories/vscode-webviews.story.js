@@ -340,7 +340,7 @@ async function renderPreview(stage, ctx, fixtureId) {
 <body class="vscode-theme">
   <div id="root"></div>
   <script>window.__MANIFEST__ = ${manifestJson};</script>
-  <script src="/src/etl-sql-vscode/media/report-runtime.js"></script>
+  <script type="module" src="/src/etl-sql-vscode/media/report-runtime.js"></script>
 </body>
 </html>`;
   const iframe = makeFrame(html);

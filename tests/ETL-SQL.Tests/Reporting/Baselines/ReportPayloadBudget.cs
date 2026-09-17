@@ -76,7 +76,18 @@ public sealed record ReportPayloadBudget(
             .Select(name => assets.FirstOrDefault(asset =>
                 asset.RelativePath.Equals(name, StringComparison.OrdinalIgnoreCase))
                 ?? throw new InvalidOperationException($"Gated asset '{name}' is not present under Resources/Shared."))
-            .Select(asset => new PayloadBudgetEntry(asset.RelativePath, asset.RawBytes, asset.GzipBytes))
+            .Select(asset =>
+            {
+                // Keep the reviewed runtime budget over the complete online module graph.
+                // Each module is compressed separately when served to a browser.
+                var parts = asset.RelativePath == "report-runtime.js"
+                    ? assets.Where(part => part.RelativePath.StartsWith("rt-", StringComparison.Ordinal)
+                        && part.RelativePath.EndsWith(".js", StringComparison.Ordinal)).ToArray()
+                    : [];
+                return new PayloadBudgetEntry(asset.RelativePath,
+                    asset.RawBytes + parts.Sum(part => part.RawBytes),
+                    asset.GzipBytes + parts.Sum(part => part.GzipBytes));
+            })
             .ToList();
 
         // The heaviest representative report is the gated page weight: a budget set on the lightest

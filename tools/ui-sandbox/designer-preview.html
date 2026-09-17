@@ -25,6 +25,7 @@
       if (runtimeInjected) return;
       runtimeInjected = true;
       var rt = document.createElement('script');
+      rt.type = 'module';
       rt.src = BASE + 'report-runtime.js';
       rt.onerror = function () {
         var root = document.getElementById('root');

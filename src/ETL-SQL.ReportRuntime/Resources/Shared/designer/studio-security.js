@@ -1,14 +1,17 @@
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-security.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Zero-trust client-side save checks shared by every Studio host.
  */
-
 import { encryptClientPassword } from './connection-wizard.js';
-
 export function detectPlaintextSecrets(scriptText) {
-    if (!scriptText || typeof scriptText !== 'string') return [];
+    if (!scriptText || typeof scriptText !== 'string')
+        return [];
     const findings = [];
     const patterns = [
         { label: 'Plaintext Password', regex: /\b(PASSWORD|PWD)\s*=\s*(['"])(?!ENC:|SECRET:|SHARED:)(.+?)\2/gi },
@@ -24,9 +27,9 @@ export function detectPlaintextSecrets(scriptText) {
     }
     return findings;
 }
-
 export async function secureStudioScriptForSave(scriptText, passphrase, encrypt = encryptClientPassword) {
-    if (!passphrase?.trim()) throw new Error('A passphrase is required to encrypt credentials.');
+    if (!passphrase?.trim())
+        throw new Error('A passphrase is required to encrypt credentials.');
     const findings = detectPlaintextSecrets(scriptText);
     let secured = scriptText;
     for (const finding of findings.sort((left, right) => right.start - left.start)) {

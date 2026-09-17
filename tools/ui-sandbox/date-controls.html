@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Date controls — UI sandbox</title>
+  <link rel="stylesheet" href="/src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.css">
+</head>
+<body>
+  <main id="root"></main>
+  <script>
+    window.__OFFLINE__ = true;
+    window.__MANIFEST__ = {
+      title: 'Date controls', parameters: { Start: '2026-09-10', End: '2026-09-12', Relative: 'D-7' },
+      pages: [{ name: 'Dates', mode: 'DASHBOARD', structure: 'A B', slotMap: { A: 'DateRange', B: 'RelativeDate' } }],
+      visuals: [
+        { name: 'DateRange', title: 'Date range', visualType: 'DATEPICKER',
+          options: { MODE: 'RANGE', DISABLED_DATES: '["2026-09-14"]' }, columns: [], rows: [],
+          actions: [{ trigger: 'ON_CHANGE', type: 'SET_PARAMETER', parameterName: 'Start', secondaryParameterName: 'End' }] },
+        { name: 'RelativeDate', title: 'Relative date', visualType: 'RELDATEPICKER', options: {}, columns: [], rows: [],
+          actions: [{ trigger: 'ON_CHANGE', type: 'SET_PARAMETER', parameterName: 'Relative' }] }
+      ]
+    };
+  </script>
+  <script type="module" src="/src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js"></script>
+</body>
+</html>

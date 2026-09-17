@@ -216,6 +216,14 @@ public sealed class ColumnQualityValidator
     }
 
     /// <summary>Closes the pre-pass; rows may now be validated against the collected key groups.</summary>
+    /// <remarks>
+    /// This is an intentional sync-only wrapper for the engine's non-async pre-pass finalization
+    /// path. It blocks the calling thread via <c>GetAwaiter().GetResult()</c> and therefore carries
+    /// a deadlock risk when called from a thread that has a synchronization context (e.g. ASP.NET
+    /// classic, UI threads). Do <em>not</em> call this method from ASP.NET or any other
+    /// synchronization-context thread. Callers that are already in an async context should use
+    /// <see cref="FinalizeUniquePrePassAsync"/> directly.
+    /// </remarks>
     public void FinalizeUniquePrePass()
     {
         FinalizeUniquePrePassAsync().GetAwaiter().GetResult();

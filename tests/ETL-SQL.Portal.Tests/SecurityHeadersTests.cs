@@ -60,7 +60,7 @@ public class SecurityHeadersTests(PortalWebFactory factory) : IClassFixture<Port
         // purpose rather than arriving by accident. Assert that, since the HTML no longer shows it.
         var pageModule = await client.GetStringAsync("/js/pages/index.js");
         Assert.Contains("document.querySelector('script[nonce]')", pageModule, StringComparison.Ordinal);
-        Assert.Contains("<script nonce=\"${CSP_NONCE}\" src=\"/js/report-runtime.js", pageModule, StringComparison.Ordinal);
+        Assert.Contains("<script nonce=\"${CSP_NONCE}\" type=\"module\" src=\"/js/report-runtime.js", pageModule, StringComparison.Ordinal);
     }
 
     [Fact]

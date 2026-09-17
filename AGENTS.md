@@ -1,4 +1,4 @@
-﻿# ETL-SQL: AI Agent Instruction Manual
+# ETL-SQL: AI Agent Instruction Manual
 
 Welcome, Agent. You are assisting in the development and operation of **ETL-SQL**, a hybrid engine that executes SQL-like syntax against diverse data sources (SQL, NoSQL, FlatFiles) with an emphasis on portability and "Zero-Trust" security.
 
@@ -231,7 +231,8 @@ The repository has three browser/extension surfaces. Follow the conventions and 
 - Avoid unsafe HTML injection. Use DOM APIs or framework rendering for untrusted content; if raw HTML is required, use the existing sanitization boundary.
 - Add or update focused Vitest tests for TypeScript/React behavior. Add or extend a UI sandbox story for browser-side visual or interaction changes.
 - Do not edit generated report-runtime copies. Follow the canonical asset workflow in [§12](#12-shared-report-runtime-assets).
-- **Browser JavaScript is type-checked.** The sources stay `.js` and are served verbatim; `tsconfig.json`
+- **Browser sources are type-checked.** Migrated `.ts` modules compile strictly before sync (see §12).
+  Remaining JavaScript is served verbatim; `tsconfig.json`
   at the repository root points `tsc --checkJs` at them and `node scripts/typecheck-browser.mjs` is the
   gate (pre-push step 3, and a CI step). `browser-typecheck-baseline.txt` is **empty** — the 822
   findings the sources carried when the gate went in have all been worked off — so any finding at
@@ -432,7 +433,18 @@ Files copied under these host folders are generated sync outputs and must not be
 
 When changing report runtime JavaScript, CSS, themes, or shared browser dependencies:
 
-1. Edit the canonical file in `src/ETL-SQL.ReportRuntime/Resources/Shared/`.
+All 44 shared report runtime and designer modules are authored under
+`src/ETL-SQL.ReportRuntime/Resources/TypeScript/`. Their matching paths under `Shared/` (and the
+concatenated offline bundle `report-runtime.bundle.js`) are generated; edit the TypeScript source.
+`sync-assets.js` compiles TypeScript modules before bundling and copying.
+Install the pinned compiler with `npm ci --prefix scripts/typecheck`. For sandbox development,
+run `node scripts/compile-browser.mjs --watch` and reload after successful compilation. Sandbox
+startup also compiles once. `sync-assets.js -Check` verifies compiled output without repairing it;
+the browser type gate checks strict TypeScript plus remaining JavaScript. No Node step is added
+to .NET builds. See the asset standards for source and output ownership.
+
+1. Edit the canonical file in `src/ETL-SQL.ReportRuntime/Resources/Shared/`, or its TypeScript owner
+   when the JavaScript banner identifies generated output.
 2. Run `node .\scripts\sync-assets.js`.
 3. Run `node .\scripts\sync-assets.js -Check`.
 
@@ -444,7 +456,7 @@ nobody would fix it at. The canonical file is the one that is checked.
 
 ### Prototyping browser-side UI (no Docker)
 
-Before changing a browser-side report/portal component, prototype and visually verify it in the **UI sandbox** at `tools/ui-sandbox/` (`pwsh -File tools\ui-sandbox\serve.ps1`) — do **not** spin up Docker or the full portal just to eyeball a JS/CSS change. It is a no-build "stories" harness that imports the canonical/source files directly (cache-busted on **↻ Reload**), so an edit shows immediately with no sync, no portal build, and no catalog DB. It hosts the `designer.js` exports (`renderDag`, `createScriptEditor`, `createDesigner`) and extracted portal UI modules (e.g. `src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js`); each surface is a story under `tools/ui-sandbox/stories/` driven by fixture data, with an injectable mock fetch (`mockApi.js`) for API-backed components. Add or extend a story when you change a surface. The sandbox is dev-only and does **not** replace the sync step above.
+Before changing a browser-side report/portal component, prototype and visually verify it in the **UI sandbox** at `tools/ui-sandbox/` (`pwsh -File tools\ui-sandbox\serve.ps1`) — do **not** spin up Docker or the full portal just to eyeball a JS/CSS change. It is a "stories" harness that imports the JavaScript delivery files directly (cache-busted on **↻ Reload**), so JavaScript/CSS edits show immediately with no sync, Portal build, or catalog DB. Migrated TypeScript requires the compiler watcher described above; startup compiles once. It hosts the `designer.js` exports (`renderDag`, `createScriptEditor`, `createDesigner`) and extracted portal UI modules (e.g. `src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js`); each surface is a story under `tools/ui-sandbox/stories/` driven by fixture data, with an injectable mock fetch (`mockApi.js`) for API-backed components. Add or extend a story when you change a surface. The sandbox is dev-only and does **not** replace the sync step above.
 
 ---
 

@@ -157,8 +157,28 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
         await WaitForStudioAsync(page);
         await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Catalog Reports" })).ToBeVisibleAsync();
         await Expect(page.GetByText(reportName + ".rptsql", new() { Exact = true })).ToBeVisibleAsync();
+        // Hold the opening workflow parse until the tab has closed. A late opening continuation
+        // must not hide Home or repaint the editor for a document that no longer exists.
+        var parseReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseParse = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var parseCalls = 0;
+        await page.RouteAsync("**/api/designer/parse", async route =>
+        {
+            if (Interlocked.Increment(ref parseCalls) != 1)
+            {
+                await route.ContinueAsync();
+                return;
+            }
+            var response = await route.FetchAsync();
+            parseReady.TrySetResult();
+            await releaseParse.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            await route.FulfillAsync(new() { Response = response });
+        });
         await page.ClickAsync($"[data-open-report='{reportId}'][data-open-proj='split']");
         await page.WaitForFunctionAsync($"() => window.__STUDIO__.state.documents.some(doc => doc.reportId === {reportId})");
+        await parseReady.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        var openingDocument = await page.EvaluateHandleAsync(
+            "id => window.__STUDIO__.state.documents.find(doc => doc.reportId === id)", reportId);
 
         var opened = await page.EvaluateAsync<JsonElement>(
             """
@@ -188,6 +208,10 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
         Assert.False(await HasEditLeaseAsync(reportId));
 
         var createdName = $"Studio Created {Guid.NewGuid():N}";
+        releaseParse.TrySetResult();
+        await page.WaitForFunctionAsync("doc => !!doc.reportWorkflow", openingDocument);
+        await openingDocument.DisposeAsync();
+        await Expect(page.Locator("[data-home-stage]")).ToBeVisibleAsync();
         // The home screen no longer offers one generic "report": the choice of dashboard or
         // paginated is made up front, which is the same question `switchDoc` otherwise has to stop
         // and ask later. This picks the plain dashboard card rather than the sample-seeded one, so

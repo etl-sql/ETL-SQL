@@ -847,6 +847,13 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
     /// <c>-1</c> when the table has spilled to disk — pruning a partially spilled table would
     /// silently prune only the resident part, so the caller is told it did not run.
     /// </summary>
+    /// <remarks>
+    /// This method intentionally calls <see cref="System.Threading.SemaphoreSlim.Wait()"/> (the
+    /// synchronous overload) because <c>RemoveRows</c> is part of a synchronous public API and
+    /// cannot be made <c>async</c> without cascading caller changes. Avoid calling this method
+    /// from async hot paths to prevent thread-pool starvation. Use the async pipeline instead
+    /// when pruning is initiated from an async context.
+    /// </remarks>
     public int RemoveRows(Predicate<Row> predicate)
     {
         _lock.Wait();

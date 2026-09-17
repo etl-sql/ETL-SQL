@@ -1,6 +1,6 @@
-/**
- * Aligns two script revisions for Studio's side-by-side Git viewer.
- * The bounded LCS keeps ordinary scripts readable without allowing a very large file to stall the UI.
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-git-diff.ts
+ * Run: node scripts/sync-assets.js
  */
 export function buildSideBySideDiff(baselineContent, workingContent) {
     const left = String(baselineContent ?? '').replace(/\r\n?/g, '\n').split('\n');
@@ -10,7 +10,6 @@ export function buildSideBySideDiff(baselineContent, workingContent) {
         : positionalOperations(left, right);
     return alignChangeRuns(operations);
 }
-
 function lcsOperations(left, right) {
     const widths = right.length + 1;
     const table = new Uint32Array((left.length + 1) * widths);
@@ -22,7 +21,6 @@ function lcsOperations(left, right) {
                 : Math.max(table[(leftIndex + 1) * widths + rightIndex], table[offset + 1]);
         }
     }
-
     const operations = [];
     let leftIndex = 0;
     let rightIndex = 0;
@@ -31,28 +29,31 @@ function lcsOperations(left, right) {
             operations.push({ kind: 'equal', text: left[leftIndex] });
             leftIndex++;
             rightIndex++;
-        } else if (rightIndex >= right.length || (leftIndex < left.length
+        }
+        else if (rightIndex >= right.length || (leftIndex < left.length
             && table[(leftIndex + 1) * widths + rightIndex] >= table[leftIndex * widths + rightIndex + 1])) {
             operations.push({ kind: 'delete', text: left[leftIndex++] });
-        } else {
+        }
+        else {
             operations.push({ kind: 'add', text: right[rightIndex++] });
         }
     }
     return operations;
 }
-
 function positionalOperations(left, right) {
     const operations = [];
     for (let index = 0; index < Math.max(left.length, right.length); index++) {
-        if (left[index] === right[index]) operations.push({ kind: 'equal', text: left[index] });
+        if (left[index] === right[index])
+            operations.push({ kind: 'equal', text: left[index] });
         else {
-            if (index < left.length) operations.push({ kind: 'delete', text: left[index] });
-            if (index < right.length) operations.push({ kind: 'add', text: right[index] });
+            if (index < left.length)
+                operations.push({ kind: 'delete', text: left[index] });
+            if (index < right.length)
+                operations.push({ kind: 'add', text: right[index] });
         }
     }
     return operations;
 }
-
 function alignChangeRuns(operations) {
     const rows = [];
     let leftNumber = 1;
@@ -64,7 +65,6 @@ function alignChangeRuns(operations) {
             index++;
             continue;
         }
-
         const deleted = [];
         const added = [];
         while (index < operations.length && operations[index].kind !== 'equal') {

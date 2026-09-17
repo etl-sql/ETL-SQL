@@ -41,9 +41,10 @@ export function bindSelection(root, onChange = () => {}) {
 }
 
 export function renderCatalogPager(root, result, onPage) {
-  const total = Number(result?.total || 0);
-  const page = Number(result?.page || 1);
-  const pageSize = Number(result?.pageSize || 25);
+  const safeInt = v => Number.isFinite(Number(v)) ? Math.trunc(Number(v)) : 0;
+  const total = safeInt(result?.total);
+  const page = safeInt(result?.page) || 1;
+  const pageSize = safeInt(result?.pageSize) || 25;
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const start = total === 0 ? 0 : ((page - 1) * pageSize) + 1;
   const end = Math.min(total, page * pageSize);

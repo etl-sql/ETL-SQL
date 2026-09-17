@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { Script } = require('vm');
 
 const repoRoot = path.resolve(__dirname, '..');
 const sharedDir = path.join(repoRoot, 'src', 'ETL-SQL.ReportRuntime', 'Resources', 'Shared');
@@ -68,6 +69,113 @@ function getExpectedContent(filePath, relativePath, content) {
     return content;
 }
 
+// ── Offline-snapshot bundle ──────────────────────────────────────────────────
+//
+// OfflineSnapshotViewer.cs inlines the report runtime into a single <script> tag in a one-file
+// .etlsnap. A single file has no siblings to import, so the ES-module parts are concatenated here
+// into report-runtime.bundle.js, which is what ETL-SQL.Reporting embeds.
+//
+// The transform is line-based, which is why the parts obey a constrained export style (see
+// docs/superpowers/specs/2026-09-07-browser-file-split-design.md). Anything it cannot handle is an
+// error rather than a silent omission: a part that vanished from a snapshot would fail only for a
+// user opening an .etlsnap, which is the furthest possible place from this script.
+const RUNTIME_PARTS = [
+    'rt-util.js',
+    'rt-state.js',
+    'rt-theme.js',
+    'rt-transport.js',
+    'rt-data.js',
+    'rt-detail.js',
+    'rt-charts.js',
+    'rt-table.js',
+    'rt-matrix.js',
+    'rt-controls-date.js',
+    'rt-controls-input.js',
+    'rt-visual.js',
+    'rt-layout.js',
+    'rt-actions.js',
+    'rt-views.js',
+    'rt-chrome.js',
+    'report-runtime.js',
+];
+const RUNTIME_BUNDLE = 'report-runtime.bundle.js';
+
+const INTRA_IMPORT = /^import\s*\{\s*([\w$]+(?:\s*,\s*[\w$]+)*\s*,?)\s*\}\s*from\s*'\.\/((?:rt-[a-z-]+|report-runtime)\.js)';\s*$/;
+const ANY_IMPORT = /^\s*import\b/;
+const EXPORT_DECL = /^export\s+(?=(?:async\s+)?function\b|const\b|let\b|class\b)/;
+const ANY_EXPORT = /^\s*export\b/;
+
+async function buildRuntimeBundle() {
+    const names = await fs.readdir(sharedDir);
+    const present = names.filter(n => /^rt-[a-z-]+\.js$/.test(n));
+    const unlisted = present.filter(n => !RUNTIME_PARTS.includes(n));
+    if (unlisted.length > 0) {
+        throw new Error(
+            `Runtime part(s) not listed in RUNTIME_PARTS, so they would be missing from every ` +
+            `offline snapshot: ${unlisted.join(', ')}`);
+    }
+
+    const bodies = [];
+    for (const name of RUNTIME_PARTS) {
+        const src = await fs.readFile(path.join(sharedDir, name), 'utf8');
+        const out = [];
+        const lines = src.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (/\bimport\s*\(/.test(line)) {
+                throw new Error(`${name}:${i + 1} uses a dynamic import the bundle cannot inline.`);
+            }
+            const imported = INTRA_IMPORT.exec(line);
+            if (imported) {
+                if (!RUNTIME_PARTS.includes(imported[2])) {
+                    throw new Error(`${name}:${i + 1} imports a module not listed in RUNTIME_PARTS: ${imported[2]}`);
+                }
+                continue;
+            }
+            if (ANY_IMPORT.test(line)) {
+                throw new Error(`${name}:${i + 1} imports something the bundle cannot inline: ${line.trim()}`);
+            }
+            if (EXPORT_DECL.test(line)) {
+                out.push(line.replace(EXPORT_DECL, ''));
+                continue;
+            }
+            if (ANY_EXPORT.test(line)) {
+                throw new Error(`${name}:${i + 1} uses an export form the bundle cannot strip: ${line.trim()}`);
+            }
+            out.push(line);
+        }
+        bodies.push(`// ─── ${name} ───\n${out.join('\n')}`);
+    }
+
+    const banner = `// @ts-nocheck — generated bundle; check the canonical parts.
+/* GENERATED FILE - DO NOT EDIT.
+ * Built from the rt-*.js parts by: node .\\scripts\\sync-assets.js
+ * Consumed by src/ETL-SQL.Reporting for single-file .etlsnap snapshots.
+ */\n\n`;
+    const bundle = `${banner}(function () {\n    'use strict';\n\n${bodies.join('\n\n')}\n})();\n`;
+    // Reject syntax errors and duplicate declarations before any host copy is written.
+    new Script(bundle, { filename: RUNTIME_BUNDLE });
+    return bundle;
+}
+
+async function syncOrCheckBundle() {
+    const bundlePath = path.join(sharedDir, RUNTIME_BUNDLE);
+    const expected = await buildRuntimeBundle();
+    if (checkMode) {
+        if (!(await existsAsync(bundlePath))) {
+            drift.push(`Offline bundle missing ${RUNTIME_BUNDLE}`);
+            return;
+        }
+        const actual = await fs.readFile(bundlePath, 'utf8');
+        if (actual !== expected) {
+            drift.push(`Offline bundle drifted: ${RUNTIME_BUNDLE}`);
+        }
+        return;
+    }
+    await fs.writeFile(bundlePath, expected, 'utf8');
+    console.log(`  ${RUNTIME_BUNDLE} OK`);
+}
+
 async function existsAsync(p) {
     try {
         await fs.access(p);
@@ -120,11 +228,14 @@ async function syncOrCheck(filePath, relativePath, targetDir, label, fileContent
 }
 
 async function run() {
+    const { compileBrowser } = await import('./compile-browser.mjs');
+    compileBrowser({ check: checkMode });
     if (!(await existsAsync(sharedDir))) {
         console.error(`Shared source directory not found: ${sharedDir}`);
         process.exit(1);
     }
 
+    await syncOrCheckBundle();
     const files = await walk(sharedDir);
 
     for (const file of files) {

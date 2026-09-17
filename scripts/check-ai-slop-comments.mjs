@@ -1,0 +1,209 @@
+#!/usr/bin/env node
+/**
+ * Guardrail against AI slop comments, conversational meta-commentary, and banned corporate buzzwords.
+ *
+ * Enforces the code comment standards in AGENTS.md §0:
+ *   - No corporate buzzwords ("seamless", "robust", "leverage", "delve", "testament", "beacon", "foster")
+ *   - No structural clichés ("harnessing the power of", "in today's digital landscape")
+ *   - No procedural tutorial step markers (// Step 1:, // First, we...)
+ *   - No trivial syntax restatements (// Loop through items, // Return result, // Check if null)
+ *   - No conversational meta-commentary (// Added to fix issue..., // Handle edge case)
+ *
+ * A legitimately non-obvious comment that happens to trip a pattern can be annotated with an inline
+ * escape hatch: `// comment-ok: <reason>` or `// slop-ok: <reason>`.
+ *
+ * Usage:
+ *   node scripts/check-ai-slop-comments.mjs
+ */
+
+import { readdir, readFile } from 'node:fs/promises';
+import path from 'node:path';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+
+const scriptRoot = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(scriptRoot, '..');
+const srcRoot = path.join(repoRoot, 'src');
+
+const TARGET_EXTENSIONS = new Set(['.cs', '.ts', '.tsx', '.js', '.mjs', '.jsx']);
+
+const SKIP_DIRS = new Set([
+  'bin',
+  'obj',
+  'node_modules',
+  'dist',
+  '.git',
+  '.vscode-test',
+  'coverage',
+  'vendor',
+  'codemirror',
+]);
+
+const SKIP_FILES = new Set([
+  'tabulator.min.js',
+  'tabulator.min.css',
+  'arrow.min.js',
+  'codemirror-bundle.min.js',
+  'etlsql-contracts.generated.d.ts',
+]);
+
+export const RULES = [
+  // 1. Corporate buzzwords & structural clichés (AGENTS.md §0)
+  {
+    category: 'Corporate buzzword (AGENTS.md §0)',
+    pattern: /\b(seamlessly|seamless|robustly|testament|beacon|delve)\b/i,
+  },
+  {
+    category: 'Corporate buzzword (AGENTS.md §0)',
+    pattern: /\bleverage[sd]?\b/i,
+  },
+  {
+    category: 'Structural cliché (AGENTS.md §0)',
+    pattern: /\b(harnessing the power of|in today's digital landscape|at the intersection of)\b/i,
+  },
+
+  // 2. Procedural step commentary
+  {
+    category: 'Procedural step marker',
+    pattern: /^\s*\/\/\s*Step\s+\d+\s*[:\-]/i,
+  },
+  {
+    category: 'Procedural narrative marker',
+    pattern: /^\s*\/\/\s*(First|Next|Then|Finally),\s+(we|I|the code)\b/i,
+  },
+
+  // 3. Conversational commentary & AI tells
+  {
+    category: 'AI commit/meta commentary',
+    pattern: /^\s*\/\/\s*Added\s+(by|to|for)\s+(fix|resolve|issue|bug|ai|claude|gemini|gpt|copilot)\b/i,
+  },
+  {
+    category: 'Conversational filler',
+    pattern: /^\s*\/\/\s*(Need to make sure|Make sure to|Just in case|Handle edge case)\b/i,
+  },
+  {
+    category: 'Conversational filler',
+    pattern: /^\s*\/\/\s*This ensures that\s+.*\s+(works|behaves|is)\s+(properly|correctly|seamlessly)\b/i,
+  },
+
+  // 4. Obvious syntax restatements (standalone trivial commentary)
+  {
+    category: 'Trivial loop restatement',
+    pattern: /^\s*\/\/\s*(Loop through|Loop over|Iterate over|Iterate through)\s+(all\s+)?\w+[\.;]?\s*$/i,
+  },
+  {
+    category: 'Trivial return restatement',
+    pattern: /^\s*\/\/\s*Return\s+(the\s+)?(result|value|response|data|status|output|true|false)[\.;]?\s*$/i,
+  },
+  {
+    category: 'Trivial instantiation restatement',
+    pattern: /^\s*\/\/\s*Create\s+(a\s+|the\s+)?new\s+instance(\s+of\s+\w+)?[\.;]?\s*$/i,
+  },
+  {
+    category: 'Trivial null-check restatement',
+    pattern: /^\s*\/\/\s*Check\s+if\s+\w+\s+is\s+(null|empty|valid|defined|undefined)[\.;]?\s*$/i,
+  },
+  {
+    category: 'Trivial increment restatement',
+    pattern: /^\s*\/\/\s*Increment\s+(\w+\s+)?by\s+\d+[\.;]?\s*$/i,
+  },
+];
+
+export const ESCAPE_HATCH = /\/\/\s*(comment-ok|slop-ok):\s*\S/;
+
+export function checkCommentLine(line, prevLine = '') {
+  if (!line.includes('//') && !line.includes('/*') && !line.includes('*')) return null;
+  if (ESCAPE_HATCH.test(line)) return null;
+  if (prevLine && ESCAPE_HATCH.test(prevLine)) return null;
+
+  for (const rule of RULES) {
+    if (rule.pattern.test(line)) {
+      return rule;
+    }
+  }
+  return null;
+}
+
+async function collectFiles(dir) {
+  const files = [];
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return files;
+  }
+
+  for (const entry of entries) {
+    if (entry.name.startsWith('.') || SKIP_DIRS.has(entry.name)) continue;
+
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await collectFiles(fullPath)));
+    } else if (entry.isFile()) {
+      const ext = path.extname(entry.name).toLowerCase();
+      if (TARGET_EXTENSIONS.has(ext) && !SKIP_FILES.has(entry.name)) {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  return files;
+}
+
+function isGenerated(content) {
+  const head = content.slice(0, 1024);
+  return (
+    head.includes('@generated') ||
+    head.includes('<auto-generated') ||
+    head.includes('/* Auto-generated') ||
+    head.includes('Generated by scripts/sync-assets.js') ||
+    head.includes('Generated by scripts/compile-browser.mjs')
+  );
+}
+
+export async function run() {
+  const files = (await collectFiles(srcRoot)).sort();
+  const findings = [];
+
+  for (const file of files) {
+    const content = await readFile(file, 'utf8');
+    if (isGenerated(content)) continue;
+
+    const lines = content.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const prevLine = i > 0 ? lines[i - 1] : '';
+      const matched = checkCommentLine(line, prevLine);
+      if (matched) {
+        findings.push({
+          file: path.relative(repoRoot, file).replace(/\\/g, '/'),
+          line: i + 1,
+          category: matched.category,
+          text: line.trim(),
+        });
+      }
+    }
+  }
+
+  return { files, findings };
+}
+
+// Direct CLI invocation
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  const { files, findings } = await run();
+  if (findings.length > 0) {
+    console.error(`\x1b[31mFound ${findings.length} AI slop / prohibited comment(s):\x1b[0m\n`);
+    for (const f of findings) {
+      console.error(`  \x1b[33m${f.file}:${f.line}\x1b[0m [\x1b[36m${f.category}\x1b[0m]`);
+      console.error(`    ${f.text}\n`);
+    }
+    console.error(
+      'Delete redundant comments or make code self-documenting.\n' +
+      'If a non-obvious comment is genuinely necessary, annotate with: // comment-ok: <reason>\n'
+    );
+    process.exit(1);
+  } else {
+    console.log(`\x1b[32mOK\x1b[0m Checked ${files.length} source files; zero AI slop comments found.`);
+    process.exit(0);
+  }
+}

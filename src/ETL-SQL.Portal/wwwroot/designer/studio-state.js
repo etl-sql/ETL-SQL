@@ -4,13 +4,16 @@
  * Edit the canonical source, then run: node .\scripts\sync-assets.js
  */
 
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-state.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Per-document and workbench state for ETL-SQL Studio.
  */
-
 export function createStudioDocumentContext(snapshot = null) {
     return {
         snapshot,
@@ -30,10 +33,10 @@ export function createStudioDocumentContext(snapshot = null) {
         lastValidDag: null,
         syncRevision: 0,
         previewedDatasetSignature: null,
-        resultsTrace: []
+        resultsTrace: [],
+        skipCrossFilters: false
     };
 }
-
 export function createStudioState(options = {}) {
     const workspaceFiles = options.workspaceFiles || [];
     const documents = options.documents ? [...options.documents] : [];
@@ -48,7 +51,6 @@ export function createStudioState(options = {}) {
             projection: 'split',
         });
     }
-
     return {
         workspaceFiles,
         catalogReports: [...(options.catalogReports || [])],
@@ -81,15 +83,16 @@ export function createStudioState(options = {}) {
         previewAsVocabulary: null,
     };
 }
-
 export function createStudioContextStore(documents, initialSnapshot = null) {
     const home = createStudioDocumentContext();
-    const forDocument = document => {
-        if (!document) return home;
+    const forDocument = (document) => {
+        if (!document)
+            return home;
         document.studioContext ||= createStudioDocumentContext();
         return document.studioContext;
     };
     documents.forEach(forDocument);
-    if (initialSnapshot && documents.length) forDocument(documents[0]).snapshot = initialSnapshot;
+    if (initialSnapshot && documents.length)
+        forDocument(documents[0]).snapshot = initialSnapshot;
     return { home, forDocument };
 }
