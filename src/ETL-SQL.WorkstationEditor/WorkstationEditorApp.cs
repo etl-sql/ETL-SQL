@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using System.Net;
 using System.Text.Json;
 using ETL_SQL.Analysis.Services;
@@ -685,6 +685,13 @@ public static class WorkstationEditorApp
                 statementText = scope.StatementText,
                 prefixScript = scope.PrefixScript,
                 statementLine = scope.StatementLine,
+                prefixEffects = (scope.PrefixEffects ?? []).Select(effect => new
+                {
+                    taskId = effect.TaskId,
+                    action = effect.Action,
+                    target = effect.Target,
+                    line = effect.Line,
+                }),
             }, JsonOptions);
         });
 
@@ -896,7 +903,18 @@ public static class WorkstationEditorApp
             WorkstationRunService runner,
             StudioHostLifecycleService lifecycle,
             CancellationToken cancellationToken) =>
-            Results.Json(await RunWithLifecycleAsync(request, runner, lifecycle, cancellationToken), JsonOptions));
+        {
+            try
+            {
+                return Results.Json(await RunWithLifecycleAsync(request, runner, lifecycle, cancellationToken), JsonOptions);
+            }
+            catch (OperationCanceledException)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    return Results.Json(new { error = "Designer run cancelled by client.", status = "Cancelled" }, JsonOptions, statusCode: StatusCodes.Status499ClientClosedRequest);
+                return Results.Json(new { error = "Designer run exceeded the timeout.", status = "Timeout" }, JsonOptions, statusCode: StatusCodes.Status408RequestTimeout);
+            }
+        });
 
         app.MapPost("/api/designer/analyze", async (AnalyzeRequest request, WorkstationAnalysisService analysis) =>
             Results.Json(await analysis.AnalyzeAsync(request), JsonOptions));
@@ -1003,7 +1021,18 @@ public static class WorkstationEditorApp
             WorkstationRunService runner,
             StudioHostLifecycleService lifecycle,
             CancellationToken cancellationToken) =>
-            Results.Json(await RunWithLifecycleAsync(request, runner, lifecycle, cancellationToken), JsonOptions));
+        {
+            try
+            {
+                return Results.Json(await RunWithLifecycleAsync(request, runner, lifecycle, cancellationToken), JsonOptions);
+            }
+            catch (OperationCanceledException)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    return Results.Json(new { error = "Designer run cancelled by client.", status = "Cancelled" }, JsonOptions, statusCode: StatusCodes.Status499ClientClosedRequest);
+                return Results.Json(new { error = "Designer run exceeded the timeout.", status = "Timeout" }, JsonOptions, statusCode: StatusCodes.Status408RequestTimeout);
+            }
+        });
 
         app.MapPost("/api/preview", async (PreviewRequest request, WorkstationPreviewService previewer, CancellationToken cancellationToken) =>
         {

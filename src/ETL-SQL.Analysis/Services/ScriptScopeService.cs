@@ -47,9 +47,10 @@ public sealed record ScriptScope(
     IReadOnlyList<ScopeTempTable> TempTables,
     string? StatementText = null,
     string? PrefixScript = null,
-    int StatementLine = 0)
+    int StatementLine = 0,
+    IReadOnlyList<PipelineRunEffect>? PrefixEffects = null)
 {
-    public static ScriptScope Failed(string error) => new(false, error, [], []);
+    public static ScriptScope Failed(string error) => new(false, error, [], [], null, null, 0, []);
 }
 
 public interface IScriptScopeProjection
@@ -148,14 +149,20 @@ public sealed class ScriptScopeService : IScriptScopeProjection
             ? Math.Clamp(statements[index + 1].Line - 1, start, lines.Length)
             : lines.Length;
 
+        var prefixScript = string.Join("\n", lines[..start]).Trim();
+        var prefixEffects = string.IsNullOrWhiteSpace(prefixScript)
+            ? []
+            : PipelineRunPlanService.ReadEffects(prefixScript);
+
         return new ScriptScope(
             true,
             null,
             collector.Variables,
             collector.TempTables,
             string.Join("\n", lines[start..end]).Trim(),
-            string.Join("\n", lines[..start]).Trim(),
-            statements[index].Line);
+            prefixScript,
+            statements[index].Line,
+            prefixEffects);
     }
 
     /// <summary>

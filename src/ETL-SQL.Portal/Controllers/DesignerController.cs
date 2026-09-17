@@ -392,6 +392,13 @@ public class DesignerController : ControllerBase
                 statementText = scope.StatementText,
                 prefixScript = scope.PrefixScript,
                 statementLine = scope.StatementLine,
+                prefixEffects = (scope.PrefixEffects ?? []).Select(effect => new
+                {
+                    taskId = effect.TaskId,
+                    action = effect.Action,
+                    target = effect.Target,
+                    line = effect.Line,
+                }),
             });
         }
         finally
@@ -814,7 +821,9 @@ public class DesignerController : ControllerBase
         }
         catch (OperationCanceledException)
         {
-            return StatusCode(StatusCodes.Status408RequestTimeout, new { error = "Designer run exceeded the 15 second timeout." });
+            if (cancellationToken.IsCancellationRequested)
+                return StatusCode(StatusCodes.Status499ClientClosedRequest, new { error = "Designer run cancelled by client.", status = "Cancelled" });
+            return StatusCode(StatusCodes.Status408RequestTimeout, new { error = "Designer run exceeded the timeout.", status = "Timeout" });
         }
         catch (InvalidOperationException ex)
         {

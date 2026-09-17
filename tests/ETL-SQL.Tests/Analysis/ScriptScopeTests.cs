@@ -284,4 +284,45 @@ public class ScriptScopeTests
         Assert.False(scope.Resolved);
         Assert.NotNull(scope.Error);
     }
+
+    [Fact]
+    public void AtLine_DetectsMutatingPrefixEffects()
+    {
+        const string scriptWithWrites = """
+            CREATE CONNECTION dest AS MOCKDB();
+
+            EXECUTE dest BEGIN
+                DELETE FROM dest.orders;
+            END;
+
+            SELECT 1 AS id INTO #tmp;
+
+            SELECT * FROM #tmp;
+            """;
+
+        var scope = _scope.AtLine(scriptWithWrites, 9);
+
+        Assert.True(scope.Resolved);
+        Assert.NotNull(scope.PrefixEffects);
+        var effect = Assert.Single(scope.PrefixEffects);
+        Assert.Equal("EXECUTE on", effect.Action);
+        Assert.Equal("dest", effect.Target);
+    }
+
+    [Fact]
+    public void AtLine_PrefixEffectsAreEmptyWhenPrefixOnlyHasStagingTables()
+    {
+        const string readOnlyScript = """
+            SELECT 1 AS id INTO #staging;
+            SELECT 2 AS val INTO #other;
+
+            SELECT * FROM #staging;
+            """;
+
+        var scope = _scope.AtLine(readOnlyScript, 4);
+
+        Assert.True(scope.Resolved);
+        Assert.NotNull(scope.PrefixEffects);
+        Assert.Empty(scope.PrefixEffects);
+    }
 }

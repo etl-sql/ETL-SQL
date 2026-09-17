@@ -61,12 +61,15 @@ public sealed class PortalDesignerRunService(
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(TimeoutSeconds));
 
+        var runId = !string.IsNullOrWhiteSpace(request.ClientRunId)
+            ? request.ClientRunId
+            : Guid.NewGuid().ToString("N");
         var sessionContext = new CliContext
         {
             Command = "run",
             BatchSize = RowCap,
             IsSilentMode = true,
-            SessionId = Guid.NewGuid().ToString("N")
+            SessionId = runId
         };
         ApplyParameters(sessionContext, request.Parameters);
 
@@ -104,7 +107,7 @@ public sealed class PortalDesignerRunService(
         }
 
         table ??= new DataTable();
-        return ToResponse(table, elapsedMs, result.ExecutionTree?.ToSnapshot(), RowCap, ResultByteCap);
+        return ToResponse(table, elapsedMs, result.ExecutionTree?.ToSnapshot(), RowCap, ResultByteCap, runId);
     }
 
     /// <summary>
@@ -204,7 +207,8 @@ public sealed class PortalDesignerRunService(
         long elapsedMs,
         object? pipeline,
         int rowCap,
-        int resultByteCap)
+        int resultByteCap,
+        string? runId = null)
     {
         rowCap = Math.Clamp(rowCap, 1, 1_000);
         resultByteCap = Math.Clamp(resultByteCap, 1_024, 16 * 1024 * 1024);
@@ -236,7 +240,7 @@ public sealed class PortalDesignerRunService(
             : capped
             ? $"Showing first {rowCap} rows; result was capped."
             : $"Returned {rows.Count} row{(rows.Count == 1 ? string.Empty : "s")}.";
-        return new RunDesignerResponse(columns, rows, rowCount, capped, elapsedMs, message, pipeline, byteCapped, bytesReturned);
+        return new RunDesignerResponse(columns, rows, rowCount, capped, elapsedMs, message, pipeline, byteCapped, bytesReturned, runId);
     }
 
     private static string? NormalizeResourceId(string? connectionRef)

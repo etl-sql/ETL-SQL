@@ -65,7 +65,8 @@ public record RunDesignerRequest(
     string? ConnectionRef = null,
     string? DocumentUri = null,
     Dictionary<string, string>? Parameters = null,
-    PreviewAsRequest? PreviewAs = null);
+    PreviewAsRequest? PreviewAs = null,
+    string? ClientRunId = null);
 
 /// <summary>
 /// The audience to evaluate row-level-security predicates as for this run.
@@ -97,7 +98,8 @@ public record RunDesignerResponse(
     /// <summary>Hierarchical execution-tree snapshot that drives the editor's Pipeline (DAG) tab.</summary>
     object? Pipeline = null,
     bool ByteCapped = false,
-    long BytesReturned = 0);
+    long BytesReturned = 0,
+    string? RunId = null);
 
 public record DesignerDataPreviewRequest(
     string SourceKind,

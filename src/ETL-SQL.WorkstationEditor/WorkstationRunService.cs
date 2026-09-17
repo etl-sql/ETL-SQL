@@ -52,12 +52,16 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
             $"SET MAX_SESSION_SIZE = {SessionCeilingBytes};\n" +
             script;
 
+        var runId = !string.IsNullOrWhiteSpace(request.ClientRunId)
+            ? request.ClientRunId
+            : Guid.NewGuid().ToString("N");
+
         var context = new CliContext
         {
             Command = "run",
             BatchSize = rowLimit,
             IsSilentMode = true,
-            SessionId = Guid.NewGuid().ToString("N")
+            SessionId = runId
         };
         ApplyParameters(context, request.Parameters);
 
@@ -135,7 +139,8 @@ public sealed class WorkstationRunService(IServiceProvider services, ETL_SQL.Com
             diagnostics,
             result.Messages.Select(m => m.Message).ToList(),
             result.ExecutionTree?.ToSnapshot(),
-            lineageList);
+            lineageList,
+            runId);
     }
 
     private static string? Redact(string? value) =>
@@ -292,7 +297,8 @@ public sealed record RunRequest(
     /// <summary>Answers to the script's INPUT prompts, keyed by name with or without '@'.</summary>
     Dictionary<string, string>? Parameters = null,
     /// <summary>The audience to evaluate row-level-security predicates as, or null to run as nobody.</summary>
-    PreviewAsAuthoringRequest? PreviewAs = null);
+    PreviewAsAuthoringRequest? PreviewAs = null,
+    string? ClientRunId = null);
 
 /// <param name="Label">What <c>@@CURRENT_USER</c> answers. A description of an audience, not a person.</param>
 public sealed record PreviewAsAuthoringRequest(
@@ -333,10 +339,11 @@ public sealed record RunResponse(
     IReadOnlyList<string> Messages,
     /// <summary>Hierarchical execution-tree snapshot that drives the editor's Pipeline (DAG) tab.</summary>
     object? Pipeline = null,
-    IReadOnlyList<LineageEntryDto>? Lineage = null)
+    IReadOnlyList<LineageEntryDto>? Lineage = null,
+    string? RunId = null)
 {
-    public static RunResponse Failed(string code, string message) =>
-        new(false, [], [], 0, false, 0, message, [new RunDiagnostic(0, 0, "Error", message, code)], []);
+    public static RunResponse Failed(string code, string message, string? runId = null) =>
+        new(false, [], [], 0, false, 0, message, [new RunDiagnostic(0, 0, "Error", message, code)], [], null, null, runId);
 }
 
 public sealed record RunDiagnostic(int Line, int Column, string Severity, string Message, string? Code = null);

@@ -278,6 +278,7 @@ interface RunDesignerRequest {
     documentUri?: string;
     parameters?: Record<string, string>;
     previewAs?: PreviewAsRequest;
+    clientRunId?: string;
 }
 
 interface RunDesignerResponse {
@@ -290,6 +291,7 @@ interface RunDesignerResponse {
     pipeline?: unknown;
     byteCapped: boolean;
     bytesReturned: number;
+    runId?: string;
 }
 
 interface ScriptDagDto {

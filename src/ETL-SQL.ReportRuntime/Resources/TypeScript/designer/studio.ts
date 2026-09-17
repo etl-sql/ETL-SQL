@@ -55,6 +55,8 @@ interface StudioRuntimeContext {
     lastValidDag: StudioDynamic | null;
     runAbort: AbortController | null;
     runActive: boolean;
+    currentRunId?: string | null;
+    stopRequested?: boolean;
     resultsTrace: RunTraceEvent[];
     diagnostics: RunDiagnostic[];
     dagRevision: number;
@@ -365,6 +367,7 @@ const _STUDIO_ICONS: Record<string, string> = {
     commands: '<path d="m4 5 3 3-3 3"/><path d="M8.5 11h4"/>',
     wizard: '<path d="M4 2.5a3.5 3.5 0 0 0 7 0v2H4z"/><path d="M6 6.5v4a1.5 1.5 0 0 0 3 0v-4"/><path d="M7.5 12v2"/>',
     close: '<path d="m4 4 8 8"/><path d="m12 4-8 8"/>',
+    stop: '<rect x="3.5" y="3.5" width="9" height="9" rx="1.5"/>',
     plus: '<path d="M8 3v10M3 8h10"/>',
     edit: '<path d="M11 2l3 3-9 9H2v-3l9-9z"/>',
     trash: '<polyline points="3 4 13 4"/><path d="M5 4V2h6v2M6 7v5M10 7v5M4 4l1 10h6l1-10"/>',
@@ -569,6 +572,9 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
                     <button type="button" class="etlsql-studio-btn btn-primary" data-action="run" title="Run Script (Ctrl+Shift+Enter)">
                         ${_studioIcon('run', 14)} Run
                     </button>
+                    <button type="button" class="etlsql-studio-btn btn-danger" data-action="stop" title="Stop Script Execution" style="display:none;">
+                        ${_studioIcon('stop', 14)} Stop
+                    </button>
                     ${opts.onExit ? `<button type="button" class="etlsql-studio-btn" data-action="exit" title="Exit Studio and stop this project host">
                         ${_studioIcon('close', 14)} Exit Studio
                     </button>` : ''}
@@ -654,6 +660,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
                             <button type="button" class="etlsql-studio-btn" data-action="code-format">${_studioIcon('format', 14)} Format</button>
                             <button type="button" class="etlsql-studio-btn" data-action="run-selected">${_studioIcon('runSelected', 14)} Run selected</button>
                             <button type="button" class="etlsql-studio-btn btn-primary" data-action="code-run">${_studioIcon('run', 14)} Run all</button>
+                            <button type="button" class="etlsql-studio-btn btn-danger" data-action="code-stop" title="Stop Script Execution" style="display:none;">${_studioIcon('stop', 14)} Stop</button>
                         </div>
                         <div class="etlsql-studio-editor-host etlsql-editor-container" data-editor-host></div>
                         <div class="etlsql-studio-results-host" data-results-host></div>
@@ -805,6 +812,38 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         }
     }
 
+    function updateRunControls() {
+        const doc = getActiveDoc();
+        const context = doc ? documentContext(doc) : null;
+        const isRunning = Boolean(context?.runActive);
+
+        const runBtn = queryElement<HTMLButtonElement>(shell, '[data-action="run"]');
+        const stopBtn = queryElement<HTMLButtonElement>(shell, '[data-action="stop"]');
+        const codeRunBtn = queryElement<HTMLButtonElement>(shell, '[data-action="code-run"]');
+        const codeStopBtn = queryElement<HTMLButtonElement>(shell, '[data-action="code-stop"]');
+        const runSelBtn = queryElement<HTMLButtonElement>(shell, '[data-action="run-selected"]');
+
+        if (runBtn) runBtn.style.display = isRunning ? 'none' : '';
+        if (stopBtn) stopBtn.style.display = isRunning ? '' : 'none';
+        if (codeRunBtn) codeRunBtn.style.display = isRunning ? 'none' : '';
+        if (codeStopBtn) codeStopBtn.style.display = isRunning ? '' : 'none';
+        if (runSelBtn) runSelBtn.disabled = isRunning;
+    }
+
+    function handleStopRun() {
+        const doc = getActiveDoc();
+        if (!doc) return;
+        const context = documentContext(doc);
+        if (context.runActive && context.runAbort) {
+            context.stopRequested = true;
+            context.runAbort.abort();
+            setDocumentTrace(doc, [
+                { type: 'status', status: 'running' },
+                { type: 'message', level: 'sys', text: `Stopping run... [Run ID: ${context.currentRunId || ''}]` },
+            ]);
+        }
+    }
+
     // One run path for "Run all" and "Run selected". Results, messages, the execution pipeline, and
     // performance all flow into the shared results panel as a trace, so a failure lands on the
     // Messages tab with the real reason instead of being painted as a success.
@@ -814,7 +853,11 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         const controller = new AbortController();
         context.runAbort = controller;
         context.runActive = true;
-        setDocumentTrace(doc, runStatusTrace(`Running ${label}…`, 'running'));
+        context.stopRequested = false;
+        const clientRunId = 'run_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+        context.currentRunId = clientRunId;
+        updateRunControls();
+        setDocumentTrace(doc, runStatusTrace(`Running ${label}… [Run ID: ${clientRunId}]`, 'running'));
         state.resultsPanel?.startElapsed();
         try {
             const response = await authFetch(apiBase + STUDIO_ROUTES.run, {
@@ -827,6 +870,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
                     connectionRef: typeof context.selectedSource === 'string'
                         ? context.selectedSource : context.selectedSource?.connection || null,
                     documentUri: doc.path || null,
+                    clientRunId,
                     // Answers to the report's INPUT prompts, when the caller collected them. Absent
                     // means "run it as written", which is what every other run has always meant.
                     ...(parameters ? { parameters } : {}),
@@ -837,26 +881,62 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
             });
 
             if (!response.ok) {
+                if (response.status === 499) {
+                    setDocumentTrace(doc, [
+                        { type: 'clear', resetHistory: true },
+                        { type: 'status', status: 'failed' },
+                        { type: 'message', level: 'warn', text: `Run cancelled by server (server-confirmed). [Run ID: ${clientRunId}]` },
+                        { type: 'done', exitCode: 1, status: 'Cancelled' },
+                    ]);
+                    return;
+                }
+                if (response.status === 408) {
+                    setDocumentTrace(doc, [
+                        { type: 'clear', resetHistory: true },
+                        { type: 'status', status: 'failed' },
+                        { type: 'message', level: 'error', text: `Run timed out on server. [Run ID: ${clientRunId}]` },
+                        { type: 'done', exitCode: 1, status: 'Timeout' },
+                    ]);
+                    return;
+                }
                 const reason = await _readErrorText(response);
                 setDocumentTrace(doc, [
                     { type: 'clear', resetHistory: true },
                     { type: 'status', status: 'failed' },
-                    { type: 'message', level: 'error', text: reason },
+                    { type: 'message', level: 'error', text: `${reason} [Run ID: ${clientRunId}]` },
                     { type: 'done', exitCode: 1, status: 'Failed' },
                 ]);
                 return;
             }
 
-            const data = await response.json() as RunResultPayload;
-            setDocumentTrace(doc, normalizeRunTrace(data, selection ?? script));
+            const data = await response.json() as RunResultPayload & { runId?: string };
+            const effectiveRunId = data.runId || clientRunId;
+            const trace = normalizeRunTrace(data, selection ?? script);
+            const doneIndex = trace.findIndex(e => e.type === 'done');
+            const runIdEvent: RunTraceEvent = { type: 'message', level: 'sys', text: `Run completed. [Run ID: ${effectiveRunId}]` };
+            if (doneIndex >= 0) {
+                trace.splice(doneIndex, 0, runIdEvent);
+            } else {
+                trace.push(runIdEvent);
+            }
+            setDocumentTrace(doc, trace);
         } catch (error) {
             if (error instanceof DOMException && error.name === 'AbortError') {
-                setDocumentTrace(doc, [
-                    { type: 'clear', resetHistory: true },
-                    { type: 'status', status: 'failed' },
-                    { type: 'message', level: 'warning', text: 'Run cancelled.' },
-                    { type: 'done', exitCode: 1, status: 'Cancelled' },
-                ]);
+                if (context.stopRequested) {
+                    setDocumentTrace(doc, [
+                        { type: 'clear', resetHistory: true },
+                        { type: 'status', status: 'failed' },
+                        { type: 'message', level: 'warn', text: `Run stopped by client. Cancellation is unconfirmed — server may have completed execution. [Run ID: ${clientRunId}]` },
+                        { type: 'done', exitCode: 1, status: 'Cancelled (Unconfirmed)' },
+                    ]);
+                } else {
+                    setDocumentTrace(doc, [
+                        { type: 'clear', resetHistory: true },
+                        { type: 'status', status: 'failed' },
+                        { type: 'message', level: 'warn', text: `Run cancelled. [Run ID: ${clientRunId}]` },
+                        { type: 'done', exitCode: 1, status: 'Cancelled' },
+                    ]);
+                }
                 return;
             }
             // A transport failure is a failed run. This once rendered a green
@@ -865,13 +945,14 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
             setDocumentTrace(doc, [
                 { type: 'clear', resetHistory: true },
                 { type: 'status', status: 'failed' },
-                { type: 'message', level: 'error', text: errorMessage(error) || 'The run did not complete.' },
+                { type: 'message', level: 'error', text: `${errorMessage(error) || 'The run did not complete.'} [Run ID: ${clientRunId}]` },
                 { type: 'done', exitCode: 1, status: 'Failed' },
             ]);
         } finally {
             context.runActive = false;
             if (context.runAbort === controller) context.runAbort = null;
             state.resultsPanel?.stopElapsed();
+            updateRunControls();
         }
     }
 
@@ -2575,6 +2656,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
             if (state.activeActivity) {
                 renderSidebarContent(state.activeActivity);
             }
+            updateRunControls();
             return;
         }
 
@@ -2617,6 +2699,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
                 renderSidebarContent(state.activeActivity);
             }
         }
+        updateRunControls();
     }
 
     async function closeDoc(docId: string) {
@@ -4455,6 +4538,12 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         state.enginePlanScope = scope?.resolved ? scope : null;
         const statement = scope?.resolved ? String(scope.statementText || '').trim() : '';
         const hasPrefix = Boolean(String(scope?.prefixScript || '').trim());
+        const prefixEffects: Array<{ taskId: string; action: string; target: string; line: number }> =
+            Array.isArray(scope?.prefixEffects) ? scope.prefixEffects : [];
+        const hasMutatingPrefix = prefixEffects.length > 0;
+        const effectSummary = prefixEffects
+            .map(e => `${_escapeHtml(e.action)} ${_escapeHtml(e.target || '')} (line ${e.line})`)
+            .join(', ');
 
         sidebarContent.innerHTML = `
             <section class="etlsql-studio-library-section">
@@ -4467,6 +4556,15 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
                 <div class="etlsql-studio-subhead"><div><strong>Query plan</strong><span>The engine's own EXPLAIN</span></div></div>
                 ${statement
                     ? `<code class="etlsql-studio-plan-target">${_escapeHtml(statement.length > 220 ? statement.slice(0, 220) + '…' : statement)}</code>
+                       ${hasMutatingPrefix ? `
+                       <div class="etlsql-studio-capability-state" style="border-left: 3px solid var(--portal-danger, #da3633); margin-block: 8px;" role="alert">
+                           <strong>Mutating prefix detected</strong>
+                           <p>The statements above line ${line} modify persistent data: ${effectSummary}.</p>
+                           <label style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; margin-top: 6px; cursor: pointer;">
+                               <input type="checkbox" data-allow-mutating-prefix>
+                               <span>Allow executing mutating prefix statements</span>
+                           </label>
+                       </div>` : ''}
                        <button type="button" class="etlsql-studio-btn is-primary" data-explain-statement>Explain this statement</button>
                        <p class="etlsql-studio-outline-note">${hasPrefix
                             ? 'The statements above the cursor run first, because they build the #temp tables the plan reads. EXPLAIN itself does not run the statement it explains.'
@@ -4485,6 +4583,19 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         const scope = state.enginePlanScope;
         const host = queryElement(sidebarContent, '[data-plan-host]');
         if (!doc || !scope || !host) return;
+
+        const prefixEffects: Array<{ taskId: string; action: string; target: string; line: number }> =
+            Array.isArray(scope.prefixEffects) ? scope.prefixEffects : [];
+        const hasMutatingPrefix = prefixEffects.length > 0;
+        const allowMutating = queryElement<HTMLInputElement>(sidebarContent, '[data-allow-mutating-prefix]')?.checked;
+
+        if (hasMutatingPrefix && !allowMutating) {
+            const effectSummary = prefixEffects
+                .map(e => `${e.action} ${e.target || ''} (line ${e.line})`)
+                .join(', ');
+            host.innerHTML = `<div class="etlsql-studio-capability-state" role="alert"><strong>Refused: Mutating prefix statements</strong><p>Statements above the cursor modify persistent data (${_escapeHtml(effectSummary)}). Check "Allow executing mutating prefix statements" to confirm explicit intent before planning.</p></div>`;
+            return;
+        }
 
         const statement = String(scope.statementText || '').trim().replace(/;\s*$/, '');
         if (!statement) return;
@@ -5926,12 +6037,28 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
     queryElement(shell, '[data-action="exit"]')?.addEventListener('click', handleExitStudio);
     queryElement(shell, '[data-action="code-format"]')?.addEventListener('click', handleFormatDocument);
     queryElement(shell, '[data-action="code-run"]')?.addEventListener('click', () => queryElement(shell, '[data-action="run"]')?.click());
+    queryElement(shell, '[data-action="stop"]')?.addEventListener('click', handleStopRun);
+    queryElement(shell, '[data-action="code-stop"]')?.addEventListener('click', () => queryElement(shell, '[data-action="stop"]')?.click());
     queryElement(shell, '[data-action="run-selected"]')?.addEventListener('click', async () => {
         const doc = getActiveDoc();
         if (!doc) return;
         const script = state.editorInstance?.getValue?.() || doc.content;
-        const selection = state.editorInstance?.getSelection?.() || state.editorInstance?.getCurrentStatement?.() || script;
-        await executeRun(doc, { script, selection, label: 'selection' });
+        const selectedText = String(state.editorInstance?.getSelection?.() || '').trim();
+        if (selectedText) {
+            await executeRun(doc, { script, selection: selectedText, label: 'selection' });
+            return;
+        }
+        const currentStatement = String(state.editorInstance?.getCurrentStatement?.() || '').trim();
+        if (currentStatement) {
+            await executeRun(doc, { script, selection: currentStatement, label: 'statement at cursor' });
+            return;
+        }
+        setDocumentTrace(doc, [
+            { type: 'clear', resetHistory: true },
+            { type: 'status', status: 'idle' },
+            { type: 'message', level: 'warn', text: 'No query or statement selected to run. Select SQL text or place cursor inside a statement.' },
+        ]);
+        _feedback.notify('No query or statement selected to run. Select SQL text or place cursor inside a statement.', { title: 'Execution Scope', tone: 'warning' });
     });
 
     queryElement(shell, '[data-action="theme"]')?.addEventListener('click', () => {

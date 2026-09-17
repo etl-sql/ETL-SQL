@@ -833,13 +833,34 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
             return;
         const script = editor.getValue();
         let runText = script;
+        let runLabel = 'script';
         if (scope === 'selection') {
-            runText = editor.getSelection?.() || editor.getCurrentStatement?.() || script;
+            const selected = editor.getSelection?.()?.trim();
+            if (selected) {
+                runText = selected;
+                runLabel = 'selection';
+            }
+            else {
+                const current = editor.getCurrentStatement?.()?.trim();
+                if (current) {
+                    runText = current;
+                    runLabel = 'statement at cursor';
+                }
+                else {
+                    resultsPanel.replay([
+                        { type: 'clear', resetHistory: true },
+                        { type: 'status', status: 'idle' },
+                        { type: 'message', level: 'warn', text: 'No query or statement selected to run. Select SQL text or place the cursor inside a statement.' },
+                    ]);
+                    return;
+                }
+            }
         }
+        const clientRunId = 'run_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
         resultsPanel.replay([
             { type: 'clear', resetHistory: true },
             { type: 'status', status: 'running' },
-            { type: 'message', level: 'sys', text: scope === 'selection' ? 'Running selected statement.' : 'Running script.' },
+            { type: 'message', level: 'sys', text: scope === 'selection' ? `Running ${runLabel}. [Run ID: ${clientRunId}]` : `Running script. [Run ID: ${clientRunId}]` },
         ]);
         setRunning(true);
         resultsPanel.startElapsed();
@@ -853,11 +874,26 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                     const res = await fetcher(opts.runUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ script, selection: runText, connectionRef: opts.connectionRef || null, documentUri: getDocumentUri(), confirmDestructive }),
+                        body: JSON.stringify({ script, selection: runText, connectionRef: opts.connectionRef || null, documentUri: getDocumentUri(), confirmDestructive, clientRunId }),
                         signal: runAbort.signal,
                     });
-                    if (!res?.ok)
+                    if (!res?.ok) {
+                        if (res.status === 499) {
+                            return {
+                                success: false,
+                                message: `Run cancelled by server (server-confirmed). [Run ID: ${clientRunId}]`,
+                                diagnostics: [{ line: 0, column: 0, severity: 'warn', message: `Run cancelled by server. [Run ID: ${clientRunId}]`, code: 'CANCELLED' }]
+                            };
+                        }
+                        if (res.status === 408) {
+                            return {
+                                success: false,
+                                message: `Run timed out on server. [Run ID: ${clientRunId}]`,
+                                diagnostics: [{ line: 0, column: 0, severity: 'error', message: `Run timed out on server. [Run ID: ${clientRunId}]`, code: 'TIMEOUT' }]
+                            };
+                        }
                         throw new Error(await res.text());
+                    }
                     return await res.json();
                 })();
             // The host refuses destructive statements until they are acknowledged. Ask once, then
@@ -871,7 +907,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 }
                 else {
                     resultsPanel.replay([
-                        { type: 'message', level: 'warn', text: 'Run cancelled — destructive statements not confirmed.' },
+                        { type: 'message', level: 'warn', text: `Run cancelled — destructive statements not confirmed. [Run ID: ${clientRunId}]` },
                         { type: 'done', exitCode: 1, status: 'Cancelled' },
                     ]);
                 }
@@ -882,8 +918,10 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
         catch (err) {
             if (err?.name === 'AbortError') {
                 resultsPanel.replay([
-                    { type: 'message', level: 'warn', text: 'Run cancelled.' },
-                    { type: 'done', exitCode: 1, status: 'Cancelled' },
+                    { type: 'clear', resetHistory: true },
+                    { type: 'status', status: 'failed' },
+                    { type: 'message', level: 'warn', text: `Run stopped by client. Cancellation is unconfirmed — server may have completed execution. [Run ID: ${clientRunId}]` },
+                    { type: 'done', exitCode: 1, status: 'Cancelled (Unconfirmed)' },
                 ]);
                 return;
             }

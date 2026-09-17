@@ -4530,6 +4530,20 @@ body.vscode-dark .etlsql-cw-missing-hint {
     font-weight: 600;
 }
 
+.etlsql-studio-btn.btn-danger,
+.etlsql-studio-btn.is-danger {
+    background: var(--portal-danger, #da3633);
+    border-color: var(--portal-danger, #da3633);
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.etlsql-studio-btn.btn-danger:hover,
+.etlsql-studio-btn.is-danger:hover {
+    background: #b62324;
+    border-color: #b62324;
+}
+
 .etlsql-studio-body {
     display: flex;
     flex: 1;

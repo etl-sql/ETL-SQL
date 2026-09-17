@@ -513,6 +513,34 @@ public class DesignerControllerTests
         Assert.Equal(script, unknownOp.Script);
     }
 
+    [Fact]
+    public void PipelineScope_IncludesPrefixEffectsWhenPrecedingStatementsModifyPersistentData()
+    {
+        var controller = new DesignerController();
+        const string script = """
+            CREATE CONNECTION staging AS MOCKDB();
+
+            EXECUTE staging BEGIN
+                DROP TABLE staging.stale;
+            END;
+
+            SELECT 1 AS id INTO #tmp;
+
+            SELECT * FROM #tmp;
+            """;
+
+        var result = Assert.IsType<OkObjectResult>(controller.PipelineScope(new PipelineScopeRequest(script, Id: null, Line: 9)));
+        var json = JsonSerializer.Serialize(result.Value);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        Assert.True(root.GetProperty("resolved").GetBoolean());
+        var prefixEffects = root.GetProperty("prefixEffects").EnumerateArray().ToList();
+        var effect = Assert.Single(prefixEffects);
+        Assert.Equal("EXECUTE on", effect.GetProperty("action").GetString());
+        Assert.Equal("staging", effect.GetProperty("target").GetString());
+    }
+
     private static IReadOnlyList<string> SplitLines(string script)
     {
         return script.Replace("\r\n", "\n", StringComparison.Ordinal)

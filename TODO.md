@@ -444,7 +444,7 @@ fixes or certify a production host.
   highlighting, and concise explanations linked to the canonical embedded language help. Let the
   author try a small hand edit and reopen the same helper without losing context. Respect a learned
   preference for Code view. Do not count the existing query-plan EXPLAIN as syntax instruction.
-- [ ] **P1 — Make execution scope and stopping explicit.** `run-selected` silently falls back to
+- [x] **P1 — Make execution scope and stopping explicit.** `run-selected` silently falls back to
   the current statement and then the entire script; `explainStatementAtCursor` submits every
   preceding statement before EXPLAIN, which can execute writes. The UI mentions the prefix but
   presents the action as Explain this statement. `executeRun` has an AbortController but no ordinary

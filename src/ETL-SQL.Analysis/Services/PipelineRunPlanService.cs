@@ -210,7 +210,7 @@ public sealed class PipelineRunPlanService : IPipelineRunPlanProjection
     /// including <c>EXECUTE</c>, whose body is pushed to the connection unparsed and so cannot be
     /// claimed to be read-only.</para>
     /// </summary>
-    private static IReadOnlyList<PipelineRunEffect> ReadEffects(string script)
+    public static IReadOnlyList<PipelineRunEffect> ReadEffects(string script)
     {
         if (!PipelineTaskAuthoringService.TryParse(script, out var ast, out _)) return [];
 
