@@ -112,8 +112,11 @@ export function sampleGridMarkup(sample, limit = STUDIO_SAMPLE_PREVIEW_ROWS) {
     const resolved = columns.length
         ? columns
         : (rows[0] && !Array.isArray(rows[0]) ? Object.keys(rows[0]) : []);
-    if (!resolved.length)
-        return noteMarkup('The sample came back with no columns.', 'warning');
+    if (!resolved.length) {
+        return noteMarkup(sample && Array.isArray(sample.rows) && sample.rows.length === 0
+            ? 'The query ran successfully but returned 0 rows.'
+            : 'The sample came back with no columns.', sample && Array.isArray(sample.rows) && sample.rows.length === 0 ? 'info' : 'warning');
+    }
     const cell = (row, column, index) => (Array.isArray(row) ? row[index] : row?.[column]);
     const count = sample?.rowCount ?? rows.length;
     return `<div class="etlsql-studio-sample-grid"><table>

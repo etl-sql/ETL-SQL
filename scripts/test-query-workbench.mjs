@@ -30,7 +30,8 @@ await assert.rejects(connectionPreamble('alias', 'fixture', {
 }), error => error.cause === failure && /Fixture request error/.test(error.message));
 
 assert.equal(firstResultSet(null), null);
-assert.equal(firstResultSet({ rows: [] }), null);
+assert.equal(firstResultSet({}), null);
+assert.deepEqual(firstResultSet({ rows: [] }), { columns: [], rows: [], rowCount: 0 });
 assert.deepEqual(firstResultSet({ columns: ['a'], rows: [{ a: 1 }], rowCount: 0 }),
     { columns: ['a'], rows: [{ a: 1 }], rowCount: 0 });
 assert.deepEqual(firstResultSet({ rows: [{ a: 1 }], trace: [{ type: 'resultset', data: { rows: [[2]] } }] }),

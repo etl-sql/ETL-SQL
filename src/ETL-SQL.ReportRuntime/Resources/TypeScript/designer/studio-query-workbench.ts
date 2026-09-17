@@ -32,6 +32,7 @@ export type WorkbenchRequest = (route: string, options: {
 type WorkbenchRoutes = Pick<typeof STUDIO_ROUTES, 'analyze' | 'complete' | 'hover' | 'parse' | 'run'>;
 export interface QueryWorkbenchOptions {
     connection?: string | null;
+    context?: 'remote' | 'engine';
     value?: string;
     routes?: WorkbenchRoutes;
     request?: WorkbenchRequest;
@@ -50,6 +51,35 @@ interface WorkbenchEditor {
 }
 
 /**
+ * Composes the script sent to the preview/run endpoint.
+ *
+ * Preserves the statement's execution context:
+ * - When `context` is 'remote' and a connection is given, wraps the query in
+ *   `EXECUTE <connection> BEGIN … END;` so remote SQL runs in the connection's native dialect,
+ *   faithful to the eventual statement the execution task will write.
+ * - When `context` is 'engine' (default), runs directly as an ETL-SQL statement.
+ * - In both cases, only the connection preamble (the CREATE CONNECTION declaration) is prepended;
+ *   preceding variables or staging statements are not executed.
+ */
+export function composeWorkbenchScript(
+    query: string,
+    preamble = '',
+    options: { connection?: string | null; context?: 'remote' | 'engine' } = {}
+): string {
+    const trimmed = String(query || '').trim().replace(/;+$/, '');
+    if (!trimmed) return '';
+    const cleanPreamble = preamble ? (preamble.endsWith('\n') ? preamble : `${preamble}\n`) : '';
+    if (options.context === 'remote' && options.connection) {
+        const body = trimmed
+            .split('\n')
+            .map(line => (line.length ? `    ${line}` : line))
+            .join('\n');
+        return `${cleanPreamble}EXECUTE ${options.connection}\nBEGIN\n${body}\nEND;`;
+    }
+    return `${cleanPreamble}${trimmed};`;
+}
+
+/**
  * Mounts the query editor without writing to the host document.
  * Parameter annotations also describe the emitted JavaScript to remaining checkJs callers.
  *
@@ -57,6 +87,7 @@ interface WorkbenchEditor {
  * @param {Object} options
  * @param {string|null} [options.connection] Alias the query runs against, or null. Used for the run
  *   and for the `CREATE CONNECTION` preamble, so an alias resolves as it will at run time.
+ * @param {'remote'|'engine'} [options.context] Execution context. 'remote' wraps in `EXECUTE <conn> BEGIN … END;`.
  * @param {string} [options.value] Starting query text.
  * @param {*} [options.routes] Route table; never a literal path.
  * @param {Function} [options.request] `(route, { body, fallbackError }) => Promise<json>` — the only
@@ -76,6 +107,7 @@ interface WorkbenchEditor {
  */
 export async function createQueryWorkbench(host: HTMLElement, {
     connection = null,
+    context = 'engine',
     value = '',
     routes,
     request,
@@ -87,9 +119,12 @@ export async function createQueryWorkbench(host: HTMLElement, {
     onChange = null,
     onSample = null,
 }: QueryWorkbenchOptions = {}): Promise<WorkbenchEditor> {
+    const defaultLabel = context === 'remote'
+        ? `Remote query · ${connection || 'no connection'}`
+        : `Query · ${connection || 'no connection'}`;
     host.innerHTML = `
         <div class="etlsql-studio-workbench-toolbar">
-            <span>${escapeHtml(label ?? `Query · ${connection || 'no connection'}`)}</span>
+            <span>${escapeHtml(label ?? defaultLabel)}</span>
             <button type="button" class="etlsql-studio-btn" data-workbench-run>${escapeHtml(runLabel)}</button>
         </div>
         <div class="etlsql-studio-workbench-editor" data-workbench-editor></div>
@@ -131,14 +166,22 @@ export async function createQueryWorkbench(host: HTMLElement, {
         /** @type {HTMLButtonElement} */ (runButton).disabled = true;
         setOutput('<div class="etlsql-studio-loading">Running…</div>');
         try {
-            // The query runs in the document's own context: its CREATE CONNECTION statements come
-            // along, so an alias the script declares resolves exactly as it will at run time.
-            const script = `${await connectionPreamble(connection, scriptText(), { request, routes })}${query};`;
-            const sample = firstResultSet(await request!(routes!.run, {
+            // The query runs through the same bounded semantic path as the eventual statement:
+            // its CREATE CONNECTION statement comes along, but preceding variables and staging
+            // statements are not silently executed. A remote-context task wraps its body in
+            // EXECUTE <connection> BEGIN … END; so native dialects execute faithfully.
+            const preamble = await connectionPreamble(connection, scriptText(), { request, routes });
+            const script = composeWorkbenchScript(query, preamble, { connection, context });
+            const result = await request!(routes!.run, {
                 body: { script, connectionRef: connection || null, documentUri: documentUri() || null },
                 fallbackError: 'The query could not be run.',
-            }));
-            if (!sample) throw new Error('The query ran but returned no result set.');
+            });
+            const sample = firstResultSet(result);
+            if (!sample) {
+                onSample?.(null);
+                setOutput(noteMarkup('The query ran successfully but returned no result set.', 'info'));
+                return;
+            }
             onSample?.(sample);
             setOutput(sampleGridMarkup(sample));
         } catch (error) {
@@ -204,7 +247,7 @@ export async function connectionPreamble(connection: string | null, script: stri
 
 /** Both run shapes: a flat `{ columns, rows }` payload, or the first resultset inside a trace. */
 export function firstResultSet(result: WorkbenchResult | null | undefined): SampleGridInput | null {
-    if (Array.isArray(result?.rows) && result.rows.length) {
+    if (Array.isArray(result?.rows)) {
         return {
             columns: result.columns || [],
             rows: result.rows,

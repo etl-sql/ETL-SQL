@@ -453,7 +453,7 @@ fixes or certify a production host.
   Show the actual scope/connection before side effects, require explicit intent for executing a
   mutating prefix, and expose Stop with server-confirmed status and run correlation for support.
   Cover no selection, failed statement resolution, a mutating prefix, and uncertain cancellation.
-- [ ] **P2 — Keep helper preview context faithful to the authored statement.** The execution-task
+- [x] **P2 — Keep helper preview context faithful to the authored statement.** The execution-task
   helper uses `createQueryWorkbench`, whose Run path sends a connection declaration plus the raw
   body; the saved task wraps that body in remote execution. `connectionPreamble` carries only one
   connection declaration, not preceding variables or staging statements. Clarify engine versus

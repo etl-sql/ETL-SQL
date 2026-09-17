@@ -30,6 +30,7 @@ assert.match(sampleGridMarkup({ rows: [{ inferred: null }] }), /<th>inferred<\/t
 assert.match(sampleGridMarkup({ columns: ['empty'], rows: [[null]] }), /<td><\/td>/);
 assert.match(sampleGridMarkup(null), /no columns/);
 assert.match(sampleGridMarkup({ rows: [[1]] }), /no columns/);
+assert.match(sampleGridMarkup({ rows: [] }), /returned 0 rows/);
 const limited = sampleGridMarkup({ columns: ['value'], rows: [[1], [2]], rowCount: 100 }, 1);
 assert.match(limited, /<td>1<\/td>/);
 assert.doesNotMatch(limited, /<td>2<\/td>/);

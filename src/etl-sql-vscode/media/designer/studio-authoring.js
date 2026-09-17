@@ -803,12 +803,14 @@ export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, r
                     return;
                 wizard.queryWorkbench = await createQueryWorkbench(host, {
                     connection: wizard.connection || '',
+                    context: 'engine',
                     routes: routes,
                     request,
                     editorTransport,
                     documentUri: () => getActiveDocument()?.path || 'untitled.rptsql',
                     scriptText: () => shell.getScriptText(),
                     value: wizard.query || `SELECT *\nFROM ${wizard.connection}.`,
+                    label: 'Dataset query · Engine context',
                     onChange: (value) => {
                         wizard.query = value;
                         const next = asButton(dialog.box.querySelector('[data-dialog-action="next"]'));
@@ -2409,10 +2411,11 @@ export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, r
                     + (taskKind === 'execution'
                         ? `<div class="etlsql-studio-workbench" data-task-workbench></div>`
                             + guidedNoteMarkup([
-                                'Run executes this block against ',
-                                { code: draft.connection },
-                                ' behind the connection declarations the script already makes, so an alias '
-                                    + 'resolves exactly as it will at run time.',
+                                'Run previews this block in ',
+                                { strong: 'remote context' },
+                                ' (',
+                                { code: `EXECUTE ${draft.connection} BEGIN … END` },
+                                ') using only this connection\'s declaration. Preceding script variables and #temp staging tables are not executed.',
                             ], 'info')
                         : '')
                     + mutationExplanationMarkup(editing
@@ -2442,13 +2445,14 @@ export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, r
                         return;
                     workbench = await createQueryWorkbench(workbenchEl, {
                         connection: draft.connection,
+                        context: 'remote',
                         routes: routes,
                         request,
                         editorTransport,
                         documentUri: () => getActiveDocument()?.path || 'untitled.etlsql',
                         scriptText: () => shell.getScriptText(),
                         value: draft.body,
-                        label: `Runs on ${draft.connection}`,
+                        label: `Remote query · ${draft.connection}`,
                         runLabel: 'Run this task',
                         onChange: (value) => { draft.body = value; },
                     });

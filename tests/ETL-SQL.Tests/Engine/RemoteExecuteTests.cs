@@ -6,6 +6,7 @@ using ETL_SQL.App;
 using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
@@ -198,7 +199,78 @@ SELECT COUNT(*) AS cnt FROM #emp;";
             await Task.CompletedTask;
         }
 
+        [Fact]
+        public async Task TestExecuteRemoteBlock_NativeDialect_PassesThroughWithoutEngineSyntaxError()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mockDb = new MockDatabaseSource();
+            evaluator.Connections["mock"] = mockDb;
 
+            // Vendor-specific syntax (PostgreSQL cast :: and jsonb) that would fail ETL-SQL engine parsing
+            var script = @"
+EXECUTE mock
+BEGIN
+    SELECT now()::date AS today, '{\""k\"": 1}'::jsonb AS data;
+END;";
+            var parser = new Parser(new Lexer(script).Tokenize());
+            var ast = parser.Parse();
+
+            await evaluator.Evaluate(ast);
+
+            Assert.Single(mockDb.ExecutedSql);
+            Assert.Contains("::", mockDb.ExecutedSql[0].Replace(" ", ""));
+            Assert.Contains("date", mockDb.ExecutedSql[0]);
+            Assert.Contains("jsonb", mockDb.ExecutedSql[0]);
+        }
+
+        [Fact]
+        public async Task TestBoundedHelperPreview_DoesNotSilentlyExecutePredecessors()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mockDb = new MockDatabaseSource();
+            evaluator.Connections["mock"] = mockDb;
+
+            // Standalone query referencing undeclared variable fails boundedly rather than silently resolving
+            var varScript = "SELECT @required_var;";
+            var varAst = new Parser(new Lexer(varScript).Tokenize()).Parse();
+            await Assert.ThrowsAsync<ExecutionException>(() => evaluator.Evaluate(varAst));
+
+            // Standalone query referencing undeclared staging connection fails boundedly
+            var connScript = "SELECT * FROM staging_conn.StagedTable;";
+            var connAst = new Parser(new Lexer(connScript).Tokenize()).Parse();
+            await Assert.ThrowsAsync<ExecutionException>(() => evaluator.Evaluate(connAst));
+
+            // Standalone query referencing unpopulated temp table has 0 rows (does not execute predecessor staging statements)
+            var stagedScript = "SELECT * FROM #staged_data;";
+            var stagedAst = new Parser(new Lexer(stagedScript).Tokenize()).Parse();
+            await evaluator.Evaluate(stagedAst);
+            Assert.Empty(evaluator.LastResult.Rows);
+        }
+
+        [Fact]
+        public async Task TestExecuteRemoteBlock_ValidZeroRowResult_ReturnsEmptyTableWithoutFailing()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mockDb = new MockDatabaseSource();
+            evaluator.Connections["mock"] = mockDb;
+
+            var emptyTable = new DataTable();
+            emptyTable.SetColumns(new[] { "id", "status" });
+            mockDb.SeededResults.Add(emptyTable);
+
+            var script = @"
+EXECUTE mock
+BEGIN
+    SELECT id, status FROM items WHERE 1 = 0;
+END;";
+            var parser = new Parser(new Lexer(script).Tokenize());
+            var ast = parser.Parse();
+
+            await evaluator.Evaluate(ast);
+
+            Assert.NotNull(evaluator.LastResult);
+            Assert.Equal(2, evaluator.LastResult.ColumnNames.Count);
+            Assert.Empty(evaluator.LastResult.Rows);
+        }
     }
-
 }
