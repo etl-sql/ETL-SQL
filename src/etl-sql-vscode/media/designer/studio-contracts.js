@@ -95,23 +95,66 @@ CREATE PAGE [Sample Dashboard] AS DASHBOARD (
     )
 );
 `,
-    etl: `-- Sample pipeline. MOCKDB is a built-in in-memory connector, so this needs no database.
--- Replace the connection below with your own when you are ready.
+    etl: `-- Sample ETL Pipeline Exercise
+--
+-- This exercise introduces the core ETL-SQL workflow:
+-- 1. Declare an in-memory sample connection (zero-trust, no external database needed).
+-- 2. Stage raw source data into an engine #temp table.
+-- 3. Inspect intermediate staged rows.
+-- 4. Transform and aggregate staged data in engine context.
+-- 5. Inspect aggregated summary rows.
+-- 6. Enforce a data quality invariant with ASSERT (includes a deliberate failure and repair).
+-- 7. Clean up temporary engine tables.
+
+-- Step 1. Declare Connection
+-- MOCKDB is a built-in in-memory connector with realistic sample data.
+-- No external database server, network access, or credentials are required.
 CREATE CONNECTION demo AS MOCKDB();
 
--- Stage the rows you care about in a #temp table.
+-- Step 2. Extract & Stage
+-- Stage source rows into an engine #temp table (#recent_sales).
+-- Staging in engine context isolates data transformations and keeps operations portable.
 SELECT SaleID, OrderDate, Region, Total
 INTO #recent_sales
 FROM demo.Orders
 WHERE Total > 100;
 
--- Summarise the staged rows.
+-- Step 3. Intermediate Inspection (Staged Rows)
+-- Inspect the staged data. Studio displays these rows in the results output grid.
+SELECT * FROM #recent_sales;
+
+-- Step 4. Transform & Summarize
+-- Aggregate staged rows in engine context to compute order counts and revenue by region.
 SELECT Region, COUNT(*) AS Orders, SUM(Total) AS Revenue
 INTO #revenue_by_region
 FROM #recent_sales
 GROUP BY Region;
 
+-- Step 5. Intermediate Inspection (Summary Rows)
+-- Inspect the aggregated regional results in the results grid.
 SELECT * FROM #revenue_by_region;
+
+-- Step 6. Data Quality Gate (Deliberate Validation Failure & Repair)
+-- Use ASSERT to enforce data contracts and invariants before downstream movement.
+-- If an assertion condition evaluates to false, ETL-SQL immediately halts execution.
+--
+-- EXERCISE:
+-- On your first run, this assertion deliberately fails because the sample batch contains
+-- fewer than 500 orders (~200 orders staged). Observe the failure in the output panel.
+--
+-- TO REPAIR:
+-- Change 500 to 50 in the ASSERT statement below (or uncomment the repair line), then Run again.
+ASSERT (SELECT COUNT(*) FROM #recent_sales) >= 500,
+    'Data quality check failed: Expected at least 500 orders, but batch volume was lower! (Deliberate exercise failure: repair by changing 500 to 50)';
+
+-- REPAIRED ASSERTION:
+-- ASSERT (SELECT COUNT(*) FROM #recent_sales) >= 50,
+--     'Data quality check failed: Staged order count is below expected minimum.';
+
+-- Step 7. Cleanup
+-- Release temporary engine memory by dropping #temp tables when processing completes.
+DROP TABLE #revenue_by_region;
+DROP TABLE #recent_sales;
 `,
     sql: `-- MOCKDB is a built-in in-memory connector, so this needs no database.
 CREATE CONNECTION demo AS MOCKDB();

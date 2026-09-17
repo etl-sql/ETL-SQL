@@ -42,8 +42,15 @@ public static class PortalInteractiveRunPolicy
         ExplainStatement { IsAnalyze: true } =>
             "EXPLAIN ANALYZE runs the query it explains. Use EXPLAIN here, or run the query itself.",
         ExplainStatement explain => Reject(explain.Query),
+        CreateConnectionStatement create when string.Equals(create.ConnectionType, "MOCKDB", StringComparison.OrdinalIgnoreCase) => null,
         CreateConnectionStatement =>
             "CREATE CONNECTION is not allowed here; pick a shared connection instead.",
+        AssertStatement => null,
+        AssertTableStatement => null,
+        DropTableStatement drop when IsTempTable(drop.TargetTable.TableName) => null,
+        DropTableStatement =>
+            "DROP TABLE is limited to temp tables (#name) in an interactive run.",
+        SectionLabelStatement => null,
         _ => $"{DescribeStatement(statement)} is not allowed in an interactive run."
     };
 

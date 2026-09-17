@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 using ETL_SQL.Data;
 using ETL_SQL.TestSupport;
 using ETL_SQL.WorkstationEditor;
@@ -854,6 +855,76 @@ public sealed class WorkstationEditorTests
         Assert.NotNull(result);
         Assert.True(result!.Success, result.Message);
         Assert.True(result.Rows.Count > 0, result.Message);
+    }
+
+    private static string SampleEtlScript()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "ETL-SQL.slnx")))
+            dir = dir.Parent;
+        Assert.NotNull(dir);
+
+        var contracts = Path.Combine(
+            dir!.FullName,
+            "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "studio-contracts.js");
+
+        var table = Regex.Match(
+            File.ReadAllText(contracts),
+            @"const\s+STUDIO_STARTER_SCRIPTS\s*=\s*Object\.freeze\(\{(?<body>.*?)\}\);",
+            RegexOptions.Singleline);
+        Assert.True(table.Success, "STUDIO_STARTER_SCRIPTS was not found in studio-contracts.js.");
+
+        var match = Regex.Match(table.Groups["body"].Value, @"etl:\s*`(?<script>[^`]*)`", RegexOptions.Singleline);
+        Assert.True(match.Success, "The etl starter script was not found in STUDIO_STARTER_SCRIPTS.");
+        return match.Groups["script"].Value;
+    }
+
+    [Fact]
+    public async Task DesignerRun_EtlStarterScript_InitialExecutionFailsOnDeliberateAssertion()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        var script = SampleEtlScript();
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var run = new HttpRequestMessage(HttpMethod.Post, "/api/designer/run");
+        run.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        run.Content = JsonContent.Create(new RunRequest(script, null, "sample_etl.etlsql", 100));
+
+        var response = await client.SendAsync(run);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<RunResponse>();
+        Assert.NotNull(result);
+        Assert.False(result!.Success);
+        var combinedError = result.Message ?? string.Join("; ", result.Diagnostics?.Select(d => d.Message) ?? []);
+        Assert.Contains("Data quality check failed: Expected at least 500 orders", combinedError);
+    }
+
+    [Fact]
+    public async Task DesignerRun_EtlStarterScript_RepairedExecutionSucceedsWithSummaryRows()
+    {
+        using var temp = new TempWorkspace();
+        await using var app = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            temp.Root, null, 0, false, "test-token"));
+        await app.StartAsync();
+
+        var repairedScript = SampleEtlScript().Replace(">= 500", ">= 50");
+        using var client = new HttpClient { BaseAddress = new Uri(WorkstationEditorApp.GetListeningUrl(app)) };
+        using var run = new HttpRequestMessage(HttpMethod.Post, "/api/designer/run");
+        run.Headers.Add("X-ETLSQL-EDITOR-TOKEN", "test-token");
+        run.Content = JsonContent.Create(new RunRequest(repairedScript, null, "sample_etl.etlsql", 100));
+
+        var response = await client.SendAsync(run);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<RunResponse>();
+        Assert.NotNull(result);
+        Assert.True(result!.Success, result.Message);
+        Assert.Contains("Region", result.Columns);
+        Assert.Contains("Orders", result.Columns);
+        Assert.Contains("Revenue", result.Columns);
+        Assert.True(result.Rows.Count > 0, "Expected regional summary rows from the repaired pipeline run.");
     }
 
     [Fact]

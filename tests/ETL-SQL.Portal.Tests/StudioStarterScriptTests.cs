@@ -1,6 +1,11 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Portal.Services;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.Portal.Tests;
@@ -206,5 +211,165 @@ public sealed class ConnectionWizardTestDataTests
 
         Assert.True(required.Count == 0,
             "MOCKDB must be usable with no configuration; mandatory options: " + string.Join(", ", required));
+    }
+}
+
+/// <summary>
+/// Verifies end-to-end execution of Studio starter scripts in Portal host via /api/designer/run,
+/// including deliberate validation failure, repair, and restricted learner execution.
+/// </summary>
+[Trait("Category", "Portal")]
+public sealed class StudioStarterScriptPortalExecutionTests : IClassFixture<StudioStarterScriptPortalExecutionTests.PracticePortalFactory>
+{
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private readonly PracticePortalFactory _factory;
+
+    public StudioStarterScriptPortalExecutionTests(PracticePortalFactory factory)
+    {
+        _factory = factory;
+    }
+
+    public sealed class PracticePortalFactory : PortalWebFactory
+    {
+        protected override void CustomizePortalConfig(PortalConfig config)
+        {
+            config.Studio.RoleCapabilities["Viewer"] =
+            [
+                StudioCapabilities.StudioAccess,
+                StudioCapabilities.ScriptRun
+            ];
+        }
+    }
+
+    private static string RepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "ETL-SQL.slnx")))
+            dir = dir.Parent;
+        Assert.NotNull(dir);
+        return dir!.FullName;
+    }
+
+    private static string GetEtlStarterScript()
+    {
+        var studioJs = File.ReadAllText(Path.Combine(
+            RepoRoot(), "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "studio-contracts.js"));
+        var match = Regex.Match(studioJs, @"etl:\s*`(?<script>[^`]*)`", RegexOptions.Singleline);
+        Assert.True(match.Success, "etl starter script not found in studio-contracts.js");
+        return match.Groups["script"].Value;
+    }
+
+    private static async Task<string> GetAdminTokenAsync(HttpClient client)
+    {
+        var initialRes = await client.PostAsJsonAsync("/api/auth/login", new { username = "admin", password = "Admin@12345!" });
+        if (initialRes.StatusCode == HttpStatusCode.OK)
+        {
+            var initialToken = (await initialRes.Content.ReadFromJsonAsync<JsonObject>(Json))!["token"]!.GetValue<string>();
+            var change = await SendAsync(client, HttpMethod.Post, initialToken, "/api/auth/change-password",
+                new { currentPassword = "Admin@12345!", newPassword = "Admin@Practice99!" });
+            Assert.Equal(HttpStatusCode.NoContent, change.StatusCode);
+        }
+        return await LoginAsync(client, "admin", "Admin@Practice99!");
+    }
+
+    private static async Task<string> LoginAsync(HttpClient client, string username, string password)
+    {
+        var response = await client.PostAsJsonAsync("/api/auth/login", new { username, password });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonObject>(Json);
+        return body!["token"]!.GetValue<string>();
+    }
+
+    private static async Task<HttpResponseMessage> SendAsync(
+        HttpClient client, HttpMethod method, string token, string url, object? body)
+    {
+        var request = new HttpRequestMessage(method, url);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        if (body is not null) request.Content = JsonContent.Create(body);
+        return await client.SendAsync(request);
+    }
+
+    [Fact]
+    public async Task EtlStarterScript_InitialExecution_FailsOnDeliberateAssertion()
+    {
+        using var client = _factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var script = GetEtlStarterScript();
+
+        var response = await SendAsync(client, HttpMethod.Post, adminToken, "/api/designer/run", new { script });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonObject>(Json);
+        var error = body!["error"]?.GetValue<string>();
+        Assert.NotNull(error);
+        Assert.Contains("Data quality check failed: Expected at least 500 orders", error);
+    }
+
+    [Fact]
+    public async Task EtlStarterScript_RepairedExecution_SucceedsAndReturnsSummaryRows()
+    {
+        using var client = _factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var script = GetEtlStarterScript().Replace(">= 500", ">= 50");
+
+        var response = await SendAsync(client, HttpMethod.Post, adminToken, "/api/designer/run", new { script });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonObject>(Json);
+        var rows = body!["rows"]!.AsArray();
+        Assert.True(rows.Count > 0, "Expected regional summary rows from the repaired pipeline run.");
+        var columns = body["columns"]!.AsArray().Select(c => c!.GetValue<string>()).ToList();
+        Assert.Contains("Region", columns);
+        Assert.Contains("Orders", columns);
+        Assert.Contains("Revenue", columns);
+        Assert.False(body["capped"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task EtlStarterScript_LearnerWithPracticePermissions_CanRunPipelineWithoutPublishPermission()
+    {
+        using var client = _factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var username = $"learner_{suffix}";
+
+        var createRes = await SendAsync(client, HttpMethod.Post, adminToken, "/api/admin/users", new
+        {
+            username,
+            email = $"{username}@test.local",
+            password = "Initial@Test1!",
+            role = "Viewer"
+        });
+        Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
+
+        var initialToken = await LoginAsync(client, username, "Initial@Test1!");
+        var changeRes = await SendAsync(client, HttpMethod.Post, initialToken, "/api/auth/change-password",
+            new { currentPassword = "Initial@Test1!", newPassword = "Learner@Pass123!" });
+        Assert.Equal(HttpStatusCode.NoContent, changeRes.StatusCode);
+
+        var learnerToken = await LoginAsync(client, username, "Learner@Pass123!");
+
+        // 1. Practice execution in Studio succeeds for learner
+        var repairedScript = GetEtlStarterScript().Replace(">= 500", ">= 50");
+        var runResponse = await SendAsync(client, HttpMethod.Post, learnerToken, "/api/designer/run", new { script = repairedScript });
+        Assert.Equal(HttpStatusCode.OK, runResponse.StatusCode);
+        var runBody = await runResponse.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.True(runBody!["rows"]!.AsArray().Count > 0);
+
+        // 2. Authoring / publishing operations are denied
+        var saveResponse = await SendAsync(client, HttpMethod.Post, learnerToken, "/api/designer/save", new
+        {
+            reportId = 1,
+            scriptText = repairedScript
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, saveResponse.StatusCode);
+
+        var publishResponse = await SendAsync(client, HttpMethod.Post, learnerToken, "/api/reports", new
+        {
+            folderId = 1,
+            name = "Unauthorized Publish",
+            scriptPath = "test.rptsql"
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, publishResponse.StatusCode);
     }
 }

@@ -167,7 +167,13 @@ public sealed class PortalDesignerRunService(
         }
 
         foreach (var statement in statements)
-            builder.AppendLine(statement.ToSql().Trim().TrimEnd(';') + ";");
+        {
+            var sql = statement.ToSql().Trim();
+            if (statement is SectionLabelStatement)
+                builder.AppendLine(sql);
+            else
+                builder.AppendLine(sql.TrimEnd(';') + ";");
+        }
 
         return builder.ToString();
     }

@@ -430,7 +430,7 @@ fixes or certify a production host.
   Escape/return behavior, keyboard document navigation, and alternatives for dragging/resizing.
   Verify the full create/edit/undo/save journey in both hosts, plus zoom and a screen-reader pass;
   the Portal-only dialog helper cannot repair unmarked shared dialogs.
-- [ ] **P2 — Give beginners a runnable ETL example as well as a dashboard.** Observed Home has
+- [x] **P2 — Give beginners a runnable ETL example as well as a dashboard.** Observed Home has
   one sample-data entry, for a dashboard; its ETL entry opens an empty script. The pipeline starter
   exists in `STUDIO_STARTER_SCRIPTS`, but Home does not offer that learning path. Provide a
   self-contained, policy-allowed ETL exercise with expected intermediate rows, a deliberate

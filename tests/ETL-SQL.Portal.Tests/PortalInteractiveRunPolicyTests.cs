@@ -37,11 +37,39 @@ public sealed class PortalInteractiveRunPolicyTests
         Assert.Contains("temp tables", Reject("SELECT UserID INTO m.Archive FROM m.Users;"));
 
     [Fact]
-    public void RejectsCreateConnection()
+    public void AllowsMockDbCreateConnection()
     {
-        // Connections are injected server-side from the ACL-gated shared catalog. A script-declared
-        // connection would carry its own credentials and bypass that check entirely.
-        Assert.Contains("shared connection", Reject("CREATE CONNECTION m AS MOCKDB();"));
+        // MOCKDB is in-memory and carries no credentials or external server access,
+        // so it is safe to declare in an interactive learning session.
+        Assert.Null(Reject("CREATE CONNECTION m AS MOCKDB();"));
+    }
+
+    [Fact]
+    public void RejectsCreateConnectionForRealDatabases()
+    {
+        // Real connections must be injected server-side from the ACL-gated shared catalog.
+        // A script-declared real connection would bypass that check.
+        Assert.Contains("shared connection", Reject("CREATE CONNECTION m AS POSTGRES('Server=localhost');"));
+    }
+
+    [Fact]
+    public void AllowsAssertAndAssertTable()
+    {
+        Assert.Null(Reject("ASSERT (SELECT COUNT(*) FROM #staging) > 0;"));
+        Assert.Null(Reject("ASSERT TABLE #actual MATCHES #expected;"));
+    }
+
+    [Fact]
+    public void AllowsDropTempTable()
+    {
+        // Session-local temp tables die with the session and are safe to drop.
+        Assert.Null(Reject("DROP TABLE #staging;"));
+    }
+
+    [Fact]
+    public void AllowsSectionLabel()
+    {
+        Assert.Null(Reject("stage_orders:"));
     }
 
     [Fact]
@@ -61,7 +89,7 @@ public sealed class PortalInteractiveRunPolicyTests
     [Fact]
     public void RejectionNamesTheStatement() =>
         // The message reaches the user in the Messages tab, so it should say what was refused.
-        Assert.Contains("Drop", Reject("DROP TABLE m.Users;"));
+        Assert.Contains("temp tables", Reject("DROP TABLE m.Users;"));
 
     [Fact]
     public void ExplainOfAnAllowedQuery_IsAllowed()

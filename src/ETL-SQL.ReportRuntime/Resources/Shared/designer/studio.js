@@ -2729,6 +2729,13 @@ export async function createStudioWorkbench(container, opts = {}) {
                                 <span>Opens a working dashboard on the built-in MOCKDB sample connector &mdash; no database or connection needed. The best place to start.</span>
                             </div>
                         </button>
+                        <button type="button" class="etlsql-home-action-card primary secondary" data-create-from-home="etl" data-seed-sample>
+                            <span class="etlsql-home-card-icon">${_studioIcon('catalog', 24)}</span>
+                            <div class="etlsql-home-card-info">
+                                <strong>Sample ETL pipeline</strong>
+                                <span>Guided multi-step pipeline on built-in MOCKDB: stage into #temp tables, transform, validate, and cleanup &mdash; runs in practice mode.</span>
+                            </div>
+                        </button>
                         <button type="button" class="etlsql-home-action-card workflow-dashboard" data-create-from-home="dashboard">
                             <span class="etlsql-home-card-icon"><span class="etlsql-home-dashboard-glyph" aria-hidden="true"><i></i><i></i><i></i></span></span>
                             <div class="etlsql-home-card-info">
