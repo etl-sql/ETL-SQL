@@ -1263,14 +1263,16 @@ function setPendingLazyRows(value) { _pendingLazyRows = value; }
 
 
 // ─── rt-detail.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-detail.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Detail surface placement, focus, announcements, and teardown.
  */
-
-
 // ════════════════════════════════════════════════════════════════════════
 // Detail surfaces
 //
@@ -1290,12 +1292,10 @@ function setPendingLazyRows(value) { _pendingLazyRows = value; }
 //              dismissed only by Escape, outside click, trigger toggle, opening
 //              another surface, or refresh/unmount.
 // ════════════════════════════════════════════════════════════════════════
-
-const DETAIL_VIEWPORT_MARGIN = 8;   // px kept clear at every viewport edge
-const DETAIL_ANCHOR_GAP = 10;       // px between the mark and the surface
-const DETAIL_HOVER_DELAY = 120;     // ms before a hover preview requests detail
+const DETAIL_VIEWPORT_MARGIN = 8; // px kept clear at every viewport edge
+const DETAIL_ANCHOR_GAP = 10; // px between the mark and the surface
+const DETAIL_HOVER_DELAY = 120; // ms before a hover preview requests detail
 const DETAIL_PREFERRED_SIDE = 'top';
-
 // Flip order per preferred side: the opposite side first, then the perpendicular
 // pair. Deterministic, so a given anchor/viewport always resolves the same way.
 const DETAIL_FLIP_ORDER = {
@@ -1304,7 +1304,6 @@ const DETAIL_FLIP_ORDER = {
     right: ['right', 'left', 'top', 'bottom'],
     left: ['left', 'right', 'top', 'bottom']
 };
-
 /**
  * Anchor-based placement. Pure: given an anchor rect, the surface size, and the
  * viewport, it returns the chosen side and the clamped position. Replaces the old
@@ -1320,22 +1319,21 @@ function computeDetailPlacement(anchor, size, viewport, options) {
     const opts = options || {};
     const gap = opts.gap == null ? DETAIL_ANCHOR_GAP : opts.gap;
     const margin = opts.margin == null ? DETAIL_VIEWPORT_MARGIN : opts.margin;
-    const preferred = DETAIL_FLIP_ORDER[opts.preferredSide] ? opts.preferredSide : DETAIL_PREFERRED_SIDE;
+    const preferred = DETAIL_FLIP_ORDER[opts.preferredSide]
+        ? opts.preferredSide
+        : DETAIL_PREFERRED_SIDE;
     const order = DETAIL_FLIP_ORDER[preferred];
     const rtl = !!opts.rtl;
-
     const minLeft = margin;
     const maxLeft = Math.max(margin, viewport.width - size.width - margin);
     const minTop = margin;
     const maxTop = Math.max(margin, viewport.height - size.height - margin);
-
     // Cross-axis alignment. Horizontally aligned surfaces align to the anchor's
     // leading edge, which is the right edge under RTL.
     const alignLeft = rtl
         ? anchor.right - size.width
         : anchor.left;
     const alignTop = anchor.top + (anchor.bottom - anchor.top) / 2 - size.height / 2;
-
     function candidate(side) {
         switch (side) {
             case 'top': return { left: alignLeft, top: anchor.top - size.height - gap };
@@ -1344,29 +1342,31 @@ function computeDetailPlacement(anchor, size, viewport, options) {
             default: return { left: anchor.left - size.width - gap, top: alignTop };
         }
     }
-
     function fits(side, pos) {
         // Only the placement axis decides fit; the cross axis is always shifted
         // into view, so a surface never leaves the viewport on that axis.
-        if (side === 'top') return pos.top >= margin;
-        if (side === 'bottom') return pos.top + size.height <= viewport.height - margin;
-        if (side === 'right') return pos.left + size.width <= viewport.width - margin;
+        if (side === 'top')
+            return pos.top >= margin;
+        if (side === 'bottom')
+            return pos.top + size.height <= viewport.height - margin;
+        if (side === 'right')
+            return pos.left + size.width <= viewport.width - margin;
         return pos.left >= margin;
     }
-
     let chosen = null;
     for (let i = 0; i < order.length; i++) {
         const pos = candidate(order[i]);
-        if (fits(order[i], pos)) { chosen = { side: order[i], pos: pos }; break; }
+        if (fits(order[i], pos)) {
+            chosen = { side: order[i], pos: pos };
+            break;
+        }
     }
-
     // Nothing fits (oversized content, or a very small viewport): keep the
     // preferred side and let the clamp below place it deterministically.
-    if (!chosen) chosen = { side: preferred, pos: candidate(preferred) };
-
+    if (!chosen)
+        chosen = { side: preferred, pos: candidate(preferred) };
     const left = Math.min(Math.max(chosen.pos.left, minLeft), maxLeft);
     const top = Math.min(Math.max(chosen.pos.top, minTop), maxTop);
-
     return {
         side: chosen.side,
         left: left,
@@ -1375,27 +1375,28 @@ function computeDetailPlacement(anchor, size, viewport, options) {
         shifted: left !== chosen.pos.left || top !== chosen.pos.top
     };
 }
-
 /** Normalises the manifest tooltip into the accepted surface contract. */
 function detailSurfaceMode(tooltip) {
-    if (!tooltip || typeof tooltip !== 'object') return null;
-    if (tooltip.mode === 'popover' || tooltip.mode === 'tooltip') return tooltip.mode;
+    if (!tooltip || typeof tooltip !== 'object')
+        return null;
+    if (tooltip.mode === 'popover' || tooltip.mode === 'tooltip')
+        return tooltip.mode;
     // Manifests published before `mode` existed: container and inline-with-visuals
     // carry visuals, so they are popovers; everything else is a transient tooltip.
-    if (tooltip.type === 'container') return 'popover';
-    if (tooltip.type === 'inline' && (tooltip.visuals || []).length > 0) return 'popover';
+    if (tooltip.type === 'container')
+        return 'popover';
+    if (tooltip.type === 'inline' && (tooltip.visuals || []).length > 0)
+        return 'popover';
     return 'tooltip';
 }
-
 // ── Shared announcement region ──────────────────────────────────────────
 // One polite region for every surface. Repeated identical messages are dropped
 // so a hover sweep across many marks cannot flood a screen reader.
-
 let detailLiveRegion = null;
 let detailLastAnnouncement = '';
-
 function announceDetail(message) {
-    if (!message || message === detailLastAnnouncement) return;
+    if (!message || message === detailLastAnnouncement)
+        return;
     detailLastAnnouncement = message;
     if (!detailLiveRegion) {
         detailLiveRegion = document.createElement('div');
@@ -1407,19 +1408,18 @@ function announceDetail(message) {
     }
     detailLiveRegion.textContent = message;
 }
-
 // ── The single open surface ─────────────────────────────────────────────
 // Opening a surface closes whatever was open, so only one detail surface exists
 // in the document at any time.
-
 let openDetail = null;
-
 function closeOpenDetail(restoreFocus) {
-    if (!openDetail) return;
+    if (!openDetail)
+        return;
     const closing = openDetail;
     openDetail = null;
     closing.generation++;
-    if (closing.element && closing.element.parentNode) closing.element.remove();
+    if (closing.element && closing.element.parentNode)
+        closing.element.remove();
     if (closing.trigger) {
         closing.trigger.removeAttribute('aria-describedby');
         closing.trigger.setAttribute('aria-expanded', 'false');
@@ -1427,12 +1427,12 @@ function closeOpenDetail(restoreFocus) {
     detailLastAnnouncement = '';
     window.removeEventListener('scroll', closing.reposition, true);
     window.removeEventListener('resize', closing.reposition);
-    if (closing.resizeObserver) closing.resizeObserver.disconnect();
+    if (closing.resizeObserver)
+        closing.resizeObserver.disconnect();
     if (restoreFocus && closing.pinned && closing.trigger && document.contains(closing.trigger)) {
         closing.trigger.focus();
     }
 }
-
 /**
  * Adds the non-hoverable fallback note for a visual's detail surface.
  *
@@ -1446,13 +1446,13 @@ function closeOpenDetail(restoreFocus) {
  */
 function appendDetailStaticNote(container, visual) {
     const summary = visual.tooltip && visual.tooltip.staticSummary;
-    if (!summary) return;
+    if (!summary)
+        return;
     const note = document.createElement('p');
     note.className = 'report-detail-static-note';
     note.textContent = summary;
     container.appendChild(note);
 }
-
 /**
  * Destroys every detail surface attached beneath `scope`. The surface element is
  * appended to document.body, so clearing the report root would otherwise orphan an
@@ -1461,14 +1461,16 @@ function appendDetailStaticNote(container, visual) {
  * @param {ParentNode} scope
  */
 function destroyDetailSurfaces(scope) {
-    if (!scope || typeof scope.querySelectorAll !== 'function') return;
+    if (!scope || typeof scope.querySelectorAll !== 'function')
+        return;
     scope.querySelectorAll('.chart-wrapper').forEach(wrapper => {
-        const handle = /** @type {EtlSqlVisualHost} */ (wrapper)._detailSurface;
-        if (handle && typeof handle.destroy === 'function') handle.destroy();
-        /** @type {EtlSqlVisualHost} */ (wrapper)._detailSurface = null;
+        const visualWrapper = /** @type {EtlSqlVisualHost} */ (wrapper);
+        const handle = visualWrapper._detailSurface;
+        if (handle && typeof handle.destroy === 'function')
+            handle.destroy();
+        visualWrapper._detailSurface = null;
     });
 }
-
 /**
  * Attaches the shared detail-surface controller to one rendered visual.
  *
@@ -1480,50 +1482,49 @@ function destroyDetailSurfaces(scope) {
  * @returns {{destroy: function}} handle used to tear the surface down on refresh/unmount
  */
 function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn) {
-    const tooltip = visual.tooltip;
-    const mode = detailSurfaceMode(tooltip);
-    if (!mode) return { destroy: function () { } };
-
+    const tooltipValue = visual.tooltip;
+    const mode = detailSurfaceMode(tooltipValue);
+    if (!mode)
+        return { destroy: function () { } };
+    const tooltip = tooltipValue;
     const surfaceId = 'detail-' + Math.random().toString(36).slice(2, 10);
     const isPopover = mode === 'popover';
     const columns = visual.columns || [];
     const rows = visual.rows || [];
-    const columnIndex = columns.findIndex(column =>
-        String(column).toLowerCase() === String(mappingColumn || '').toLowerCase());
-
+    const columnIndex = columns.findIndex(column => String(column).toLowerCase() === String(mappingColumn || '').toLowerCase());
     let hoverTimer = null;
     let localGeneration = 0;
     let destroyed = false;
-
     function rowContext(mark) {
         const rowIndex = Number(mark.dataset.rowIndex);
-        if (!Number.isInteger(rowIndex)) return null;
+        if (!Number.isInteger(rowIndex))
+            return null;
         const row = rows[rowIndex] || [];
         return String(row[columnIndex >= 0 ? columnIndex : 0] ?? '');
     }
-
     // ── Marks become discoverable and focusable ─────────────────────────
     // Hover-only detail is not acceptable, so every mark that exposes detail is
     // reachable by keyboard and carries an accessible name.
     function prepareMarks() {
         wrapper.querySelectorAll('[data-row-index]').forEach(mark => {
-            if (/** @type {HTMLElement} */ (mark).dataset.detailReady === '1') return;
-            /** @type {HTMLElement} */ (mark).dataset.detailReady = '1';
-            mark.setAttribute('tabindex', '0');
-            mark.setAttribute('role', 'button');
-            const context = rowContext(mark);
+            const markElement = /** @type {HTMLElement} */ (mark);
+            if (markElement.dataset.detailReady === '1')
+                return;
+            markElement.dataset.detailReady = '1';
+            markElement.setAttribute('tabindex', '0');
+            markElement.setAttribute('role', 'button');
+            const context = rowContext(markElement);
             const title = visual.title || visual.name || 'chart';
-            mark.setAttribute('aria-label', isPopover
+            markElement.setAttribute('aria-label', isPopover
                 ? `${context} — show details for ${title}`
                 : `${context} — ${title}`);
             if (isPopover) {
-                mark.setAttribute('aria-haspopup', 'dialog');
-                mark.setAttribute('aria-expanded', 'false');
+                markElement.setAttribute('aria-haspopup', 'dialog');
+                markElement.setAttribute('aria-expanded', 'false');
             }
         });
     }
     prepareMarks();
-
     function buildSurfaceElement(pinned) {
         const el = document.createElement('div');
         el.className = 'report-chart-tooltip' + (pinned ? ' report-chart-detail-pinned' : '');
@@ -1535,62 +1536,55 @@ function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn
             el.setAttribute('aria-modal', 'false');
             el.setAttribute('aria-label', `Details for ${visual.title || visual.name || 'chart'}`);
             el.tabIndex = -1;
-        } else {
+        }
+        else {
             el.setAttribute('role', 'tooltip');
         }
         return el;
     }
-
     function contextElement(value) {
         const context = document.createElement('div');
         context.className = 'report-chart-tooltip-context';
         context.textContent = String(value ?? '');
         return context;
     }
-
     function reposition(state) {
-        if (!state.element || !state.trigger || !document.contains(state.trigger)) return;
+        if (!state.element || !state.trigger || !document.contains(state.trigger))
+            return;
         const anchor = state.trigger.getBoundingClientRect();
         const size = state.element.getBoundingClientRect();
         const rtl = getComputedStyle(document.documentElement).direction === 'rtl' ||
             getComputedStyle(document.body).direction === 'rtl';
-        const placement = computeDetailPlacement(
-            { left: anchor.left, top: anchor.top, right: anchor.right, bottom: anchor.bottom },
-            { width: size.width, height: size.height },
-            { width: window.innerWidth, height: window.innerHeight },
-            { preferredSide: DETAIL_PREFERRED_SIDE, rtl: rtl });
+        const placement = computeDetailPlacement({ left: anchor.left, top: anchor.top, right: anchor.right, bottom: anchor.bottom }, { width: size.width, height: size.height }, { width: window.innerWidth, height: window.innerHeight }, { preferredSide: DETAIL_PREFERRED_SIDE, rtl: rtl });
         state.element.style.left = placement.left + 'px';
         state.element.style.top = placement.top + 'px';
         state.element.dataset.side = placement.side;
     }
-
     function open(mark, pinned) {
         closeOpenDetail(false);
-        if (destroyed) return null;
-
+        if (destroyed)
+            return null;
         const element = buildSurfaceElement(pinned);
         document.body.appendChild(element);
-
         const state = {
             element: element,
             trigger: mark,
             pinned: pinned,
             generation: ++localGeneration,
             owner: wrapper,
-            reposition: null,
+            reposition: () => { },
             resizeObserver: null
         };
         state.reposition = () => reposition(state);
         openDetail = state;
-
         if (!pinned) {
             // A transient surface describes its trigger; a pinned dialog does not,
             // so assistive technology is not told to read a whole dialog inline.
             mark.setAttribute('aria-describedby', surfaceId);
-        } else if (isPopover) {
+        }
+        else if (isPopover) {
             mark.setAttribute('aria-expanded', 'true');
         }
-
         window.addEventListener('scroll', state.reposition, true);
         window.addEventListener('resize', state.reposition);
         if (typeof ResizeObserver === 'function') {
@@ -1600,10 +1594,10 @@ function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn
         }
         return state;
     }
-
     function showText(mark, pinned) {
         const state = open(mark, pinned);
-        if (!state) return;
+        if (!state)
+            return;
         const value = rowContext(mark);
         state.element.replaceChildren(contextElement(value));
         if (tooltip.markdown || tooltip.text) {
@@ -1620,9 +1614,8 @@ function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn
             const row = Number.isInteger(rowIndex) ? (rows[rowIndex] || []) : [];
             const list = document.createElement('dl');
             list.className = 'report-chart-tooltip-fields';
-            fields.forEach(field => {
-                const index = columns.findIndex(column =>
-                    String(column).toLowerCase() === String(field.name).toLowerCase());
+            fields.forEach((field) => {
+                const index = columns.findIndex(column => String(column).toLowerCase() === String(field.name).toLowerCase());
                 const term = document.createElement('dt');
                 term.textContent = String(field.name);
                 const detail = document.createElement('dd');
@@ -1635,10 +1628,8 @@ function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn
         }
         reposition(state);
     }
-
     function renderDetailContent(state, value, sourceManifest) {
         state.element.replaceChildren(contextElement(value));
-
         if (tooltip.type === 'container') {
             const ref = String(tooltip.containerRef || '').toLowerCase();
             const containerDef = (sourceManifest.containers || [])
@@ -1651,7 +1642,6 @@ function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn
             announceDetail(`Details for ${value} loaded.`);
             return;
         }
-
         // Inline form: optional markdown, then each named visual rendered in order.
         // This is the path that previously parsed and serialized but rendered nothing.
         if (tooltip.markdown) {
@@ -1660,25 +1650,23 @@ function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn
             md.textContent = tooltip.markdown;
             state.element.appendChild(md);
         }
-
         const names = tooltip.visuals || [];
         const byName = new Map((sourceManifest.visuals || [])
             .map(v => [String(v.name).toLowerCase(), v]));
         let rendered = 0;
-        names.forEach(name => {
+        names.forEach((name) => {
             const def = byName.get(String(name).toLowerCase());
-            if (!def) return;
+            if (!def)
+                return;
             renderVisual(state.element, def, pageTheme, sourceManifest);
             rendered++;
         });
-
         if (!rendered && !tooltip.markdown) {
             appendUnavailable(state, `Details for ${value} are unavailable.`);
             return;
         }
         announceDetail(`Details for ${value} loaded.`);
     }
-
     function appendUnavailable(state, message) {
         const unavailable = document.createElement('div');
         unavailable.className = 'report-chart-tooltip-loading';
@@ -1686,13 +1674,12 @@ function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn
         state.element.appendChild(unavailable);
         announceDetail(message);
     }
-
     function showDetail(mark, pinned) {
         const state = open(mark, pinned);
-        if (!state) return;
+        if (!state)
+            return;
         const value = rowContext(mark);
         const generation = state.generation;
-
         state.element.replaceChildren(contextElement(value));
         const loading = document.createElement('div');
         loading.className = 'report-chart-tooltip-loading';
@@ -1700,58 +1687,73 @@ function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn
         state.element.appendChild(loading);
         reposition(state);
         announceDetail(`Loading details for ${value}.`);
-
-        if (pinned) state.element.focus();
-
+        if (pinned)
+            state.element.focus();
         // Only the explicitly mapped, non-secret row value flows into the refresh.
         postParameters({ '@hover_value': value }, true).then(refreshed => {
             // Generation fencing: a response for a superseded row, a closed surface,
             // or a destroyed attachment never replaces current detail.
-            if (destroyed || openDetail !== state || state.generation !== generation) return;
-            renderDetailContent(state, value, refreshed || manifest);
+            if (destroyed || openDetail !== state || state.generation !== generation)
+                return;
+            const refreshedManifest = refreshed && typeof refreshed === 'object'
+                ? refreshed
+                : manifest;
+            renderDetailContent(state, value, refreshedManifest);
             reposition(state);
         }).catch(() => {
-            if (destroyed || openDetail !== state || state.generation !== generation) return;
+            if (destroyed || openDetail !== state || state.generation !== generation)
+                return;
             state.element.replaceChildren(contextElement(value));
             appendUnavailable(state, `Details for ${value} could not be loaded.`);
             reposition(state);
         });
     }
-
     function showFor(mark, pinned) {
-        if (isPopover) showDetail(mark, pinned);
-        else showText(mark, pinned);
+        if (isPopover)
+            showDetail(mark, pinned);
+        else
+            showText(mark, pinned);
     }
-
     function isOwnTrigger(mark) {
         return openDetail && openDetail.trigger === mark;
     }
-
     // ── Pointer: hover previews, click pins ─────────────────────────────
-
     function onPointerOver(event) {
         // Coarse pointers get no hover preview; tap opens the pinned surface instead.
-        if (event.pointerType === 'touch') return;
-        const mark = event.target.closest('[data-row-index]');
-        if (!mark || !wrapper.contains(mark)) return;
-        if (openDetail && openDetail.pinned) return; // a pinned surface owns the screen
-        if (isOwnTrigger(mark)) return;
-        if (hoverTimer) clearTimeout(hoverTimer);
-        if (isPopover) hoverTimer = setTimeout(() => showFor(mark, false), DETAIL_HOVER_DELAY);
-        else showFor(mark, false);
+        if (event.pointerType === 'touch')
+            return;
+        const mark = event.target?.closest('[data-row-index]');
+        if (!mark || !wrapper.contains(mark))
+            return;
+        if (openDetail && openDetail.pinned)
+            return; // a pinned surface owns the screen
+        if (isOwnTrigger(mark))
+            return;
+        if (hoverTimer)
+            clearTimeout(hoverTimer);
+        if (isPopover)
+            hoverTimer = setTimeout(() => showFor(mark, false), DETAIL_HOVER_DELAY);
+        else
+            showFor(mark, false);
     }
-
     function onPointerLeave() {
-        if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+        if (hoverTimer) {
+            clearTimeout(hoverTimer);
+            hoverTimer = null;
+        }
         // Deterministic: an unpinned surface never bridges to the pointer, so leaving
         // the mark always dismisses it. A pinned surface is unaffected.
-        if (openDetail && !openDetail.pinned && openDetail.owner === wrapper) closeOpenDetail(false);
+        if (openDetail && !openDetail.pinned && openDetail.owner === wrapper)
+            closeOpenDetail(false);
     }
-
     function onClick(event) {
-        const mark = event.target.closest('[data-row-index]');
-        if (!mark || !wrapper.contains(mark)) return;
-        if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+        const mark = event.target?.closest('[data-row-index]');
+        if (!mark || !wrapper.contains(mark))
+            return;
+        if (hoverTimer) {
+            clearTimeout(hoverTimer);
+            hoverTimer = null;
+        }
         // Trigger reactivation toggles consistently for both surfaces.
         if (openDetail && openDetail.pinned && openDetail.trigger === mark) {
             closeOpenDetail(true);
@@ -1759,11 +1761,12 @@ function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn
         }
         showFor(mark, true);
     }
-
     function onKeyDown(event) {
-        if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
-        const mark = event.target.closest('[data-row-index]');
-        if (!mark || !wrapper.contains(mark)) return;
+        if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar')
+            return;
+        const mark = event.target?.closest('[data-row-index]');
+        if (!mark || !wrapper.contains(mark))
+            return;
         event.preventDefault(); // Space must not scroll the page
         if (openDetail && openDetail.pinned && openDetail.trigger === mark) {
             closeOpenDetail(true);
@@ -1771,36 +1774,42 @@ function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn
         }
         showFor(mark, true);
     }
-
     function onFocusIn(event) {
-        const mark = event.target.closest('[data-row-index]');
-        if (!mark || !wrapper.contains(mark)) return;
-        if (openDetail && openDetail.pinned) return;
-        if (isOwnTrigger(mark)) return;
+        const mark = event.target?.closest('[data-row-index]');
+        if (!mark || !wrapper.contains(mark))
+            return;
+        if (openDetail && openDetail.pinned)
+            return;
+        if (isOwnTrigger(mark))
+            return;
         // Keyboard focus shows the transient surface; activation pins it.
-        if (!isPopover) showFor(mark, false);
+        if (!isPopover)
+            showFor(mark, false);
     }
-
     function onFocusOut(event) {
-        if (!openDetail || openDetail.pinned || openDetail.owner !== wrapper) return;
-        if (event.relatedTarget && wrapper.contains(event.relatedTarget)) return;
+        if (!openDetail || openDetail.pinned || openDetail.owner !== wrapper)
+            return;
+        if (event.relatedTarget && wrapper.contains(event.relatedTarget))
+            return;
         closeOpenDetail(false);
     }
-
     wrapper.addEventListener('pointerover', onPointerOver);
     wrapper.addEventListener('pointerleave', onPointerLeave);
     wrapper.addEventListener('click', onClick);
     wrapper.addEventListener('keydown', onKeyDown);
     wrapper.addEventListener('focusin', onFocusIn);
     wrapper.addEventListener('focusout', onFocusOut);
-
     return {
         /** Closes any surface this attachment owns and detaches every listener. */
         destroy: function () {
             destroyed = true;
-            if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+            if (hoverTimer) {
+                clearTimeout(hoverTimer);
+                hoverTimer = null;
+            }
             localGeneration++;
-            if (openDetail && openDetail.owner === wrapper) closeOpenDetail(false);
+            if (openDetail && openDetail.owner === wrapper)
+                closeOpenDetail(false);
             wrapper.removeEventListener('pointerover', onPointerOver);
             wrapper.removeEventListener('pointerleave', onPointerLeave);
             wrapper.removeEventListener('click', onClick);
@@ -1810,24 +1819,24 @@ function attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn
         }
     };
 }
-
 function getOpenDetail() { return openDetail; }
 function setOpenDetail(value) { openDetail = value; }
 
 
-
 // ─── rt-charts.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-charts.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Native SVG charts, toolbox, zoom, and responsive layout.
  */
-
 let _nativeLayoutObservers = [];
 const _nativeLayoutTimers = new Map();
 const _nativeLayoutRequests = new Map();
-
 // Chart-type visuals are rendered server-side into `nativeSvg`. A manifest that reaches
 // the browser without one — an older snapshot, a lightweight/externalized manifest, an
 // unrecognized visual type — has no payload the runtime can draw. Degrade to an explicit,
@@ -1841,7 +1850,6 @@ function renderMissingChartPayload(container, visual) {
     container.appendChild(el);
     return el;
 }
-
 // ── Interaction contract ──────────────────────────────────────────────
 //
 // The server resolves every interaction decision — which column a selection is keyed on, which
@@ -1853,10 +1861,10 @@ function renderMissingChartPayload(container, visual) {
 // snapshots, cached artifacts — which carry the old `visual.interactions` map instead. It is the
 // only place left that reads `visualType`, and it is reached only when `visual.interaction` is
 // absent.
-
 function resolveInteraction(visual) {
     const resolved = visual && visual.interaction;
-    if (!resolved) return legacyInteraction(visual || {});
+    if (!resolved)
+        return legacyInteraction((visual || {}));
     return {
         key: resolved.key || null,
         valueKey: resolved.valueKey || null,
@@ -1866,12 +1874,11 @@ function resolveInteraction(visual) {
         extent: null
     };
 }
-
 function legacyInteraction(visual) {
-    const legacy = visual.interactions || {};
+    const legacy = (visual.interactions || {});
     const mode = String(legacy['ON_SELECT'] || '').toUpperCase();
     const active = !!mode && mode !== 'NONE';
-    const options = visual.options || {};
+    const options = (visual.options || {});
     const key = legacy['MATCHING'] || options['mapping:x'] || options['mapping:label'] ||
         options['mapping:name'] || options['mapping:region'] || options['mapping:y'] ||
         (visual.columns || [])[0] || null;
@@ -1890,11 +1897,9 @@ function legacyInteraction(visual) {
             : null
     };
 }
-
 function crossFilterActive(interaction) {
     return interaction.select !== 'NONE' && !!interaction.key;
 }
-
 function renderNativeSvg(container, visual, manifest, pageTheme) {
     const wrapper = document.createElement('div');
     wrapper.className = 'chart-wrapper native-chart-wrapper';
@@ -1905,41 +1910,36 @@ function renderNativeSvg(container, visual, manifest, pageTheme) {
         return;
     }
     wrapper.appendChild(document.importNode(svg, true));
-    if (visual.layout?.tier) wrapper.dataset.layoutTier = String(visual.layout.tier).toUpperCase();
+    if (visual.layout?.tier)
+        wrapper.dataset.layoutTier = String(visual.layout.tier).toUpperCase();
     container.appendChild(wrapper);
     attachNativeZoomSlider(container, wrapper, visual);
     attachNativeChartToolbox(container, wrapper, visual);
     attachProgressiveReveal(wrapper, visual);
     observeNativeLayout(wrapper, visual);
-
     const clickActions = actionsFor(visual, 'ON_CLICK');
     const interaction = resolveInteraction(visual);
     const crossFilter = crossFilterActive(interaction);
     const mappingColumn = interaction.key;
     let activeRow = null;
-
     applyNativeHighlight(wrapper, visual, interaction);
-
     // The wrapper owns its detail surface: re-rendering or unmounting the visual
     // tears it down, so a surface can never outlive the marks it is anchored to.
     const detailSurface = attachDetailSurface(wrapper, visual, manifest, pageTheme, mappingColumn);
     /** @type {EtlSqlVisualHost} */ (wrapper)._detailSurface = detailSurface;
     appendDetailStaticNote(container, visual);
-
-    
     const vopts = visual.options || {};
     const crosshairOpt = (vopts['CROSSHAIR'] || '').toUpperCase();
     const crosshairAxis = (vopts['CROSSHAIR_AXIS'] || 'BOTH').toUpperCase();
     const crosshairColor = vopts['CROSSHAIR_COLOR'] || '#94a3b8';
     const crosshairDash = vopts['CROSSHAIR_DASH'] || '4 4';
     const linkTooltipGroup = vopts['LINK_TOOLTIP'] ? vopts['LINK_TOOLTIP'].trim() : null;
-
     if (linkTooltipGroup) {
         wrapper.dataset.linkTooltip = linkTooltipGroup;
     }
-
     const svgEl = wrapper.querySelector('svg');
     if (svgEl && (crosshairOpt === 'ON' || crosshairOpt === 'TRUE' || vopts['CROSSHAIR_AXIS'] || linkTooltipGroup)) {
+        const chartSvg = svgEl;
         let crosshairG = svgEl.querySelector('.plot-crosshair-group');
         if (!crosshairG) {
             crosshairG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -1948,23 +1948,22 @@ function renderNativeSvg(container, visual, manifest, pageTheme) {
             /** @type {HTMLElement} */ (crosshairG).style.display = 'none';
             svgEl.appendChild(crosshairG);
         }
-
         const lineX = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         lineX.setAttribute('class', 'plot-crosshair-x');
         lineX.setAttribute('stroke', crosshairColor);
         lineX.setAttribute('stroke-dasharray', crosshairDash);
         lineX.setAttribute('stroke-width', '1');
-        if (crosshairAxis === 'X' || crosshairAxis === 'BOTH') crosshairG.appendChild(lineX);
-
+        if (crosshairAxis === 'X' || crosshairAxis === 'BOTH')
+            crosshairG.appendChild(lineX);
         const lineY = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         lineY.setAttribute('class', 'plot-crosshair-y');
         lineY.setAttribute('stroke', crosshairColor);
         lineY.setAttribute('stroke-dasharray', crosshairDash);
         lineY.setAttribute('stroke-width', '1');
-        if (crosshairAxis === 'Y' || crosshairAxis === 'BOTH') crosshairG.appendChild(lineY);
-
+        if (crosshairAxis === 'Y' || crosshairAxis === 'BOTH')
+            crosshairG.appendChild(lineY);
         function updateCrosshair(svgPoint) {
-            const bbox = svgEl.viewBox?.baseVal || { x: 0, y: 0, width: svgEl.clientWidth || 600, height: svgEl.clientHeight || 400 };
+            const bbox = chartSvg.viewBox?.baseVal || { x: 0, y: 0, width: chartSvg.clientWidth || 600, height: chartSvg.clientHeight || 400 };
             /** @type {HTMLElement} */ (crosshairG).style.display = '';
             if (lineX) {
                 lineX.setAttribute('x1', String(svgPoint.x));
@@ -1979,23 +1978,19 @@ function renderNativeSvg(container, visual, manifest, pageTheme) {
                 lineY.setAttribute('x2', String((bbox.x || 0) + (bbox.width || 600)));
             }
         }
-
         function hideCrosshair() {
             /** @type {HTMLElement} */ (crosshairG).style.display = 'none';
         }
-
         /** @type {EtlSqlVisualHost} */ (wrapper)._updateCrosshair = updateCrosshair;
         /** @type {EtlSqlVisualHost} */ (wrapper)._hideCrosshair = hideCrosshair;
-
-        svgEl.addEventListener('pointermove', event => {
-            const pt = svgEl.createSVGPoint();
+        chartSvg.addEventListener('pointermove', event => {
+            const pt = chartSvg.createSVGPoint();
             pt.x = event.clientX;
             pt.y = event.clientY;
-            const ctm = svgEl.getScreenCTM();
+            const ctm = chartSvg.getScreenCTM();
             if (ctm) {
                 const svgPt = pt.matrixTransform(ctm.inverse());
                 updateCrosshair(svgPt);
-
                 if (linkTooltipGroup) {
                     const linkedWrappers = document.querySelectorAll(`[data-link-tooltip="${CSS.escape(linkTooltipGroup)}"]`);
                     linkedWrappers.forEach(w => {
@@ -2006,8 +2001,7 @@ function renderNativeSvg(container, visual, manifest, pageTheme) {
                 }
             }
         });
-
-        svgEl.addEventListener('pointerleave', () => {
+        chartSvg.addEventListener('pointerleave', () => {
             hideCrosshair();
             if (linkTooltipGroup) {
                 const linkedWrappers = document.querySelectorAll(`[data-link-tooltip="${CSS.escape(linkTooltipGroup)}"]`);
@@ -2019,7 +2013,6 @@ function renderNativeSvg(container, visual, manifest, pageTheme) {
             }
         });
     }
-
     // Setup Hover Focus & Series Emphasis
     const hoverFocusMode = (svgEl?.dataset?.hoverFocus || vopts['HOVER_FOCUS'] || 'NONE').toUpperCase();
     if (svgEl && hoverFocusMode !== 'NONE') {
@@ -2030,16 +2023,18 @@ function renderNativeSvg(container, visual, manifest, pageTheme) {
                     const seriesKey = /** @type {HTMLElement} */ (target).dataset.series;
                     const allSeriesMarks = svgEl.querySelectorAll('[data-series]');
                     allSeriesMarks.forEach(m => {
-                        if (/** @type {HTMLElement} */ (m).dataset.series === seriesKey) {
+                        if ( /** @type {HTMLElement} */(m).dataset.series === seriesKey) {
                             m.classList.add('plot-series-focused');
                             m.classList.remove('plot-series-dimmed');
-                        } else {
+                        }
+                        else {
                             m.classList.add('plot-series-dimmed');
                             m.classList.remove('plot-series-focused');
                         }
                     });
                 }
-            } else if (hoverFocusMode === 'SELF') {
+            }
+            else if (hoverFocusMode === 'SELF') {
                 const mark = /** @type {Element} */ (event.target).closest('[data-row-index]');
                 if (mark) {
                     const allMarks = svgEl.querySelectorAll('[data-row-index]');
@@ -2047,7 +2042,8 @@ function renderNativeSvg(container, visual, manifest, pageTheme) {
                         if (m === mark) {
                             m.classList.add('plot-mark-focused');
                             m.classList.remove('plot-mark-dimmed');
-                        } else {
+                        }
+                        else {
                             m.classList.add('plot-mark-dimmed');
                             m.classList.remove('plot-mark-focused');
                         }
@@ -2055,20 +2051,19 @@ function renderNativeSvg(container, visual, manifest, pageTheme) {
                 }
             }
         });
-
         svgEl.addEventListener('pointerleave', () => {
             if (hoverFocusMode === 'SERIES') {
                 svgEl.querySelectorAll('.plot-series-focused, .plot-series-dimmed').forEach(m => {
                     m.classList.remove('plot-series-focused', 'plot-series-dimmed');
                 });
-            } else if (hoverFocusMode === 'SELF') {
+            }
+            else if (hoverFocusMode === 'SELF') {
                 svgEl.querySelectorAll('.plot-mark-focused, .plot-mark-dimmed').forEach(m => {
                     m.classList.remove('plot-mark-focused', 'plot-mark-dimmed');
                 });
             }
         });
     }
-
     // Setup Animation
     const animOpt = (svgEl?.dataset?.animation || vopts['ANIMATION'] || 'ON').toUpperCase();
     if (svgEl && animOpt !== 'OFF') {
@@ -2086,20 +2081,19 @@ function renderNativeSvg(container, visual, manifest, pageTheme) {
         wrapper.style.setProperty('--anim-duration', `${durationMs}ms`);
         wrapper.style.setProperty('--anim-easing', easingCss);
         wrapper.classList.add('chart-animated');
-
         const updateAnimOpt = (svgEl?.dataset?.updateAnimation || vopts['UPDATE_ANIMATION'] || 'ON').toUpperCase();
         if (updateAnimOpt !== 'OFF') {
             wrapper.classList.add('update-animated');
         }
     }
-
     wrapper.addEventListener('pointerover', event => {
         const mark = /** @type {Element} */ (event.target).closest('[data-row-index]');
         activeRow = mark ? (visual.rows || [])[Number(/** @type {HTMLElement} */ (mark).dataset.rowIndex)] || null : null;
     });
     wrapper.addEventListener('click', event => {
         const mark = /** @type {Element} */ (event.target).closest('[data-row-index]');
-        if (!mark) return;
+        if (!mark)
+            return;
         const index = Number(/** @type {HTMLElement} */ (mark).dataset.rowIndex);
         const row = (visual.rows || [])[index] || [];
         const columnIndex = crossFilter && mappingColumn
@@ -2109,24 +2103,25 @@ function renderNativeSvg(container, visual, manifest, pageTheme) {
         // confidently wrong filter; doing nothing is the safer failure.
         if (columnIndex >= 0) {
             const value = row[columnIndex];
-            if (value != null) applyPageCrossFilter(container, String(value), mappingColumn, visual.name, event);
-        } else {
+            if (value != null)
+                applyPageCrossFilter(container, String(value), mappingColumn, visual.name, event);
+        }
+        else {
             clickActions.forEach(action => executeAction(action, row, visual.columns || [], visual.name, visual));
         }
     });
     wrapper.addEventListener('contextmenu', event => {
-        if (!(visual.actions || []).some(action => action.type === 'DRILL_DOWN')) return;
+        if (!(visual.actions || []).some(action => action.type === 'DRILL_DOWN'))
+            return;
         event.preventDefault();
         showCtxMenu(event.clientX, event.clientY, visual, activeRow);
     });
 }
-
 /** @returns {boolean} whether an ON/TRUE/1 toggle is set on the visual. */
 function nativeToggleOn(visual, key) {
     const value = String(visual.options?.[key] || '').toUpperCase();
     return value === 'ON' || value === 'TRUE' || value === '1';
 }
-
 /**
  * Per-chart toolbox: `SHOW_EXPORT = ON` adds a PNG download, `SHOW_DATA_VIEW = ON` adds a
  * toggle between the chart and a table of its SOURCE rows. Both are chart-local — neither
@@ -2135,13 +2130,12 @@ function nativeToggleOn(visual, key) {
 function attachNativeChartToolbox(container, wrapper, visual) {
     const wantsExport = nativeToggleOn(visual, 'SHOW_EXPORT');
     const wantsDataView = nativeToggleOn(visual, 'SHOW_DATA_VIEW');
-    if (!wantsExport && !wantsDataView) return;
-
+    if (!wantsExport && !wantsDataView)
+        return;
     const bar = document.createElement('div');
     bar.className = 'native-chart-toolbox';
     bar.setAttribute('role', 'group');
     bar.setAttribute('aria-label', 'Chart tools');
-
     if (wantsExport) {
         const button = document.createElement('button');
         button.type = 'button';
@@ -2153,7 +2147,6 @@ function attachNativeChartToolbox(container, wrapper, visual) {
         button.addEventListener('click', () => saveChartImage(wrapper, visual));
         bar.appendChild(button);
     }
-
     if (wantsDataView) {
         const table = buildDataViewTable(visual);
         table.hidden = true;
@@ -2177,10 +2170,8 @@ function attachNativeChartToolbox(container, wrapper, visual) {
         container.appendChild(table);
         return;
     }
-
     container.appendChild(bar);
 }
-
 /** Renders the visual's SOURCE rows as an accessible table for `SHOW_DATA_VIEW`. */
 function buildDataViewTable(visual) {
     const columns = visual.columns || [];
@@ -2211,14 +2202,14 @@ function buildDataViewTable(visual) {
     table.appendChild(body);
     return table;
 }
-
 /**
  * Rasterises the chart's SVG through a canvas and hands the viewer a PNG. The SVG is serialized
  * from the live DOM, so what downloads is what is on screen, including any zoom applied.
  */
 function saveChartImage(wrapper, visual) {
     const svg = wrapper.querySelector('svg');
-    if (!svg) return;
+    if (!svg)
+        return;
     const width = Number(svg.getAttribute('width')) || svg.clientWidth || 600;
     const height = Number(svg.getAttribute('height')) || svg.clientHeight || 400;
     const markup = new XMLSerializer().serializeToString(svg);
@@ -2229,12 +2220,14 @@ function saveChartImage(wrapper, visual) {
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+        if (!ctx)
+            return;
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, width, height);
         ctx.drawImage(image, 0, 0, width, height);
         canvas.toBlob(blob => {
-            if (!blob) return;
+            if (!blob)
+                return;
             const url = URL.createObjectURL(blob);
             const anchor = document.createElement('a');
             anchor.href = url;
@@ -2248,7 +2241,6 @@ function saveChartImage(wrapper, visual) {
     image.onerror = () => console.warn('Chart image export failed for', visual.name);
     image.src = source;
 }
-
 /**
  * `PROGRESSIVE = ON` reveals a dense chart's marks in `PROGRESSIVE_CHUNK` sized batches across
  * animation frames rather than painting every mark in one layout pass. The marks are already in
@@ -2256,35 +2248,41 @@ function saveChartImage(wrapper, visual) {
  * that blocks the main thread on a high-cardinality series.
  */
 function attachProgressiveReveal(wrapper, visual) {
-    if (!nativeToggleOn(visual, 'PROGRESSIVE')) return;
-    if (typeof requestAnimationFrame !== 'function') return;
+    if (!nativeToggleOn(visual, 'PROGRESSIVE'))
+        return;
+    if (typeof requestAnimationFrame !== 'function')
+        return;
     const svg = wrapper.querySelector('svg');
-    if (!svg) return;
+    if (!svg)
+        return;
     const marks = Array.from(svg.querySelectorAll('[data-row-index]'));
     const chunk = Math.max(1, Number(visual.options?.['PROGRESSIVE_CHUNK']) || 200);
-    if (marks.length <= chunk) return;
-
+    if (marks.length <= chunk)
+        return;
     marks.forEach(mark => mark.setAttribute('visibility', 'hidden'));
     wrapper.dataset.progressive = String(chunk);
     let index = 0;
     const step = () => {
         const end = Math.min(marks.length, index + chunk);
-        for (; index < end; index++) marks[index].removeAttribute('visibility');
-        if (index < marks.length) requestAnimationFrame(step);
-        else delete wrapper.dataset.progressive;
+        for (; index < end; index++)
+            marks[index].removeAttribute('visibility');
+        if (index < marks.length)
+            requestAnimationFrame(step);
+        else
+            delete wrapper.dataset.progressive;
     };
     requestAnimationFrame(step);
 }
-
 function attachNativeZoomSlider(container, wrapper, visual) {
     const enabled = String(visual.options?.ZOOM_SLIDER || '').toUpperCase();
     const grouped = String(visual.options?.ZOOM_GROUP || '').trim() !== '';
     // Naming a ZOOM_GROUP implies the slider: a chart cannot join a linked zoom without one.
-    if (!grouped && enabled !== 'ON' && enabled !== 'TRUE' && enabled !== '1') return;
+    if (!grouped && enabled !== 'ON' && enabled !== 'TRUE' && enabled !== '1')
+        return;
     const svg = wrapper.querySelector('svg');
     const raw = String(svg?.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number);
-    if (!svg || raw.length !== 4 || raw.some(value => !Number.isFinite(value)) || raw[2] <= 0) return;
-
+    if (!svg || raw.length !== 4 || raw.some(value => !Number.isFinite(value)) || raw[2] <= 0)
+        return;
     const [originX, originY, fullWidth, fullHeight] = raw;
     const controls = document.createElement('div');
     controls.className = 'native-chart-zoom-slider';
@@ -2304,10 +2302,8 @@ function attachNativeZoomSlider(container, wrapper, visual) {
     end.setAttribute('aria-label', 'Visible range end');
     const value = document.createElement('output');
     value.textContent = '0–100%';
-
     // ZOOM_GROUP links sliders: zooming one chart scrolls every chart naming the same group.
     const group = String(visual.options?.ZOOM_GROUP || '').trim();
-
     /** Applies a range to this chart without re-broadcasting, so linked charts cannot loop. */
     const applyRange = (first, last) => {
         start.value = String(first);
@@ -2317,16 +2313,18 @@ function attachNativeZoomSlider(container, wrapper, visual) {
         svg.setAttribute('viewBox', `${x} ${originY} ${width} ${fullHeight}`);
         value.textContent = `${first}–${last}%`;
     };
-
-    const update = changed => {
+    const update = (changed) => {
         let first = Number(start.value);
         let last = Number(end.value);
         if (last - first < 5) {
-            if (changed === start) first = Math.max(0, last - 5);
-            else last = Math.min(100, first + 5);
+            if (changed === start)
+                first = Math.max(0, last - 5);
+            else
+                last = Math.min(100, first + 5);
         }
         applyRange(first, last);
-        if (group) broadcastZoomRange(group, controls, first, last);
+        if (group)
+            broadcastZoomRange(group, controls, first, last);
     };
     start.addEventListener('input', () => update(start));
     end.addEventListener('input', () => update(end));
@@ -2337,46 +2335,54 @@ function attachNativeZoomSlider(container, wrapper, visual) {
     }
     container.appendChild(controls);
 }
-
 /**
  * Pushes one chart's zoom range onto every other slider in its `ZOOM_GROUP`. Peers apply the
  * range directly rather than through their own input handler, so a group never echoes.
  */
 function broadcastZoomRange(group, origin, first, last) {
     document.querySelectorAll('.native-chart-zoom-slider').forEach(peer => {
-        if (peer === origin) return;
-        if (/** @type {HTMLElement} */ (peer).dataset.zoomGroup !== group) return;
+        if (peer === origin)
+            return;
+        if ( /** @type {HTMLElement} */(peer).dataset.zoomGroup !== group)
+            return;
         const apply = /** @type {any} */ (peer)._applyZoomRange;
-        if (typeof apply === 'function') apply(first, last);
+        if (typeof apply === 'function')
+            apply(first, last);
     });
 }
-
 function nativeLayoutTier(layout, containerWidth) {
     const width = Number(containerWidth);
-    if (!layout || !Number.isFinite(width) || width <= 0) return null;
+    if (!layout || !Number.isFinite(width) || width <= 0)
+        return null;
     const compactMax = Number(layout.compactMaxWidth);
     const standardMax = Number(layout.standardMaxWidth);
-    if (!Number.isFinite(compactMax) || !Number.isFinite(standardMax)) return null;
-    if (width <= compactMax) return 'COMPACT';
-    if (width <= standardMax) return 'STANDARD';
+    if (!Number.isFinite(compactMax) || !Number.isFinite(standardMax))
+        return null;
+    if (width <= compactMax)
+        return 'COMPACT';
+    if (width <= standardMax)
+        return 'STANDARD';
     return 'WIDE';
 }
-
 function observeNativeLayout(wrapper, visual) {
     if (!visual.layout || !isWebMode || vscode || isOfflineSnapshot()
-        || typeof ResizeObserver !== 'function') return;
-
+        || typeof ResizeObserver !== 'function')
+        return;
     const visualName = String(visual.name || '');
-    if (!visualName) return;
+    if (!visualName)
+        return;
+    const layout = visual.layout;
     const observer = new ResizeObserver(entries => {
         const width = entries[entries.length - 1]?.contentRect?.width;
-        const tier = nativeLayoutTier(visual.layout, width);
-        if (!tier || tier === String(visual.layout.tier || '').toUpperCase()) return;
-
+        const tier = nativeLayoutTier(layout, width);
+        if (!tier || tier === String(layout.tier || '').toUpperCase())
+            return;
         const pending = _nativeLayoutRequests.get(visualName);
-        if (pending?.tier === tier) return;
+        if (pending?.tier === tier)
+            return;
         const oldTimer = _nativeLayoutTimers.get(visualName);
-        if (oldTimer) clearTimeout(oldTimer);
+        if (oldTimer)
+            clearTimeout(oldTimer);
         _nativeLayoutTimers.set(visualName, setTimeout(() => {
             _nativeLayoutTimers.delete(visualName);
             requestNativeLayout(visualName, tier);
@@ -2385,45 +2391,43 @@ function observeNativeLayout(wrapper, visual) {
     observer.observe(wrapper);
     _nativeLayoutObservers.push(observer);
 }
-
 function findVisualInManifest(m, name) {
-    if (!m || !name) return null;
+    if (!m || !name)
+        return null;
     const lower = name.toLowerCase();
     const top = (m.visuals || []).find(v => (v.name || '').toLowerCase() === lower);
-    if (top) return top;
+    if (top)
+        return top;
     if (m.pages) {
         for (const p of m.pages) {
             const pv = (p.visuals || []).find(v => (v.name || '').toLowerCase() === lower);
-            if (pv) return pv;
+            if (pv)
+                return pv;
         }
     }
     return null;
 }
-
 function updateNativeVisualInPlace(card, visual) {
     const wrapper = card.querySelector('.native-chart-wrapper');
-    if (!wrapper) return false;
-
+    if (!wrapper)
+        return false;
     const parsed = new DOMParser().parseFromString(String(visual.nativeSvg || ''), 'image/svg+xml');
     const newSvg = parsed.documentElement;
     if (!newSvg || newSvg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
         return false;
     }
-
     const oldSvg = wrapper.querySelector('svg');
     if (oldSvg) {
         wrapper.replaceChild(document.importNode(newSvg, true), oldSvg);
-    } else {
+    }
+    else {
         wrapper.appendChild(document.importNode(newSvg, true));
     }
-
     if (visual.layout?.tier) {
         /** @type {HTMLElement} */ (wrapper).dataset.layoutTier = String(visual.layout.tier).toUpperCase();
     }
-
     const interaction = resolveInteraction(visual);
     applyNativeHighlight(/** @type {HTMLElement} */ (wrapper), visual, interaction);
-
     const vopts = visual.options || {};
     const crosshairOpt = (vopts['CROSSHAIR'] || '').toUpperCase();
     const linkTooltipGroup = vopts['LINK_TOOLTIP'] ? vopts['LINK_TOOLTIP'].trim() : null;
@@ -2438,15 +2442,14 @@ function updateNativeVisualInPlace(card, visual) {
             svgEl.appendChild(crosshairG);
         }
     }
-
     return true;
 }
-
 async function requestNativeLayout(visualName, tier) {
     const previous = _nativeLayoutRequests.get(visualName);
-    if (previous?.tier === tier) return;
-    if (previous) previous.controller.abort();
-
+    if (previous?.tier === tier)
+        return;
+    if (previous)
+        previous.controller.abort();
     const controller = new AbortController();
     _nativeLayoutRequests.set(visualName, { tier, controller });
     try {
@@ -2456,15 +2459,15 @@ async function requestNativeLayout(visualName, tier) {
             body: JSON.stringify({ visualName, tier }),
             signal: controller.signal
         });
-        if (!response.ok) return;
-        const manifest = await response.json();
-        if (_nativeLayoutRequests.get(visualName)?.controller !== controller) return;
-
+        if (!response.ok)
+            return;
+        const manifest = (await response.json());
+        if (_nativeLayoutRequests.get(visualName)?.controller !== controller)
+            return;
         const newVisual = findVisualInManifest(manifest, visualName);
         const targetVisual = findVisualInManifest(getLastManifest(), visualName);
         const cards = document.querySelectorAll('.visual-card');
         const card = Array.from(cards).find(c => (c.getAttribute('data-name') || '').toLowerCase() === visualName.toLowerCase());
-
         let updatedInPlace = false;
         if (newVisual && targetVisual && card) {
             targetVisual.nativeSvg = newVisual.nativeSvg;
@@ -2482,63 +2485,64 @@ async function requestNativeLayout(visualName, tier) {
             }
             updatedInPlace = updateNativeVisualInPlace(/** @type {HTMLElement} */ (card), targetVisual);
         }
-
         if (!updatedInPlace) {
             renderManifest(manifest);
         }
-    } catch (error) {
-        if (error?.name !== 'AbortError') console.warn('Native chart layout refresh failed:', error);
-    } finally {
+    }
+    catch (error) {
+        if (error?.name !== 'AbortError')
+            console.warn('Native chart layout refresh failed:', error);
+    }
+    finally {
         if (_nativeLayoutRequests.get(visualName)?.controller === controller)
             _nativeLayoutRequests.delete(visualName);
     }
 }
-
 // Draws the current selection over the unselected universe. Which treatment applies is a server
 // decision carried on `interaction.highlight`; where a mark's value extent lies is a server
 // decision carried on the mark's own `data-extent-axis`/`data-extent-anchor`. Neither is
 // inferred here from a chart type.
 function applyNativeHighlight(wrapper, visual, interaction) {
-    if (!Array.isArray(visual.highlightRows)) return;
+    if (!Array.isArray(visual.highlightRows))
+        return;
     const columns = visual.columns || [];
-    const mappingIndex = columns.findIndex(column =>
-        column.toLowerCase() === String(interaction.key || '').toLowerCase());
-    const valueIndex = columns.findIndex(column =>
-        column.toLowerCase() === String(interaction.valueKey || '').toLowerCase());
-    const rowKey = row => mappingIndex >= 0
+    const mappingIndex = columns.findIndex(column => column.toLowerCase() === String(interaction.key || '').toLowerCase());
+    const valueIndex = columns.findIndex(column => column.toLowerCase() === String(interaction.valueKey || '').toLowerCase());
+    const rowKey = (row) => mappingIndex >= 0
         ? String(row?.[mappingIndex] ?? '')
         : JSON.stringify(row || []);
     const highlighted = new Set(visual.highlightRows.map(rowKey));
-
-    const markExtent = mark => {
+    const markExtent = (mark) => {
         const axis = mark.dataset.extentAxis || (interaction.extent && interaction.extent.axis);
-        if (!axis) return null;
+        if (!axis)
+            return null;
         return {
             axis: String(axis).toLowerCase(),
             anchor: String(mark.dataset.extentAnchor ||
                 (interaction.extent && interaction.extent.anchor) || 'start').toLowerCase()
         };
     };
-
     if (interaction.highlight === 'PROPORTIONAL' && valueIndex >= 0) {
         const selectedValues = new Map();
         visual.highlightRows.forEach(row => {
-            const value = Number.parseFloat(row?.[valueIndex]);
-            if (!Number.isFinite(value)) return;
+            const value = Number.parseFloat(String(row?.[valueIndex] ?? ''));
+            if (!Number.isFinite(value))
+                return;
             const key = rowKey(row);
             selectedValues.set(key, (selectedValues.get(key) || 0) + value);
         });
         let drewProportional = false;
         wrapper.querySelectorAll('rect[data-row-index]').forEach(mark => {
             const extent = markExtent(mark);
-            if (!extent) return;
+            if (!extent)
+                return;
             drewProportional = true;
             const row = (visual.rows || [])[Number(mark.dataset.rowIndex)] || [];
-            const universeValue = Number.parseFloat(row?.[valueIndex]);
+            const universeValue = Number.parseFloat(String(row?.[valueIndex] ?? ''));
             const selectedValue = selectedValues.get(rowKey(row));
             mark.classList.add('cross-highlight-universe');
-            if (!Number.isFinite(universeValue) || selectedValue === undefined) return;
-
+            if (!Number.isFinite(universeValue) || selectedValue === undefined)
+                return;
             const ratio = universeValue === 0 ? 0 : Math.max(0, Math.min(1, selectedValue / universeValue));
             const overlay = mark.cloneNode(false);
             overlay.removeAttribute('data-row-index');
@@ -2549,25 +2553,30 @@ function applyNativeHighlight(wrapper, visual, interaction) {
             overlay.setAttribute('pointer-events', 'none');
             overlay.setAttribute('aria-hidden', 'true');
             if (extent.axis === 'y') {
-                const fullHeight = Number.parseFloat(mark.getAttribute('height')) || 0;
-                const fullY = Number.parseFloat(mark.getAttribute('y')) || 0;
+                const fullHeight = Number.parseFloat(String(mark.getAttribute('height') || '')) || 0;
+                const fullY = Number.parseFloat(String(mark.getAttribute('y') || '')) || 0;
                 overlay.setAttribute('height', String(fullHeight * ratio));
                 // An `end` anchor puts the baseline at the high edge of the axis, so the
                 // selected share hugs the far edge of the mark rather than its own origin.
-                if (extent.anchor === 'end') overlay.setAttribute('y', String(fullY + fullHeight * (1 - ratio)));
-            } else {
-                const fullWidth = Number.parseFloat(mark.getAttribute('width')) || 0;
-                const fullX = Number.parseFloat(mark.getAttribute('x')) || 0;
-                overlay.setAttribute('width', String(fullWidth * ratio));
-                if (extent.anchor === 'end') overlay.setAttribute('x', String(fullX + fullWidth * (1 - ratio)));
+                if (extent.anchor === 'end')
+                    overlay.setAttribute('y', String(fullY + fullHeight * (1 - ratio)));
             }
-            mark.parentNode.insertBefore(overlay, mark.nextSibling);
+            else {
+                const fullWidth = Number.parseFloat(String(mark.getAttribute('width') || '')) || 0;
+                const fullX = Number.parseFloat(String(mark.getAttribute('x') || '')) || 0;
+                overlay.setAttribute('width', String(fullWidth * ratio));
+                if (extent.anchor === 'end')
+                    overlay.setAttribute('x', String(fullX + fullWidth * (1 - ratio)));
+            }
+            if (mark.parentNode) {
+                mark.parentNode.insertBefore(overlay, mark.nextSibling);
+            }
         });
         // No mark declared a value extent, so there is nothing to draw a share inside of.
         // Fall through to the categorical treatment rather than leaving the selection invisible.
-        if (drewProportional) return;
+        if (drewProportional)
+            return;
     }
-
     wrapper.querySelectorAll('[data-row-index]').forEach(mark => {
         const row = (visual.rows || [])[Number(mark.dataset.rowIndex)] || [];
         const selected = highlighted.has(rowKey(row));
@@ -2575,51 +2584,49 @@ function applyNativeHighlight(wrapper, visual, interaction) {
         mark.classList.toggle('cross-dimmed', !selected);
     });
 }
-
 function getNativeLayoutObservers() { return _nativeLayoutObservers; }
 function setNativeLayoutObservers(value) { _nativeLayoutObservers = value; }
 
 
-
 // ─── rt-table.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-table.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Table rendering and Tabulator integration.
  */
-
-
 // ── Table ───────────────────────────────────────────────────────────────
-
 function renderTable(container, visual, manifest) {
     if (!visual.columns || visual.columns.length === 0) {
         container.appendChild(noDataEl('No data available'));
         return;
     }
-
-    const opts          = visual.options || {};
-    const colMeta       = visual.columnMeta || [];
-    const allRows       = visual.rows || [];
-    const pageSize      = parseInt(opts['PAGE_SIZE'] || opts['page_size'] || '50', 10) || 50;
-    const showSearch    = (opts['SEARCH'] || opts['search'] || 'ON').toUpperCase() !== 'OFF';
-    const striped       = (opts['STRIPED'] || opts['striped'] || 'ON').toUpperCase() !== 'OFF';
-    const clickActions  = actionsFor(visual, 'ON_CLICK');
-    const isClickable   = clickActions.length > 0;
-    const interaction   = resolveInteraction(visual);
-    const crossFilter   = crossFilterActive(interaction);
-    const stateKey      = 'table:' + (visual.name || visual.id || '');
-    const state         = _uiStates[stateKey] || (_uiStates[stateKey] = { sortCol: -1, sortDir: 'asc', page: 0, search: '' });
-
+    const columns = visual.columns;
+    const opts = visual.options || {};
+    const colMeta = visual.columnMeta || [];
+    const allRows = visual.rows || [];
+    const pageSize = parseInt(opts['PAGE_SIZE'] || opts['page_size'] || '50', 10) || 50;
+    const showSearch = (opts['SEARCH'] || opts['search'] || 'ON').toUpperCase() !== 'OFF';
+    const striped = (opts['STRIPED'] || opts['striped'] || 'ON').toUpperCase() !== 'OFF';
+    const clickActions = actionsFor(visual, 'ON_CLICK');
+    const isClickable = clickActions.length > 0;
+    const interaction = resolveInteraction(visual);
+    const crossFilter = crossFilterActive(interaction);
+    const stateKey = 'table:' + (visual.name || visual.id || '');
+    const state = _uiStates[stateKey] || (_uiStates[stateKey] = { sortCol: -1, sortDir: 'asc', page: 0, search: '' });
     const defaultSortStr = opts['DEFAULT_SORT'] || opts['default_sort'] || '';
-    const defaultSorts   = [];
+    const defaultSorts = [];
     if (defaultSortStr) {
         const rawItems = defaultSortStr.replace(/^\(|\)$/g, '').split(',');
         rawItems.forEach(item => {
             const parts = item.trim().split(/\s+/);
             if (parts.length > 0 && parts[0]) {
                 const colName = parts[0].replace(/^['"[]|['"\]]$/g, '').toLowerCase();
-                const colIdx = visual.columns.findIndex(c => c.toLowerCase() === colName);
+                const colIdx = columns.findIndex(c => c.toLowerCase() === colName);
                 if (colIdx >= 0) {
                     const dir = parts.length > 1 && parts[1].toUpperCase() === 'DESC' ? 'desc' : 'asc';
                     defaultSorts.push({ colIndex: colIdx, dir: dir });
@@ -2627,12 +2634,10 @@ function renderTable(container, visual, manifest) {
             }
         });
     }
-
     if (crossFilter) {
         container.setAttribute('data-cross-filter', '1');
         container._visualData = visual;
     }
-
     function getFilteredRows() {
         const q = state.search.toLowerCase();
         let rows = q
@@ -2645,26 +2650,26 @@ function renderTable(container, visual, manifest) {
                 const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : String(av).localeCompare(String(bv));
                 return state.sortDir === 'asc' ? cmp : -cmp;
             });
-        } else if (defaultSorts.length > 0) {
+        }
+        else if (defaultSorts.length > 0) {
             rows = rows.slice().sort((a, b) => {
                 for (const s of defaultSorts) {
                     const av = a[s.colIndex] ?? '', bv = b[s.colIndex] ?? '';
                     const an = parseFloat(av), bn = parseFloat(bv);
                     const cmp = !isNaN(an) && !isNaN(bn) ? an - bn : String(av).localeCompare(String(bv));
-                    if (cmp !== 0) return s.dir === 'asc' ? cmp : -cmp;
+                    if (cmp !== 0)
+                        return s.dir === 'asc' ? cmp : -cmp;
                 }
                 return 0;
             });
         }
         return rows;
     }
-
     const wrapper = document.createElement('div');
     wrapper.className = 'table-wrapper' + (isClickable ? ' clickable' : '');
-
     let heightOpt = visual.styles ? (visual.styles['HEIGHT'] || visual.styles['height']) : null;
-    if (heightOpt) wrapper.style.maxHeight = heightOpt;
-
+    if (heightOpt)
+        wrapper.style.maxHeight = heightOpt;
     // Search box
     if (showSearch) {
         const searchRow = document.createElement('div');
@@ -2682,44 +2687,42 @@ function renderTable(container, visual, manifest) {
         searchRow.appendChild(searchInput);
         wrapper.appendChild(searchRow);
     }
-
     let leftAccum = 0;
     const leftOffsets = [];
-    visual.columns.forEach((col, ci) => {
+    columns.forEach((_col, ci) => {
         const meta = colMeta[ci] || {};
         if (meta.freeze === 'left') {
             leftOffsets[ci] = leftAccum;
             leftAccum += (meta.width || 120);
         }
     });
-
     let rightAccum = 0;
     const rightOffsets = [];
-    for (let ci = visual.columns.length - 1; ci >= 0; ci--) {
+    for (let ci = columns.length - 1; ci >= 0; ci--) {
         const meta = colMeta[ci] || {};
         if (meta.freeze === 'right') {
             rightOffsets[ci] = rightAccum;
             rightAccum += (meta.width || 120);
         }
     }
-
-    const table  = document.createElement('table');
-    const thead  = document.createElement('thead');
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
-
-    const hasDetail = visual.rowDetail != null && manifest != null;
+    const rowDetail = visual.rowDetail;
+    const hasDetail = rowDetail != null && manifest != null;
     if (hasDetail) {
         const expTh = document.createElement('th');
         expTh.className = 'expand-col sortable';
         headerRow.appendChild(expTh);
     }
-
-    visual.columns.forEach((col, ci) => {
-        const th   = document.createElement('th');
+    columns.forEach((col, ci) => {
+        const th = document.createElement('th');
         th.className = 'sortable';
         const meta = colMeta[ci] || {};
-        if (meta.hidden) th.style.display = 'none';
-        if (meta.align) th.style.textAlign = meta.align;
+        if (meta.hidden)
+            th.style.display = 'none';
+        if (meta.align)
+            th.style.textAlign = meta.align;
         if (meta.width) {
             th.style.width = meta.width + 'px';
             th.style.minWidth = meta.width + 'px';
@@ -2728,23 +2731,22 @@ function renderTable(container, visual, manifest) {
         if (meta.freeze === 'left') {
             th.classList.add('table-cell-frozen-left');
             th.style.left = (leftOffsets[ci] || 0) + 'px';
-        } else if (meta.freeze === 'right') {
+        }
+        else if (meta.freeze === 'right') {
             th.classList.add('table-cell-frozen-right');
             th.style.right = (rightOffsets[ci] || 0) + 'px';
         }
-
         const label = document.createElement('span');
         label.textContent = col;
         th.appendChild(label);
-
         const arrow = document.createElement('span');
         arrow.className = 'sort-arrow';
         th.appendChild(arrow);
-
         th.addEventListener('click', () => {
             if (state.sortCol === ci) {
                 state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
-            } else {
+            }
+            else {
                 state.sortCol = ci;
                 state.sortDir = 'asc';
             }
@@ -2755,29 +2757,30 @@ function renderTable(container, visual, manifest) {
     });
     thead.appendChild(headerRow);
     table.appendChild(thead);
-
     const tbody = document.createElement('tbody');
     table.appendChild(tbody);
-
     // Summary (Top or Bottom)
     const totalPosition = (visual.summaryData?.totalPosition || opts['TOTAL_POSITION'] || opts['total_position'] || 'BOTTOM').toUpperCase();
-    if (visual.summaryData) {
+    const summaryData = visual.summaryData;
+    if (summaryData) {
         let summaryRow = null;
-        if (visual.summaryData.grandTotals) {
+        const grandTotals = summaryData.grandTotals;
+        if (grandTotals) {
             summaryRow = document.createElement('tr');
             summaryRow.className = 'summary-row' + (totalPosition === 'TOP' ? ' summary-row-top' : '');
-            if (hasDetail) {
+            if (rowDetail && manifest) {
                 const expTd = document.createElement('td');
                 expTd.className = 'summary-cell';
                 summaryRow.appendChild(expTd);
             }
-            visual.columns.forEach((col, ci) => {
-                const td  = document.createElement('td');
+            columns.forEach((col, ci) => {
+                const td = document.createElement('td');
                 td.className = 'summary-cell';
                 const meta = colMeta[ci] || {};
-                const val  = visual.summaryData.grandTotals[col] ?? '';
+                const val = grandTotals[col] ?? '';
                 td.textContent = val ? formatValue(val, meta.format) : '';
-                if (meta.align) td.style.textAlign = meta.align;
+                if (meta.align)
+                    td.style.textAlign = meta.align;
                 if (meta.width) {
                     td.style.width = meta.width + 'px';
                     td.style.minWidth = meta.width + 'px';
@@ -2786,89 +2789,91 @@ function renderTable(container, visual, manifest) {
                 if (meta.freeze === 'left') {
                     td.classList.add('table-cell-frozen-left');
                     td.style.left = (leftOffsets[ci] || 0) + 'px';
-                } else if (meta.freeze === 'right') {
+                }
+                else if (meta.freeze === 'right') {
                     td.classList.add('table-cell-frozen-right');
                     td.style.right = (rightOffsets[ci] || 0) + 'px';
                 }
                 summaryRow.appendChild(td);
             });
         }
-
         let aggRow = null;
-        if (visual.summaryData.aggregates && visual.summaryData.aggregates.length > 0) {
+        if (summaryData.aggregates && summaryData.aggregates.length > 0) {
             aggRow = document.createElement('tr');
             const td = document.createElement('td');
-            td.colSpan = visual.columns.length + (hasDetail ? 1 : 0);
+            td.colSpan = columns.length + (hasDetail ? 1 : 0);
             td.className = 'summary-aggregates';
-            visual.summaryData.aggregates.forEach(agg => {
+            summaryData.aggregates.forEach(agg => {
                 const sp = document.createElement('span');
                 sp.textContent = (agg.alias || (agg.aggregate + '(' + agg.column + ')')) + ' = ' + agg.value;
                 td.appendChild(sp);
             });
             aggRow.appendChild(td);
         }
-
         if (totalPosition === 'TOP') {
-            if (summaryRow) thead.appendChild(summaryRow);
-            if (aggRow) thead.appendChild(aggRow);
-        } else {
+            if (summaryRow)
+                thead.appendChild(summaryRow);
+            if (aggRow)
+                thead.appendChild(aggRow);
+        }
+        else {
             const tfoot = document.createElement('tfoot');
-            if (summaryRow) tfoot.appendChild(summaryRow);
-            if (aggRow) tfoot.appendChild(aggRow);
+            if (summaryRow)
+                tfoot.appendChild(summaryRow);
+            if (aggRow)
+                tfoot.appendChild(aggRow);
             table.appendChild(tfoot);
         }
     }
-
     wrapper.appendChild(table);
-
     const paginationRow = document.createElement('div');
     paginationRow.className = 'table-pagination';
     wrapper.appendChild(paginationRow);
-
     function updateSortArrows() {
         Array.from(headerRow.children).forEach((th, ci) => {
             const arrow = th.querySelector('.sort-arrow');
-            if (!arrow) return;
+            if (!arrow)
+                return;
             const colIdx = hasDetail ? ci - 1 : ci;
-            if (colIdx < 0) return;
+            if (colIdx < 0)
+                return;
             if (state.sortCol >= 0) {
                 arrow.textContent = state.sortCol === colIdx ? (state.sortDir === 'asc' ? ' ▲' : ' ▼') : '';
-            } else {
+            }
+            else {
                 const match = defaultSorts.find(s => s.colIndex === colIdx);
                 arrow.textContent = match ? (match.dir === 'asc' ? ' ▲' : ' ▼') : '';
             }
         });
     }
-
     function rebuildBody() {
-        const filtered   = getFilteredRows();
+        const filtered = getFilteredRows();
         const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(filtered.length / pageSize)) : 1;
-        if (state.page >= totalPages) state.page = Math.max(0, totalPages - 1);
-
-        const start    = pageSize > 0 ? state.page * pageSize : 0;
+        if (state.page >= totalPages)
+            state.page = Math.max(0, totalPages - 1);
+        const start = pageSize > 0 ? state.page * pageSize : 0;
         const pageRows = pageSize > 0 ? filtered.slice(start, start + pageSize) : filtered;
-
         tbody.innerHTML = '';
         pageRows.forEach((row, localIdx) => {
             const origIdx = allRows.indexOf(row);
             const tr = document.createElement('tr');
-            if (isClickable) tr.style.cursor = 'pointer';
-
+            if (isClickable)
+                tr.style.cursor = 'pointer';
             // Striped
-            if (striped && (start + localIdx) % 2 === 1) tr.classList.add('table-row-alt');
-
+            if (striped && (start + localIdx) % 2 === 1)
+                tr.classList.add('table-row-alt');
             // Row background / font color from FORMATTING rules
-            const rowBg   = Array.isArray(visual.rowStyles)     ? visual.rowStyles[origIdx]     : null;
-            const rowFont = Array.isArray(visual.rowFontStyles)  ? visual.rowFontStyles[origIdx] : null;
-            if (rowBg)   tr.style.backgroundColor = rowBg;
-            if (rowFont) tr.style.color = rowFont;
-
+            const rowBg = Array.isArray(visual.rowStyles) ? visual.rowStyles[origIdx] : null;
+            const rowFont = Array.isArray(visual.rowFontStyles) ? visual.rowFontStyles[origIdx] : null;
+            if (rowBg)
+                tr.style.backgroundColor = rowBg;
+            if (rowFont)
+                tr.style.color = rowFont;
             if (hasDetail) {
                 const expTd = document.createElement('td');
                 expTd.className = 'expand-cell';
                 expTd.style.width = '30px';
                 expTd.style.textAlign = 'center';
-                
                 const expBtn = document.createElement('button');
                 expBtn.className = 'expand-btn';
                 expBtn.setAttribute('aria-label', 'Toggle row details');
@@ -2876,63 +2881,59 @@ function renderTable(container, visual, manifest) {
                 expBtn.style.background = 'none';
                 expBtn.style.border = 'none';
                 expBtn.style.padding = '4px';
-                
                 const rowKey = visual.rowDetailKeys ? JSON.stringify(visual.rowDetailKeys[origIdx]) : String(origIdx);
-                visual._expandedRowKeys = visual._expandedRowKeys || new Set();
-                const initiallyExpanded = visual._expandedRowKeys.has(rowKey);
-                
+                const expandedRowKeys = visual._expandedRowKeys ?? (visual._expandedRowKeys = new Set());
+                const initiallyExpanded = expandedRowKeys.has(rowKey);
                 expBtn.innerHTML = initiallyExpanded ? '&#9660;' : '&#9658;'; // Down : Right triangle
                 expBtn.setAttribute('aria-expanded', initiallyExpanded ? 'true' : 'false');
                 expTd.appendChild(expBtn);
                 tr.appendChild(expTd);
-
                 let detailTr = null;
-                
-                const toggleDetail = (forceExpand) => {
+                const toggleDetail = (forceExpand = false) => {
                     const isExpanded = expBtn.getAttribute('aria-expanded') === 'true';
                     if (isExpanded && !forceExpand) {
                         expBtn.innerHTML = '&#9658;';
                         expBtn.setAttribute('aria-expanded', 'false');
-                        visual._expandedRowKeys.delete(rowKey);
-                        if (detailTr) detailTr.style.display = 'none';
-                    } else if (!isExpanded || forceExpand) {
+                        expandedRowKeys.delete(rowKey);
+                        if (detailTr)
+                            detailTr.style.display = 'none';
+                    }
+                    else if (!isExpanded || forceExpand) {
                         expBtn.innerHTML = '&#9660;'; // Down triangle
                         expBtn.setAttribute('aria-expanded', 'true');
-                        visual._expandedRowKeys.add(rowKey);
+                        expandedRowKeys.add(rowKey);
                         if (!detailTr) {
                             detailTr = document.createElement('tr');
                             detailTr.className = 'detail-row';
                             const detailTd = document.createElement('td');
-                            let visibleCols = visual.columns.filter((c, i) => !(colMeta[i] || {}).hidden).length;
+                            const visibleCols = columns.filter((_c, i) => !(colMeta[i] || {}).hidden).length;
                             detailTd.colSpan = visibleCols + 1;
                             detailTd.className = 'nested-row-detail-td';
                             detailTr.appendChild(detailTd);
-                            tr.parentNode.insertBefore(detailTr, tr.nextSibling);
-
+                            tr.parentNode?.insertBefore(detailTr, tr.nextSibling);
                             const detailCard = document.createElement('div');
                             detailCard.className = 'detail-container';
                             detailTd.appendChild(detailCard);
-
-                            const targetName = visual.rowDetail.targetName;
+                            const targetName = rowDetail.targetName;
                             // Try finding visual or container
-                            const targetVisual = (manifest.visuals || []).find(v => v.name.toLowerCase() === targetName.toLowerCase());
+                            const targetVisual = (manifest.visuals || []).find(v => (v.name || '').toLowerCase() === targetName.toLowerCase());
                             if (targetVisual) {
-                                const keys = visual.rowDetailKeys ? visual.rowDetailKeys[origIdx] : {};
+                                const keys = (visual.rowDetailKeys ? visual.rowDetailKeys[origIdx] : {});
                                 const clonedVisual = JSON.parse(JSON.stringify(targetVisual));
-                                
-                                if (clonedVisual.rows && visual.rowDetail.bindings) {
-                                    const b = visual.rowDetail.bindings;
-                                    clonedVisual.rows = clonedVisual.rows.filter(childRow => {
+                                if (clonedVisual.rows && rowDetail.bindings) {
+                                    const b = rowDetail.bindings;
+                                    clonedVisual.rows = clonedVisual.rows.filter((childRow) => {
                                         return b.every(binding => {
-                                            const childColIdx = clonedVisual.columns.findIndex(c => c.toLowerCase() === binding.childParameter.toLowerCase());
-                                            if (childColIdx < 0) return false;
+                                            const childColIdx = (clonedVisual.columns || []).findIndex((_c) => _c.toLowerCase() === binding.childParameter.toLowerCase());
+                                            if (childColIdx < 0)
+                                                return false;
                                             const pVal = keys[binding.childParameter];
                                             const cVal = childRow[childColIdx];
                                             return String(pVal) === String(cVal);
                                         });
                                     });
-                                    if (visual.rowDetail.limit && clonedVisual.rows.length > visual.rowDetail.limit) {
-                                        clonedVisual.rows = clonedVisual.rows.slice(0, visual.rowDetail.limit);
+                                    if (rowDetail.limit && clonedVisual.rows.length > rowDetail.limit) {
+                                        clonedVisual.rows = clonedVisual.rows.slice(0, rowDetail.limit);
                                     }
                                 }
                                 // Ensure the cloned visual is visible when rendered as a nested detail,
@@ -2941,38 +2942,40 @@ function renderTable(container, visual, manifest) {
                                     clonedVisual.options['VISIBLE'] = 'ON';
                                 }
                                 renderVisual(detailCard, clonedVisual, null, manifest);
-                            } else {
+                            }
+                            else {
                                 const targetContainer = (manifest.containers || []).find(c => c.name.toLowerCase() === targetName.toLowerCase());
                                 if (targetContainer) {
                                     detailCard.textContent = 'Container detail not fully supported in preview';
-                                } else {
+                                }
+                                else {
                                     detailCard.textContent = 'Detail target not found: ' + targetName;
                                 }
                             }
                             detailTr.style.display = 'table-row';
-                        } else {
+                        }
+                        else {
                             detailTr.style.display = 'table-row';
                         }
                     }
                 };
-
                 expBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     toggleDetail();
                 });
-
                 if (initiallyExpanded) {
                     toggleDetail(true);
                 }
             }
-
-            visual.columns.forEach((col, ci) => {
-                const td   = document.createElement('td');
+            columns.forEach((_col, ci) => {
+                const td = document.createElement('td');
                 const meta = colMeta[ci] || {};
                 const rawVal = row[ci] != null ? String(row[ci]) : '';
                 const fmtVal = formatValue(rawVal, meta.format || opts['FORMAT']);
-                if (meta.hidden) td.style.display = 'none';
-                if (meta.align) td.style.textAlign = meta.align;
+                if (meta.hidden)
+                    td.style.display = 'none';
+                if (meta.align)
+                    td.style.textAlign = meta.align;
                 if (meta.width) {
                     td.style.width = meta.width + 'px';
                     td.style.minWidth = meta.width + 'px';
@@ -2980,31 +2983,33 @@ function renderTable(container, visual, manifest) {
                     td.style.overflow = 'hidden';
                     td.style.textOverflow = 'ellipsis';
                     td.style.whiteSpace = 'nowrap';
-                    if (rawVal) td.title = rawVal;
+                    if (rawVal)
+                        td.title = rawVal;
                 }
                 if (meta.freeze === 'left') {
                     td.classList.add('table-cell-frozen-left');
                     td.style.left = (leftOffsets[ci] || 0) + 'px';
-                } else if (meta.freeze === 'right') {
+                }
+                else if (meta.freeze === 'right') {
                     td.classList.add('table-cell-frozen-right');
                     td.style.right = (rightOffsets[ci] || 0) + 'px';
                 }
-
                 // COLOR_SCALE: gradient background based on column min/max
                 if (meta.colorScaleFrom && meta.colorScaleTo && meta.colorScaleMax !== undefined) {
                     const num = parseFloat(rawVal);
                     if (!isNaN(num)) {
-                        const range = (meta.colorScaleMax - meta.colorScaleMin) || 1;
-                        const t = Math.max(0, Math.min(1, (num - meta.colorScaleMin) / range));
+                        const colorScaleMin = meta.colorScaleMin ?? 0;
+                        const range = (meta.colorScaleMax - colorScaleMin) || 1;
+                        const t = Math.max(0, Math.min(1, (num - colorScaleMin) / range));
                         td.style.backgroundColor = interpolateColor(meta.colorScaleFrom, meta.colorScaleTo, t);
                     }
                 }
-
                 // DATA_BAR: proportional fill bar behind cell text
                 if (meta.dataBar && meta.dataBarMax !== undefined) {
                     const num = parseFloat(rawVal);
-                    if (!isNaN(num) && meta.dataBarMax > meta.dataBarMin) {
-                        const pct = Math.max(0, Math.min(100, (num - meta.dataBarMin) / (meta.dataBarMax - meta.dataBarMin) * 100));
+                    const dataBarMin = meta.dataBarMin ?? 0;
+                    if (!isNaN(num) && meta.dataBarMax > dataBarMin) {
+                        const pct = Math.max(0, Math.min(100, (num - dataBarMin) / (meta.dataBarMax - dataBarMin) * 100));
                         td.style.position = 'relative';
                         td.style.padding = '0';
                         const bar = document.createElement('div');
@@ -3016,21 +3021,24 @@ function renderTable(container, visual, manifest) {
                         span.className = 'data-bar-label';
                         span.textContent = fmtVal;
                         td.appendChild(span);
-                    } else {
-                        td.textContent = fmtVal;
                     }
-                } else if (meta.cellRenderer === 'image') {
+                    else {
+                        td.textContent = String(fmtVal ?? '');
+                    }
+                }
+                else if (meta.cellRenderer === 'image') {
                     // IMAGE: render <img> from URL value
                     if (rawVal) {
                         const img = document.createElement('img');
                         img.src = safeUrl(rawVal);
                         img.alt = '';
                         img.style.maxHeight = (meta.imageWidth || 32) + 'px';
-                        img.style.maxWidth  = (meta.imageWidth ? meta.imageWidth * 3 : 96) + 'px';
+                        img.style.maxWidth = (meta.imageWidth ? meta.imageWidth * 3 : 96) + 'px';
                         img.style.verticalAlign = 'middle';
                         td.appendChild(img);
                     }
-                } else if (meta.cellRenderer === 'hyperlink') {
+                }
+                else if (meta.cellRenderer === 'hyperlink') {
                     // HYPERLINK: render <a> — only allow http/https to prevent injection
                     const href = rawVal || '';
                     const a = document.createElement('a');
@@ -3039,7 +3047,8 @@ function renderTable(container, visual, manifest) {
                     a.rel = 'noopener noreferrer';
                     a.textContent = meta.hyperlinkLabel || href;
                     td.appendChild(a);
-                } else if (meta.cellRenderer === 'sparkline') {
+                }
+                else if (meta.cellRenderer === 'sparkline') {
                     // Micro-charts consume the server-resolved PlotPlan SVG; the browser does no geometry work.
                     const micro = findMicroChart(visual, origIdx, ci, rawVal);
                     if (micro && micro.svg) {
@@ -3048,10 +3057,12 @@ function renderTable(container, visual, manifest) {
                         td.setAttribute('role', 'img');
                         td.style.verticalAlign = 'middle';
                         td.style.lineHeight = '0';
-                    } else {
-                        td.textContent = micro ? micro.plainText : '';
                     }
-                } else if (meta.cellRenderer === 'progress') {
+                    else {
+                        td.textContent = micro?.plainText ?? '';
+                    }
+                }
+                else if (meta.cellRenderer === 'progress') {
                     const micro = findMicroChart(visual, origIdx, ci, rawVal);
                     if (micro && micro.svg) {
                         td.innerHTML = micro.svg;
@@ -3059,31 +3070,31 @@ function renderTable(container, visual, manifest) {
                         td.setAttribute('role', 'img');
                         td.style.verticalAlign = 'middle';
                         td.style.lineHeight = '0';
-                    } else {
-                        td.textContent = micro ? micro.plainText : fmtVal;
                     }
-                } else {
+                    else {
+                        td.textContent = micro?.plainText ?? String(fmtVal ?? '');
+                    }
+                }
+                else {
                     td.textContent = fmtVal;
                 }
                 tr.appendChild(td);
             });
-
             if (isClickable || crossFilter) {
                 tr.addEventListener('click', (e) => {
                     if (crossFilter) {
-                        const xCol = opts['mapping:x'] || (visual.columns && visual.columns[0]);
-                        const xIdx = xCol ? visual.columns.findIndex(c => c.toLowerCase() === xCol.toLowerCase()) : 0;
+                        const xCol = opts['mapping:x'] || columns[0];
+                        const xIdx = xCol ? columns.findIndex(c => c.toLowerCase() === xCol.toLowerCase()) : 0;
                         applyPageCrossFilter(container, String(row[xIdx]), xCol, visual.name, e);
-                    } else {
-                        clickActions.forEach(action => executeAction(action, row, visual.columns, visual.name, visual));
+                    }
+                    else {
+                        clickActions.forEach(action => executeAction(action, row, columns, visual.name, visual));
                     }
                 });
             }
             tbody.appendChild(tr);
         });
-
         updateSortArrows();
-
         // Pagination controls
         paginationRow.innerHTML = '';
         if (pageSize > 0 && totalPages > 1) {
@@ -3091,56 +3102,56 @@ function renderTable(container, visual, manifest) {
             prev.textContent = '◀';
             prev.disabled = state.page === 0;
             prev.addEventListener('click', () => { state.page--; rebuildBody(); });
-
             const info = document.createElement('span');
             info.className = 'pagination-info';
             info.textContent = `${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}`;
-
             const next = document.createElement('button');
             next.textContent = '▶';
             next.disabled = state.page >= totalPages - 1;
             next.addEventListener('click', () => { state.page++; rebuildBody(); });
-
             paginationRow.append(prev, info, next);
         }
     }
-
     // Right-click → Drill Down & Export
-    wrapper.addEventListener('contextmenu', e => {
+    wrapper.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        const tr  = /** @type {Element} */ (e.target).closest('tr');
+        const tr = /** @type {Element | null} */ (e.target)?.closest('tr') ?? null;
         const idx = tr ? Array.from(tbody.rows).indexOf(tr) : -1;
         const filtered = getFilteredRows();
         const start = pageSize > 0 ? state.page * pageSize : 0;
         const rowData = idx >= 0 ? (pageSize > 0 ? filtered : allRows)[start + idx] : null;
         showCtxMenu(e.clientX, e.clientY, visual, rowData);
     });
-
     rebuildBody();
     container.appendChild(wrapper);
 }
 
 
 // ─── rt-matrix.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-matrix.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Matrix rendering and embedded micro-charts.
  */
-
-
 // ── MATRIX (Pivot / Cross-tab) ────────────────────────────────────────────
 // chartConfig carries JSON with { __matrix, rowHeaders, colHeaders, colParts, rows, grandTotals }.
-
 function renderMatrix(container, visual) {
     let meta;
-    try { meta = visual.chartConfig ? JSON.parse(visual.chartConfig) : null; } catch { meta = null; }
+    try {
+        meta = visual.chartConfig ? JSON.parse(visual.chartConfig) : null;
+    }
+    catch {
+        meta = null;
+    }
     if (!meta || !meta.__matrix) {
         container.appendChild(noDataEl('No pivot data available'));
         return;
     }
-
     const sep = '\u001F';
     const rowHeaders = meta.rowHeaders || [];
     const rows = meta.rows || [];
@@ -3157,7 +3168,6 @@ function renderMatrix(container, visual) {
     const valueHeaders = Array.isArray(meta.valueHeaders) ? meta.valueHeaders : null;
     const valueCount = valueHeaders ? valueHeaders.length : 1;
     const subtotalsEnabled = !!meta.subtotalsEnabled;
-
     const columnTotalsEnabled = meta.columnTotalsEnabled !== false && (!!meta.columnTotalsEnabled || (grandTotals && grandTotals.length > 0));
     const rowTotalsEnabled = !!meta.rowTotalsEnabled;
     const defaultExpand = String(meta.defaultExpand || (visual.options && visual.options['DEFAULT_EXPAND']) || 'ALL').toUpperCase();
@@ -3166,49 +3176,45 @@ function renderMatrix(container, visual) {
     const dataBarMin = typeof meta.dataBarMin === 'number' ? meta.dataBarMin : 0;
     const dataBarMax = typeof meta.dataBarMax === 'number' ? meta.dataBarMax : 0;
     const formattingRules = Array.isArray(meta.formattingRules) ? meta.formattingRules : (Array.isArray(visual.formattingRules) ? visual.formattingRules : []);
-
     const stateKey = `matrix:${visual.name || visual.id || ''}`;
     const state = _uiStates[stateKey] || (_uiStates[stateKey] = { collapsedRows: {}, collapsedCols: {} });
     state.collapsedRows = state.collapsedRows || {};
     state.collapsedCols = state.collapsedCols || {};
-
     const wrapper = document.createElement('div');
     wrapper.className = 'table-wrapper';
     let heightOpt = visual.styles ? (visual.styles['HEIGHT'] || visual.styles['height']) : null;
-    if (heightOpt) wrapper.style.maxHeight = heightOpt;
-
+    if (heightOpt)
+        wrapper.style.maxHeight = heightOpt;
     const table = document.createElement('table');
     table.className = 'matrix-table';
-
     const leaves = colParts.map((parts, index) => ({
         index,
         parts: Array.from({ length: colDepth }, (_, i) => parts[i] || ''),
         key: Array.from({ length: colDepth }, (_, i) => parts[i] || '').join(sep)
     }));
-
     function colPrefixKey(parts, level) {
         return parts.slice(0, level + 1).join(sep);
     }
-
     function rowPrefixKey(parts, level) {
         return parts.slice(0, level + 1).join(sep);
     }
-
     function hasColumnChildren(parts, level) {
-        if (level >= colDepth - 1) return false;
+        if (level >= colDepth - 1)
+            return false;
         const key = colPrefixKey(parts, level);
         const nextValues = new Set(leaves
             .filter(leaf => colPrefixKey(leaf.parts, level) === key)
             .map(leaf => leaf.parts[level + 1]));
         return nextValues.size > 0;
     }
-
     function buildColumnNodes(level, prefix, sourceLeaves) {
-        if (level >= colDepth) return [];
+        if (level >= colDepth)
+            return [];
         const buckets = new Map();
         sourceLeaves.forEach(leaf => {
             const label = leaf.parts[level] || '';
-            if (!buckets.has(label)) buckets.set(label, []);
+            if (!buckets.has(label))
+                buckets.set(label, []);
             buckets.get(label).push(leaf);
         });
         return Array.from(buckets, ([label, bucket]) => {
@@ -3223,82 +3229,84 @@ function renderMatrix(container, visual) {
             };
         });
     }
-
     function flattenColumns(nodes, output = []) {
         nodes.forEach(node => {
             const hasChildren = node.children.length > 0;
             if (!hasChildren || state.collapsedCols[node.key]) {
                 output.push(node);
-            } else {
+            }
+            else {
                 flattenColumns(node.children, output);
             }
         });
         return output;
     }
-
     const visibleColumns = flattenColumns(buildColumnNodes(0, [], leaves));
-
     // Expanded columns = visibleColumns x valueCount (interleaved: col0v0, col0v1, col1v0, col1v1, ...)
     const expandedCols = [];
     visibleColumns.forEach(col => {
-        for (let vi = 0; vi < valueCount; vi++) expandedCols.push({ col, vi });
+        for (let vi = 0; vi < valueCount; vi++)
+            expandedCols.push({ col, vi });
     });
-
     function numericCell(value) {
         const n = parseFloat(String(value ?? '').replace(/,/g, ''));
         return Number.isFinite(n) ? n : null;
     }
-
     function formatMatrixNumber(total, sawAny) {
-        if (!sawAny) return '';
+        if (!sawAny)
+            return '';
         return Number.isInteger(total) ? String(total) : String(Number(total.toFixed(6)));
     }
-
     function aggregateNumbers(values) {
-        if (!values.length) return '';
-        if (matrixAggregate === 'MIN') return formatMatrixNumber(Math.min(...values), true);
-        if (matrixAggregate === 'MAX') return formatMatrixNumber(Math.max(...values), true);
-        if (matrixAggregate === 'AVG') return formatMatrixNumber(values.reduce((a, b) => a + b, 0) / values.length, true);
+        if (!values.length)
+            return '';
+        if (matrixAggregate === 'MIN')
+            return formatMatrixNumber(Math.min(...values), true);
+        if (matrixAggregate === 'MAX')
+            return formatMatrixNumber(Math.max(...values), true);
+        if (matrixAggregate === 'AVG')
+            return formatMatrixNumber(values.reduce((a, b) => a + b, 0) / values.length, true);
         return formatMatrixNumber(values.reduce((a, b) => a + b, 0), true);
     }
-
     function aggregateColumn(row, col, vi) {
         const values = [];
         col.leaves.forEach(leaf => {
             const n = numericCell(row[rowDepth + leaf.index * valueCount + (vi || 0)]);
-            if (n != null) values.push(n);
+            if (n != null)
+                values.push(n);
         });
         return aggregateNumbers(values);
     }
-
     function aggregateRows(sourceRows, col, vi) {
         const values = [];
         sourceRows.forEach(row => {
             col.leaves.forEach(leaf => {
                 const n = numericCell(row[rowDepth + leaf.index * valueCount + (vi || 0)]);
-                if (n != null) values.push(n);
+                if (n != null)
+                    values.push(n);
             });
         });
         return aggregateNumbers(values);
     }
-
     function aggregateRowTotal(sourceRows, vi) {
         const values = [];
         sourceRows.forEach(row => {
             leaves.forEach(leaf => {
                 const n = numericCell(row[rowDepth + leaf.index * valueCount + (vi || 0)]);
-                if (n != null) values.push(n);
+                if (n != null)
+                    values.push(n);
             });
         });
         return aggregateNumbers(values);
     }
-
     function evaluateMatrixFormatting(numVal, colName) {
-        if (numVal == null || !Number.isFinite(numVal) || formattingRules.length === 0) return null;
+        if (numVal == null || !Number.isFinite(numVal) || formattingRules.length === 0)
+            return null;
         for (let i = 0; i < formattingRules.length; i++) {
             const rule = formattingRules[i];
             const cond = (rule.condition || rule.Condition || '').trim();
-            if (!cond) continue;
+            if (!cond)
+                continue;
             if (matchesMatrixCondition(cond, numVal, colName)) {
                 return {
                     color: rule.color || rule.Color,
@@ -3308,20 +3316,19 @@ function renderMatrix(container, visual) {
         }
         return null;
     }
-
     function matchesMatrixCondition(cond, val, colName) {
         return matchesCondition(cond, val, colName);
     }
-
     function formatAndDecorateValueCell(td, rawVal, vi, isTotal) {
         const num = numericCell(rawVal);
-        const colName = valueHeaders ? valueHeaders[vi] : (visual.options && visual.options['mapping:value']) || 'value';
+        const colName = valueHeaders ? valueHeaders[vi] || 'value' : (visual.options && visual.options['mapping:value']) || 'value';
         const fmt = evaluateMatrixFormatting(num, colName);
         if (fmt) {
-            if (fmt.color) td.style.backgroundColor = fmt.color;
-            if (fmt.fontColor) td.style.color = fmt.fontColor;
+            if (fmt.color)
+                td.style.backgroundColor = fmt.color;
+            if (fmt.fontColor)
+                td.style.color = fmt.fontColor;
         }
-
         if (!isTotal && isDataBar && num != null && dataBarMax > dataBarMin) {
             const range = dataBarMax - dataBarMin;
             const pct = Math.max(0, Math.min(100, (num - dataBarMin) / range * 100));
@@ -3339,7 +3346,6 @@ function renderMatrix(container, visual) {
             bar.style.opacity = '0.35';
             bar.style.pointerEvents = 'none';
             td.appendChild(bar);
-
             const span = document.createElement('span');
             span.className = 'data-bar-label';
             span.style.position = 'relative';
@@ -3348,16 +3354,17 @@ function renderMatrix(container, visual) {
             span.style.padding = '4px 10px';
             span.textContent = formatValue(rawVal, null);
             td.appendChild(span);
-        } else {
+        }
+        else {
             td.textContent = formatValue(rawVal, null);
         }
     }
-
     function buildRowNodes(level, sourceRows) {
         const buckets = new Map();
         sourceRows.forEach(row => {
             const label = String(row[level] ?? '');
-            if (!buckets.has(label)) buckets.set(label, []);
+            if (!buckets.has(label))
+                buckets.set(label, []);
             buckets.get(label).push(row);
         });
         return Array.from(buckets, ([label, bucket]) => ({
@@ -3368,14 +3375,13 @@ function renderMatrix(container, visual) {
             children: level < rowDepth - 1 ? buildRowNodes(level + 1, bucket) : []
         }));
     }
-
-    function appendToggle(cell, key, isCollapsed, onClick) {
+    function appendToggle(cell, _key, isCollapsed, onClick) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'matrix-toggle';
         button.textContent = isCollapsed ? '+' : '-';
         button.setAttribute('aria-label', isCollapsed ? 'Expand' : 'Collapse');
-        button.addEventListener('click', e => {
+        button.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             onClick();
@@ -3383,28 +3389,29 @@ function renderMatrix(container, visual) {
         });
         cell.appendChild(button);
     }
-
     function appendRowNode(tbody, node) {
         const isLeaf = node.children.length === 0;
         const key = rowPrefixKey(node.parts, node.level);
         let isCollapsed;
         if (key in state.collapsedRows) {
             isCollapsed = !!state.collapsedRows[key];
-        } else {
+        }
+        else {
             if (defaultExpand === 'NONE') {
                 isCollapsed = !isLeaf;
-            } else if (defaultExpand === 'LEVEL_1') {
+            }
+            else if (defaultExpand === 'LEVEL_1') {
                 isCollapsed = !isLeaf && node.level >= 1;
-            } else if (defaultExpand === 'LEVEL_2') {
+            }
+            else if (defaultExpand === 'LEVEL_2') {
                 isCollapsed = !isLeaf && node.level >= 2;
-            } else {
+            }
+            else {
                 isCollapsed = false;
             }
         }
-
         const tr = document.createElement('tr');
         tr.className = isLeaf ? 'matrix-leaf-row' : 'matrix-group-row';
-
         for (let i = 0; i < rowDepth; i++) {
             const td = document.createElement('td');
             td.className = 'matrix-dim';
@@ -3416,12 +3423,12 @@ function renderMatrix(container, visual) {
                     });
                 }
                 td.appendChild(document.createTextNode(node.label));
-            } else if (isLeaf) {
+            }
+            else if (isLeaf) {
                 td.textContent = String(node.rows[0][i] ?? '');
             }
             tr.appendChild(td);
         }
-
         expandedCols.forEach(({ col, vi }) => {
             const td = document.createElement('td');
             td.className = 'matrix-val';
@@ -3429,7 +3436,6 @@ function renderMatrix(container, visual) {
             formatAndDecorateValueCell(td, val, vi, false);
             tr.appendChild(td);
         });
-
         if (rowTotalsEnabled) {
             for (let vi = 0; vi < valueCount; vi++) {
                 const td = document.createElement('td');
@@ -3439,7 +3445,6 @@ function renderMatrix(container, visual) {
                 tr.appendChild(td);
             }
         }
-
         tbody.appendChild(tr);
         if (!isLeaf && !isCollapsed) {
             node.children.forEach(child => appendRowNode(tbody, child));
@@ -3449,7 +3454,8 @@ function renderMatrix(container, visual) {
                 for (let i = 0; i < rowDepth; i++) {
                     const td = document.createElement('td');
                     td.className = i === node.level ? 'matrix-dim matrix-subtotal-label' : 'matrix-dim';
-                    if (i === node.level) td.textContent = node.label + ' Total';
+                    if (i === node.level)
+                        td.textContent = node.label + ' Total';
                     subtr.appendChild(td);
                 }
                 expandedCols.forEach(({ col, vi }) => {
@@ -3472,16 +3478,15 @@ function renderMatrix(container, visual) {
             }
         }
     }
-
     function appendColumnHeaderButton(th, node) {
         const canCollapse = node.leaves.length > 1 || hasColumnChildren(node.parts, node.level);
-        if (!canCollapse) return;
+        if (!canCollapse)
+            return;
         const key = node.key;
-        appendToggle(th, key, !!state.collapsedCols[key], () => {
+        appendToggle(th, key, !state.collapsedCols[key], () => {
             state.collapsedCols[key] = !state.collapsedCols[key];
         });
     }
-
     // Header rows
     const thead = document.createElement('thead');
     const totalHeaderRows = colDepth + (valueCount > 1 ? 1 : 0);
@@ -3499,7 +3504,8 @@ function renderMatrix(container, visual) {
         visibleColumns.forEach(col => {
             const th = document.createElement('th');
             th.className = 'matrix-val-header';
-            if (valueCount > 1) th.colSpan = valueCount;
+            if (valueCount > 1)
+                th.colSpan = valueCount;
             const label = col.parts[level] || '';
             if (label) {
                 const prefixParts = col.parts.slice(0, level + 1);
@@ -3515,23 +3521,22 @@ function renderMatrix(container, visual) {
             }
             headerRow.appendChild(th);
         });
-
         if (rowTotalsEnabled && level === 0) {
             const th = document.createElement('th');
             th.className = 'matrix-val-header matrix-row-total-header';
             if (valueCount > 1) {
                 th.colSpan = valueCount;
-            } else {
+            }
+            else {
                 th.rowSpan = totalHeaderRows;
             }
             th.textContent = 'Total';
             headerRow.appendChild(th);
         }
-
         thead.appendChild(headerRow);
     }
     // Value sub-header row when multiple VALUE columns
-    if (valueCount > 1) {
+    if (valueCount > 1 && valueHeaders) {
         const valHeaderRow = document.createElement('tr');
         visibleColumns.forEach(() => {
             valueHeaders.forEach(vh => {
@@ -3552,11 +3557,9 @@ function renderMatrix(container, visual) {
         thead.appendChild(valHeaderRow);
     }
     table.appendChild(thead);
-
     // Data rows
     const tbody = document.createElement('tbody');
     buildRowNodes(0, rows).forEach(node => appendRowNode(tbody, node));
-
     // Grand total row (COLUMN_TOTAL)
     if (columnTotalsEnabled && grandTotals && grandTotals.length > 0) {
         const tr = document.createElement('tr');
@@ -3572,7 +3575,8 @@ function renderMatrix(container, visual) {
             const values = [];
             col.leaves.forEach(leaf => {
                 const n = numericCell(grandTotals[rowDepth + leaf.index * valueCount + vi]);
-                if (n != null) values.push(n);
+                if (n != null)
+                    values.push(n);
             });
             const val = aggregateNumbers(values);
             formatAndDecorateValueCell(td, val, vi, true);
@@ -3587,7 +3591,8 @@ function renderMatrix(container, visual) {
                 rows.forEach(row => {
                     leaves.forEach(leaf => {
                         const n = numericCell(row[rowDepth + leaf.index * valueCount + vi]);
-                        if (n != null) values.push(n);
+                        if (n != null)
+                            values.push(n);
                     });
                 });
                 const val = aggregateNumbers(values);
@@ -3597,14 +3602,13 @@ function renderMatrix(container, visual) {
         }
         tbody.appendChild(tr);
     }
-
     table.appendChild(tbody);
     wrapper.appendChild(table);
     container.appendChild(wrapper);
 }
-
 function findMicroChart(visual, rowIndex, columnIndex, sourceValue) {
-    if (!Array.isArray(visual.microCharts)) return null;
+    if (!Array.isArray(visual.microCharts))
+        return null;
     return visual.microCharts.find(micro => micro.role === 'table.cell' &&
         micro.columnIndex === columnIndex && micro.rowIndex === rowIndex) ||
         visual.microCharts.find(micro => micro.role === 'table.cell' &&
@@ -9443,20 +9447,23 @@ function updateStagedUI() {
 
 
 // ─── report-runtime.js ───
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/report-runtime.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * Report bootstrap, manifest rendering, and host event wiring.
  */
-
-
 window.__etlSqlReportWhenExportReady = function (timeoutMs) {
     const timeout = Number(timeoutMs || 0);
     if (window.__etlSqlReportExportReady) {
         return Promise.resolve(window.__etlSqlReportExportState);
     }
-    if (timeout <= 0) return getExportReadyPromise();
+    if (timeout <= 0)
+        return getExportReadyPromise();
     return Promise.race([
         getExportReadyPromise(),
         new Promise((_, reject) => {
@@ -9464,7 +9471,6 @@ window.__etlSqlReportWhenExportReady = function (timeoutMs) {
         })
     ]);
 };
-
 /**
  * Entry point: obtain manifest and render all visuals + pages.
  */
@@ -9477,27 +9483,33 @@ async function boot() {
     if (window.__MANIFEST__) {
         // Pre-embedded (single-report web mode or VS Code preview)
         manifest = window.__MANIFEST__;
-    } else if (isWebMode) {
+    }
+    else if (isWebMode) {
         // Multi-report web mode: fetch from API
         try {
             const qs = window.location.search;
             const res = await fetch(apiBase + '/manifest' + qs);
-            manifest  = await res.json();
-        } catch (e) {
-            document.getElementById('root').innerHTML =
-                '<p class="error">Failed to load manifest: ' + escHtml(e.message) + '</p>';
-            publishExportState('error', { reason: 'manifest-load-failed', message: e.message });
+            manifest = (await res.json());
+        }
+        catch (e) {
+            const err = e;
+            const root = document.getElementById('root');
+            if (root) {
+                root.innerHTML = '<p class="error">Failed to load manifest: ' + escHtml(err.message || String(e)) + '</p>';
+            }
+            publishExportState('error', { reason: 'manifest-load-failed', message: err.message || String(e) });
             return;
         }
-    } else {
-        document.getElementById('root').innerHTML =
-            '<p class="error">No manifest available.</p>';
+    }
+    else {
+        const root = document.getElementById('root');
+        if (root) {
+            root.innerHTML = '<p class="error">No manifest available.</p>';
+        }
         publishExportState('error', { reason: 'manifest-missing' });
         return;
     }
-
     renderManifest(manifest);
-
     // Launch precedence (exact order):
     //   1. explicit #bookmark=Name
     //   2. explicit #view=SavedViewId
@@ -9505,7 +9517,6 @@ async function boot() {
     //   4. author default bookmark (DEFAULT = ON)
     //   5. declared parameter/navigation defaults (already applied by renderManifest)
     await applyLaunchPrecedence(manifest);
-
     // A launch bookmark/view may be the source of a REQUIRED parameter. Validate only after
     // launch precedence has had the opportunity to apply it atomically.
     const launchedManifest = getLastManifest() || manifest;
@@ -9513,41 +9524,46 @@ async function boot() {
         publishExportState('blocked', { reason: 'required-parameters' });
         return;
     }
-
     // Identifier-only hash replay. URLs and history carry only an identifier — never parameter,
     // filter, search, drill, or presentation values.
     window.addEventListener('hashchange', () => {
         const parsed = parseStateHash(window.location.hash);
-        if (parsed.bookmark) applyBookmark(parsed.bookmark);
-        else if (parsed.view) applySavedView(parsed.view);
+        if (parsed.bookmark)
+            applyBookmark(parsed.bookmark);
+        else if (parsed.view)
+            applySavedView(parsed.view);
     });
 }
-
 async function applyLaunchPrecedence(manifest) {
     const parsed = parseStateHash(window.location.hash);
-    if (parsed.bookmark) { if (await applyBookmark(parsed.bookmark)) return true; }
-    if (parsed.view) { if (await applySavedView(parsed.view)) return true; }
-
+    if (parsed.bookmark) {
+        if (await applyBookmark(parsed.bookmark))
+            return true;
+    }
+    if (parsed.view) {
+        if (await applySavedView(parsed.view))
+            return true;
+    }
     // User's default Portal saved view (Portal mode only). A stale/unknown default must never
     // prevent the base report from opening, so failure falls through to the author default.
-    if (await applyUserDefaultSavedView()) return true;
-
+    if (await applyUserDefaultSavedView())
+        return true;
     if (manifest.bookmarks) {
         const authorDefault = manifest.bookmarks.find(b => b.isDefault);
-        if (authorDefault && await applyBookmark(authorDefault.name)) return true;
+        if (authorDefault && await applyBookmark(authorDefault.name))
+            return true;
     }
     // else: declared parameter/navigation defaults already applied by renderManifest.
     return false;
 }
-
 function checkRequiredParameters(manifest) {
-    if (!manifest.parameterMetadata) return true;
-
+    if (!manifest.parameterMetadata)
+        return true;
     const missing = [];
     const required = [];
     for (const name in manifest.parameterMetadata) {
         const meta = manifest.parameterMetadata[name];
-        if (meta.isRequired) {
+        if (meta && meta.isRequired) {
             required.push(meta);
             const val = getParam(manifest.parameters, name);
             if (val === undefined || val === null || val === "" || val === "null") {
@@ -9555,7 +9571,6 @@ function checkRequiredParameters(manifest) {
             }
         }
     }
-
     if (missing.length > 0) {
         // Show all REQUIRED parameters in the modal, not just the missing ones,
         // to provide full context to the user.
@@ -9564,19 +9579,17 @@ function checkRequiredParameters(manifest) {
     }
     return true;
 }
-
-function renderManifest(manifest) {
+function renderManifest(inputManifest) {
+    const manifest = (inputManifest || {});
     markExportNotReady('render-manifest');
     setLastManifest(manifest);
-
     // Cancel any running per-page auto-refresh timers before rebuilding.
-    getRefreshTimers().forEach(id => clearInterval(id));
+    getRefreshTimers().forEach((id) => clearInterval(id));
     setRefreshTimers([]);
-    getNativeLayoutObservers().forEach(observer => observer.disconnect());
+    getNativeLayoutObservers().forEach((observer) => observer.disconnect());
     setNativeLayoutObservers([]);
-    _nativeLayoutTimers.forEach(id => clearTimeout(id));
+    _nativeLayoutTimers.forEach((id) => clearTimeout(id));
     _nativeLayoutTimers.clear();
-
     const root = document.getElementById('root');
     if (!root) {
         publishExportState('error', { reason: 'root-missing' });
@@ -9584,68 +9597,60 @@ function renderManifest(manifest) {
     }
     const frag = document.createDocumentFragment();
     renderHeader(frag, manifest);
-
-
     // Cache baseline manifest (the first one with no parameters set)
     if (!getBaselineManifest() && (!manifest.parameters || Object.keys(manifest.parameters).length === 0)) {
         setBaselineManifest(JSON.parse(JSON.stringify(manifest)));
     }
     window.__CURRENT_MANIFEST__ = manifest;
-
     // Update local parameters from manifest
     if (manifest.parameters) {
         Object.keys(manifest.parameters).forEach(k => {
             parameters[k] = manifest.parameters[k];
         });
     }
-
     // Navigation bar
     const navDef = manifest.navigations && manifest.navigations.length > 0
         ? manifest.navigations[0] : null;
-
     let activePageName = null;
     if (manifest.pages && manifest.pages.length > 0) {
         const firstVisible = manifest.pages.find(p => !p.isHidden);
         const defaultPage = navDef
-            ? (navDef.defaultPage || (firstVisible && firstVisible.name))
-            : (firstVisible && firstVisible.name);
-        const requestedPage = (getLastActivePage() || window.__INITIAL_PAGE__ || '').trim();
+            ? (navDef.defaultPage || (firstVisible && firstVisible.name) || null)
+            : ((firstVisible && firstVisible.name) || null);
+        const requestedPage = String(getLastActivePage() || window.__INITIAL_PAGE__ || '').trim();
         activePageName = (requestedPage && manifest.pages.some(p => p.name === requestedPage)) ? requestedPage : defaultPage;
     }
     updateBodyTheme(manifest, activePageName);
-
     /** @type {Record<string, HTMLElement>} */
     const pageSections = {};
     let effectiveActivePage = null;
-
     if (manifest.pages && manifest.pages.length > 0) {
         const firstVisible = manifest.pages.find(p => !p.isHidden);
         const defaultPageName = navDef
-            ? (navDef.defaultPage || (firstVisible && firstVisible.name))
-            : (firstVisible && firstVisible.name);
+            ? (navDef.defaultPage || (firstVisible && firstVisible.name) || null)
+            : ((firstVisible && firstVisible.name) || null);
         effectiveActivePage = activePageName || defaultPageName;
-
         manifest.pages.forEach(page => {
             const reportStyles = manifest.styles || {};
             const pageStyles = page.styles || {};
             const pageTheme = getStyle(pageStyles, 'THEME') || getStyle(reportStyles, 'THEME') || getDefaultTheme(manifest);
             const section = renderPage(manifest, page, pageSections, pageTheme);
             frag.appendChild(section);
-
             // Hidden pages start invisible; active page starts visible with active class
             const isPageActive = !page.isHidden && (page.name === effectiveActivePage);
             if (isPageActive) {
                 section.style.display = 'block';
                 section.classList.add('active');
-            } else {
+            }
+            else {
                 section.style.display = 'none';
                 section.classList.remove('active');
             }
         });
-
         if (navDef) {
             renderNavBar(frag, navDef, pageSections, manifest.pages, manifest);
-        } else if (manifest.pages.length > 0) {
+        }
+        else if (manifest.pages.length > 0) {
             // No navigation — show the first page by default
             const firstPage = manifest.pages.find(p => !p.isHidden) || manifest.pages[0];
             const section = pageSections[firstPage.name];
@@ -9654,54 +9659,53 @@ function renderManifest(manifest) {
                 section.classList.add('active');
             }
         }
-    } else {
+    }
+    else {
         (manifest.visuals || []).forEach(v => renderVisual(frag, v, getDefaultTheme(manifest), manifest));
     }
-
     destroyDetailSurfaces(root); // Close detail surfaces before their marks disappear.
     root.replaceChildren(frag); // Atomic swap to eliminate white flash!
-
     if (manifest.pages && manifest.pages.length > 0) {
         const activeSection = effectiveActivePage ? pageSections[effectiveActivePage] : null;
         if (activeSection) {
             resizeChartsIn(activeSection);
         }
     }
-
     // Synchronize parameter values to any newly rendered controls
     if (manifest.parameters) {
         syncParameters(manifest.parameters);
     }
-
     // Cross-filter state management across re-renders:
     // - Non-interaction rebuild (slicer/param change): clear all selection state.
     // - Interaction rebuild (chart click): re-apply dimming/source CSS so the visual
     //   feedback survives the full DOM rebuild that renderManifest does.
-    const hasCrossHighlights = (manifest.visuals || []).some(visual =>
-        Array.isArray(visual.highlightRows) && visual.highlightRows.length > 0);
+    const hasCrossHighlights = (manifest.visuals || []).some(visual => Array.isArray(visual.highlightRows) && visual.highlightRows.length > 0);
     if (!manifest.isInteraction && !hasCrossHighlights) {
-        for (let k in _crossFilterStates) delete _crossFilterStates[k];
-    } else {
+        for (let k in _crossFilterStates)
+            delete _crossFilterStates[k];
+    }
+    else {
         reApplyCrossFilterStyling();
     }
-
     // Set up per-page auto-refresh timers (web mode only; VS Code preview ignores).
     if (isWebMode && manifest.pages) {
         manifest.pages.forEach(page => {
-            if (!page.refreshIntervalSeconds || page.refreshIntervalSeconds <= 0) return;
+            if (!page.refreshIntervalSeconds || page.refreshIntervalSeconds <= 0)
+                return;
             const id = setInterval(() => {
                 // Only refresh when the page section is visible.
                 const section = document.getElementById('page-' + page.name.toLowerCase());
-                if (!section || section.style.display === 'none') return;
+                if (!section || section.style.display === 'none')
+                    return;
                 fetch(apiBase + '/manifest')
                     .then(r => r.ok ? r.json() : null)
-                    .then(m => { if (m) renderManifest(m); })
-                    .catch(() => {});
+                    .then(m => { if (m)
+                    renderManifest(m); })
+                    .catch(() => { });
             }, page.refreshIntervalSeconds * 1000);
             getRefreshTimers().push(id);
         });
     }
-
     renderFooter(root, manifest);
     renderPipelineConsole(root, manifest);
     renderAutoPanel(root, manifest);
@@ -9709,37 +9713,37 @@ function renderManifest(manifest) {
         markExportReady(manifest);
     }
 }
-
 function syncParameters(params) {
-    if (!params) return;
-    for (let name in params) {
+    if (!params)
+        return;
+    for (const name in params) {
         const val = params[name];
-        const elements = document.querySelectorAll(`[data-parameter]`);
+        const elements = document.querySelectorAll('[data-parameter]');
         elements.forEach(el => {
             const paramKey = el.getAttribute('data-parameter');
             if (paramKey && paramKey.toLowerCase() === name.toLowerCase()) {
-                const targets = (el.tagName === 'SELECT' || el.tagName === 'INPUT')
-                                ? [el]
-                                : Array.from(el.querySelectorAll('select, input'));
+                const targets = (el.tagName === 'SELECT' || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')
+                    ? [/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (el)]
+                    : Array.from(el.querySelectorAll('select, input, textarea'));
                 targets.forEach(t => {
-                    if (/** @type {HTMLInputElement | HTMLSelectElement} */ (t).multiple && t.tagName === 'SELECT') {
+                    if ( /** @type {HTMLInputElement | HTMLSelectElement} */(t).multiple && t.tagName === 'SELECT') {
                         const csvValues = (String(val || '')).split(',').map(v => v.trim());
                         Array.from(/** @type {HTMLSelectElement} */ (t).options).forEach(opt => {
                             opt.selected = csvValues.includes(opt.value);
                         });
-                    } else if (/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (t).value !== val) {
-                        /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (t).value = val;
+                    }
+                    else if ( /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */(t).value !== val) {
+                        /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (t).value = String(val ?? '');
                     }
                 });
             }
         });
     }
 }
-
-document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeMaximizedVisual();
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape')
+        closeMaximizedVisual();
 });
-
 // Exposed for deterministic geometry fixtures and for driving the refresh/unmount
 // teardown from a test. Reading it does not open a surface.
 window.__ETLSQL_DETAIL__ = Object.freeze({
@@ -9749,38 +9753,40 @@ window.__ETLSQL_DETAIL__ = Object.freeze({
     viewportMargin: DETAIL_VIEWPORT_MARGIN,
     anchorGap: DETAIL_ANCHOR_GAP
 });
-
 // Escape and outside click are document-level and installed once.
-document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || !getOpenDetail()) return;
+document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !getOpenDetail())
+        return;
     event.stopPropagation();
     closeOpenDetail(true);
 }, true);
-
-document.addEventListener('pointerdown', event => {
-    if (!getOpenDetail() || !getOpenDetail().pinned) return;
-    if (getOpenDetail().element && getOpenDetail().element.contains(event.target)) return;
-    if (getOpenDetail().trigger && getOpenDetail().trigger.contains(event.target)) return; // toggle handles this
+document.addEventListener('pointerdown', (event) => {
+    const openDetail = getOpenDetail();
+    if (!openDetail || !openDetail.pinned)
+        return;
+    const targetNode = event.target;
+    if (targetNode && openDetail.element && openDetail.element.contains(targetNode))
+        return;
+    if (targetNode && openDetail.trigger && openDetail.trigger.contains(targetNode))
+        return; // toggle handles this
     closeOpenDetail(false);
 }, true);
-
 // Boot on DOMContentLoaded
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
-} else {
+}
+else {
     boot();
 }
-
 // VS Code message listener
 if (vscode) {
-    window.addEventListener('message', event => {
+    window.addEventListener('message', (event) => {
         const message = event.data;
-        if (message.type === 'reportManifest') {
+        if (message && message.type === 'reportManifest') {
             renderManifest(message);
         }
     });
 }
-
 // Test escape hatch: exposes pure functions for automated testing.
 // Harmless in production (just sets a window property that nothing reads).
 if (typeof window !== 'undefined') {

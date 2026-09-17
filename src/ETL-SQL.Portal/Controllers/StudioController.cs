@@ -15,8 +15,7 @@ namespace ETL_SQL.Portal.Controllers;
 
 [ApiController]
 [Route("api/studio")]
-[Authorize(Roles = "Admin,Publisher")]
-[RequirePortalModule("Reporting")]
+[Authorize]
 [RequirePortalModule("Designer")]
 [RequireStudioCapability(StudioCapabilities.StudioAccess,
     StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]

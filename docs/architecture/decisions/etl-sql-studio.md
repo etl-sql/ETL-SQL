@@ -12,9 +12,10 @@ ETL-SQL serves three core developer and analyst personas through four coordinate
 
 1. **Terminal IDE (`ETL-SQL.TUI`)**: Keyboard-driven, zero-GUI text environment optimized for DevOps, SSH sessions, air-gapped deployments, and headless servers.
 2. **VS Code Extension (`etl-sql-vscode`)**: Code-first editor optimized for software and analytics engineers managing multi-file Git repositories, CI/CD branches, and custom automation.
-3. **ETL-SQL Studio (Flagship Desktop & Web UI)**: The primary visual and interactive authoring environment, combining drag-and-drop WYSIWYG scaffolding with full-featured script editing.
+3. **ETL-SQL Studio (Flagship Desktop & Web UI)**: The primary visual and interactive authoring environment, combining drag-and-drop WYSIWYG scaffolding with full-featured script editing. Studio is deployed across **two production hosts** (plus the standalone developer UI sandbox):
    - **Desktop Edition (`WorkstationEditor` / `etlsql studio`)**: Local developer workstation application running over local loopback (`localhost:port`).
    - **Portal SaaS Edition (`Portal Studio` / `/studio/`)**: Zero-install web application hosted inside the enterprise security boundary, enforcing Zero-Trust connection access, Gateway routing, and Row-Level Security (RLS).
+   - **Developer Sandbox (`tools/ui-sandbox`)**: Standalone browser testbed for component authoring, mock contracts, and visual regression testing.
 
 ### 1.1 The Pivot: Dual Projections on the Active File (No Disconnected Tabs)
 
@@ -65,6 +66,13 @@ expires missed heartbeats and may apply a configured idle timeout once all clien
 is active, and no server draft is pending. The explicit **Exit Studio** flow checks dirty documents
 and active runs, requests graceful application shutdown, and polls for a bounded period so the UI
 can report whether the host actually stopped.
+
+### 1.3 Explicit Localization Decision
+
+ETL-SQL Studio v0.19.x/v0.20 uses English literals across all UI strings, menus, alerts, and diagnostics. This is an explicit recorded decision for the Alpha/Beta lifecycle:
+- Core language keywords in ETL-SQL and Report-SQL (`SELECT`, `VISUAL`, `DATASET`, `EXECUTE`, etc.) are English language tokens.
+- Keeping authoring surface strings and scaffolding in canonical English avoids premature i18n indirection while visual components, workflows, and interaction models are actively evolving.
+- Enterprise localization infrastructure (token catalogs, language dictionaries, and `IStringLocalizer` parity) is deferred to post-GA enterprise hardening.
 
 ---
 

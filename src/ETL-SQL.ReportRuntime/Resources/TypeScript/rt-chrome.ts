@@ -275,7 +275,7 @@ export function renderAutoPanel(container: HTMLElement, manifest: ChromeManifest
 
 // ── Header & Actions ──────────────────────────────────────────────────
 
-export function renderHeader(container: HTMLElement, manifest: ChromeManifest): void {
+export function renderHeader(container: HTMLElement | DocumentFragment, manifest: ChromeManifest): void {
     const header = document.createElement('header');
     header.className = 'report-header';
 

@@ -55,15 +55,31 @@ import { createQueryWorkbench } from './studio-query-workbench.js';
 import { taskKindLabel } from './studio-pipeline-canvas.js';
 import { CHART_AGGREGATES, STUDIO_VISUAL_GROUPS, aggregateRows, buildAggregatedSource, defaultAggregateAlias, missingRequiredRoles, renderVisualSample, rolesForVisualType, } from './visual-preview.js';
 // DOM cast helpers for emitted JavaScript checkJs evaluation
+/**
+ * @param {unknown} el
+ * @returns {any}
+ */
 function asHtml(el) {
     return el;
 }
+/**
+ * @param {unknown} el
+ * @returns {any}
+ */
 function asInput(el) {
     return el;
 }
+/**
+ * @param {unknown} el
+ * @returns {any}
+ */
 function asSelect(el) {
     return el;
 }
+/**
+ * @param {unknown} el
+ * @returns {any}
+ */
 function asButton(el) {
     return el;
 }
@@ -145,25 +161,61 @@ export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, r
     function studioDialog({ kicker, title, wide = false }, controller) {
         return new Promise(resolve => {
             let settled = false;
+            const previouslyFocused = document.activeElement;
             const close = (value) => {
                 if (settled)
                     return;
                 settled = true;
                 document.removeEventListener('keydown', onKeyDown, true);
+                dialog.backdrop.removeEventListener('click', onBackdropClick);
                 dialog.backdrop.hidden = true;
+                dialog.box.removeAttribute('role');
+                dialog.box.removeAttribute('aria-modal');
+                dialog.box.removeAttribute('aria-labelledby');
                 dialog.box.innerHTML = '';
                 dialog.box.classList.remove('etlsql-studio-dialog-wide');
                 resolve(value === undefined ? null : value);
+                asHtml(previouslyFocused)?.focus?.();
             };
             const onKeyDown = (event) => {
-                if (event.key !== 'Escape')
+                if (event.key === 'Escape') {
+                    event.stopPropagation();
+                    event.preventDefault();
+                    close(null);
                     return;
-                event.stopPropagation();
-                close(null);
+                }
+                if (event.key === 'Tab') {
+                    const focusable = Array.from(dialog.box.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')).map(asHtml).filter(el => el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement);
+                    if (focusable.length === 0) {
+                        event.preventDefault();
+                        return;
+                    }
+                    const first = asHtml(focusable[0]);
+                    const last = asHtml(focusable[focusable.length - 1]);
+                    if (event.shiftKey) {
+                        if (document.activeElement === first || !dialog.box.contains(document.activeElement)) {
+                            event.preventDefault();
+                            last.focus();
+                        }
+                    }
+                    else {
+                        if (document.activeElement === last || !dialog.box.contains(document.activeElement)) {
+                            event.preventDefault();
+                            first.focus();
+                        }
+                    }
+                }
             };
+            const onBackdropClick = (event) => {
+                if (event.target === dialog.backdrop)
+                    close(null);
+            };
+            dialog.box.setAttribute('role', 'dialog');
+            dialog.box.setAttribute('aria-modal', 'true');
+            dialog.box.setAttribute('aria-labelledby', 'etlsql-studio-dialog-title');
             dialog.box.innerHTML = `
                 <div class="etlsql-studio-modal-header">
-                    <div><span class="etlsql-studio-kicker">${escapeHtml(kicker)}</span><h2 data-dialog-title>${escapeHtml(title)}</h2></div>
+                    <div><span class="etlsql-studio-kicker">${escapeHtml(kicker)}</span><h2 data-dialog-title id="etlsql-studio-dialog-title">${escapeHtml(title)}</h2></div>
                     <button type="button" class="etlsql-studio-dialog-dismiss" data-dialog-dismiss aria-label="Close">&times;</button>
                 </div>
                 <div class="etlsql-studio-modal-body etlsql-studio-guided-body" data-dialog-body></div>
@@ -172,6 +224,7 @@ export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, r
                 dialog.box.classList.add('etlsql-studio-dialog-wide');
             dialog.backdrop.hidden = false;
             document.addEventListener('keydown', onKeyDown, true);
+            dialog.backdrop.addEventListener('click', onBackdropClick);
             dialog.box.querySelector('[data-dialog-dismiss]')?.addEventListener('click', () => close(null));
             const bodyHost = asHtml(dialog.box.querySelector('[data-dialog-body]'));
             const actionHost = asHtml(dialog.box.querySelector('[data-dialog-actions]'));
@@ -1674,7 +1727,9 @@ export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, r
     async function runFurnitureStep() {
         const doc = getActiveDocument();
         const draft = {
+            headerKind: 'text',
             header: doc?.name?.replace(/\.rptsql$/i, '').replace(/[_-]+/g, ' ') || 'Report',
+            headerImage: '/images/logo.png',
             footer: 'Page {{PAGE}} of {{PAGES}}',
             addHeader: true,
             addFooter: true,
@@ -1682,22 +1737,44 @@ export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, r
         };
         await studioDialog({ kicker: 'Step 5 · Header + footer', title: 'Add page furniture' }, api => {
             const paint = () => api.render({
-                lede: 'Page <strong>furniture</strong> is the text that frames every printed page. '
-                    + 'These are TEXT bands with a <code>KEEP_TOGETHER</code> print rule, so they never split across a page boundary.',
+                lede: 'Page <strong>furniture</strong> is the content that frames every printed page. '
+                    + 'These are TEXT and IMAGE bands with a <code>KEEP_TOGETHER</code> print rule, so they never split across a page boundary.',
                 body: `
                     <label class="etlsql-studio-guided-check">
                         <input type="checkbox" data-furniture-header ${draft.addHeader ? 'checked' : ''}> Add a page header</label>
-                    ${draft.addHeader ? `<label class="etlsql-studio-guided-field"><span>Header text</span>
-                        <input type="text" data-header-text value="${escapeHtml(draft.header)}"></label>` : ''}
-                    <label class="etlsql-studio-guided-check">
+                    ${draft.addHeader ? `
+                        <div style="display:flex;gap:12px;margin:4px 0 6px 0;">
+                            <label style="font-size:12px;"><input type="radio" name="furniture_header_kind" value="text" ${draft.headerKind === 'text' ? 'checked' : ''} data-header-kind> Text & dynamic fields</label>
+                            <label style="font-size:12px;"><input type="radio" name="furniture_header_kind" value="image" ${draft.headerKind === 'image' ? 'checked' : ''} data-header-kind> Image / Logo</label>
+                        </div>
+                        ${draft.headerKind === 'text' ? `
+                            <label class="etlsql-studio-guided-field"><span>Header text</span>
+                                <input type="text" data-header-text value="${escapeHtml(draft.header)}"></label>
+                            <div style="display:flex;gap:6px;margin:2px 0 8px 0;flex-wrap:wrap;align-items:center;">
+                                <span style="font-size:11px;color:var(--portal-muted,#7a8798);">Tokens:</span>
+                                <button type="button" class="btn btn-xs" data-insert-token="header" data-token="{{PAGE}}">+ Page #</button>
+                                <button type="button" class="btn btn-xs" data-insert-token="header" data-token="{{PAGES}}">+ Total Pages</button>
+                                <button type="button" class="btn btn-xs" data-insert-token="header" data-token="{{CURRENT_DATE}}">+ Date</button>
+                            </div>` : `
+                            <label class="etlsql-studio-guided-field"><span>Image URL or file path</span>
+                                <input type="text" data-header-image value="${escapeHtml(draft.headerImage)}" placeholder="/images/logo.png or https://..."></label>`}` : ''}
+                    <label class="etlsql-studio-guided-check" style="margin-top:8px;">
                         <input type="checkbox" data-furniture-footer ${draft.addFooter ? 'checked' : ''}> Add a page footer</label>
-                    ${draft.addFooter ? `<label class="etlsql-studio-guided-field"><span>Footer text</span>
-                        <input type="text" data-footer-text value="${escapeHtml(draft.footer)}"></label>` : ''}
-                    <label class="etlsql-studio-guided-check">
+                    ${draft.addFooter ? `
+                        <label class="etlsql-studio-guided-field"><span>Footer text</span>
+                            <input type="text" data-footer-text value="${escapeHtml(draft.footer)}"></label>
+                        <div style="display:flex;gap:6px;margin:2px 0 8px 0;flex-wrap:wrap;align-items:center;">
+                            <span style="font-size:11px;color:var(--portal-muted,#7a8798);">Tokens:</span>
+                            <button type="button" class="btn btn-xs" data-insert-token="footer" data-token="{{PAGE}}">+ Page #</button>
+                            <button type="button" class="btn btn-xs" data-insert-token="footer" data-token="{{PAGES}}">+ Total Pages</button>
+                            <button type="button" class="btn btn-xs" data-insert-token="footer" data-token="{{CURRENT_DATE}}">+ Date</button>
+                            <button type="button" class="btn btn-xs" data-insert-token="footer" data-token="Page {{PAGE}} of {{PAGES}}">Page X of Y</button>
+                        </div>` : ''}
+                    <label class="etlsql-studio-guided-check" style="margin-top:8px;">
                         <input type="checkbox" data-furniture-break ${draft.breakAfterDetails ? 'checked' : ''}>
                         Start a new page after the detail table</label>`
-                    + mutationExplanationMarkup(`Adds ${[draft.addHeader ? 'a header band' : null, draft.addFooter ? 'a footer band' : null]
-                        .filter(Boolean).join(' and ') || 'nothing yet'} to the page as TEXT visuals`
+                    + mutationExplanationMarkup(`Adds ${[draft.addHeader ? (draft.headerKind === 'image' ? 'a logo image' : 'a header band') : null, draft.addFooter ? 'a footer band' : null]
+                        .filter(Boolean).join(' and ') || 'nothing yet'} to the page`
                         + `${draft.breakAfterDetails ? ', and sets the detail table to start a new page after it' : ''}. `
                         + 'The bands print on every physical page; the data visuals are untouched.')
                     + (draft.addHeader || draft.addFooter ? '' : guidedNoteMarkup('Nothing selected — pick a header, a footer, or both.', 'warning')),
@@ -1711,8 +1788,6 @@ export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, r
                                 page.mode = 'Paginated';
                                 page.visuals ||= [];
                                 const bottom = () => page.visuals.reduce((max, visual) => Math.max(max, visual.gridRow + visual.gridRowSpan - 1), 0);
-                                // A TEXT band carries its content in DEFAULT and reads no data, so it
-                                // gets no SOURCE — one with a source and no text prints nothing.
                                 const band = (slug, title, text) => ({
                                     id: `studio_${slug}_${Date.now().toString(36)}`,
                                     name: uniqueVisualName(design, `page_${slug}`),
@@ -1725,8 +1800,25 @@ export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, r
                                         print_layout: 'PRINT_LAYOUT (KEEP_TOGETHER = ON)',
                                     },
                                 });
-                                if (draft.addHeader)
-                                    page.visuals.push(band('header', 'Page header', draft.header));
+                                if (draft.addHeader) {
+                                    if (draft.headerKind === 'image') {
+                                        page.visuals.push({
+                                            id: `studio_header_logo_${Date.now().toString(36)}`,
+                                            name: uniqueVisualName(design, 'page_header_logo'),
+                                            type: 'IMAGE', gridCol: 1, gridRow: bottom() + 1, gridColSpan: 12, gridRowSpan: 2,
+                                            title: 'Report logo',
+                                            dataset: null,
+                                            mappings: {},
+                                            options: {
+                                                src: `'${String(draft.headerImage).replace(/'/g, "''")}'`,
+                                                print_layout: 'PRINT_LAYOUT (KEEP_TOGETHER = ON)',
+                                            },
+                                        });
+                                    }
+                                    else {
+                                        page.visuals.push(band('header', 'Page header', draft.header));
+                                    }
+                                }
                                 if (draft.addFooter)
                                     page.visuals.push(band('footer', 'Page footer', draft.footer));
                                 if (draft.breakAfterDetails) {
@@ -1749,8 +1841,28 @@ export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, r
                     host.querySelector('[data-furniture-header]')?.addEventListener('change', event => { draft.addHeader = asInput(event.target).checked; paint(); });
                     host.querySelector('[data-furniture-footer]')?.addEventListener('change', event => { draft.addFooter = asInput(event.target).checked; paint(); });
                     host.querySelector('[data-furniture-break]')?.addEventListener('change', event => { draft.breakAfterDetails = asInput(event.target).checked; });
+                    host.querySelectorAll('[data-header-kind]').forEach(r => r.addEventListener('change', event => { draft.headerKind = asInput(event.target).value; paint(); }));
                     host.querySelector('[data-header-text]')?.addEventListener('input', event => { draft.header = asInput(event.target).value; });
+                    host.querySelector('[data-header-image]')?.addEventListener('input', event => { draft.headerImage = asInput(event.target).value; });
                     host.querySelector('[data-footer-text]')?.addEventListener('input', event => { draft.footer = asInput(event.target).value; });
+                    host.querySelectorAll('[data-insert-token]').forEach(btn => btn.addEventListener('click', () => {
+                        const target = asHtml(btn).dataset.insertToken;
+                        const token = asHtml(btn).dataset.token || '';
+                        if (target === 'header') {
+                            const input = host.querySelector('[data-header-text]');
+                            if (input) {
+                                input.value = input.value ? `${input.value} ${token}` : token;
+                                draft.header = input.value;
+                            }
+                        }
+                        else if (target === 'footer') {
+                            const input = host.querySelector('[data-footer-text]');
+                            if (input) {
+                                input.value = input.value ? `${input.value} ${token}` : token;
+                                draft.footer = input.value;
+                            }
+                        }
+                    }));
                 },
             });
             paint();
@@ -2022,6 +2134,7 @@ export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, r
         if (!await requireDataSample('Step 3 · Cross-filters'))
             return;
         shell.setActivity('filters');
+        const context = activeContext();
         await studioDialog({ kicker: 'Step 3 · Cross-filters', title: 'Filter across visuals' }, api => api.render({
             lede: 'A <strong>filter</strong> narrows the rows every visual sees. Promoting one to a viewer control turns it into a slicer '
                 + 'the reader can change, backed by a report parameter.',
@@ -2030,7 +2143,17 @@ export function createStudioAuthoringSurfaces({ dialog, routes, catalogRoutes, r
                     <li>Choose <em>Dataset global</em> to filter every visual, or <em>Selected visual</em> for just one.</li>
                     <li>Use <em>Promote to viewer control</em> to give the reader a slicer for that field.</li>
                 </ul>`,
-            actions: [{ id: 'close', label: 'Got it', primary: true, run: () => api.close(null) }],
+            actions: [
+                {
+                    id: 'skip',
+                    label: 'Skip / No filters needed',
+                    run: () => {
+                        context.skipCrossFilters = true;
+                        api.close('skip');
+                    }
+                },
+                { id: 'close', label: 'Configure filters', primary: true, run: () => api.close(null) },
+            ],
         }));
     }
     /**

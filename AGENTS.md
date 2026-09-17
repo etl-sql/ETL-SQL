@@ -1,4 +1,4 @@
-﻿# ETL-SQL: AI Agent Instruction Manual
+# ETL-SQL: AI Agent Instruction Manual
 
 Welcome, Agent. You are assisting in the development and operation of **ETL-SQL**, a hybrid engine that executes SQL-like syntax against diverse data sources (SQL, NoSQL, FlatFiles) with an emphasis on portability and "Zero-Trust" security.
 
@@ -433,12 +433,10 @@ Files copied under these host folders are generated sync outputs and must not be
 
 When changing report runtime JavaScript, CSS, themes, or shared browser dependencies:
 
-Migrated modules are authored under `src/ETL-SQL.ReportRuntime/Resources/TypeScript/`, currently
-`rt-util.ts`, `designer/designer-util.ts`, `designer/editor-toolbar.ts`, and
-`designer/studio-git-diff.ts`, `designer/studio-host.ts`, `designer/studio-lifecycle.ts`, `designer/studio-security.ts`, `designer/html-preview.ts`, `designer/studio-authoring-ui.ts`,
-`designer/data-prep-recipes.ts`, `designer/studio-contracts.ts`, and `designer/studio-query-workbench.ts`.
-Their matching paths under `Shared/` are generated;
-edit the TypeScript source. `sync-assets.js` compiles migrated modules before bundling and copying.
+All 44 shared report runtime and designer modules are authored under
+`src/ETL-SQL.ReportRuntime/Resources/TypeScript/`. Their matching paths under `Shared/` (and the
+concatenated offline bundle `report-runtime.bundle.js`) are generated; edit the TypeScript source.
+`sync-assets.js` compiles TypeScript modules before bundling and copying.
 Install the pinned compiler with `npm ci --prefix scripts/typecheck`. For sandbox development,
 run `node scripts/compile-browser.mjs --watch` and reload after successful compilation. Sandbox
 startup also compiles once. `sync-assets.js -Check` verifies compiled output without repairing it;

@@ -646,7 +646,13 @@ body.vscode-high-contrast .btn-primary:hover {
 }
 
 .etlsql-editor-container .cm-activeLine {
-    background: var(--portal-accent-soft, #eff6ff) !important;
+    background: rgba(37, 99, 235, 0.08) !important;
+}
+
+.etlsql-editor-container .cm-selectionBackground,
+.etlsql-editor-container.cm-focused .cm-selectionBackground,
+.etlsql-editor-container .cm-selectionLayer .cm-selectionBackground {
+    background: #bfdbfe !important;
 }
 
 body.theme-dark .etlsql-editor-container .cm-editor,
@@ -699,6 +705,17 @@ body.theme-midnight .etlsql-editor-container .cm-content,
 body.vscode-dark .etlsql-editor-container .cm-content,
 body.vscode-high-contrast .etlsql-editor-container .cm-content {
     caret-color: #f0f6fc !important;
+}
+
+body.theme-dark .etlsql-editor-container .cm-selectionBackground,
+body.theme-midnight .etlsql-editor-container .cm-selectionBackground,
+body.vscode-dark .etlsql-editor-container .cm-selectionBackground,
+body.vscode-high-contrast .etlsql-editor-container .cm-selectionBackground,
+body.theme-dark .etlsql-editor-container .cm-selectionLayer .cm-selectionBackground,
+body.theme-midnight .etlsql-editor-container .cm-selectionLayer .cm-selectionBackground,
+body.vscode-dark .etlsql-editor-container .cm-selectionLayer .cm-selectionBackground,
+body.vscode-high-contrast .etlsql-editor-container .cm-selectionLayer .cm-selectionBackground {
+    background: rgba(56, 139, 253, 0.35) !important;
 }
 
 .etlsql-editor-diagnostics {
@@ -4261,6 +4278,11 @@ body.vscode-dark .etlsql-cw-missing-hint {
     font-weight: 600;
 }
 
+.etlsql-studio-tab:focus-visible {
+    outline: 2px solid var(--portal-accent, #388bfd);
+    outline-offset: -2px;
+}
+
 .etlsql-studio-tab .etlsql-tab-title {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -4862,8 +4884,11 @@ body.vscode-dark .etlsql-cw-missing-hint {
     cursor: row-resize;
 }
 
-.etlsql-studio-stage-resizer:hover {
+.etlsql-studio-stage-resizer:hover,
+.etlsql-studio-stage-resizer:focus-visible {
     background: var(--portal-accent, #388bfd);
+    outline: 2px solid var(--portal-accent, #388bfd);
+    outline-offset: 1px;
 }
 
 .etlsql-studio-code-stage {
@@ -5750,6 +5775,20 @@ body.vscode-dark .etlsql-cw-missing-hint {
     background: rgba(210, 153, 34, 0.12);
 }
 
+.etlsql-home-action-card.etlsql-home-card-disabled,
+.etlsql-home-action-card[aria-disabled="true"] {
+    opacity: 0.6;
+    cursor: not-allowed;
+    border-style: dashed;
+}
+
+.etlsql-home-action-card.etlsql-home-card-disabled:hover,
+.etlsql-home-action-card[aria-disabled="true"]:hover {
+    border-color: var(--portal-border, #30363d);
+    transform: none;
+    box-shadow: none;
+}
+
 .etlsql-home-dashboard-glyph,
 .etlsql-home-page-glyph {
     width: 25px;
@@ -6165,6 +6204,18 @@ body.vscode-dark .etlsql-cw-missing-hint {
     display: block;
     font-size: 0.6875rem;
     color: var(--portal-text-soft, #8b949e);
+}
+
+.etlsql-tab-new-item.disabled,
+.etlsql-tab-new-item[aria-disabled="true"] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.etlsql-tab-new-item.disabled:hover,
+.etlsql-tab-new-item[aria-disabled="true"]:hover {
+    background: transparent;
+    color: var(--portal-text, #f0f6fc);
 }
 
 /* ── Guided workflow rail ──────────────────────────────────────────────────────

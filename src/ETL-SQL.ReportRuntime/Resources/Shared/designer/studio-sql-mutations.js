@@ -72,6 +72,7 @@ export function createStudioSqlMutationService({ state, getActiveDocument, activ
         const context = document.studioContext;
         context.patchQueue ||= Promise.resolve();
         context.patchQueue = context.patchQueue.catch(() => { }).then(async () => {
+            const startRevision = document.contentRevision || 0;
             const script = getActiveDocument() === document && state.editorInstance ? state.editorInstance.getValue() : document.content;
             const parsed = await designerApiJson(routes.parse, { script });
             if (parsed.error)
@@ -83,8 +84,18 @@ export function createStudioSqlMutationService({ state, getActiveDocument, activ
             const patched = await designerApiJson(routes.patch, { script, designState });
             if (typeof patched.script !== 'string')
                 throw new Error('The canonical patcher returned no script.');
+            // Verify document hasn't been edited while in-flight before applying
+            const currentScript = getActiveDocument() === document && state.editorInstance
+                ? state.editorInstance.getValue()
+                : document.content;
+            const currentRevision = document.contentRevision || 0;
+            if (currentRevision !== startRevision || currentScript !== script) {
+                feedback.notify(`Visual edit "${label}" was cancelled because the script was modified while processing. Your newer typing was preserved.`, { title: 'Conflicting Edit', tone: 'warning' });
+                return null;
+            }
             document.content = patched.script;
             document.isDirty = patched.script !== script || document.isDirty;
+            document.contentRevision = (document.contentRevision || 0) + 1;
             if (getActiveDocument() === document) {
                 const changed = state.editorInstance?.replaceAll?.(patched.script);
                 if (changed)
@@ -93,6 +104,9 @@ export function createStudioSqlMutationService({ state, getActiveDocument, activ
                 renderVisualStage();
                 renderWorkflow(document, applied?.designState);
                 offerUndo?.(label, { document, before: script, after: patched.script });
+            }
+            else {
+                document.editorState = null;
             }
             renderTabs();
             return mutationResult;
@@ -128,6 +142,7 @@ export function createStudioSqlMutationService({ state, getActiveDocument, activ
         const context = document.studioContext;
         context.patchQueue ||= Promise.resolve();
         context.patchQueue = context.patchQueue.catch(() => { }).then(async () => {
+            const startRevision = document.contentRevision || 0;
             const script = getActiveDocument() === document && state.editorInstance
                 ? state.editorInstance.getValue()
                 : document.content;
@@ -138,14 +153,27 @@ export function createStudioSqlMutationService({ state, getActiveDocument, activ
                 throw new Error('The host returned no script.');
             if (result.script === script)
                 return result;
+            // Verify document hasn't been edited while in-flight before applying
+            const currentScript = getActiveDocument() === document && state.editorInstance
+                ? state.editorInstance.getValue()
+                : document.content;
+            const currentRevision = document.contentRevision || 0;
+            if (currentRevision !== startRevision || currentScript !== script) {
+                feedback.notify(`Pipeline edit "${label}" was cancelled because the script was modified while processing. Your newer typing was preserved.`, { title: 'Conflicting Edit', tone: 'warning' });
+                return null;
+            }
             document.content = result.script;
             document.isDirty = true;
+            document.contentRevision = (document.contentRevision || 0) + 1;
             if (getActiveDocument() === document) {
                 const changed = state.editorInstance?.replaceAll?.(result.script);
                 if (changed)
                     state.editorInstance?.revealRange?.(changed.from, changed.to);
                 renderVisualStage();
                 offerUndo?.(label, { document, before: script, after: result.script });
+            }
+            else {
+                document.editorState = null;
             }
             renderTabs();
             return result;

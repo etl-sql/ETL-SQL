@@ -10,6 +10,7 @@ import { escapeHtml } from './designer-util.js';
 import { _loadCm, _getRptsqlLang, _getRptsqlHighlightStyle } from './rptsql-language.js';
 
 export interface ScriptEditorDiagnostic {
+    [key: string]: unknown;
     startLine?: number;
     startColumn?: number;
     endLine?: number;
@@ -59,6 +60,11 @@ export interface ScriptEditorHandle {
     redo: () => boolean;
     focus: () => void;
     dispose: () => void;
+    getState?: () => unknown;
+    setState?: (state: unknown) => void;
+    createDocState?: (text: string) => unknown;
+    getScrollPosition?: () => { top: number; left: number };
+    setScrollPosition?: (pos: { top?: number; left?: number }) => void;
 }
 
 export interface CompletionItemLike {
@@ -208,6 +214,11 @@ export function diagnosticSeverity(d?: ScriptEditorDiagnostic): 'error' | 'info'
  * @property {() => void} undo
  * @property {() => void} redo
  * @property {() => void} dispose
+ * @property {() => *} [getState]
+ * @property {(state: *) => void} [setState]
+ * @property {(text: string) => *} [createDocState]
+ * @property {() => { top: number, left: number }} [getScrollPosition]
+ * @property {(pos: { top?: number, left?: number }) => void} [setScrollPosition]
  */
 
 /**
@@ -886,7 +897,26 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
          * The query workbench has always called this, as `editor.focus?.()` — an optional call, so
          * it never threw and never focused anything either. It is a real member now.
          */
-        focus: (): void => view.focus(),
+        focus: () => view.focus(),
+        getState: (): unknown => view?.state,
+        setState: (newState: unknown): void => {
+            if (view && newState) {
+                view.setState(newState);
+            }
+        },
+        createDocState: (text: string): unknown => {
+            return EditorState.create({ doc: text ?? '', extensions });
+        },
+        getScrollPosition: (): { top: number; left: number } => ({
+            top: view?.scrollDOM?.scrollTop ?? 0,
+            left: view?.scrollDOM?.scrollLeft ?? 0,
+        }),
+        setScrollPosition: (pos: { top?: number; left?: number }): void => {
+            if (view?.scrollDOM) {
+                if (pos?.top != null) view.scrollDOM.scrollTop = pos.top;
+                if (pos?.left != null) view.scrollDOM.scrollLeft = pos.left;
+            }
+        },
         dispose: (): void => {
             clearTimeout(analyzeTimer);
             clearTimeout(hoverTimer);

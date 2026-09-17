@@ -256,6 +256,38 @@ assert.equal(notifyCalls.length, 1);
 assert.match(notifyCalls[0].msg, /Broken Mutation failed: Syntax error on line 5/);
 assert.equal(notifyCalls[0].opts.tone, 'error');
 
+// 7b. Reject stale visual edits before they overwrite newer typing
+notifyCalls = [];
+mockActiveDoc.content = 'SELECT 1;';
+mockActiveDoc.contentRevision = 1;
+editorInstance._value = 'SELECT 1;';
+mockApiResponse[routes.parse] = () => ({
+    designState: {
+        pages: [{ id: 'p1', name: 'Page 1', visuals: [] }],
+        datasets: []
+    }
+});
+mockApiResponse[routes.patch] = () => {
+    // Simulate user typing while the patch was processing
+    editorInstance._value = 'SELECT 1; -- user typed this while waiting';
+    mockActiveDoc.content = 'SELECT 1; -- user typed this while waiting';
+    mockActiveDoc.contentRevision = 2;
+    return { script: 'SELECT 1; -- stale patch' };
+};
+
+const conflictRes = await service.canonicalDesignerMutation('Add Visual Concurrent', (ds) => {
+    ds.pages[0].visuals.push({ id: 'v_conflict', name: 'Conflict_Visual' });
+    return 'created_v_conflict';
+});
+
+// Patch must be rejected to preserve user's newer typing:
+assert.equal(conflictRes, null);
+assert.equal(editorInstance._value, 'SELECT 1; -- user typed this while waiting');
+assert.equal(mockActiveDoc.content, 'SELECT 1; -- user typed this while waiting');
+assert.equal(notifyCalls.length, 1);
+assert.match(notifyCalls[0].msg, /cancelled because the script was modified while processing/);
+assert.equal(notifyCalls[0].opts.tone, 'warning');
+
 // 8. canonicalPipelineMutation & canonicalScriptMutation
 visualStageRendered = false;
 undoOffers = [];
@@ -269,6 +301,26 @@ assert.equal(scriptMutationRes.applied, true);
 assert.match(mockActiveDoc.content, /-- added task load_data/);
 assert.equal(undoOffers.length, 1);
 assert.equal(undoOffers[0].label, 'Add Task');
+
+// 8b. Reject stale pipeline edits when user typed meanwhile
+notifyCalls = [];
+mockActiveDoc.content = 'SELECT 100;';
+mockActiveDoc.contentRevision = 1;
+editorInstance._value = 'SELECT 100;';
+mockApiResponse[routes.pipelineTask] = () => {
+    editorInstance._value = 'SELECT 100; -- user typed newer content';
+    mockActiveDoc.content = 'SELECT 100; -- user typed newer content';
+    mockActiveDoc.contentRevision = 2;
+    return { applied: true, script: 'SELECT 100;\n-- task applied' };
+};
+
+const pipelineConflictRes = await service.canonicalPipelineMutation('Concurrent Task', { task: 't1' });
+assert.equal(pipelineConflictRes, null);
+assert.equal(editorInstance._value, 'SELECT 100; -- user typed newer content');
+assert.equal(mockActiveDoc.content, 'SELECT 100; -- user typed newer content');
+assert.equal(notifyCalls.length, 1);
+assert.match(notifyCalls[0].msg, /cancelled because the script was modified while processing/);
+assert.equal(notifyCalls[0].opts.tone, 'warning');
 
 // Refused mutation
 notifyCalls = [];

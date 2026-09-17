@@ -252,7 +252,7 @@ export function closeMaximizedVisual(): void {
 // Filter types that render without requiring rows
 const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'HTML', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX', 'IMAGE']);
 
-export function renderVisual(container: HTMLElement, visual: VisualVisual, pageTheme: string | null, manifest: VisualManifest, embedDepth = 0): void {
+export function renderVisual(container: HTMLElement | DocumentFragment, visual: VisualVisual, pageTheme: string | null, manifest: VisualManifest, embedDepth = 0): void {
     const card = document.createElement('div');
     card.className = 'visual-card';
     card.setAttribute('data-name', visual.name);

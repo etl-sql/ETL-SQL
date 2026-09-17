@@ -27,7 +27,8 @@ export function createStudioDocumentContext(snapshot = null) {
         lastValidDag: null,
         syncRevision: 0,
         previewedDatasetSignature: null,
-        resultsTrace: []
+        resultsTrace: [],
+        skipCrossFilters: false
     };
 }
 export function createStudioState(options = {}) {

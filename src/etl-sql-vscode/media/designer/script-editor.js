@@ -137,6 +137,11 @@ export function diagnosticSeverity(d) {
  * @property {() => void} undo
  * @property {() => void} redo
  * @property {() => void} dispose
+ * @property {() => *} [getState]
+ * @property {(state: *) => void} [setState]
+ * @property {(text: string) => *} [createDocState]
+ * @property {() => { top: number, left: number }} [getScrollPosition]
+ * @property {(pos: { top?: number, left?: number }) => void} [setScrollPosition]
  */
 /**
  * Mount a CodeMirror 6 rptsql editor into `container`.
@@ -808,6 +813,27 @@ export async function createScriptEditor(container, opts = {}) {
          * it never threw and never focused anything either. It is a real member now.
          */
         focus: () => view.focus(),
+        getState: () => view?.state,
+        setState: (newState) => {
+            if (view && newState) {
+                view.setState(newState);
+            }
+        },
+        createDocState: (text) => {
+            return EditorState.create({ doc: text ?? '', extensions });
+        },
+        getScrollPosition: () => ({
+            top: view?.scrollDOM?.scrollTop ?? 0,
+            left: view?.scrollDOM?.scrollLeft ?? 0,
+        }),
+        setScrollPosition: (pos) => {
+            if (view?.scrollDOM) {
+                if (pos?.top != null)
+                    view.scrollDOM.scrollTop = pos.top;
+                if (pos?.left != null)
+                    view.scrollDOM.scrollLeft = pos.left;
+            }
+        },
         dispose: () => {
             clearTimeout(analyzeTimer);
             clearTimeout(hoverTimer);

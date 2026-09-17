@@ -23,7 +23,7 @@ namespace ETL_SQL.Portal.Controllers;
 
 [ApiController]
 [Route("api/designer")]
-[Authorize(Roles = "Admin,Publisher")]
+[Authorize]
 [RequirePortalModule("Designer")]
 [RequireStudioCapability(StudioCapabilities.StudioAccess, StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
 public class DesignerController : ControllerBase
@@ -829,7 +829,7 @@ public class DesignerController : ControllerBase
     // ── POST /api/designer/preview ────────────────────────────────────────────
 
     [HttpPost("preview")]
-    [Authorize(Roles = "Admin,Publisher")]
+    [Authorize]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> Preview([FromBody] PreviewDesignerRequest req, CancellationToken cancellationToken)
@@ -926,7 +926,7 @@ public class DesignerController : ControllerBase
     // ── POST /api/designer/preview/pdf ────────────────────────────────────────
 
     [HttpPost("preview/pdf")]
-    [Authorize(Roles = "Admin,Publisher")]
+    [Authorize]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> PreviewPdf([FromBody] PreviewDesignerRequest req, CancellationToken cancellationToken)
@@ -983,7 +983,7 @@ public class DesignerController : ControllerBase
     // ── POST /api/designer/save ──────────────────────────────────────────────
 
     [HttpPost("save")]
-    [Authorize(Roles = "Admin,Publisher")]
+    [Authorize]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptSave)]
     public async Task<IActionResult> Save([FromBody] SaveDesignerRequest req, CancellationToken cancellationToken)
@@ -1031,7 +1031,7 @@ public class DesignerController : ControllerBase
     // ── POST /api/designer/lease ──────────────────────────────────────────────
 
     [HttpPost("lease")]
-    [Authorize(Roles = "Admin,Publisher")]
+    [Authorize]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptSave)]
     public async Task<IActionResult> AcquireLease([FromBody] LeaseDesignerRequest req, CancellationToken cancellationToken)
@@ -1089,7 +1089,7 @@ public class DesignerController : ControllerBase
     }
 
     [HttpDelete("lease/{reportId:int}")]
-    [Authorize(Roles = "Admin,Publisher")]
+    [Authorize]
     [RequireStudioCapability(StudioCapabilities.ScriptSave)]
     public async Task<IActionResult> ReleaseLease(int reportId, CancellationToken cancellationToken)
     {

@@ -57,8 +57,8 @@ async function readJson(url, opts = {}) {
 }
 
 let studioSession;
-let catalogReports = [];
-let catalogFolders = [];
+let catalogReports;
+let catalogFolders;
 try {
   studioSession = await studioApi.session();
   const capabilities = new Set(studioSession.capabilities || []);
@@ -67,8 +67,18 @@ try {
     capabilities.has('ScriptSave') ? studioApi.folders() : Promise.resolve([])
   ]);
 } catch (error) {
-  ETLSQLFeedback?.notify?.('Studio catalog failed to load: ' + error.message, { title: 'Studio Unavailable', tone: 'error' });
-  studioSession = { mode: 'Viewer', capabilities: [], sourceControlEnabled: false };
+  ETLSQLFeedback?.notify?.('Studio session failed to load: ' + error.message, { title: 'Studio Unavailable', tone: 'error' });
+  if (container) {
+    container.innerHTML = `
+      <div class="etlsql-studio-error-stage" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:400px;padding:32px;text-align:center;">
+        <div style="font-size:36px;margin-bottom:16px;">⚠️</div>
+        <h2 style="font-size:18px;font-weight:600;margin-bottom:8px;">Unable to load authoring session</h2>
+        <p style="color:var(--portal-muted,#7a8798);max-width:480px;margin-bottom:20px;font-size:14px;line-height:1.5;">${String(error.message || 'A transient server or network error occurred while establishing your authoring session.').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+        <button type="button" class="btn btn-primary" id="retrySessionBtn" style="padding:8px 20px;font-size:14px;">Retry Connection</button>
+      </div>`;
+    document.getElementById('retrySessionBtn')?.addEventListener('click', () => window.location.reload());
+  }
+  throw error;
 }
 
 const capabilities = new Set(studioSession.capabilities || []);
@@ -138,6 +148,22 @@ const studio = await createStudioWorkbench(container, {
     description: null
   }),
   onRenewDocument: doc => acquireLease(doc.reportId),
+  onReacquireDocument: async doc => {
+    if (!doc?.reportId) return null;
+    const lease = await acquireLease(doc.reportId);
+    let script = null;
+    try {
+      script = await readJson(`/api/reports/${doc.reportId}/script-content`);
+    } catch {
+      // script content is best-effort for server version check
+    }
+    return {
+      lease,
+      version: script?.version ?? null,
+      sourceRevision: script?.sourceRevision ?? null,
+      content: script?.scriptText ?? ''
+    };
+  },
   onCloseDocument: async (doc, { keepalive = false } = {}) => {
     if (!doc?.reportId || !doc.lease?.acquired) return;
     const res = await authFetch(`/api/designer/lease/${doc.reportId}`, { method: 'DELETE', keepalive });

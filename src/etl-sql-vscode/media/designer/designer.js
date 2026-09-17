@@ -4,6 +4,10 @@
  * Edit the canonical source, then run: node .\scripts\sync-assets.js
  */
 
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/designer.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -24,8 +28,9 @@
  *
  * CodeMirror bundle loaded on demand: designer/codemirror/codemirror-bundle.min.js
  */
-
-import { renderVisualSample } from './visual-preview.js';
+/// <reference path="../../../../../types/etlsql-contracts.generated.d.ts" />
+/// <reference path="../../../../../types/browser-globals.d.ts" />
+import { renderVisualSample, CHART_AGGREGATES, VISUAL_ROLES, aggregateExpression } from './visual-preview.js';
 import { _feedback, esc } from './designer-util.js';
 import { toolbarButton } from './editor-toolbar.js';
 import { editLeaseRetryDelay } from './run-results.js';
@@ -33,17 +38,37 @@ import { createScriptEditorWorkbench } from './script-workbench.js';
 import { DATA_PREP_RECIPES } from './data-prep-recipes.js';
 import { HTML_PREVIEW_BUDGETS, _copyHtmlPreviewNode, _validateHtmlPreviewCss } from './html-preview.js';
 import { toHexColor, parseNumericRadius, parseNumericOpacity, visualFormatting, renderVisualFormatInspectorHtml, renderFormattingSectionHtml } from './visual-format-inspector.js';
-
+const feedback = _feedback;
 export { _edgeStyle, renderDag } from './dag.js';
 export { redactSecrets, normalizeRunTrace, createScriptResultsPanel, MAX_RENDERED_ROWS, resultRenderWindow, filterRows, toCsv, formatResultCell, buildDataPreviewPayload, editLeaseRetryDelay } from './run-results.js';
 export { createScriptEditor } from './script-editor.js';
 export { createScriptEditorWorkbench } from './script-workbench.js';
 export { DATA_PREP_RECIPES } from './data-prep-recipes.js';
-
+/** Query helpers retain the source's direct-access behaviour while keeping DOM types native. */
+function queryElement(root, selector) {
+    return root.querySelector(selector);
+}
+function queryElements(root, selector) {
+    return root.querySelectorAll(selector);
+}
+function controlTarget(event) {
+    return event.target;
+}
+function checkedTarget(event) {
+    return event.target.checked;
+}
+function eventElement(event) {
+    return event.target;
+}
+function closestElement(event, selector) {
+    return event.target?.closest(selector);
+}
+function datasetValue(element, key) {
+    return element.dataset[key];
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase 4 — Report Designer
 // ─────────────────────────────────────────────────────────────────────────────
-
 /*
  * NOTE: an ordinary comment, not JSDoc. The @param list below is stale — createDesigner also
  * accepts snapshotPackage, sourceControlEnabled, previewUrl, host, isVisualLocked and hideTopbar,
@@ -75,30 +100,34 @@ export { DATA_PREP_RECIPES } from './data-prep-recipes.js';
  * @returns {{ dispose: Function }}
  */
 export function createDesigner(container, opts = {}) {
-
     // ── State ────────────────────────────────────────────────────────────────
     const state = opts.designState
         ? JSON.parse(JSON.stringify(opts.designState))
         : { pages: [], datasets: [] };
     if (!state.pages?.length)
         state.pages = [{ id: 'p1', name: 'Page 1', mode: 'Dashboard', visuals: [] }];
-    if (!state.datasets) state.datasets = [];
-
-    let pageIdx     = 0;
+    if (!state.datasets)
+        state.datasets = [];
+    // The parser permits omitted OPTIONS for a visual. Normalize that wire field once at the
+    // boundary so control handlers can use the open-ended option vocabulary safely.
+    for (const page of state.pages) {
+        for (const visual of page.visuals || [])
+            visual.options ||= {};
+    }
+    let pageIdx = 0;
     let selVisualId = null;
     let scriptEditor = null;
-    let reportName  = opts.reportName ?? 'New Report';
-    const reportId  = opts.reportId   ?? null;
+    let reportName = opts.reportName ?? 'New Report';
+    const reportId = opts.reportId ?? null;
     let reportVersion = opts.reportVersion ?? null;
     let sourceRevision = opts.sourceRevision ?? null;
     const sourceControlEnabled = Boolean(opts.sourceControlEnabled);
-    const folderId  = opts.folderId   ?? null;
-    const folders   = Array.isArray(opts.folders) ? opts.folders : [];
+    const folderId = opts.folderId ?? null;
+    const folders = Array.isArray(opts.folders) ? opts.folders : [];
     const initialMode = opts.initialMode === 'code' ? 'code' : 'design';
-    const apiBase   = opts.apiBase    ?? '';
-    const _fetch    = opts.authFetch  ?? ((url, o) => fetch(url, o));
+    const apiBase = opts.apiBase ?? '';
+    const _fetch = opts.authFetch ?? ((url, o) => fetch(url, o));
     const previewUrl = opts.previewUrl ?? '/designer-preview.html';
-
     // ── Undo / Redo, Clipboard & Ergonomics state ─────────────────────────────
     const undoStack = [];
     const redoStack = [];
@@ -110,59 +139,61 @@ export function createDesigner(container, opts = {}) {
     let leaseTimer = null;
     let leaseRequestInFlight = false;
     let leaseDisposed = false;
-
     function pushUndoState() {
-        if (undoStack.length >= 20) undoStack.shift();
+        if (undoStack.length >= 20)
+            undoStack.shift();
         undoStack.push(JSON.stringify(state.pages));
         redoStack.length = 0;
         isDirty = true;
     }
-
     function undoCanvasState() {
-        if (!undoStack.length) return;
+        if (!undoStack.length)
+            return;
         redoStack.push(JSON.stringify(state.pages));
-        state.pages = JSON.parse(undoStack.pop());
+        state.pages = JSON.parse(undoStack.pop() ?? '[]');
         renderAll();
     }
-
     function redoCanvasState() {
-        if (!redoStack.length) return;
+        if (!redoStack.length)
+            return;
         undoStack.push(JSON.stringify(state.pages));
-        state.pages = JSON.parse(redoStack.pop());
+        state.pages = JSON.parse(redoStack.pop() ?? '[]');
         renderAll();
     }
-
     function duplicateVisual(id) {
         const v = findVis(id);
-        if (!v) return;
+        if (!v)
+            return;
         pushUndoState();
         const newId = uid();
         const clone = JSON.parse(JSON.stringify(v));
         clone.id = newId;
         clone.name = (clone.type || 'vis').toLowerCase() + '_' + newId.slice(2);
         clone.gridRow = (v.gridRow || 1) + (v.gridRowSpan || 4);
-        if (clone.gridRow > 50) clone.gridRow = (v.gridRow || 1) + 1;
+        if (clone.gridRow > 50)
+            clone.gridRow = (v.gridRow || 1) + 1;
         const page = curPage();
-        if (page?.visuals) page.visuals.push(clone);
+        if (page?.visuals)
+            page.visuals.push(clone);
         selectVisual(newId);
         renderAll();
     }
-
     function copySelectedVisuals() {
-        if (selVisualIds.size === 0) return;
+        if (selVisualIds.size === 0)
+            return;
         clipboardVisuals = Array.from(selVisualIds)
             .map(id => findVis(id))
             .filter(Boolean)
             .map(v => JSON.parse(JSON.stringify(v)));
     }
-
     function pasteVisuals() {
-        if (!clipboardVisuals.length) return;
+        if (!clipboardVisuals.length)
+            return;
         pushUndoState();
         const page = curPage();
-        if (!page.visuals) page.visuals = [];
+        if (!page.visuals)
+            page.visuals = [];
         const newSelIds = [];
-
         for (const orig of clipboardVisuals) {
             const newId = uid();
             const clone = JSON.parse(JSON.stringify(orig));
@@ -173,13 +204,12 @@ export function createDesigner(container, opts = {}) {
             page.visuals.push(clone);
             newSelIds.push(newId);
         }
-
         selVisualIds.clear();
-        for (const id of newSelIds) selVisualIds.add(id);
+        for (const id of newSelIds)
+            selVisualIds.add(id);
         selVisualId = selVisualIds.size === 1 ? Array.from(selVisualIds)[0] : null;
         renderAll();
     }
-
     const beforeUnloadHandler = (e) => {
         if (isDirty) {
             e.preventDefault();
@@ -187,45 +217,43 @@ export function createDesigner(container, opts = {}) {
         }
     };
     window.addEventListener('beforeunload', beforeUnloadHandler);
-
     // ── Visual type registry ──────────────────────────────────────────────────
     const VCATEGORIES = [
         {
             name: 'Charts',
             types: [
-                ['BAR','#3b82f6'],['LINE','#06b6d4'],['AREA','#0891b2'],['PIE','#8b5cf6'],
-                ['DONUT','#a855f7'],['HBAR','#6366f1'],['SCATTER','#6366f1'],['GAUGE','#a855f7'],
-                ['FUNNEL','#d946ef'],['TREEMAP','#ec4899'],['HEATMAP','#f43f5e'],['COMBO','#0ea5e9'],
-                ['BOXPLOT','#14b8a6'],['WATERFALL','#10b981'],['BUBBLE','#06b6d4'],['RADAR','#8b5cf6'],
-                ['CANDLESTICK','#f59e0b'],['MAP','#10b981'],['GANTT','#8b5cf6'],['SANKEY','#14b8a6'],
-                ['SUNBURST','#d946ef'],['NETWORK','#6366f1'],['TRELLIS','#64748b'],['MATRIX','#475569'],
-                ['CUSTOM','#8b5cf6']
+                ['BAR', '#3b82f6'], ['LINE', '#06b6d4'], ['AREA', '#0891b2'], ['PIE', '#8b5cf6'],
+                ['DONUT', '#a855f7'], ['HBAR', '#6366f1'], ['SCATTER', '#6366f1'], ['GAUGE', '#a855f7'],
+                ['FUNNEL', '#d946ef'], ['TREEMAP', '#ec4899'], ['HEATMAP', '#f43f5e'], ['COMBO', '#0ea5e9'],
+                ['BOXPLOT', '#14b8a6'], ['WATERFALL', '#10b981'], ['BUBBLE', '#06b6d4'], ['RADAR', '#8b5cf6'],
+                ['CANDLESTICK', '#f59e0b'], ['MAP', '#10b981'], ['GANTT', '#8b5cf6'], ['SANKEY', '#14b8a6'],
+                ['SUNBURST', '#d946ef'], ['NETWORK', '#6366f1'], ['TRELLIS', '#64748b'], ['MATRIX', '#475569'],
+                ['CUSTOM', '#8b5cf6']
             ]
         },
         {
             name: 'Data & Content',
             types: [
-                ['TABLE','#64748b'],['CARD','#10b981'],['TEXT','#f59e0b'],['IMAGE','#ec4899'],['HTML','#059669']
+                ['TABLE', '#64748b'], ['CARD', '#10b981'], ['TEXT', '#f59e0b'], ['IMAGE', '#ec4899'], ['HTML', '#059669']
             ]
         },
         {
             name: 'Filters & Inputs',
             types: [
-                ['SLICER','#f97316'],['MULTISELECT','#f97316'],['DATEPICKER','#e11d48'],['RELDATEPICKER','#e11d48'],
-                ['SLIDER','#f59e0b'],['SEARCH','#0ea5e9'],['CHECKBOX','#10b981'],['TEXTBOX','#64748b'],['NUMBERBOX','#64748b']
+                ['SLICER', '#f97316'], ['MULTISELECT', '#f97316'], ['DATEPICKER', '#e11d48'], ['RELDATEPICKER', '#e11d48'],
+                ['SLIDER', '#f59e0b'], ['SEARCH', '#0ea5e9'], ['CHECKBOX', '#10b981'], ['TEXTBOX', '#64748b'], ['NUMBERBOX', '#64748b']
             ]
         },
         {
             name: 'Layout & Actions',
             types: [
-                ['CONTAINER','#475569'],['BUTTON','#a855f7']
+                ['CONTAINER', '#475569'], ['BUTTON', '#a855f7']
             ]
         }
     ];
     const VTYPES = VCATEGORIES.flatMap(c => c.types);
     const VCOLOR = Object.fromEntries(VTYPES.map(([t, c]) => [t, c]));
-    const ROLES  = ['X', 'Y', 'VALUE', 'CATEGORY', 'SERIES', 'LABEL', 'TOOLTIP'];
-
+    const ROLES = ['X', 'Y', 'VALUE', 'CATEGORY', 'SERIES', 'LABEL', 'TOOLTIP'];
     // ── API helper ────────────────────────────────────────────────────────────
     async function apiJson(url, method = 'GET', body = null, version = null) {
         const init = { method, headers: {} };
@@ -236,20 +264,23 @@ export function createDesigner(container, opts = {}) {
             init.body = JSON.stringify(body);
         }
         const res = await _fetch(apiBase + url, init);
-        if (!res) return null;
+        if (!res)
+            return null;
         if (!res.ok) {
             const payload = await res.json().catch(() => ({}));
-            const error = new Error(payload.error || res.statusText);
+            const payloadObject = payload && typeof payload === 'object' ? payload : {};
+            const error = new Error(typeof payloadObject.error === 'string' ? payloadObject.error : res.statusText);
             error.status = res.status;
-            error.payload = payload;
+            error.payload = payloadObject;
             throw error;
         }
-        if (res.status === 204) return null;
+        if (res.status === 204)
+            return null;
         return res.json();
     }
-
     // ── Utilities ─────────────────────────────────────────────────────────────
-    const uid       = () => 'v_' + Math.random().toString(36).slice(2, 8);
+    const uid = () => 'v_' + Math.random().toString(36).slice(2, 8);
+    const errorText = (error) => error instanceof Error ? error.message : String(error);
     /**
      * Whether the host has locked this visual on the canvas.
      *
@@ -258,21 +289,20 @@ export function createDesigner(container, opts = {}) {
      * on every interaction rather than caching an answer, so a lock toggled while a card is on
      * screen holds from the next drag without the panel pushing state in.
      */
-    const isLocked = v => Boolean(v) && Boolean(opts.isVisualLocked?.(v));
-    const refuseLocked = v => _feedback.notify(
-        `${v.name} is locked. Unlock it in the outline to move, resize, or remove it here.`,
-        { title: 'Visual locked', tone: 'info' });
-    const curPage   = () => state.pages[pageIdx];
-    const curVis    = () => curPage()?.visuals ?? [];
-    const findVis   = id => { for (const p of state.pages) for (const v of p.visuals ?? []) if (v.id === id) return v; return null; };
-    const maxRow    = vs => vs.length ? Math.max(...vs.map(v => (v.gridRow || 1) + (v.gridRowSpan || 4) - 1)) : 0;
-
+    const isLocked = (v) => Boolean(v) && Boolean(v && opts.isVisualLocked?.(v));
+    const refuseLocked = (v) => feedback.notify(`${v.name} is locked. Unlock it in the outline to move, resize, or remove it here.`, { title: 'Visual locked', tone: 'info' });
+    const curPage = () => state.pages[pageIdx];
+    const curVis = () => curPage()?.visuals ?? [];
+    const findVis = (id) => { for (const p of state.pages)
+        for (const v of p.visuals ?? [])
+            if (v.id === id)
+                return v; return null; };
+    const maxRow = (vs) => vs.length ? Math.max(...vs.map(v => (v.gridRow || 1) + (v.gridRowSpan || 4) - 1)) : 0;
     // ── DOM scaffold ──────────────────────────────────────────────────────────
     container.innerHTML = '';
     const root = document.createElement('div');
     root.className = 'etlsql-designer';
     container.appendChild(root);
-
     // Top bar
     const topbar = document.createElement('div');
     topbar.className = 'etlsql-designer-topbar';
@@ -306,113 +336,127 @@ export function createDesigner(container, opts = {}) {
         ${toolbarButton({ attr: 'id="dsgn-cancel"', icon: 'close', title: 'Cancel editing', label: 'Cancel' })}
     `;
     root.appendChild(topbar);
-    /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (topbar.querySelector('#dsgn-name')).value = reportName;
-    /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (topbar.querySelector('#dsgn-theme-select')).value = localStorage.getItem('portal-theme') || 'light';
+    /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (queryElement(topbar, '#dsgn-name')).value = reportName;
+    /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (queryElement(topbar, '#dsgn-theme-select')).value = localStorage.getItem('portal-theme') || 'light';
     if (opts.hideTopbar) {
         topbar.style.display = 'none';
         root.classList.add('no-topbar');
     }
-
     function setScriptDiagnosticBadge(errorText) {
-        const el = topbar.querySelector('#dsgn-diagnostic-badge');
-        if (!el) return;
+        const el = queryElement(topbar, '#dsgn-diagnostic-badge');
+        if (!el)
+            return;
         if (errorText) {
             /** @type {HTMLElement} */ (el).style.display = 'inline-flex';
             el.textContent = '⚠ Script syntax warning';
             /** @type {HTMLElement} */ (el).title = errorText;
-        } else {
+        }
+        else {
             /** @type {HTMLElement} */ (el).style.display = 'none';
             el.textContent = '';
             /** @type {HTMLElement} */ (el).title = '';
         }
     }
-
     function setScmStatus(text, kind) {
-        const el = topbar.querySelector('#dsgn-scm-status');
-        if (!el) return;
+        const el = queryElement(topbar, '#dsgn-scm-status');
+        if (!el)
+            return;
         el.textContent = text || '';
         const colors = { success: '#16a34a', error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
         /** @type {HTMLElement} */ (el).style.color = colors[kind] || colors.neutral;
         /** @type {HTMLElement} */ (el).style.marginLeft = '8px';
         /** @type {HTMLElement} */ (el).style.fontSize = '12px';
     }
-    const shortRev = r => (r ? String(r).slice(0, 8) : '');
-
+    const shortRev = (r) => (r ? String(r).slice(0, 8) : '');
     function setLeaseStatus(text, kind, title = '') {
-        const status = topbar.querySelector('#dsgn-lease-status');
-        if (!status) return;
+        const status = queryElement(topbar, '#dsgn-lease-status');
+        if (!status)
+            return;
         status.textContent = text || '';
         /** @type {HTMLElement} */ (status).dataset.kind = kind || 'neutral';
         /** @type {HTMLElement} */ (status).title = title || text || '';
     }
-
     function scheduleLeaseAttempt(delayMs) {
-        clearTimeout(leaseTimer);
-        if (!leaseDisposed) leaseTimer = setTimeout(acquireEditLease, Math.max(1_000, delayMs));
+        clearTimeout(leaseTimer ?? undefined);
+        if (!leaseDisposed)
+            leaseTimer = setTimeout(acquireEditLease, Math.max(1_000, delayMs));
     }
-
     async function acquireEditLease() {
-        if (!reportId || opts.host !== 'portal' || leaseDisposed || leaseRequestInFlight) return;
+        if (!reportId || opts.host !== 'portal' || leaseDisposed || leaseRequestInFlight)
+            return;
         leaseRequestInFlight = true;
-        if (leaseState !== 'held') setLeaseStatus('Claiming edit session…', 'pending');
+        if (leaseState !== 'held')
+            setLeaseStatus('Claiming edit session…', 'pending');
         try {
             const lease = await apiJson('/api/designer/lease', 'POST', { reportId });
-            if (leaseDisposed) return;
+            if (!lease)
+                return;
+            if (leaseDisposed)
+                return;
             leaseState = 'held';
             const expires = new Date(lease.expiresAt);
-            setLeaseStatus('Editing session active', 'success',
-                `This edit session is held by ${lease.owner || 'you'} until ${expires.toLocaleTimeString()}. It renews automatically.`);
+            setLeaseStatus('Editing session active', 'success', `This edit session is held by ${lease.owner || 'you'} until ${expires.toLocaleTimeString()}. It renews automatically.`);
             /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (topbar.querySelector('#dsgn-save')).disabled = false;
             // Renew with a wide safety margin. A successful renewal does not advance the report's
             // optimistic content version, so it cannot create a false save conflict.
             scheduleLeaseAttempt(120_000);
-        } catch (error) {
-            if (leaseDisposed) return;
-            leaseState = error.status === 409 ? 'held-by-other' : 'disconnected';
+        }
+        catch (error) {
+            if (leaseDisposed)
+                return;
+            const problem = error;
+            leaseState = problem.status === 409 ? 'held-by-other' : 'disconnected';
             /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (topbar.querySelector('#dsgn-save')).disabled = true;
-            if (error.status === 409) {
-                const owner = error.payload?.owner || 'Another author';
-                const expires = error.payload?.expiresAt ? new Date(error.payload.expiresAt) : null;
+            if (problem.status === 409) {
+                const details = problem.payload && typeof problem.payload === 'object'
+                    ? problem.payload : {};
+                const owner = typeof details.owner === 'string' ? details.owner : 'Another author';
+                const expires = typeof details.expiresAt === 'string' ? new Date(details.expiresAt) : null;
                 const expiryText = expires && !Number.isNaN(expires.valueOf())
                     ? ` until ${expires.toLocaleTimeString()}` : '';
-                setLeaseStatus(`${owner} is editing${expiryText}`, 'warning',
-                    'Saving is paused. Studio will claim the session after the current lease expires.');
-                scheduleLeaseAttempt(editLeaseRetryDelay(error.payload?.expiresAt));
-            } else {
-                setLeaseStatus('Edit session disconnected', 'error',
-                    'Saving is paused while Studio reconnects to the lease service.');
+                setLeaseStatus(`${owner} is editing${expiryText}`, 'warning', 'Saving is paused. Studio will claim the session after the current lease expires.');
+                scheduleLeaseAttempt(editLeaseRetryDelay(typeof details.expiresAt === 'string' ? details.expiresAt : ''));
+            }
+            else {
+                setLeaseStatus('Edit session disconnected', 'error', 'Saving is paused while Studio reconnects to the lease service.');
                 scheduleLeaseAttempt(15_000);
             }
-        } finally {
+        }
+        finally {
             leaseRequestInFlight = false;
         }
     }
-
     function releaseEditLease({ keepalive = false } = {}) {
-        clearTimeout(leaseTimer);
-        if (!reportId || opts.host !== 'portal' || leaseState !== 'held') return Promise.resolve();
+        clearTimeout(leaseTimer ?? undefined);
+        if (!reportId || opts.host !== 'portal' || leaseState !== 'held')
+            return Promise.resolve();
         leaseState = 'released';
         const url = apiBase + `/api/designer/lease/${reportId}`;
         if (keepalive) {
             // Best effort on navigation. authFetch retains the caller's normal authorization headers.
-            try { return Promise.resolve(_fetch(url, { method: 'DELETE', keepalive: true })).catch(() => {}); }
-            catch { return Promise.resolve(); }
+            try {
+                return Promise.resolve(_fetch(url, { method: 'DELETE', keepalive: true })).catch(() => { });
+            }
+            catch {
+                return Promise.resolve();
+            }
         }
-        return apiJson(`/api/designer/lease/${reportId}`, 'DELETE').catch(() => {});
+        return apiJson(`/api/designer/lease/${reportId}`, 'DELETE').catch(() => { });
     }
-
     const pageHideLeaseHandler = () => { void releaseEditLease({ keepalive: true }); };
     const visibilityLeaseHandler = () => {
-        if (document.visibilityState === 'visible' && leaseState !== 'held') void acquireEditLease();
+        if (document.visibilityState === 'visible' && leaseState !== 'held')
+            void acquireEditLease();
     };
     const pageShowLeaseHandler = () => {
-        if (leaseState !== 'held') void acquireEditLease();
+        if (leaseState !== 'held')
+            void acquireEditLease();
     };
     window.addEventListener('pagehide', pageHideLeaseHandler);
     window.addEventListener('pageshow', pageShowLeaseHandler);
     document.addEventListener('visibilitychange', visibilityLeaseHandler);
-    if (reportId && opts.host === 'portal') queueMicrotask(acquireEditLease);
-
+    if (reportId && opts.host === 'portal')
+        queueMicrotask(acquireEditLease);
     // ── Sidebar (Palette + Tree + Datasets + Bookmarks) ─────────────────────────
     const sidebar = document.createElement('div');
     sidebar.className = 'etlsql-designer-sidebar';
@@ -461,7 +505,6 @@ export function createDesigner(container, opts = {}) {
         </div>
     `;
     sidebar.innerHTML = sidebarHtml;
-
     // Bookmarks live in their own element rather than in the sidebar's markup, because Studio hides
     // this sidebar and hosts its own rail. `mountBookmarks` moves this exact node — same DOM, same
     // listeners, same render path — so the two hosts cannot drift into two bookmark editors.
@@ -479,18 +522,20 @@ export function createDesigner(container, opts = {}) {
         sidebar.hidden = true;
         root.classList.add('no-sidebar');
     }
-
-    const paletteSearch = sidebar.querySelector('#dsgn-palette-search');
-    const paletteCount = sidebar.querySelector('#dsgn-palette-count');
+    const paletteSearch = queryElement(sidebar, '#dsgn-palette-search');
+    const paletteCount = queryElement(sidebar, '#dsgn-palette-count');
     function filterPalette() {
         const query = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (paletteSearch).value.trim().toLowerCase();
         let visible = 0;
-        for (const section of sidebar.querySelectorAll('[data-palette-category]')) {
+        for (const section of queryElements(sidebar, '[data-palette-category]')) {
             let sectionVisible = 0;
-            for (const button of section.querySelectorAll('[data-vtype]')) {
-                const matches = !query || /** @type {HTMLElement} */ (button).dataset.search.toLowerCase().includes(query);
+            for (const button of queryElements(section, '[data-vtype]')) {
+                const matches = !query || (button.dataset.search || '').toLowerCase().includes(query);
                 /** @type {HTMLElement} */ (button).hidden = !matches;
-                if (matches) { visible++; sectionVisible++; }
+                if (matches) {
+                    visible++;
+                    sectionVisible++;
+                }
             }
             /** @type {HTMLElement} */ (section).hidden = sectionVisible === 0;
         }
@@ -498,12 +543,11 @@ export function createDesigner(container, opts = {}) {
     }
     paletteSearch.addEventListener('input', filterPalette);
     paletteSearch.addEventListener('keydown', event => {
-        if (/** @type {KeyboardEvent} */ (event).key === 'Escape' && /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (paletteSearch).value) {
+        if ( /** @type {KeyboardEvent} */(event).key === 'Escape' && /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (paletteSearch).value) {
             /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (paletteSearch).value = '';
             filterPalette();
         }
     });
-
     // Canvas
     const canvasWrap = document.createElement('div');
     canvasWrap.className = 'etlsql-designer-canvas';
@@ -511,7 +555,6 @@ export function createDesigner(container, opts = {}) {
     canvasGrid.className = 'etlsql-dsgn-grid';
     canvasWrap.appendChild(canvasGrid);
     root.appendChild(canvasWrap);
-
     // Properties panel
     const propsPanel = document.createElement('div');
     propsPanel.className = 'etlsql-designer-props';
@@ -519,20 +562,19 @@ export function createDesigner(container, opts = {}) {
         propsPanel.classList.add('etlsql-designer-props-external');
         opts.propertiesHost.appendChild(propsPanel);
         root.classList.add('no-props');
-    } else {
+    }
+    else {
         root.appendChild(propsPanel);
     }
     if (opts.hideProps && !opts.propertiesHost) {
         propsPanel.hidden = true;
         root.classList.add('no-props');
     }
-
     // Script overlay
     const scriptOverlay = document.createElement('div');
     scriptOverlay.className = 'etlsql-designer-script-overlay';
     scriptOverlay.innerHTML = '<div class="etlsql-designer-script-body" id="dsgn-script-workbench-host"></div>';
     root.appendChild(scriptOverlay);
-
     // Report preview overlay: reuses the script overlay's positioning/visibility, hosts a
     // sandboxed iframe that renders the compiled report manifest via report-runtime.js.
     const previewOverlay = document.createElement('div');
@@ -547,7 +589,6 @@ export function createDesigner(container, opts = {}) {
         </div>
         <iframe id="dsgn-preview-frame" title="Report preview" sandbox="allow-scripts allow-same-origin" style="flex:1;border:0;width:100%;background:#fff"></iframe>`;
     root.appendChild(previewOverlay);
-
     // Save-as modal
     const saveModal = document.createElement('div');
     saveModal.className = 'etlsql-dsgn-modal-bg';
@@ -567,7 +608,6 @@ export function createDesigner(container, opts = {}) {
         </div>
     `;
     root.appendChild(saveModal);
-
     // Data-prep recipe modal
     const dataPrepModal = document.createElement('div');
     dataPrepModal.className = 'etlsql-dsgn-modal-bg';
@@ -599,39 +639,33 @@ export function createDesigner(container, opts = {}) {
         </div>
     `;
     root.appendChild(dataPrepModal);
-
     // ── Render ────────────────────────────────────────────────────────────────
-
     let activeSnapshotFilter = null;
     const snapshotResizeObservers = new Set();
-
     function disconnectSnapshotResizeObservers() {
         for (const observer of snapshotResizeObservers) {
-            try { observer.disconnect(); } catch { /* Already disconnected, or its element is gone; either way nothing is left to do. */ }
+            try {
+                observer.disconnect();
+            }
+            catch { /* Already disconnected, or its element is gone; either way nothing is left to do. */ }
         }
         snapshotResizeObservers.clear();
     }
-
     function tidyLayout() {
         const page = curPage();
-        if (!page?.visuals?.length) return;
-
+        if (!page?.visuals?.length)
+            return;
         const visuals = [...page.visuals].sort((a, b) => ((a.gridRow || 1) - (b.gridRow || 1)) || ((a.gridCol || 1) - (b.gridCol || 1)));
-
         for (let i = 0; i < visuals.length; i++) {
             const v = visuals[i];
             const vColStart = v.gridCol || 1;
             const vColEnd = vColStart + (v.gridColSpan || 12) - 1;
-
             let newRow = 1;
-
             for (let j = 0; j < i; j++) {
                 const prev = visuals[j];
                 const pColStart = prev.gridCol || 1;
                 const pColEnd = pColStart + (prev.gridColSpan || 12) - 1;
-
                 const overlapsHorizontally = (vColStart <= pColEnd) && (vColEnd >= pColStart);
-
                 if (overlapsHorizontally) {
                     const prevBottom = (prev.gridRow || 1) + (prev.gridRowSpan || 4);
                     if (prevBottom > newRow) {
@@ -639,10 +673,8 @@ export function createDesigner(container, opts = {}) {
                     }
                 }
             }
-
             const deltaRow = newRow - (v.gridRow || 1);
             v.gridRow = newRow;
-
             if (v.type === 'CONTAINER' && deltaRow !== 0) {
                 for (const child of page.visuals) {
                     if (child.containerId === v.id) {
@@ -651,14 +683,12 @@ export function createDesigner(container, opts = {}) {
                 }
             }
         }
-
         renderCanvas();
         renderTree();
         renderProps();
     }
-
     function renderPageTabs() {
-        const strip = topbar.querySelector('#dsgn-pages');
+        const strip = queryElement(topbar, '#dsgn-pages');
         strip.innerHTML = '';
         state.pages.forEach((p, i) => {
             const tab = document.createElement('button');
@@ -668,13 +698,13 @@ export function createDesigner(container, opts = {}) {
             strip.appendChild(tab);
         });
     }
-
     function _renderHtmlVisualPreview(bodyEl, visual, snapshotPackage) {
         const tmpl = visual.options?.html_template || '<article class="custom-card"><h3>{{Title}}</h3><p>{{Description}}</p></article>';
         const css = visual.options?.html_style || '';
         const mode = visual.options?.html_mode || 'SINGLE';
-        const rows = (snapshotPackage && visual.dataset && snapshotPackage.datasets?.[visual.dataset]?.rows) || [];
-
+        const rows = (snapshotPackage && visual.dataset
+            ? snapshotPackage.datasets?.[visual.dataset]?.rows
+            : undefined) || [];
         const renderRow = (row, columns) => {
             let rowHtml = tmpl;
             columns.forEach((col, idx) => {
@@ -684,54 +714,60 @@ export function createDesigner(container, opts = {}) {
             });
             return rowHtml;
         };
-
         let sampleHtml;
         let budgetHtml;
         if (mode === 'REPEATER' && rows.length > 0) {
-            const columns = snapshotPackage.datasets[visual.dataset].columns || [];
+            const columns = snapshotPackage?.datasets?.[visual.dataset]?.columns || [];
             sampleHtml = rows.slice(0, 5).map(row => renderRow(row, columns)).join('');
             budgetHtml = rows.map(row => renderRow(row, columns)).join('');
-        } else if (rows.length > 0) {
-            const columns = snapshotPackage?.datasets?.[visual.dataset]?.columns || [];
+        }
+        else if (rows.length > 0) {
+            const columns = visual.dataset ? snapshotPackage?.datasets?.[visual.dataset]?.columns || [] : [];
             sampleHtml = renderRow(rows[0], columns);
             budgetHtml = sampleHtml;
-        } else {
+        }
+        else {
             // Static or placeholder preview
             sampleHtml = tmpl.replace(/\{\{#IF\s+[^}]+\}\}/gi, '')
-                             .replace(/\{\{\/IF\}\}/gi, '')
-                             .replace(/\{\{([@a-zA-Z0-9_]+)(?:\s+FORMAT\s+[^}]+)?\}\}/g, '$1');
+                .replace(/\{\{\/IF\}\}/gi, '')
+                .replace(/\{\{([@a-zA-Z0-9_]+)(?:\s+FORMAT\s+[^}]+)?\}\}/g, '$1');
             budgetHtml = sampleHtml;
         }
-
         const encoder = new TextEncoder();
         const authored = new DOMParser().parseFromString(tmpl, 'text/html');
         const rendered = new DOMParser().parseFromString(sampleHtml, 'text/html');
         const budgetRendered = new DOMParser().parseFromString(budgetHtml, 'text/html');
-        const templateNodes = authored.body.querySelectorAll('*').length;
+        const templateNodes = queryElements(authored.body, '*').length;
         const rowLimit = Number(visual.options?.MAX_ROWS || visual.options?.max_rows || HTML_PREVIEW_BUDGETS.rows);
         const instances = mode === 'REPEATER' ? rows.length : 1;
         const authoredOutputNodes = templateNodes * instances;
-        const outputNodes = budgetRendered.body.querySelectorAll('*').length;
+        const outputNodes = queryElements(budgetRendered.body, '*').length;
         const outputBytes = encoder.encode(budgetHtml).length;
         const renderWork = outputNodes + Math.ceil(outputBytes / 256);
         const violations = [];
-        if (encoder.encode(tmpl).length > HTML_PREVIEW_BUDGETS.templateBytes) violations.push('Template byte budget exceeded.');
-        if (encoder.encode(css).length > HTML_PREVIEW_BUDGETS.cssBytes) violations.push('CSS byte budget exceeded.');
-        if (templateNodes > HTML_PREVIEW_BUDGETS.templateNodes) violations.push('Template node budget exceeded.');
-        if (mode === 'REPEATER' && rows.length > rowLimit) violations.push('Repeater row budget exceeded.');
+        if (encoder.encode(tmpl).length > HTML_PREVIEW_BUDGETS.templateBytes)
+            violations.push('Template byte budget exceeded.');
+        if (encoder.encode(css).length > HTML_PREVIEW_BUDGETS.cssBytes)
+            violations.push('CSS byte budget exceeded.');
+        if (templateNodes > HTML_PREVIEW_BUDGETS.templateNodes)
+            violations.push('Template node budget exceeded.');
+        if (mode === 'REPEATER' && rows.length > rowLimit)
+            violations.push('Repeater row budget exceeded.');
         if (authoredOutputNodes > HTML_PREVIEW_BUDGETS.outputNodes || outputNodes > HTML_PREVIEW_BUDGETS.outputNodes)
             violations.push('Output node budget exceeded.');
-        if (outputBytes > HTML_PREVIEW_BUDGETS.outputBytes) violations.push('Output byte budget exceeded.');
-        if (renderWork > HTML_PREVIEW_BUDGETS.renderWork) violations.push('Render-work budget exceeded.');
+        if (outputBytes > HTML_PREVIEW_BUDGETS.outputBytes)
+            violations.push('Output byte budget exceeded.');
+        if (renderWork > HTML_PREVIEW_BUDGETS.renderWork)
+            violations.push('Render-work budget exceeded.');
         const cssViolation = _validateHtmlPreviewCss(css);
-        if (cssViolation) violations.push(cssViolation);
-
+        if (cssViolation)
+            violations.push(cssViolation);
         const sanitized = document.createDocumentFragment();
         for (const child of rendered.body.childNodes) {
             const copied = _copyHtmlPreviewNode(child, document, violations);
-            if (copied) sanitized.appendChild(copied);
+            if (copied)
+                sanitized.appendChild(copied);
         }
-
         const preview = document.createElement('div');
         preview.className = 'etlsql-html-visual-preview';
         preview.style.cssText = 'width:100%;height:100%;overflow:auto;padding:8px;box-sizing:border-box;font-size:12px;';
@@ -744,7 +780,6 @@ export function createDesigner(container, opts = {}) {
             preview.appendChild(error);
             return;
         }
-
         const shadow = preview.attachShadow({ mode: 'open' });
         if (css.trim()) {
             const style = document.createElement('style');
@@ -756,13 +791,11 @@ export function createDesigner(container, opts = {}) {
         content.appendChild(sanitized);
         shadow.appendChild(content);
     }
-
     function _renderSnapshotCardBody(bodyEl, visual, snapshotPackage) {
         if (!snapshotPackage || !snapshotPackage.sampleRows) {
             bodyEl.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--portal-muted,#64748b);font-size:11px;">No snapshot data</div>`;
             return;
         }
-
         // Resolve the visual's own identity first, then its dataset. The snapshot manifest records
         // visuals and datasets but never links them, so the server keys sample rows by visual name —
         // the only identity both sides share. Dataset lookup stays as a fallback for packages keyed
@@ -771,12 +804,11 @@ export function createDesigner(container, opts = {}) {
         const sampleRows = snapshotPackage.sampleRows;
         const byVisual = [visual.name, visual.title, visual.id].find(k => k && sampleRows[k]);
         const dsName = visual.dataset;
-        let rows = (byVisual && sampleRows[byVisual])
+        let rows = (byVisual ? sampleRows[byVisual] : undefined)
             || (dsName && sampleRows[dsName])
             || Object.values(sampleRows)[0]
             || [];
         const type = (visual.type || '').toUpperCase();
-
         // Interactive Filter Slicers Simulation
         if (type === 'SLICER' || type === 'MULTISELECT' || type === 'DATEPICKER') {
             const categories = Array.from(new Set(rows.map(r => String(Array.isArray(r) ? r[0] : r))));
@@ -786,14 +818,12 @@ export function createDesigner(container, opts = {}) {
                 const isSel = String(selected).toLowerCase() === String(cat).toLowerCase();
                 btnHtml += `<button class="btn btn-xs ${isSel ? 'btn-primary' : ''}" data-slicer-val="${esc(cat)}" style="margin:2px;font-size:10px;">${esc(cat)}</button>`;
             });
-
             bodyEl.innerHTML = `
                 <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:4px;text-align:center;">
                     <div style="font-size:10px;font-weight:600;color:var(--portal-muted,#64748b);margin-bottom:4px;">Filter by ${esc(visual.title || 'Category')}</div>
                     <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:2px;">${btnHtml}</div>
                 </div>`;
-
-            bodyEl.querySelectorAll('[data-slicer-val]').forEach(b => {
+            queryElements(bodyEl, '[data-slicer-val]').forEach(b => {
                 b.addEventListener('click', e => {
                     e.stopPropagation();
                     const btn = e.currentTarget;
@@ -804,7 +834,6 @@ export function createDesigner(container, opts = {}) {
             });
             return;
         }
-
         if (type === 'CONTAINER') {
             const containerType = visual.options?.CONTAINER_TYPE || 'BOX';
             const childCount = curVis().filter(c => c.containerId === visual.id).length;
@@ -815,7 +844,6 @@ export function createDesigner(container, opts = {}) {
                 </div>`;
             return;
         }
-
         // Apply active filter if set
         if (activeSnapshotFilter) {
             const filterLower = activeSnapshotFilter.toLowerCase();
@@ -823,14 +851,12 @@ export function createDesigner(container, opts = {}) {
                 ? r.some(cell => String(cell).toLowerCase() === filterLower)
                 : String(r).toLowerCase() === filterLower);
         }
-
         if (type === 'HTML') {
             _renderHtmlVisualPreview(bodyEl, visual, snapshotPackage);
             return;
         }
-
         if (type === 'CARD') {
-            const val = rows[0] ? (rows[0][rows[0].length - 1] ?? rows[0][0]) : '0';
+            const val = rows[0] ? (Array.isArray(rows[0]) ? (rows[0][rows[0].length - 1] ?? rows[0][0]) : Object.values(rows[0])[0]) : '0';
             bodyEl.innerHTML = `
                 <div style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:4px;text-align:center;">
                     <div style="font-size:22px;font-weight:700;color:var(--portal-accent,#2563eb);line-height:1.2;">${esc(val)}</div>
@@ -838,7 +864,6 @@ export function createDesigner(container, opts = {}) {
                 </div>`;
             return;
         }
-
         if (type === 'TABLE' || type === 'MATRIX') {
             const mappings = visual.mappings || {};
             const sampleHeaders = Object.values(mappings).filter(Boolean);
@@ -856,7 +881,6 @@ export function createDesigner(container, opts = {}) {
             bodyEl.innerHTML = html;
             return;
         }
-
         // Server-rendered native GoG SVG preview when available
         const visualSvgs = snapshotPackage.visualSvgs;
         const svgKey = byVisual || (dsName && visualSvgs?.[dsName] ? dsName : null) || visual.name || visual.id;
@@ -865,18 +889,16 @@ export function createDesigner(container, opts = {}) {
             bodyEl.innerHTML = compiledSvg;
             return;
         }
-
         // Dependency-free preview fallback; production manifests use the native SVG surface. It reads
         // the visual's MAPPINGS, so assigning a column to a role changes what the card draws. The
         // previous fallback chose columns by position and ignored the mapping entirely.
-        const visualColumns = snapshotPackage.columnsByVisual?.[byVisual]
-            || snapshotPackage.columnsByVisual?.[visual.name]
-            || snapshotPackage.columnsByVisual?.[dsName]
+        const visualColumns = (byVisual ? snapshotPackage.columnsByVisual?.[byVisual] : undefined)
+            || (visual.name ? snapshotPackage.columnsByVisual?.[visual.name] : undefined)
+            || (dsName ? snapshotPackage.columnsByVisual?.[dsName] : undefined)
             || snapshotPackage.columns
             || [];
         renderVisualSample(bodyEl, visual, { columns: Array.isArray(visualColumns) ? visualColumns : [], rows });
     }
-
     function renderCanvas() {
         disconnectSnapshotResizeObservers();
         canvasGrid.innerHTML = '';
@@ -906,25 +928,34 @@ export function createDesigner(container, opts = {}) {
             card.dataset.visualId = v.id;
             card.classList.add('etlsql-studio-canvas-card');
             card.style.gridColumn = `${v.gridCol || 1} / span ${v.gridColSpan || 12}`;
-            card.style.gridRow    = `${v.gridRow || 1} / span ${isFolded ? 1 : (v.gridRowSpan || 4)}`;
+            card.style.gridRow = `${v.gridRow || 1} / span ${isFolded ? 1 : (v.gridRowSpan || 4)}`;
             card.style.setProperty('--vc', VCOLOR[v.type] || '#64748b');
-            card.style.zIndex     = isContainer ? '1' : '2';
-
-            if (v.options?.BACKGROUND) card.style.background = v.options.BACKGROUND;
-            if (v.options?.COLOR) card.style.color = v.options.COLOR;
-            if (v.options?.BORDER) card.style.border = v.options.BORDER;
-            if (v.options?.BORDER_RADIUS) card.style.borderRadius = v.options.BORDER_RADIUS;
+            card.style.zIndex = isContainer ? '1' : '2';
+            if (v.options?.BACKGROUND)
+                card.style.background = v.options.BACKGROUND;
+            if (v.options?.COLOR)
+                card.style.color = v.options.COLOR;
+            if (v.options?.BORDER)
+                card.style.border = v.options.BORDER;
+            if (v.options?.BORDER_RADIUS)
+                card.style.borderRadius = v.options.BORDER_RADIUS;
             if (v.options?.SHADOW) {
                 const s = v.options.SHADOW.trim().toUpperCase();
-                if (s === 'ON') card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
-                else if (s === 'OFF') card.style.boxShadow = 'none';
-                else card.style.boxShadow = v.options.SHADOW;
+                if (s === 'ON')
+                    card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                else if (s === 'OFF')
+                    card.style.boxShadow = 'none';
+                else
+                    card.style.boxShadow = v.options.SHADOW;
             }
-            if (v.options?.FONT) card.style.fontFamily = v.options.FONT;
-            if (v.options?.FONT_SIZE) card.style.fontSize = v.options.FONT_SIZE;
-            if (v.options?.FONT_WEIGHT) card.style.fontWeight = v.options.FONT_WEIGHT;
-            if (v.options?.OPACITY) card.style.opacity = v.options.OPACITY;
-
+            if (v.options?.FONT)
+                card.style.fontFamily = v.options.FONT;
+            if (v.options?.FONT_SIZE)
+                card.style.fontSize = v.options.FONT_SIZE;
+            if (v.options?.FONT_WEIGHT)
+                card.style.fontWeight = v.options.FONT_WEIGHT;
+            if (v.options?.OPACITY)
+                card.style.opacity = v.options.OPACITY;
             let badgeExtra = '';
             if (opts.snapshotPackage) {
                 const meta = opts.snapshotPackage.metadata || {};
@@ -935,12 +966,10 @@ export function createDesigner(container, opts = {}) {
                     badgeExtra += `<span style="background:#f59e0b;color:#fff;padding:1px 4px;border-radius:3px;font-size:9px;margin-left:4px;" title="Sampled Snapshot Data">⚡ Sampled</span>`;
                 }
             }
-
             const badgeText = isContainer ? `📁 ${v.options?.CONTAINER_TYPE || 'BOX'}` : v.type;
             const foldBtn = isContainer ? `<button class="etlsql-dsgn-vcard-fold" data-fold="${v.id}" title="${isFolded ? 'Expand container' : 'Collapse container'}" aria-label="${isFolded ? 'Expand container' : 'Collapse container'}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="${isFolded ? 'M6 3.5 11 8l-5 4.5' : 'm3.5 6 4.5 5 4.5-5'}"/></svg></button>` : '';
             const dupBtn = `<button class="etlsql-dsgn-vcard-dup" data-dup="${v.id}" title="Duplicate visual" aria-label="Duplicate visual"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="2.5" width="8" height="8" rx="1.5"/><path d="M10.5 11v1.5a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1H5"/></svg></button>`;
             const detachBtn = v.containerId ? `<button class="etlsql-dsgn-vcard-detach" data-detach="${v.id}" title="Detach from container" aria-label="Detach from container"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11 11.5 4.5M7.5 4.5h4v4M3 7v5a1 1 0 0 0 1 1h5"/></svg></button>` : '';
-
             const cardHdr = document.createElement('div');
             cardHdr.className = 'etlsql-dsgn-vcard-hdr';
             cardHdr.innerHTML = `
@@ -950,54 +979,54 @@ export function createDesigner(container, opts = {}) {
                     <button class="etlsql-dsgn-vcard-del" data-del="${v.id}" title="Remove visual" aria-label="Remove visual"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8m0-8-8 8"/></svg></button>
                 </div>
             `;
-            const titleButton = cardHdr.querySelector('.etlsql-dsgn-vcard-name');
+            const titleButton = queryElement(cardHdr, '.etlsql-dsgn-vcard-name');
             const titleFormatting = v.formatting?.title;
             if (titleButton && titleFormatting) {
-                if (titleFormatting.color) /** @type {HTMLElement} */ (titleButton).style.color = titleFormatting.color;
-                if (titleFormatting.font) /** @type {HTMLElement} */ (titleButton).style.fontFamily = titleFormatting.font;
-                if (titleFormatting.size) /** @type {HTMLElement} */ (titleButton).style.fontSize = titleFormatting.size;
-                if (titleFormatting.weight) /** @type {HTMLElement} */ (titleButton).style.fontWeight = titleFormatting.weight;
-                if (titleFormatting.align) /** @type {HTMLElement} */ (titleButton).style.textAlign = titleFormatting.align.toLowerCase();
+                if (titleFormatting.color) /** @type {HTMLElement} */
+                    (titleButton).style.color = titleFormatting.color;
+                if (titleFormatting.font) /** @type {HTMLElement} */
+                    (titleButton).style.fontFamily = titleFormatting.font;
+                if (titleFormatting.size) /** @type {HTMLElement} */
+                    (titleButton).style.fontSize = titleFormatting.size;
+                if (titleFormatting.weight) /** @type {HTMLElement} */
+                    (titleButton).style.fontWeight = titleFormatting.weight;
+                if (titleFormatting.align) /** @type {HTMLElement} */
+                    (titleButton).style.textAlign = titleFormatting.align.toLowerCase();
             }
             card.appendChild(cardHdr);
-
             const cardBody = document.createElement('div');
             cardBody.className = 'etlsql-dsgn-vcard-body';
-
             if (opts.snapshotPackage || opts.snapshotMode) {
                 _renderSnapshotCardBody(cardBody, v, opts.snapshotPackage);
-            } else if (v.type === 'CUSTOM') {
+            }
+            else if (v.type === 'CUSTOM') {
                 const width = 360, height = 180, pad = 24;
                 cardBody.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(v.title || v.name)}" style="width:100%;height:100%"><line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" stroke="#cbd5e1"/><line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" stroke="#cbd5e1"/><rect x="60" y="60" width="30" height="96" rx="2" fill="#8b5cf6" opacity="0.85"/><rect x="110" y="40" width="30" height="116" rx="2" fill="#8b5cf6" opacity="0.85"/><rect x="160" y="80" width="30" height="76" rx="2" fill="#8b5cf6" opacity="0.85"/><path d="M 75 80 L 125 50 L 175 90 L 225 30" fill="none" stroke="#06b6d4" stroke-width="2"/><circle cx="75" cy="80" r="3" fill="#06b6d4"/><circle cx="125" cy="50" r="3" fill="#06b6d4"/><circle cx="175" cy="90" r="3" fill="#06b6d4"/><circle cx="225" cy="30" r="3" fill="#06b6d4"/><text x="180" y="20" font-size="10" fill="#7a8798" text-anchor="middle">CUSTOM CHART (GoG Layers)</text></svg>`;
-            } else if (v.type === 'HTML') {
+            }
+            else if (v.type === 'HTML') {
                 _renderHtmlVisualPreview(cardBody, v, opts.snapshotPackage);
-            } else {
+            }
+            else {
                 cardBody.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--portal-muted,#64748b);font-size:11px;">${v.type} Placeholder</div>`;
             }
-
             card.appendChild(cardBody);
-
             const resizeHandle = document.createElement('div');
             resizeHandle.className = 'etlsql-dsgn-vcard-resize';
             resizeHandle.title = 'Drag to resize';
             card.appendChild(resizeHandle);
-
             canvasGrid.appendChild(card);
         }
     }
-
     function renderTree() {
-        const tree = sidebar.querySelector('#dsgn-tree');
+        const tree = queryElement(sidebar, '#dsgn-tree');
         tree.innerHTML = '';
         const visuals = curVis();
         const containers = visuals.filter(v => v.type === 'CONTAINER');
         const rootVisuals = visuals.filter(v => !v.containerId || !containers.some(c => c.id === v.containerId));
-
         if (!rootVisuals.length) {
             tree.innerHTML = '<div class="etlsql-dsgn-sidebar-empty"><strong>No visuals on this page</strong><span>Add one from the visual library above.</span></div>';
             return;
         }
-
         for (const v of rootVisuals) {
             const item = document.createElement('div');
             item.className = 'etlsql-dsgn-tree-item' + (v.id === selVisualId ? ' selected' : '');
@@ -1005,7 +1034,6 @@ export function createDesigner(container, opts = {}) {
             const icon = v.type === 'CONTAINER' ? '📁' : '📊';
             item.textContent = `${icon} ${v.name} (${v.type})`;
             tree.appendChild(item);
-
             if (v.type === 'CONTAINER') {
                 const children = visuals.filter(c => c.containerId === v.id);
                 for (const child of children) {
@@ -1019,9 +1047,8 @@ export function createDesigner(container, opts = {}) {
             }
         }
     }
-
     function renderDatasets() {
-        const list = sidebar.querySelector('#dsgn-ds-list');
+        const list = queryElement(sidebar, '#dsgn-ds-list');
         list.innerHTML = '';
         if (!state.datasets.length) {
             list.innerHTML = '<div class="etlsql-dsgn-sidebar-empty"><strong>No datasets yet</strong><span>Add a dataset to expose fields for mappings.</span></div>';
@@ -1031,14 +1058,13 @@ export function createDesigner(container, opts = {}) {
             const isExpanded = expandedDsIds.has(ds.id);
             const row = document.createElement('div');
             row.className = 'etlsql-dsgn-ds-block';
-
             let cols = [];
             if (opts.snapshotPackage && Array.isArray(opts.snapshotPackage.columns)) {
                 cols = opts.snapshotPackage.columns;
-            } else if (opts.getDatasetColumns) {
+            }
+            else if (opts.getDatasetColumns) {
                 cols = opts.getDatasetColumns(ds.name) || [];
             }
-
             const toggleIcon = cols.length ? (isExpanded ? '▾' : '▸') : ' ';
             row.innerHTML = `
                 <div class="etlsql-dsgn-ds-item" data-dstoggle="${esc(ds.id)}" style="cursor:pointer">
@@ -1058,95 +1084,94 @@ export function createDesigner(container, opts = {}) {
             list.appendChild(row);
         }
     }
-
     function bindInspectorSearch(panel) {
-        const searchInput = panel.querySelector('#pp-search-filter');
-        const clearBtn = panel.querySelector('#pp-search-clear');
-        if (!searchInput) return;
-
-        const groups = panel.querySelectorAll('details.etlsql-format-group');
+        const searchInput = queryElement(panel, '#pp-search-filter');
+        const clearBtn = queryElement(panel, '#pp-search-clear');
+        if (!searchInput)
+            return;
+        const groups = queryElements(panel, 'details.etlsql-format-group');
         const defaultOpenMap = new Map();
         groups.forEach(g => {
             defaultOpenMap.set(g, g.hasAttribute('open'));
         });
-
         const filter = () => {
             const q = (searchInput.value || '').trim().toLowerCase();
-            if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
-
+            if (clearBtn)
+                clearBtn.style.display = q ? 'block' : 'none';
             if (!q) {
                 groups.forEach(g => {
                     g.style.display = '';
-                    if (defaultOpenMap.get(g)) g.setAttribute('open', '');
-                    else g.removeAttribute('open');
-                    g.querySelectorAll('.etlsql-dsgn-label, .etlsql-dsgn-map-row, .etlsql-format-rule, .etlsql-format-field, .etlsql-format-axis-grid, .etlsql-dsgn-grid4, .etlsql-format-toggle, .etlsql-dsgn-chart-quick-controls, .etlsql-dsgn-color-grid').forEach(row => {
+                    if (defaultOpenMap.get(g))
+                        g.setAttribute('open', '');
+                    else
+                        g.removeAttribute('open');
+                    queryElements(g, '.etlsql-dsgn-label, .etlsql-dsgn-map-row, .etlsql-format-rule, .etlsql-format-field, .etlsql-format-axis-grid, .etlsql-dsgn-grid4, .etlsql-format-toggle, .etlsql-dsgn-chart-quick-controls, .etlsql-dsgn-color-grid').forEach(row => {
                         row.style.display = '';
                     });
                 });
                 return;
             }
-
             groups.forEach(g => {
-                const summaryText = (g.querySelector('summary')?.textContent || '').toLowerCase();
-                const rows = g.querySelectorAll('.etlsql-dsgn-label, .etlsql-dsgn-map-row, .etlsql-format-rule, .etlsql-format-field, .etlsql-format-axis-grid, .etlsql-dsgn-grid4, .etlsql-format-toggle, .etlsql-dsgn-chart-quick-controls, .etlsql-dsgn-color-grid');
+                const summaryText = (queryElement(g, 'summary')?.textContent || '').toLowerCase();
+                const rows = queryElements(g, '.etlsql-dsgn-label, .etlsql-dsgn-map-row, .etlsql-format-rule, .etlsql-format-field, .etlsql-format-axis-grid, .etlsql-dsgn-grid4, .etlsql-format-toggle, .etlsql-dsgn-chart-quick-controls, .etlsql-dsgn-color-grid');
                 let matchCount = 0;
-
                 if (summaryText.includes(q)) {
                     g.style.display = '';
                     g.setAttribute('open', '');
                     rows.forEach(row => { row.style.display = ''; });
                     return;
                 }
-
                 rows.forEach(row => {
-                    const rowText = row.textContent.toLowerCase();
-                    const inputMeta = Array.from(row.querySelectorAll('input, select, textarea'))
-                        .map(i => `${i.placeholder || ''} ${i.id || ''} ${i.name || ''} ${i.dataset?.role || ''} ${i.dataset?.axisKey || ''}`)
+                    const rowText = String(row.textContent || '').toLowerCase();
+                    const inputMeta = Array.from(queryElements(row, 'input, select, textarea'))
+                        .map(i => `${'placeholder' in i ? i.placeholder || '' : ''} ${i.id || ''} ${i.name || ''} ${i.dataset?.role || ''} ${i.dataset?.axisKey || ''}`)
                         .join(' ').toLowerCase();
                     const isMatch = rowText.includes(q) || inputMeta.includes(q);
                     row.style.display = isMatch ? '' : 'none';
-                    if (isMatch) matchCount++;
+                    if (isMatch)
+                        matchCount++;
                 });
-
                 if (matchCount > 0) {
                     g.style.display = '';
                     g.setAttribute('open', '');
-                } else {
+                }
+                else {
                     g.style.display = 'none';
                 }
             });
         };
-
         searchInput.addEventListener('input', filter);
-        searchInput.addEventListener('keydown', e => {
+        searchInput.addEventListener('keydown', ((e) => {
             if (e.key === 'Escape') {
                 searchInput.value = '';
                 filter();
                 searchInput.blur();
             }
-        });
+        }));
         clearBtn?.addEventListener('click', () => {
             searchInput.value = '';
             filter();
             searchInput.focus();
         });
     }
-
     function bindVisualFormatInspector(panel, v, columns, rerender) {
         const formatting = visualFormatting(v);
         const sync = () => { renderCanvas(); syncScriptFromGridDebounced(); };
-        const bindValue = (selector, target, key) => panel.querySelector(selector)?.addEventListener('change', event => {
-            const value = event.target.value.trim();
-            if (value) target[key] = value;
-            else delete target[key];
+        const bindValue = (selector, target, key) => queryElement(panel, selector)?.addEventListener('change', event => {
+            const value = controlTarget(event).value.trim();
+            if (value)
+                target[key] = value;
+            else
+                delete target[key];
             sync();
         });
-
-        panel.querySelector('#pp-format-subtitle')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-subtitle')?.addEventListener('change', event => {
             formatting.subtitle ||= {};
-            const value = event.target.value.trim();
-            if (value) formatting.subtitle.text = value;
-            else delete formatting.subtitle.text;
+            const value = controlTarget(event).value.trim();
+            if (value)
+                formatting.subtitle.text = value;
+            else
+                delete formatting.subtitle.text;
             sync();
         });
         bindValue('#pp-title-font', formatting.title, 'font');
@@ -1154,68 +1179,78 @@ export function createDesigner(container, opts = {}) {
         bindValue('#pp-title-weight', formatting.title, 'weight');
         bindValue('#pp-title-align', formatting.title, 'align');
         bindValue('#pp-title-color', formatting.title, 'color');
-        panel.querySelector('#pp-title-color-picker')?.addEventListener('input', event => {
-            formatting.title.color = event.target.value;
-            const text = panel.querySelector('#pp-title-color');
-            if (text) text.value = event.target.value;
+        queryElement(panel, '#pp-title-color-picker')?.addEventListener('input', event => {
+            formatting.title.color = controlTarget(event).value;
+            const text = queryElement(panel, '#pp-title-color');
+            if (text)
+                text.value = controlTarget(event).value;
             sync();
         });
-        panel.querySelector('#pp-number-format')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-number-format')?.addEventListener('change', event => {
             v.options ||= {};
-            const value = event.target.value.trim();
-            if (value) v.options.FORMAT = value;
-            else delete v.options.FORMAT;
+            const value = controlTarget(event).value.trim();
+            if (value)
+                v.options.FORMAT = value;
+            else
+                delete v.options.FORMAT;
             sync();
             rerender();
         });
-        panel.querySelector('#pp-format-legend')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-legend')?.addEventListener('change', event => {
             v.options ||= {};
-            v.options.LEGEND = event.target.checked ? 'ON' : 'OFF';
+            v.options.LEGEND = checkedTarget(event) ? 'ON' : 'OFF';
             sync();
         });
-        panel.querySelector('#pp-format-legend-position')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-legend-position')?.addEventListener('change', event => {
             v.options ||= {};
-            v.options.LEGEND_POSITION = event.target.value;
-            const anchorWrap = panel.querySelector('#pp-format-legend-anchor-wrap');
-            if (anchorWrap) anchorWrap.style.display = event.target.value === 'INSIDE' ? '' : 'none';
+            v.options.LEGEND_POSITION = controlTarget(event).value;
+            const anchorWrap = queryElement(panel, '#pp-format-legend-anchor-wrap');
+            if (anchorWrap)
+                anchorWrap.style.display = controlTarget(event).value === 'INSIDE' ? '' : 'none';
             sync();
         });
-        panel.querySelector('#pp-format-legend-anchor')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-legend-anchor')?.addEventListener('change', event => {
             v.options ||= {};
-            v.options.LEGEND_ANCHOR = event.target.value;
+            v.options.LEGEND_ANCHOR = controlTarget(event).value;
             sync();
         });
-        panel.querySelector('#pp-format-legend-orientation')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-legend-orientation')?.addEventListener('change', event => {
             v.options ||= {};
-            if (event.target.value) v.options.LEGEND_ORIENTATION = event.target.value;
-            else delete v.options.LEGEND_ORIENTATION;
+            if (controlTarget(event).value)
+                v.options.LEGEND_ORIENTATION = controlTarget(event).value;
+            else
+                delete v.options.LEGEND_ORIENTATION;
             sync();
         });
-        panel.querySelector('#pp-format-legend-reverse')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-legend-reverse')?.addEventListener('change', event => {
             v.options ||= {};
-            v.options.LEGEND_REVERSE = event.target.checked ? 'ON' : 'OFF';
+            v.options.LEGEND_REVERSE = checkedTarget(event) ? 'ON' : 'OFF';
             sync();
         });
-        panel.querySelector('#pp-format-legend-title')?.addEventListener('input', event => {
+        queryElement(panel, '#pp-format-legend-title')?.addEventListener('input', event => {
             v.options ||= {};
-            if (event.target.value) v.options.LEGEND_TITLE = event.target.value;
-            else delete v.options.LEGEND_TITLE;
+            if (controlTarget(event).value)
+                v.options.LEGEND_TITLE = controlTarget(event).value;
+            else
+                delete v.options.LEGEND_TITLE;
             sync();
         });
-        panel.querySelector('#pp-format-legend-columns')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-legend-columns')?.addEventListener('change', event => {
             v.options ||= {};
-            if (event.target.value) v.options.LEGEND_COLUMNS = event.target.value;
-            else delete v.options.LEGEND_COLUMNS;
+            if (controlTarget(event).value)
+                v.options.LEGEND_COLUMNS = controlTarget(event).value;
+            else
+                delete v.options.LEGEND_COLUMNS;
             sync();
         });
-        panel.querySelector('#pp-format-grid-lines')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-grid-lines')?.addEventListener('change', event => {
             v.options ||= {};
-            v.options.GRID_LINES = event.target.checked ? 'ON' : 'OFF';
+            v.options.GRID_LINES = checkedTarget(event) ? 'ON' : 'OFF';
             sync();
         });
-        const bindOption = (selector, key, eventName = 'change', getValue = el => el.value) => panel.querySelector(selector)?.addEventListener(eventName, event => {
+        const bindOption = (selector, key, eventName = 'change', getValue = el => el.value) => queryElement(panel, selector)?.addEventListener(eventName, event => {
             v.options ||= {};
-            v.options[key] = getValue(event.target);
+            v.options[key] = getValue(controlTarget(event));
             sync();
         });
         bindOption('#pp-format-grid-color', 'GRID_LINE_COLOR', 'input');
@@ -1286,245 +1321,265 @@ export function createDesigner(container, opts = {}) {
         bindOption('#pp-format-zero-line-color', 'ZERO_LINE_COLOR', 'input');
         bindOption('#pp-format-zero-line-dash', 'ZERO_LINE_DASH');
         bindOption('#pp-format-zero-line-width', 'ZERO_LINE_WIDTH');
-        panel.querySelector('#pp-format-minor-grid-lines')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-minor-grid-lines')?.addEventListener('change', event => {
             v.options ||= {};
-            v.options.MINOR_GRID_LINES = event.target.checked ? 'ON' : 'OFF';
+            v.options.MINOR_GRID_LINES = checkedTarget(event) ? 'ON' : 'OFF';
             sync();
         });
-        panel.querySelector('#pp-format-zero-line')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-zero-line')?.addEventListener('change', event => {
             v.options ||= {};
-            v.options.ZERO_LINE = event.target.checked ? 'ON' : 'OFF';
+            v.options.ZERO_LINE = checkedTarget(event) ? 'ON' : 'OFF';
             sync();
         });
-        panel.querySelector('#pp-format-zoom-slider')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-zoom-slider')?.addEventListener('change', event => {
             v.options ||= {};
-            v.options.ZOOM_SLIDER = event.target.checked ? 'ON' : 'OFF';
+            v.options.ZOOM_SLIDER = checkedTarget(event) ? 'ON' : 'OFF';
             sync();
         });
-        panel.querySelector('#pp-format-data-labels')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-data-labels')?.addEventListener('change', event => {
             v.options ||= {};
-            v.options.DATA_LABELS = event.target.checked ? 'ON' : 'OFF';
+            v.options.DATA_LABELS = checkedTarget(event) ? 'ON' : 'OFF';
             sync();
         });
-        panel.querySelector('#pp-format-data-label-position')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-data-label-position')?.addEventListener('change', event => {
             v.options ||= {};
-            v.options['DATA_LABELS:POSITION'] = event.target.value.replaceAll(' ', '_');
+            v.options['DATA_LABELS:POSITION'] = controlTarget(event).value.replaceAll(' ', '_');
             sync();
         });
-        panel.querySelector('#pp-format-symbols')?.addEventListener('change', event => {
+        queryElement(panel, '#pp-format-symbols')?.addEventListener('change', event => {
             v.options ||= {};
-            v.options.SYMBOLS = event.target.checked ? 'ON' : 'OFF';
+            v.options.SYMBOLS = checkedTarget(event) ? 'ON' : 'OFF';
             sync();
         });
         bindOption('#pp-format-stacked', 'STACKED');
-        panel.querySelector('#pp-format-band-size')?.addEventListener('input', event => {
+        queryElement(panel, '#pp-format-band-size')?.addEventListener('input', event => {
             v.options ||= {};
-            v.options.BAND_SIZE = event.target.value;
-            const output = panel.querySelector('#pp-format-band-size-value');
-            if (output) output.value = event.target.value;
+            v.options.BAND_SIZE = controlTarget(event).value;
+            const output = queryElement(panel, '#pp-format-band-size-value');
+            if (output)
+                output.value = controlTarget(event).value;
             sync();
         });
         for (const [selector, key, outputSelector] of [
             ['#pp-format-series-gap', 'SERIES_GAP', '#pp-format-series-gap-value'],
             ['#pp-format-outer-padding', 'OUTER_PADDING', '#pp-format-outer-padding-value']
-        ]) panel.querySelector(selector)?.addEventListener('input', event => {
+        ])
+            queryElement(panel, selector)?.addEventListener('input', event => {
+                v.options ||= {};
+                v.options[key] = controlTarget(event).value;
+                const output = queryElement(panel, outputSelector);
+                if (output)
+                    output.value = controlTarget(event).value;
+                sync();
+            });
+        queryElement(panel, '#pp-format-overlays')?.addEventListener('change', event => {
             v.options ||= {};
-            v.options[key] = event.target.value;
-            const output = panel.querySelector(outputSelector);
-            if (output) output.value = event.target.value;
+            const value = controlTarget(event).value.trim();
+            if (value)
+                v.options.overlays = value;
+            else
+                delete v.options.overlays;
             sync();
         });
-        panel.querySelector('#pp-format-overlays')?.addEventListener('change', event => {
-            v.options ||= {};
-            const value = event.target.value.trim();
-            if (value) v.options.overlays = value;
-            else delete v.options.overlays;
-            sync();
-        });
-        panel.querySelectorAll('[data-axis]').forEach(input => input.addEventListener('change', () => {
+        queryElements(panel, '[data-axis]').forEach(input => input.addEventListener('change', () => {
             const axis = input.dataset.axis === 'x' ? formatting.xAxis : formatting.yAxis;
-            const key = input.dataset.axisKey;
+            const key = datasetValue(input, 'axisKey');
             const value = input.hasAttribute('data-axis-boolean')
                 ? (input.checked ? 'ON' : 'OFF')
                 : input.value.trim();
-            if (value) axis[key] = value;
-            else delete axis[key];
+            if (value)
+                axis[key] = value;
+            else
+                delete axis[key];
             sync();
         }));
-        panel.querySelectorAll('[data-palette-color]').forEach(input => input.addEventListener('input', () => {
-            const index = Number(input.dataset.paletteColor);
+        queryElements(panel, '[data-palette-color]').forEach(input => input.addEventListener('input', () => {
+            const index = Number(datasetValue(input, 'paletteColor'));
             formatting.palette[index] = input.value;
-            const text = panel.querySelector(`[data-palette-text="${index}"]`);
-            if (text) text.value = input.value;
+            const text = queryElement(panel, `[data-palette-text="${index}"]`);
+            if (text)
+                text.value = input.value;
             sync();
         }));
-        panel.querySelectorAll('[data-palette-text]').forEach(input => input.addEventListener('change', () => {
-            formatting.palette[Number(input.dataset.paletteText)] = input.value.trim();
+        queryElements(panel, '[data-palette-text]').forEach(input => input.addEventListener('change', () => {
+            formatting.palette[Number(datasetValue(input, 'paletteText'))] = input.value.trim();
             sync();
             rerender();
         }));
-        panel.querySelectorAll('[data-palette-remove]').forEach(button => button.addEventListener('click', () => {
+        queryElements(panel, '[data-palette-remove]').forEach(button => button.addEventListener('click', () => {
             formatting.palette.splice(Number(button.dataset.paletteRemove), 1);
             sync();
             rerender();
         }));
-        panel.querySelector('[data-palette-add]')?.addEventListener('click', () => {
+        queryElement(panel, '[data-palette-add]')?.addEventListener('click', () => {
             formatting.palette.push(['#2563eb', '#16a34a', '#f59e0b', '#dc2626'][formatting.palette.length % 4]);
             sync();
             rerender();
         });
-
         const syncNamedColors = () => {
             v.options ||= {};
             Object.keys(v.options).filter(key => key.toUpperCase().startsWith('COLOR:')).forEach(key => delete v.options[key]);
-            panel.querySelectorAll('[data-named-color-row]').forEach(row => {
-                const name = row.querySelector('[data-named-color-name]')?.value.trim();
-                const color = row.querySelector('[data-named-color-value]')?.value;
-                if (name && color) v.options[`COLOR:${name}`] = color;
+            queryElements(panel, '[data-named-color-row]').forEach(row => {
+                const name = queryElement(row, '[data-named-color-name]')?.value.trim();
+                const color = queryElement(row, '[data-named-color-value]')?.value;
+                if (name && color)
+                    v.options[`COLOR:${name}`] = color;
             });
             sync();
         };
-        panel.querySelectorAll('[data-named-color-row]').forEach(row => {
-            row.querySelector('[data-named-color-name]')?.addEventListener('change', syncNamedColors);
-            row.querySelector('[data-named-color-value]')?.addEventListener('input', syncNamedColors);
-            row.querySelector('[data-named-color-remove]')?.addEventListener('click', () => {
+        queryElements(panel, '[data-named-color-row]').forEach(row => {
+            queryElement(row, '[data-named-color-name]')?.addEventListener('change', syncNamedColors);
+            queryElement(row, '[data-named-color-value]')?.addEventListener('input', syncNamedColors);
+            queryElement(row, '[data-named-color-remove]')?.addEventListener('click', () => {
                 row.remove();
                 syncNamedColors();
                 rerender();
             });
         });
-        panel.querySelector('[data-named-color-add]')?.addEventListener('click', () => {
+        queryElement(panel, '[data-named-color-add]')?.addEventListener('click', () => {
             v.options ||= {};
             let index = 1;
-            while (Object.keys(v.options).some(key => key.toUpperCase() === `COLOR:SERIES${index}`)) index++;
+            while (Object.keys(v.options).some(key => key.toUpperCase() === `COLOR:SERIES${index}`))
+                index++;
             v.options[`COLOR:Series${index}`] = '#2563eb';
             sync();
             rerender();
         });
-
         const ensureTableMappings = () => {
-            if (Object.keys(v.mappings || {}).length) return;
+            if (Object.keys(v.mappings || {}).length)
+                return;
             v.mappings ||= {};
-            for (const column of columns || []) v.mappings[column] = column;
+            for (const column of columns || [])
+                v.mappings[column] = column;
         };
-        panel.querySelectorAll('[data-format-field]').forEach(row => {
+        queryElements(panel, '[data-format-field]').forEach(row => {
             const key = row.dataset.formatField;
+            if (!key)
+                return;
             const field = formatting.fields[key] ||= {};
-            row.querySelector('[data-field-format]')?.addEventListener('change', event => {
+            queryElement(row, '[data-field-format]')?.addEventListener('change', event => {
                 ensureTableMappings();
-                const value = event.target.value.trim();
-                if (value) field.format = value;
-                else delete field.format;
+                const value = controlTarget(event).value.trim();
+                if (value)
+                    field.format = value;
+                else
+                    delete field.format;
                 sync();
             });
-            row.querySelector('[data-field-data-bar]')?.addEventListener('change', event => {
+            queryElement(row, '[data-field-data-bar]')?.addEventListener('change', event => {
                 ensureTableMappings();
-                field.dataBar = event.target.checked;
+                field.dataBar = checkedTarget(event);
                 sync();
             });
-            row.querySelector('[data-field-data-bar-color]')?.addEventListener('input', event => {
+            queryElement(row, '[data-field-data-bar-color]')?.addEventListener('input', event => {
                 ensureTableMappings();
                 field.dataBar = true;
-                field.dataBarColor = event.target.value;
-                const checkbox = row.querySelector('[data-field-data-bar]');
-                if (checkbox) checkbox.checked = true;
+                field.dataBarColor = controlTarget(event).value;
+                const checkbox = queryElement(row, '[data-field-data-bar]');
+                if (checkbox)
+                    checkbox.checked = true;
                 sync();
             });
         });
-
-        const updateRule = row => {
+        const updateRule = (row) => {
             const rule = formatting.conditionalRules[Number(row.dataset.ruleIndex)];
-            if (!rule) return;
-            rule.condition = `${row.querySelector('[data-rule-field]').value} ${row.querySelector('[data-rule-operator]').value} ${row.querySelector('[data-rule-value]').value.trim()}`;
-            rule.backgroundColor = row.querySelector('[data-rule-background]').value;
-            rule.fontColor = row.querySelector('[data-rule-font]').value;
+            if (!rule)
+                return;
+            rule.condition = `${queryElement(row, '[data-rule-field]').value} ${queryElement(row, '[data-rule-operator]').value} ${queryElement(row, '[data-rule-value]').value.trim()}`;
+            rule.backgroundColor = queryElement(row, '[data-rule-background]').value;
+            rule.fontColor = queryElement(row, '[data-rule-font]').value;
             sync();
         };
-        panel.querySelectorAll('[data-rule-index]').forEach(row => {
-            row.querySelectorAll('select,input').forEach(input => input.addEventListener('change', () => updateRule(row)));
-            row.querySelector('[data-rule-remove]')?.addEventListener('click', () => {
+        queryElements(panel, '[data-rule-index]').forEach(row => {
+            queryElements(row, 'select,input').forEach(input => input.addEventListener('change', () => updateRule(row)));
+            queryElement(row, '[data-rule-remove]')?.addEventListener('click', () => {
                 formatting.conditionalRules.splice(Number(row.dataset.ruleIndex), 1);
                 sync();
                 rerender();
             });
         });
-        panel.querySelector('[data-rule-add]')?.addEventListener('click', () => {
+        queryElement(panel, '[data-rule-add]')?.addEventListener('click', () => {
             const fallback = Object.values(v.mappings || {}).find(Boolean) || columns?.[0] || 'value';
             formatting.conditionalRules.push({ condition: `${fallback} < 0`, backgroundColor: '#fee2e2', fontColor: '#991b1b' });
             sync();
             rerender();
         });
     }
-
     function bindFormattingSection(propsPanel, v, renderCanvas, syncScriptFromGridDebounced) {
-        const ensureOptions = () => { if (!v.options) v.options = {}; };
-
-        const bgPicker = propsPanel.querySelector('#pp-fmt-bg-picker');
-        const bgText = propsPanel.querySelector('#pp-fmt-bg-text');
+        const ensureOptions = () => { if (!v.options)
+            v.options = {}; };
+        const bgPicker = queryElement(propsPanel, '#pp-fmt-bg-picker');
+        const bgText = queryElement(propsPanel, '#pp-fmt-bg-text');
         if (bgPicker && bgText) {
             bgPicker.addEventListener('input', e => {
                 ensureOptions();
-                bgText.value = e.target.value;
-                v.options.BACKGROUND = e.target.value;
+                bgText.value = controlTarget(e).value;
+                v.options.BACKGROUND = controlTarget(e).value;
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
             bgText.addEventListener('input', e => {
                 ensureOptions();
-                const val = e.target.value.trim();
+                const val = controlTarget(e).value.trim();
                 if (val) {
                     v.options.BACKGROUND = val;
-                    const hex = toHexColor(val, null);
-                    if (hex) bgPicker.value = hex;
-                } else {
+                    const hex = toHexColor(val, '');
+                    if (hex)
+                        bgPicker.value = hex;
+                }
+                else {
                     delete v.options.BACKGROUND;
                 }
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
         }
-
-        const colorPicker = propsPanel.querySelector('#pp-fmt-color-picker');
-        const colorText = propsPanel.querySelector('#pp-fmt-color-text');
+        const colorPicker = queryElement(propsPanel, '#pp-fmt-color-picker');
+        const colorText = queryElement(propsPanel, '#pp-fmt-color-text');
         if (colorPicker && colorText) {
             colorPicker.addEventListener('input', e => {
                 ensureOptions();
-                colorText.value = e.target.value;
-                v.options.COLOR = e.target.value;
+                colorText.value = controlTarget(e).value;
+                v.options.COLOR = controlTarget(e).value;
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
             colorText.addEventListener('input', e => {
                 ensureOptions();
-                const val = e.target.value.trim();
+                const val = controlTarget(e).value.trim();
                 if (val) {
                     v.options.COLOR = val;
-                    const hex = toHexColor(val, null);
-                    if (hex) colorPicker.value = hex;
-                } else {
+                    const hex = toHexColor(val, '');
+                    if (hex)
+                        colorPicker.value = hex;
+                }
+                else {
                     delete v.options.COLOR;
                 }
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
         }
-
-        propsPanel.querySelectorAll('.etlsql-dsgn-swatch-row').forEach(row => {
-            const inputSel = row.dataset.targetInput;
-            const pickerSel = row.dataset.targetPicker;
-            const inputEl = propsPanel.querySelector(inputSel);
-            const pickerEl = propsPanel.querySelector(pickerSel);
-            row.querySelectorAll('.etlsql-dsgn-swatch-chip').forEach(btn => {
+        queryElements(propsPanel, '.etlsql-dsgn-swatch-row').forEach(row => {
+            const inputSel = row.dataset.targetInput || "";
+            const pickerSel = row.dataset.targetPicker || "";
+            const inputEl = queryElement(propsPanel, inputSel);
+            const pickerEl = queryElement(propsPanel, pickerSel);
+            queryElements(row, '.etlsql-dsgn-swatch-chip').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const colorVal = btn.dataset.color;
-                    if (!colorVal) return;
+                    if (!colorVal)
+                        return;
                     ensureOptions();
-                    if (inputEl) inputEl.value = colorVal;
-                    const hex = toHexColor(colorVal, null);
-                    if (pickerEl && hex) pickerEl.value = hex;
+                    if (inputEl)
+                        inputEl.value = colorVal;
+                    const hex = toHexColor(colorVal, '');
+                    if (pickerEl && hex)
+                        pickerEl.value = hex;
                     if (inputSel.includes('bg')) {
                         v.options.BACKGROUND = colorVal;
-                    } else if (inputSel.includes('color')) {
+                    }
+                    else if (inputSel.includes('color')) {
                         v.options.COLOR = colorVal;
                     }
                     renderCanvas();
@@ -1532,37 +1587,40 @@ export function createDesigner(container, opts = {}) {
                 });
             });
         });
-
-        const borderText = propsPanel.querySelector('#pp-fmt-border-text');
+        const borderText = queryElement(propsPanel, '#pp-fmt-border-text');
         if (borderText) {
             borderText.addEventListener('input', e => {
                 ensureOptions();
-                const val = e.target.value.trim();
-                if (val) v.options.BORDER = val;
-                else delete v.options.BORDER;
+                const val = controlTarget(e).value.trim();
+                if (val)
+                    v.options.BORDER = val;
+                else
+                    delete v.options.BORDER;
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
-            propsPanel.querySelectorAll('.etlsql-dsgn-preset-chips[data-target-input="#pp-fmt-border-text"] .etlsql-dsgn-preset-chip').forEach(btn => {
+            queryElements(propsPanel, '.etlsql-dsgn-preset-chips[data-target-input="#pp-fmt-border-text"] .etlsql-dsgn-preset-chip').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const val = btn.dataset.val;
+                    const val = btn.dataset.val || '';
                     ensureOptions();
                     borderText.value = val;
-                    if (val && val !== 'none') v.options.BORDER = val;
-                    else if (val === 'none') v.options.BORDER = 'none';
-                    else delete v.options.BORDER;
+                    if (val && val !== 'none')
+                        v.options.BORDER = val;
+                    else if (val === 'none')
+                        v.options.BORDER = 'none';
+                    else
+                        delete v.options.BORDER;
                     renderCanvas();
                     syncScriptFromGridDebounced();
                 });
             });
         }
-
-        const radiusSlider = propsPanel.querySelector('#pp-fmt-radius-slider');
-        const radiusText = propsPanel.querySelector('#pp-fmt-radius-text');
+        const radiusSlider = queryElement(propsPanel, '#pp-fmt-radius-slider');
+        const radiusText = queryElement(propsPanel, '#pp-fmt-radius-text');
         if (radiusSlider && radiusText) {
             radiusSlider.addEventListener('input', e => {
                 ensureOptions();
-                const val = `${e.target.value}px`;
+                const val = `${controlTarget(e).value}px`;
                 radiusText.value = val;
                 v.options.BORDER_RADIUS = val;
                 renderCanvas();
@@ -1570,79 +1628,83 @@ export function createDesigner(container, opts = {}) {
             });
             radiusText.addEventListener('input', e => {
                 ensureOptions();
-                const val = e.target.value.trim();
+                const val = controlTarget(e).value.trim();
                 if (val) {
                     v.options.BORDER_RADIUS = val;
-                    radiusSlider.value = parseNumericRadius(val, 8);
-                } else {
+                    radiusSlider.value = String(parseNumericRadius(val, 8));
+                }
+                else {
                     delete v.options.BORDER_RADIUS;
                 }
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
-            propsPanel.querySelectorAll('.etlsql-dsgn-preset-chips[data-target-input="#pp-fmt-radius-text"] .etlsql-dsgn-preset-chip').forEach(btn => {
+            queryElements(propsPanel, '.etlsql-dsgn-preset-chips[data-target-input="#pp-fmt-radius-text"] .etlsql-dsgn-preset-chip').forEach(btn => {
                 btn.addEventListener('click', () => {
-                    const val = btn.dataset.val;
+                    const val = btn.dataset.val || '';
                     ensureOptions();
                     radiusText.value = val;
-                    radiusSlider.value = parseNumericRadius(val, 8);
+                    radiusSlider.value = String(parseNumericRadius(val, 8));
                     v.options.BORDER_RADIUS = val;
                     renderCanvas();
                     syncScriptFromGridDebounced();
                 });
             });
         }
-
-        const fontSelect = propsPanel.querySelector('#pp-fmt-font-select');
+        const fontSelect = queryElement(propsPanel, '#pp-fmt-font-select');
         if (fontSelect) {
             fontSelect.addEventListener('change', e => {
                 ensureOptions();
-                if (e.target.value) v.options.FONT = e.target.value;
-                else delete v.options.FONT;
+                if (controlTarget(e).value)
+                    v.options.FONT = controlTarget(e).value;
+                else
+                    delete v.options.FONT;
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
         }
-
-        const sizeSelect = propsPanel.querySelector('#pp-fmt-size-select');
+        const sizeSelect = queryElement(propsPanel, '#pp-fmt-size-select');
         if (sizeSelect) {
             sizeSelect.addEventListener('change', e => {
                 ensureOptions();
-                if (e.target.value) v.options.FONT_SIZE = e.target.value;
-                else delete v.options.FONT_SIZE;
+                if (controlTarget(e).value)
+                    v.options.FONT_SIZE = controlTarget(e).value;
+                else
+                    delete v.options.FONT_SIZE;
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
         }
-
-        const weightSelect = propsPanel.querySelector('#pp-fmt-weight-select');
+        const weightSelect = queryElement(propsPanel, '#pp-fmt-weight-select');
         if (weightSelect) {
             weightSelect.addEventListener('change', e => {
                 ensureOptions();
-                if (e.target.value) v.options.FONT_WEIGHT = e.target.value;
-                else delete v.options.FONT_WEIGHT;
+                if (controlTarget(e).value)
+                    v.options.FONT_WEIGHT = controlTarget(e).value;
+                else
+                    delete v.options.FONT_WEIGHT;
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
         }
-
-        const shadowSelect = propsPanel.querySelector('#pp-fmt-shadow-select');
+        const shadowSelect = queryElement(propsPanel, '#pp-fmt-shadow-select');
         if (shadowSelect) {
             shadowSelect.addEventListener('change', e => {
                 ensureOptions();
-                if (e.target.value) v.options.SHADOW = e.target.value;
-                else delete v.options.SHADOW;
+                if (controlTarget(e).value)
+                    v.options.SHADOW = controlTarget(e).value;
+                else
+                    delete v.options.SHADOW;
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
         }
-
-        const opacitySlider = propsPanel.querySelector('#pp-fmt-opacity-slider');
-        const opacityText = propsPanel.querySelector('#pp-fmt-opacity-text');
+        const opacitySlider = queryElement(propsPanel, '#pp-fmt-opacity-slider');
+        const opacityText = queryElement(propsPanel, '#pp-fmt-opacity-text');
         if (opacitySlider && opacityText) {
             opacitySlider.addEventListener('input', e => {
                 ensureOptions();
-                const pct = parseInt(e.target.value, 10);
+                const pct = parseInt(controlTarget(e).value, 10);
                 const val = pct === 100 ? '1' : (pct / 100).toFixed(2).replace(/\.?0+$/, '');
                 opacityText.value = val;
                 v.options.OPACITY = val;
@@ -1651,11 +1713,12 @@ export function createDesigner(container, opts = {}) {
             });
             opacityText.addEventListener('input', e => {
                 ensureOptions();
-                const val = e.target.value.trim();
+                const val = controlTarget(e).value.trim();
                 if (val) {
                     v.options.OPACITY = val;
-                    opacitySlider.value = parseNumericOpacity(val, 100);
-                } else {
+                    opacitySlider.value = String(parseNumericOpacity(val, 100));
+                }
+                else {
                     delete v.options.OPACITY;
                 }
                 renderCanvas();
@@ -1663,25 +1726,21 @@ export function createDesigner(container, opts = {}) {
             });
         }
     }
-
     // ── Cross-visual interaction and cascade authoring ────────────────────────
     //
     // Both clauses already existed in the engine and in the browser runtime; what was missing was a
     // way to author them that did not require knowing the dialect. `ON_SELECT` was a free-text box
     // whose placeholder was the documentation, and `CASCADE` had no control at all.
-
     const INTERACTION_EFFECTS = [
         { value: 'HIGHLIGHT', label: 'Highlight matching data', note: 'Keeps every row and dims the rest.' },
         { value: 'FILTER', label: 'Filter to matching rows', note: 'Re-queries this visual and hides the rest.' },
         { value: 'NONE', label: 'Ignore selections elsewhere', note: 'This visual never reacts to another one.' },
     ];
-
     const CASCADE_INVALID = [
         { value: 'CLEAR', label: 'Clear the selection' },
         { value: 'FIRST', label: 'Select the first remaining option' },
         { value: 'ERROR', label: 'Refuse the change' },
     ];
-
     /**
      * Columns this visual can key a selection on: what it maps, what its dataset declares, and what
      * the host can see in its own data sample.
@@ -1694,22 +1753,21 @@ export function createDesigner(container, opts = {}) {
         let hostColumns = [];
         try {
             hostColumns = opts.getDatasetColumns?.() || [];
-        } catch {
+        }
+        catch {
             // A host that cannot answer right now is not a reason to lose the columns we do know.
         }
         return [...new Set([
-            ...Object.values(v.mappings || {}).filter(Boolean).map(String),
-            ...(colNames || []),
-            ...hostColumns.map(String),
-        ])].filter(Boolean);
+                ...Object.values(v.mappings || {}).filter(Boolean).map(String),
+                ...(colNames || []),
+                ...hostColumns.map(String),
+            ])].filter(Boolean);
     }
-
     /** Suggestions for a free-text column field. */
     function columnDatalist(id, values) {
         return `<datalist id="${esc(id)}">${values
             .map(value => `<option value="${esc(value)}"></option>`).join('')}</datalist>`;
     }
-
     /**
      * Options for a picker that must never silently drop a value the author wrote by hand.
      *
@@ -1724,30 +1782,23 @@ export function createDesigner(container, opts = {}) {
         return `<option value=""${current ? '' : ' selected'}>${esc(placeholder)}</option>`
             + all.map(value => `<option value="${esc(value)}"${String(value).toLowerCase() === String(current || '').toLowerCase() ? ' selected' : ''}>${esc(value)}</option>`).join('');
     }
-
-    /**
-     * Reads a `CASCADE ( ... )` clause into the fields the inspector edits.
-     *
-     * The clause is carried through design state as the text the parser produced, so this reads the
-     * canonical serialization. `supported: false` is a distinct answer from "no cascade": a clause
-     * this cannot read is shown as read-only text and left in the script untouched, because
-     * rewriting it from a partial reading would lose whatever it could not see.
-     */
     function readCascade(clause) {
-        if (!clause || !String(clause).trim()) return null;
+        if (!clause || !String(clause).trim())
+            return null;
         const text = String(clause);
         const mode = /\bMODE\s*=\s*(LOCAL|LIVE)\b/i.exec(text)?.[1]?.toUpperCase();
-        if (!mode) return { supported: false, text };
-
+        if (!mode)
+            return { supported: false, text };
         const parents = [];
         const parentsClause = /\bPARENTS\s*\(([^)]*)\)/i.exec(text)?.[1] || '';
         for (const entry of parentsClause.split(',')) {
             const pair = /^\s*(@[A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/.exec(entry);
-            if (pair) parents.push({ parameter: pair[1], column: pair[2] });
+            if (pair)
+                parents.push({ parameter: pair[1], column: pair[2] });
         }
         // A PARENTS clause that is present but unreadable must not be silently emptied.
-        if (parentsClause.trim() && !parents.length) return { supported: false, text };
-
+        if (parentsClause.trim() && !parents.length)
+            return { supported: false, text };
         return {
             supported: true,
             text,
@@ -1759,7 +1810,6 @@ export function createDesigner(container, opts = {}) {
             multiSelect: /\bMULTISELECT\s*=\s*(ANY|ALL)\b/i.exec(text)?.[1]?.toUpperCase() || 'ANY',
         };
     }
-
     /** Writes the clause back in the serializer's own shape, so a round-trip changes no bytes. */
     function writeCascade(cascade) {
         const parts = [`MODE = ${cascade.mode}`];
@@ -1773,7 +1823,6 @@ export function createDesigner(container, opts = {}) {
         parts.push(`MULTISELECT = ${cascade.multiSelect}`);
         return 'CASCADE ( ' + parts.join(', ') + ' )';
     }
-
     /**
      * Which inspector groups the author has opened, by their heading.
      *
@@ -1784,36 +1833,38 @@ export function createDesigner(container, opts = {}) {
      * survives the rebuild.
      */
     const openInspectorGroups = new Set();
-
     propsPanel.addEventListener('toggle', event => {
-        const details = event.target;
-        if (!/** @type {Element} */ (details).matches?.('.etlsql-format-group')) return;
-        const heading = /** @type {Element} */ (details).querySelector('summary')?.textContent.trim();
-        if (!heading) return;
-        if (/** @type {HTMLDetailsElement} */ (details).open) openInspectorGroups.add(heading);
-        else openInspectorGroups.delete(heading);
+        const details = eventElement(event);
+        if (!(details).matches?.('.etlsql-format-group'))
+            return;
+        const heading = String(queryElement(details, 'summary')?.textContent || '').trim();
+        if (!heading)
+            return;
+        if (details.open)
+            openInspectorGroups.add(heading);
+        else
+            openInspectorGroups.delete(heading);
     }, true);
-
     function restoreInspectorGroups() {
-        for (const details of propsPanel.querySelectorAll('.etlsql-format-group')) {
-            const heading = details.querySelector('summary')?.textContent.trim();
-            if (!heading) continue;
+        for (const details of queryElements(propsPanel, '.etlsql-format-group')) {
+            const heading = String(queryElement(details, 'summary')?.textContent || '').trim();
+            if (!heading)
+                continue;
             // A group the markup opens by default stays open and is recorded, so closing it sticks.
-            if (/** @type {HTMLDetailsElement} */ (details).open) openInspectorGroups.add(heading);
-            else if (openInspectorGroups.has(heading)) /** @type {HTMLDetailsElement} */ (details).open = true;
+            if (details.open)
+                openInspectorGroups.add(heading);
+            else if (openInspectorGroups.has(heading))
+                details.open = true;
         }
     }
-
     function renderProps() {
         renderPropsBody();
         restoreInspectorGroups();
     }
-
     function renderPropsBody() {
         propsPanel.innerHTML = '';
         const v = selVisualId ? findVis(selVisualId) : null;
-        const on = (sel, fn) => propsPanel.querySelector(sel)?.addEventListener('change', fn);
-
+        const on = (sel, fn) => queryElement(propsPanel, sel)?.addEventListener('change', fn);
         if (!v) {
             // Reading the inspector must not author anything. Defaulting the theme into the design
             // state here wrote `SET REPORT THEME = 'light';` into every script that had no theme, on
@@ -1822,7 +1873,6 @@ export function createDesigner(container, opts = {}) {
             const style = state.reportStyle || {};
             const currentTheme = style.theme || 'light';
             const themes = ['light', 'dark', 'midnight', 'dracula', 'nord', 'custom'];
-
             propsPanel.innerHTML = `
                 <section class="etlsql-format-inspector" aria-label="Report properties">
                     <div class="etlsql-format-profile">
@@ -1863,30 +1913,33 @@ export function createDesigner(container, opts = {}) {
                 </section>
                 <p class="etlsql-dsgn-props-empty" style="margin-top:16px;">Click any visual card on the grid canvas to edit its properties, mappings, and events.</p>
             `;
-
             on('#pp-report-title', e => {
-                reportName = e.target.value;
-                const titleEl = topbar.querySelector('#dsgn-title-input');
-                if (titleEl) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (titleEl).value = reportName;
+                reportName = controlTarget(e).value;
+                const titleEl = queryElement(topbar, '#dsgn-title-input');
+                if (titleEl) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */
+                    (titleEl).value = reportName;
                 syncScriptFromGridDebounced();
             });
             on('#pp-report-theme', e => {
                 pushUndoState();
-                if (!state.reportStyle) state.reportStyle = {};
-                state.reportStyle.theme = e.target.value;
+                if (!state.reportStyle)
+                    state.reportStyle = {};
+                state.reportStyle.theme = controlTarget(e).value;
                 const themesList = ['light', 'dark', 'midnight', 'dracula', 'nord', 'custom'];
                 themesList.forEach(t => document.body.classList.remove('theme-' + t));
-                document.body.classList.add('theme-' + e.target.value);
-                const selectEl = topbar.querySelector('#dsgn-theme-select');
-                if (selectEl) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (selectEl).value = e.target.value;
+                document.body.classList.add('theme-' + controlTarget(e).value);
+                const selectEl = queryElement(topbar, '#dsgn-theme-select');
+                if (selectEl) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */
+                    (selectEl).value = controlTarget(e).value;
                 renderProps();
                 syncScriptFromGridDebounced();
             });
             const bindColor = (id, prop) => {
                 on(id, e => {
                     pushUndoState();
-                    if (!state.reportStyle) state.reportStyle = {};
-                    state.reportStyle[prop] = e.target.value;
+                    if (!state.reportStyle)
+                        state.reportStyle = {};
+                    state.reportStyle[prop] = controlTarget(e).value;
                     syncScriptFromGridDebounced();
                 });
             };
@@ -1897,7 +1950,6 @@ export function createDesigner(container, opts = {}) {
             bindInspectorSearch(propsPanel);
             return;
         }
-
         if (v.type === 'CONTAINER') {
             const containerType = v.options?.CONTAINER_TYPE || 'BOX';
             const ctypes = ['BOX', 'SCROLL', 'DRAWER', 'SIDEBAR', 'TABS', 'ACCORDION', 'MODAL', 'POPOVER'];
@@ -1937,19 +1989,19 @@ export function createDesigner(container, opts = {}) {
                     </details>
                 </section>
             `;
-            on('#pp-name',  e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
-            on('#pp-container-type', e => { if(!v.options) v.options = {}; v.options.CONTAINER_TYPE = e.target.value; });
-            on('#pp-title', e => { v.title = e.target.value; renderCanvas(); });
-            on('#pp-col',   e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
-            on('#pp-row',   e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
-            on('#pp-cspan', e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
-            on('#pp-rspan', e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
+            on('#pp-name', e => { v.name = controlTarget(e).value; renderCanvas(); renderTree(); });
+            on('#pp-container-type', e => { if (!v.options)
+                v.options = {}; v.options.CONTAINER_TYPE = controlTarget(e).value; });
+            on('#pp-title', e => { v.title = controlTarget(e).value; renderCanvas(); });
+            on('#pp-col', e => { v.gridCol = +controlTarget(e).value || 1; renderCanvas(); });
+            on('#pp-row', e => { v.gridRow = +controlTarget(e).value || 1; renderCanvas(); });
+            on('#pp-cspan', e => { v.gridColSpan = +controlTarget(e).value || 12; renderCanvas(); });
+            on('#pp-rspan', e => { v.gridRowSpan = +controlTarget(e).value || 4; renderCanvas(); });
             bindFormattingSection(propsPanel, v, renderCanvas, syncScriptFromGridDebounced);
             bindInspectorSearch(propsPanel);
-            propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
+            queryElement(propsPanel, '#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
             return;
         }
-
         if (v.type === 'BUTTON') {
             const buttonType = v.options?.BUTTON_TYPE || 'REFRESH';
             const btypes = ['REFRESH', 'BACK', 'HELP', 'SUBMIT', 'RESET', 'NAVIGATE', 'ACTION'];
@@ -1989,24 +2041,34 @@ export function createDesigner(container, opts = {}) {
                     </details>
                 </section>
             `;
-            on('#pp-name',  e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
-            on('#pp-button-type', e => { if(!v.options) v.options = {}; v.options.BUTTON_TYPE = e.target.value; });
-            on('#pp-title', e => { v.title = e.target.value; renderCanvas(); });
-            on('#pp-col',   e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
-            on('#pp-row',   e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
-            on('#pp-cspan', e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
-            on('#pp-rspan', e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
+            on('#pp-name', e => { v.name = controlTarget(e).value; renderCanvas(); renderTree(); });
+            on('#pp-button-type', e => { if (!v.options)
+                v.options = {}; v.options.BUTTON_TYPE = controlTarget(e).value; });
+            on('#pp-title', e => { v.title = controlTarget(e).value; renderCanvas(); });
+            on('#pp-col', e => { v.gridCol = +controlTarget(e).value || 1; renderCanvas(); });
+            on('#pp-row', e => { v.gridRow = +controlTarget(e).value || 1; renderCanvas(); });
+            on('#pp-cspan', e => { v.gridColSpan = +controlTarget(e).value || 12; renderCanvas(); });
+            on('#pp-rspan', e => { v.gridRowSpan = +controlTarget(e).value || 4; renderCanvas(); });
             bindFormattingSection(propsPanel, v, renderCanvas, syncScriptFromGridDebounced);
             bindInspectorSearch(propsPanel);
-            propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
+            queryElement(propsPanel, '#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
             return;
         }
-
+        function parseRoleAggregate(expr) {
+            const s = String(expr || '').trim();
+            const match = /^(COUNT|SUM|AVG|MIN|MAX)\s*\(\s*(DISTINCT\s+)?([A-Za-z0-9_.]+)\s*\)$/i.exec(s);
+            if (match) {
+                return {
+                    aggregate: match[2] ? 'COUNT_DISTINCT' : match[1].toUpperCase(),
+                    column: match[3],
+                };
+            }
+            return { aggregate: 'NONE', column: s };
+        }
         const mappings = v.mappings || {};
         const dsOpts = state.datasets
             .map(d => `<option value="${esc(d.name)}"${v.dataset === d.name ? ' selected' : ''}>#${esc(d.name)}</option>`)
             .join('');
-
         const REQUIRED_ROLES = {
             SANKEY: ['Source', 'Target', 'Value'],
             NETWORK: ['From', 'To'],
@@ -2016,12 +2078,10 @@ export function createDesigner(container, opts = {}) {
             GAUGE: ['Value'], HEATMAP: ['Category', 'Value'], BOXPLOT: ['Category', 'Value'],
             SCATTER: ['X', 'Y'], BUBBLE: ['X', 'Y'], SLICER: ['Category'], MULTISELECT: ['Category']
         };
-
         const reqList = REQUIRED_ROLES[v.type] || [];
         const parentVis = v.containerId ? findVis(v.containerId) : null;
         const parentType = parentVis?.options?.CONTAINER_TYPE;
         const isTabbedParent = parentType === 'TABS' || parentType === 'ACCORDION';
-
         // Visuals live on the page, not on the root state. Reaching for state.visuals threw a
         // TypeError inside renderProps, and because renderProps runs *before* onVisualSelect in
         // selectVisual, the throw took the whole selection with it: the host never learned a visual
@@ -2030,26 +2090,23 @@ export function createDesigner(container, opts = {}) {
             .filter(c => c.type === 'CONTAINER' && c.id !== v.id)
             .map(c => `<option value="${esc(c.id)}"${v.containerId === c.id ? ' selected' : ''}>${esc(c.name || 'Container')} (${esc(c.options?.CONTAINER_TYPE || 'BOX')})</option>`)
             .join('');
-
         // The parse reports declarations as `parameters`, with the `@` already on the name. Reading
         // `state.variables` — a key nothing ever sets — left this picker permanently empty, so the
         // one control that binds a slicer to a parameter looked like a report with no parameters.
         const declaredParameters = state.parameters || [];
         const varOpts = declaredParameters
-            .map(vr => `<option value="${esc(vr.name)}"${v.options?.['action:TARGET_VAR'] === vr.name ? ' selected' : ''}>${esc(vr.name)} (${esc(vr.dataType || vr.type || 'VARCHAR')})</option>`)
+            .map(vr => `<option value="${esc(vr.name)}"${v.options?.['action:TARGET_VAR'] === vr.name ? ' selected' : ''}>${esc(vr.name)} (${esc(vr.dataType || 'VARCHAR')})</option>`)
             .join('');
-
         const ds = state.datasets.find(d => d.name === v.dataset);
-        const colNames = ds?.schema?.map(c => c.name) || ds?.columns || [];
+        const schema = ds?.schema;
+        const colNames = schema?.map(c => c.name) || ds?.columns || [];
         const colOptions = colNames.length
             ? (ds?.schema?.length
-                ? colNames.map(n => { const c = ds.schema.find(s => s.name === n); return `<option value="${esc(n)}">${esc(n)} (${esc(c?.type || 'TEXT')})</option>`; }).join('')
+                ? colNames.map(n => { const c = schema?.find(s => s.name === n); return `<option value="${esc(n)}">${esc(n)} (${esc(c?.type || 'TEXT')})</option>`; }).join('')
                 : colNames.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join(''))
             : '';
-
         const datalistId = `dsgn-cols-${v.id}`;
         const datalistHtml = colOptions.length ? `<datalist id="${datalistId}">${colOptions}</datalist>` : '';
-
         // Cross-visual interaction and cascade state, read from the visual as authored.
         const onSelect = String(v.options?.['interaction:ON_SELECT'] || '').trim().toUpperCase();
         const matchingColumn = String(v.options?.['interaction:MATCHING'] || '').trim();
@@ -2069,7 +2126,6 @@ export function createDesigner(container, opts = {}) {
                 : cascade.parents.length
                     ? `Its options are filtered by ${cascade.parents.map(parent => parent.parameter).join(' and ')} before the reader sees them.`
                     : 'LOCAL filtering does nothing until a parent binding names the parameter and the column to filter on.';
-
         const isCustomChart = v.type === 'CUSTOM';
         const defaultCustomChart = `CHART (
     COORDINATE (TYPE = CARTESIAN),
@@ -2168,13 +2224,11 @@ export function createDesigner(container, opts = {}) {
         const htmlTemplate = v.options?.html_template || '<article class="custom-card">\n  <h3>{{Title}}</h3>\n  <p>{{Description}}</p>\n</article>';
         const htmlStyle = v.options?.html_style || '';
         const htmlFallback = v.options?.html_fallback || '';
-
         const formatting = v.formatting || {};
         const palette = formatting.palette || [];
         const palettePreview = palette.length ? palette : ['#2563eb', '#16a34a', '#f59e0b', '#dc2626'];
         const formatValue = v.options?.FORMAT || '';
         const filledRolesCount = ROLES.filter(r => Boolean(mappings[r])).length;
-
         propsPanel.innerHTML = `
             <section class="etlsql-format-inspector" aria-label="Visual formatting">
                 <div class="etlsql-format-profile">
@@ -2261,20 +2315,30 @@ export function createDesigner(container, opts = {}) {
                         </div>` : `
                         <div style="margin-top:8px;">
                             ${ROLES.map(r => {
-                                const isReq = reqList.includes(r);
-                                const isFilled = Boolean(mappings[r]);
-                                const badge = isReq
-                                    ? (isFilled ? '<span class="etlsql-dsgn-role-badge req-ok">✓ Required</span>' : '<span class="etlsql-dsgn-role-badge req-missing">* Required</span>')
-                                    : '';
-                                return `
+            const isReq = reqList.includes(r);
+            const isFilled = Boolean(mappings[r]);
+            const badge = isReq
+                ? (isFilled ? '<span class="etlsql-dsgn-role-badge req-ok">✓ Required</span>' : '<span class="etlsql-dsgn-role-badge req-missing">* Required</span>')
+                : '';
+            const roleSpecs = VISUAL_ROLES[v.type || ''] || [];
+            const roleSpec = roleSpecs.find(s => s.key.toUpperCase() === r.toUpperCase());
+            const isMeasureRole = Boolean(roleSpec?.measure || ['Y', 'VALUE', 'MEASURE', 'ACTUAL', 'TARGET'].includes(r.toUpperCase()));
+            const { aggregate: currentAgg } = parseRoleAggregate(mappings[r] || '');
+            return `
                                     <div class="etlsql-dsgn-map-row">
                                         <div class="etlsql-dsgn-map-label">
                                             <span class="etlsql-dsgn-role-name" title="${r}">${r}</span>
                                             ${badge}
                                         </div>
-                                        <input type="text" data-role="${r}" class="form-control${isReq && !isFilled ? ' is-required-missing' : ''}" value="${esc(mappings[r] || '')}" placeholder="column or expression" ${colOptions.length ? `list="${datalistId}"` : ''}>
+                                        <div style="display:flex;gap:4px;width:100%;align-items:center;">
+                                            <input type="text" data-role="${r}" class="form-control${isReq && !isFilled ? ' is-required-missing' : ''}" value="${esc(mappings[r] || '')}" placeholder="column or expression" ${colOptions.length ? `list="${datalistId}"` : ''} style="flex:1;">
+                                            ${isMeasureRole ? `
+                                            <select data-role-agg="${r}" class="form-control etlsql-dsgn-agg-select" style="width:115px;font-size:11px;padding:2px 4px;" title="Aggregation function">
+                                                ${CHART_AGGREGATES.map(a => `<option value="${a.id}" ${currentAgg === a.id ? 'selected' : ''}>${esc(a.id === 'NONE' ? 'No aggregate' : a.label)}</option>`).join('')}
+                                            </select>` : ''}
+                                        </div>
                                     </div>`;
-                            }).join('')}
+        }).join('')}
                             ${datalistHtml}
                         </div>`)}
                     </div>
@@ -2303,7 +2367,7 @@ export function createDesigner(container, opts = {}) {
                                 <option value=""${onSelect ? '' : ' selected'}>Default — highlight matching data</option>
                                 ${INTERACTION_EFFECTS.map(effect => `<option value="${effect.value}"${onSelect === effect.value ? ' selected' : ''}>${esc(effect.label)}</option>`).join('')}
                                 ${onSelect && !INTERACTION_EFFECTS.some(effect => effect.value === onSelect)
-                                    ? `<option value="${esc(onSelect)}" selected>${esc(onSelect)} (authored)</option>` : ''}
+            ? `<option value="${esc(onSelect)}" selected>${esc(onSelect)} (authored)</option>` : ''}
                             </select>
                         </label>
                         ${onSelect === 'NONE' ? '' : `<label class="etlsql-dsgn-label">Match selections on
@@ -2340,7 +2404,7 @@ export function createDesigner(container, opts = {}) {
                                         list="dsgn-match-cols-${esc(v.id)}" value="${esc(parent.column)}" placeholder="column">
                                     <button type="button" class="etlsql-dsgn-cascade-drop" data-cascade-remove="${index}" aria-label="Remove parent binding">×</button>
                                 </div>`).join('')
-                                : '<p class="etlsql-dsgn-interaction-note">No parents yet. LOCAL filtering needs at least one.</p>'}
+            : '<p class="etlsql-dsgn-interaction-note">No parents yet. LOCAL filtering needs at least one.</p>'}
                             <button type="button" class="btn btn-sm" id="pp-cascade-add-parent"${declaredParameters.length ? '' : ' disabled'}>+ Parent control</button>
                             ${declaredParameters.length ? '' : '<p class="etlsql-dsgn-interaction-note">Declare a parameter first; a parent binding names one.</p>'}
                         </div>` : ''}
@@ -2399,15 +2463,17 @@ export function createDesigner(container, opts = {}) {
                 </details>
             </section>
         `;
-
-        on('#pp-name',         e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
-        on('#pp-type',         e => {
-            v.type  = e.target.value;
+        on('#pp-name', e => { v.name = controlTarget(e).value; renderCanvas(); renderTree(); });
+        on('#pp-type', e => {
+            v.type = controlTarget(e).value;
             if (v.type === 'CUSTOM' && !v.options?.advanced_chart) {
-                if (!v.options) v.options = {};
+                if (!v.options)
+                    v.options = {};
                 v.options.advanced_chart = defaultCustomChart;
-            } else if (v.type === 'HTML' && !v.options?.html_template) {
-                if (!v.options) v.options = {};
+            }
+            else if (v.type === 'HTML' && !v.options?.html_template) {
+                if (!v.options)
+                    v.options = {};
                 v.options.html_mode = 'SINGLE';
                 v.options.html_template = `<article class="custom-card">\n  <h3>{{Title}}</h3>\n  <p>{{Description}}</p>\n</article>`;
                 v.options.html_style = `.custom-card {\n  padding: 12px;\n  border: 1px solid var(--portal-border, #e2e8f0);\n  border-radius: 6px;\n}`;
@@ -2417,148 +2483,189 @@ export function createDesigner(container, opts = {}) {
             renderTree();
             renderProps();
         });
-        on('#pp-container-id', e => { v.containerId = e.target.value || null; renderTree(); renderCanvas(); renderProps(); });
+        on('#pp-container-id', e => { v.containerId = controlTarget(e).value || null; renderTree(); renderCanvas(); renderProps(); });
         if (isTabbedParent) {
-            on('#pp-container-section', e => { if(!v.options) v.options = {}; if (e.target.value.trim()) v.options.CONTAINER_SECTION = e.target.value.trim(); else delete v.options.CONTAINER_SECTION; syncScriptFromGridDebounced(); });
+            on('#pp-container-section', e => { if (!v.options)
+                v.options = {}; if (controlTarget(e).value.trim())
+                v.options.CONTAINER_SECTION = controlTarget(e).value.trim();
+            else
+                delete v.options.CONTAINER_SECTION; syncScriptFromGridDebounced(); });
         }
-        on('#pp-title',        e => {
-            v.title = e.target.value;
-            if (v.formatting?.title) v.formatting.title.text = e.target.value;
+        on('#pp-title', e => {
+            v.title = controlTarget(e).value;
+            if (v.formatting?.title)
+                v.formatting.title.text = controlTarget(e).value;
             renderCanvas();
         });
-        on('#pp-ds',           e => { v.dataset = e.target.value || null; });
-        on('#pp-width',        e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.WIDTH = e.target.value.trim(); else delete v.options.WIDTH; });
-        on('#pp-height',       e => { if (!v.options) v.options = {}; if (e.target.value.trim()) v.options.HEIGHT = e.target.value.trim(); else delete v.options.HEIGHT; });
+        on('#pp-ds', e => { v.dataset = controlTarget(e).value || null; });
+        on('#pp-width', e => { if (!v.options)
+            v.options = {}; if (controlTarget(e).value.trim())
+            v.options.WIDTH = controlTarget(e).value.trim();
+        else
+            delete v.options.WIDTH; });
+        on('#pp-height', e => { if (!v.options)
+            v.options = {}; if (controlTarget(e).value.trim())
+            v.options.HEIGHT = controlTarget(e).value.trim();
+        else
+            delete v.options.HEIGHT; });
         on('#pp-action-target-var', e => {
-            const selectedVar = e.target.value;
-            if (!selectedVar) return;
-            if (!v.options) v.options = {};
+            const selectedVar = controlTarget(e).value;
+            if (!selectedVar)
+                return;
+            if (!v.options)
+                v.options = {};
             const col = mappings['Category'] || mappings['Value'] || 'value';
             const actionStr = `SET_PARAMETER(${selectedVar}, ${col})`;
             v.options['action:ON_CHANGE'] = actionStr;
-            const input = propsPanel.querySelector('#pp-action-on-change');
-            if (input) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (input).value = actionStr;
+            const input = queryElement(propsPanel, '#pp-action-on-change');
+            if (input) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */
+                (input).value = actionStr;
             syncScriptFromGridDebounced();
         });
         // These three wrote to the in-memory visual and never to the script: an author could set an
         // action or an interaction, watch the control keep the value, save, and find nothing there.
-        on('#pp-action-on-change', e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['action:ON_CHANGE'] = val; else delete v.options['action:ON_CHANGE']; syncScriptFromGridDebounced(); });
-        on('#pp-action-on-click',  e => { if (!v.options) v.options = {}; const val = e.target.value.trim(); if (val) v.options['action:ON_CLICK'] = val; else delete v.options['action:ON_CLICK']; syncScriptFromGridDebounced(); });
+        on('#pp-action-on-change', e => { if (!v.options)
+            v.options = {}; const val = controlTarget(e).value.trim(); if (val)
+            v.options['action:ON_CHANGE'] = val;
+        else
+            delete v.options['action:ON_CHANGE']; syncScriptFromGridDebounced(); });
+        on('#pp-action-on-click', e => { if (!v.options)
+            v.options = {}; const val = controlTarget(e).value.trim(); if (val)
+            v.options['action:ON_CLICK'] = val;
+        else
+            delete v.options['action:ON_CLICK']; syncScriptFromGridDebounced(); });
         on('#pp-interaction-on-select', e => {
-            if (!v.options) v.options = {};
-            const val = e.target.value.trim().toUpperCase();
-            if (val) v.options['interaction:ON_SELECT'] = val;
-            else delete v.options['interaction:ON_SELECT'];
+            if (!v.options)
+                v.options = {};
+            const val = controlTarget(e).value.trim().toUpperCase();
+            if (val)
+                v.options['interaction:ON_SELECT'] = val;
+            else
+                delete v.options['interaction:ON_SELECT'];
             // NONE means this visual never reacts, so a match column would describe nothing.
-            if (val === 'NONE') delete v.options['interaction:MATCHING'];
+            if (val === 'NONE')
+                delete v.options['interaction:MATCHING'];
             renderProps();
             syncScriptFromGridDebounced();
         });
         on('#pp-interaction-matching', e => {
-            if (!v.options) v.options = {};
-            const val = e.target.value.trim();
-            if (val) v.options['interaction:MATCHING'] = val;
-            else delete v.options['interaction:MATCHING'];
+            if (!v.options)
+                v.options = {};
+            const val = controlTarget(e).value.trim();
+            if (val)
+                v.options['interaction:MATCHING'] = val;
+            else
+                delete v.options['interaction:MATCHING'];
             renderProps();
             syncScriptFromGridDebounced();
         });
-
         // ── Cascade ───────────────────────────────────────────────────────────
         // Every edit rewrites the whole clause from the fields, in the serializer's own shape, so a
         // parse of what Studio wrote produces the text Studio would write again.
-        const commitCascade = next => {
-            if (!v.options) v.options = {};
-            if (next) v.options.cascade = writeCascade(next);
-            else delete v.options.cascade;
+        const commitCascade = (next) => {
+            if (!v.options)
+                v.options = {};
+            if (next)
+                v.options.cascade = writeCascade(next);
+            else
+                delete v.options.cascade;
             renderProps();
             syncScriptFromGridDebounced();
         };
-        const editCascade = change => {
-            if (!cascade?.supported) return;
-            const next = { ...cascade, parents: cascade.parents.map(parent => ({ ...parent })) };
+        const editCascade = (change) => {
+            if (!cascade?.supported)
+                return;
+            const next = { ...cascade, parents: cascade.parents.map((parent) => ({ ...parent })) };
             change(next);
             commitCascade(next);
         };
         on('#pp-cascade-mode', e => {
-            const mode = e.target.value;
-            if (!mode) { commitCascade(null); return; }
+            const mode = controlTarget(e).value;
+            if (!mode) {
+                commitCascade(null);
+                return;
+            }
+            const cascadeMode = mode;
             const base = cascade?.supported ? cascade : null;
             commitCascade({
-                mode,
+                supported: true,
+                text: '',
+                mode: cascadeMode,
                 // LIVE infers its parents from the parameters its own query names, and the parser
                 // rejects PARENTS there, so switching to LIVE drops them rather than writing a
                 // clause that will not parse.
-                parents: mode === 'LOCAL' ? (base?.parents ?? []) : [],
+                parents: cascadeMode === 'LOCAL' ? (base?.parents ?? []) : [],
                 invalid: base?.invalid ?? 'CLEAR',
                 nullPolicy: base?.nullPolicy ?? 'ALL',
                 allValue: base?.allValue ?? '*',
                 multiSelect: base?.multiSelect ?? 'ANY',
             });
         });
-        on('#pp-cascade-invalid', e => editCascade(next => { next.invalid = e.target.value; }));
-        on('#pp-cascade-null', e => editCascade(next => { next.nullPolicy = e.target.value; }));
-        on('#pp-cascade-all-value', e => editCascade(next => { next.allValue = e.target.value; }));
-        on('#pp-cascade-multiselect', e => editCascade(next => { next.multiSelect = e.target.value; }));
-        propsPanel.querySelector('#pp-cascade-add-parent')?.addEventListener('click', () => editCascade(next => {
+        on('#pp-cascade-invalid', e => editCascade(next => { next.invalid = controlTarget(e).value; }));
+        on('#pp-cascade-null', e => editCascade(next => { next.nullPolicy = controlTarget(e).value; }));
+        on('#pp-cascade-all-value', e => editCascade(next => { next.allValue = controlTarget(e).value; }));
+        on('#pp-cascade-multiselect', e => editCascade(next => { next.multiSelect = controlTarget(e).value; }));
+        queryElement(propsPanel, '#pp-cascade-add-parent')?.addEventListener('click', () => editCascade(next => {
             next.parents.push({
                 parameter: declaredParameters[0]?.name || '@parameter',
                 column: interactionKeyCandidates(v, colNames)[0] || '',
             });
         }));
-        propsPanel.querySelectorAll('[data-cascade-parameter]').forEach(select => select.addEventListener('change', () =>
-            editCascade(next => { next.parents[Number(/** @type {HTMLElement} */ (select).dataset.cascadeParameter)].parameter = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (select).value; })));
-        propsPanel.querySelectorAll('[data-cascade-column]').forEach(select => select.addEventListener('change', () =>
-            editCascade(next => { next.parents[Number(/** @type {HTMLElement} */ (select).dataset.cascadeColumn)].column = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (select).value; })));
-        propsPanel.querySelectorAll('[data-cascade-remove]').forEach(button => button.addEventListener('click', () =>
-            editCascade(next => { next.parents.splice(Number(/** @type {HTMLElement} */ (button).dataset.cascadeRemove), 1); })));
-        on('#pp-col',          e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
-        on('#pp-row',          e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
-        on('#pp-cspan',        e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
-        on('#pp-rspan',        e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
-
+        queryElements(propsPanel, '[data-cascade-parameter]').forEach(select => select.addEventListener('change', () => editCascade(next => { next.parents[Number(datasetValue(select, 'cascadeParameter'))].parameter = select.value; })));
+        queryElements(propsPanel, '[data-cascade-column]').forEach(select => select.addEventListener('change', () => editCascade(next => { next.parents[Number(datasetValue(select, 'cascadeColumn'))].column = select.value; })));
+        queryElements(propsPanel, '[data-cascade-remove]').forEach(button => button.addEventListener('click', () => editCascade(next => { next.parents.splice(Number(/** @type {HTMLElement} */ (button).dataset.cascadeRemove), 1); })));
+        on('#pp-col', e => { v.gridCol = +controlTarget(e).value || 1; renderCanvas(); });
+        on('#pp-row', e => { v.gridRow = +controlTarget(e).value || 1; renderCanvas(); });
+        on('#pp-cspan', e => { v.gridColSpan = +controlTarget(e).value || 12; renderCanvas(); });
+        on('#pp-rspan', e => { v.gridRowSpan = +controlTarget(e).value || 4; renderCanvas(); });
         if (isCustomChart) {
-            const chartInput = propsPanel.querySelector('#pp-chart-code');
+            const chartInput = queryElement(propsPanel, '#pp-chart-code');
             if (chartInput) {
                 chartInput.addEventListener('input', ev => {
-                    if (!v.options) v.options = {};
-                    v.options.advanced_chart = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value;
+                    if (!v.options)
+                        v.options = {};
+                    v.options.advanced_chart = controlTarget(ev).value;
                     renderCanvas();
                     syncScriptFromGridDebounced();
                 });
             }
-            const coordInput = propsPanel.querySelector('#pp-chart-coord');
+            const coordInput = queryElement(propsPanel, '#pp-chart-coord');
             if (coordInput) {
                 coordInput.addEventListener('change', ev => {
-                    if (!v.options) v.options = {};
+                    if (!v.options)
+                        v.options = {};
                     let cur = v.options.advanced_chart || chartCode;
                     if (/COORDINATE\s*\(\s*TYPE\s*=\s*[A-Z_]+\s*\)/i.test(cur)) {
-                        const coordinate = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value === 'GEOGRAPHIC'
+                        const coordinate = controlTarget(ev).value === 'GEOGRAPHIC'
                             ? "COORDINATE (TYPE = GEOGRAPHIC, PROJECTION = EQUIRECTANGULAR, MAP_NAME = 'WORLD', FEATURE_KEY = 'name')"
-                            : `COORDINATE (TYPE = ${/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value})`;
+                            : `COORDINATE (TYPE = ${controlTarget(ev).value})`;
                         cur = cur.replace(/COORDINATE\s*\(\s*TYPE\s*=\s*[A-Z_]+\s*\)/i, coordinate);
                     }
                     v.options.advanced_chart = cur;
-                    if (chartInput) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (chartInput).value = cur;
+                    if (chartInput) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */
+                        (chartInput).value = cur;
                     renderCanvas();
                     syncScriptFromGridDebounced();
                 });
             }
-            const markInput = propsPanel.querySelector('#pp-chart-primary-mark');
+            const markInput = queryElement(propsPanel, '#pp-chart-primary-mark');
             if (markInput) {
                 markInput.addEventListener('change', ev => {
-                    if (!v.options) v.options = {};
+                    if (!v.options)
+                        v.options = {};
                     let cur = v.options.advanced_chart || chartCode;
                     const markPattern = /\b(RECT|LINE|AREA|POINT|RULE|ARC|TEXT|TICK)\b/i;
                     if (markPattern.test(cur)) {
-                        cur = cur.replace(markPattern, /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value);
+                        cur = cur.replace(markPattern, controlTarget(ev).value);
                     }
                     v.options.advanced_chart = cur;
-                    if (chartInput) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (chartInput).value = cur;
+                    if (chartInput) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */
+                        (chartInput).value = cur;
                     renderCanvas();
                     syncScriptFromGridDebounced();
                 });
             }
-            const recipeInput = propsPanel.querySelector('#pp-chart-recipe');
+            const recipeInput = queryElement(propsPanel, '#pp-chart-recipe');
             if (recipeInput) {
                 recipeInput.addEventListener('change', ev => {
                     const recipes = {
@@ -2566,73 +2673,119 @@ export function createDesigner(container, opts = {}) {
                         'candlestick-volume': candlestickVolumeRecipe,
                         'layered-map': layeredMapRecipe
                     };
-                    const replacement = recipes[/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value];
-                    if (!replacement) return;
-                    if (!v.options) v.options = {};
+                    const replacement = recipes[controlTarget(ev).value];
+                    if (!replacement)
+                        return;
+                    if (!v.options)
+                        v.options = {};
                     v.options.advanced_chart = replacement;
-                    if (chartInput) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (chartInput).value = replacement;
+                    if (chartInput) /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */
+                        (chartInput).value = replacement;
                     renderCanvas();
                     syncScriptFromGridDebounced();
                 });
             }
-        } else if (isHtmlVisual) {
+        }
+        else if (isHtmlVisual) {
             on('#pp-html-mode', e => {
-                if (!v.options) v.options = {};
-                v.options.html_mode = e.target.value;
+                if (!v.options)
+                    v.options = {};
+                v.options.html_mode = controlTarget(e).value;
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
             on('#pp-html-template', e => {
-                if (!v.options) v.options = {};
-                v.options.html_template = e.target.value;
+                if (!v.options)
+                    v.options = {};
+                v.options.html_template = controlTarget(e).value;
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
             on('#pp-html-style', e => {
-                if (!v.options) v.options = {};
-                if (e.target.value.trim()) v.options.html_style = e.target.value.trim();
-                else delete v.options.html_style;
+                if (!v.options)
+                    v.options = {};
+                if (controlTarget(e).value.trim())
+                    v.options.html_style = controlTarget(e).value.trim();
+                else
+                    delete v.options.html_style;
                 renderCanvas();
                 syncScriptFromGridDebounced();
             });
             on('#pp-html-fallback', e => {
-                if (!v.options) v.options = {};
-                if (e.target.value.trim()) v.options.html_fallback = e.target.value.trim();
-                else delete v.options.html_fallback;
+                if (!v.options)
+                    v.options = {};
+                if (controlTarget(e).value.trim())
+                    v.options.html_fallback = controlTarget(e).value.trim();
+                else
+                    delete v.options.html_fallback;
                 syncScriptFromGridDebounced();
             });
-        } else {
+        }
+        else {
             for (const role of ROLES) {
-                const input = propsPanel.querySelector(`[data-role="${role}"]`);
-                if (!input) continue;
+                const input = queryElement(propsPanel, `[data-role="${role}"]`);
+                const aggSelect = queryElement(propsPanel, `[data-role-agg="${role}"]`);
+                if (aggSelect) {
+                    aggSelect.addEventListener('change', () => {
+                        const agg = aggSelect.value;
+                        const currentVal = v.mappings?.[role] || input?.value || '';
+                        const parsed = parseRoleAggregate(currentVal);
+                        const col = parsed.column;
+                        if (!v.mappings)
+                            v.mappings = {};
+                        if (!col) {
+                            renderProps();
+                            return;
+                        }
+                        if (agg === 'NONE') {
+                            v.mappings[role] = col;
+                        }
+                        else {
+                            v.mappings[role] = aggregateExpression(agg, col);
+                        }
+                        if (input)
+                            input.value = v.mappings[role];
+                        renderCanvas();
+                        renderProps();
+                        syncScriptFromGridDebounced();
+                    });
+                }
+                if (!input)
+                    continue;
                 input.addEventListener('change', ev => {
-                    if (!v.mappings) v.mappings = {};
-                    if (/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value) v.mappings[role] = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (ev.target).value;
-                    else delete v.mappings[role];
+                    if (!v.mappings)
+                        v.mappings = {};
+                    const val = controlTarget(ev).value.trim();
+                    if (val)
+                        v.mappings[role] = val;
+                    else
+                        delete v.mappings[role];
+                    renderCanvas();
                     renderProps();
+                    syncScriptFromGridDebounced();
                 });
                 input.addEventListener('dragover', e => {
                     e.preventDefault();
                     input.classList.add('drag-over');
                 });
                 input.addEventListener('dragleave', () => input.classList.remove('drag-over'));
-                input.addEventListener('drop', e => {
+                input.addEventListener('drop', ((e) => {
                     e.preventDefault();
                     input.classList.remove('drag-over');
-                    const col = /** @type {DragEvent} */ (e).dataTransfer.getData('text/plain');
+                    const col = e.dataTransfer?.getData('text/plain');
                     if (col) {
-                        /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (input).value = col;
+                        const currentAgg = aggSelect?.value || 'NONE';
+                        input.value = currentAgg !== 'NONE' ? aggregateExpression(currentAgg, col) : col;
                         input.dispatchEvent(new Event('change'));
                     }
-                });
+                }));
             }
         }
         bindFormattingSection(propsPanel, v, renderCanvas, syncScriptFromGridDebounced);
         bindVisualFormatInspector(propsPanel, v, colNames, renderProps);
         bindInspectorSearch(propsPanel);
-        propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
+        queryElement(propsPanel, '#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
     }
-
     function renderAll() {
         renderPageTabs();
         renderCanvas();
@@ -2642,34 +2795,30 @@ export function createDesigner(container, opts = {}) {
         renderProps();
         syncScriptFromGridDebounced();
     }
-
     // ── Actions ───────────────────────────────────────────────────────────────
-
     let selVisualIds = new Set();
-
     function selectVisual(id, selectionOpts = {}) {
         if (selectionOpts.toggle || selectionOpts.multi) {
             if (id) {
-                if (selVisualIds.has(id)) selVisualIds.delete(id);
-                else selVisualIds.add(id);
+                if (selVisualIds.has(id))
+                    selVisualIds.delete(id);
+                else
+                    selVisualIds.add(id);
             }
-        } else {
+        }
+        else {
             selVisualIds.clear();
-            if (id) selVisualIds.add(id);
+            if (id)
+                selVisualIds.add(id);
         }
-
         selVisualId = selVisualIds.size === 1 ? Array.from(selVisualIds)[0] : null;
-
-        for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card')) {
-            card.classList.toggle('selected', selVisualIds.has(/** @type {HTMLElement} */ (card).dataset.vid));
+        for (const card of queryElements(canvasGrid, '.etlsql-dsgn-visual-card')) {
+            card.classList.toggle('selected', selVisualIds.has(datasetValue(card, 'vid')));
         }
-
         renderTree();
         renderProps();
         renderAlignmentToolbar();
-
         opts.onVisualSelect?.(selVisualId);
-
         if (selVisualId && !selectionOpts.skipEditorSync) {
             const v = findVis(selVisualId);
             if (v && v.name) {
@@ -2677,44 +2826,45 @@ export function createDesigner(container, opts = {}) {
             }
         }
     }
-
     function renderAlignmentToolbar() {
-        let bar = canvasWrap.querySelector('#dsgn-align-bar');
+        let bar = queryElement(canvasWrap, '#dsgn-align-bar');
         if (selVisualIds.size < 2) {
-            if (bar) /** @type {HTMLElement} */ (bar).style.display = 'none';
+            if (bar) /** @type {HTMLElement} */
+                (bar).style.display = 'none';
             return;
         }
-
         if (!bar) {
             bar = document.createElement('div');
             bar.id = 'dsgn-align-bar';
             bar.className = 'etlsql-dsgn-align-bar';
             canvasWrap.appendChild(bar);
-
             bar.addEventListener('click', e => {
-                const btn = /** @type {Element} */ (e.target).closest('[data-align]');
-                if (!btn) return;
+                const btn = closestElement(e, '[data-align]');
+                if (!btn)
+                    return;
                 const mode = /** @type {HTMLElement} */ (btn).dataset.align;
                 const visuals = curVis().filter(v => selVisualIds.has(v.id));
-                if (visuals.length < 2) return;
-
+                if (visuals.length < 2)
+                    return;
                 if (mode === 'left') {
                     const minCol = Math.min(...visuals.map(v => v.gridCol || 1));
                     visuals.forEach(v => v.gridCol = minCol);
-                } else if (mode === 'top') {
+                }
+                else if (mode === 'top') {
                     const minRow = Math.min(...visuals.map(v => v.gridRow || 1));
                     visuals.forEach(v => v.gridRow = minRow);
-                } else if (mode === 'width') {
+                }
+                else if (mode === 'width') {
                     const targetSpan = visuals[0].gridColSpan || 12;
                     visuals.forEach(v => v.gridColSpan = targetSpan);
-                } else if (mode === 'height') {
+                }
+                else if (mode === 'height') {
                     const targetSpan = visuals[0].gridRowSpan || 4;
                     visuals.forEach(v => v.gridRowSpan = targetSpan);
                 }
                 renderCanvas();
             });
         }
-
         bar.innerHTML = `
             <span style="font-size:11px;font-weight:600;margin-right:2px;">${selVisualIds.size} selected</span>
             <button class="btn btn-xs" data-align="left" title="Align Left">⬅ Left</button>
@@ -2724,23 +2874,26 @@ export function createDesigner(container, opts = {}) {
         `;
         /** @type {HTMLElement} */ (bar).style.display = 'flex';
     }
-
     function deleteVisual(id) {
         pushUndoState();
         for (const page of state.pages) {
             const i = (page.visuals || []).findIndex(v => v.id === id);
-            if (i >= 0) { page.visuals.splice(i, 1); break; }
+            if (i >= 0) {
+                page.visuals.splice(i, 1);
+                break;
+            }
         }
-        if (selVisualId === id) selVisualId = null;
+        if (selVisualId === id)
+            selVisualId = null;
         selVisualIds.delete(id);
         renderCanvas();
         renderTree();
         renderProps();
         syncScriptFromGridDebounced();
     }
-
     function deleteSelectedVisuals() {
-        if (selVisualIds.size === 0) return;
+        if (selVisualIds.size === 0)
+            return;
         pushUndoState();
         for (const page of state.pages) {
             page.visuals = (page.visuals || []).filter(v => !selVisualIds.has(v.id));
@@ -2749,7 +2902,6 @@ export function createDesigner(container, opts = {}) {
         selVisualId = null;
         renderAll();
     }
-
     /**
      * The parser requires a SOURCE clause on every visual except the ones that read no rows, so
      * these are the types that can be declared without one.
@@ -2762,7 +2914,6 @@ export function createDesigner(container, opts = {}) {
         'TEXT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'SEARCH', 'SLICER',
         'MULTISELECT', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX', 'IMAGE', 'HTML',
     ]);
-
     /**
      * What a newly added visual should read from.
      *
@@ -2774,24 +2925,25 @@ export function createDesigner(container, opts = {}) {
     function defaultVisualBinding() {
         if (typeof opts.defaultVisualBinding === 'function') {
             const hosted = opts.defaultVisualBinding();
-            if (hosted && (hosted.dataset || hosted.options?.inline_source)) return hosted;
+            if (hosted && (hosted.dataset || hosted.options?.inline_source))
+                return hosted;
         }
         const dataset = (state.datasets || []).find(item => item?.name);
-        if (dataset) return { dataset: dataset.name, options: {} };
+        if (dataset)
+            return { dataset: dataset.name, options: {} };
         for (const existing of curVis()) {
-            if (existing.dataset) return { dataset: existing.dataset, options: {} };
+            if (existing.dataset)
+                return { dataset: existing.dataset, options: {} };
             if (existing.options?.inline_source)
                 return { dataset: null, options: { inline_source: existing.options.inline_source } };
         }
         return null;
     }
-
     function addVisualAt(type, col = 1, row = null, colSpan = 12, rowSpan = 4) {
         if (opts.canAddVisual && !opts.canAddVisual()) {
             opts.onAddVisualBlocked?.();
             return null;
         }
-
         // A visual added with no source used to look like it worked and then vanish. The card
         // rendered, but `CREATE VISUAL x AS BAR (...)` without a SOURCE clause does not parse, and
         // the patcher refuses a patch that does not parse - so the script never changed and the
@@ -2805,7 +2957,6 @@ export function createDesigner(container, opts = {}) {
             opts.onAddVisualBlocked?.();
             return null;
         }
-
         pushUndoState();
         if (!state.pages || !state.pages.length) {
             state.pages = [{ id: 'p1', name: 'Page 1', mode: 'Dashboard', visuals: [] }];
@@ -2816,7 +2967,8 @@ export function createDesigner(container, opts = {}) {
             page = state.pages[0];
             pageIdx = 0;
         }
-        if (!page.visuals) page.visuals = [];
+        if (!page.visuals)
+            page.visuals = [];
         const newId = uid();
         const visual = {
             id: newId,
@@ -2831,35 +2983,42 @@ export function createDesigner(container, opts = {}) {
             mappings: {},
             options: { ...(binding?.options ?? {}) },
         };
-
         const uType = upperType;
         if (uType === 'BAR') {
             Object.assign(visual.options, { TITLE: 'Bar Chart' });
-        } else if (uType === 'LINE') {
+        }
+        else if (uType === 'LINE') {
             Object.assign(visual.options, { TITLE: 'Trend Line' });
-        } else if (uType === 'KPI') {
+        }
+        else if (uType === 'KPI') {
             Object.assign(visual.options, { TITLE: 'Key Metric' });
             visual.gridColSpan = 3;
             visual.gridRowSpan = 2;
-        } else if (uType === 'DONUT' || uType === 'PIE') {
+        }
+        else if (uType === 'DONUT' || uType === 'PIE') {
             Object.assign(visual.options, { TITLE: 'Proportions' });
-        } else if (uType === 'TABLE') {
+        }
+        else if (uType === 'TABLE') {
             Object.assign(visual.options, { TITLE: 'Data Grid Table', PAGE_SIZE: '10' });
             visual.gridColSpan = 12;
             visual.gridRowSpan = 5;
-        } else if (uType === 'SLICER') {
+        }
+        else if (uType === 'SLICER') {
             Object.assign(visual.options, { TITLE: 'Filter Slicer' });
             visual.gridColSpan = 3;
             visual.gridRowSpan = 3;
-        } else if (uType === 'CONTAINER') {
+        }
+        else if (uType === 'CONTAINER') {
             visual.options.CONTAINER_TYPE = 'BOX';
             visual.gridColSpan = 12;
             visual.gridRowSpan = 6;
-        } else if (uType === 'BUTTON') {
+        }
+        else if (uType === 'BUTTON') {
             visual.options.BUTTON_TYPE = 'REFRESH';
             visual.gridColSpan = 2;
             visual.gridRowSpan = 1;
-        } else if (uType === 'CUSTOM') {
+        }
+        else if (uType === 'CUSTOM') {
             visual.options.advanced_chart = `CHART (
         COORDINATE (TYPE = CARTESIAN),
         LAYERS (
@@ -2871,7 +3030,8 @@ export function createDesigner(container, opts = {}) {
             )
         )
     )`;
-        } else if (uType === 'HTML') {
+        }
+        else if (uType === 'HTML') {
             visual.options.html_mode = 'SINGLE';
             visual.options.html_template = `<article class="custom-card">
   <h3>{{Title}}</h3>
@@ -2884,7 +3044,6 @@ export function createDesigner(container, opts = {}) {
 }`;
             visual.options.html_fallback = 'Custom HTML Visual: {{Title}} - {{Description}}';
         }
-
         page.visuals.push(visual);
         selVisualId = newId;
         renderCanvas();
@@ -2893,12 +3052,10 @@ export function createDesigner(container, opts = {}) {
         syncScriptFromGridDebounced();
         return newId;
     }
-
     function addVisual(type) {
         const uType = (type || 'BAR').toUpperCase();
         addVisualAt(uType, 1, null, uType === 'KPI' ? 3 : uType === 'TABLE' ? 12 : 6, uType === 'KPI' ? 2 : uType === 'TABLE' ? 5 : 4);
     }
-
     function addPage() {
         const n = state.pages.length + 1;
         state.pages.push({ id: `p${n}_${Date.now()}`, name: `Page ${n}`, mode: 'Dashboard', visuals: [] });
@@ -2906,62 +3063,55 @@ export function createDesigner(container, opts = {}) {
         selVisualId = null;
         renderAll();
     }
-
     async function addDataset() {
-        const name = await _feedback.prompt('Name the dataset used by this report.', { title: 'Add dataset', label: 'Dataset name', required: true, pattern: /^[A-Za-z_][A-Za-z0-9_]*$/, patternMessage: 'Start with a letter or underscore and use only letters, numbers, and underscores.', confirmLabel: 'Add dataset', auditAction: 'designer.dataset.add' });
-        if (!name?.trim()) return;
+        const name = await feedback.prompt('Name the dataset used by this report.', { title: 'Add dataset', label: 'Dataset name', required: true, pattern: /^[A-Za-z_][A-Za-z0-9_]*$/, patternMessage: 'Start with a letter or underscore and use only letters, numbers, and underscores.', confirmLabel: 'Add dataset', auditAction: 'designer.dataset.add' });
+        if (!name?.trim())
+            return;
         state.datasets.push({ id: 'ds_' + uid(), name: name.trim(), query: 'SELECT 1 AS Placeholder' });
         renderDatasets();
         renderProps();
     }
-
     function openDataPrepModal() {
-        const recipeSelect = dataPrepModal.querySelector('#dsgn-dp-recipe');
-        const descEl = dataPrepModal.querySelector('#dsgn-dp-desc');
-        const sourceInput = dataPrepModal.querySelector('#dsgn-dp-source');
-        const targetInput = dataPrepModal.querySelector('#dsgn-dp-target');
-        const sqlPreview = dataPrepModal.querySelector('#dsgn-dp-sql');
-
+        const recipeSelect = queryElement(dataPrepModal, '#dsgn-dp-recipe');
+        const descEl = queryElement(dataPrepModal, '#dsgn-dp-desc');
+        const sourceInput = queryElement(dataPrepModal, '#dsgn-dp-source');
+        const targetInput = queryElement(dataPrepModal, '#dsgn-dp-target');
+        const sqlPreview = queryElement(dataPrepModal, '#dsgn-dp-sql');
         const defaultSource = (state.datasets && state.datasets.length > 0)
             ? state.datasets[0].name.replace(/^[#&]/, '')
             : 'source_data';
         /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (sourceInput).value = defaultSource;
-
         function updatePreview() {
             const recipeId = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (recipeSelect).value;
             const recipe = DATA_PREP_RECIPES.find(r => r.id === recipeId) || DATA_PREP_RECIPES[0];
             descEl.textContent = recipe.description;
             const src = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (sourceInput).value.trim() || 'source_data';
-            if (!/** @type {HTMLElement} */ (targetInput).dataset.userEdited) {
+            if (!(targetInput).dataset.userEdited) {
                 /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (targetInput).value = `${src}_${recipe.targetSuffix}`;
             }
             const tgt = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (targetInput).value.trim() || `${src}_${recipe.targetSuffix}`;
             /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (sqlPreview).value = recipe.template(tgt, src);
         }
-
         /** @type {HTMLElement} */ (targetInput).dataset.userEdited = '';
         /** @type {HTMLElement} */ (targetInput).oninput = () => { /** @type {HTMLElement} */ (targetInput).dataset.userEdited = 'true'; updatePreview(); };
         /** @type {HTMLElement} */ (sourceInput).oninput = () => { updatePreview(); };
         /** @type {HTMLElement} */ (recipeSelect).onchange = () => { /** @type {HTMLElement} */ (targetInput).dataset.userEdited = ''; updatePreview(); };
-
         updatePreview();
         dataPrepModal.style.display = 'flex';
     }
-
     // ── Author bookmarks ─────────────────────────────────────────────────────
     // Bookmarks are shared, source-controlled report state — the author's counterpart to a reader's
     // private saved view. The designer edits them as a list; the server patches only the matching
     // CREATE BOOKMARK statement, so everything else in the script stays where the author put it.
-
     function bookmarkList() {
         // Undefined means "never loaded"; the patcher reads that as "leave existing bookmarks alone".
         // Only materialize the array once the author actually edits one.
         return Array.isArray(state.bookmarks) ? state.bookmarks : [];
     }
-
     function renderBookmarks() {
-        const list = bookmarksSection.querySelector('#dsgn-bookmark-list');
-        if (!list) return;
+        const list = queryElement(bookmarksSection, '#dsgn-bookmark-list');
+        if (!list)
+            return;
         list.innerHTML = '';
         const bookmarks = bookmarkList();
         if (!bookmarks.length) {
@@ -2991,16 +3141,17 @@ export function createDesigner(container, opts = {}) {
             list.appendChild(row);
         }
     }
-
     async function addBookmark() {
-        const name = await _feedback.prompt('Name the bookmark readers will see.', {
+        const name = await feedback.prompt('Name the bookmark readers will see.', {
             title: 'Add bookmark', label: 'Bookmark name', required: true,
             pattern: /^[A-Za-z_][A-Za-z0-9_]*$/,
             patternMessage: 'Start with a letter or underscore and use only letters, numbers, and underscores.',
             confirmLabel: 'Add bookmark', auditAction: 'designer.bookmark.add'
         });
-        if (!name?.trim()) return;
-        if (!Array.isArray(state.bookmarks)) state.bookmarks = [];
+        if (!name?.trim())
+            return;
+        if (!Array.isArray(state.bookmarks))
+            state.bookmarks = [];
         state.bookmarks.push({
             id: 'bm_' + uid(),
             name: name.trim(),
@@ -3014,58 +3165,55 @@ export function createDesigner(container, opts = {}) {
         renderBookmarks();
         syncScriptFromGridDebounced();
     }
-
     async function editBookmarkTitle(id) {
         const bm = bookmarkList().find(b => b.id === id);
-        if (!bm) return;
-        const title = await _feedback.prompt('Shown in the reader’s bookmark menu.', {
+        if (!bm)
+            return;
+        const title = await feedback.prompt('Shown in the reader’s bookmark menu.', {
             title: `Edit ${bm.name}`, label: 'Display title', value: bm.title || '',
             confirmLabel: 'Save', auditAction: 'designer.bookmark.update'
         });
-        if (title === null) return;
+        if (title === null)
+            return;
         bm.title = title.trim() || null;
         renderBookmarks();
         syncScriptFromGridDebounced();
     }
-
     function toggleBookmarkDefault(id) {
         const bookmarks = bookmarkList();
         const target = bookmarks.find(b => b.id === id);
-        if (!target) return;
+        if (!target)
+            return;
         const next = !target.isDefault;
         // At most one author default: the parser rejects a second one, so the designer must not be
         // able to author a script that will not parse.
-        for (const bm of bookmarks) bm.isDefault = false;
+        for (const bm of bookmarks)
+            bm.isDefault = false;
         target.isDefault = next;
         renderBookmarks();
         syncScriptFromGridDebounced();
     }
-
     function removeBookmark(id) {
-        if (!Array.isArray(state.bookmarks)) return;
+        if (!Array.isArray(state.bookmarks))
+            return;
         state.bookmarks = state.bookmarks.filter(b => b.id !== id);
         renderBookmarks();
         syncScriptFromGridDebounced();
     }
-
     let isSplitActive = false;
-
-    function triggerChartResizes() {}
-
+    function triggerChartResizes() { }
     function selectVisualInEditor(visualName) {
-        if (!isSplitActive || !scriptEditor?.editor?.view) return;
-        const view = scriptEditor.editor.view;
+        const view = scriptEditor?.editor?.view;
+        if (!isSplitActive || !view)
+            return;
         const text = view.state.doc.toString();
-
         const patterns = [
             `CREATE VISUAL ${visualName}`,
             `CREATE CONTAINER ${visualName}`,
             `CREATE BUTTON ${visualName}`
         ];
-
         let foundIdx = -1;
         let matchLength = 0;
-
         for (const pattern of patterns) {
             const regex = new RegExp(`\\b${pattern.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}\\b`, 'i');
             const match = text.match(regex);
@@ -3075,7 +3223,6 @@ export function createDesigner(container, opts = {}) {
                 break;
             }
         }
-
         if (foundIdx !== -1) {
             const from = foundIdx;
             const to = foundIdx + matchLength;
@@ -3085,17 +3232,16 @@ export function createDesigner(container, opts = {}) {
             });
         }
     }
-
     let cursorTimeout = null;
     function handleEditorCursorActivity(pos, text) {
-        if (!isSplitActive) return;
-        clearTimeout(cursorTimeout);
+        if (!isSplitActive)
+            return;
+        clearTimeout(cursorTimeout ?? undefined);
         cursorTimeout = setTimeout(() => {
             const regex = /\bCREATE\s+(VISUAL|CONTAINER|BUTTON)\s+(\w+)/gi;
             let match;
             let activeVisualName = null;
             let bestDistance = Infinity;
-
             while ((match = regex.exec(text)) !== null) {
                 const matchIndex = match.index;
                 if (matchIndex <= pos) {
@@ -3106,7 +3252,6 @@ export function createDesigner(container, opts = {}) {
                     }
                 }
             }
-
             if (activeVisualName) {
                 const v = curVis().find(vis => String(vis.name).toUpperCase() === activeVisualName.toUpperCase());
                 if (v && v.id !== selVisualId) {
@@ -3115,7 +3260,6 @@ export function createDesigner(container, opts = {}) {
             }
         }, 100);
     }
-
     /**
      * The script as it is *now*.
      *
@@ -3128,50 +3272,51 @@ export function createDesigner(container, opts = {}) {
     function currentScriptText() {
         if (typeof opts.getScript === 'function') {
             const live = opts.getScript();
-            if (typeof live === 'string') return live;
+            if (typeof live === 'string')
+                return live;
         }
         return scriptEditor ? scriptEditor.getValue() : (opts.script || opts.initialScript || '');
     }
-
     let scriptSyncVersion = 0;
-
     async function syncScriptFromGrid(requestVersion) {
         try {
             const currentScript = currentScriptText();
             const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
-            if (requestVersion !== scriptSyncVersion) return;
+            if (requestVersion !== scriptSyncVersion)
+                return;
             if (r?.script) {
                 if (typeof opts.onScriptChange === 'function') {
                     opts.onScriptChange(r.script);
                 }
                 if (isSplitActive && scriptEditor && r.script !== currentScript) {
                     const view = scriptEditor.editor.view;
+                    if (!view)
+                        return;
                     const prevSel = view.state.selection.main;
-                    scriptEditor.setValue(r.script);
+                    scriptEditor.editor.setValue(r.script);
                     try {
                         const newLen = view.state.doc.length;
                         const anchor = Math.min(prevSel.anchor, newLen);
                         const head = Math.min(prevSel.head, newLen);
                         view.dispatch({ selection: { anchor, head } });
-                    } catch {
+                    }
+                    catch {
                         // Restoring the caret is best-effort: the regenerated document may
                         // have no position corresponding to the old one.
                     }
                 }
             }
-        } catch {
+        }
+        catch {
             // A failed regenerate leaves the script as it was. The grid and the script are
             // then out of step until the next edit, and nothing here says so — surfacing it
             // needs somewhere in the workbench UI to say it, which this does not have.
         }
     }
-
     let syncTimeout = null;
-
     // Depth counter, not a boolean: renderAll() can nest, and a boolean would be cleared by the
     // inner call while the outer one is still ingesting.
     let suppressScriptSync = 0;
-
     /**
      * Re-render after ingesting script text, without writing the script back.
      *
@@ -3185,36 +3330,39 @@ export function createDesigner(container, opts = {}) {
         suppressScriptSync++;
         try {
             renderAll();
-        } finally {
+        }
+        finally {
             suppressScriptSync--;
         }
     }
-
     function syncScriptFromGridDebounced() {
-        if (suppressScriptSync > 0) return;
-        if (!isSplitActive && !scriptEditor && typeof opts.onScriptChange !== 'function') return;
+        if (suppressScriptSync > 0)
+            return;
+        if (!isSplitActive && !scriptEditor && typeof opts.onScriptChange !== 'function')
+            return;
         const requestVersion = ++scriptSyncVersion;
-        clearTimeout(syncTimeout);
+        clearTimeout(syncTimeout ?? undefined);
         syncTimeout = setTimeout(() => syncScriptFromGrid(requestVersion), 400);
     }
-
     // ── Script overlay ────────────────────────────────────────────────────────
-
     async function openScript() {
         let text;
         try {
             const currentScript = currentScriptText() || null;
             const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
             text = r?.script ?? '';
-        } catch { text = '-- Failed to generate script\n'; }
+        }
+        catch {
+            text = '-- Failed to generate script\n';
+        }
         scriptOverlay.classList.add('active');
-        topbar.querySelector('#dsgn-design-mode')?.classList.remove('active');
-        topbar.querySelector('#dsgn-design-mode')?.setAttribute('aria-selected', 'false');
-        topbar.querySelector('#dsgn-code-mode')?.classList.add('active');
-        topbar.querySelector('#dsgn-code-mode')?.setAttribute('aria-selected', 'true');
-        const host = scriptOverlay.querySelector('#dsgn-script-workbench-host');
+        queryElement(topbar, '#dsgn-design-mode')?.classList.remove('active');
+        queryElement(topbar, '#dsgn-design-mode')?.setAttribute('aria-selected', 'false');
+        queryElement(topbar, '#dsgn-code-mode')?.classList.add('active');
+        queryElement(topbar, '#dsgn-code-mode')?.setAttribute('aria-selected', 'true');
+        const host = queryElement(scriptOverlay, '#dsgn-script-workbench-host');
         host.innerHTML = '';
-        scriptEditor = await createScriptEditorWorkbench(/** @type {HTMLElement} */ (host), {
+        scriptEditor = await createScriptEditorWorkbench(host, {
             title: 'Script',
             authFetch: _fetch,
             // The Portal has no file workspace (its catalog is folders/reports) and git
@@ -3234,43 +3382,43 @@ export function createDesigner(container, opts = {}) {
                 documentUri: opts.documentUri || 'portal-designer',
                 onCursorActivity: handleEditorCursorActivity,
             },
-            onApply: applyScriptText,
+            onApply: async (script) => { await applyScriptText(script); },
             onClose: closeScript,
         });
     }
-
     function closeScript() {
         scriptOverlay.classList.remove('active');
-        topbar.querySelector('#dsgn-design-mode')?.classList.add('active');
-        topbar.querySelector('#dsgn-design-mode')?.setAttribute('aria-selected', 'true');
-        topbar.querySelector('#dsgn-code-mode')?.classList.remove('active');
-        topbar.querySelector('#dsgn-code-mode')?.setAttribute('aria-selected', 'false');
+        queryElement(topbar, '#dsgn-design-mode')?.classList.add('active');
+        queryElement(topbar, '#dsgn-design-mode')?.setAttribute('aria-selected', 'true');
+        queryElement(topbar, '#dsgn-code-mode')?.classList.remove('active');
+        queryElement(topbar, '#dsgn-code-mode')?.setAttribute('aria-selected', 'false');
         scriptEditor?.dispose();
         scriptEditor = null;
         isSplitActive = false;
         root.classList.remove('split-screen');
-        topbar.querySelector('#dsgn-split-toggle')?.classList.remove('active');
+        queryElement(topbar, '#dsgn-split-toggle')?.classList.remove('active');
         triggerChartResizes();
     }
-
     // ── Report preview ──────────────────────────────────────────────────────────
-    const previewFrame   = previewOverlay.querySelector('#dsgn-preview-frame');
-    const previewStatusEl = previewOverlay.querySelector('#dsgn-preview-status');
+    const previewFrame = queryElement(previewOverlay, '#dsgn-preview-frame');
+    const previewStatusEl = queryElement(previewOverlay, '#dsgn-preview-status');
     let _pendingManifest = null;
-
     function setPreviewStatus(text, kind) {
-        if (!previewStatusEl) return;
+        if (!previewStatusEl)
+            return;
         previewStatusEl.textContent = text || '';
         const colors = { error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
         /** @type {HTMLElement} */ (previewStatusEl).style.color = colors[kind] || colors.neutral;
     }
-
     // The preview iframe posts 'previewReady' after each (re)load; hand it the latest manifest.
     const previewMessageHandler = (event) => {
-        if (event.source !== /** @type {HTMLIFrameElement} */ (previewFrame)?.contentWindow) return;
-        if (event.data?.type !== 'previewReady') return;
+        const previewWindow = previewFrame.contentWindow;
+        if (!previewWindow || event.source !== previewWindow)
+            return;
+        if (event.data?.type !== 'previewReady')
+            return;
         if (_pendingManifest) {
-            /** @type {HTMLIFrameElement} */ (previewFrame).contentWindow.postMessage({
+            previewWindow.postMessage({
                 type: 'reportManifest',
                 manifest: _pendingManifest,
                 dark: document.body.classList.contains('theme-dark'),
@@ -3278,50 +3426,52 @@ export function createDesigner(container, opts = {}) {
         }
     };
     window.addEventListener('message', previewMessageHandler);
-
     async function refreshPreview() {
         setPreviewStatus('Building preview…', 'pending');
         try {
             const currentScript = currentScriptText() || null;
             const gen = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
             const script = gen?.script ?? '';
-            if (!script.trim()) { setPreviewStatus('Nothing to preview yet.', 'neutral'); return; }
+            if (!script.trim()) {
+                setPreviewStatus('Nothing to preview yet.', 'neutral');
+                return;
+            }
             const manifest = await apiJson('/api/designer/preview', 'POST', { script });
+            if (!manifest)
+                return;
             _pendingManifest = manifest;
             // Reload the host page so report-runtime.js boots fresh with the new manifest.
             /** @type {HTMLImageElement | HTMLIFrameElement | HTMLScriptElement | HTMLMediaElement} */ (previewFrame).src = previewUrl + (previewUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
             const pages = manifest?.pages?.length ?? 0;
             const visuals = manifest?.visuals?.length ?? 0;
             setPreviewStatus(`Rendered ${pages} page${pages === 1 ? '' : 's'}, ${visuals} visual${visuals === 1 ? '' : 's'}.`, 'neutral');
-        } catch (e) {
-            setPreviewStatus('Preview failed: ' + e.message, 'error');
+        }
+        catch (e) {
+            setPreviewStatus('Preview failed: ' + errorText(e), 'error');
         }
     }
-
     function openPreview() {
         previewOverlay.classList.add('active');
         refreshPreview();
     }
-
     function closePreview() {
         previewOverlay.classList.remove('active');
     }
-
     let scriptApplySequence = 0;
-
     function invalidateScriptApply() {
         scriptApplySequence++;
     }
-
     async function applyScriptText(script) {
         const sequence = ++scriptApplySequence;
         try {
             const r = await apiJson('/api/designer/parse', 'POST', { script });
-            if (sequence !== scriptApplySequence) return { applied: false, stale: true };
+            if (sequence !== scriptApplySequence)
+                return { applied: false, stale: true };
             if (r?.designState?.pages?.length) {
                 setScriptDiagnosticBadge(null);
                 Object.assign(state, r.designState);
-                if (!state.datasets) state.datasets = [];
+                if (!state.datasets)
+                    state.datasets = [];
                 if (pageIdx >= state.pages.length) {
                     pageIdx = 0;
                 }
@@ -3331,32 +3481,32 @@ export function createDesigner(container, opts = {}) {
                 }
                 renderAllFromScript();
                 return { applied: true, designState: r.designState };
-            } else {
+            }
+            else {
                 setScriptDiagnosticBadge(r?.error || 'Script syntax error');
                 if (!isSplitActive) {
-                    _feedback.notify(r?.error || 'Could not parse script.', { title: 'Script not parsed', tone: 'error' });
+                    feedback.notify(r?.error || 'Could not parse script.', { title: 'Script not parsed', tone: 'error' });
                 }
                 return { applied: false, error: r?.error || 'Script syntax error' };
             }
-        } catch (e) {
-            if (sequence !== scriptApplySequence) return { applied: false, stale: true };
-            setScriptDiagnosticBadge(e.message);
+        }
+        catch (e) {
+            if (sequence !== scriptApplySequence)
+                return { applied: false, stale: true };
+            setScriptDiagnosticBadge(errorText(e));
             if (!isSplitActive) {
-                _feedback.notify(e.message, { title: 'Script not parsed', tone: 'error' });
+                feedback.notify(errorText(e), { title: 'Script not parsed', tone: 'error' });
             }
-            return { applied: false, error: e.message };
+            return { applied: false, error: errorText(e) };
         }
     }
-
     // ── Save ──────────────────────────────────────────────────────────────────
-
     async function saveReport() {
         if (reportId && opts.host === 'portal' && leaseState !== 'held') {
-            _feedback.notify('Saving is paused until this browser holds the report edit session.',
-                { title: 'Edit session unavailable', tone: 'warning' });
+            feedback.notify('Saving is paused until this browser holds the report edit session.', { title: 'Edit session unavailable', tone: 'warning' });
             return;
         }
-        reportName = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (topbar.querySelector('#dsgn-name')).value.trim() || reportName;
+        reportName = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (queryElement(topbar, '#dsgn-name')).value.trim() || reportName;
         try {
             const currentScript = currentScriptText() || null;
             const r = await apiJson('/api/designer/generate', 'POST', { designState: state, script: currentScript });
@@ -3368,11 +3518,7 @@ export function createDesigner(container, opts = {}) {
                 return;
             }
             if (reportId) {
-                const saved = await apiJson(
-                    '/api/designer/save',
-                    'POST',
-                    { reportId, scriptText: script, baseRevision: sourceRevision },
-                    reportVersion);
+                const saved = await apiJson('/api/designer/save', 'POST', { reportId, scriptText: script, baseRevision: sourceRevision }, reportVersion);
                 reportVersion = saved?.version ?? reportVersion;
                 sourceRevision = saved?.sourceRevision ?? sourceRevision;
                 isDirty = false;
@@ -3381,26 +3527,33 @@ export function createDesigner(container, opts = {}) {
                     // separate, explicit step, so stay on the page and surface the Commit action
                     // instead of navigating away.
                     setScmStatus(`Saved v${reportVersion} · not yet committed`, 'pending');
-                    const commitBtn = topbar.querySelector('#dsgn-commit');
-                    if (commitBtn) /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (commitBtn).disabled = false;
-                } else {
+                    const commitBtn = queryElement(topbar, '#dsgn-commit');
+                    if (commitBtn) {
+                        /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ ((commitBtn)).disabled = false;
+                    }
+                }
+                else {
                     opts.onSave?.();
                 }
-            } else {
-                /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (saveModal.querySelector('#dsgn-modal-name')).value   = reportName;
-                /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (saveModal.querySelector('#dsgn-modal-folder')).value = folderId ?? '';
+            }
+            else {
+                /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (queryElement(saveModal, '#dsgn-modal-name')).value = reportName;
+                /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (queryElement(saveModal, '#dsgn-modal-folder')).value = folderId == null ? '' : String(folderId);
                 /** @type {HTMLElement & {_script?: string}} */ (saveModal)._script = script;
                 saveModal.style.display = 'flex';
             }
-        } catch (e) { _feedback.notify('Save failed: ' + e.message, { title: 'Save failed', tone: 'error' }); }
+        }
+        catch (e) {
+            feedback.notify('Save failed: ' + errorText(e), { title: 'Save failed', tone: 'error' });
+        }
     }
-
     // Explicit, separately reported source-control step. Commits the last-saved script
     // artifact to Git (and pushes if the server is configured to push on commit). This never
     // holds a database transaction — the server stages/commits under its own repository lease.
     async function commitScript() {
-        if (!reportId) return;
-        const commitBtn = topbar.querySelector('#dsgn-commit');
+        if (!reportId)
+            return;
+        const commitBtn = queryElement(topbar, '#dsgn-commit');
         const prevTitle = commitBtn?.getAttribute('title') || 'Commit saved script to source control';
         if (commitBtn) {
             /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (commitBtn).disabled = true;
@@ -3413,12 +3566,15 @@ export function createDesigner(container, opts = {}) {
             if (res?.committed) {
                 sourceRevision = res.sourceRevision ?? sourceRevision;
                 setScmStatus(`Committed ${shortRev(res.sourceRevision)}`, 'success');
-            } else {
+            }
+            else {
                 setScmStatus(`Nothing to commit — working tree matches ${shortRev(res?.sourceRevision) || 'HEAD'}`, 'neutral');
             }
-        } catch (e) {
-            setScmStatus(`Commit failed: ${e.message}`, 'error');
-        } finally {
+        }
+        catch (e) {
+            setScmStatus(`Commit failed: ${errorText(e)}`, 'error');
+        }
+        finally {
             if (commitBtn) {
                 /** @type {HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (commitBtn).disabled = false;
                 commitBtn.removeAttribute('aria-busy');
@@ -3426,10 +3582,9 @@ export function createDesigner(container, opts = {}) {
             }
         }
     }
-
     async function saveAsNew() {
-        const name   = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (saveModal.querySelector('#dsgn-modal-name')).value.trim() || 'New Report';
-        const folder = parseInt(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (saveModal.querySelector('#dsgn-modal-folder')).value, 10) || null;
+        const name = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (queryElement(saveModal, '#dsgn-modal-name')).value.trim() || 'New Report';
+        const folder = parseInt(/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (queryElement(saveModal, '#dsgn-modal-folder')).value, 10) || null;
         const script = /** @type {HTMLElement & {_script?: string}} */ (saveModal)._script;
         try {
             const created = await apiJson('/api/studio/reports', 'POST', {
@@ -3437,20 +3592,19 @@ export function createDesigner(container, opts = {}) {
             });
             saveModal.style.display = 'none';
             opts.onSave?.(created);
-        } catch (e) { _feedback.notify('Save failed: ' + e.message, { title: 'Save failed', tone: 'error' }); }
+        }
+        catch (e) {
+            feedback.notify('Save failed: ' + errorText(e), { title: 'Save failed', tone: 'error' });
+        }
     }
-
     // ── Event wiring ──────────────────────────────────────────────────────────
-
     root.addEventListener('keydown', event => {
-        const tag = (/** @type {Element} */ (event.target).tagName || '').toUpperCase();
-        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || /** @type {HTMLElement} */ (event.target).isContentEditable || /** @type {Element} */ (event.target).closest('.CodeMirror')) {
+        const tag = eventElement(event).tagName.toUpperCase();
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || eventElement(event).isContentEditable || closestElement(event, '.CodeMirror')) {
             return;
         }
-
         const key = event.key;
         const mod = event.ctrlKey || event.metaKey;
-
         if (mod && (key === 'c' || key === 'C')) {
             event.preventDefault();
             copySelectedVisuals();
@@ -3491,11 +3645,11 @@ export function createDesigner(container, opts = {}) {
             pushUndoState();
             const deltaCol = key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : 0;
             const deltaRow = key === 'ArrowUp' ? -1 : key === 'ArrowDown' ? 1 : 0;
-
             let canMove = true;
             for (const id of selVisualIds) {
                 const v = findVis(id);
-                if (!v) continue;
+                if (!v)
+                    continue;
                 const newCol = (v.gridCol || 1) + deltaCol;
                 const newRow = (v.gridRow || 1) + deltaRow;
                 if (newCol < 1 || newCol + (v.gridColSpan || 12) - 1 > 12 || newRow < 1) {
@@ -3503,7 +3657,6 @@ export function createDesigner(container, opts = {}) {
                     break;
                 }
             }
-
             if (canMove) {
                 for (const id of selVisualIds) {
                     const v = findVis(id);
@@ -3520,34 +3673,35 @@ export function createDesigner(container, opts = {}) {
             return;
         }
     });
-
     canvasGrid.addEventListener('click', e => {
-        const chooseData = /** @type {Element} */ (e.target).closest('[data-empty-data]');
+        const chooseData = closestElement(e, '[data-empty-data]');
         if (chooseData) {
             e.stopPropagation();
             opts.onRequestData?.();
             return;
         }
-        const emptyAdd = /** @type {Element} */ (e.target).closest('[data-empty-vtype]');
+        const emptyAdd = closestElement(e, '[data-empty-vtype]');
         if (emptyAdd) {
             e.stopPropagation();
-            addVisual(/** @type {HTMLElement} */ (emptyAdd).dataset.emptyVtype);
+            addVisual(datasetValue(emptyAdd, 'emptyVtype'));
             return;
         }
-        const titleButton = /** @type {Element} */ (e.target).closest('[data-edit-title]');
+        const titleButton = closestElement(e, '[data-edit-title]');
         if (titleButton) {
             e.stopPropagation();
-            const visual = findVis(/** @type {HTMLElement} */ (titleButton).dataset.editTitle);
-            if (!visual) return;
+            const visual = findVis(datasetValue(titleButton, 'editTitle'));
+            if (!visual)
+                return;
             const input = document.createElement('input');
             input.className = 'etlsql-dsgn-vcard-name-input';
-            input.value = visual.title || visual.name;
+            input.value = visual.title || visual.name || '';
             titleButton.replaceWith(input);
             input.focus();
             input.select();
             let committed = false;
-            const finish = save => {
-                if (committed) return;
+            const finish = (save) => {
+                if (committed)
+                    return;
                 committed = true;
                 if (save && input.value.trim()) {
                     visual.title = input.value.trim();
@@ -3560,35 +3714,46 @@ export function createDesigner(container, opts = {}) {
             };
             input.addEventListener('blur', () => finish(true), { once: true });
             input.addEventListener('keydown', event => {
-                if (event.key === 'Enter') { event.preventDefault(); finish(true); }
-                if (event.key === 'Escape') { event.preventDefault(); finish(false); }
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    finish(true);
+                }
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    finish(false);
+                }
             });
             return;
         }
-        const del = /** @type {Element} */ (e.target).closest('[data-del]');
+        const del = closestElement(e, '[data-del]');
         if (del) {
             e.stopPropagation();
-            const locked = findVis(/** @type {HTMLElement} */ (del).dataset.del);
-            if (isLocked(locked)) { refuseLocked(locked); return; }
-            deleteVisual(/** @type {HTMLElement} */ (del).dataset.del);
+            const locked = findVis(datasetValue(del, 'del'));
+            if (locked && isLocked(locked)) {
+                refuseLocked(locked);
+                return;
+            }
+            deleteVisual(datasetValue(del, 'del'));
             return;
         }
-        const fold = /** @type {Element} */ (e.target).closest('[data-fold]');
+        const fold = closestElement(e, '[data-fold]');
         if (fold) {
-            const id = /** @type {HTMLElement} */ (fold).dataset.fold;
-            if (collapsedContainers.has(id)) collapsedContainers.delete(id);
-            else collapsedContainers.add(id);
+            const id = datasetValue(fold, 'fold');
+            if (collapsedContainers.has(id))
+                collapsedContainers.delete(id);
+            else
+                collapsedContainers.add(id);
             renderCanvas();
             return;
         }
-        const dup = /** @type {Element} */ (e.target).closest('[data-dup]');
+        const dup = closestElement(e, '[data-dup]');
         if (dup) {
-            duplicateVisual(/** @type {HTMLElement} */ (dup).dataset.dup);
+            duplicateVisual(datasetValue(dup, 'dup'));
             return;
         }
-        const detachBtn = /** @type {Element} */ (e.target).closest('[data-detach]');
+        const detachBtn = closestElement(e, '[data-detach]');
         if (detachBtn) {
-            const v = findVis(/** @type {HTMLElement} */ (detachBtn).dataset.detach);
+            const v = findVis(datasetValue(detachBtn, 'detach'));
             if (v) {
                 pushUndoState();
                 v.containerId = null;
@@ -3596,39 +3761,38 @@ export function createDesigner(container, opts = {}) {
             }
             return;
         }
-        const card = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-visual-card');
+        const card = closestElement(e, '.etlsql-dsgn-visual-card');
         if (card) {
-            selectVisual(/** @type {HTMLElement} */ (card).dataset.vid, { toggle: e.shiftKey || e.ctrlKey || e.metaKey });
-        } else {
+            selectVisual(datasetValue(card, 'vid'), { toggle: e.shiftKey || e.ctrlKey || e.metaKey });
+        }
+        else {
             selectVisual(null);
         }
     });
-
-    topbar.querySelector('#dsgn-back').addEventListener('click', async () => { await releaseEditLease(); opts.onCancel?.(); });
-    topbar.querySelector('#dsgn-cancel').addEventListener('click', async () => { await releaseEditLease(); opts.onCancel?.(); });
-    topbar.querySelector('#dsgn-save').addEventListener('click',    saveReport);
-    topbar.querySelector('#dsgn-commit')?.addEventListener('click', commitScript);
-    topbar.querySelector('#dsgn-add-page').addEventListener('click', addPage);
-    topbar.querySelector('#dsgn-tidy')?.addEventListener('click', tidyLayout);
-    topbar.querySelector('#dsgn-theme-select')?.addEventListener('change', e => {
+    queryElement(topbar, '#dsgn-back').addEventListener('click', async () => { await releaseEditLease(); opts.onCancel?.(); });
+    queryElement(topbar, '#dsgn-cancel').addEventListener('click', async () => { await releaseEditLease(); opts.onCancel?.(); });
+    queryElement(topbar, '#dsgn-save').addEventListener('click', saveReport);
+    queryElement(topbar, '#dsgn-commit')?.addEventListener('click', commitScript);
+    queryElement(topbar, '#dsgn-add-page').addEventListener('click', addPage);
+    queryElement(topbar, '#dsgn-tidy')?.addEventListener('click', tidyLayout);
+    queryElement(topbar, '#dsgn-theme-select')?.addEventListener('change', e => {
         const themes = ['light', 'dark', 'midnight', 'dracula', 'nord'];
-        const nextTheme = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value;
-
+        const nextTheme = controlTarget(e).value;
         themes.forEach(t => document.body.classList.remove('theme-' + t));
         document.body.classList.add('theme-' + nextTheme);
         localStorage.setItem('portal-theme', nextTheme);
         renderCanvas();
     });
-    topbar.querySelector('#dsgn-name').addEventListener('change',   e => { reportName = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (e.target).value; });
-    topbar.querySelector('#dsgn-design-mode').addEventListener('click', closeScript);
-    topbar.querySelector('#dsgn-code-mode').addEventListener('click', () => {
-        if (!scriptOverlay.classList.contains('active')) openScript();
+    queryElement(topbar, '#dsgn-name').addEventListener('change', e => { reportName = controlTarget(e).value; });
+    queryElement(topbar, '#dsgn-design-mode').addEventListener('click', closeScript);
+    queryElement(topbar, '#dsgn-code-mode').addEventListener('click', () => {
+        if (!scriptOverlay.classList.contains('active'))
+            openScript();
     });
-    topbar.querySelector('#dsgn-split-toggle').addEventListener('click', async () => {
+    queryElement(topbar, '#dsgn-split-toggle').addEventListener('click', async () => {
         isSplitActive = !isSplitActive;
         root.classList.toggle('split-screen', isSplitActive);
-        topbar.querySelector('#dsgn-split-toggle').classList.toggle('active', isSplitActive);
-
+        queryElement(topbar, '#dsgn-split-toggle').classList.toggle('active', isSplitActive);
         if (isSplitActive) {
             if (!scriptOverlay.classList.contains('active')) {
                 await openScript();
@@ -3636,30 +3800,30 @@ export function createDesigner(container, opts = {}) {
         }
         triggerChartResizes();
     });
-    topbar.querySelector('#dsgn-preview-toggle')?.addEventListener('click', () =>
-        previewOverlay.classList.contains('active') ? closePreview() : openPreview());
-    previewOverlay.querySelector('#dsgn-preview-refresh')?.addEventListener('click', refreshPreview);
-    previewOverlay.querySelector('#dsgn-preview-close')?.addEventListener('click', closePreview);
-
-    topbar.querySelector('#dsgn-pages').addEventListener('click', e => {
-        const tab = /** @type {Element} */ (e.target).closest('.etlsql-designer-page-tab');
-        if (tab) { pageIdx = +/** @type {HTMLElement} */ (tab).dataset.idx; selVisualId = null; renderAll(); }
+    queryElement(topbar, '#dsgn-preview-toggle')?.addEventListener('click', () => previewOverlay.classList.contains('active') ? closePreview() : openPreview());
+    queryElement(previewOverlay, '#dsgn-preview-refresh')?.addEventListener('click', refreshPreview);
+    queryElement(previewOverlay, '#dsgn-preview-close')?.addEventListener('click', closePreview);
+    queryElement(topbar, '#dsgn-pages').addEventListener('click', e => {
+        const tab = closestElement(e, '.etlsql-designer-page-tab');
+        if (tab) {
+            pageIdx = +datasetValue(tab, 'idx');
+            selVisualId = null;
+            renderAll();
+        }
     });
-
     sidebar.addEventListener('dragstart', e => {
-        const btn = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-palette-btn');
+        const btn = closestElement(e, '.etlsql-dsgn-palette-btn');
         if (btn) {
-            e.dataTransfer.setData('text/plain', /** @type {HTMLElement} */ (btn).dataset.vtype);
-            e.dataTransfer.setData('application/x-etlsql-visual', /** @type {HTMLElement} */ (btn).dataset.vtype);
+            e.dataTransfer.setData('text/plain', datasetValue(btn, 'vtype'));
+            e.dataTransfer.setData('application/x-etlsql-visual', datasetValue(btn, 'vtype'));
             e.dataTransfer.effectAllowed = 'copy';
         }
     });
-
     sidebar.addEventListener('click', e => {
-        const btn = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-palette-btn');
-        if (btn) addVisual(/** @type {HTMLElement} */ (btn).dataset.vtype);
+        const btn = closestElement(e, '.etlsql-dsgn-palette-btn');
+        if (btn)
+            addVisual(datasetValue(btn, 'vtype'));
     });
-
     // ── Drag, Resize & Marquee Interaction ─────────────────────────────────
     let isDragging = false;
     let isResizing = false;
@@ -3675,42 +3839,37 @@ export function createDesigner(container, opts = {}) {
     let targetCol = 1, targetRow = 1;
     let targetColSpan = 12, targetRowSpan = 4;
     let initialRect = null;
-
     function handleMarqueeMove(e) {
-        if (!isMarquee || !marqueeEl) return;
+        if (!isMarquee || !marqueeEl)
+            return;
         const wrapRect = canvasWrap.getBoundingClientRect();
-
         const curX = e.clientX;
         const curY = e.clientY;
-
         const left = Math.min(marqueeStartX, curX) - wrapRect.left + canvasWrap.scrollLeft;
         const top = Math.min(marqueeStartY, curY) - wrapRect.top + canvasWrap.scrollTop;
         const width = Math.abs(curX - marqueeStartX);
         const height = Math.abs(curY - marqueeStartY);
-
         marqueeEl.style.left = `${left}px`;
         marqueeEl.style.top = `${top}px`;
         marqueeEl.style.width = `${width}px`;
         marqueeEl.style.height = `${height}px`;
-
         const mRect = marqueeEl.getBoundingClientRect();
-        for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card')) {
+        for (const card of queryElements(canvasGrid, '.etlsql-dsgn-visual-card')) {
             const cRect = card.getBoundingClientRect();
             const intersects = !(mRect.right < cRect.left || mRect.left > cRect.right || mRect.bottom < cRect.top || mRect.top > cRect.bottom);
             if (intersects) {
-                selVisualIds.add(/** @type {HTMLElement} */ (card).dataset.vid);
-            } else if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
-                selVisualIds.delete(/** @type {HTMLElement} */ (card).dataset.vid);
+                selVisualIds.add(datasetValue(card, 'vid'));
+            }
+            else if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                selVisualIds.delete(datasetValue(card, 'vid'));
             }
         }
-
         selVisualId = selVisualIds.size === 1 ? Array.from(selVisualIds)[0] : null;
-        for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card')) {
-            card.classList.toggle('selected', selVisualIds.has(/** @type {HTMLElement} */ (card).dataset.vid));
+        for (const card of queryElements(canvasGrid, '.etlsql-dsgn-visual-card')) {
+            card.classList.toggle('selected', selVisualIds.has(datasetValue(card, 'vid')));
         }
         renderAlignmentToolbar();
     }
-
     function handleMarqueeUp() {
         if (marqueeEl) {
             marqueeEl.style.display = 'none';
@@ -3721,25 +3880,21 @@ export function createDesigner(container, opts = {}) {
         renderTree();
         renderProps();
     }
-
     canvasGrid.addEventListener('mousedown', e => {
-        const resizeHandle = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-vcard-resize');
-        const card = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-visual-card');
-        const delBtn = /** @type {Element} */ (e.target).closest('[data-del]');
-        const emptyBtn = /** @type {Element} */ (e.target).closest('[data-empty-vtype]');
-        const headerControl = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-vcard-actions, .etlsql-dsgn-vcard-name, .etlsql-dsgn-vcard-name-input');
-
-        if (delBtn || emptyBtn || headerControl) return; // Managed by click handlers
-
+        const resizeHandle = closestElement(e, '.etlsql-dsgn-vcard-resize');
+        const card = closestElement(e, '.etlsql-dsgn-visual-card');
+        const delBtn = closestElement(e, '[data-del]');
+        const emptyBtn = closestElement(e, '[data-empty-vtype]');
+        const headerControl = closestElement(e, '.etlsql-dsgn-vcard-actions, .etlsql-dsgn-vcard-name, .etlsql-dsgn-vcard-name-input');
+        if (delBtn || emptyBtn || headerControl)
+            return; // Managed by click handlers
         if (!card && !resizeHandle) {
             isMarquee = true;
             marqueeStartX = e.clientX;
             marqueeStartY = e.clientY;
-
             if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
                 selectVisual(null);
             }
-
             if (!marqueeEl) {
                 marqueeEl = document.createElement('div');
                 marqueeEl.className = 'etlsql-dsgn-marquee';
@@ -3751,23 +3906,20 @@ export function createDesigner(container, opts = {}) {
             marqueeEl.style.width = '0px';
             marqueeEl.style.height = '0px';
             marqueeEl.style.display = 'block';
-
             document.addEventListener('mousemove', handleMarqueeMove);
             document.addEventListener('mouseup', handleMarqueeUp);
             return;
         }
-
         if (card) {
-            const vid = /** @type {HTMLElement} */ (card).dataset.vid;
+            const vid = datasetValue(card, 'vid');
             const v = findVis(vid);
-            if (!v) return;
-
+            if (!v)
+                return;
             selectVisual(vid, { skipCanvas: true, toggle: e.shiftKey || e.ctrlKey || e.metaKey });
-
             // A locked card still selects — the outline's lock guards the geometry, not the
             // author's ability to look at what they locked.
-            if (isLocked(v)) return;
-
+            if (isLocked(v))
+                return;
             startX = e.clientX;
             startY = e.clientY;
             activeId = vid;
@@ -3776,13 +3928,13 @@ export function createDesigner(container, opts = {}) {
             startRow = targetRow = v.gridRow || 1;
             startColSpan = targetColSpan = v.gridColSpan || 12;
             startRowSpan = targetRowSpan = v.gridRowSpan || 4;
-
             if (resizeHandle) {
                 isResizing = true;
                 e.preventDefault();
                 document.addEventListener('mousemove', handleMouseMove);
                 document.addEventListener('mouseup', handleMouseUp);
-            } else {
+            }
+            else {
                 isDragging = true;
                 initialRect = card.getBoundingClientRect();
                 e.preventDefault();
@@ -3791,57 +3943,50 @@ export function createDesigner(container, opts = {}) {
             }
         }
     });
-
     function handleMouseMove(e) {
-        if (!activeId || !activeCardEl) return;
+        if (!activeId || !activeCardEl)
+            return;
         const v = findVis(activeId);
-        if (!v) return;
-
+        if (!v)
+            return;
         const gridRect = canvasGrid.getBoundingClientRect();
         const gridW = gridRect.width - 32;
         const W_col = (gridW - 11 * 6) / 12;
-
+        const dragRect = initialRect;
         if (isDragging) {
+            if (!dragRect)
+                return;
             if (!ghostEl) {
                 ghostEl = document.createElement('div');
                 ghostEl.className = 'etlsql-dsgn-grid-ghost';
                 ghostEl.style.gridColumn = `${startCol} / span ${startColSpan}`;
-                ghostEl.style.gridRow    = `${startRow} / span ${startRowSpan}`;
+                ghostEl.style.gridRow = `${startRow} / span ${startRowSpan}`;
                 canvasGrid.appendChild(ghostEl);
-
                 activeCardEl.classList.add('dragging');
-                activeCardEl.style.width = `${initialRect.width}px`;
-                activeCardEl.style.height = `${initialRect.height}px`;
-                activeCardEl.style.left = `${initialRect.left - gridRect.left}px`;
-                activeCardEl.style.top = `${initialRect.top - gridRect.top}px`;
+                activeCardEl.style.width = `${dragRect.width}px`;
+                activeCardEl.style.height = `${dragRect.height}px`;
+                activeCardEl.style.left = `${dragRect.left - gridRect.left}px`;
+                activeCardEl.style.top = `${dragRect.top - gridRect.top}px`;
             }
-
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
             activeCardEl.style.transform = `translate3d(${dx}px, ${dy}px, 0)`;
-
-            const currentLeft = (initialRect.left - gridRect.left) + dx - 16;
-            const currentTop  = (initialRect.top - gridRect.top) + dy - 16;
-
+            const currentLeft = (dragRect.left - gridRect.left) + dx - 16;
+            const currentTop = (dragRect.top - gridRect.top) + dy - 16;
             let newCol = Math.round(currentLeft / (W_col + 6)) + 1;
             newCol = Math.max(1, Math.min(12, newCol));
-
             let newColSpan = startColSpan;
             if (newCol + newColSpan - 1 > 12) {
                 newColSpan = Math.max(1, 13 - newCol);
             }
-
             let newRow = Math.round(currentTop / 66) + 1;
             newRow = Math.max(1, newRow);
-
             targetCol = newCol;
             targetRow = newRow;
             targetColSpan = newColSpan;
             targetRowSpan = startRowSpan;
-
             ghostEl.style.gridColumn = `${newCol} / span ${newColSpan}`;
-            ghostEl.style.gridRow    = `${newRow} / span ${startRowSpan}`;
-
+            ghostEl.style.gridRow = `${newRow} / span ${startRowSpan}`;
             // Highlight hover container drop zones
             let hoverContainerId = null;
             if (v.type !== 'CONTAINER') {
@@ -3853,57 +3998,48 @@ export function createDesigner(container, opts = {}) {
                     const cRowEnd = cRowStart + (c.gridRowSpan || 4) - 1;
                     return targetCol >= cColStart && targetCol <= cColEnd && targetRow >= cRowStart && targetRow <= cRowEnd;
                 });
-                if (parentContainer) hoverContainerId = parentContainer.id;
+                if (parentContainer)
+                    hoverContainerId = parentContainer.id;
             }
-
-            for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card.is-container')) {
-                if (/** @type {HTMLElement} */ (card).dataset.vid === hoverContainerId) {
+            for (const card of queryElements(canvasGrid, '.etlsql-dsgn-visual-card.is-container')) {
+                if (datasetValue(card, 'vid') === hoverContainerId) {
                     card.classList.add('drop-zone-hover');
-                } else {
+                }
+                else {
                     card.classList.remove('drop-zone-hover');
                 }
             }
-
-        } else if (isResizing) {
+        }
+        else if (isResizing) {
             if (!ghostEl) {
                 ghostEl = document.createElement('div');
                 ghostEl.className = 'etlsql-dsgn-grid-ghost';
                 ghostEl.style.gridColumn = `${startCol} / span ${startColSpan}`;
-                ghostEl.style.gridRow    = `${startRow} / span ${startRowSpan}`;
+                ghostEl.style.gridRow = `${startRow} / span ${startRowSpan}`;
                 canvasGrid.appendChild(ghostEl);
             }
-
             const cardRightX = e.clientX - gridRect.left - 16;
             const cardBottomY = e.clientY - gridRect.top - 16;
-
             const cardLeftX = (startCol - 1) * (W_col + 6);
             const cardTopY = (startRow - 1) * 66;
-
             let newColSpan = Math.round((cardRightX - cardLeftX + 6) / (W_col + 6));
             newColSpan = Math.max(1, Math.min(13 - startCol, newColSpan));
-
             let newRowSpan = Math.round((cardBottomY - cardTopY + 6) / 66);
             newRowSpan = Math.max(1, newRowSpan);
-
             targetCol = startCol;
             targetRow = startRow;
             targetColSpan = newColSpan;
             targetRowSpan = newRowSpan;
-
             activeCardEl.style.gridColumn = `${startCol} / span ${newColSpan}`;
-            activeCardEl.style.gridRow    = `${startRow} / span ${newRowSpan}`;
-
+            activeCardEl.style.gridRow = `${startRow} / span ${newRowSpan}`;
             ghostEl.style.gridColumn = `${startCol} / span ${newColSpan}`;
-            ghostEl.style.gridRow    = `${startRow} / span ${newRowSpan}`;
-
+            ghostEl.style.gridRow = `${startRow} / span ${newRowSpan}`;
         }
-
         // Draw grid snapping guides
         let showVGuide = false;
         let showHGuide = false;
         let vGuideCol = 1;
         let hGuideRow = 1;
-
         if (isDragging || isResizing) {
             const otherVis = curVis().filter(other => other.id !== activeId);
             for (const other of otherVis) {
@@ -3911,35 +4047,45 @@ export function createDesigner(container, opts = {}) {
                 const otherColEnd = otherColStart + (other.gridColSpan || 12);
                 const otherRowStart = other.gridRow || 1;
                 const otherRowEnd = otherRowStart + (other.gridRowSpan || 4);
-
                 const targetColStart = targetCol;
                 const targetColEnd = targetCol + targetColSpan;
                 const targetRowStart = targetRow;
                 const targetRowEnd = targetRow + targetRowSpan;
-
                 if (targetColStart === otherColStart) {
-                    showVGuide = true; vGuideCol = targetColStart;
-                } else if (targetColEnd === otherColEnd) {
-                    showVGuide = true; vGuideCol = targetColEnd;
-                } else if (targetColStart === otherColEnd) {
-                    showVGuide = true; vGuideCol = targetColStart;
-                } else if (targetColEnd === otherColStart) {
-                    showVGuide = true; vGuideCol = targetColEnd;
+                    showVGuide = true;
+                    vGuideCol = targetColStart;
                 }
-
+                else if (targetColEnd === otherColEnd) {
+                    showVGuide = true;
+                    vGuideCol = targetColEnd;
+                }
+                else if (targetColStart === otherColEnd) {
+                    showVGuide = true;
+                    vGuideCol = targetColStart;
+                }
+                else if (targetColEnd === otherColStart) {
+                    showVGuide = true;
+                    vGuideCol = targetColEnd;
+                }
                 if (targetRowStart === otherRowStart) {
-                    showHGuide = true; hGuideRow = targetRowStart;
-                } else if (targetRowEnd === otherRowEnd) {
-                    showHGuide = true; hGuideRow = targetRowEnd;
-                } else if (targetRowStart === otherRowEnd) {
-                    showHGuide = true; hGuideRow = targetRowStart;
-                } else if (targetRowEnd === otherRowStart) {
-                    showHGuide = true; hGuideRow = targetRowEnd;
+                    showHGuide = true;
+                    hGuideRow = targetRowStart;
+                }
+                else if (targetRowEnd === otherRowEnd) {
+                    showHGuide = true;
+                    hGuideRow = targetRowEnd;
+                }
+                else if (targetRowStart === otherRowEnd) {
+                    showHGuide = true;
+                    hGuideRow = targetRowStart;
+                }
+                else if (targetRowEnd === otherRowStart) {
+                    showHGuide = true;
+                    hGuideRow = targetRowEnd;
                 }
             }
         }
-
-        let vGuideEl = canvasGrid.querySelector('.etlsql-dsgn-guide-v');
+        let vGuideEl = queryElement(canvasGrid, '.etlsql-dsgn-guide-v');
         if (showVGuide) {
             if (!vGuideEl) {
                 vGuideEl = document.createElement('div');
@@ -3948,11 +4094,11 @@ export function createDesigner(container, opts = {}) {
             }
             /** @type {HTMLElement} */ (vGuideEl).style.gridColumnStart = `${vGuideCol}`;
             /** @type {HTMLElement} */ (vGuideEl).style.display = 'block';
-        } else if (vGuideEl) {
+        }
+        else if (vGuideEl) {
             /** @type {HTMLElement} */ (vGuideEl).style.display = 'none';
         }
-
-        let hGuideEl = canvasGrid.querySelector('.etlsql-dsgn-guide-h');
+        let hGuideEl = queryElement(canvasGrid, '.etlsql-dsgn-guide-h');
         if (showHGuide) {
             if (!hGuideEl) {
                 hGuideEl = document.createElement('div');
@@ -3961,26 +4107,25 @@ export function createDesigner(container, opts = {}) {
             }
             /** @type {HTMLElement} */ (hGuideEl).style.gridRowStart = `${hGuideRow}`;
             /** @type {HTMLElement} */ (hGuideEl).style.display = 'block';
-        } else if (hGuideEl) {
+        }
+        else if (hGuideEl) {
             /** @type {HTMLElement} */ (hGuideEl).style.display = 'none';
         }
     }
-
     function handleMouseUp() {
         if (ghostEl) {
             ghostEl.remove();
             ghostEl = null;
         }
-
-        for (const card of canvasGrid.querySelectorAll('.etlsql-dsgn-visual-card.is-container')) {
+        for (const card of queryElements(canvasGrid, '.etlsql-dsgn-visual-card.is-container')) {
             card.classList.remove('drop-zone-hover');
         }
-
-        const vGuide = canvasGrid.querySelector('.etlsql-dsgn-guide-v');
-        if (vGuide) vGuide.remove();
-        const hGuide = canvasGrid.querySelector('.etlsql-dsgn-guide-h');
-        if (hGuide) hGuide.remove();
-
+        const vGuide = queryElement(canvasGrid, '.etlsql-dsgn-guide-v');
+        if (vGuide)
+            vGuide.remove();
+        const hGuide = queryElement(canvasGrid, '.etlsql-dsgn-guide-h');
+        if (hGuide)
+            hGuide.remove();
         if (activeId && activeCardEl) {
             activeCardEl.classList.remove('dragging');
             activeCardEl.style.position = '';
@@ -3991,17 +4136,14 @@ export function createDesigner(container, opts = {}) {
             activeCardEl.style.transform = '';
             activeCardEl.style.zIndex = '';
             activeCardEl.style.opacity = '';
-
             const v = findVis(activeId);
             if (v) {
                 const deltaCol = targetCol - (v.gridCol || 1);
                 const deltaRow = targetRow - (v.gridRow || 1);
-
                 v.gridCol = targetCol;
                 v.gridRow = targetRow;
                 v.gridColSpan = targetColSpan;
                 v.gridRowSpan = targetRowSpan;
-
                 if (selVisualIds.has(v.id) && selVisualIds.size > 1 && isDragging && (deltaCol !== 0 || deltaRow !== 0)) {
                     for (const otherId of selVisualIds) {
                         if (otherId !== v.id) {
@@ -4012,14 +4154,16 @@ export function createDesigner(container, opts = {}) {
                             }
                         }
                     }
-                } else if (v.type === 'CONTAINER' && isDragging && (deltaCol !== 0 || deltaRow !== 0)) {
+                }
+                else if (v.type === 'CONTAINER' && isDragging && (deltaCol !== 0 || deltaRow !== 0)) {
                     for (const child of curVis()) {
                         if (child.containerId === v.id) {
                             child.gridCol = Math.max(1, (child.gridCol || 1) + deltaCol);
                             child.gridRow = Math.max(1, (child.gridRow || 1) + deltaRow);
                         }
                     }
-                } else if (v.type !== 'CONTAINER' && isDragging) {
+                }
+                else if (v.type !== 'CONTAINER' && isDragging) {
                     const containers = curVis().filter(c => c.type === 'CONTAINER' && c.id !== v.id);
                     const parentContainer = containers.find(c => {
                         const cColStart = c.gridCol || 1;
@@ -4031,12 +4175,10 @@ export function createDesigner(container, opts = {}) {
                     v.containerId = parentContainer ? parentContainer.id : null;
                 }
             }
-
             renderCanvas();
             renderProps();
             syncScriptFromGridDebounced();
         }
-
         isDragging = false;
         isResizing = false;
         activeId = null;
@@ -4045,7 +4187,6 @@ export function createDesigner(container, opts = {}) {
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
     }
-
     canvasGrid.addEventListener('dragover', e => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
@@ -4058,8 +4199,7 @@ export function createDesigner(container, opts = {}) {
         col = Math.max(1, Math.min(12, col));
         let row = Math.round(currentTop / 66) + 1;
         row = Math.max(1, row);
-
-        let ghost = canvasGrid.querySelector('.etlsql-dsgn-grid-ghost');
+        let ghost = queryElement(canvasGrid, '.etlsql-dsgn-grid-ghost');
         if (!ghost) {
             ghost = document.createElement('div');
             ghost.className = 'etlsql-dsgn-grid-ghost';
@@ -4069,22 +4209,21 @@ export function createDesigner(container, opts = {}) {
         /** @type {HTMLElement} */ (ghost).style.gridColumn = `${col} / span ${colSpan}`;
         /** @type {HTMLElement} */ (ghost).style.gridRow = `${row} / span 4`;
     });
-
     canvasGrid.addEventListener('dragleave', e => {
-        if (!canvasGrid.contains(/** @type {Node} */ (e.relatedTarget))) {
-            const ghost = canvasGrid.querySelector('.etlsql-dsgn-grid-ghost');
-            if (ghost) ghost.remove();
+        if (!(e.relatedTarget instanceof Node) || !canvasGrid.contains(e.relatedTarget)) {
+            const ghost = queryElement(canvasGrid, '.etlsql-dsgn-grid-ghost');
+            if (ghost)
+                ghost.remove();
         }
     });
-
     canvasGrid.addEventListener('drop', e => {
         e.preventDefault();
-        const ghost = canvasGrid.querySelector('.etlsql-dsgn-grid-ghost');
-        if (ghost) ghost.remove();
-
+        const ghost = queryElement(canvasGrid, '.etlsql-dsgn-grid-ghost');
+        if (ghost)
+            ghost.remove();
         const vtype = e.dataTransfer.getData('text/plain') || e.dataTransfer.getData('application/x-etlsql-visual');
-        if (!vtype) return;
-
+        if (!vtype)
+            return;
         const gridRect = canvasGrid.getBoundingClientRect();
         const gridW = gridRect.width - 32;
         const W_col = (gridW - 11 * 6) / 12;
@@ -4095,68 +4234,70 @@ export function createDesigner(container, opts = {}) {
         let row = Math.round(currentTop / 66) + 1;
         row = Math.max(1, row);
         const colSpan = Math.min(6, Math.max(1, 13 - col));
-
         addVisualAt(vtype.toUpperCase(), col, row, colSpan, 4);
     });
-
-    sidebar.querySelector('#dsgn-tree').addEventListener('click', e => {
-        const item = /** @type {Element} */ (e.target).closest('.etlsql-dsgn-tree-item');
-        if (item) selectVisual(/** @type {HTMLElement} */ (item).dataset.vid);
+    queryElement(sidebar, '#dsgn-tree').addEventListener('click', e => {
+        const item = closestElement(e, '.etlsql-dsgn-tree-item');
+        if (item)
+            selectVisual(datasetValue(item, 'vid'));
     });
-
-    sidebar.querySelector('#dsgn-add-recipe')?.addEventListener('click', openDataPrepModal);
-    sidebar.querySelector('#dsgn-add-ds').addEventListener('click', addDataset);
-    sidebar.querySelector('#dsgn-ds-list').addEventListener('click', e => {
-        const del = /** @type {Element} */ (e.target).closest('[data-dsid]');
-        if (del) { state.datasets = state.datasets.filter(d => d.id !== /** @type {HTMLElement} */ (del).dataset.dsid); renderDatasets(); renderProps(); }
+    queryElement(sidebar, '#dsgn-add-recipe')?.addEventListener('click', openDataPrepModal);
+    queryElement(sidebar, '#dsgn-add-ds').addEventListener('click', addDataset);
+    queryElement(sidebar, '#dsgn-ds-list').addEventListener('click', e => {
+        const del = closestElement(e, '[data-dsid]');
+        if (del) {
+            state.datasets = state.datasets.filter(d => d.id !== datasetValue(del, 'dsid'));
+            renderDatasets();
+            renderProps();
+        }
     });
-
-    bookmarksSection.querySelector('#dsgn-add-bookmark').addEventListener('click', () =>
-        addBookmark().catch(e => _feedback.notify(e.message, { title: 'Bookmark not added', tone: 'error' })));
-    bookmarksSection.querySelector('#dsgn-bookmark-list').addEventListener('click', e => {
-        const edit = /** @type {Element} */ (e.target).closest('[data-bmedit]');
+    queryElement(bookmarksSection, '#dsgn-add-bookmark').addEventListener('click', () => addBookmark().catch(e => feedback.notify(e.message, { title: 'Bookmark not added', tone: 'error' })));
+    queryElement(bookmarksSection, '#dsgn-bookmark-list').addEventListener('click', e => {
+        const edit = closestElement(e, '[data-bmedit]');
         if (edit) {
-            editBookmarkTitle(/** @type {HTMLElement} */ (edit).dataset.bmedit)
-                .catch(err => _feedback.notify(err.message, { title: 'Bookmark not updated', tone: 'error' }));
+            editBookmarkTitle(datasetValue(edit, 'bmedit'))
+                .catch(err => feedback.notify(err.message, { title: 'Bookmark not updated', tone: 'error' }));
             return;
         }
-        const makeDefault = /** @type {Element} */ (e.target).closest('[data-bmdefault]');
-        if (makeDefault) { toggleBookmarkDefault(/** @type {HTMLElement} */ (makeDefault).dataset.bmdefault); return; }
-        const del = /** @type {Element} */ (e.target).closest('[data-bmid]');
-        if (del) removeBookmark(/** @type {HTMLElement} */ (del).dataset.bmid);
+        const makeDefault = closestElement(e, '[data-bmdefault]');
+        if (makeDefault) {
+            toggleBookmarkDefault(datasetValue(makeDefault, 'bmdefault'));
+            return;
+        }
+        const del = closestElement(e, '[data-bmid]');
+        if (del)
+            removeBookmark(datasetValue(del, 'bmid'));
     });
-
-    dataPrepModal.querySelector('#dsgn-dp-cancel').addEventListener('click', () => { dataPrepModal.style.display = 'none'; });
-    dataPrepModal.querySelector('#dsgn-dp-ok').addEventListener('click', () => {
-        const targetInput = dataPrepModal.querySelector('#dsgn-dp-target');
-        const sqlPreview = dataPrepModal.querySelector('#dsgn-dp-sql');
-        const name = (/** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (targetInput).value || '').trim();
+    queryElement(dataPrepModal, '#dsgn-dp-cancel').addEventListener('click', () => { dataPrepModal.style.display = 'none'; });
+    queryElement(dataPrepModal, '#dsgn-dp-ok').addEventListener('click', () => {
+        const targetInput = queryElement(dataPrepModal, '#dsgn-dp-target');
+        const sqlPreview = queryElement(dataPrepModal, '#dsgn-dp-sql');
+        const name = targetInput.value.trim();
         if (!name) {
-            _feedback?.notify?.('Enter a target dataset name.', { title: 'Target name required', tone: 'warning' });
+            feedback.notify?.('Enter a target dataset name.', { title: 'Target name required', tone: 'warning' });
             return;
         }
         state.datasets.push({
             id: 'ds_' + uid(),
             name: name,
-            query: /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (sqlPreview).value
+            query: sqlPreview.value
         });
         dataPrepModal.style.display = 'none';
         renderDatasets();
         renderProps();
-        _feedback?.notify?.(`Added data-prep dataset #${name}.`, { title: 'Dataset added', tone: 'success', auditAction: 'designer.dataset.add' });
+        feedback.notify?.(`Added data-prep dataset #${name}.`, { title: 'Dataset added', tone: 'success', auditAction: 'designer.dataset.add' });
     });
-
-    saveModal.querySelector('#dsgn-modal-cancel').addEventListener('click', () => { saveModal.style.display = 'none'; });
-    saveModal.querySelector('#dsgn-modal-ok').addEventListener('click', () => saveAsNew().catch(e => _feedback.notify(e.message, { title: 'Save failed', tone: 'error' })));
-
+    queryElement(saveModal, '#dsgn-modal-cancel').addEventListener('click', () => { saveModal.style.display = 'none'; });
+    queryElement(saveModal, '#dsgn-modal-ok').addEventListener('click', () => saveAsNew().catch(e => feedback.notify(errorText(e), { title: 'Save failed', tone: 'error' })));
     // ── Initial render ────────────────────────────────────────────────────────
     if (opts.script || opts.initialScript) {
-        applyScriptText(opts.script || opts.initialScript);
-    } else {
+        applyScriptText(opts.script ?? opts.initialScript ?? '');
+    }
+    else {
         renderAll();
     }
-    if (initialMode === 'code') queueMicrotask(() => openScript());
-
+    if (initialMode === 'code')
+        queueMicrotask(() => openScript());
     return {
         applyScriptText,
         invalidateScriptApply,
@@ -4169,7 +4310,8 @@ export function createDesigner(container, opts = {}) {
          * the current script declares.
          */
         mountBookmarks: host => {
-            (host || sidebar).appendChild(bookmarksSection);
+            const target = host || sidebar;
+            target.appendChild(bookmarksSection);
             renderBookmarks();
             return bookmarksSection;
         },
@@ -4181,7 +4323,8 @@ export function createDesigner(container, opts = {}) {
          */
         selectPage: index => {
             const wanted = Number(index);
-            if (!Number.isInteger(wanted) || wanted < 0 || wanted >= state.pages.length) return false;
+            if (!Number.isInteger(wanted) || wanted < 0 || wanted >= state.pages.length)
+                return false;
             pageIdx = wanted;
             selVisualId = null;
             renderAll();
@@ -4198,8 +4341,8 @@ export function createDesigner(container, opts = {}) {
             window.removeEventListener('beforeunload', beforeUnloadHandler);
             window.removeEventListener('message', previewMessageHandler);
             disconnectSnapshotResizeObservers();
-            clearTimeout(cursorTimeout);
-            clearTimeout(syncTimeout);
+            clearTimeout(cursorTimeout ?? undefined);
+            clearTimeout(syncTimeout ?? undefined);
             closeScript();
             propsPanel.remove();
             container.innerHTML = '';

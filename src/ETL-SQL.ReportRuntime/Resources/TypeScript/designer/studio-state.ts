@@ -29,6 +29,7 @@ export interface StudioDocumentContext {
     syncRevision: number;
     previewedDatasetSignature: string | null;
     resultsTrace: unknown[];
+    skipCrossFilters?: boolean;
     patchQueue?: Promise<unknown>;
     [key: string]: unknown;
 }
@@ -39,6 +40,10 @@ export interface StudioDocument {
     name?: string;
     content: string;
     isDirty: boolean;
+    contentRevision?: number;
+    editorState?: unknown;
+    scrollTop?: number;
+    scrollLeft?: number;
     projection?: string;
     studioContext?: StudioDocumentContext;
     lease?: { acquired?: boolean; [key: string]: unknown };
@@ -98,6 +103,7 @@ export interface StudioState {
     selectedVisualId: string | null;
     sidebarOpen: boolean;
     editorInstance: unknown;
+    isEditorDegraded?: boolean;
     resultsPanel: unknown;
     dagInstance: unknown;
     dagDocumentId: string | null;
@@ -134,7 +140,8 @@ export function createStudioDocumentContext(snapshot: unknown = null): StudioDoc
         lastValidDag: null,
         syncRevision: 0,
         previewedDatasetSignature: null,
-        resultsTrace: []
+        resultsTrace: [],
+        skipCrossFilters: false
     };
 }
 

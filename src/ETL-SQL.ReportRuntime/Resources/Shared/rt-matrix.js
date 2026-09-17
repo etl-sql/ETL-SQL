@@ -1,3 +1,7 @@
+/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/rt-matrix.ts
+ * Run: node scripts/sync-assets.js
+ */
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
@@ -8,19 +12,20 @@ import { formatValue, noDataEl } from './rt-util.js';
 import { _uiStates, getLastManifest } from './rt-state.js';
 import { matchesCondition } from './rt-actions.js';
 import { renderManifest } from './report-runtime.js';
-
-
 // ── MATRIX (Pivot / Cross-tab) ────────────────────────────────────────────
 // chartConfig carries JSON with { __matrix, rowHeaders, colHeaders, colParts, rows, grandTotals }.
-
 export function renderMatrix(container, visual) {
     let meta;
-    try { meta = visual.chartConfig ? JSON.parse(visual.chartConfig) : null; } catch { meta = null; }
+    try {
+        meta = visual.chartConfig ? JSON.parse(visual.chartConfig) : null;
+    }
+    catch {
+        meta = null;
+    }
     if (!meta || !meta.__matrix) {
         container.appendChild(noDataEl('No pivot data available'));
         return;
     }
-
     const sep = '\u001F';
     const rowHeaders = meta.rowHeaders || [];
     const rows = meta.rows || [];
@@ -37,7 +42,6 @@ export function renderMatrix(container, visual) {
     const valueHeaders = Array.isArray(meta.valueHeaders) ? meta.valueHeaders : null;
     const valueCount = valueHeaders ? valueHeaders.length : 1;
     const subtotalsEnabled = !!meta.subtotalsEnabled;
-
     const columnTotalsEnabled = meta.columnTotalsEnabled !== false && (!!meta.columnTotalsEnabled || (grandTotals && grandTotals.length > 0));
     const rowTotalsEnabled = !!meta.rowTotalsEnabled;
     const defaultExpand = String(meta.defaultExpand || (visual.options && visual.options['DEFAULT_EXPAND']) || 'ALL').toUpperCase();
@@ -46,49 +50,45 @@ export function renderMatrix(container, visual) {
     const dataBarMin = typeof meta.dataBarMin === 'number' ? meta.dataBarMin : 0;
     const dataBarMax = typeof meta.dataBarMax === 'number' ? meta.dataBarMax : 0;
     const formattingRules = Array.isArray(meta.formattingRules) ? meta.formattingRules : (Array.isArray(visual.formattingRules) ? visual.formattingRules : []);
-
     const stateKey = `matrix:${visual.name || visual.id || ''}`;
     const state = _uiStates[stateKey] || (_uiStates[stateKey] = { collapsedRows: {}, collapsedCols: {} });
     state.collapsedRows = state.collapsedRows || {};
     state.collapsedCols = state.collapsedCols || {};
-
     const wrapper = document.createElement('div');
     wrapper.className = 'table-wrapper';
     let heightOpt = visual.styles ? (visual.styles['HEIGHT'] || visual.styles['height']) : null;
-    if (heightOpt) wrapper.style.maxHeight = heightOpt;
-
+    if (heightOpt)
+        wrapper.style.maxHeight = heightOpt;
     const table = document.createElement('table');
     table.className = 'matrix-table';
-
     const leaves = colParts.map((parts, index) => ({
         index,
         parts: Array.from({ length: colDepth }, (_, i) => parts[i] || ''),
         key: Array.from({ length: colDepth }, (_, i) => parts[i] || '').join(sep)
     }));
-
     function colPrefixKey(parts, level) {
         return parts.slice(0, level + 1).join(sep);
     }
-
     function rowPrefixKey(parts, level) {
         return parts.slice(0, level + 1).join(sep);
     }
-
     function hasColumnChildren(parts, level) {
-        if (level >= colDepth - 1) return false;
+        if (level >= colDepth - 1)
+            return false;
         const key = colPrefixKey(parts, level);
         const nextValues = new Set(leaves
             .filter(leaf => colPrefixKey(leaf.parts, level) === key)
             .map(leaf => leaf.parts[level + 1]));
         return nextValues.size > 0;
     }
-
     function buildColumnNodes(level, prefix, sourceLeaves) {
-        if (level >= colDepth) return [];
+        if (level >= colDepth)
+            return [];
         const buckets = new Map();
         sourceLeaves.forEach(leaf => {
             const label = leaf.parts[level] || '';
-            if (!buckets.has(label)) buckets.set(label, []);
+            if (!buckets.has(label))
+                buckets.set(label, []);
             buckets.get(label).push(leaf);
         });
         return Array.from(buckets, ([label, bucket]) => {
@@ -103,82 +103,84 @@ export function renderMatrix(container, visual) {
             };
         });
     }
-
     function flattenColumns(nodes, output = []) {
         nodes.forEach(node => {
             const hasChildren = node.children.length > 0;
             if (!hasChildren || state.collapsedCols[node.key]) {
                 output.push(node);
-            } else {
+            }
+            else {
                 flattenColumns(node.children, output);
             }
         });
         return output;
     }
-
     const visibleColumns = flattenColumns(buildColumnNodes(0, [], leaves));
-
     // Expanded columns = visibleColumns x valueCount (interleaved: col0v0, col0v1, col1v0, col1v1, ...)
     const expandedCols = [];
     visibleColumns.forEach(col => {
-        for (let vi = 0; vi < valueCount; vi++) expandedCols.push({ col, vi });
+        for (let vi = 0; vi < valueCount; vi++)
+            expandedCols.push({ col, vi });
     });
-
     function numericCell(value) {
         const n = parseFloat(String(value ?? '').replace(/,/g, ''));
         return Number.isFinite(n) ? n : null;
     }
-
     function formatMatrixNumber(total, sawAny) {
-        if (!sawAny) return '';
+        if (!sawAny)
+            return '';
         return Number.isInteger(total) ? String(total) : String(Number(total.toFixed(6)));
     }
-
     function aggregateNumbers(values) {
-        if (!values.length) return '';
-        if (matrixAggregate === 'MIN') return formatMatrixNumber(Math.min(...values), true);
-        if (matrixAggregate === 'MAX') return formatMatrixNumber(Math.max(...values), true);
-        if (matrixAggregate === 'AVG') return formatMatrixNumber(values.reduce((a, b) => a + b, 0) / values.length, true);
+        if (!values.length)
+            return '';
+        if (matrixAggregate === 'MIN')
+            return formatMatrixNumber(Math.min(...values), true);
+        if (matrixAggregate === 'MAX')
+            return formatMatrixNumber(Math.max(...values), true);
+        if (matrixAggregate === 'AVG')
+            return formatMatrixNumber(values.reduce((a, b) => a + b, 0) / values.length, true);
         return formatMatrixNumber(values.reduce((a, b) => a + b, 0), true);
     }
-
     function aggregateColumn(row, col, vi) {
         const values = [];
         col.leaves.forEach(leaf => {
             const n = numericCell(row[rowDepth + leaf.index * valueCount + (vi || 0)]);
-            if (n != null) values.push(n);
+            if (n != null)
+                values.push(n);
         });
         return aggregateNumbers(values);
     }
-
     function aggregateRows(sourceRows, col, vi) {
         const values = [];
         sourceRows.forEach(row => {
             col.leaves.forEach(leaf => {
                 const n = numericCell(row[rowDepth + leaf.index * valueCount + (vi || 0)]);
-                if (n != null) values.push(n);
+                if (n != null)
+                    values.push(n);
             });
         });
         return aggregateNumbers(values);
     }
-
     function aggregateRowTotal(sourceRows, vi) {
         const values = [];
         sourceRows.forEach(row => {
             leaves.forEach(leaf => {
                 const n = numericCell(row[rowDepth + leaf.index * valueCount + (vi || 0)]);
-                if (n != null) values.push(n);
+                if (n != null)
+                    values.push(n);
             });
         });
         return aggregateNumbers(values);
     }
-
     function evaluateMatrixFormatting(numVal, colName) {
-        if (numVal == null || !Number.isFinite(numVal) || formattingRules.length === 0) return null;
+        if (numVal == null || !Number.isFinite(numVal) || formattingRules.length === 0)
+            return null;
         for (let i = 0; i < formattingRules.length; i++) {
             const rule = formattingRules[i];
             const cond = (rule.condition || rule.Condition || '').trim();
-            if (!cond) continue;
+            if (!cond)
+                continue;
             if (matchesMatrixCondition(cond, numVal, colName)) {
                 return {
                     color: rule.color || rule.Color,
@@ -188,20 +190,19 @@ export function renderMatrix(container, visual) {
         }
         return null;
     }
-
     function matchesMatrixCondition(cond, val, colName) {
         return matchesCondition(cond, val, colName);
     }
-
     function formatAndDecorateValueCell(td, rawVal, vi, isTotal) {
         const num = numericCell(rawVal);
-        const colName = valueHeaders ? valueHeaders[vi] : (visual.options && visual.options['mapping:value']) || 'value';
+        const colName = valueHeaders ? valueHeaders[vi] || 'value' : (visual.options && visual.options['mapping:value']) || 'value';
         const fmt = evaluateMatrixFormatting(num, colName);
         if (fmt) {
-            if (fmt.color) td.style.backgroundColor = fmt.color;
-            if (fmt.fontColor) td.style.color = fmt.fontColor;
+            if (fmt.color)
+                td.style.backgroundColor = fmt.color;
+            if (fmt.fontColor)
+                td.style.color = fmt.fontColor;
         }
-
         if (!isTotal && isDataBar && num != null && dataBarMax > dataBarMin) {
             const range = dataBarMax - dataBarMin;
             const pct = Math.max(0, Math.min(100, (num - dataBarMin) / range * 100));
@@ -219,7 +220,6 @@ export function renderMatrix(container, visual) {
             bar.style.opacity = '0.35';
             bar.style.pointerEvents = 'none';
             td.appendChild(bar);
-
             const span = document.createElement('span');
             span.className = 'data-bar-label';
             span.style.position = 'relative';
@@ -228,16 +228,17 @@ export function renderMatrix(container, visual) {
             span.style.padding = '4px 10px';
             span.textContent = formatValue(rawVal, null);
             td.appendChild(span);
-        } else {
+        }
+        else {
             td.textContent = formatValue(rawVal, null);
         }
     }
-
     function buildRowNodes(level, sourceRows) {
         const buckets = new Map();
         sourceRows.forEach(row => {
             const label = String(row[level] ?? '');
-            if (!buckets.has(label)) buckets.set(label, []);
+            if (!buckets.has(label))
+                buckets.set(label, []);
             buckets.get(label).push(row);
         });
         return Array.from(buckets, ([label, bucket]) => ({
@@ -248,14 +249,13 @@ export function renderMatrix(container, visual) {
             children: level < rowDepth - 1 ? buildRowNodes(level + 1, bucket) : []
         }));
     }
-
-    function appendToggle(cell, key, isCollapsed, onClick) {
+    function appendToggle(cell, _key, isCollapsed, onClick) {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'matrix-toggle';
         button.textContent = isCollapsed ? '+' : '-';
         button.setAttribute('aria-label', isCollapsed ? 'Expand' : 'Collapse');
-        button.addEventListener('click', e => {
+        button.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             onClick();
@@ -263,28 +263,29 @@ export function renderMatrix(container, visual) {
         });
         cell.appendChild(button);
     }
-
     function appendRowNode(tbody, node) {
         const isLeaf = node.children.length === 0;
         const key = rowPrefixKey(node.parts, node.level);
         let isCollapsed;
         if (key in state.collapsedRows) {
             isCollapsed = !!state.collapsedRows[key];
-        } else {
+        }
+        else {
             if (defaultExpand === 'NONE') {
                 isCollapsed = !isLeaf;
-            } else if (defaultExpand === 'LEVEL_1') {
+            }
+            else if (defaultExpand === 'LEVEL_1') {
                 isCollapsed = !isLeaf && node.level >= 1;
-            } else if (defaultExpand === 'LEVEL_2') {
+            }
+            else if (defaultExpand === 'LEVEL_2') {
                 isCollapsed = !isLeaf && node.level >= 2;
-            } else {
+            }
+            else {
                 isCollapsed = false;
             }
         }
-
         const tr = document.createElement('tr');
         tr.className = isLeaf ? 'matrix-leaf-row' : 'matrix-group-row';
-
         for (let i = 0; i < rowDepth; i++) {
             const td = document.createElement('td');
             td.className = 'matrix-dim';
@@ -296,12 +297,12 @@ export function renderMatrix(container, visual) {
                     });
                 }
                 td.appendChild(document.createTextNode(node.label));
-            } else if (isLeaf) {
+            }
+            else if (isLeaf) {
                 td.textContent = String(node.rows[0][i] ?? '');
             }
             tr.appendChild(td);
         }
-
         expandedCols.forEach(({ col, vi }) => {
             const td = document.createElement('td');
             td.className = 'matrix-val';
@@ -309,7 +310,6 @@ export function renderMatrix(container, visual) {
             formatAndDecorateValueCell(td, val, vi, false);
             tr.appendChild(td);
         });
-
         if (rowTotalsEnabled) {
             for (let vi = 0; vi < valueCount; vi++) {
                 const td = document.createElement('td');
@@ -319,7 +319,6 @@ export function renderMatrix(container, visual) {
                 tr.appendChild(td);
             }
         }
-
         tbody.appendChild(tr);
         if (!isLeaf && !isCollapsed) {
             node.children.forEach(child => appendRowNode(tbody, child));
@@ -329,7 +328,8 @@ export function renderMatrix(container, visual) {
                 for (let i = 0; i < rowDepth; i++) {
                     const td = document.createElement('td');
                     td.className = i === node.level ? 'matrix-dim matrix-subtotal-label' : 'matrix-dim';
-                    if (i === node.level) td.textContent = node.label + ' Total';
+                    if (i === node.level)
+                        td.textContent = node.label + ' Total';
                     subtr.appendChild(td);
                 }
                 expandedCols.forEach(({ col, vi }) => {
@@ -352,16 +352,15 @@ export function renderMatrix(container, visual) {
             }
         }
     }
-
     function appendColumnHeaderButton(th, node) {
         const canCollapse = node.leaves.length > 1 || hasColumnChildren(node.parts, node.level);
-        if (!canCollapse) return;
+        if (!canCollapse)
+            return;
         const key = node.key;
-        appendToggle(th, key, !!state.collapsedCols[key], () => {
+        appendToggle(th, key, !state.collapsedCols[key], () => {
             state.collapsedCols[key] = !state.collapsedCols[key];
         });
     }
-
     // Header rows
     const thead = document.createElement('thead');
     const totalHeaderRows = colDepth + (valueCount > 1 ? 1 : 0);
@@ -379,7 +378,8 @@ export function renderMatrix(container, visual) {
         visibleColumns.forEach(col => {
             const th = document.createElement('th');
             th.className = 'matrix-val-header';
-            if (valueCount > 1) th.colSpan = valueCount;
+            if (valueCount > 1)
+                th.colSpan = valueCount;
             const label = col.parts[level] || '';
             if (label) {
                 const prefixParts = col.parts.slice(0, level + 1);
@@ -395,23 +395,22 @@ export function renderMatrix(container, visual) {
             }
             headerRow.appendChild(th);
         });
-
         if (rowTotalsEnabled && level === 0) {
             const th = document.createElement('th');
             th.className = 'matrix-val-header matrix-row-total-header';
             if (valueCount > 1) {
                 th.colSpan = valueCount;
-            } else {
+            }
+            else {
                 th.rowSpan = totalHeaderRows;
             }
             th.textContent = 'Total';
             headerRow.appendChild(th);
         }
-
         thead.appendChild(headerRow);
     }
     // Value sub-header row when multiple VALUE columns
-    if (valueCount > 1) {
+    if (valueCount > 1 && valueHeaders) {
         const valHeaderRow = document.createElement('tr');
         visibleColumns.forEach(() => {
             valueHeaders.forEach(vh => {
@@ -432,11 +431,9 @@ export function renderMatrix(container, visual) {
         thead.appendChild(valHeaderRow);
     }
     table.appendChild(thead);
-
     // Data rows
     const tbody = document.createElement('tbody');
     buildRowNodes(0, rows).forEach(node => appendRowNode(tbody, node));
-
     // Grand total row (COLUMN_TOTAL)
     if (columnTotalsEnabled && grandTotals && grandTotals.length > 0) {
         const tr = document.createElement('tr');
@@ -452,7 +449,8 @@ export function renderMatrix(container, visual) {
             const values = [];
             col.leaves.forEach(leaf => {
                 const n = numericCell(grandTotals[rowDepth + leaf.index * valueCount + vi]);
-                if (n != null) values.push(n);
+                if (n != null)
+                    values.push(n);
             });
             const val = aggregateNumbers(values);
             formatAndDecorateValueCell(td, val, vi, true);
@@ -467,7 +465,8 @@ export function renderMatrix(container, visual) {
                 rows.forEach(row => {
                     leaves.forEach(leaf => {
                         const n = numericCell(row[rowDepth + leaf.index * valueCount + vi]);
-                        if (n != null) values.push(n);
+                        if (n != null)
+                            values.push(n);
                     });
                 });
                 const val = aggregateNumbers(values);
@@ -477,14 +476,13 @@ export function renderMatrix(container, visual) {
         }
         tbody.appendChild(tr);
     }
-
     table.appendChild(tbody);
     wrapper.appendChild(table);
     container.appendChild(wrapper);
 }
-
 export function findMicroChart(visual, rowIndex, columnIndex, sourceValue) {
-    if (!Array.isArray(visual.microCharts)) return null;
+    if (!Array.isArray(visual.microCharts))
+        return null;
     return visual.microCharts.find(micro => micro.role === 'table.cell' &&
         micro.columnIndex === columnIndex && micro.rowIndex === rowIndex) ||
         visual.microCharts.find(micro => micro.role === 'table.cell' &&
