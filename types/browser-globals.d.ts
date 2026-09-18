@@ -9,6 +9,13 @@
  * stops the gate reporting the next real one.
  */
 
+interface EtlSqlFeedbackAction {
+    label?: string;
+    onSelect: () => void;
+    tone?: string;
+    primary?: boolean;
+}
+
 /** One toast. Returns a function that dismisses it early. See src/ETL-SQL.Portal/wwwroot/js/feedback.js. */
 interface EtlSqlFeedbackNotifyOptions {
     tone?: 'info' | 'success' | 'warning' | 'error';
@@ -16,6 +23,7 @@ interface EtlSqlFeedbackNotifyOptions {
     /** Milliseconds. 0 or below keeps the toast until it is dismissed. */
     duration?: number;
     action?: { label?: string; onSelect: () => void };
+    actions?: Array<EtlSqlFeedbackAction>;
     auditAction?: string | null;
 }
 

@@ -9,7 +9,7 @@
  */
 
 import { createScriptEditor, createDesigner, createScriptResultsPanel, normalizeRunTrace, renderDag, type DesignerHandle } from './designer.js';
-import type { ScriptEditorHandle } from './script-editor.js';
+import { markdownToTooltipHtml, type ScriptEditorHandle } from './script-editor.js';
 import type { RunDiagnostic, RunResultPayload, RunTraceEvent, ScriptResultsPanel } from './run-results.js';
 import { STUDIO_VISUAL_GROUPS } from './visual-preview.js';
 import { createStudioAuthoringSurfaces, declaredConnectionNames } from './studio-authoring.js';
@@ -75,6 +75,24 @@ interface StudioRunRequest {
     selection?: string | null;
     label: string;
     parameters?: Record<string, unknown> | null;
+}
+
+interface SyntaxBridgeContext {
+    document: StudioRuntimeDocument;
+    label: string;
+    before: string;
+    after: string;
+    diff: {
+        from: number;
+        to: number;
+        insertedText: string;
+        replacedText: string;
+        constructName: string;
+        keyword: string;
+        explanation: string;
+        relatedKeywords: string[];
+    };
+    cachedHelp?: Record<string, string>;
 }
 
 type KnownProperties<T> = { [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K] };
@@ -264,6 +282,7 @@ interface StudioRuntimeState extends Omit<StudioState, 'workspaceFiles' | 'catal
     selectedTaskId: string | null;
     pipelineTaskEditor: { dispose?: () => void } | null;
     guidedRailHidden: boolean;
+    lastSyntaxBridgeContext?: SyntaxBridgeContext | null;
 }
 
 export interface StudioWorkbenchHandle {
@@ -281,6 +300,10 @@ export interface StudioWorkbenchHandle {
     deleteVisual: (...args: any[]) => Promise<any> | any;
     openCatalogReport: (...args: any[]) => Promise<any> | any;
     publishCatalogReport?: (targetDoc?: any) => Promise<boolean | undefined>;
+    openSyntaxBridge?: (context?: any) => Promise<void> | void;
+    closeSyntaxBridge?: () => void;
+    getStoredProjectionPreference?: () => string | null;
+    storeProjectionPreference?: (pref: string) => void;
     dispose: () => void;
 }
 
@@ -390,8 +413,116 @@ const _STUDIO_ICONS: Record<string, string> = {
     moveUp: '<path d="M8 13V3"/><path d="m4 7 4-4 4 4"/>',
     moveDown: '<path d="M8 3v10"/><path d="m4 9 4 4 4-4"/>',
     governance: '<path d="M8 1.5 3 3.5v4.2c0 3 2.1 5.6 5 6.8 2.9-1.2 5-3.8 5-6.8V3.5z"/><path d="m5.8 8 1.6 1.6 3-3.4"/>',
-    engine: '<circle cx="8" cy="8" r="2"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/><path d="m3.1 3.1 2.1 2.1M10.8 10.8l2.1 2.1M12.9 3.1l-2.1 2.1M5.2 10.8l-2.1 2.1"/>'
+    engine: '<circle cx="8" cy="8" r="2"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/><path d="m3.1 3.1 2.1 2.1M10.8 10.8l2.1 2.1M12.9 3.1l-2.1 2.1M5.2 10.8l-2.1 2.1"/>',
+    syntax: '<path d="M4 2.5h8a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H4A1.5 1.5 0 0 1 2.5 13V4A1.5 1.5 0 0 1 4 2.5z"/><path d="M6 6h4m-4 3h4m-4 3h2"/>'
 };
+
+const STUDIO_PROJECTION_PREFERENCE_KEY = 'etlsql-studio-projection-preference';
+
+function getStoredProjectionPreference(): 'canvas' | 'split' | 'code' | null {
+    try {
+        const v = localStorage.getItem(STUDIO_PROJECTION_PREFERENCE_KEY);
+        if (v === 'canvas' || v === 'split' || v === 'code') return v;
+    } catch {
+        return null;
+    }
+    return null;
+}
+
+function storeProjectionPreference(pref: string) {
+    if (pref !== 'canvas' && pref !== 'split' && pref !== 'code') return;
+    try {
+        localStorage.setItem(STUDIO_PROJECTION_PREFERENCE_KEY, pref);
+    } catch (error) {
+        if (typeof console !== 'undefined') console.debug?.('Projection preference store failed', error);
+    }
+}
+
+function analyzeSyntaxDiff(label: string, before: string, after: string): {
+    from: number;
+    to: number;
+    insertedText: string;
+    replacedText: string;
+    constructName: string;
+    keyword: string;
+    explanation: string;
+    relatedKeywords: string[];
+} {
+    let prefix = 0;
+    const maxPrefix = Math.min(before.length, after.length);
+    while (prefix < maxPrefix && before[prefix] === after[prefix]) prefix++;
+
+    let suffix = 0;
+    const maxSuffix = Math.min(before.length - prefix, after.length - prefix);
+    while (suffix < maxSuffix && before[before.length - 1 - suffix] === after[after.length - 1 - suffix]) suffix++;
+
+    const from = prefix;
+    const to = after.length - suffix;
+    const insertedText = after.slice(from, to);
+    const replacedText = before.slice(from, before.length - suffix);
+
+    const windowText = after.slice(Math.max(0, from - 80), Math.min(after.length, to + 80)).toUpperCase();
+    const sample = (insertedText.trim() ? insertedText : windowText).toUpperCase();
+    const lLabel = label.toLowerCase();
+
+    let keyword = 'VISUAL';
+    let constructName = 'CREATE VISUAL';
+    let explanation = 'Defines a visual tile (chart, KPI, table, or slicer) bound to a dataset or query.';
+    let relatedKeywords = ['VISUAL', 'LAYOUT', 'MAPPINGS', 'OPTIONS'];
+
+    if (sample.includes('PRINT_LAYOUT') || sample.includes('PAGE_BREAK') || lLabel.includes('page break') || lLabel.includes('page setup')) {
+        keyword = 'PRINT_LAYOUT';
+        constructName = 'PRINT_LAYOUT';
+        explanation = 'Controls physical page boundaries, orientation, margins, and page breaks for export.';
+        relatedKeywords = ['PRINT_LAYOUT', 'PAGE', 'OPTIONS'];
+    } else if (sample.includes('CREATE PAGE') || lLabel.includes('page')) {
+        keyword = 'PAGE';
+        constructName = 'CREATE PAGE';
+        explanation = 'Creates a report or dashboard page containing visual tiles.';
+        relatedKeywords = ['PAGE', 'LAYOUT', 'VISUAL'];
+    } else if (sample.includes('LAYOUT') || lLabel.includes('layout') || lLabel.includes('move') || lLabel.includes('resize')) {
+        keyword = 'LAYOUT';
+        constructName = 'LAYOUT';
+        explanation = 'Specifies the grid position (X, Y) and dimensions (W, H) of a visual on the canvas.';
+        relatedKeywords = ['LAYOUT', 'VISUAL', 'PAGE'];
+    } else if (sample.includes('MAPPINGS') || lLabel.includes('mapping') || lLabel.includes('field')) {
+        keyword = 'MAPPINGS';
+        constructName = 'MAPPINGS';
+        explanation = 'Binds dataset columns to visual channels such as X-axis, Y-axis, Series, or Values.';
+        relatedKeywords = ['MAPPINGS', 'VISUAL', 'OPTIONS'];
+    } else if (sample.includes('OPTIONS') || lLabel.includes('option') || lLabel.includes('format') || lLabel.includes('title') || lLabel.includes('total')) {
+        keyword = 'OPTIONS';
+        constructName = 'OPTIONS';
+        explanation = 'Configures visual properties like title, legend, grand totals, and appearance.';
+        relatedKeywords = ['OPTIONS', 'VISUAL', 'THEME'];
+    } else if (sample.includes('FILTER') || sample.includes('SLICER') || lLabel.includes('filter')) {
+        keyword = 'FILTER';
+        constructName = 'FILTER / SLICER';
+        explanation = 'Filters dataset rows globally or across cross-filtered visuals.';
+        relatedKeywords = ['FILTER', 'SLICER', 'WHERE'];
+    } else if (sample.includes('CREATE CONNECTION') || lLabel.includes('connection')) {
+        keyword = 'CONNECTION';
+        constructName = 'CREATE CONNECTION';
+        explanation = 'Declares a data connection to a database, file, API, or mock in-memory source.';
+        relatedKeywords = ['CONNECTION', 'DATASET'];
+    } else if (sample.includes('CREATE DATASET') || lLabel.includes('dataset')) {
+        keyword = 'DATASET';
+        constructName = 'CREATE DATASET';
+        explanation = 'Defines a reusable query or table source used by visuals in the report.';
+        relatedKeywords = ['DATASET', 'CONNECTION', 'VISUAL'];
+    }
+
+    return {
+        from,
+        to,
+        insertedText,
+        replacedText,
+        constructName,
+        keyword,
+        explanation,
+        relatedKeywords
+    };
+}
 
 function _studioIcon(name: string, size = 16): string {
     return `<svg viewBox="0 0 16 16" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${_STUDIO_ICONS[name] || ''}</svg>`;
@@ -657,11 +788,13 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
                     <div class="etlsql-studio-code-stage" data-code-stage>
                         <div class="etlsql-studio-code-toolbar" role="toolbar" aria-label="Script actions">
                             <strong>Script</strong><span class="etlsql-studio-code-status">Live projection</span><span class="etlsql-studio-code-toolbar-spacer"></span>
+                            <button type="button" class="etlsql-studio-btn etlsql-studio-btn-syntax" data-action="syntax-bridge" title="Visual-to-Script Learning Bridge: see generated syntax and canonical language help" style="display:none;">${_studioIcon('syntax', 14)} Syntax Helper</button>
                             <button type="button" class="etlsql-studio-btn" data-action="code-format">${_studioIcon('format', 14)} Format</button>
                             <button type="button" class="etlsql-studio-btn" data-action="run-selected">${_studioIcon('runSelected', 14)} Run selected</button>
                             <button type="button" class="etlsql-studio-btn btn-primary" data-action="code-run">${_studioIcon('run', 14)} Run all</button>
                             <button type="button" class="etlsql-studio-btn btn-danger" data-action="code-stop" title="Stop Script Execution" style="display:none;">${_studioIcon('stop', 14)} Stop</button>
                         </div>
+                        <div class="etlsql-studio-syntax-bridge" data-syntax-bridge style="display:none;"></div>
                         <div class="etlsql-studio-editor-host etlsql-editor-container" data-editor-host></div>
                         <div class="etlsql-studio-results-host" data-results-host></div>
                     </div>
@@ -694,6 +827,8 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
     const visualStage = queryElement(shell, '[data-visual-stage]');
     const workflowBar = queryElement(shell, '[data-workflow-bar]');
     const codeStage = queryElement(shell, '[data-code-stage]');
+    const syntaxBridgeBtn = queryElement<HTMLButtonElement>(shell, '[data-action="syntax-bridge"]');
+    const syntaxBridgePanel = queryElement<HTMLDivElement>(shell, '[data-syntax-bridge]');
     const resizer = queryElement(shell, '[data-stage-resizer]');
     const editorHost = queryElement(shell, '[data-editor-host]');
     const resultsHost = queryElement(shell, '[data-results-host]');
@@ -1156,7 +1291,12 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
                 const chosen = await promptForReportWorkflow(doc);
                 if (!chosen) return;
                 doc.reportWorkflow = chosen;
-                if (chosen === 'dashboard' && doc.projection !== 'canvas') setProjection('canvas');
+                if (chosen === 'dashboard' && doc.projection !== 'canvas') {
+                    const pref = getStoredProjectionPreference();
+                    if (pref !== 'code' && pref !== 'split') {
+                        setProjection('canvas');
+                    }
+                }
                 renderReportWorkflowChrome(doc);
                 renderSidebarContent(state.activeActivity);
             });
@@ -1181,7 +1321,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         const stepClass = (key: string) => (done[key] ? ' class="is-done"' : '');
 
         if (workflow === 'dashboard') {
-            workflowBar.innerHTML = `<div class="etlsql-workflow-identity"><span class="etlsql-workflow-kind">Dashboard</span><strong>Responsive visual canvas</strong><span>Build the story with chart, KPI, table, and slicer tiles. Use filters for cross-visual interaction; use Format on the selected tile for presentation.</span></div><ol class="etlsql-workflow-steps" aria-label="Dashboard workflow"><li><button type="button" data-workflow-step="catalog"${stepClass('catalog')}><b>1</b><span><strong>Data</strong><small>Connection, dataset, fields</small></span></button></li><li><button type="button" data-workflow-step="palette"${stepClass('palette')}><b>2</b><span><strong>Visuals</strong><small>Charts, KPIs, tables, slicers</small></span></button></li><li><button type="button" data-workflow-step="filters"${stepClass('filters')}><b>3</b><span><strong>Cross-filters</strong><small>Narrow every visual at once</small></span></button></li><li><button type="button" data-workflow-step="layout"><b>4</b><span><strong>Layout</strong><small>Arrange tiles on the canvas</small></span></button></li><li><button type="button" data-workflow-step="format"><b>5</b><span><strong>Format + code</strong><small>Style the selection beside the script</small></span></button></li></ol>`;
+            workflowBar.innerHTML = `<div class="etlsql-workflow-identity"><span class="etlsql-workflow-kind">Dashboard</span><strong>Responsive visual canvas</strong><span>Build the story with chart, KPI, table, and slicer tiles. Use filters for cross-visual interaction; use Format on the selected tile for presentation.</span></div><ol class="etlsql-workflow-steps" aria-label="Dashboard workflow"><li><button type="button" data-workflow-step="catalog"${stepClass('catalog')}><b>1</b><span><strong>Data</strong><small>Connection, dataset, fields</small><code class="etlsql-workflow-syntax-tag">CREATE CONNECTION</code></span></button></li><li><button type="button" data-workflow-step="palette"${stepClass('palette')}><b>2</b><span><strong>Visuals</strong><small>Charts, KPIs, tables, slicers</small><code class="etlsql-workflow-syntax-tag">CREATE VISUAL</code></span></button></li><li><button type="button" data-workflow-step="filters"${stepClass('filters')}><b>3</b><span><strong>Cross-filters</strong><small>Narrow every visual at once</small><code class="etlsql-workflow-syntax-tag">FILTER / SLICER</code></span></button></li><li><button type="button" data-workflow-step="layout"><b>4</b><span><strong>Layout</strong><small>Arrange tiles on the canvas</small><code class="etlsql-workflow-syntax-tag">LAYOUT (...)</code></span></button></li><li><button type="button" data-workflow-step="format"><b>5</b><span><strong>Format + code</strong><small>Style the selection beside the script</small><code class="etlsql-workflow-syntax-tag">OPTIONS / MAPPINGS</code></span></button></li></ol>`;
         } else {
             const page = designState?.pages?.[0] || {};
             workflowBar.innerHTML = `<div class="etlsql-workflow-identity"><span class="etlsql-workflow-kind">Paginated Report</span><strong>Physical page authoring</strong><span>Work top-to-bottom: prompts, repeating detail, totals, page furniture, then pagination and export.</span></div><ol class="etlsql-workflow-steps etlsql-paginated-steps"><li><button type="button" data-workflow-step="catalog"${stepClass('catalog')}><b>1</b><span><strong>Choose data</strong><small>Connection, dataset, fields</small></span></button></li><li><button type="button" data-workflow-step="parameter"${stepClass('parameter')}><b>2</b><span><strong>Define parameters</strong><small>Input prompts before execution</small></span></button></li><li><button type="button" data-workflow-step="details"${stepClass('details')}><b>3</b><span><strong>Groups + details</strong><small>Matrix groups and table rows</small></span></button></li><li><button type="button" data-workflow-step="totals"${stepClass('totals')}><b>4</b><span><strong>Add totals</strong><small>Grand total on the detail table</small></span></button></li><li><button type="button" data-workflow-step="furniture"${stepClass('furniture')}><b>5</b><span><strong>Header + footer</strong><small>Text bands and page breaks</small></span></button></li><li><div><b>6</b><span><strong>Page setup + breaks</strong><small>Writes PRINT_LAYOUT through the patcher</small></span>${pageSetupMarkup(page)}</div></li><li><button type="button" data-workflow-step="preview"><b>7</b><span><strong>Preview pagination</strong><small>Run and inspect physical pages</small></span></button></li><li><button type="button" data-workflow-step="export"><b>8</b><span><strong>Export</strong><small>PDF for pages; CSV/Excel for results</small></span></button></li></ol>`;
@@ -2004,10 +2144,181 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
      */
     let dismissUndoOffer: (() => void) | null = null;
 
+    function performUndoFor(target: any, before: string, after: string, label: string) {
+        if (getActiveDoc() !== target) {
+            _feedback.notify(
+                `Undo applies to ${target.name}. Open that document again and use its own undo.`,
+                { title: 'Nothing undone', tone: 'warning' });
+            return;
+        }
+        if (state.editorInstance?.getValue?.() !== after) {
+            _feedback.notify(
+                'The script changed again after this edit, so undoing it here would take back the wrong change. '
+                + 'The editor\'s own undo still steps back through every change in order.',
+                { title: 'Nothing undone', tone: 'warning' });
+            return;
+        }
+        state.editorInstance?.undo?.();
+        if (state.editorInstance?.getValue?.() !== before) {
+            _feedback.notify(
+                'The editor undid a different change than expected, so the script is not back where it started. '
+                + 'Check the script before saving.',
+                { title: 'Undo Incomplete', tone: 'error' });
+            return;
+        }
+        _feedback.notify(`${label} was undone.`, { title: 'Script restored', tone: 'info' });
+    }
+
+    function resolveCurrentEditorContext(): SyntaxBridgeContext | null {
+        const doc = getActiveDoc();
+        if (!doc) return null;
+        if (state.lastSyntaxBridgeContext && state.lastSyntaxBridgeContext.document === doc) {
+            return state.lastSyntaxBridgeContext;
+        }
+        const script = state.editorInstance?.getValue?.() || doc.content || '';
+        const currentStatement = String(state.editorInstance?.getCurrentStatement?.() || '').trim();
+        const token = currentStatement.split(/[\s(;]+/)[0]?.toUpperCase() || 'VISUAL';
+        return {
+            document: doc,
+            label: `Inspect ${token}`,
+            before: script,
+            after: script,
+            diff: {
+                from: 0,
+                to: Math.min(script.length, 80),
+                insertedText: currentStatement,
+                replacedText: '',
+                constructName: token,
+                keyword: token,
+                explanation: `Canonical syntax documentation for ${token}.`,
+                relatedKeywords: ['VISUAL', 'LAYOUT', 'MAPPINGS', 'OPTIONS'],
+            },
+        };
+    }
+
+    async function openSyntaxBridge(context?: SyntaxBridgeContext | null) {
+        const ctx = context || state.lastSyntaxBridgeContext || resolveCurrentEditorContext();
+        if (!ctx?.document) return;
+        if (getActiveDoc() !== ctx.document) {
+            await switchDoc(ctx.document.id);
+        }
+        const doc = getActiveDoc();
+        if (!doc) return;
+
+        if (doc.projection === 'canvas') {
+            setProjection('split');
+        }
+
+        state.editorInstance?.revealRange?.(ctx.diff.from, ctx.diff.to, true);
+        void renderSyntaxBridge(ctx);
+    }
+
+    async function renderSyntaxBridge(ctx: SyntaxBridgeContext, selectedKeyword = ctx.diff.keyword) {
+        if (!syntaxBridgePanel) return;
+        syntaxBridgePanel.style.display = 'flex';
+        syntaxBridgeBtn?.classList.add('is-active');
+
+        ctx.cachedHelp ||= {};
+
+        const snippet = (ctx.diff.insertedText || ctx.diff.replacedText || '').trim();
+        const keywords = ctx.diff.relatedKeywords || [ctx.diff.keyword];
+
+        syntaxBridgePanel.innerHTML = `
+            <div class="etlsql-syntax-bridge-header">
+                <div class="etlsql-syntax-bridge-title">
+                    <span>Syntax Bridge: ${_escapeHtml(ctx.diff.constructName)}</span>
+                    <span class="etlsql-syntax-badge">${_escapeHtml(selectedKeyword)}</span>
+                </div>
+                <button type="button" class="etlsql-syntax-bridge-close" data-syntax-close title="Close Syntax Helper" aria-label="Close Syntax Helper">×</button>
+            </div>
+            <p class="etlsql-syntax-bridge-desc">${_escapeHtml(ctx.diff.explanation)} Try a hand edit in the script; click <strong>Syntax Helper</strong> in the toolbar above to reopen this at any time.</p>
+            ${snippet ? `
+            <div class="etlsql-syntax-snippet-box">
+                <pre><code>${_escapeHtml(snippet)}</code></pre>
+            </div>` : ''}
+            <div class="etlsql-syntax-keywords">
+                <span>Canonical help topics:</span>
+                ${keywords.map(kw => `
+                    <button type="button" class="etlsql-syntax-kw-chip${kw === selectedKeyword ? ' is-active' : ''}" data-syntax-kw="${_escapeHtml(kw)}">${_escapeHtml(kw)}</button>
+                `).join('')}
+            </div>
+            <div class="etlsql-syntax-help-content" data-syntax-help-body>
+                <em>Loading canonical reference for ${_escapeHtml(selectedKeyword)}...</em>
+            </div>
+            <div class="etlsql-syntax-actions">
+                <button type="button" class="etlsql-studio-btn is-primary" data-syntax-undo>Undo this edit</button>
+                <button type="button" class="etlsql-studio-btn" data-syntax-dismiss>Close helper</button>
+            </div>
+        `;
+
+        queryElement(syntaxBridgePanel, '[data-syntax-close]')?.addEventListener('click', closeSyntaxBridge);
+        queryElement(syntaxBridgePanel, '[data-syntax-dismiss]')?.addEventListener('click', closeSyntaxBridge);
+        queryElement(syntaxBridgePanel, '[data-syntax-undo]')?.addEventListener('click', () => {
+            closeSyntaxBridge();
+            performUndoFor(ctx.document, ctx.before, ctx.after, ctx.label);
+        });
+
+        queryElements(syntaxBridgePanel, '[data-syntax-kw]').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const kw = chip.getAttribute('data-syntax-kw');
+                if (kw) void renderSyntaxBridge(ctx, kw);
+            });
+        });
+
+        const helpContainer = queryElement(syntaxBridgePanel, '[data-syntax-help-body]');
+        if (!helpContainer) return;
+
+        if (ctx.cachedHelp[selectedKeyword]) {
+            helpContainer.innerHTML = markdownToTooltipHtml(ctx.cachedHelp[selectedKeyword]);
+            return;
+        }
+
+        try {
+            const res = await authFetch(apiBase + STUDIO_ROUTES.hover, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ word: selectedKeyword }),
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data?.markdown) {
+                    ctx.cachedHelp[selectedKeyword] = data.markdown;
+                    helpContainer.innerHTML = markdownToTooltipHtml(data.markdown);
+                    return;
+                }
+            }
+        } catch (error) {
+            if (typeof console !== 'undefined') console.debug?.('Hover help lookup failed', error);
+        }
+
+        const fallback = `# ${selectedKeyword}\n\n${ctx.diff.explanation}\n\n\`\`\`sql\n${snippet || selectedKeyword}\n\`\`\``;
+        helpContainer.innerHTML = markdownToTooltipHtml(fallback);
+    }
+
+    function closeSyntaxBridge() {
+        if (!syntaxBridgePanel) return;
+        syntaxBridgePanel.style.display = 'none';
+        syntaxBridgeBtn?.classList.remove('is-active');
+    }
+
     function offerUndo(label: string, { document: target, before, after }: { document?: any; before?: string; after?: string }) {
         if (!target || typeof before !== 'string' || typeof after !== 'string' || before === after) return;
         if (typeof state.editorInstance?.undo !== 'function') return;
         if (getActiveDoc() !== target) return;
+
+        const diff = analyzeSyntaxDiff(label, before, after);
+        const bridgeContext: SyntaxBridgeContext = {
+            document: target,
+            label,
+            before,
+            after,
+            diff,
+        };
+        state.lastSyntaxBridgeContext = bridgeContext;
+        if (syntaxBridgeBtn) {
+            syntaxBridgeBtn.style.display = 'inline-flex';
+            syntaxBridgeBtn.title = `Syntax Helper: ${diff.constructName} (${label})`;
+        }
 
         // One offer at a time. Ticking through a filter's values writes once per click, and a column
         // of stacked offers would bury the panel being worked in — while only the newest of them
@@ -2016,33 +2327,21 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         dismissUndoOffer = _feedback.notify(`Studio wrote this into ${target.name}.`, {
             title: label,
             tone: 'success',
-            action: {
-                label: 'Undo',
-                onSelect: () => {
-                    if (getActiveDoc() !== target) {
-                        _feedback.notify(
-                            `Undo applies to ${target.name}. Open that document again and use its own undo.`,
-                            { title: 'Nothing undone', tone: 'warning' });
-                        return;
-                    }
-                    if (state.editorInstance?.getValue?.() !== after) {
-                        _feedback.notify(
-                            'The script changed again after this edit, so undoing it here would take back the wrong change. '
-                            + 'The editor\'s own undo still steps back through every change in order.',
-                            { title: 'Nothing undone', tone: 'warning' });
-                        return;
-                    }
-                    state.editorInstance?.undo?.();
-                    if (state.editorInstance?.getValue?.() !== before) {
-                        _feedback.notify(
-                            'The editor undid a different change than expected, so the script is not back where it started. '
-                            + 'Check the script before saving.',
-                            { title: 'Undo Incomplete', tone: 'error' });
-                        return;
-                    }
-                    _feedback.notify(`${label} was undone.`, { title: 'Script restored', tone: 'info' });
+            actions: [
+                {
+                    label: 'Show what changed',
+                    primary: true,
+                    onSelect: () => {
+                        void openSyntaxBridge(bridgeContext);
+                    },
                 },
-            },
+                {
+                    label: 'Undo',
+                    onSelect: () => {
+                        performUndoFor(target, before, after, label);
+                    },
+                },
+            ],
         });
     }
 
@@ -2875,7 +3174,9 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
                     const created = await opts.onCreateDocument({ ...request, type: 'report', workflow: reportWorkflow, scriptText });
                     created.reportWorkflow = reportWorkflow;
                     state.catalogReports.push(created);
-                    await openCatalogReport(created, reportWorkflow === 'dashboard' ? 'canvas' : 'split');
+                    const pref = getStoredProjectionPreference();
+                    const targetProj = (pref === 'code' || pref === 'split') ? pref : (reportWorkflow === 'dashboard' ? 'canvas' : 'split');
+                    await openCatalogReport(created, targetProj);
                     return;
                 } catch (error) {
                     _feedback.notify(errorMessage(error) || 'The report could not be created.', { title: 'Create Report Failed', tone: 'error' });
@@ -2897,11 +3198,15 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
             content = seed ? STUDIO_STARTER_SCRIPTS.report : REPORT_WORKFLOW_TEMPLATES[workflowKey];
             // A new dashboard opens on the canvas it is about to be built on. Splitting the window
             // with a script the author has not written yet teaches the wrong first lesson — the
-            // script is the escape hatch, and the projection buttons keep it one click away. The
-            // choice is per document from then on, because `setProjection` records it on the
-            // document, so switching to Split here is remembered for this report alone. A paginated
-            // report still opens split: its page setup is largely script-shaped.
-            proj = reportWorkflow === 'dashboard' ? 'canvas' : 'split';
+            // script is the escape hatch, and the projection buttons keep it one click away.
+            // If the author has learned and expressed a preference for 'code' or 'split' view,
+            // respect that preference.
+            const pref = getStoredProjectionPreference();
+            if (pref === 'code' || pref === 'split') {
+                proj = pref;
+            } else {
+                proj = reportWorkflow === 'dashboard' ? 'canvas' : 'split';
+            }
         } else if (type === 'etl') {
             path = `untitled_pipeline_${etlCount}.etlsql`;
             content = seed ? STUDIO_STARTER_SCRIPTS.etl : '';
@@ -2951,9 +3256,11 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
     }
 
     async function openCatalogReport(report: StudioDynamic, proj = 'split') {
+        const pref = getStoredProjectionPreference();
+        const effectiveProj = (pref === 'code' || pref === 'split') ? pref : proj;
         const existing = state.documents.find(doc => doc.reportId === report.id);
         if (existing) {
-            existing.projection = proj;
+            existing.projection = effectiveProj;
             if (!existing.lease?.acquired && hasCapability('ScriptSave')) {
                 void leaseLifecycle.reacquire(existing as any, { silent: true });
             }
@@ -2972,7 +3279,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
                 name: opened.name || `${report.name}.rptsql`,
                 content: opened.content || '',
                 isDirty: false,
-                projection: proj
+                projection: effectiveProj
             };
             state.documents.push(newDoc);
             await switchDoc(newDoc.id);
@@ -6017,7 +6324,13 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
     }
 
     queryElements(shell, '[data-projection]').forEach(btn => {
-        btn.addEventListener('click', () => setProjection(btn.dataset.projection));
+        btn.addEventListener('click', () => {
+            const p = btn.dataset.projection;
+            if (p) {
+                storeProjectionPreference(p);
+                setProjection(p);
+            }
+        });
     });
 
     queryElements(shell, '.etlsql-studio-rail-btn[data-activity]').forEach(btn => {
@@ -6042,6 +6355,13 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
     queryElement(shell, '[data-action="save"]')?.addEventListener('click', handleSave);
     queryElement(shell, '[data-action="publish"]')?.addEventListener('click', () => handlePublishCatalogReport());
     queryElement(shell, '[data-action="exit"]')?.addEventListener('click', handleExitStudio);
+    queryElement(shell, '[data-action="syntax-bridge"]')?.addEventListener('click', () => {
+        if (syntaxBridgePanel && syntaxBridgePanel.style.display !== 'none') {
+            closeSyntaxBridge();
+        } else {
+            void openSyntaxBridge();
+        }
+    });
     queryElement(shell, '[data-action="code-format"]')?.addEventListener('click', handleFormatDocument);
     queryElement(shell, '[data-action="code-run"]')?.addEventListener('click', () => queryElement(shell, '[data-action="run"]')?.click());
     queryElement(shell, '[data-action="stop"]')?.addEventListener('click', handleStopRun);
@@ -6288,7 +6608,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
             await ensureReportWorkflow(active);
             checkRecoverableDraft(active);
         }
-        setProjection(getActiveDoc()?.projection || 'split');
+        setProjection(getActiveDoc()?.projection || getStoredProjectionPreference() || 'split');
         renderVisualStage();
         setContextualRailVisibility();
     }
@@ -6308,6 +6628,10 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         deleteVisual,
         openCatalogReport,
         publishCatalogReport: handlePublishCatalogReport,
+        openSyntaxBridge,
+        closeSyntaxBridge,
+        getStoredProjectionPreference,
+        storeProjectionPreference,
         dispose: () => {
             document.removeEventListener('click', onOutsideClick);
             document.removeEventListener('keydown', onShellKeyDown);

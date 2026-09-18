@@ -51,7 +51,7 @@ export interface ScriptEditorHandle {
     triggerCompletion: () => boolean;
     setValue: (text: string) => void;
     replaceAll: (text: string) => ScriptEditorSpan | null;
-    revealRange: (from: number, to: number) => ScriptEditorSpan | undefined;
+    revealRange: (from: number, to: number, select?: boolean) => ScriptEditorSpan | undefined;
     revealLines: (fromLine: number, toLine?: number) => ScriptEditorSpan | null;
     gotoLine: (line: number, column?: number) => void;
     getCursorLine: () => number;
@@ -205,7 +205,7 @@ export function diagnosticSeverity(d?: ScriptEditorDiagnostic): 'error' | 'info'
  * @property {(text: string) => void} setValue
  * @property {(text: string) => ({from: number, to: number}|null)} replaceAll Dispatches only the
  *   span that changed, so the caret and scroll position survive a GUI-generated edit.
- * @property {(from: number, to: number) => void} revealRange
+ * @property {(from: number, to: number, select?: boolean) => void} revealRange
  * @property {(fromLine: number, toLine?: number) => void} revealLines
  * @property {(line: number, column?: number) => void} gotoLine
  * @property {() => void} focus            Puts the caret back in the editor.
@@ -825,13 +825,20 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
             });
             return { from, to: from + insert.length };
         },
-        /** Scrolls a document range into view without stealing focus from the canvas. */
-        revealRange: (from: number, to: number): ScriptEditorSpan | undefined => {
+        /** Scrolls a document range into view. Optionally selects it so the author can see what changed. */
+        revealRange: (from: number, to: number, select = false): ScriptEditorSpan | undefined => {
             if (!view) return;
             const length: number = view.state.doc.length;
             const start = Math.max(0, Math.min(length, Number(from) || 0));
             const end = Math.max(start, Math.min(length, Number(to) || start));
-            view.dispatch({ effects: EditorView.scrollIntoView(start, { y: 'center' }) });
+            const spec: { effects: any; selection?: { anchor: number; head: number } } = {
+                effects: EditorView.scrollIntoView(start, { y: 'center' }),
+            };
+            if (select) {
+                spec.selection = { anchor: start, head: end };
+                view.focus();
+            }
+            view.dispatch(spec);
             return { from: start, to: end };
         },
         /**

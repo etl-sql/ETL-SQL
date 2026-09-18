@@ -4922,6 +4922,24 @@ body.vscode-dark .etlsql-cw-missing-hint {
 .etlsql-studio-code-toolbar>strong { font-size:.75rem; }
 .etlsql-studio-code-status { color:var(--portal-text-soft,#8b949e);font-size:.6875rem; }
 .etlsql-studio-code-toolbar-spacer { flex:1; }
+.etlsql-workflow-syntax-tag { display:inline-block;margin-top:2px;padding:1px 4px;border-radius:3px;background:rgba(56,139,253,.15);color:var(--portal-accent,#58a6ff);font-size:.625rem;font-family:monospace; }
+.etlsql-studio-syntax-bridge { display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-bottom:1px solid var(--portal-border,#30363d);background:var(--portal-surface-subtle,#1b222c);max-height:280px;overflow-y:auto;flex-shrink:0; }
+.etlsql-syntax-bridge-header { display:flex;align-items:center;justify-content:space-between;gap:8px; }
+.etlsql-syntax-bridge-title { display:flex;align-items:center;gap:8px;font-weight:600;font-size:.8125rem;color:var(--portal-text,#f0f6fc); }
+.etlsql-syntax-badge { padding:2px 7px;border-radius:999px;background:rgba(56,139,253,.2);color:var(--portal-accent,#58a6ff);font-size:.6875rem;font-family:monospace;font-weight:600; }
+.etlsql-syntax-bridge-close { border:0;background:transparent;color:var(--portal-text-soft,#8b949e);font-size:16px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:4px; }
+.etlsql-syntax-bridge-close:hover { color:var(--portal-text,#f0f6fc);background:var(--portal-surface,#161b22); }
+.etlsql-syntax-bridge-desc { margin:0;font-size:.75rem;color:var(--portal-text-soft,#8b949e);line-height:1.4; }
+.etlsql-syntax-snippet-box { display:flex;flex-direction:column;gap:4px;border:1px solid var(--portal-border,#30363d);border-radius:6px;background:var(--portal-bg,#0d1117);padding:8px 10px; }
+.etlsql-syntax-snippet-box pre { margin:0;font-size:.75rem;font-family:monospace;white-space:pre-wrap;word-break:break-word;color:var(--portal-text,#f0f6fc);max-height:80px;overflow-y:auto; }
+.etlsql-syntax-keywords { display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px; }
+.etlsql-syntax-keywords>span { font-size:.6875rem;color:var(--portal-text-soft,#8b949e); }
+.etlsql-syntax-kw-chip { padding:2px 8px;border:1px solid var(--portal-border,#30363d);border-radius:4px;background:var(--portal-surface,#161b22);color:var(--portal-text,#f0f6fc);font-size:.6875rem;font-family:monospace;cursor:pointer; }
+.etlsql-syntax-kw-chip:hover,.etlsql-syntax-kw-chip.is-active { border-color:var(--portal-accent,#58a6ff);color:var(--portal-accent,#58a6ff);background:rgba(56,139,253,.08); }
+.etlsql-syntax-help-content { margin-top:4px;padding:8px 10px;border:1px solid rgba(56,139,253,.2);border-radius:6px;background:rgba(56,139,253,.04);font-size:.75rem;line-height:1.4;max-height:120px;overflow-y:auto;color:var(--portal-text,#f0f6fc); }
+.etlsql-syntax-actions { display:flex;align-items:center;gap:8px;margin-top:4px; }
+.etlsql-studio-btn-syntax { border-color:rgba(56,139,253,.4)!important;color:var(--portal-accent,#58a6ff)!important; }
+.etlsql-studio-btn-syntax.is-active { background:rgba(56,139,253,.15)!important; }
 .etlsql-studio-inspector { display:none;flex:1;flex-direction:column;gap:14px;padding:12px;overflow-y:auto; }
 .etlsql-studio-properties-back { display:inline-flex;align-items:center;gap:6px;align-self:flex-start;padding:4px 0;border:0;background:transparent;color:var(--portal-accent,#58a6ff);font:inherit;font-size:.75rem;cursor:pointer; }
 .etlsql-studio-property-fields { display:flex;flex-direction:column;gap:6px;padding-bottom:10px;border-bottom:1px solid var(--portal-border,#30363d); }

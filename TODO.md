@@ -437,7 +437,7 @@ fixes or certify a production host.
   validation failure, a repair, and cleanup. Explain each ETL-SQL statement as it is introduced,
   without requiring a database, SMTP server, or native SQL knowledge. Verify real execution in
   both hosts, including the restricted practice permissions above.
-- [ ] **P2 — Complete the visual-to-script learning bridge.** Observed the sample dashboard opens
+- [x] **P2 — Complete the visual-to-script learning bridge.** Observed the sample dashboard opens
   Canvas-only; its workflow explains construction steps but does not introduce the corresponding
   syntax. `offerUndo` reports that Studio wrote something, while guided explanations are mostly
   strings embedded in the UI. Offer an obvious Show what changed path, exact changed-range
