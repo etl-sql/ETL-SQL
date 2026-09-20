@@ -117,10 +117,12 @@ requires a bundler.
    modules, wired into the pre-push gate beside the type gate. `no-undef` and `no-dupe-keys` alone
    would have caught ten of the twelve defects above, in seconds, with no structural change. The VS
    Code extension and its React UI already carry configs, so this extends an existing practice.
-2. **Split `designer.js` and `report-runtime.js`.** Mechanical extraction is implemented:
-   the designer has 11 modules, while the runtime has a 356-line entry and 16 sibling modules.
-   Online hosts load ES modules; offline snapshots embed the drift-gated generated bundle.
-   Stateful designer and Studio closure refactors remain tracked in TODO §2.
+2. **Split `designer.js` and `report-runtime.js`.** Mechanical extraction and the stateful
+   TypeScript follow-up are complete. Designer, script workbench, Studio, and guided authoring
+   compose focused controllers with typed dependencies. Private controller state stays with its
+   owner; shared state and disposal remain coordinated by the entry points.
+   Online hosts load ES modules; offline snapshots embed the drift-gated generated runtime bundle.
+   Verification is recorded in [the browser split baseline](docs/releases/v0.20.0-browser-split-baseline.md).
 3. **Repair the browser and Portal test lanes.** A separate problem from typing, and it must not be
    folded into it — none of these failures live in the browser sources. The lane reports one fixture
    failure as 231 identical, contentless messages naming none of the real conditions, which has

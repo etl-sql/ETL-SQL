@@ -129,7 +129,7 @@ namespace ETL_SQL.Tests.Reporting
         public void ReportBuilder_ExposesNativeCustomCompositionRecipes()
         {
             var root = FindRepoRoot();
-            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "designer.js"));
+            var js = File.ReadAllText(Path.Combine(root, "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", "designer-inspector.js"));
 
             Assert.Contains("Composition recipe", js);
             Assert.Contains("Box plot + mean tick", js);

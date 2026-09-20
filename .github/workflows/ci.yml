@@ -68,6 +68,9 @@ jobs:
       - name: Build
         run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
 
+      - name: Verify generated browser contracts against registered hosts
+        run: dotnet test tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj --no-restore --no-build --configuration Release --filter FullyQualifiedName~BrowserContractsGeneratorTests
+
       - name: Audit test lanes and structure
         shell: pwsh
         run: .\scripts\Get-TestLaneInventory.ps1 -FailOnIssues

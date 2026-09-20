@@ -433,8 +433,9 @@ Files copied under these host folders are generated sync outputs and must not be
 
 When changing report runtime JavaScript, CSS, themes, or shared browser dependencies:
 
-All 44 shared report runtime and designer modules are authored under
-`src/ETL-SQL.ReportRuntime/Resources/TypeScript/`. Their matching paths under `Shared/` (and the
+Shared report runtime and designer modules live under
+`src/ETL-SQL.ReportRuntime/Resources/TypeScript/`. The route-table module is generated from named
+host endpoints; see the asset standards for regeneration. Their matching paths under `Shared/` (and the
 concatenated offline bundle `report-runtime.bundle.js`) are generated; edit the TypeScript source.
 `sync-assets.js` compiles TypeScript modules before bundling and copying.
 Install the pinned compiler with `npm ci --prefix scripts/typecheck`. For sandbox development,

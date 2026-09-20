@@ -41,7 +41,7 @@ public class DatasetController(
 
     // ── GET /api/datasets ─────────────────────────────────────────────────────
 
-    [HttpGet]
+    [HttpGet(Name = "Studio.Catalog.datasetRegistry")]
     public async Task<IActionResult> GetAll()
     {
         return Ok(await queries.GetAllAsync(CurrentUserId, IsAdmin));

@@ -12,7 +12,7 @@ To prevent code drift and duplication, all browser-based report player and catal
 src/ETL-SQL.ReportRuntime/Resources/Shared/
 ```
 
-- **Rule**: Edit authored JavaScript, styles, and vendor assets here. All 44 shared runtime and
+- **Rule**: Edit authored JavaScript, styles, and vendor assets here. Shared runtime and
   designer modules are authored under `Resources/TypeScript/`; their corresponding JavaScript here is
   generated. Follow the generated banner to its source.
 - **Strictly Prohibited**: Never edit files directly inside the generated target directories of host applications. Any direct edits in host directories will be flagged as drift and overwritten by the asset synchronizer.
@@ -54,8 +54,8 @@ check mode fails on stale compilation without writing files. .NET builds consume
 
 ### Runtime module and offline bundle ownership
 
-`report-runtime.js` and the sibling `rt-*.js` files are ES modules; `rt-util.js` is generated from
-`Resources/TypeScript/rt-util.ts`, while the other parts remain authored JavaScript. Keep part imports
+`report-runtime.js` and the sibling `rt-*.js` files are ES modules generated from their matching
+`Resources/TypeScript/` sources. Keep part imports
 as single-line named imports with no aliases, and export declarations directly. The entry's
 hoisted `renderManifest` participates in the rendering cycle; do not call across that cycle at
 module initialization time.
@@ -67,10 +67,10 @@ classic-script IIFE for `OfflineSnapshotViewer`. Online hosts use `type="module"
 
 ### Planned TypeScript compilation and ownership
 
-This is the implementation design for TODO §5, recorded on 2026-09-08. The shared `rt-util` pilot
-and designer utility now use this pipeline. Portal conversion and broader migration remain pending. The source roots,
-compiler, drift checks, sync integration, and sandbox startup compilation are implemented; the
-remaining acceptance steps apply to each subsequent conversion.
+The pipeline designed on 2026-09-08 compiles the shared runtime and designer modules.
+The source roots, compiler, drift checks, sync integration, and sandbox startup compilation are
+implemented. Portal-owned pages remain JavaScript under `wwwroot/js/pages/`, covered by the
+browser type and lint gates. The Portal TypeScript root below is available for future conversions.
 
 Preserve browser URLs and the existing offline concatenator. Use the pinned TypeScript toolchain
 under `scripts/typecheck`; do not add another bundler or a Node invocation to the .NET build.
@@ -86,10 +86,63 @@ the TypeScript source. Shared host copies and `report-runtime.bundle.js` remain 
 Portal's generated shared copies must never become Portal-owned TypeScript inputs.
 
 Keep `.ts` sources outside served asset directories. Do not emit source maps or declarations in
-the pilot: no `.map`, `.d.ts`, or `sourceMappingURL` is shipped. Source-level debugging can be added
+generated browser output: no `.map`, `.d.ts`, or `sourceMappingURL` is shipped. Source-level debugging can be added
 later with an explicit development-only map delivery decision. Preserve copyright/license comments,
 emit LF, and retain comments needed by consumer checks. No minification or formatting cleanup is
 part of a conversion.
+
+#### Stateful browser controllers
+
+The entry points under `TypeScript/designer/` compose controllers through typed context interfaces.
+Their public exports and corresponding JavaScript URLs remain stable.
+
+| Entry point | Responsibility owners |
+| :--- | :--- |
+| `designer.ts` | `designer-history`, `designer-persistence`, `designer-canvas-render`, `designer-inspector`, `designer-inspector-format`, `designer-visual-actions`, `designer-script-sync`, `designer-pointer` |
+| `script-workbench.ts` | `workbench-sidebar`, `workbench-execution`, `workbench-overlays` |
+| `studio.ts` | Navigation, document tabs/sessions, editor hosting, run sessions, visual/pipeline views, syntax bridge, workspace explorer, data/filter/engine panels, file commands, and governance controllers in `studio-*.ts` |
+| `studio-authoring.ts` | Dialog, data, chart, report, preview, and pipeline controllers in `studio-authoring-*.ts` |
+
+The matching `*-context.ts` files own shared TypeScript contracts and DOM helpers. Type-only
+re-exports preserve existing imports. Controllers keep private state, such as undo history, lease
+renewal timers, and parse sequence counters. The composition layer passes live getters and setters
+for shared bindings so sibling callbacks see current documents, selections, and editor instances.
+Controller construction must not read deferred bindings before shell initialization. Keep DOM
+listeners and disposal paired in the composition layer when their lifetime spans controllers.
+
+`test-browser-controllers.mjs` covers isolated history, stale parse invalidation, explicit run
+selection, and cancellation. Consumer assertions name the module owning each behavior. Authoring
+architecture checks discover all `studio-authoring*.js` modules, and the route guard checks every
+Studio TypeScript module except the generated route owner.
+
+#### Generated Studio routes and palette contracts
+
+`designer/studio-routes.generated.ts` is generated from named endpoints in the registered Portal
+and WorkstationEditor hosts. It is re-exported by `studio-contracts.ts`; browser callers must use
+those tables. `Studio.Shared.*` endpoint names supply common routes, `Studio.Catalog.*` supplies
+Portal routes, and `Studio.Workspace.*` supplies desktop routes. Generation verifies that the
+desktop host serves every common path with the same HTTP methods. No source-text route parsing
+or separate hand-maintained URL inventory is involved.
+
+After changing endpoint names, paths, methods, or browser DTOs, regenerate from the repository root:
+
+```powershell
+$env:ETLSQL_UPDATE_BROWSER_CONTRACTS = '1'
+try {
+    dotnet test tests\ETL-SQL.Portal.Tests --filter FullyQualifiedName~BrowserContractsGeneratorTests
+} finally {
+    Remove-Item Env:ETLSQL_UPDATE_BROWSER_CONTRACTS
+}
+node scripts\sync-assets.js
+node scripts\sync-assets.js -Check
+```
+
+Without the update flag, the same tests reject stale generated routes and DTO declarations.
+Pre-push and CI run these checks. The existing strict browser compiler checks route-key usage.
+`PipelinePaletteCoverage` compares the palette's inferred IDs with the generated `PipelineTaskKind`
+union, rejecting both invalid IDs and missing kinds. The consumer gate includes negative compiler
+fixtures for these failures and checks that Studio does not bypass its route tables with raw URLs.
+Behavioral endpoint, authorization, and browser journey tests remain separate requirements.
 
 #### Mixed-source compilation
 

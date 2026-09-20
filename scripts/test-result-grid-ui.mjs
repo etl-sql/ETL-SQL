@@ -1,3 +1,13 @@
+import { readFileSync as readSplitSource } from 'node:fs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { importSourceModule } from './lib/import-source-module.mjs';
+
+const designerPersistenceSource = readSplitSource('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer-persistence.js', 'utf8');
+
 // Unit tests for the script workbench result grid's behaviour: what the filter box matches, how a
 // value becomes display text, and what CSV export writes.
 //
@@ -6,13 +16,7 @@
 // invoked as bare `node scripts/<file>` with no package.json, which is why the sibling tests
 // hand-roll a DOM rather than reaching for jsdom.
 
-import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 
-import { importSourceModule } from './lib/import-source-module.mjs';
 
 // Imported from a sibling of the source, not a temp directory: designer.js imports
 // './visual-preview.js', which only resolves from the folder the author wrote it in.
@@ -165,15 +169,15 @@ assert.equal(editLeaseRetryDelay('not-a-date', 0), 30_000);
 
 // Pin the browser lifecycle wiring as well as its pure timing rule: mount acquires, the timer
 // renews, contention disables Save, and every browser exit/re-entry path releases or recovers.
-assert.match(sourceText, /apiJson\('\/api\/designer\/lease', 'POST', \{ reportId \}\)/);
-assert.match(sourceText, /scheduleLeaseAttempt\(120_000\)/);
+assert.match(designerPersistenceSource, /apiJson\('\/api\/designer\/lease', 'POST', \{ reportId: context\.reportId \}\)/);
+assert.match(designerPersistenceSource, /scheduleLeaseAttempt\(120_000\)/);
 // The optional `)` absorbs the JSDoc cast the browser type gate wraps this call in:
 // `/** @type {...} */ (topbar.querySelector('#dsgn-save')).disabled = true`. The claim is that
 // the save button is disabled without a lease, not that the two tokens are adjacent.
-assert.match(sourceText, /querySelector\('#dsgn-save'\)\)?\.disabled = true/);
+assert.match(designerPersistenceSource, /querySelector\('#dsgn-save'\)\)?\.disabled = true/);
 assert.match(sourceText, /addEventListener\('pagehide', pageHideLeaseHandler\)/);
 assert.match(sourceText, /addEventListener\('pageshow', pageShowLeaseHandler\)/);
-assert.match(sourceText, /apiJson\(`\/api\/designer\/lease\/\$\{reportId\}`, 'DELETE'\)/);
+assert.match(designerPersistenceSource, /apiJson\(`\/api\/designer\/lease\/\$\{context\.reportId\}`, 'DELETE'\)/);
 
 // The cap bounds the DOM but never the data: export reads the filtered rows, not what was drawn,
 // so a truncated grid still exports in full.

@@ -1,7 +1,11 @@
+import { readFileSync as readSplitSource } from 'node:fs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-// The designer is now eleven modules rather than one file, so each assertion names the module that
+const designerCanvasRenderSource = readSplitSource('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer-canvas-render.js', 'utf8');
+
+
+// The designer is split into focused modules, so each assertion names the module that
 // owns the behaviour. Concatenating the modules and grepping the result would keep this script green
 // while saying nothing about where anything lives — and the whole point of the split was that the
 // formatting inspector is its own unit.
@@ -10,13 +14,13 @@ const designer = await readFile(`${root}/designer.js`, 'utf8');
 const formatInspector = await readFile(`${root}/visual-format-inspector.js`, 'utf8');
 const css = await readFile(`${root}/designer.css`, 'utf8');
 
-// Discovery, hierarchy and empty states stay with createDesigner.
+// The shell owns palette discovery; the canvas controller owns hierarchy and empty states.
 assert.match(designer, /id="dsgn-palette-search"/);
 assert.match(designer, /function filterPalette\(\)/);
 assert.match(designer, /data-search="\$\{type\} \$\{cat\.name\}"/);
-assert.match(designer, /Build your first visual/);
-assert.match(designer, /No datasets yet/);
-assert.match(designer, /No visuals on this page/);
+assert.match(designerCanvasRenderSource, /Build your first visual/);
+assert.match(designerCanvasRenderSource, /No datasets yet/);
+assert.match(designerCanvasRenderSource, /No visuals on this page/);
 assert.match(designer, /title: 'Save report', label: 'Save', primary: true/);
 assert.match(designer, /title: 'Preview report', label: 'Preview'/);
 
@@ -40,6 +44,6 @@ assert.match(css, /\.etlsql-dsgn-slider-row/);
 assert.match(css, /\.etlsql-dsgn-typography-grid/);
 
 // Native SVG preview contract.
-assert.match(designer, /snapshotPackage\.visualSvgs/);
+assert.match(designerCanvasRenderSource, /snapshotPackage\.visualSvgs/);
 
 console.log('Designer discovery, hierarchy, empty-state, responsive, formatting pickers, and native SVG preview contract passed.');

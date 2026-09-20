@@ -17,6 +17,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - The browser sources are linted. `eslint.config.mjs` at the repository root points `eslint:recommended` at the canonical shared assets and the Portal's own modules — the same sources the type gate covers — and `node scripts/lint-browser.mjs` gates them from pre-push and CI against `browser-lint-baseline.txt`, on the same shrink-only ratchet as the type baseline. A file ESLint cannot parse is never baselined.
 
 ### Changed
+- Designer, script workbench, Studio, and guided authoring now compose focused TypeScript
+  controllers for canvas editing, properties, execution, document navigation, governance, and
+  authoring dialogs. Existing host entry points remain stable. Designer HTML escaping now handles
+  `>` consistently, and its JSDoc references the complete options contract.
+
+- Studio route tables are generated from registered Portal and WorkstationEditor endpoints.
+  Validation checks shared paths and HTTP methods, while strict TypeScript checks route keys and
+  complete pipeline palette coverage. Generated contract drift is checked by pre-push and CI.
 
 - Shared toast, confirmation, and prompt dialogs now compile from strict TypeScript
   (`feedback.ts`), preserving classic-script loading and existing behavior.
@@ -134,12 +142,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- SMTP explicitly rejects a missing execution context before message or attachment processing.
+
 - Browser action expressions and conditional formatting now parse `<>` as inequality. Equal values
   no longer produce an incorrect result because the operator was split into `<` and `>`.
-- Orchestrator ad-hoc job execution disposes cancellation tokens on completion, evicts stale completed jobs via a 1-hour retention policy, and handles pre-try faults so submissions do not hang in queued state.
+- Orchestrator ad-hoc jobs dispose cancellation sources and record completion even when scope creation or executor resolution fails. Setup errors are sanitized in status and logs. Completed jobs are evicted after one hour or when retention exceeds 1,000 entries; active jobs are preserved.
 - FlatFile and SMTP connectors enforce execution context presence during path resolution, preventing unvalidated path access when context is missing.
-- Live TUI visualizer and execution tree demo cancel and dispose cancellation token sources cleanly, including on evaluation failure.
-- Governance script analysis logs exceptions when linting instead of silently swallowing errors.
+- CLI execution-tree cancellation sources are disposed when setup, evaluation, or rendering fails. The execution tree demo also disposes its cancellation source.
+- Governance analysis runs its in-memory rules synchronously without blocking on async work. Rule failures return an explicit sanitized error instead of appearing as an empty findings list, including in Release builds.
 - Portal storage usage sampler catches and records unexpected sampling failures, preventing unhandled background service faults.
 - Admin catalog and dataset management UIs validate and coerce numeric pagination and profiling statistics before inserting into the DOM.
 - Removed extraneous debug traces from the production report transport and layout modules.

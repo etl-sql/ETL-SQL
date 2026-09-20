@@ -51,7 +51,7 @@ public class ConnectorsController(
     /// <summary>
     /// Returns the schema descriptor for a specific connector type, or all registered connector schemas.
     /// </summary>
-    [HttpGet("schema")]
+    [HttpGet("schema", Name = "Studio.Shared.connectorsSchema")]
     public IActionResult GetSchemas([FromQuery] string? type)
     {
         if (!string.IsNullOrWhiteSpace(type))

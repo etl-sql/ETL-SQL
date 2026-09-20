@@ -1,10 +1,18 @@
+import { readFileSync as readSplitSource } from 'node:fs';
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
 import { readPortalPage, readPortalPageModule } from './lib/portal-page.mjs';
 
+const studioVisualStageSource = readSplitSource('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-visual-stage.js', 'utf8');
+const studioFilterPanelSource = readSplitSource('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-filter-panel.js', 'utf8');
+
+const designerPersistenceSource = readSplitSource('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer-persistence.js', 'utf8');
+const designerCanvasRenderSource = readSplitSource('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer-canvas-render.js', 'utf8');
+
+
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
-const [studio, designerHost, api, controller, designer, sharedStudio, studioState, studioContracts, designerCss, css, program, portalHeader, indexPage, adminPage] = await Promise.all([
+const [studio, designerHost, api, controller, designer, sharedStudio, studioState, designerCss, css, program, portalHeader, indexPage, adminPage] = await Promise.all([
   Promise.resolve(readPortalPage('studio')),
   Promise.resolve(readPortalPage('designer')),
   read('src/ETL-SQL.Portal/wwwroot/js/api.js'),
@@ -12,7 +20,6 @@ const [studio, designerHost, api, controller, designer, sharedStudio, studioStat
   read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js'),
   read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio.js'),
   read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-state.js'),
-  read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-contracts.js'),
   read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.css'),
   read('src/ETL-SQL.Portal/wwwroot/css/portal.css'),
   read('src/ETL-SQL.Portal/Program.cs'),
@@ -54,27 +61,25 @@ assert.match(studio, /createStudioWorkbench/);
 assert.match(studio, /\/api\/designer\/save/);
 assert.match(designer, /id="dsgn-design-mode"/);
 assert.match(designer, /id="dsgn-code-mode"/);
-assert.match(designer, /\/api\/studio\/reports/);
+assert.match(designerPersistenceSource, /\/api\/studio\/reports/);
 assertAbsentEverywhere(/\/api\/scripts\/upload/, 'the legacy script-upload endpoint');
 assert.match(designer, /opts\.hideTopbar/);
-assert.match(sharedStudio, /hideTopbar: true/);
-assert.match(sharedStudio, /hideSidebar: true/);
+assert.match(studioVisualStageSource, /hideTopbar: true/);
+assert.match(studioVisualStageSource, /hideSidebar: true/);
 assert.match(sharedStudio, /propertiesHost/);
-assert.match(sharedStudio, /requireDataFirst: true/);
+assert.match(studioVisualStageSource, /requireDataFirst: true/);
 assert.match(studioState, /snapshotCache: new Map/);
-assert.match(studioContracts, /['"]\/api\/designer\/parse['"]/);
-assert.match(studioContracts, /['"]\/api\/designer\/patch['"]/);
 assert.match(sharedStudio, /canonicalDesignerMutation/);
 assertAbsentEverywhere(/script\.replace\s*\(/, 'raw text mutation of the script');
 assert.match(sharedStudio, /data-property-field/);
 assert.match(sharedStudio, /data-action="run-selected"/);
-assert.match(sharedStudio, /No filters yet/);
+assert.match(studioFilterPanelSource, /No filters yet/);
 assert.match(designer, /data-edit-title/);
 assert.match(designer, /refreshSnapshot: renderCanvas/);
 assert.match(sharedStudio, /data-studio-tabbar/);
 assert.match(sharedStudio, /data-studio-overflow-btn/);
 assert.match(sharedStudio, /data-studio-tab-dropdown/);
-assert.match(designer, /dataset\.vid/);
+assert.match(designerCanvasRenderSource, /dataset\.vid/);
 assert.match(designerCss, /\.etlsql-studio-tabbar/);
 assert.match(designerCss, /\.etlsql-studio-tab-dropdown/);
 assert.match(designerHost, /await studioApi\.session\(\)/);

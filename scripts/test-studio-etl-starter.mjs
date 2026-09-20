@@ -4,25 +4,25 @@ import { readFile } from 'node:fs/promises';
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
 
-const [studioJs, contractsJs, policyCs] = await Promise.all([
-  read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio.js'),
+const [studioHome, contractsJs, policyCs] = await Promise.all([
+  read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-navigation.js'),
   read('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-contracts.js'),
   read('src/ETL-SQL.Portal/Services/PortalInteractiveRunPolicy.cs')
 ]);
 
 // ── 1. Studio Home Quick Actions Markup ─────────────────────────────────────
 assert.match(
-  studioJs,
+  studioHome,
   /data-create-from-home="etl"/,
   'Studio Home quick action cards must include an ETL creation action.'
 );
 assert.match(
-  studioJs,
+  studioHome,
   /data-create-from-home="etl"[^>]*data-seed-sample/,
   'Sample ETL pipeline card must specify data-seed-sample to seed the starter script.'
 );
 assert.match(
-  studioJs,
+  studioHome,
   /Sample ETL pipeline/,
   'Studio Home quick action card title must identify the Sample ETL pipeline.'
 );

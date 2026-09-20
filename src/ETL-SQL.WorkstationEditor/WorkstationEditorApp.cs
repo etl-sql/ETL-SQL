@@ -217,7 +217,7 @@ public static class WorkstationEditorApp
                 description = $"{c.Type} connection ({c.Name})"
             }).ToList();
             return Results.Json(new { connections }, JsonOptions);
-        });
+        }).WithName("Studio.Workspace.connections");
 
         app.MapGet("/api/session/metadata", async (string? documentUri, IMetadataManager metadata, CancellationToken cancellationToken) =>
         {
@@ -348,7 +348,7 @@ public static class WorkstationEditorApp
             {
                 return Results.BadRequest(new { error = ex.Message });
             }
-        });
+        }).WithName("Studio.Workspace.files");
 
         app.MapGet("/api/files/revision", async (string path, WorkstationWorkspace workspace, CancellationToken cancellationToken) =>
         {

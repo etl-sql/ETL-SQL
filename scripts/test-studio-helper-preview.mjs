@@ -1,7 +1,12 @@
+import { readFileSync as readSplitSource } from 'node:fs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const studioAuthoringPipelineSource = readSplitSource('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-authoring-pipeline.js', 'utf8');
+const studioAuthoringDataSource = readSplitSource('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-authoring-data.js', 'utf8');
+
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const queryWorkbenchSource = readFileSync(path.join(repo, 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-query-workbench.js'), 'utf8');
@@ -26,13 +31,13 @@ assert.match(queryWorkbenchSource, /The query ran successfully but returned no r
 
 // ── 4. Clarify engine vs remote context in Studio authoring surfaces ──────────
 // Execution task editor passes context: 'remote' and clarifies remote execution
-assert.match(authoringSource, /context:\s*'remote'/,
+assert.match(studioAuthoringPipelineSource, /context:\s*'remote'/,
     'studio-authoring openPipelineTaskEditor must configure execution workbench with context: remote');
-assert.match(authoringSource, /remote context[\s\S]*?EXECUTE[\s\S]*?BEGIN … END[\s\S]*?Preceding script variables and #temp staging tables are not executed/,
+assert.match(studioAuthoringPipelineSource, /remote context[\s\S]*?EXECUTE[\s\S]*?BEGIN … END[\s\S]*?Preceding script variables and #temp staging tables are not executed/,
     'studio-authoring openPipelineTaskEditor must display note explaining remote context and bounded execution without predecessors');
 
 // Dataset wizard passes context: 'engine'
-assert.match(authoringSource, /context:\s*'engine'/,
+assert.match(studioAuthoringDataSource, /context:\s*'engine'/,
     'studio-authoring mountQueryWorkbench must configure dataset wizard query workbench with context: engine');
 
 // ── 5. studio-authoring-ui sampleGridMarkup teaches zero rows ─────────────────

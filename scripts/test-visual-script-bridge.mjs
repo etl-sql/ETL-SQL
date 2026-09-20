@@ -1,5 +1,11 @@
+import { readFileSync as readSplitSource } from 'node:fs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+
+const studioContextSource = readSplitSource('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-context.js', 'utf8');
+const studioReportWorkflowSource = readSplitSource('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-report-workflow.js', 'utf8');
+const studioSyntaxBridgeSource = readSplitSource('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-syntax-bridge.js', 'utf8');
+
 
 const root = new URL('../', import.meta.url);
 const read = path => readFile(new URL(path, root), 'utf8');
@@ -13,17 +19,17 @@ const [studioJs, scriptEditorJs, feedbackJs, designerCss] = await Promise.all([
 
 // ── 1. Learned Preference for Code View ───────────────────────────────────────
 assert.match(
-  studioJs,
+  studioContextSource,
   /etlsql-studio-projection-preference/,
   'Studio must define a localStorage key for learned projection preference.'
 );
 assert.match(
-  studioJs,
+  studioContextSource,
   /function getStoredProjectionPreference\(\)/,
   'Studio must provide getStoredProjectionPreference to check learned projection preference.'
 );
 assert.match(
-  studioJs,
+  studioContextSource,
   /function storeProjectionPreference\(/,
   'Studio must provide storeProjectionPreference to record user projection choice.'
 );
@@ -37,27 +43,27 @@ assert.match(
 
 // ── 2. Dashboard Workflow Syntax Instruction ──────────────────────────────────
 assert.match(
-  studioJs,
+  studioReportWorkflowSource,
   /class="etlsql-workflow-syntax-tag"[^>]*>CREATE CONNECTION<\/code>/,
   'Dashboard workflow step 1 must introduce CREATE CONNECTION syntax.'
 );
 assert.match(
-  studioJs,
+  studioReportWorkflowSource,
   /class="etlsql-workflow-syntax-tag"[^>]*>CREATE VISUAL<\/code>/,
   'Dashboard workflow step 2 must introduce CREATE VISUAL syntax.'
 );
 assert.match(
-  studioJs,
+  studioReportWorkflowSource,
   /class="etlsql-workflow-syntax-tag"[^>]*>FILTER \/ SLICER<\/code>/,
   'Dashboard workflow step 3 must introduce FILTER / SLICER syntax.'
 );
 assert.match(
-  studioJs,
+  studioReportWorkflowSource,
   /class="etlsql-workflow-syntax-tag"[^>]*>LAYOUT \(\.\.\.\)<\/code>/,
   'Dashboard workflow step 4 must introduce LAYOUT (...) syntax.'
 );
 assert.match(
-  studioJs,
+  studioReportWorkflowSource,
   /class="etlsql-workflow-syntax-tag"[^>]*>OPTIONS \/ MAPPINGS<\/code>/,
   'Dashboard workflow step 5 must introduce OPTIONS / MAPPINGS syntax.'
 );
@@ -93,17 +99,17 @@ assert.match(
 
 // ── 5. offerUndo "Show What Changed" & Syntax Bridge ─────────────────────────
 assert.match(
-  studioJs,
+  studioSyntaxBridgeSource,
   /label:\s*['"]Show what changed['"]/,
   'offerUndo toast must include a "Show what changed" action alongside Undo.'
 );
 assert.match(
-  studioJs,
+  studioContextSource,
   /function analyzeSyntaxDiff\(/,
   'Studio must analyze syntax diff from visual mutation before and after scripts.'
 );
 assert.match(
-  studioJs,
+  studioSyntaxBridgeSource,
   /function openSyntaxBridge\(/,
   'Studio must implement openSyntaxBridge to switch to split view, highlight range, and display helper.'
 );

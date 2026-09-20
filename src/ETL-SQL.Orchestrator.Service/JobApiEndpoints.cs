@@ -75,10 +75,7 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 if (kvp.Value.CompletedAt.HasValue && kvp.Value.CompletedAt.Value < cutoff)
                 {
-                    if (_jobs.TryRemove(kvp.Key, out var removed))
-                    {
-                        try { removed.Cts.Dispose(); } catch (ObjectDisposedException) { }
-                    }
+                    _jobs.TryRemove(kvp.Key, out _);
                 }
             }
 
@@ -92,10 +89,7 @@ namespace ETL_SQL.Orchestrator.Service
 
                 foreach (var old in excess)
                 {
-                    if (_jobs.TryRemove(old.JobId, out var removed))
-                    {
-                        try { removed.Cts.Dispose(); } catch (ObjectDisposedException) { }
-                    }
+                    _jobs.TryRemove(old.JobId, out _);
                 }
             }
         }
@@ -230,8 +224,8 @@ namespace ETL_SQL.Orchestrator.Service
                         if (t.IsFaulted)
                         {
                             entry.Status = JobRunStatus.Failed;
-                            entry.ErrorMessage = t.Exception?.InnerException?.Message ?? "Unexpected fault before job execution started.";
-                            logger.LogError(t.Exception, "Job {JobId} faulted before execution started.", entry.JobId);
+                            entry.ErrorMessage = SecretRedactor.Redact(t.Exception?.InnerException?.Message ?? "Unexpected job execution fault.");
+                            logger.LogError("Job {JobId} faulted: {Message}", entry.JobId, entry.ErrorMessage);
                         }
                     }, TaskContinuationOptions.OnlyOnFaulted);
 
@@ -2839,13 +2833,12 @@ namespace ETL_SQL.Orchestrator.Service
         {
             entry.Status = JobRunStatus.Running;
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            using var activity = OrchestratorObservability.StartAdHocJobActivity(entry.JobId, entry.CorrelationId);
-
-            using var scope = scopeFactory.CreateScope();
-            var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
-
+            Activity? activity = null;
             try
             {
+                activity = OrchestratorObservability.StartAdHocJobActivity(entry.JobId, entry.CorrelationId);
+                using var scope = scopeFactory.CreateScope();
+                var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
                 var result = await executor.ExecuteTextAsync(
                     request.ScriptText,
                     request.SessionId,
@@ -2908,16 +2901,19 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 sw.Stop();
                 entry.ExecutionTimeMs = sw.ElapsedMilliseconds;
-                OrchestratorObservability.CompleteAdHocJobActivity(
-                    activity,
-                    entry.JobId,
-                    entry.Status,
-                    entry.ExecutionTimeMs,
-                    entry.RowsProcessed,
-                    entry.PeakMemoryBytes,
-                    entry.CpuTimeSeconds);
+                entry.Cts.Dispose();
                 entry.CompletedAt = DateTimeOffset.UtcNow;
-                try { entry.Cts.Dispose(); } catch (ObjectDisposedException) { }
+                using (activity)
+                {
+                    OrchestratorObservability.CompleteAdHocJobActivity(
+                        activity,
+                        entry.JobId,
+                        entry.Status,
+                        entry.ExecutionTimeMs,
+                        entry.RowsProcessed,
+                        entry.PeakMemoryBytes,
+                        entry.CpuTimeSeconds);
+                }
             }
         }
 

@@ -348,4 +348,52 @@ mockApiResponse[routes.patch] = () => ({
 const persistTarget = await service.persistFilter('amount');
 assert.equal(persistTarget, 'v1');
 
+// An in-flight response belongs to its original document after the author changes tabs.
+for (const kind of ['designer', 'pipeline']) {
+    for (const editedWhileAway of [false, true]) {
+        const original = { content: 'SELECT 1;', contentRevision: 1, editorState: {}, studioContext: {} };
+        const other = { content: 'SELECT 2;', contentRevision: 1, editorState: {}, studioContext: {} };
+        mockActiveDoc = original;
+        editorInstance._value = original.content;
+        visualStageRendered = false;
+        undoOffers = [];
+        notifyCalls = [];
+        let resolveResponse;
+        let signalRequested;
+        const requested = new Promise(resolve => { signalRequested = resolve; });
+        const response = new Promise(resolve => { resolveResponse = resolve; });
+        mockApiResponse[routes.parse] = () => ({ designState: { pages: [], datasets: [] } });
+        mockApiResponse[kind === 'designer' ? routes.patch : routes.pipelineTask] = () => {
+            signalRequested();
+            return response;
+        };
+        const pending = kind === 'designer'
+            ? service.canonicalDesignerMutation('Delayed visual', () => 'updated')
+            : service.canonicalPipelineMutation('Delayed task', { task: 't1' });
+        await requested;
+        mockActiveDoc = other;
+        editorInstance._value = other.content;
+        if (editedWhileAway) {
+            original.content = 'SELECT 1; -- newer typing';
+            original.contentRevision++;
+        }
+        resolveResponse({ applied: true, script: 'SELECT 1; -- patched' });
+        const result = await pending;
+        assert.equal(editorInstance._value, 'SELECT 2;');
+        assert.equal(other.content, 'SELECT 2;');
+        assert.equal(other.contentRevision, 1);
+        assert.equal(visualStageRendered, false);
+        assert.equal(undoOffers.length, 0);
+        if (editedWhileAway) {
+            assert.equal(result, null);
+            assert.equal(original.content, 'SELECT 1; -- newer typing');
+            assert.equal(notifyCalls[0].opts.tone, 'warning');
+        } else {
+            assert.notEqual(result, null);
+            assert.equal(original.content, 'SELECT 1; -- patched');
+            assert.equal(original.contentRevision, 2);
+            assert.equal(original.editorState, null);
+        }
+    }
+}
 console.log('test-studio-sql-mutations: all checks passed');

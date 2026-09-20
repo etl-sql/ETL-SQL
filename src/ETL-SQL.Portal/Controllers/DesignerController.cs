@@ -102,7 +102,7 @@ public class DesignerController : ControllerBase
     // explorer never reveals a connection the caller cannot use; temp tables come from the
     // metadata the analyze pass registered for this document.
 
-    [HttpGet("/api/session/metadata")]
+    [HttpGet("/api/session/metadata", Name = "Studio.Shared.sessionMetadata")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> SessionMetadata([FromQuery] string? documentUri, CancellationToken cancellationToken)
@@ -131,7 +131,7 @@ public class DesignerController : ControllerBase
     // ── POST /api/script/dag and /api/designer/dag ───────────────────────────
 
     [HttpPost("/api/script/dag")]
-    [HttpPost("dag")]
+    [HttpPost("dag", Name = "Studio.Shared.dag")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult ScriptDag([FromBody] ScriptDagRequest req)
@@ -158,7 +158,7 @@ public class DesignerController : ControllerBase
     // refused. Refusals are ordinary answers here — a duplicate label, a GOTO target, a script that
     // does not parse — so the canvas can say what happened instead of appearing to do nothing.
 
-    [HttpPost("pipeline-task")]
+    [HttpPost("pipeline-task", Name = "Studio.Shared.pipelineTask")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult PipelineTask([FromBody] PipelineTaskRequest req)
@@ -244,7 +244,7 @@ public class DesignerController : ControllerBase
     // span edit on the author's own bytes, so a refusal — a value the tag catalog does not accept, a
     // scope this script does not have — comes back as an ordinary answer with its reason.
 
-    [HttpPost("governance")]
+    [HttpPost("governance", Name = "Studio.Shared.governance")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult Governance([FromBody] GovernanceRequest req)
@@ -364,7 +364,7 @@ public class DesignerController : ControllerBase
     // yet, so a flat list of every name in the file would tell the author they can use things that
     // are not there — wrong only at run time, which is the most expensive place to find out.
 
-    [HttpPost("pipeline-scope")]
+    [HttpPost("pipeline-scope", Name = "Studio.Shared.pipelineScope")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult PipelineScope([FromBody] PipelineScopeRequest req)
@@ -416,7 +416,7 @@ public class DesignerController : ControllerBase
     // asked and executed would have to be trusted to ask; this one cannot execute at all, and the
     // route that does execute is the ordinary one, still behind the same policy and the same gate.
 
-    [HttpPost("pipeline-run-plan")]
+    [HttpPost("pipeline-run-plan", Name = "Studio.Shared.pipelineRunPlan")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult PipelineRunPlan([FromBody] PipelineRunPlanRequest req)
@@ -465,7 +465,7 @@ public class DesignerController : ControllerBase
     // distinguish "these tables declare no keys" from "nobody asked a database". Both leave every
     // cardinality unknown, and only one of them is a fact about the data.
 
-    [HttpPost("data-model")]
+    [HttpPost("data-model", Name = "Studio.Shared.dataModel")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> DataModel([FromBody] DataModelRequest req, CancellationToken cancellationToken)
@@ -496,7 +496,7 @@ public class DesignerController : ControllerBase
 
     // ── POST /api/designer/parse ──────────────────────────────────────────────
 
-    [HttpPost("parse")]
+    [HttpPost("parse", Name = "Studio.Shared.parse")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult Parse([FromBody] ParseDesignerRequest req)
     {
@@ -522,7 +522,7 @@ public class DesignerController : ControllerBase
 
     // ── POST /api/designer/analyze ───────────────────────────────────────────
 
-    [HttpPost("analyze")]
+    [HttpPost("analyze", Name = "Studio.Shared.analyze")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> Analyze([FromBody] AnalyzeDesignerRequest req)
@@ -549,7 +549,7 @@ public class DesignerController : ControllerBase
 
     // ── GET /api/designer/schema ─────────────────────────────────────────────
 
-    [HttpGet("schema")]
+    [HttpGet("schema", Name = "Studio.Shared.schema")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> Schema(
@@ -593,7 +593,7 @@ public class DesignerController : ControllerBase
 
     // ── POST /api/designer/complete ──────────────────────────────────────────
 
-    [HttpPost("complete")]
+    [HttpPost("complete", Name = "Studio.Shared.complete")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> Complete([FromBody] CompleteDesignerRequest req, CancellationToken cancellationToken)
@@ -704,7 +704,7 @@ public class DesignerController : ControllerBase
     // desktop reaches the same lookup through the Workstation Editor's /api/hover; both delegate to
     // the shared LanguageHoverService so the two hosts cannot drift apart.
 
-    [HttpPost("hover")]
+    [HttpPost("hover", Name = "Studio.Shared.hover")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult Hover([FromBody] HoverDesignerRequest req)
@@ -723,7 +723,7 @@ public class DesignerController : ControllerBase
     // The Portal has no workspace on disk, so there is no .etlsql-formatter.json to honour here;
     // formatting uses engine defaults. The desktop host keeps its workspace-aware variant.
 
-    [HttpPost("format")]
+    [HttpPost("format", Name = "Studio.Shared.format")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult Format([FromBody] FormatDesignerRequest req)
@@ -758,7 +758,7 @@ public class DesignerController : ControllerBase
     // one thing this must not be. An audience carries no user id and no administrator authority, so
     // it grants nothing; it only changes what the author's own predicates see.
 
-    [HttpGet("preview-as")]
+    [HttpGet("preview-as", Name = "Studio.Shared.previewAs")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> PreviewAsVocabulary(CancellationToken cancellationToken)
@@ -788,7 +788,7 @@ public class DesignerController : ControllerBase
 
     // ── POST /api/designer/run ───────────────────────────────────────────────
 
-    [HttpPost("run")]
+    [HttpPost("run", Name = "Studio.Shared.run")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptRun)]
     public async Task<IActionResult> Run([FromBody] RunDesignerRequest req, CancellationToken cancellationToken)
@@ -837,7 +837,7 @@ public class DesignerController : ControllerBase
 
     // ── POST /api/designer/preview ────────────────────────────────────────────
 
-    [HttpPost("preview")]
+    [HttpPost("preview", Name = "Studio.Shared.preview")]
     [Authorize]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
@@ -882,7 +882,7 @@ public class DesignerController : ControllerBase
     // ── POST /api/designer/data-preview ──────────────────────────────────────
 
     [HttpPost("data-preview")]
-    [HttpPost("data-sample")]
+    [HttpPost("data-sample", Name = "Studio.Shared.dataSample")]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> DataPreview(
@@ -934,7 +934,7 @@ public class DesignerController : ControllerBase
 
     // ── POST /api/designer/preview/pdf ────────────────────────────────────────
 
-    [HttpPost("preview/pdf")]
+    [HttpPost("preview/pdf", Name = "Studio.Shared.previewPdf")]
     [Authorize]
     [EnableRateLimiting("designer")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
@@ -1155,7 +1155,7 @@ public class DesignerController : ControllerBase
 
     // ── POST /api/designer/patch ──────────────────────────────────────────────
 
-    [HttpPost("patch")]
+    [HttpPost("patch", Name = "Studio.Shared.patch")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult Patch([FromBody] PatchDesignerRequest req)
     {
@@ -1181,7 +1181,7 @@ public class DesignerController : ControllerBase
 
     // ── POST /api/designer/query-filter ───────────────────────────────────────
 
-    [HttpPost("query-filter")]
+    [HttpPost("query-filter", Name = "Studio.Shared.queryFilter")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult ApplyQueryFilters([FromBody] ApplyDesignerQueryFiltersRequest req)
     {
@@ -1198,7 +1198,7 @@ public class DesignerController : ControllerBase
         }
     }
 
-    [HttpPost("option-source")]
+    [HttpPost("option-source", Name = "Studio.Shared.optionSource")]
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public IActionResult BuildOptionSource([FromBody] BuildDesignerOptionSourceRequest req)
     {

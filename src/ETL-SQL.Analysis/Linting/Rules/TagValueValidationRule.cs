@@ -15,12 +15,16 @@ public class TagValueValidationRule : ILintRule
     public string Name => "TagValue";
     public string Description => "Warns when a standard governance tag has a value outside its allowed type or enum.";
 
-    public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
+    public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context) =>
+        Task.FromResult(Analyze(script));
+
+    /// <summary>Analyzes in-memory governance metadata without asynchronous work.</summary>
+    public IEnumerable<LintResult> Analyze(Script script)
     {
         var results = new List<LintResult>();
         foreach (var stmt in script.Statements)
             AnalyzeStatement(stmt, results);
-        return Task.FromResult<IEnumerable<LintResult>>(results);
+        return results;
     }
 
     private void AnalyzeStatement(Statement? stmt, List<LintResult> results)

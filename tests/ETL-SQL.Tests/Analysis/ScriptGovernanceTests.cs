@@ -18,6 +18,23 @@ namespace ETL_SQL.Tests.Analysis;
 /// </summary>
 public class ScriptGovernanceTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Analysis_failure_is_explicit_and_does_not_expose_exception_details(bool deferred)
+    {
+        var service = new ScriptGovernanceService(_ => deferred
+            ? Enumerable.Range(0, 1).Select<int, ETL_SQL.Analysis.Linting.LintResult>(
+                _ => throw new InvalidOperationException("Password=governance-test-secret;"))
+            : throw new InvalidOperationException("Password=governance-test-secret;"));
+
+        var result = service.Read(TaggedScript);
+
+        Assert.False(result.Parsed);
+        Assert.Equal("Governance analysis could not be completed.", result.Error);
+        Assert.Empty(result.Findings);
+        Assert.Empty(result.Scopes);
+    }
     private readonly ScriptGovernanceService _service = new();
 
     private const string TaggedScript = """

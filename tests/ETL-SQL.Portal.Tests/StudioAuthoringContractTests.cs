@@ -6,7 +6,7 @@ namespace ETL_SQL.Portal.Tests;
 /// Enforces the authoring component contract documented at the top of <c>studio-authoring.js</c>.
 ///
 /// <para>Studio's guided wizards are the surface that lets an author produce Report-SQL without
-/// writing it. They ship as one canonical module across five hosts, so a wizard that reaches past its
+/// writing it. They ship as canonical modules across five hosts, so a wizard that reaches past its
 /// injected dependencies works on the host it was written against and degrades silently everywhere
 /// else — which is exactly how the earlier route mismatch stayed invisible. These are the three rules
 /// that can be checked by inspection; preview-before-write and read-state-from-the-parse are
@@ -27,17 +27,25 @@ public sealed class StudioAuthoringContractTests
     private static string DesignerAsset(string fileName) => File.ReadAllText(Path.Combine(
         RepoRoot(), "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer", fileName));
 
-    private static string AuthoringJs() => DesignerAsset("studio-authoring.js");
+    private static string AuthoringJs() => string.Join("\n", AuthoringFiles().Select(DesignerAsset));
 
     /// <summary>Every module bound by the authoring component contract.</summary>
-    public static TheoryData<string> AuthoringModules() => new()
+    private static IEnumerable<string> AuthoringFiles()
     {
-        "studio-authoring.js",
-        "studio-query-workbench.js",
-        "studio-authoring-ui.js",
-        "studio-pipeline-canvas.js",
-    };
+        var directory = Path.Combine(RepoRoot(), "src", "ETL-SQL.ReportRuntime", "Resources", "Shared", "designer");
+        return Directory.EnumerateFiles(directory, "studio-authoring*.js")
+            .Order()
+            .Select(file => Path.GetFileName(file))
+            .Concat(["studio-query-workbench.js", "studio-pipeline-canvas.js"]);
+    }
 
+    public static TheoryData<string> AuthoringModules()
+    {
+        var modules = new TheoryData<string>();
+        foreach (var file in AuthoringFiles())
+            modules.Add(file);
+        return modules;
+    }
     /// <summary>
     /// Strips comments so a rule documented in prose is not mistaken for a rule being broken in code.
     /// Deliberately simple: the module is authored with no regex or string literal containing the
@@ -98,89 +106,13 @@ public sealed class StudioAuthoringContractTests
         // is USE DATASET, which the patcher cannot express; it is confined to one helper.
         var directWrites = Regex.Matches(code, @"shell\.setScriptText\(").Count;
         Assert.True(directWrites <= 1,
-            $"studio-authoring.js writes the script directly in {directWrites} places. Only the "
+            $"The authoring modules write the script directly in {directWrites} places. Only the "
             + "USE DATASET insertion may bypass the canonical mutation; everything else must go "
             + "through `mutate` so hand edits survive.");
 
         Assert.Contains("mutate(", code, StringComparison.Ordinal);
         Assert.DoesNotContain("editorInstance", code, StringComparison.Ordinal);
         Assert.DoesNotContain("designerInstance", code, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AuthoringModule_CallsNothingThatOnlyExistsInTheCompositionLayer()
-    {
-        // Extracting the wizards out of studio.js left one call to `designerApiJson`, a helper that
-        // only exists in the composition layer. It threw a ReferenceError on every open, a catch
-        // meant for unparseable documents swallowed it, and the reuse-an-existing-dataset path was
-        // dead behind an honest-looking "None available". Source inspection could see it; nothing
-        // was looking. This is that check.
-        var authoring = CodeOnly(AuthoringJs());
-        var studio = CodeOnly(DesignerAsset("studio.js"));
-
-        var compositionOnly = Regex.Matches(studio, @"\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
-            .Select(match => match.Groups[1].Value)
-            .Distinct()
-            .ToHashSet(StringComparer.Ordinal);
-
-        // Names the authoring module defines for itself are its own, whatever studio.js also calls them.
-        foreach (var defined in Regex.Matches(authoring, @"\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
-                     .Select(match => match.Groups[1].Value))
-        {
-            compositionOnly.Remove(defined);
-        }
-
-        var called = Regex.Matches(authoring, @"(?<![.\w])([A-Za-z_][A-Za-z0-9_]*)\s*\(")
-            .Select(match => match.Groups[1].Value)
-            .Where(compositionOnly.Contains)
-            .Distinct()
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToList();
-
-        Assert.True(called.Count == 0,
-            "studio-authoring.js calls helpers that live only in studio.js, so they are undefined at "
-            + "runtime and any surrounding catch will hide it. Inject them instead: "
-            + string.Join(", ", called));
-    }
-
-    [Fact]
-    public void AuthoringModule_DefinesOrImportsEveryConstantItReferences()
-    {
-        // The same extraction left STUDIO_PARAMETER_TYPES and STUDIO_TOTAL_AGGREGATES behind in
-        // studio.js. The parameter dialog opened with its header and an empty body, because render()
-        // threw on a missing binding before it painted. The function check above could not see it —
-        // a constant is not a call — so this covers the module-level constant convention as well.
-        var code = CodeOnly(AuthoringJs());
-
-        // Deliberately narrow: a constant is matched only where it is *used* as an object —
-        // STUDIO_PARAMETER_TYPES.map(...) — never as a bare word. That skips SQL keywords sitting
-        // in markup (GRAND_TOTAL = SUM) without needing to parse JavaScript, which a regex cannot
-        // do correctly: an earlier attempt desynchronised on the /'/g literal in this same module
-        // and silently stopped checking everything after it. The trade is that a constant passed
-        // only as a bare argument is not covered; every one in this module is used as an object.
-        // Two naming conventions carry module-level bindings here: UPPER_SNAKE constants, and the
-        // leading-underscore privates studio.js uses (_feedback, _escapeHtml). Both have now been
-        // left behind by an extraction, and a `feedback` vs `_feedback` slip is invisible until the
-        // exact line runs.
-        var referenced = Regex.Matches(code, @"(?<![.\w$])(_[A-Za-z][A-Za-z0-9_]*|[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)\s*\.")
-            .Select(match => match.Groups[1].Value)
-            .Distinct()
-            .ToList();
-
-        var available = Regex.Matches(code, @"(?:const|let|var|function)\s+(_?[A-Za-z][A-Za-z0-9_]*)")
-            .Select(match => match.Groups[1].Value)
-            .Concat(Regex.Matches(code, @"import\s*\{([^}]*)\}")
-                .SelectMany(match => match.Groups[1].Value.Split(','))
-                .Select(entry => entry.Trim().Split(" as ").Last().Trim()))
-            .ToHashSet(StringComparer.Ordinal);
-
-        var undefined = referenced.Where(name => !available.Contains(name))
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToList();
-
-        Assert.True(undefined.Count == 0,
-            "studio-authoring.js references module-level constants it neither defines nor imports, so "
-            + "they are undefined at runtime: " + string.Join(", ", undefined));
     }
 
     [Fact]

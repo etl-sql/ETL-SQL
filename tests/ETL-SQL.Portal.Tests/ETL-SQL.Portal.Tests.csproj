@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ETL-SQL.Portal\ETL-SQL.Portal.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.WorkstationEditor\ETL-SQL.WorkstationEditor.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Connectors.Databases\ETL-SQL.Connectors.Databases.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Connectors.Files\ETL-SQL.Connectors.Files.csproj" />

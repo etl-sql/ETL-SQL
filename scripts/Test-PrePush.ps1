@@ -126,7 +126,18 @@ if ($LASTEXITCODE -ne 0) {
 
 # 13. Fast Contract & Smoke Suite
 if (-not $SkipSmoke) {
-    Write-Host "[13/13] Building and running fast contract, architecture, and smoke tests..." -ForegroundColor White
+    Write-Host "[13/13] Building and running generated browser contracts and fast smoke tests..." -ForegroundColor White
+    & dotnet test (Join-Path $RepoRoot "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj") `
+        -m:1 `
+        -nr:false `
+        --filter "FullyQualifiedName~BrowserContractsGeneratorTests" `
+        --configuration $Configuration `
+        --no-restore `
+        --logger "console;verbosity=minimal"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Generated browser contracts differ from the registered server endpoints or DTOs."
+        exit $LASTEXITCODE
+    }
     $filter = "Category=Architecture|Category=Docs|Category=Smoke.Core|Category=Smoke.Reporting|Category=Smoke.Security"
     & dotnet test (Join-Path $RepoRoot "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj") `
         -m:1 `

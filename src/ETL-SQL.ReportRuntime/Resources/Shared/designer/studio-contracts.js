@@ -8,37 +8,7 @@
  *
  * Stable host routes and script templates consumed by the Studio composition layer.
  */
-export const STUDIO_ROUTES = Object.freeze({
-    analyze: '/api/designer/analyze',
-    complete: '/api/designer/complete',
-    hover: '/api/designer/hover',
-    format: '/api/designer/format',
-    run: '/api/designer/run',
-    dag: '/api/designer/dag',
-    pipelineTask: '/api/designer/pipeline-task',
-    pipelineScope: '/api/designer/pipeline-scope',
-    pipelineRunPlan: '/api/designer/pipeline-run-plan',
-    preview: '/api/designer/preview',
-    previewPdf: '/api/designer/preview/pdf',
-    dataModel: '/api/designer/data-model',
-    previewAs: '/api/designer/preview-as',
-    governance: '/api/designer/governance',
-    parse: '/api/designer/parse',
-    patch: '/api/designer/patch',
-    queryFilter: '/api/designer/query-filter',
-    optionSource: '/api/designer/option-source',
-    dataSample: '/api/designer/data-sample',
-    schema: '/api/designer/schema',
-    sessionMetadata: '/api/session/metadata',
-    connectorsSchema: '/api/connectors/schema',
-});
-export const STUDIO_CATALOG_ROUTES = Object.freeze({
-    datasetRegistry: '/api/datasets',
-});
-export const STUDIO_WORKSPACE_ROUTES = Object.freeze({
-    files: '/api/files',
-    connections: '/api/connections',
-});
+export { STUDIO_ROUTES, STUDIO_CATALOG_ROUTES, STUDIO_WORKSPACE_ROUTES } from './studio-routes.generated.js';
 export const STUDIO_STARTER_SCRIPTS = Object.freeze({
     report: `-- Sample dashboard. MOCKDB is a built-in in-memory connector, so this needs no database.
 -- Replace the connection below with your own when you are ready.

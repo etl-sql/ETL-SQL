@@ -5,6 +5,8 @@
  * Canonical Report-SQL mutations initiated by Studio controls.
  */
 
+import type { STUDIO_ROUTES } from './studio-contracts.js';
+
 export interface FilterContractSpec {
     id: string;
     column: string;
@@ -72,13 +74,7 @@ export interface StudioDocumentLike {
     [key: string]: unknown;
 }
 
-export interface StudioRoutesLike {
-    queryFilter: string;
-    parse: string;
-    patch: string;
-    pipelineTask: string;
-    [key: string]: string;
-}
+export type StudioRoutesLike = Pick<typeof STUDIO_ROUTES, 'queryFilter' | 'parse' | 'patch' | 'pipelineTask'>;
 
 export interface DesignerVisualLike {
     id?: string;

@@ -54,10 +54,8 @@ public sealed class BrowserContractsGeneratorTests
     /// The kinds the palette offers are the kinds the host can write.
     /// </summary>
     /// <remarks>
-    /// One direction of this — a chip naming a kind that does not exist — is now the type gate's
-    /// job: <c>studio-pipeline-canvas.js</c> declares its palette as <c>PipelineTaskKind</c>, so a
-    /// bad id fails <c>tsc</c> at the line that wrote it. The other direction cannot be a type
-    /// check, because nothing makes an array exhaustive over a union, so it stays here.
+    /// The strict TypeScript palette coverage assertion checks both invalid and missing chip IDs.
+    /// This test protects the generator's source vocabulary independently of its checked-in output.
     /// </remarks>
     [Fact]
     public void EveryKindTheHostCanWriteAppearsInTheGeneratedUnion()

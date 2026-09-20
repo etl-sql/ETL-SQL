@@ -266,16 +266,10 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
-        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
-        await page.ClickAsync("button.story-link[data-story-id='designer']");
-        await page.WaitForSelectorAsync("#fixtureSel", new PageWaitForSelectorOptions { Timeout = 30_000 });
-
-        // 1. Mount the transient syntax resilience fixture
-        await page.SelectOptionAsync("#fixtureSel", "syntax-resilience");
-        await page.WaitForTimeoutAsync(300);
-
-        // 2. Diagnostic badge must be displayed with syntax warning
+        // Open the fixture directly so it cannot race the default story's asynchronous mount.
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=designer&fixture=syntax-resilience");
         var badge = page.Locator("#dsgn-diagnostic-badge");
+        await badge.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Visible });
         Assert.Equal(1, await badge.CountAsync());
         Assert.True(await badge.IsVisibleAsync());
         Assert.Contains("Script syntax warning", await badge.InnerTextAsync());
@@ -297,7 +291,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
                 }
             }
         """);
-        await page.WaitForTimeoutAsync(200);
+        await badge.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Hidden });
 
         // 5. Diagnostic badge must be hidden after recovery
         Assert.False(await badge.IsVisibleAsync());

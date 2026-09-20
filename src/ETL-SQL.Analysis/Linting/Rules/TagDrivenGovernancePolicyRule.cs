@@ -21,7 +21,11 @@ public class TagDrivenGovernancePolicyRule : ILintRule
     public string Name => "TagDrivenGovernancePolicy";
     public string Description => "Flags protected-data governance issues on dataset publish/export and quality promotion boundaries.";
 
-    public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
+    public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context) =>
+        Task.FromResult(Analyze(script));
+
+    /// <summary>Analyzes in-memory governance metadata without asynchronous work.</summary>
+    public IEnumerable<LintResult> Analyze(Script script)
     {
         var results = new List<LintResult>();
         var scriptTags = new Dictionary<string, string>(script.Metadata, StringComparer.OrdinalIgnoreCase);
@@ -64,7 +68,7 @@ public class TagDrivenGovernancePolicyRule : ILintRule
             }
         }
 
-        return Task.FromResult<IEnumerable<LintResult>>(results);
+        return results;
     }
 
     private static void CheckPublishedDataset(

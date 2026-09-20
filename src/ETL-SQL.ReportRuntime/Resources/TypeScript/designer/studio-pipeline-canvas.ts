@@ -80,14 +80,13 @@ export interface PipelineTaskGroup {
  * `PipelineTaskKind` is generated from the C# enum (types/etlsql-contracts.generated.d.ts), so a
  * chip naming a kind no host can write now fails the type gate on the line that wrote it rather
  * than becoming a control that refuses every time an author uses it. The other direction — a kind
- * the host can write with no chip to create it — is not something a type can state about an array,
- * and stays a test: see PipelineTaskAuthoringService's palette contract tests.
+ * the host can write with no chip to create it — is checked by PipelinePaletteCoverage below.
  *
  * @typedef {{ id: PipelineTaskKind, label: string, glyph: string, hint: string, container?: boolean, needsLoop?: boolean }} PipelineTaskChip
  * @typedef {{ id: string, label: string, hint: string, kinds: ReadonlyArray<PipelineTaskChip> }} PipelineTaskGroup
  * @type {ReadonlyArray<PipelineTaskGroup>}
  */
-export const PIPELINE_TASK_GROUPS: ReadonlyArray<PipelineTaskGroup> = Object.freeze([
+const pipelineTaskGroups = Object.freeze([
     Object.freeze({
         id: 'work',
         label: 'Work',
@@ -262,7 +261,13 @@ export const PIPELINE_TASK_GROUPS: ReadonlyArray<PipelineTaskGroup> = Object.fre
             }),
         ]),
     }),
-]);
+]) satisfies ReadonlyArray<PipelineTaskGroup>;
+
+// A new server enum member must acquire a chip; a valid subset is not a complete palette.
+type RequireCompletePalette<T extends never> = T;
+export type PipelinePaletteCoverage = RequireCompletePalette<Exclude<
+    PipelineTaskKind, (typeof pipelineTaskGroups)[number]['kinds'][number]['id']>>;
+export const PIPELINE_TASK_GROUPS: ReadonlyArray<PipelineTaskGroup> = pipelineTaskGroups;
 
 /**
  * Every palette entry, flat.

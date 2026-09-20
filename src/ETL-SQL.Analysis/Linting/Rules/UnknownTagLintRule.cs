@@ -14,12 +14,16 @@ public class UnknownTagLintRule : ILintRule
     private static readonly string _standardList =
         string.Join(", ", LanguageMetadata.StandardTags.OrderBy(t => t).Select(t => $"@{t}"));
 
-    public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
+    public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context) =>
+        Task.FromResult(Analyze(script));
+
+    /// <summary>Analyzes in-memory governance metadata without asynchronous work.</summary>
+    public IEnumerable<LintResult> Analyze(Script script)
     {
         var results = new List<LintResult>();
         foreach (var stmt in script.Statements)
             AnalyzeStatement(stmt, results);
-        return Task.FromResult<IEnumerable<LintResult>>(results);
+        return results;
     }
 
     private void AnalyzeStatement(Statement? stmt, List<LintResult> results)

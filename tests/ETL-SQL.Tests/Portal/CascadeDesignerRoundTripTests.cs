@@ -45,7 +45,7 @@ public sealed class CascadeDesignerRoundTripTests
         """;
 
     /// <summary>
-    /// The exact text Studio's cascade editor writes (designer.js, <c>writeCascade</c>).
+    /// The exact text Studio's cascade editor writes (designer-inspector.ts, <c>writeCascade</c>).
     ///
     /// <para>It is pinned here because the inspector rewrites the whole clause on every edit, in the
     /// serializer's own shape, so that a parse of what Studio wrote returns the string Studio would

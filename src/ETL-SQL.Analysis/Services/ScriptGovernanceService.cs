@@ -151,6 +151,19 @@ public sealed record GovernanceEditResult(bool Applied, string Script, string? E
 public sealed class ScriptGovernanceService
 {
     private const string RuleTagDescription = "d";
+    private readonly Func<Script, IEnumerable<LintResult>> analyzeGovernance;
+
+    public ScriptGovernanceService() : this(AnalyzeGovernance) { }
+
+    internal ScriptGovernanceService(Func<Script, IEnumerable<LintResult>> analyzeGovernance)
+    {
+        this.analyzeGovernance = analyzeGovernance;
+    }
+
+    private static IEnumerable<LintResult> AnalyzeGovernance(Script ast) =>
+        new TagDrivenGovernancePolicyRule().Analyze(ast)
+            .Concat(new TagValueValidationRule().Analyze(ast))
+            .Concat(new UnknownTagLintRule().Analyze(ast));
 
     /// <summary>The governance metadata this script declares, in script order.</summary>
     public ScriptGovernance Read(string? scriptText)
@@ -160,8 +173,15 @@ public sealed class ScriptGovernanceService
             return ScriptGovernance.Failed(parseError);
 
         var projection = Project(source, ast);
-        var findings = ReadFindings(ast, projection.Scopes);
-        return new ScriptGovernance(true, null, projection.Scopes, findings, projection.TaskScopes);
+        try
+        {
+            var findings = ReadFindings(ast, projection.Scopes);
+            return new ScriptGovernance(true, null, projection.Scopes, findings, projection.TaskScopes);
+        }
+        catch (Exception)
+        {
+            return ScriptGovernance.Failed("Governance analysis could not be completed.");
+        }
     }
 
     /// <summary>
@@ -652,29 +672,9 @@ public sealed class ScriptGovernanceService
 
     // ── Findings ─────────────────────────────────────────────────────────────
 
-    private static IReadOnlyList<GovernanceFinding> ReadFindings(Script ast, IReadOnlyList<GovernanceScope> scopes)
+    private IReadOnlyList<GovernanceFinding> ReadFindings(Script ast, IReadOnlyList<GovernanceScope> scopes)
     {
-        var linter = new Linter();
-        linter.AddRule(new TagDrivenGovernancePolicyRule());
-        linter.AddRule(new TagValueValidationRule());
-        linter.AddRule(new UnknownTagLintRule());
-
-        List<LintResult> results;
-        try
-        {
-            results = linter.AnalyzeAsync(ast, new DefaultLintContext()).GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            // No logger is available in this static context; write to debug output so the
-            // failure is not silently swallowed. Replace with a proper ILogger if one is
-            // ever threaded through to ReadFindings.
-            System.Diagnostics.Debug.WriteLine(
-                $"[ScriptGovernanceService] ReadFindings: linter threw {ex.GetType().Name}: {ex.Message}");
-            return [];
-        }
-
-        return results
+        return analyzeGovernance(ast)
             .Select(result => new GovernanceFinding(
                 result.Code ?? result.RuleName,
                 result.Severity.ToString().ToLowerInvariant(),

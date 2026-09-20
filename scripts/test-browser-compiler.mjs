@@ -67,7 +67,7 @@ console.log('runtime utility pilot: coercion, URL, escaping, formatting and mark
 const designerPath = path.join(repo, 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer-util.js');
 const designer = await import(`data:text/javascript;base64,${Buffer.from(fs.readFileSync(designerPath, 'utf8')).toString('base64')}`);
 assert.equal(designer.escapeHtml('<>&"\''), '&lt;&gt;&amp;&quot;\'');
-assert.equal(designer.esc('<>&"\''), '&lt;>&amp;&quot;\'');
+assert.equal(designer.esc('<>&"\''), '&lt;&gt;&amp;&quot;\'');
 for (const escape of [designer.escapeHtml, designer.esc]) {
     assert.equal(escape(null), '');
     assert.equal(escape(undefined), '');

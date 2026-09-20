@@ -35,6 +35,7 @@ namespace ETL_SQL.Connectors.Email
         /// <param name="logger">The logger instance.</param>
         public SmtpDataSource(IExecutionContext context, Dictionary<string, string> options)
         {
+            ArgumentNullException.ThrowIfNull(context);
             _context = context;
             _options = options;
             _logger = context.Logger;
