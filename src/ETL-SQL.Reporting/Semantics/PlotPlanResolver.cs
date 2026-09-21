@@ -1152,6 +1152,16 @@ public sealed class PlotPlanResolver
         }
     }
 
+    internal static string? TextLabel(ResolvedDatum datum)
+    {
+        if (!datum.Encodings.IsDefaultOrEmpty)
+            for (var index = datum.Encodings.Length - 1; index >= 0; index--)
+                if (datum.Encodings[index].Channel == ConditionalEncodingChannel.Text)
+                    return Display(datum.Encodings[index].Value);
+        var text = datum.Channels.FirstOrDefault(channel => channel.Channel == FieldChannel.Text);
+        return text is null ? null : text.DisplayValue ?? Display(text.Value);
+    }
+
     private static SemanticFallback BuildFallback(ChartSpec spec, ImmutableArray<ResolvedMarkLayer> layers,
         ImmutableArray<string> categories, ChartValueFormatter formatter)
     {
@@ -1163,6 +1173,8 @@ public sealed class PlotPlanResolver
         {
             var label = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Region or FieldChannel.Route or FieldChannel.Text or FieldChannel.X or FieldChannel.Theta)?.DisplayValue
                 ?? (index < categories.Length ? categories[index] : $"Row {index + 1}");
+            if (layer.Mark == MarkKind.Text && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
+                label = TextLabel(datum) ?? label;
             var value = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or
                 FieldChannel.Median or FieldChannel.Close or FieldChannel.Size or FieldChannel.YEnd);
             var numeric = value is null ? null : Number(value.Value);

@@ -82,7 +82,7 @@ update the fixtures and compatibility expectations together.
 
 ## Transposed point aspect ratios
 
-Continuous primary-axis `POINT` compositions accept `ASPECT_RATIO` with
+Continuous primary-axis `POINT` and `TEXT` compositions accept `ASPECT_RATIO` with
 `TRANSPOSED_CARTESIAN`. The ratio is physical semantic Y-unit size divided by X-unit size;
 logarithmic spans use decades. The resolver fits the viewport using
 `height / width = xSpan / (aspectRatio * ySpan)`, including facet panels and relayout.
@@ -93,7 +93,7 @@ they do not claim physical-distance fidelity.
 This increment retains ChartSpec v2 and PlotPlan v3: it adds no serialized fields or enum values,
 and existing valid specifications retain their behavior and fingerprints. Older ChartSpec validators
 reject the newly allowed combination. Regenerate output with a supporting renderer; serialization
-compatibility alone does not establish rendering support. Non-point layers, secondary axes,
+compatibility alone does not establish rendering support. Marks other than POINT/TEXT, secondary axes,
 stacking, offset channels, JITTER and DATA/BAND nudges remain rejected for transposed aspect ratios.
 
 Error bars on these points retain `ErrorLow`/`ErrorHigh` in the semantic Y domain.
@@ -108,6 +108,13 @@ The portable em remains 12 pixels. Semantic X moves vertically and semantic Y ho
 independent of scale reversal, domain kind and viewport size. Relayout recomputes the same offsets;
 points and error intervals consume them together. No raw values, domains, fallback text or wire
 fields change. Existing Cartesian and non-aspect transposed behavior stays unchanged.
+
+`TEXT` layers share the transposed point mapping, collision placement, and EM displacement.
+Conditional text overrides the text binding in SVG, terminal annotation rows, and fallback labels;
+SVG also honors conditional color, opacity, and font size. Text that cannot fit the physical viewport
+is retained in SVG descriptions. Terminal rows preserve semantic X/Y values and facet membership,
+including text-only compositions. These behaviors are scoped to the newly accepted combination;
+ChartSpec v2 and PlotPlan v3 remain unchanged, as do existing valid chart fingerprints.
 
 ## Cross-backend conformance
 

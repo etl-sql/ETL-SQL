@@ -101,6 +101,38 @@ public sealed class ReportRenameProviderTests
         Assert.All(edits, edit => Assert.Equal("renamed", edit.NewText));
     }
 
+    [Theory]
+    [InlineData("Caption (", 2)]
+    [InlineData("estimates =", 2)]
+    public async Task TransposedAspectText_RenameBindingAndCondition(string token, int expectedEdits)
+    {
+        var script = """
+            CREATE VISUAL Measurement AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+                SCALES (distances = LINEAR (CHANNEL = X), estimates = LINEAR (CHANNEL = Y)),
+                ENCODINGS (X = Distance (TYPE = QUANTITATIVE, SCALE = distances),
+                           Y = Estimate (TYPE = QUANTITATIVE, SCALE = estimates)),
+                LAYERS (labels = TEXT (
+                  ENCODINGS (TEXT = Caption (TYPE = NOMINAL)),
+                  CONDITIONS (TEXT WHEN Caption = 'Caption' THEN 'high')
+                ))
+              )
+            );
+            """;
+        var (provider, uri) = Provider(script);
+        var result = await provider.Handle(new RenameParams
+        {
+            TextDocument = new TextDocumentIdentifier(uri),
+            Position = PositionOf(script, token),
+            NewName = "renamed"
+        }, CancellationToken.None);
+        var edits = Assert.IsAssignableFrom<IEnumerable<TextEdit>>(result!.Changes![uri]).ToList();
+        Assert.Equal(expectedEdits, edits.Count);
+        Assert.All(edits, edit => Assert.Equal("renamed", edit.NewText));
+    }
+
     private static (ReportRenameProvider Provider, DocumentUri Uri) Provider(string script = ScriptText)
     {
         var uri = DocumentUri.From("untitled:advanced-chart.rptsql");

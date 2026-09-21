@@ -320,7 +320,12 @@ semantics and backend evidence before its rejection can be lifted.
   displacement into physical offsets, preserving point/error-bar alignment through reversed/log
   scales, facets and resize. Raw values, domains and terminal output stay unchanged. Covered by
   `TransposedAspectNudgeTests`, existing goldens, and LSP rename tests; no contract fields changed.
-- [ ] **Remaining physical aspect combinations.** Transposed non-POINT layers, offset channels,
+- [x] **TEXT layers on continuous transposed aspect charts.** Labels share point geometry and
+  EM nudges; conditional text is preserved in native/static SVG, terminal rows and accessible
+  fallback. Covered for logarithmic/reversed axes, facets, relayout, crowded labels, null positions,
+  authoring/contract round trips, LSP rename and static PDF in `TransposedAspectTextTests`.
+  ChartSpec v2 and PlotPlan v3 retain their existing wire shapes.
+- [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT, offset channels,
   JITTER, DATA/BAND nudges, stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**

@@ -22,7 +22,7 @@ internal sealed class PlotPlanSvgRenderer
     private sealed record PositionedOverlayLabel(OverlayLabel Label, decimal Y);
     private sealed record ArcLabel(decimal AnchorX, decimal AnchorY, decimal ElbowX, decimal PreferredY, string Text, bool IsRight);
     private sealed record PositionedArcLabel(ArcLabel Label, decimal Y);
-    private sealed record SmartLabel(int RowIndex, decimal X, decimal Y, string Text, string Color, int Priority, decimal FontSize = 9m);
+    private sealed record SmartLabel(int RowIndex, decimal X, decimal Y, string Text, string Color, int Priority, decimal FontSize = 9m, decimal? Opacity = null);
     private sealed record LabelBox(decimal Left, decimal Top, decimal Right, decimal Bottom);
 
     public string Render(PlotPlan plan)
@@ -397,7 +397,7 @@ internal sealed class PlotPlanSvgRenderer
                 case MarkKind.Text:
                     RenderText(layer, categories.Length, area, xScale,
                         layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale,
-                        color, smartLabels);
+                        color, smartLabels, transposedPointAxes, ColorScale(plan));
                     break;
                 case MarkKind.Tick:
                     RenderTicks(builder, plan, layer, categories.Length, area, xScale, yScale, color);
@@ -3828,6 +3828,11 @@ internal sealed class PlotPlanSvgRenderer
         {
             var labelWidth = Math.Min(160m, Math.Max(8m, label.Text.Length * label.FontSize * .56m));
             var labelHeight = label.FontSize + 4m;
+            if (labelWidth > area.Width || labelHeight + 2m > area.Height)
+            {
+                builder.AppendLine($"<desc class='plot-smart-label-occluded' data-row-index='{label.RowIndex}'>{Esc(label.Text)}</desc>");
+                continue;
+            }
             (decimal X, decimal Y, LabelBox Box)? placed = null;
             foreach (var offset in offsets)
             {
@@ -3864,7 +3869,8 @@ internal sealed class PlotPlanSvgRenderer
                 builder.AppendLine($"<path class='plot-smart-label-leader' data-row-index='{label.RowIndex}' d='M {N(label.X)} {N(label.Y)} L {N(placed.Value.X)} {N(placed.Value.Y - label.FontSize / 2m)}' fill='none' stroke='{Esc(leaderColor)}' stroke-width='.75'{leaderDash}/>");
             }
             RenderDataLabelBackground(builder, plan, label.RowIndex, placed.Value.X, placed.Value.Y, "middle", label.FontSize, label.Text);
-            builder.AppendLine($"<text class='plot-smart-label' data-row-index='{label.RowIndex}' data-priority='{label.Priority}' x='{N(placed.Value.X)}' y='{N(placed.Value.Y)}' text-anchor='middle' font-size='{N(label.FontSize)}' fill='{Esc(label.Color)}'>{Esc(label.Text)}</text>");
+            var opacity = label.Opacity is { } alpha ? $" opacity='{N(Math.Clamp(alpha, 0m, 1m))}'" : "";
+            builder.AppendLine($"<text class='plot-smart-label' data-row-index='{label.RowIndex}' data-priority='{label.Priority}' x='{N(placed.Value.X)}' y='{N(placed.Value.Y)}' text-anchor='middle' font-size='{N(label.FontSize)}' fill='{Esc(label.Color)}'{opacity}>{Esc(label.Text)}</text>");
         }
     }
 
@@ -4246,7 +4252,7 @@ internal sealed class PlotPlanSvgRenderer
 
     private static void RenderText(ResolvedMarkLayer layer, int categoryCount,
         in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? scale,
-        string color, ICollection<SmartLabel> smartLabels)
+        string color, ICollection<SmartLabel> smartLabels, bool transposedAspect = false, ResolvedScale? colorScale = null)
     {
         if (scale is null) return;
         for (var index = 0; index < layer.Data.Length; index++)
@@ -4256,6 +4262,7 @@ internal sealed class PlotPlanSvgRenderer
             if (datum.IsGap || !value.HasValue) continue;
             var text = EncodingText(datum, ConditionalEncodingChannel.Text)
                 ?? (Channel(datum, FieldChannel.Text) is { } textValue ? PlotPlanResolver.Display(textValue) : null);
+            if (transposedAspect) text = PlotPlanResolver.TextLabel(datum);
             if (string.IsNullOrEmpty(text)) continue;
             var xValue = PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
             var x = xScale is not null && Continuous(xScale) && xValue.HasValue
@@ -4263,7 +4270,10 @@ internal sealed class PlotPlanSvgRenderer
                 : CategoryX(index, categoryCount, area, xScale);
             x += datum.DisplayOffsetX;
             var y = MapY(value.Value, scale, area.Height) + datum.DisplayOffsetY;
-            smartLabels.Add(new SmartLabel(datum.RowIndex, x, y, text, color, 200 + layer.ZIndex, 10m));
+            var labelColor = transposedAspect ? ResolveDatumColor(colorScale, datum, color) : color;
+            var fontSize = transposedAspect ? Math.Clamp(EncodingNumber(datum, ConditionalEncodingChannel.Size) ?? 10m, 1m, 100m) : 10m;
+            var opacity = transposedAspect ? EncodingNumber(datum, ConditionalEncodingChannel.Opacity) : null;
+            smartLabels.Add(new SmartLabel(datum.RowIndex, x, y, text, labelColor, 200 + layer.ZIndex, fontSize, opacity));
         }
     }
 

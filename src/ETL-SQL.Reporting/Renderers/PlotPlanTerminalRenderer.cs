@@ -101,6 +101,22 @@ internal static class PlotPlanTerminalRenderer
                 token.Value.Equals("ReferenceBand", StringComparison.OrdinalIgnoreCase))).ToList();
         activeLayers = activeLayers.Except(bandLayers).ToList();
 
+        var textLayers = activeLayers.Where(item => item.Layer.Mark == MarkKind.Text &&
+            plan.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null }).ToList();
+        activeLayers = activeLayers.Except(textLayers).ToList();
+        foreach (var item in textLayers)
+        {
+            var table = new Table().Border(TableBorder.Simple).AddColumn("Annotation").AddColumn("X").AddColumn("Y");
+            foreach (var datum in item.Data)
+            {
+                var label = PlotPlanResolver.TextLabel(datum);
+                if (string.IsNullOrEmpty(label)) continue;
+                table.AddRow(Markup.Escape(label), Markup.Escape(DisplayChannel(datum, FieldChannel.X) ?? ""),
+                    Markup.Escape(datum.IsGap ? "gap" : DisplayChannel(datum, FieldChannel.Y) ?? ""));
+            }
+            content.Add(table);
+        }
+
         var rectLayers = activeLayers.Where(item => item.Layer.Mark == MarkKind.Rect).ToList();
         var continuousLayers = activeLayers.Where(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area or MarkKind.Point).ToList();
         var ruleLayers = activeLayers.Where(item => item.Layer.Mark is MarkKind.Rule or MarkKind.Tick).ToList();
