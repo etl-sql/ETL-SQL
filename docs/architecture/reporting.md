@@ -525,7 +525,7 @@ Server-side native SVG generation shared by manifests and `PdfExporter`. PlotPla
 
 ### 6.3 PDF Export
 
-`ReportPdfExporter` selects a PDF export mode:
+`ReportPdfExporter.ExportAsync` selects a PDF export mode. `IReportPdfExporter` exposes only the async contract; callers await it and pass their cancellation token:
 
 | Mode | Status | Behavior |
 |---|---|---|
@@ -534,14 +534,14 @@ Server-side native SVG generation shared by manifests and `PdfExporter`. PlotPla
 | `HOSTED` | Planned | Uses Portal or `report serve` to render all report pages through the browser runtime. |
 | `BROWSER` | Planned | Uses an installed Chrome, Edge, or Chromium executable; no browser is bundled. |
 
-Explicit `HOSTED` and `BROWSER` modes fail clearly when unavailable. Only `AUTO` is allowed to fall back.
+Explicit `HOSTED` and `BROWSER` modes fail clearly when unavailable. Only `AUTO` is allowed to fall back. Caller cancellation propagates without starting a fallback.
 
 ### 6.3.1 `PdfExporter`
 
 Uses PDFsharp/MigraDoc to produce portable static PDF output.
 
 ```csharp
-public byte[] Export(ReportManifest manifest) => ...
+public Task<byte[]> ExportAsync(ReportManifest manifest, CancellationToken cancellationToken = default) => ...
 ```
 
 Layout:

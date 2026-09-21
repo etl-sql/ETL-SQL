@@ -158,7 +158,7 @@ namespace ETL_SQL.Connectors.Json
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
                     publicationFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
-                    _encryption.EncryptFile(fileToEncrypt, publicationFile);
+                    await _encryption.EncryptFileAsync(fileToEncrypt, publicationFile, effectiveCancellationToken);
                     fileToEncrypt = publicationFile;
                 }
 
@@ -192,36 +192,6 @@ namespace ETL_SQL.Connectors.Json
                 return await JsonExtractor.GetColumnsAsync(stream, _rootPath, effectiveCancellationToken);
             }
             catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
-        }
-
-        private string PrepareReadPath(List<string> tempFiles, string extension)
-        {
-            var effectivePath = _filePath;
-
-            if (_encryption.Enabled)
-            {
-                var decryptedTemp = System.IO.Path.GetTempFileName();
-                tempFiles.Add(decryptedTemp);
-                _encryption.DecryptFile(_filePath, decryptedTemp);
-                effectivePath = decryptedTemp;
-            }
-
-            if (_compress && (_filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-                              || effectivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-                              || _encryption.Enabled))
-            {
-                var extractedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + extension);
-                tempFiles.Add(extractedTemp);
-                using var zip = System.IO.Compression.ZipFile.OpenRead(effectivePath);
-                var entry = zip.Entries.FirstOrDefault();
-                if (entry != null)
-                {
-                    entry.ExtractToFile(extractedTemp, true);
-                    effectivePath = extractedTemp;
-                }
-            }
-
-            return effectivePath;
         }
 
         private void DeleteTempFiles(IEnumerable<string> tempFiles)

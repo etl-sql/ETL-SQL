@@ -316,7 +316,7 @@ public class DatasetViewerService(
                 Directory.CreateDirectory(previewScratch);
                 tempFile = Path.Combine(previewScratch, "cache.parquet");
                 var enc = new EncryptionOptions(atRestDecryptOptions);
-                enc.DecryptFile(dataset.ParquetFilePath, tempFile);
+                await enc.DecryptFileAsync(dataset.ParquetFilePath, tempFile, CancellationToken.None);
                 effectivePath = tempFile;
             }
             catch (Exception ex) when (ex is not InvalidOperationException)

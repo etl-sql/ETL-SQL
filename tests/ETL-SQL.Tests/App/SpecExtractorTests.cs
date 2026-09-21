@@ -9,7 +9,7 @@ using Xunit;
 
 namespace ETL_SQL.Tests.App
 {
-    public class SpecExtractorTests : IDisposable
+    public class SpecExtractorTests : IDisposable, IAsyncLifetime
     {
         private readonly string _tempDir;
         private readonly string _inputPdf;
@@ -17,21 +17,18 @@ namespace ETL_SQL.Tests.App
 
         public SpecExtractorTests()
         {
-            // Initialize PDFsharp font resolver
-            try
-            {
-                new PdfExporter().Export(new ReportManifest { Title = "Font Init" });
-            }
-            catch
-            {
-                // Ignore any rendering errors; we only need to trigger font initialization
-            }
-
             _tempDir = Path.Combine(Path.GetTempPath(), "etlsql_spec_extractor_test_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_tempDir);
             _inputPdf = Path.Combine(_tempDir, "input.pdf");
             _outputPdf = Path.Combine(_tempDir, "output.pdf");
         }
+
+        public async Task InitializeAsync()
+        {
+            await new PdfExporter().ExportAsync(new ReportManifest { Title = "Font Init" });
+        }
+
+        public Task DisposeAsync() => Task.CompletedTask;
 
         public void Dispose()
         {

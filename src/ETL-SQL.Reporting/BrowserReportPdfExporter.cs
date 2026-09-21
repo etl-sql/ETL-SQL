@@ -19,15 +19,6 @@ namespace ETL_SQL.Reporting
     {
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-        public byte[] Export(ReportManifest manifest, PdfExportOptions? options = null)
-        {
-            options ??= PdfExportOptions.Static;
-            if (string.IsNullOrWhiteSpace(options.Host))
-                throw new InvalidOperationException("Browser-backed PDF export requires a HOST URL.");
-
-            return ExportAsync(options).GetAwaiter().GetResult();
-        }
-
         public Task<byte[]> ExportAsync(ReportManifest manifest, PdfExportOptions? options = null, CancellationToken cancellationToken = default)
         {
             options ??= PdfExportOptions.Static;

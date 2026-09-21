@@ -280,10 +280,12 @@ first.
 
 **Sync-over-async**
 
-- [ ] **`BackupRestoreService.cs`, `CryptoUtils.cs`, `MachineBoundCrypto.cs`, `PdfExporter.cs`,
-  `BrowserReportPdfExporter.cs` — sync wrappers using `.GetAwaiter().GetResult()`.** Multiple
-  public sync methods wrap async ones. Low immediate deadlock risk (no ASP.NET sync context) but
-  tech debt flagged for the ongoing async cleanup.
+- [x] **Remove sync-over-async wrappers in backup, crypto, and PDF export.** Removed the
+  wrappers in all five flagged files and the synchronous PDF interface/default Task.Run bridge.
+  Migrated encryption callers and PDF tests to async APIs; file connectors pass cancellation
+  through SSH/machine encryption and clean up failed decryptions. PDF AUTO preserves caller
+  cancellation without starting a fallback. Removed unused backup and file-read helpers.
+  Existing password-based crypto remains synchronous; no encryption format changed.
 
 ---
 
@@ -291,23 +293,27 @@ first.
 
 Sections 7 and 8 are **not** part of the v0.20.0 *Code Stability* theme. They are the genuinely
 remaining increments of two `ROADMAP.md` entries, written out here so they can be prioritised against
-the theme rather than rediscovered. Both were verified against the code on 2026-09-07; neither is
-partially done in some invisible way.
+the theme rather than rediscovered. Both were verified against the code on 2026-09-07; completed increments are recorded below.
 
 ## 7. Grammar-of-Graphics semantic extensions (candidate)
 
 [`ROADMAP.md` — Grammar-of-Graphics Semantic Extensions](ROADMAP.md#reporting--presentation--grammar-of-graphics-semantic-extensions).
 Horizon **Later**: no catalog visual or renderer retirement depends on these, so demand and
-representative reports should choose the order. Each is a combination `AdvancedChartSemanticValidator`
-rejects today, so each has an exact starting point and an exact test that must flip.
+representative reports should choose the order. The remaining combinations are rejected by `AdvancedChartSemanticValidator`; each needs explicit
+semantics and backend evidence before its rejection can be lifted.
 
 - [ ] **Renderer-neutral polar/radial stacking.** `AdvancedChartSemanticValidator.cs:324` — *"STACK
   requires a quantitative Cartesian/transposed Y or Y2 binding; polar/radial stacking is not yet
   portable."* Needs a stacking model that resolves the same way for SVG, terminal, and static export
   before the rejection can be lifted.
-- [ ] **Physical aspect semantics beyond continuous Cartesian.**
-  `AdvancedChartSemanticValidator.cs:750` — *"ASPECT_RATIO currently supports CARTESIAN coordinates
-  only."* `ChartSpec.cs:401` carries the matching contract guard, so both move together.
+- [x] **Physical aspect ratios for continuous transposed POINT charts.** Core and contract
+  validation agree; resolution preserves semantic Y/X unit sizes through transposition, logarithmic
+  domains, facets and relayout. Native/static SVG uses physical axes; terminal/accessibility retain
+  semantic values. Parser/formatter/designer/contract round trips and deterministic plan/SVG fixtures
+  live in `TransposedAspectRatioTests`.
+- [ ] **Remaining physical aspect combinations.** Transposed non-POINT layers, offsets, positional
+  adjustments, stacking, secondary axes and error bars remain rejected. Categorical, temporal,
+  polar and geographic physical aspect semantics still need explicit contracts and backend evidence.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**
   `AdvancedChartSemanticValidator.cs:697` — today the author is told to stage separate series or
   layers in ETL-SQL. The question to settle first is what a per-row condition *means* on a connected

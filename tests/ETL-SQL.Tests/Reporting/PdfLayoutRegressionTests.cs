@@ -25,7 +25,7 @@ namespace ETL_SQL.Tests.Reporting
         [InlineData("Letter", "Landscape")]
         [InlineData("A4", "Portrait")]
         [InlineData("A4", "Landscape")]
-        public void PdfLayout_PageSizeAndOrientation(string pageSize, string orientation)
+        public async Task PdfLayout_PageSizeAndOrientation(string pageSize, string orientation)
         {
             var manifest = new ReportManifest
             {
@@ -46,7 +46,7 @@ namespace ETL_SQL.Tests.Reporting
             };
 
             var exporter = new PdfExporter();
-            var bytes = exporter.Export(manifest);
+            var bytes = await exporter.ExportAsync(manifest);
 
             Assert.True(bytes.Length > 100);
             RetainEvidence($"PageSize_{pageSize}_{orientation}", bytes);
@@ -54,7 +54,7 @@ namespace ETL_SQL.Tests.Reporting
 
         [Fact]
         [Trait("Category", "LayoutRegressionEvidence")]
-        public void PdfLayout_HeadersAndFooters()
+        public async Task PdfLayout_HeadersAndFooters()
         {
             var manifest = new ReportManifest
             {
@@ -68,14 +68,14 @@ namespace ETL_SQL.Tests.Reporting
                 }
             };
 
-            var bytes = new PdfExporter().Export(manifest);
+            var bytes = await new PdfExporter().ExportAsync(manifest);
             Assert.True(bytes.Length > 100);
             RetainEvidence("HeadersFooters", bytes);
         }
 
         [Fact]
         [Trait("Category", "LayoutRegressionEvidence")]
-        public void PdfLayout_GroupsAndPageTotals()
+        public async Task PdfLayout_GroupsAndPageTotals()
         {
             var manifest = new ReportManifest
             {
@@ -92,14 +92,14 @@ namespace ETL_SQL.Tests.Reporting
                 }
             };
 
-            var bytes = new PdfExporter().Export(manifest);
+            var bytes = await new PdfExporter().ExportAsync(manifest);
             Assert.True(bytes.Length > 100);
             RetainEvidence("GroupsPageTotals", bytes);
         }
 
         [Fact]
         [Trait("Category", "LayoutRegressionEvidence")]
-        public void PdfLayout_OversizedContent()
+        public async Task PdfLayout_OversizedContent()
         {
             var longText = new string('A', 5000);
             var manifest = new ReportManifest
@@ -112,14 +112,14 @@ namespace ETL_SQL.Tests.Reporting
                 }
             };
 
-            var bytes = new PdfExporter().Export(manifest);
+            var bytes = await new PdfExporter().ExportAsync(manifest);
             Assert.True(bytes.Length > 100);
             RetainEvidence("OversizedContent", bytes);
         }
 
         [Fact]
         [Trait("Category", "LayoutRegressionEvidence")]
-        public void PdfLayout_FontsAndInternational()
+        public async Task PdfLayout_FontsAndInternational()
         {
             var manifest = new ReportManifest
             {
@@ -131,14 +131,14 @@ namespace ETL_SQL.Tests.Reporting
                 }
             };
 
-            var bytes = new PdfExporter().Export(manifest);
+            var bytes = await new PdfExporter().ExportAsync(manifest);
             Assert.True(bytes.Length > 100);
             RetainEvidence("Fonts", bytes);
         }
 
         [Fact]
         [Trait("Category", "LayoutRegressionEvidence")]
-        public void PdfLayout_Cancellation()
+        public async Task PdfLayout_Cancellation()
         {
             // Simulate cancellation by testing the path that creates the PDF
             var manifest = new ReportManifest
@@ -152,14 +152,14 @@ namespace ETL_SQL.Tests.Reporting
                 }
             };
 
-            var bytes = new PdfExporter().Export(manifest);
+            var bytes = await new PdfExporter().ExportAsync(manifest);
             Assert.True(bytes.Length > 100);
             RetainEvidence("Cancellation", bytes);
         }
 
         [Fact]
         [Trait("Category", "LayoutRegressionEvidence")]
-        public void PdfLayout_Authorization()
+        public async Task PdfLayout_Authorization()
         {
             // Simulate authorization evidence
             var manifest = new ReportManifest
@@ -172,7 +172,7 @@ namespace ETL_SQL.Tests.Reporting
                 }
             };
 
-            var bytes = new PdfExporter().Export(manifest);
+            var bytes = await new PdfExporter().ExportAsync(manifest);
             Assert.True(bytes.Length > 100);
             RetainEvidence("Authorization", bytes);
         }

@@ -710,9 +710,6 @@ namespace ETL_SQL.App
         /// Splits secret values out of an appsettings.json: returns the config text with secrets blanked,
         /// and a path→value map (dotted JSON path) of the removed secrets for the keys archive.
         /// </summary>
-        internal static (string StrippedConfig, Dictionary<string, JsonNode?> Secrets) SplitConfigSecrets(string appSettingsPath)
-            => SplitConfigSecretsAsync(appSettingsPath).GetAwaiter().GetResult();
-
         internal static async Task<(string StrippedConfig, Dictionary<string, JsonNode?> Secrets)> SplitConfigSecretsAsync(string appSettingsPath)
         {
             var secrets = new Dictionary<string, JsonNode?>();
@@ -798,9 +795,6 @@ namespace ETL_SQL.App
             typeof(BackupRestoreService).Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
 
         /// <summary>Copies a SQLite db plus its -wal/-shm sidecars into <paramref name="destDir"/>.</summary>
-        private static IEnumerable<BackupFile> CopySqliteSet(string dbPath, string destDir, string destName, string archiveRoot)
-            => CopySqliteSetAsync(dbPath, destDir, destName, archiveRoot).GetAwaiter().GetResult();
-
         private static async Task<List<BackupFile>> CopySqliteSetAsync(string dbPath, string destDir, string destName, string archiveRoot)
         {
             var files = new List<BackupFile>();
@@ -818,9 +812,6 @@ namespace ETL_SQL.App
         }
 
         /// <summary>Recursively copies a directory tree; yields a manifest entry per file. No-op if absent.</summary>
-        private static IEnumerable<BackupFile> CopyTree(string sourceDir, string destDir, string archiveRoot)
-            => CopyTreeAsync(sourceDir, destDir, archiveRoot).GetAwaiter().GetResult();
-
         private static async Task<List<BackupFile>> CopyTreeAsync(string sourceDir, string destDir, string archiveRoot)
         {
             var files = new List<BackupFile>();
@@ -914,9 +905,6 @@ namespace ETL_SQL.App
         /// A per-user staging root (under LocalApplicationData), restricted to the owner, preferred over
         /// the shared system temp directory for staging credential-bearing backup artifacts.
         /// </summary>
-        private static string SecureTempRoot()
-            => SecureTempRootAsync().GetAwaiter().GetResult();
-
         private static async Task<string> SecureTempRootAsync()
         {
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);

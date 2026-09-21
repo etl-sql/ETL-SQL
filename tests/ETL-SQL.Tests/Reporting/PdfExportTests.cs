@@ -13,7 +13,7 @@ namespace ETL_SQL.Tests
     public class PdfExportTests
     {
         [Fact]
-        public void PdfExporter_RendersTableManifest_AsValidPdf()
+        public async Task PdfExporter_RendersTableManifest_AsValidPdf()
         {
             var manifest = new ReportManifest
             {
@@ -27,7 +27,7 @@ namespace ETL_SQL.Tests
                 }
             };
 
-            var bytes = new PdfExporter().Export(manifest);
+            var bytes = await new PdfExporter().ExportAsync(manifest);
 
             Assert.NotNull(bytes);
             Assert.True(bytes.Length > 100, "PDF output is implausibly small");
@@ -36,7 +36,7 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
-        public void PdfExporter_RendersChart_ViaNativeSvg()
+        public async Task PdfExporter_RendersChart_ViaNativeSvg()
         {
             var manifest = new ReportManifest
             {
@@ -50,14 +50,14 @@ namespace ETL_SQL.Tests
                 }
             };
 
-            var bytes = new PdfExporter().Export(manifest);
+            var bytes = await new PdfExporter().ExportAsync(manifest);
 
             Assert.True(bytes.Length > 100);
             Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, bytes[..4]);
         }
 
         [Fact]
-        public void PdfExporter_RendersFilterSelection_AndFormatsCells()
+        public async Task PdfExporter_RendersFilterSelection_AndFormatsCells()
         {
             var manifest = new ReportManifest
             {
@@ -77,14 +77,14 @@ namespace ETL_SQL.Tests
                 }
             };
 
-            var bytes = new PdfExporter().Export(manifest);
+            var bytes = await new PdfExporter().ExportAsync(manifest);
 
             Assert.True(bytes.Length > 100);
             Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, bytes[..4]);
         }
 
         [Fact]
-        public void ReportPdfExporter_DefaultsToStaticPdf()
+        public async Task ReportPdfExporter_DefaultsToStaticPdf()
         {
             var manifest = new ReportManifest
             {
@@ -97,14 +97,14 @@ namespace ETL_SQL.Tests
                 }
             };
 
-            var bytes = new ReportPdfExporter().Export(manifest);
+            var bytes = await new ReportPdfExporter().ExportAsync(manifest);
 
             Assert.True(bytes.Length > 100);
             Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, bytes[..4]);
         }
 
         [Fact]
-        public void ReportPdfExporter_AutoFallsBackToStaticWithWarning()
+        public async Task ReportPdfExporter_AutoFallsBackToStaticWithWarning()
         {
             string? warning = null;
             var manifest = new ReportManifest
@@ -118,7 +118,7 @@ namespace ETL_SQL.Tests
                 }
             };
 
-            var bytes = new ReportPdfExporter().Export(
+            var bytes = await new ReportPdfExporter().ExportAsync(
                 manifest,
                 new PdfExportOptions { Mode = PdfExportMode.Auto, Warn = message => warning = message });
 
@@ -130,25 +130,25 @@ namespace ETL_SQL.Tests
         [Theory]
         [InlineData(PdfExportMode.Hosted)]
         [InlineData(PdfExportMode.Browser)]
-        public void ReportPdfExporter_ExplicitHighFidelityModesUseConfiguredExporter(PdfExportMode mode)
+        public async Task ReportPdfExporter_ExplicitHighFidelityModesUseConfiguredExporter(PdfExportMode mode)
         {
             var manifest = new ReportManifest { Title = "Explicit PDF" };
             var expected = new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D };
             var exporter = new ReportPdfExporter(highFidelityExporter: new StubReportPdfExporter(expected));
 
-            var bytes = exporter.Export(manifest, new PdfExportOptions { Mode = mode, Host = "http://localhost/report" });
+            var bytes = await exporter.ExportAsync(manifest, new PdfExportOptions { Mode = mode, Host = "http://localhost/report" });
 
             Assert.Same(expected, bytes);
         }
 
         [Fact]
-        public void ReportPdfExporter_AutoTriesConfiguredHighFidelityExporter()
+        public async Task ReportPdfExporter_AutoTriesConfiguredHighFidelityExporter()
         {
             var manifest = new ReportManifest { Title = "Auto PDF" };
             var expected = new byte[] { 0x25, 0x50, 0x44, 0x46, 0x2D };
             var exporter = new ReportPdfExporter(highFidelityExporter: new StubReportPdfExporter(expected));
 
-            var bytes = exporter.Export(manifest, new PdfExportOptions
+            var bytes = await exporter.ExportAsync(manifest, new PdfExportOptions
             {
                 Mode = PdfExportMode.Auto,
                 Host = "http://localhost/report"
@@ -158,7 +158,7 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
-        public void ReportPdfExporter_AutoFallsBackWhenHighFidelityExporterFails()
+        public async Task ReportPdfExporter_AutoFallsBackWhenHighFidelityExporterFails()
         {
             string? warning = null;
             var manifest = new ReportManifest
@@ -173,7 +173,7 @@ namespace ETL_SQL.Tests
             };
             var exporter = new ReportPdfExporter(highFidelityExporter: new ThrowingReportPdfExporter());
 
-            var bytes = exporter.Export(manifest, new PdfExportOptions
+            var bytes = await exporter.ExportAsync(manifest, new PdfExportOptions
             {
                 Mode = PdfExportMode.Auto,
                 Host = "http://localhost/report",
@@ -254,12 +254,12 @@ namespace ETL_SQL.Tests
 
         private sealed class StubReportPdfExporter(byte[] bytes) : IReportPdfExporter
         {
-            public byte[] Export(ReportManifest manifest, PdfExportOptions? options = null) => bytes;
+            public Task<byte[]> ExportAsync(ReportManifest manifest, PdfExportOptions? options = null, CancellationToken cancellationToken = default) => Task.FromResult(bytes);
         }
 
         private sealed class ThrowingReportPdfExporter : IReportPdfExporter
         {
-            public byte[] Export(ReportManifest manifest, PdfExportOptions? options = null) =>
+            public Task<byte[]> ExportAsync(ReportManifest manifest, PdfExportOptions? options = null, CancellationToken cancellationToken = default) =>
                 throw new System.InvalidOperationException("boom");
         }
     }

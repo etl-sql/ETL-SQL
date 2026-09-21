@@ -75,8 +75,16 @@ namespace ETL_SQL.Connectors.Avro
             {
                 effectiveCancellationToken.ThrowIfCancellationRequested();
                 tempFile = System.IO.Path.GetTempFileName();
-                _encryption.DecryptFile(_filePath, tempFile);
-                effectivePath = tempFile;
+                try
+                {
+                    await _encryption.DecryptFileAsync(_filePath, tempFile, effectiveCancellationToken);
+                    effectivePath = tempFile;
+                }
+                catch
+                {
+                    TempFileHelper.SafeDelete(tempFile, _logger);
+                    throw;
+                }
             }
 
             try
@@ -182,7 +190,7 @@ namespace ETL_SQL.Connectors.Avro
                 if (_encryption.Enabled)
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
-                    _encryption.EncryptFile(targetPath, _filePath);
+                    await _encryption.EncryptFileAsync(targetPath, _filePath, effectiveCancellationToken);
                 }
             }
             finally
@@ -250,8 +258,9 @@ namespace ETL_SQL.Connectors.Avro
             {
                 effectiveCancellationToken.ThrowIfCancellationRequested();
                 tempFile = System.IO.Path.GetTempFileName();
-                try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch (Exception ex) { _logger.Debug("[AvroDataSource.GetColumnsAsync] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
+                try { await _encryption.DecryptFileAsync(_filePath, tempFile, effectiveCancellationToken); effectivePath = tempFile; }
+                catch (OperationCanceledException) { TempFileHelper.SafeDelete(tempFile, _logger); throw; }
+                catch (Exception ex) { TempFileHelper.SafeDelete(tempFile, _logger); _logger.Debug("[AvroDataSource.GetColumnsAsync] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
             }
 
             try

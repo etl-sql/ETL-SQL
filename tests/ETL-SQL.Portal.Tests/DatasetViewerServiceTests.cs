@@ -37,7 +37,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
         // The regression: a CREATEd dataset stores EncryptionMode=MachineBound but, with a portal at-rest
         // key configured, the file is portal-key (PASSWORD) encrypted. The viewer must decrypt with the key.
         const string atRestKey = "cG9ydGFsLWF0LXJlc3Qta2V5LXZpZXdlcg==";
-        var parquet = WriteParquet("ds_portalkey.parquet",
+        var parquet = await WriteParquetAsync("ds_portalkey.parquet",
             new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = atRestKey });
 
         await using var db = NewDb(out var config, atRestKey);
@@ -50,7 +50,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
     [Fact]
     public async Task View_PortalKeyEncrypted_WrongKey_Throws()
     {
-        var parquet = WriteParquet("ds_wrongkey.parquet",
+        var parquet = await WriteParquetAsync("ds_wrongkey.parquet",
             new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = "cG9ydGFsLWtleS1BLTAwMA==" });
 
         await using var db = NewDb(out var config, atRestKey: "cG9ydGFsLWtleS1CLTk5OQ==");   // different key
@@ -65,7 +65,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
     {
         var oldKey = Convert.ToBase64String(Enumerable.Repeat((byte)4, 32).ToArray());
         var newKey = Convert.ToBase64String(Enumerable.Repeat((byte)5, 32).ToArray());
-        var parquet = WriteParquet(
+        var parquet = await WriteParquetAsync(
             "ds_previous.parquet",
             new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = oldKey });
 
@@ -83,7 +83,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
     [Fact]
     public async Task View_NoKey_MachineEncrypted_Decrypts()
     {
-        var parquet = WriteParquet("ds_machine.parquet",
+        var parquet = await WriteParquetAsync("ds_machine.parquet",
             new Dictionary<string, string> { ["ENCRYPT"] = "MACHINE" });
 
         await using var db = NewDb(out var config, atRestKey: null);
@@ -96,7 +96,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
     [Fact]
     public async Task View_NoKey_Plaintext_Reads()
     {
-        var parquet = WriteParquet("ds_plain.parquet", encryptOptions: null);   // plaintext
+        var parquet = await WriteParquetAsync("ds_plain.parquet", encryptOptions: null);   // plaintext
 
         await using var db = NewDb(out var config, atRestKey: null);
         var id = AddDataset(db, "#pl", parquet, DatasetEncryptionMode.None);
@@ -111,7 +111,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
         // A published dataset's file is portal-key encrypted; the publish handler leaves EncryptionMode
         // at its default. With the key configured the viewer still decrypts by config.
         const string atRestKey = "cG9ydGFsLWF0LXJlc3Qta2V5LXB1Ymxpc2g=";
-        var parquet = WriteParquet("ds_published.parquet",
+        var parquet = await WriteParquetAsync("ds_published.parquet",
             new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = atRestKey });
 
         await using var db = NewDb(out var config, atRestKey);
@@ -124,7 +124,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
     [Fact]
     public async Task Query_FilteredUnsortedPage_ReturnsCountsWithoutChangingRows()
     {
-        var parquet = WriteParquet("ds_page.parquet", encryptOptions: null);
+        var parquet = await WriteParquetAsync("ds_page.parquet", encryptOptions: null);
 
         await using var db = NewDb(out var config, atRestKey: null);
         var id = AddDataset(db, "#page", parquet, DatasetEncryptionMode.None);
@@ -148,7 +148,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
     [Fact]
     public async Task Export_ReadsBeyondPreviewLimit()
     {
-        var parquet = WriteParquet("ds_export.parquet", encryptOptions: null, 10, 20, 30);
+        var parquet = await WriteParquetAsync("ds_export.parquet", encryptOptions: null, 10, 20, 30);
 
         await using var db = NewDb(out var config, atRestKey: null);
         config.MaxPreviewRows = 1;
@@ -166,8 +166,8 @@ public sealed class DatasetViewerServiceTests : IDisposable
     [Fact]
     public async Task Query_CacheKeyChangesWhenDatasetContentIdentityChanges()
     {
-        var firstParquet = WriteParquet("ds_cache_v1.parquet", encryptOptions: null, 10);
-        var secondParquet = WriteParquet("ds_cache_v2.parquet", encryptOptions: null, 99);
+        var firstParquet = await WriteParquetAsync("ds_cache_v1.parquet", encryptOptions: null, 10);
+        var secondParquet = await WriteParquetAsync("ds_cache_v2.parquet", encryptOptions: null, 99);
 
         await using var db = NewDb(out var config, atRestKey: null);
         var id = AddDataset(db, "#cache", firstParquet, DatasetEncryptionMode.None, rowCount: 1);
@@ -191,8 +191,8 @@ public sealed class DatasetViewerServiceTests : IDisposable
     [Fact]
     public async Task Query_PreviewCacheEvictsEntriesWhenRowBudgetIsExceeded()
     {
-        var firstParquet = WriteParquet("ds_budget_a.parquet", encryptOptions: null, 10);
-        var secondParquet = WriteParquet("ds_budget_b.parquet", encryptOptions: null, 20);
+        var firstParquet = await WriteParquetAsync("ds_budget_a.parquet", encryptOptions: null, 10);
+        var secondParquet = await WriteParquetAsync("ds_budget_b.parquet", encryptOptions: null, 20);
 
         await using var db = NewDb(out var config, atRestKey: null);
         config.Dataset.PreviewCacheMaxRows = 1;
@@ -204,7 +204,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
         var first = await viewer.QueryAsync(firstId, 1, 100, null, null, null, []);
         Assert.Equal(10L, Convert.ToInt64(first.Rows.Single()["v"]));
 
-        WriteParquet("ds_budget_a.parquet", encryptOptions: null, 99);
+        await WriteParquetAsync("ds_budget_a.parquet", encryptOptions: null, 99);
         var second = await viewer.QueryAsync(secondId, 1, 100, null, null, null, []);
         Assert.Equal(20L, Convert.ToInt64(second.Rows.Single()["v"]));
 
@@ -216,7 +216,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
     [Fact]
     public async Task Stats_AndColumnValues_PreserveDatasetViewerSemantics()
     {
-        var parquet = WriteParquet("ds_stats.parquet", encryptOptions: null);
+        var parquet = await WriteParquetAsync("ds_stats.parquet", encryptOptions: null);
 
         await using var db = NewDb(out var config, atRestKey: null);
         var id = AddDataset(db, "#stats", parquet, DatasetEncryptionMode.None);
@@ -238,7 +238,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
     {
         var bytes = Enumerable.Repeat((byte)42, 32).ToArray();
         var password = Convert.ToBase64String(bytes);
-        var parquet = WriteParquet("ds_provider.parquet", new()
+        var parquet = await WriteParquetAsync("ds_provider.parquet", new()
         {
             ["ENCRYPT"] = "PASSWORD",
             ["PASSWORD"] = password
@@ -272,7 +272,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
     }
 
     // Writes a 2-row parquet (v = 10, 20) to <_root>/<fileName>, encrypted with encryptOptions when given.
-    private string WriteParquet(string fileName, Dictionary<string, string>? encryptOptions, params long[] values)
+    private async Task<string> WriteParquetAsync(string fileName, Dictionary<string, string>? encryptOptions, params long[] values)
     {
         if (values.Length == 0)
             values = [10, 20];
@@ -296,7 +296,7 @@ public sealed class DatasetViewerServiceTests : IDisposable
         }
         else
         {
-            new EncryptionOptions(encryptOptions).EncryptFile(plain, dest);
+            await new EncryptionOptions(encryptOptions).EncryptFileAsync(plain, dest);
         }
         File.Delete(plain);
         return dest;

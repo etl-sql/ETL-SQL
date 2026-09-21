@@ -116,7 +116,7 @@ public sealed class NativeChartLayoutTests
         Assert.DoesNotContain("\"chartSpec\"", browserJson, StringComparison.Ordinal);
         Assert.Contains("\"layout\"", browserJson, StringComparison.Ordinal);
 
-        var pdf = new PdfExporter().Export(refreshed);
+        var pdf = await new PdfExporter().ExportAsync(refreshed);
         Assert.True(pdf.Length > 100);
         Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdf, 0, 4));
     }

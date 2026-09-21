@@ -48,7 +48,7 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
-        public void MachineBoundCrypto_FileRoundTrip_ProducesIdenticalContent()
+        public async Task MachineBoundCrypto_FileRoundTrip_ProducesIdenticalContent()
         {
             var dir = Path.GetTempPath();
             var plain = Path.Combine(dir, Path.GetRandomFileName());
@@ -59,12 +59,12 @@ namespace ETL_SQL.Tests.Reporting
             try
             {
                 File.WriteAllText(plain, content);
-                MachineBoundCrypto.EncryptFile(plain, encrypted);
+                await MachineBoundCrypto.EncryptFileAsync(plain, encrypted);
 
                 // Encrypted file must differ from plaintext
                 Assert.NotEqual(content, File.ReadAllText(encrypted));
 
-                MachineBoundCrypto.DecryptFile(encrypted, decrypted);
+                await MachineBoundCrypto.DecryptFileAsync(encrypted, decrypted);
                 Assert.Equal(content, File.ReadAllText(decrypted));
             }
             finally

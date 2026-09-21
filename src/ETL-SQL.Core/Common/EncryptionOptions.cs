@@ -84,21 +84,24 @@ public class EncryptionOptions
     /// </summary>
     /// <param name="inputFile">The encrypted source file.</param>
     /// <param name="outputFile">The target decrypted file.</param>
-    public void DecryptFile(string inputFile, string outputFile)
+    public async Task DecryptFileAsync(string inputFile, string outputFile, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!Enabled)
         {
-            System.IO.File.Copy(inputFile, outputFile, true);
+            await using var source = new FileStream(inputFile, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+            await using var target = new FileStream(outputFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+            await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
             return;
         }
 
         if (IsMachineBound)
         {
-            MachineBoundCrypto.DecryptFile(inputFile, outputFile);
+            await MachineBoundCrypto.DecryptFileAsync(inputFile, outputFile, cancellationToken).ConfigureAwait(false);
         }
         else if (!string.IsNullOrEmpty(KeyFile))
         {
-            CryptoUtils.DecryptFileWithSsh(inputFile, outputFile, KeyFile, true, Passphrase);
+            await CryptoUtils.DecryptFileWithSshAsync(inputFile, outputFile, KeyFile, true, Passphrase, cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -135,21 +138,24 @@ public class EncryptionOptions
     /// </summary>
     /// <param name="inputFile">The plain source file.</param>
     /// <param name="outputFile">The target encrypted file.</param>
-    public void EncryptFile(string inputFile, string outputFile)
+    public async Task EncryptFileAsync(string inputFile, string outputFile, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!Enabled)
         {
-            System.IO.File.Copy(inputFile, outputFile, true);
+            await using var source = new FileStream(inputFile, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+            await using var target = new FileStream(outputFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+            await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
             return;
         }
 
         if (IsMachineBound)
         {
-            MachineBoundCrypto.EncryptFile(inputFile, outputFile);
+            await MachineBoundCrypto.EncryptFileAsync(inputFile, outputFile, cancellationToken).ConfigureAwait(false);
         }
         else if (!string.IsNullOrEmpty(KeyFile))
         {
-            CryptoUtils.EncryptFileWithSsh(inputFile, outputFile, KeyFile, true);
+            await CryptoUtils.EncryptFileWithSshAsync(inputFile, outputFile, KeyFile, true, cancellationToken).ConfigureAwait(false);
         }
         else
         {

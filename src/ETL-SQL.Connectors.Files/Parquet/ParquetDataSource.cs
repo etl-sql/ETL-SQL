@@ -81,8 +81,16 @@ namespace ETL_SQL.Connectors.Parquet
             {
                 effectiveCancellationToken.ThrowIfCancellationRequested();
                 tempFile = System.IO.Path.GetTempFileName();
-                _encryption.DecryptFile(_filePath, tempFile);
-                effectivePath = tempFile;
+                try
+                {
+                    await _encryption.DecryptFileAsync(_filePath, tempFile, effectiveCancellationToken);
+                    effectivePath = tempFile;
+                }
+                catch
+                {
+                    TempFileHelper.SafeDelete(tempFile, _logger);
+                    throw;
+                }
             }
 
             try
@@ -218,7 +226,7 @@ namespace ETL_SQL.Connectors.Parquet
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
                     publicationFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
-                    _encryption.EncryptFile(targetPath, publicationFile);
+                    await _encryption.EncryptFileAsync(targetPath, publicationFile, effectiveCancellationToken);
                     fileToPublish = publicationFile;
                 }
 
@@ -394,12 +402,18 @@ namespace ETL_SQL.Connectors.Parquet
                 tempFile = System.IO.Path.GetTempFileName();
                 try
                 {
-                    _encryption.DecryptFile(_filePath, tempFile);
+                    await _encryption.DecryptFileAsync(_filePath, tempFile, effectiveCancellationToken);
                     effectivePath = tempFile;
                     _logger.Debug("[PARQUET] Decrypted to {TempFile} for schema discovery.", tempFile);
                 }
+                catch (OperationCanceledException)
+                {
+                    TempFileHelper.SafeDelete(tempFile, _logger);
+                    throw;
+                }
                 catch (Exception ex)
                 {
+                    TempFileHelper.SafeDelete(tempFile, _logger);
                     _logger.Debug("[PARQUET] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message);
                     return Enumerable.Empty<string>();
                 }

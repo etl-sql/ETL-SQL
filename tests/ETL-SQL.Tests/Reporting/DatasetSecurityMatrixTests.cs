@@ -27,45 +27,45 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
-        public void AtRestPassword_SameKeyRoundTrips_SwappedKeyFails()
+        public async Task AtRestPassword_SameKeyRoundTrips_SwappedKeyFails()
         {
             const string atRestKey = "portal-at-rest-key-a";
             var plain = WritePlaintext();
             var encrypted = Path.Combine(_root, "at-rest.enc");
             var decrypted = Path.Combine(_root, "at-rest.dec");
 
-            Password(atRestKey).EncryptFile(plain, encrypted);
+            await Password(atRestKey).EncryptFileAsync(plain, encrypted);
 
             AssertCiphertextDiffers(plain, encrypted);
-            Password(atRestKey).DecryptFile(encrypted, decrypted);
+            await Password(atRestKey).DecryptFileAsync(encrypted, decrypted);
             Assert.Equal(File.ReadAllBytes(plain), File.ReadAllBytes(decrypted));
 
             var wrongOutput = Path.Combine(_root, "wrong-at-rest.dec");
-            Assert.ThrowsAny<CryptographicException>(
-                () => Password("portal-at-rest-key-b").DecryptFile(encrypted, wrongOutput));
+            await Assert.ThrowsAnyAsync<CryptographicException>(
+                async () => await Password("portal-at-rest-key-b").DecryptFileAsync(encrypted, wrongOutput));
         }
 
         [Fact]
-        public void PasswordTransport_RightPasswordRoundTrips_WrongPasswordFails()
+        public async Task PasswordTransport_RightPasswordRoundTrips_WrongPasswordFails()
         {
             const string transportPassword = "portable-transport-password";
             var plain = WritePlaintext();
             var encrypted = Path.Combine(_root, "password-export.enc");
             var decrypted = Path.Combine(_root, "password-export.dec");
 
-            Password(transportPassword).EncryptFile(plain, encrypted);
+            await Password(transportPassword).EncryptFileAsync(plain, encrypted);
 
             AssertCiphertextDiffers(plain, encrypted);
-            Password(transportPassword).DecryptFile(encrypted, decrypted);
+            await Password(transportPassword).DecryptFileAsync(encrypted, decrypted);
             Assert.Equal(File.ReadAllBytes(plain), File.ReadAllBytes(decrypted));
 
             var wrongOutput = Path.Combine(_root, "wrong-password.dec");
-            Assert.ThrowsAny<CryptographicException>(
-                () => Password("incorrect-transport-password").DecryptFile(encrypted, wrongOutput));
+            await Assert.ThrowsAnyAsync<CryptographicException>(
+                async () => await Password("incorrect-transport-password").DecryptFileAsync(encrypted, wrongOutput));
         }
 
         [Fact]
-        public void KeyFileTransport_PublicPrivateRoundTrips_MissingAndWrongKeysFail()
+        public async Task KeyFileTransport_PublicPrivateRoundTrips_MissingAndWrongKeysFail()
         {
             var (publicKey, privateKey) = WriteRsaKeyPair("transport");
             var (_, wrongPrivateKey) = WriteRsaKeyPair("wrong");
@@ -73,19 +73,19 @@ namespace ETL_SQL.Tests.Reporting
             var encrypted = Path.Combine(_root, "keyfile-export.enc");
             var decrypted = Path.Combine(_root, "keyfile-export.dec");
 
-            KeyFile(publicKey).EncryptFile(plain, encrypted);
+            await KeyFile(publicKey).EncryptFileAsync(plain, encrypted);
 
             AssertCiphertextDiffers(plain, encrypted);
-            KeyFile(privateKey).DecryptFile(encrypted, decrypted);
+            await KeyFile(privateKey).DecryptFileAsync(encrypted, decrypted);
             Assert.Equal(File.ReadAllBytes(plain), File.ReadAllBytes(decrypted));
 
             var missingOutput = Path.Combine(_root, "missing-key.dec");
-            Assert.Throws<FileNotFoundException>(
-                () => KeyFile(Path.Combine(_root, "missing.pem")).DecryptFile(encrypted, missingOutput));
+            await Assert.ThrowsAsync<FileNotFoundException>(
+                async () => await KeyFile(Path.Combine(_root, "missing.pem")).DecryptFileAsync(encrypted, missingOutput));
 
             var wrongOutput = Path.Combine(_root, "wrong-key.dec");
-            Assert.ThrowsAny<CryptographicException>(
-                () => KeyFile(wrongPrivateKey).DecryptFile(encrypted, wrongOutput));
+            await Assert.ThrowsAnyAsync<CryptographicException>(
+                async () => await KeyFile(wrongPrivateKey).DecryptFileAsync(encrypted, wrongOutput));
         }
 
         private string WritePlaintext()

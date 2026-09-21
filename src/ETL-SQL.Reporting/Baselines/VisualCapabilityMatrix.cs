@@ -102,7 +102,10 @@ public static class VisualCapabilityMatrix
         Chart(VisualType.Treemap, "TREEMAP", "Hierarchical", "treemap", "Rect click, drill context, tooltip"),
         Chart(VisualType.HeatMap, "HEATMAP", "Matrix / Grid", "heat map", "Cell click, cross-filter, tooltip"),
         Chart(VisualType.Combo, "COMBO", "Layered", "bar/line combo", "Click, cross-filter, tooltip"),
-        Chart(VisualType.Custom, "CUSTOM", "Advanced / Layered", "advanced chart", "Click, cross-filter, tooltip"),
+        Chart(VisualType.Custom, "CUSTOM", "Advanced / Layered", "advanced chart", "Click, cross-filter, tooltip") with
+        {
+            Notes = "Shared PlotPlan; continuous transposed POINT aspect ratios in native/static SVG; terminal retains semantic values, not physical distances"
+        },
         Control(VisualType.Table, "TABLE", "Tabular", "Tabulator / HTML table", "Markdown, CSV, and static table exporters", "Spectre table", "Sort, filter, pagination, row click", browserLevel: CapabilityLevel.ThirdPartyDependency),
         Control(VisualType.Card, "CARD", "KPI", "native DOM card", "Markdown and static card exporters", "Spectre panel", "Click, navigation"),
         Control(VisualType.Slicer, "SLICER", "Filter / Control", "native DOM control", "omitted from non-browser exports", "Spectre selection summary", "Selection, parameter binding", false),

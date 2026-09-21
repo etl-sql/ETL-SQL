@@ -802,7 +802,7 @@ public class HtmlVisualStaticFallbackTests
     }
 
     [Fact]
-    public void StaticPdf_UsesSemanticFallbackAndProducesValidPdf()
+    public async Task StaticPdf_UsesSemanticFallbackAndProducesValidPdf()
     {
         var visual = new VisualManifest
         {
@@ -813,7 +813,7 @@ public class HtmlVisualStaticFallbackTests
         };
         visual.SemanticFallback = VisualSemanticFallbackBuilder.Build(visual);
 
-        var bytes = new PdfExporter().Export(new ReportManifest { Title = "HTML fallback", Visuals = [visual] });
+        var bytes = await new PdfExporter().ExportAsync(new ReportManifest { Title = "HTML fallback", Visuals = [visual] });
 
         Assert.True(bytes.Length > 100);
         Assert.Equal("%PDF", Encoding.ASCII.GetString(bytes, 0, 4));

@@ -183,10 +183,36 @@ internal sealed class PlotPlanSvgRenderer
         return false;
     }
 
-    private static void RenderCartesian(StringBuilder builder, PlotPlan plan)
+    private static void RenderCartesian(StringBuilder builder, PlotPlan plan, bool preservePhysicalAspect = false)
     {
         if (plan.Coordinate?.Kind == CoordinateKind.TransposedCartesian)
         {
+            if (plan.Coordinate.AspectRatio is not null)
+            {
+                // Adapt point coordinates to physical axes without mutating the authoritative plan.
+                static FieldChannel Transpose(FieldChannel channel) => channel switch
+                {
+                    FieldChannel.X => FieldChannel.Y,
+                    FieldChannel.Y => FieldChannel.X,
+                    _ => channel
+                };
+                RenderCartesian(builder, plan with
+                {
+                    Coordinate = plan.Coordinate with { Kind = CoordinateKind.Cartesian },
+                    Scales = plan.Scales.Select(scale => scale with { Channel = Transpose(scale.Channel) }).ToImmutableArray(),
+                    Layers = plan.Layers.Select(layer => layer with
+                    {
+                        Data = layer.Data.Select(datum => datum with
+                        {
+                            Channels = datum.Channels.Select(channel => channel with
+                            {
+                                Channel = Transpose(channel.Channel)
+                            }).ToImmutableArray()
+                        }).ToImmutableArray()
+                    }).ToImmutableArray()
+                }, preservePhysicalAspect: true);
+                return;
+            }
             RenderTransposedCartesian(builder, plan);
             return;
         }
@@ -256,6 +282,14 @@ internal sealed class PlotPlanSvgRenderer
         var plotWidth = Math.Max(minPlotWidth, totalWidth - plotLeft - plotRight);
         var plotHeight = plan.Bounds.Height - Top - Bottom;
 
+        if (preservePhysicalAspect)
+        {
+            // Legend gutters may reduce the available plot, but must not change physical unit sizes.
+            var ratio = (plan.Bounds.Height - Top - Bottom) / (plan.Bounds.Width - Left - Right);
+            plotWidth = Math.Min(plotWidth, plan.Bounds.Width - Left - Right);
+            plotWidth = Math.Min(plotWidth, plotHeight / ratio);
+            plotHeight = plotWidth * ratio;
+        }
         CartesianPlotArea area = new(plotLeft, Top, plotWidth, plotHeight);
 
         var overlayLabels = new List<OverlayLabel>();

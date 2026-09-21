@@ -85,7 +85,7 @@ CREATE VISUAL name AS CUSTOM (
 
 ## Mappings
 
-- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and currently requires quantitative primary Cartesian X/Y scales.
+- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` layers without stacking, offsets, position adjustments, secondary axes, or error bars. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
 - **SCALES** — Optionally declares named `LINEAR`, `LOGARITHMIC`, `TIME`, `BAND`, `POINT`, `ORDINAL`, or `IDENTITY` scales. Encoding `SCALE` references must name a declared scale; omission requests deterministic inference from the required `TYPE`, channel, mark, and coordinate.
 - **RANGE** — Adds a dependency-free sRGB sequential or diverging output range to a quantitative `COLOR` scale. Colors use portable `#RRGGBB`; values clamp at the domain, nulls use `NULL_COLOR`, and a diverging midpoint must lie inside the resolved domain.
 - **Scale axis controls** — `MIN`/`MAX` set the domain, `INCLUDE_ZERO` expands a quantitative domain to zero, `REVERSE` flips its display direction, `MAJOR_TICK_COUNT` or `TICK_INTERVAL` controls major ticks, `MINOR_TICKS` adds midpoint ticks, `TIME_UNIT` truncates/bins temporal scales by calendar unit (`AUTO`, `DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`), `TICK_FORMAT` applies a custom date/time or numeric format pattern, and `LABEL_ROTATION`/`LABEL_SKIP` control crowded tick labels. `OUTER_PADDING = 0..1` adds space before the first and after the last category on `BAND` scales only.
@@ -112,6 +112,28 @@ CREATE VISUAL name AS CUSTOM (
 - **HOVER_FOCUS = NONE|SELF|SERIES** — On mark layers, controls pointer hover emphasis. `NONE` (default) applies standard hover effects, `SELF` dims other marks in the plot, and `SERIES` highlights the active series across all categories while dimming unrelated series.
 - **ANNOTATIONS (POINT (...))** — Attaches data point and coordinate callouts to chart series. `SERIES` specifies the target layer or series name, `TYPE` selects `MAX`, `MIN`, or `COORD(x, y)`, `LABEL` sets the callout text, and `SYMBOL` selects the marker style (`'pin'`, `'arrow'`, or `'circle'`).
 - **Visible transformations** — Aggregation, filtering, calculation, lookup, windowing, and statistical preparation belong in preceding ETL-SQL/`#temp` statements, not in `CHART`.
+
+## Fixed physical units on transposed points
+
+```sql
+CREATE VISUAL PhysicalScatter AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    SCALES (
+      horizontal = LINEAR (CHANNEL = X, MIN = 0, MAX = 10),
+      vertical = LINEAR (CHANNEL = Y, MIN = 0, MAX = 20)
+    ),
+    LAYERS (observations = POINT (ENCODINGS (
+      X = Distance (TYPE = QUANTITATIVE, SCALE = horizontal),
+      Y = Elevation (TYPE = QUANTITATIVE, SCALE = vertical)
+    )))
+  )
+);
+```
+
+- **Source** � `#prepared` supplies quantitative `Distance` and `Elevation` columns.
+- **ASPECT_RATIO = 2** � One Elevation unit spans twice the physical distance of one Distance unit, including after transposition.
 
 ## Examples
 

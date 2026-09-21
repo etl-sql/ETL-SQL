@@ -546,7 +546,7 @@ the parameter.
 
 ### 4.2 PDF Export
 - `GET /api/reports/{id}/export/pdf`
-- Calls `new PdfExporter().Export(manifest)` — same pipeline as
+- Calls `await new PdfExporter().ExportAsync(manifest, cancellationToken)` — same pipeline as
   `etl-sql-report build --format pdf`.
 - Charts rendered by `SvgChartRenderer` (server-side SVG from manifest data).
   Tables laid out natively by QuestPDF. No Chromium, no external runtime.

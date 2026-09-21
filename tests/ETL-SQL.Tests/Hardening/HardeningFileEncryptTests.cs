@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
@@ -92,39 +92,39 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
-        public void CryptoUtils_SshKeyEncryption_NoPassphrase()
+        public async Task CryptoUtils_SshKeyEncryption_NoPassphrase()
         {
-            CryptoUtils.EncryptFileWithSsh(_plainFile, _encryptedFile, _publicKeyFile, true);
+            await CryptoUtils.EncryptFileWithSshAsync(_plainFile, _encryptedFile, _publicKeyFile, true);
             Assert.True(File.Exists(_encryptedFile));
 
-            CryptoUtils.DecryptFileWithSsh(_encryptedFile, _decryptedFile, _privateKeyFile, true);
+            await CryptoUtils.DecryptFileWithSshAsync(_encryptedFile, _decryptedFile, _privateKeyFile, true);
             Assert.Equal(File.ReadAllText(_plainFile), File.ReadAllText(_decryptedFile));
         }
 
         [Fact]
-        public void CryptoUtils_SshKeyEncryption_WithPassphrase()
+        public async Task CryptoUtils_SshKeyEncryption_WithPassphrase()
         {
-            CryptoUtils.EncryptFileWithSsh(_plainFile, _encryptedFile, _publicKeyFile, true);
+            await CryptoUtils.EncryptFileWithSshAsync(_plainFile, _encryptedFile, _publicKeyFile, true);
 
             // Decrypt with correct passphrase
-            CryptoUtils.DecryptFileWithSsh(_encryptedFile, _decryptedFile, _passphraseKeyFile, true, Passphrase);
+            await CryptoUtils.DecryptFileWithSshAsync(_encryptedFile, _decryptedFile, _passphraseKeyFile, true, Passphrase);
             Assert.Equal(File.ReadAllText(_plainFile), File.ReadAllText(_decryptedFile));
 
             // Decrypt with WRONG passphrase should throw
-            Assert.ThrowsAny<Exception>(() => CryptoUtils.DecryptFileWithSsh(_encryptedFile, _decryptedFile, _passphraseKeyFile, true, "wrong"));
+            await Assert.ThrowsAnyAsync<Exception>(async () => await CryptoUtils.DecryptFileWithSshAsync(_encryptedFile, _decryptedFile, _passphraseKeyFile, true, "wrong"));
         }
 
         [Fact]
-        public void CryptoUtils_SshKeyEncryption_DetectsTampering()
+        public async Task CryptoUtils_SshKeyEncryption_DetectsTampering()
         {
-            CryptoUtils.EncryptFileWithSsh(_plainFile, _encryptedFile, _publicKeyFile, true);
+            await CryptoUtils.EncryptFileWithSshAsync(_plainFile, _encryptedFile, _publicKeyFile, true);
 
             var encrypted = File.ReadAllBytes(_encryptedFile);
             encrypted[^1] ^= 0x01;
             File.WriteAllBytes(_encryptedFile, encrypted);
 
-            Assert.ThrowsAny<CryptographicException>(() =>
-                CryptoUtils.DecryptFileWithSsh(_encryptedFile, _decryptedFile, _privateKeyFile, true));
+            await Assert.ThrowsAnyAsync<CryptographicException>(() =>
+                CryptoUtils.DecryptFileWithSshAsync(_encryptedFile, _decryptedFile, _privateKeyFile, true));
         }
 
         [Fact]

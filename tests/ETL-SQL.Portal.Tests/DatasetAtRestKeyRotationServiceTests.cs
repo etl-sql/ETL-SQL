@@ -29,7 +29,7 @@ public sealed class DatasetAtRestKeyRotationServiceTests : IDisposable
         var oldKey = Convert.ToBase64String(oldBytes);
         var newKey = Convert.ToBase64String(newBytes);
         var path = Path.Combine(_root, "provider_1.parquet");
-        WriteEncrypted(path, oldKey, "provider-dataset-payload");
+        await WriteEncryptedAsync(path, oldKey, "provider-dataset-payload");
         var config = new PortalConfig
         {
             TenantId = "tenant-alpha",
@@ -60,8 +60,8 @@ public sealed class DatasetAtRestKeyRotationServiceTests : IDisposable
 
         Assert.Equal(1, result.Rotated);
         Assert.Equal("v2", result.TargetVersion);
-        Assert.Equal("provider-dataset-payload", ReadEncrypted(path, newKey));
-        Assert.ThrowsAny<Exception>(() => ReadEncrypted(path, oldKey));
+        Assert.Equal("provider-dataset-payload", await ReadEncryptedAsync(path, newKey));
+        await Assert.ThrowsAnyAsync<Exception>(async () => await ReadEncryptedAsync(path, oldKey));
 
         var artifactOnly = new ResolvedKeyMaterialProvider("vault",
         [
@@ -78,7 +78,7 @@ public sealed class DatasetAtRestKeyRotationServiceTests : IDisposable
         var newKey = Convert.ToBase64String(Enumerable.Repeat((byte)2, 32).ToArray());
         var config = NewConfig(newKey, "v2", oldKey, "v1");
         var path = Path.Combine(_root, "sales_1.parquet");
-        WriteEncrypted(path, oldKey, "old-key-payload");
+        await WriteEncryptedAsync(path, oldKey, "old-key-payload");
 
         await using var db = NewDb();
         db.Datasets.Add(new Dataset
@@ -101,8 +101,8 @@ public sealed class DatasetAtRestKeyRotationServiceTests : IDisposable
         Assert.Empty(first.FailedDatasets);
         Assert.Equal("v2", (await db.Datasets.SingleAsync()).AtRestKeyVersion);
         Assert.Equal(DatasetEncryptionMode.MachineBound, (await db.Datasets.SingleAsync()).EncryptionMode);
-        Assert.Equal("old-key-payload", ReadEncrypted(path, newKey));
-        Assert.ThrowsAny<Exception>(() => ReadEncrypted(path, oldKey));
+        Assert.Equal("old-key-payload", await ReadEncryptedAsync(path, newKey));
+        await Assert.ThrowsAnyAsync<Exception>(async () => await ReadEncryptedAsync(path, oldKey));
 
         var second = await service.RotateAsync();
         Assert.Equal(0, second.Rotated);
@@ -115,7 +115,7 @@ public sealed class DatasetAtRestKeyRotationServiceTests : IDisposable
         var key = Convert.ToBase64String(Enumerable.Repeat((byte)3, 32).ToArray());
         var config = NewConfig(key, "v1", null, null);
         var path = Path.Combine(_root, "legacy_2.parquet");
-        WriteEncrypted(path, key, "legacy-payload");
+        await WriteEncryptedAsync(path, key, "legacy-payload");
         var before = await File.ReadAllBytesAsync(path);
 
         await using var db = NewDb();
@@ -172,20 +172,20 @@ public sealed class DatasetAtRestKeyRotationServiceTests : IDisposable
         return config;
     }
 
-    private void WriteEncrypted(string path, string key, string payload)
+    private async Task WriteEncryptedAsync(string path, string key, string payload)
     {
         var plain = Path.Combine(_root, Guid.NewGuid() + ".txt");
         File.WriteAllText(plain, payload);
-        PasswordOptions(key).EncryptFile(plain, path);
+        await PasswordOptions(key).EncryptFileAsync(plain, path);
         File.Delete(plain);
     }
 
-    private string ReadEncrypted(string path, string key)
+    private async Task<string> ReadEncryptedAsync(string path, string key)
     {
         var plain = Path.Combine(_root, Guid.NewGuid() + ".txt");
         try
         {
-            PasswordOptions(key).DecryptFile(path, plain);
+            await PasswordOptions(key).DecryptFileAsync(path, plain);
             return File.ReadAllText(plain);
         }
         finally

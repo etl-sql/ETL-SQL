@@ -25,7 +25,7 @@ namespace ETL_SQL.Tests.Reporting
         private static Script Parse(string sql) => new Parser(new Lexer(sql).Tokenize()).Parse();
 
         [Fact]
-        public void EncryptPortal_ResolvesEnvKey_RoundTripsWithPassword()
+        public async Task EncryptPortal_ResolvesEnvKey_RoundTripsWithPassword()
         {
             const string key = "cG9ydGFsLWF0LXJlc3Qta2V5LXBvcnRhbA==";
             var prev = Environment.GetEnvironmentVariable(EncryptionOptions.PortalAtRestKeyEnvVar);
@@ -41,10 +41,8 @@ namespace ETL_SQL.Tests.Reporting
                 var decrypted = Path.Combine(dir, "dec.bin");
 
                 // Encrypt with ENCRYPT=PORTAL (key from env), decrypt with ENCRYPT=PASSWORD + the same key.
-                new EncryptionOptions(new Dictionary<string, string> { ["ENCRYPT"] = "PORTAL" })
-                    .EncryptFile(plain, encrypted);
-                new EncryptionOptions(new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = key })
-                    .DecryptFile(encrypted, decrypted);
+                await new EncryptionOptions(new Dictionary<string, string> { ["ENCRYPT"] = "PORTAL" }).EncryptFileAsync(plain, encrypted);
+                await new EncryptionOptions(new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = key }).DecryptFileAsync(encrypted, decrypted);
 
                 Assert.Equal(File.ReadAllText(plain), File.ReadAllText(decrypted));
             }

@@ -204,7 +204,7 @@ namespace ETL_SQL.Tests.Reporting
 
         [Fact]
         [Trait("Category", "Smoke.Reporting")]
-        public void PdfExport_CarriesTheDetailNotice()
+        public async Task PdfExport_CarriesTheDetailNotice()
         {
             var popover = new TooltipManifest
             {
@@ -214,8 +214,8 @@ namespace ETL_SQL.Tests.Reporting
                 ResolvedVisuals = new List<string> { "MonthDetail" }
             };
 
-            var withDetail = new PdfExporter().Export(PageWith(popover));
-            var withoutDetail = new PdfExporter().Export(PageWith(null));
+            var withDetail = await new PdfExporter().ExportAsync(PageWith(popover));
+            var withoutDetail = await new PdfExporter().ExportAsync(PageWith(null));
 
             // PDF content streams are compressed, so the text is not directly assertable here;
             // the wording itself is pinned by the Describe tests above. What this establishes is

@@ -281,10 +281,10 @@ namespace ETL_SQL.Tests.CliCommands
         }
 
         [Fact]
-        public void SplitConfigSecrets_BlanksSecretsAndCapturesByDottedPath()
+        public async Task SplitConfigSecrets_BlanksSecretsAndCapturesByDottedPath()
         {
             var path = Path.Combine(_source, "appsettings.json");
-            var (stripped, secrets) = BackupRestoreService.SplitConfigSecrets(path);
+            var (stripped, secrets) = await BackupRestoreService.SplitConfigSecretsAsync(path);
 
             Assert.DoesNotContain(AtRestKey, stripped);
             Assert.DoesNotContain(JwtSecret, stripped);

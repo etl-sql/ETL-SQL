@@ -25,9 +25,6 @@ public static class MachineBoundCrypto
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    public static void EncryptFile(string inputPath, string outputPath)
-        => EncryptFileAsync(inputPath, outputPath).GetAwaiter().GetResult();
-
     public static async Task EncryptFileAsync(string inputPath, string outputPath, CancellationToken cancellationToken = default)
     {
         var fileKey = GetMachineFileKey();
@@ -53,9 +50,6 @@ public static class MachineBoundCrypto
             TryDeleteFile(tempCipher);
         }
     }
-
-    public static void DecryptFile(string inputPath, string outputPath)
-        => DecryptFileAsync(inputPath, outputPath).GetAwaiter().GetResult();
 
     public static async Task DecryptFileAsync(string inputPath, string outputPath, CancellationToken cancellationToken = default)
     {

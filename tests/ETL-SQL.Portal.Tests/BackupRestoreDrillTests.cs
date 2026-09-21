@@ -226,7 +226,7 @@ public sealed class BackupRestoreDrillTests : IDisposable
         Directory.CreateDirectory(restoredRoot);
         var v1 = Convert.ToBase64String(Enumerable.Repeat((byte)7, 32).ToArray());
 
-        var sourceParquet = WriteEncryptedParquet(sourceRoot, "sales_1.parquet", v1);
+        var sourceParquet = await WriteEncryptedParquetAsync(sourceRoot, "sales_1.parquet", v1);
 
         // Back up + restore the cache file into a clean location.
         var restoredParquet = Path.Combine(restoredRoot, "sales_1.parquet");
@@ -274,7 +274,7 @@ public sealed class BackupRestoreDrillTests : IDisposable
         (await client.SendAsync(change)).EnsureSuccessStatusCode();
     }
 
-    private string WriteEncryptedParquet(string root, string fileName, string keyBase64)
+    private async Task<string> WriteEncryptedParquetAsync(string root, string fileName, string keyBase64)
     {
         var dest = Path.Combine(root, fileName);
         var plain = Path.Combine(root, "_plain_" + fileName);
@@ -286,8 +286,7 @@ public sealed class BackupRestoreDrillTests : IDisposable
         batch.AddRowAsync(r1).GetAwaiter().GetResult();
         batch.AddRowAsync(r2).GetAwaiter().GetResult();
         ds.WriteBatches(new[] { batch }.ToAsyncEnumerable()).GetAwaiter().GetResult();
-        new EncryptionOptions(new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = keyBase64 })
-            .EncryptFile(plain, dest);
+        await new EncryptionOptions(new Dictionary<string, string> { ["ENCRYPT"] = "PASSWORD", ["PASSWORD"] = keyBase64 }).EncryptFileAsync(plain, dest);
         File.Delete(plain);
         return dest;
     }

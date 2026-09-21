@@ -142,8 +142,8 @@ public sealed class DatasetAtRestKeyRotationService(
 
         try
         {
-            sourceOptions.DecryptFile(path, plainPath);
-            targetOptions.EncryptFile(plainPath, stagedPath);
+            await sourceOptions.DecryptFileAsync(path, plainPath, cancellationToken);
+            await targetOptions.EncryptFileAsync(plainPath, stagedPath, cancellationToken);
             if (!File.Exists(stagedPath) || new FileInfo(stagedPath).Length == 0)
                 throw new InvalidDataException("Rotation did not produce a valid encrypted file.");
 

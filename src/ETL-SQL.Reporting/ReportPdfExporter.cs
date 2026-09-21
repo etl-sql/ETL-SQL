@@ -12,20 +12,6 @@ namespace ETL_SQL.Reporting
         private readonly IReportPdfExporter _staticExporter = staticExporter ?? new StaticReportPdfExporter(logger);
         private readonly IReportPdfExporter _highFidelityExporter = highFidelityExporter ?? new BrowserReportPdfExporter();
 
-        public byte[] Export(ReportManifest manifest, PdfExportOptions? options = null)
-        {
-            options ??= PdfExportOptions.Static;
-
-            return options.Mode switch
-            {
-                PdfExportMode.Static => _staticExporter.Export(manifest, options),
-                PdfExportMode.Auto => ExportAuto(manifest, options),
-                PdfExportMode.Hosted => _highFidelityExporter.Export(manifest, options),
-                PdfExportMode.Browser => _highFidelityExporter.Export(manifest, options),
-                _ => throw new ArgumentOutOfRangeException(nameof(options), $"Unsupported PDF export mode '{options.Mode}'.")
-            };
-        }
-
         public async Task<byte[]> ExportAsync(ReportManifest manifest, PdfExportOptions? options = null, CancellationToken cancellationToken = default)
         {
             options ??= PdfExportOptions.Static;
@@ -40,30 +26,6 @@ namespace ETL_SQL.Reporting
             };
         }
 
-        private byte[] ExportAuto(ReportManifest manifest, PdfExportOptions options)
-        {
-            if (HasPaginatedLayout(manifest))
-                return _staticExporter.Export(manifest, options);
-
-            if (!string.IsNullOrWhiteSpace(options.Host))
-            {
-                try
-                {
-                    return _highFidelityExporter.Export(manifest, options);
-                }
-                catch (Exception ex)
-                {
-                    options.Warn?.Invoke($"High-fidelity PDF export failed ({ex.Message}); falling back to STATIC PDF export.");
-                }
-            }
-            else
-            {
-                options.Warn?.Invoke("High-fidelity PDF export is not configured; falling back to STATIC PDF export.");
-            }
-
-            return _staticExporter.Export(manifest, options);
-        }
-
         private async Task<byte[]> ExportAutoAsync(ReportManifest manifest, PdfExportOptions options, CancellationToken cancellationToken)
         {
             if (HasPaginatedLayout(manifest))
@@ -75,7 +37,7 @@ namespace ETL_SQL.Reporting
                 {
                     return await _highFidelityExporter.ExportAsync(manifest, options, cancellationToken);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
                 {
                     options.Warn?.Invoke($"High-fidelity PDF export failed ({ex.Message}); falling back to STATIC PDF export.");
                 }

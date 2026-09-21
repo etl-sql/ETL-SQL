@@ -80,6 +80,22 @@ Golden SHA-256 fingerprints in `GrammarOfGraphicsContractTests` make an accident
 CI. An intentional compatible or breaking change must introduce an explicit version decision and
 update the fixtures and compatibility expectations together.
 
+## Transposed point aspect ratios
+
+Continuous primary-axis `POINT` compositions accept `ASPECT_RATIO` with
+`TRANSPOSED_CARTESIAN`. The ratio is physical semantic Y-unit size divided by X-unit size;
+logarithmic spans use decades. The resolver fits the viewport using
+`height / width = xSpan / (aspectRatio * ySpan)`, including facet panels and relayout.
+The SVG adapter exchanges point channels and scale channels only in its local rendering copy.
+Static export consumes the same SVG. Terminal and accessible output retain raw values and order;
+they do not claim physical-distance fidelity.
+
+This increment retains ChartSpec v2 and PlotPlan v3: it adds no serialized fields or enum values,
+and existing valid specifications retain their behavior and fingerprints. Older ChartSpec validators
+reject the newly allowed combination. Regenerate output with a supporting renderer; serialization
+compatibility alone does not establish rendering support. Non-point layers, secondary axes, error
+bars, stacking and positional adjustments remain rejected for transposed aspect ratios.
+
 ## Cross-backend conformance
 
 A backend implements `IPlotPlanSemanticBackend` and projects its effective interpretation into

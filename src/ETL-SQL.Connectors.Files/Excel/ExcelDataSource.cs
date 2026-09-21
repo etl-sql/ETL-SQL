@@ -478,7 +478,7 @@ namespace ETL_SQL.Connectors.Excel
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
                     publicationFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
-                    _encryption.EncryptFile(fileToEncrypt, publicationFile);
+                    await _encryption.EncryptFileAsync(fileToEncrypt, publicationFile, effectiveCancellationToken);
                     fileToEncrypt = publicationFile;
                 }
 
@@ -623,37 +623,6 @@ namespace ETL_SQL.Connectors.Excel
 
         private CancellationToken EffectiveCancellationToken(CancellationToken cancellationToken) =>
             cancellationToken.CanBeCanceled ? cancellationToken : (_context?.CancellationToken ?? CancellationToken.None);
-
-        private string PrepareReadPath(List<string> tempFiles)
-        {
-            var effectivePath = _filePath;
-
-            if (_encryption.Enabled)
-            {
-                var decryptedTemp = System.IO.Path.GetTempFileName();
-                tempFiles.Add(decryptedTemp);
-                _encryption.DecryptFile(_filePath, decryptedTemp);
-                effectivePath = decryptedTemp;
-            }
-
-            if (_compress &&
-                (System.IO.Path.GetExtension(_filePath).Equals(".zip", StringComparison.OrdinalIgnoreCase)
-                 || System.IO.Path.GetExtension(effectivePath).Equals(".zip", StringComparison.OrdinalIgnoreCase)
-                 || _encryption.Enabled))
-            {
-                var extractedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".xlsx");
-                tempFiles.Add(extractedTemp);
-                using var zip = System.IO.Compression.ZipFile.OpenRead(effectivePath);
-                var entry = zip.Entries.FirstOrDefault(e => !string.IsNullOrEmpty(e.Name));
-                if (entry != null)
-                {
-                    entry.ExtractToFile(extractedTemp, true);
-                    effectivePath = extractedTemp;
-                }
-            }
-
-            return effectivePath;
-        }
 
         private void DeleteTempFiles(IEnumerable<string> tempFiles)
         {

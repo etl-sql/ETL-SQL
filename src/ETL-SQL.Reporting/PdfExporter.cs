@@ -37,9 +37,6 @@ namespace ETL_SQL.Reporting
 
         private readonly SvgChartRenderer _svg = new();
 
-        public byte[] Export(ReportManifest manifest)
-            => ExportAsync(manifest).GetAwaiter().GetResult();
-
         public async Task<byte[]> ExportAsync(ReportManifest manifest, CancellationToken cancellationToken = default)
         {
             EnsureFontsInitialized();

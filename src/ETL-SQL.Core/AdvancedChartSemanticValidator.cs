@@ -746,10 +746,16 @@ public static class AdvancedChartSemanticValidator
         if (coordinate.AspectRatio is null) return;
         if (coordinate.AspectRatio <= 0m)
             Add(results, node, "Cartesian ASPECT_RATIO must be greater than zero.");
-        if (coordinate.Kind != AdvancedChartCoordinateKind.Cartesian)
-            Add(results, node, "ASPECT_RATIO currently supports CARTESIAN coordinates only.");
+        if (coordinate.Kind is not (AdvancedChartCoordinateKind.Cartesian or AdvancedChartCoordinateKind.TransposedCartesian))
+            Add(results, node, "ASPECT_RATIO requires CARTESIAN or TRANSPOSED_CARTESIAN coordinates.");
         else if (!ContinuousPositionalScale(chart, AdvancedChartChannel.X) || !ContinuousPositionalScale(chart, AdvancedChartChannel.Y))
             Add(results, node, "ASPECT_RATIO requires continuous quantitative primary X and Y scales.");
+        if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian && chart.Layers.Any(layer =>
+            layer.Mark != AdvancedChartMarkKind.Point || layer.Position.Kind != AdvancedChartPositionKind.Identity ||
+            EffectiveEncodings(chart, layer).Any(encoding => encoding.Stack != AdvancedChartStackMode.None ||
+                encoding.Channel is AdvancedChartChannel.Y2 or AdvancedChartChannel.XOffset or AdvancedChartChannel.YOffset or
+                    AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh)))
+            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers without stacking, offsets, position adjustments, secondary axes, or error bars.");
     }
 
     private static void ValidateFacetAndResolution(List<Diagnostic> results, AdvancedChartDefinition chart, AstNode chartNode)

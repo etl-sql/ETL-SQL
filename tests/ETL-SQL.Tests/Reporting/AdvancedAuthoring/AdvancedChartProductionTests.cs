@@ -22,7 +22,7 @@ namespace ETL_SQL.Tests.Reporting.AdvancedAuthoring;
 public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
 {
     [Fact]
-    public void GeographicCustomLayers_ParseLowerResolveAndRenderWithBoundedBuiltInGeometry()
+    public async Task GeographicCustomLayers_ParseLowerResolveAndRenderWithBoundedBuiltInGeometry()
     {
         const string sql = """
             CREATE VISUAL NativeGeography AS CUSTOM (
@@ -89,7 +89,7 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
             Source = "geography.rptsql",
             Visuals = [new VisualManifest { Name = "NativeGeography", VisualType = "CUSTOM", PlotPlan = plan, NativeSvg = svg }]
         };
-        Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, new PdfExporter().Export(report)[..4]);
+        Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, (await new PdfExporter().ExportAsync(report))[..4]);
         Assert.Contains("west-route", new MarkdownRenderer().Render(report));
     }
 
@@ -632,7 +632,7 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void DivergingColorRangeAndTick_ResolvePortableSemanticsAcrossSurfaces()
+    public async Task DivergingColorRangeAndTick_ResolvePortableSemanticsAcrossSurfaces()
     {
         const string sql = """
             CREATE VISUAL Variance AS CUSTOM (
@@ -701,7 +701,7 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
             Source = "variance.rptsql",
             Visuals = [new VisualManifest { Name = "Variance", VisualType = "CUSTOM", PlotPlan = plan, NativeSvg = svg }]
         };
-        var pdf = new PdfExporter().Export(report);
+        var pdf = await new PdfExporter().ExportAsync(report);
         Assert.Equal(new byte[] { 0x25, 0x50, 0x44, 0x46 }, pdf[..4]);
         Assert.Contains("Color ranges from", new MarkdownRenderer().Render(report));
     }
@@ -1123,7 +1123,7 @@ public sealed class AdvancedChartProductionTests(ITestOutputHelper output)
         });
 
         var markdown = new MarkdownRenderer().Render(manifest);
-        var pdf = new PdfExporter().Export(manifest);
+        var pdf = await new PdfExporter().ExportAsync(manifest);
         Assert.Contains("Declarative Geometry Refinements", markdown);
         Assert.NotEmpty(pdf);
         Assert.Contains(manifest.Visuals, visual =>

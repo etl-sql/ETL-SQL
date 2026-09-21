@@ -427,9 +427,6 @@ public static class CryptoUtils
     /// <summary>
     /// Encrypts a file using an SSH (RSA) public key.
     /// </summary>
-    public static void EncryptFileWithSsh(string inputFile, string outputFile, string keyFile, bool overwrite)
-        => EncryptFileWithSshAsync(inputFile, outputFile, keyFile, overwrite).GetAwaiter().GetResult();
-
     public static async Task EncryptFileWithSshAsync(
         string inputFile,
         string outputFile,
@@ -478,9 +475,6 @@ public static class CryptoUtils
     /// <summary>
     /// Decrypts a file using an SSH (RSA) private key.
     /// </summary>
-    public static void DecryptFileWithSsh(string inputFile, string outputFile, string keyFile, bool overwrite, string? passphrase = null)
-        => DecryptFileWithSshAsync(inputFile, outputFile, keyFile, overwrite, passphrase).GetAwaiter().GetResult();
-
     public static async Task DecryptFileWithSshAsync(
         string inputFile,
         string outputFile,

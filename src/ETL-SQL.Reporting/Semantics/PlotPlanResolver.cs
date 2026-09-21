@@ -1322,7 +1322,10 @@ public sealed class PlotPlanResolver
         var availableHeight = bounds.Height - verticalChrome;
         if (availableWidth <= 0m || availableHeight <= 0m)
             throw new InvalidDataException("ASPECT_RATIO requires a visual large enough for axes and plot content.");
-        var desiredPlotRatio = aspectRatio * ySpan / xSpan;
+        // The ratio follows semantic Y/X units when their physical axes are exchanged.
+        var desiredPlotRatio = coordinate.Kind == CoordinateKind.TransposedCartesian
+            ? xSpan / (aspectRatio * ySpan)
+            : aspectRatio * ySpan / xSpan;
         var plotWidth = availableWidth;
         var plotHeight = plotWidth * desiredPlotRatio;
         if (plotHeight > availableHeight)

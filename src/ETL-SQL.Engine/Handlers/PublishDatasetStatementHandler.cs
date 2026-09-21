@@ -126,8 +126,8 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
             try
             {
                 // Decrypt the portable file once with the transport credential, then re-encrypt at rest.
-                transport.DecryptFile(sourcePath, tempPlain);
-                atRest.EncryptFile(tempPlain, fileTransaction.StagingPath);
+                await transport.DecryptFileAsync(sourcePath, tempPlain, context.CancellationToken);
+                await atRest.EncryptFileAsync(tempPlain, fileTransaction.StagingPath, context.CancellationToken);
                 fileTransaction.Commit();
             }
             finally

@@ -282,38 +282,6 @@ namespace ETL_SQL.Connectors.Xml
             return reader.Depth;
         }
 
-        private string GetEffectivePath(List<string> tempFiles)
-        {
-            var effectivePath = _filePath;
-
-            if (_encryption.Enabled)
-            {
-                string decryptedTemp = System.IO.Path.GetTempFileName();
-                tempFiles.Add(decryptedTemp);
-                _encryption.DecryptFile(_filePath, decryptedTemp);
-                effectivePath = decryptedTemp;
-            }
-
-            if (_compress && (_filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-                              || effectivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-                              || _encryption.Enabled))
-            {
-                string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString() + ".xml");
-                tempFiles.Add(tempFile);
-                using (var zip = System.IO.Compression.ZipFile.OpenRead(effectivePath))
-                {
-                    var entry = zip.Entries.FirstOrDefault();
-                    if (entry != null)
-                    {
-                        entry.ExtractToFile(tempFile, true);
-                        effectivePath = tempFile;
-                    }
-                }
-            }
-
-            return effectivePath;
-        }
-
         private void DeleteTempFiles(IEnumerable<string> tempFiles)
         {
             foreach (var tempFile in tempFiles.Reverse())
@@ -433,7 +401,7 @@ namespace ETL_SQL.Connectors.Xml
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
                     publicationFile = ETL_SQL.Core.Common.FileConnectorPathHelper.GetStagingFilePath(_context, _filePath, _transactional);
-                    _encryption.EncryptFile(fileToEncrypt, publicationFile);
+                    await _encryption.EncryptFileAsync(fileToEncrypt, publicationFile, effectiveCancellationToken);
                     fileToEncrypt = publicationFile;
                 }
 

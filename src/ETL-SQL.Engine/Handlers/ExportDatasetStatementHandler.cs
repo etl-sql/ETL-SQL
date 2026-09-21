@@ -82,8 +82,8 @@ public class ExportDatasetStatementHandler(ILogger logger) : IStatementHandler
         try
         {
             // Decrypt the at-rest cache to a transient plaintext parquet, then re-encrypt to the target.
-            atRest.DecryptFile(existing.ParquetFilePath, tempPlain);
-            transport.EncryptFile(tempPlain, fileTransaction.StagingPath);
+            await atRest.DecryptFileAsync(existing.ParquetFilePath, tempPlain, context.CancellationToken);
+            await transport.EncryptFileAsync(tempPlain, fileTransaction.StagingPath, context.CancellationToken);
             fileTransaction.Commit();
             fileTransaction.Complete();
         }

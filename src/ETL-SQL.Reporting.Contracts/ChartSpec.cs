@@ -401,13 +401,19 @@ public sealed record ChartSpec(
             throw new InvalidDataException("Cartesian ASPECT_RATIO must be greater than zero.");
         if (Coordinate.AspectRatio is not null)
         {
-            if (Coordinate.Kind != CoordinateKind.Cartesian)
-                throw new InvalidDataException("ASPECT_RATIO currently supports CARTESIAN coordinates only.");
+            if (Coordinate.Kind is not (CoordinateKind.Cartesian or CoordinateKind.TransposedCartesian))
+                throw new InvalidDataException("ASPECT_RATIO requires CARTESIAN or TRANSPOSED_CARTESIAN coordinates.");
             var xScale = Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.X);
             var yScale = Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.Y);
             if (xScale?.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic) ||
                 yScale?.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic))
                 throw new InvalidDataException("ASPECT_RATIO requires continuous quantitative primary X and Y scales.");
+            if (Coordinate.Kind == CoordinateKind.TransposedCartesian && Layers.Any(layer =>
+                layer.Mark != MarkKind.Point || layer.Position is { Kind: not PositionAdjustmentKind.Identity } ||
+                layer.Bindings.Any(binding => binding.Stack != StackMode.None ||
+                    binding.Channel is FieldChannel.Y2 or FieldChannel.XOffset or FieldChannel.YOffset or
+                        FieldChannel.ErrorLow or FieldChannel.ErrorHigh)))
+                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers without stacking, offsets, position adjustments, secondary axes, or error bars.");
         }
         if (Facet is not null)
         {
