@@ -108,17 +108,14 @@ public sealed class TransposedAspectNudgeTests
     [Theory]
     [InlineData("NUDGE(X = 1, Y = 1, UNIT = DATA)")]
     [InlineData("NUDGE(X = 0.1, Y = 0.1, UNIT = BAND)")]
-    [InlineData("JITTER(X = 0.1, Y = 0.1, KEY = Distance, SEED = 1)")]
-    public void UnsupportedUnitsAndJitter_StillFailAuthoringAndContractValidation(string position)
+    public void UnsupportedUnits_StillFailAuthoringAndContractValidation(string position)
     {
         var invalid = Parse(Script.Replace("NUDGE(X = 1, Y = -0.5, UNIT = EM)", position, StringComparison.Ordinal));
         Assert.Contains(AdvancedChartSemanticValidator.Validate(invalid), diagnostic =>
             diagnostic.Code == "RPT-CHART" && diagnostic.Line > 0 && diagnostic.Column > 0 &&
             diagnostic.Message.Contains("NUDGE UNIT EM", StringComparison.Ordinal));
         var (spec, _) = Lower(Script);
-        var unsupported = position.StartsWith("JITTER", StringComparison.Ordinal)
-            ? new PositionAdjustmentSpec(PositionAdjustmentKind.Jitter, .1m, .1m, "Distance", 1)
-            : new PositionAdjustmentSpec(PositionAdjustmentKind.Nudge, .1m, .1m,
+        var unsupported = new PositionAdjustmentSpec(PositionAdjustmentKind.Nudge, .1m, .1m,
                 Unit: position.Contains("DATA", StringComparison.Ordinal) ? PositionAdjustmentUnit.Data : PositionAdjustmentUnit.Band);
         var contract = spec with { Layers = [spec.Layers[0] with { Position = unsupported }] };
         Assert.Contains("NUDGE UNIT EM", Assert.Throws<InvalidDataException>(contract.Validate).Message);

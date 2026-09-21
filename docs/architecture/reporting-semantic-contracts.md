@@ -94,7 +94,7 @@ This increment retains ChartSpec v2 and PlotPlan v3: it adds no serialized field
 and existing valid specifications retain their behavior and fingerprints. Older ChartSpec validators
 reject the newly allowed combination. Regenerate output with a supporting renderer; serialization
 compatibility alone does not establish rendering support. Marks other than POINT/TEXT, secondary axes,
-stacking, offset channels, JITTER and DATA/BAND nudges remain rejected for transposed aspect ratios.
+stacking, offset channels and DATA/BAND nudges remain rejected for transposed aspect ratios.
 
 Error bars on these points retain `ErrorLow`/`ErrorHigh` in the semantic Y domain.
 Their endpoints participate in global and independent facet domains before viewport fitting.
@@ -115,6 +115,18 @@ SVG also honors conditional color, opacity, and font size. Text that cannot fit 
 is retained in SVG descriptions. Terminal rows preserve semantic X/Y values and facet membership,
 including text-only compositions. These behaviors are scoped to the newly accepted combination;
 ChartSpec v2 and PlotPlan v3 remain unchanged, as do existing valid chart fingerprints.
+
+`JITTER` is also accepted for this POINT/TEXT composition. With signed seeded hashes `hx` and
+`hy`, resolution emits `DisplayOffsetX = hy * Y * (viewport.Width - 80)` and
+`DisplayOffsetY = -hx * X * (viewport.Height - 100)`. The viewport is the fitted Cartesian
+frame for the row's facet, or the global fitted frame; margins exclude axis chrome, and the
+metric precedes renderer-specific legend layout. Relayout recomputes offsets from the same hashes.
+The existing chart/layer/key/axis/seed hash identity is retained: row reorder and layer rename do
+not change displacement, while changing the seed does. Layer identity includes mark, Z index and
+channel sequence, so separate point/text layers may have different offsets. Keys must exist and
+be unique and non-null. Raw channels, scale domains, fallback and terminal values stay unchanged.
+This lifts a validation restriction without adding fields to ChartSpec v2 or PlotPlan v3; older
+validators reject it. Existing valid Cartesian and transposed chart goldens remain unchanged.
 
 ## Cross-backend conformance
 

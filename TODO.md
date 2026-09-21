@@ -325,8 +325,13 @@ semantics and backend evidence before its rejection can be lifted.
   fallback. Covered for logarithmic/reversed axes, facets, relayout, crowded labels, null positions,
   authoring/contract round trips, LSP rename and static PDF in `TransposedAspectTextTests`.
   ChartSpec v2 and PlotPlan v3 retain their existing wire shapes.
+- [x] **Deterministic JITTER on continuous transposed POINT/TEXT aspect charts.** Seeded
+  stable-key displacement follows semantic axes, scales with fitted facet/resize viewports, and
+  moves point intervals together. Raw channels, domains and terminal/fallback values stay intact.
+  `TransposedAspectJitterTests` covers geometry, key/seed stability, invalid inputs, round trips,
+  lineage, PDF and deterministic goldens; LSP covers stable-key rename. No wire fields changed.
 - [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT, offset channels,
-  JITTER, DATA/BAND nudges, stacking and secondary axes remain rejected. Categorical, temporal,
+  DATA/BAND nudges, stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**
   `AdvancedChartSemanticValidator.cs:697` — today the author is told to stage separate series or

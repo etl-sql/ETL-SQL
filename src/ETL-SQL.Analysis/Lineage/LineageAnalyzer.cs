@@ -513,6 +513,11 @@ public class LineageAnalyzer
                 {
                     foreach (var encoding in layer.Encodings)
                         RecordChartBinding(encoding, layer.Name);
+                    if (chart.Coordinate is { Kind: AdvancedChartCoordinateKind.TransposedCartesian, AspectRatio: not null } &&
+                        layer.Position is { Kind: AdvancedChartPositionKind.Jitter, KeyField: { } keyField } position)
+                        Tracker.Record(target, sources, "CREATE VISUAL CHART POSITION",
+                            targetColumn: $"{layer.Name}.POSITION.KEY", sourceColumns: new[] { keyField },
+                            line: position.Line, column: position.Column);
                     foreach (var condition in layer.Conditions)
                         Tracker.Record(target, sources, "CREATE VISUAL CHART CONDITION",
                             targetColumn: $"{layer.Name}.{condition.Channel.ToString().ToUpperInvariant()}",

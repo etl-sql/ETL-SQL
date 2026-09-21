@@ -1508,6 +1508,10 @@ public sealed class PlotPlanResolver
                 throw new InvalidOperationException($"Layer '{layer.Id}' JITTER key field '{keyField}' contains duplicate value '{duplicate.Key}'.");
         }
 
+        var transposedJitterViewport = spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
+            layers.Any(layer => layer.Position?.Kind == PositionAdjustmentKind.Jitter)
+            ? ResolveCartesianViewport(spec.Coordinate, scales, bounds) : null;
+
         return layers.Select(layer => layer with
         {
             Data = layer.Data.Select(datum =>
@@ -1527,10 +1531,21 @@ public sealed class PlotPlanResolver
                     {
                         var key = ValueKey(columns[position.StableKeyField!].Values[datum.RowIndex])!;
                         var identity = LayerPlacementIdentity(layer);
-                        offsetX += SignedHash(spec.Id, identity, key, "x", position.Seed) * position.X *
-                            (xScale?.Kind is ScaleKind.Band or ScaleKind.Point ? xBand : datumBounds.Width);
-                        offsetY += SignedHash(spec.Id, identity, key, "y", position.Seed) * position.Y *
-                            (yScale?.Kind is ScaleKind.Band or ScaleKind.Point ? yBand : datumBounds.Height);
+                        if (transposedJitterViewport is not null)
+                        {
+                            // Jitter amplitudes use the fitted plot before renderer-specific legend layout.
+                            // Semantic X moves vertically; semantic Y moves horizontally.
+                            var viewport = panel?.CartesianViewport ?? transposedJitterViewport;
+                            offsetX += SignedHash(spec.Id, identity, key, "y", position.Seed) * position.Y * (viewport.Width - 80m);
+                            offsetY -= SignedHash(spec.Id, identity, key, "x", position.Seed) * position.X * (viewport.Height - 100m);
+                        }
+                        else
+                        {
+                            offsetX += SignedHash(spec.Id, identity, key, "x", position.Seed) * position.X *
+                                (xScale?.Kind is ScaleKind.Band or ScaleKind.Point ? xBand : datumBounds.Width);
+                            offsetY += SignedHash(spec.Id, identity, key, "y", position.Seed) * position.Y *
+                                (yScale?.Kind is ScaleKind.Band or ScaleKind.Point ? yBand : datumBounds.Height);
+                        }
                     }
                     else if (position.Kind == PositionAdjustmentKind.Nudge)
                     {

@@ -133,6 +133,34 @@ public sealed class ReportRenameProviderTests
         Assert.All(edits, edit => Assert.Equal("renamed", edit.NewText));
     }
 
+    [Fact]
+    public async Task TransposedAspectJitter_RenamesStableKeyAndBinding()
+    {
+        var script = """
+            CREATE VISUAL Measurement AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+                LAYERS (observations = POINT (
+                  POSITION = JITTER(X = 0.02, Y = 0.03, KEY = Id, SEED = 42),
+                  ENCODINGS (X = Distance (TYPE = QUANTITATIVE), Y = Estimate (TYPE = QUANTITATIVE),
+                             DETAIL = Id (TYPE = NOMINAL))
+                ))
+              )
+            );
+            """;
+        var (provider, uri) = Provider(script);
+        var result = await provider.Handle(new RenameParams
+        {
+            TextDocument = new TextDocumentIdentifier(uri),
+            Position = PositionOf(script, "Id, SEED"),
+            NewName = "StableId"
+        }, CancellationToken.None);
+        var edits = Assert.IsAssignableFrom<IEnumerable<TextEdit>>(result!.Changes![uri]).ToList();
+        Assert.Equal(2, edits.Count);
+        Assert.All(edits, edit => Assert.Equal("StableId", edit.NewText));
+    }
+
     private static (ReportRenameProvider Provider, DocumentUri Uri) Provider(string script = ScriptText)
     {
         var uri = DocumentUri.From("untitled:advanced-chart.rptsql");
