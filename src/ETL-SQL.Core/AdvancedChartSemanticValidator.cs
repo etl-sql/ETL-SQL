@@ -751,10 +751,12 @@ public static class AdvancedChartSemanticValidator
         else if (!ContinuousPositionalScale(chart, AdvancedChartChannel.X) || !ContinuousPositionalScale(chart, AdvancedChartChannel.Y))
             Add(results, node, "ASPECT_RATIO requires continuous quantitative primary X and Y scales.");
         if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian && chart.Layers.Any(layer =>
-            layer.Mark != AdvancedChartMarkKind.Point || layer.Position.Kind != AdvancedChartPositionKind.Identity ||
+            layer.Mark != AdvancedChartMarkKind.Point ||
+            layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or
+            { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em }) ||
             EffectiveEncodings(chart, layer).Any(encoding => encoding.Stack != AdvancedChartStackMode.None ||
                 encoding.Channel is AdvancedChartChannel.Y2 or AdvancedChartChannel.XOffset or AdvancedChartChannel.YOffset)))
-            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers without stacking, offsets, position adjustments, or secondary axes.");
+            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers with IDENTITY or NUDGE UNIT EM, without stacking, offset channels, or secondary axes.");
     }
 
     private static void ValidateFacetAndResolution(List<Diagnostic> results, AdvancedChartDefinition chart, AstNode chartNode)

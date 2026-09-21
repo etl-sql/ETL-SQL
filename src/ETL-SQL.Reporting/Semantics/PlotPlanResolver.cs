@@ -1522,7 +1522,12 @@ public sealed class PlotPlanResolver
                     }
                     else if (position.Kind == PositionAdjustmentKind.Nudge)
                     {
-                        var nudge = ResolveNudge(position, datum, xScale, yScale, datumBounds, xBand, yBand, layer.Id);
+                        // Display offsets are physical coordinates. For the fixed-aspect transposed
+                        // point composition, semantic X is vertical and semantic Y is horizontal.
+                        var nudge = spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
+                            position.Unit == PositionAdjustmentUnit.Em
+                            ? (X: position.Y * 12m, Y: -position.X * 12m)
+                            : ResolveNudge(position, datum, xScale, yScale, datumBounds, xBand, yBand, layer.Id);
                         offsetX += nudge.X;
                         offsetY += nudge.Y;
                     }

@@ -316,8 +316,12 @@ semantics and backend evidence before its rejection can be lifted.
   and reversed scales, resize, independent facets, missing bounds, authoring/contract round trips,
   lineage, LSP rename, terminal intervals and static PDF. New deterministic plan/SVG fixtures live
   in `TransposedAspectErrorBarTests`.
-- [ ] **Remaining physical aspect combinations.** Transposed non-POINT layers, offsets, positional
-  adjustments, stacking and secondary axes remain rejected. Categorical, temporal,
+- [x] **EM nudges on continuous transposed POINT aspect charts.** Resolve semantic X/Y
+  displacement into physical offsets, preserving point/error-bar alignment through reversed/log
+  scales, facets and resize. Raw values, domains and terminal output stay unchanged. Covered by
+  `TransposedAspectNudgeTests`, existing goldens, and LSP rename tests; no contract fields changed.
+- [ ] **Remaining physical aspect combinations.** Transposed non-POINT layers, offset channels,
+  JITTER, DATA/BAND nudges, stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**
   `AdvancedChartSemanticValidator.cs:697` — today the author is told to stage separate series or

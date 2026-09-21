@@ -409,10 +409,12 @@ public sealed record ChartSpec(
                 yScale?.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic))
                 throw new InvalidDataException("ASPECT_RATIO requires continuous quantitative primary X and Y scales.");
             if (Coordinate.Kind == CoordinateKind.TransposedCartesian && Layers.Any(layer =>
-                layer.Mark != MarkKind.Point || layer.Position is { Kind: not PositionAdjustmentKind.Identity } ||
+                layer.Mark != MarkKind.Point ||
+                layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or
+                { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em }) ||
                 layer.Bindings.Any(binding => binding.Stack != StackMode.None ||
                     binding.Channel is FieldChannel.Y2 or FieldChannel.XOffset or FieldChannel.YOffset)))
-                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers without stacking, offsets, position adjustments, or secondary axes.");
+                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers with IDENTITY or NUDGE UNIT EM, without stacking, offset channels, or secondary axes.");
         }
         if (Facet is not null)
         {

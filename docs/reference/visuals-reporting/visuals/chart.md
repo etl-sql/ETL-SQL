@@ -85,7 +85,7 @@ CREATE VISUAL name AS CUSTOM (
 
 ## Mappings
 
-- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` layers without stacking, offsets, position adjustments, or secondary axes. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
+- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` layers with `IDENTITY` or `NUDGE(..., UNIT = EM)`, without stacking, offset channels, or secondary axes. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
 - **SCALES** — Optionally declares named `LINEAR`, `LOGARITHMIC`, `TIME`, `BAND`, `POINT`, `ORDINAL`, or `IDENTITY` scales. Encoding `SCALE` references must name a declared scale; omission requests deterministic inference from the required `TYPE`, channel, mark, and coordinate.
 - **RANGE** — Adds a dependency-free sRGB sequential or diverging output range to a quantitative `COLOR` scale. Colors use portable `#RRGGBB`; values clamp at the domain, nulls use `NULL_COLOR`, and a diverging midpoint must lie inside the resolved domain.
 - **Scale axis controls** — `MIN`/`MAX` set the domain, `INCLUDE_ZERO` expands a quantitative domain to zero, `REVERSE` flips its display direction, `MAJOR_TICK_COUNT` or `TICK_INTERVAL` controls major ticks, `MINOR_TICKS` adds midpoint ticks, `TIME_UNIT` truncates/bins temporal scales by calendar unit (`AUTO`, `DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`), `TICK_FORMAT` applies a custom date/time or numeric format pattern, and `LABEL_ROTATION`/`LABEL_SKIP` control crowded tick labels. `OUTER_PADDING = 0..1` adds space before the first and after the last category on `BAND` scales only.
@@ -98,7 +98,7 @@ CREATE VISUAL name AS CUSTOM (
 
 ## Options
 
-- **Placement** — `STACK` accumulates quantitative Y/Y2 values for Cartesian and transposed Cartesian layouts; polar/radial stacking is rejected until it has portable geometry. Offset channels dodge categories, `BAND_SIZE` controls relative thickness, and `Z_INDEX` controls paint order. `JITTER` uses a stable key and deterministic hash; `NUDGE` is resolved after domains without changing raw values.
+- **Placement** — `STACK` accumulates quantitative Y/Y2 values for Cartesian and transposed Cartesian layouts; polar/radial stacking is rejected until it has portable geometry. Offset channels dodge categories, `BAND_SIZE` controls relative thickness, and `Z_INDEX` controls paint order. `JITTER` uses a stable key and deterministic hash; `NUDGE` is resolved after domains without changing raw values. For transposed fixed-aspect points, `NUDGE` accepts `UNIT = EM`: one em is the portable 12-pixel unit, positive X moves up, and positive Y moves right. Negative values move in the opposite direction. This presentation displacement does not follow scale reversal; the point and its error bar move together. DATA/BAND nudges and JITTER remain unsupported for this combination.
 - **Intervals** — Paired `Y_START`/`Y_END` creates an AREA ribbon, a vertical RULE span, or a ranged RECT such as a qualitative band or a floating variance bar; `X_START`/`X_END` supplies the symmetric horizontal range, which on a RECT with a continuous X scale is an explicit-bin histogram. Both endpoints are required, must share a quantitative or temporal `TYPE`, and both take part in scale-domain resolution. A ranged RECT owns its extent on that axis, so it rejects `Y`/`Y2` alongside `Y_START`/`Y_END` and `X`/`X2` alongside `X_START`/`X_END`; `STACK` computes its own endpoints and is unaffected. Endpoint calculations stay in SQL.
 - **TICK** — Draws a short category-local quantitative observation or target. It requires nominal/ordinal X and quantitative Y. `ORIENTATION = AUTO` resolves to a horizontal segment across the category band; `HORIZONTAL` and `VERTICAL` make that choice explicit. TICK is distinct from plot-spanning/ranged `RULE`; its `BAND_SIZE` is relative to the category band and `THICKNESS` is bounded to `(0, 1]` em.
 - **Error bars** — `POINT` and `RECT` layers support paired `ERROR_LOW` and `ERROR_HIGH` encoding channels under Cartesian or transposed Cartesian coordinates. Both channels require quantitative type, share the primary Y scale, and expand the scale domain to encompass the whiskers. Absolute endpoints are pre-computed in SQL. Optional layer style `STYLE (ERROR_BAR_STYLE = 'CAPS')` or `STYLE (ERROR_BAR_STYLE = 'NO_CAPS')` controls whether endpoint caps are drawn (defaults to `'CAPS'`). On transposed `POINT` charts with `ASPECT_RATIO`, whiskers run horizontally and caps run vertically; endpoint values still use the semantic Y scale and expand its domain before the aspect viewport is fitted. On `RECT`, whiskers anchor to the category position and primary quantitative value, and error channels cannot be combined with ranged rectangle or boxplot/candlestick channels.
@@ -124,18 +124,22 @@ CREATE VISUAL PhysicalScatter AS CUSTOM (
       horizontal = LINEAR (CHANNEL = X, MIN = 0, MAX = 10),
       vertical = LINEAR (CHANNEL = Y, MIN = 0, MAX = 20)
     ),
-    LAYERS (observations = POINT (ENCODINGS (
-      X = Distance (TYPE = QUANTITATIVE, SCALE = horizontal),
-      Y = Elevation (TYPE = QUANTITATIVE, SCALE = vertical),
-      ERROR_LOW = LowerBound (TYPE = QUANTITATIVE, SCALE = vertical),
-      ERROR_HIGH = UpperBound (TYPE = QUANTITATIVE, SCALE = vertical)
-    )))
+    LAYERS (observations = POINT (
+      POSITION = NUDGE(X = 1, Y = -0.5, UNIT = EM),
+      ENCODINGS (
+        X = Distance (TYPE = QUANTITATIVE, SCALE = horizontal),
+        Y = Elevation (TYPE = QUANTITATIVE, SCALE = vertical),
+        ERROR_LOW = LowerBound (TYPE = QUANTITATIVE, SCALE = vertical),
+        ERROR_HIGH = UpperBound (TYPE = QUANTITATIVE, SCALE = vertical)
+      )
+    ))
   )
 );
 ```
 
-- **Source** � `#prepared` supplies quantitative `Distance`, `Elevation`, `LowerBound`, and `UpperBound` columns.
-- **ASPECT_RATIO = 2** � One Elevation unit spans twice the physical distance of one Distance unit, including after transposition.
+- **Source** — `#prepared` supplies quantitative `Distance`, `Elevation`, `LowerBound`, and `UpperBound` columns.
+- **ASPECT_RATIO = 2** — One Elevation unit spans twice the physical distance of one Distance unit, including after transposition.
+- **NUDGE** — Moves each point and its interval 12 pixels up and 6 pixels left without changing the reported values. Omit `POSITION` for no displacement.
 
 ## Examples
 

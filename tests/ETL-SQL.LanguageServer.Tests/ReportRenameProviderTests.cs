@@ -63,11 +63,13 @@ public sealed class ReportRenameProviderTests
     }
 
     [Theory]
-    [InlineData("estimates =", 4)]
-    [InlineData("LowerBound (", 1)]
-    public async Task TransposedAspectErrorBars_RenameScaleAndEndpoint(string token, int expectedEdits)
+    [InlineData("estimates =", 4, false)]
+    [InlineData("LowerBound (", 1, false)]
+    [InlineData("estimates =", 4, true)]
+    [InlineData("LowerBound (", 1, true)]
+    public async Task TransposedAspectErrorBars_RenameScaleAndEndpoint(string token, int expectedEdits, bool nudge)
     {
-        const string script = """
+        var script = """
             CREATE VISUAL Measurement AS CUSTOM (
               SOURCE = #prepared,
               CHART (
@@ -85,6 +87,8 @@ public sealed class ReportRenameProviderTests
               )
             );
             """;
+        if (nudge)
+            script = script.Replace("POINT (ENCODINGS", "POINT (POSITION = NUDGE(X = 1, Y = -0.5, UNIT = EM), ENCODINGS", System.StringComparison.Ordinal);
         var (provider, uri) = Provider(script);
         var result = await provider.Handle(new RenameParams
         {

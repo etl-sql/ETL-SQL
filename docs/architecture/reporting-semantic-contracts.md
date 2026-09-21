@@ -94,13 +94,20 @@ This increment retains ChartSpec v2 and PlotPlan v3: it adds no serialized field
 and existing valid specifications retain their behavior and fingerprints. Older ChartSpec validators
 reject the newly allowed combination. Regenerate output with a supporting renderer; serialization
 compatibility alone does not establish rendering support. Non-point layers, secondary axes,
-stacking and positional adjustments remain rejected for transposed aspect ratios.
+stacking, offset channels, JITTER and DATA/BAND nudges remain rejected for transposed aspect ratios.
 
 Error bars on these points retain `ErrorLow`/`ErrorHigh` in the semantic Y domain.
 Their endpoints participate in global and independent facet domains before viewport fitting.
 The SVG adapter draws the interval on the physical horizontal axis using the transposed Y scale;
 caps are vertical. Linear, logarithmic and reversed scales use the same mapping as the point.
 No serialized contract changes are needed. Terminal and accessible output retain the interval text.
+
+`NUDGE` with `UNIT = EM` is resolved for this transposed point composition before rendering.
+The portable em remains 12 pixels. Semantic X moves vertically and semantic Y horizontally:
+`DisplayOffsetX = Y * 12`, `DisplayOffsetY = -X * 12`. These are physical display offsets,
+independent of scale reversal, domain kind and viewport size. Relayout recomputes the same offsets;
+points and error intervals consume them together. No raw values, domains, fallback text or wire
+fields change. Existing Cartesian and non-aspect transposed behavior stays unchanged.
 
 ## Cross-backend conformance
 
