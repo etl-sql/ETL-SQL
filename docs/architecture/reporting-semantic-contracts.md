@@ -93,8 +93,14 @@ they do not claim physical-distance fidelity.
 This increment retains ChartSpec v2 and PlotPlan v3: it adds no serialized fields or enum values,
 and existing valid specifications retain their behavior and fingerprints. Older ChartSpec validators
 reject the newly allowed combination. Regenerate output with a supporting renderer; serialization
-compatibility alone does not establish rendering support. Non-point layers, secondary axes, error
-bars, stacking and positional adjustments remain rejected for transposed aspect ratios.
+compatibility alone does not establish rendering support. Non-point layers, secondary axes,
+stacking and positional adjustments remain rejected for transposed aspect ratios.
+
+Error bars on these points retain `ErrorLow`/`ErrorHigh` in the semantic Y domain.
+Their endpoints participate in global and independent facet domains before viewport fitting.
+The SVG adapter draws the interval on the physical horizontal axis using the transposed Y scale;
+caps are vertical. Linear, logarithmic and reversed scales use the same mapping as the point.
+No serialized contract changes are needed. Terminal and accessible output retain the interval text.
 
 ## Cross-backend conformance
 

@@ -753,9 +753,8 @@ public static class AdvancedChartSemanticValidator
         if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian && chart.Layers.Any(layer =>
             layer.Mark != AdvancedChartMarkKind.Point || layer.Position.Kind != AdvancedChartPositionKind.Identity ||
             EffectiveEncodings(chart, layer).Any(encoding => encoding.Stack != AdvancedChartStackMode.None ||
-                encoding.Channel is AdvancedChartChannel.Y2 or AdvancedChartChannel.XOffset or AdvancedChartChannel.YOffset or
-                    AdvancedChartChannel.ErrorLow or AdvancedChartChannel.ErrorHigh)))
-            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers without stacking, offsets, position adjustments, secondary axes, or error bars.");
+                encoding.Channel is AdvancedChartChannel.Y2 or AdvancedChartChannel.XOffset or AdvancedChartChannel.YOffset)))
+            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers without stacking, offsets, position adjustments, or secondary axes.");
     }
 
     private static void ValidateFacetAndResolution(List<Diagnostic> results, AdvancedChartDefinition chart, AstNode chartNode)

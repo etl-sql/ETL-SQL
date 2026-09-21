@@ -411,9 +411,8 @@ public sealed record ChartSpec(
             if (Coordinate.Kind == CoordinateKind.TransposedCartesian && Layers.Any(layer =>
                 layer.Mark != MarkKind.Point || layer.Position is { Kind: not PositionAdjustmentKind.Identity } ||
                 layer.Bindings.Any(binding => binding.Stack != StackMode.None ||
-                    binding.Channel is FieldChannel.Y2 or FieldChannel.XOffset or FieldChannel.YOffset or
-                        FieldChannel.ErrorLow or FieldChannel.ErrorHigh)))
-                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers without stacking, offsets, position adjustments, secondary axes, or error bars.");
+                    binding.Channel is FieldChannel.Y2 or FieldChannel.XOffset or FieldChannel.YOffset)))
+                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers without stacking, offsets, position adjustments, or secondary axes.");
         }
         if (Facet is not null)
         {

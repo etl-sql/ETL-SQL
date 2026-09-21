@@ -183,7 +183,7 @@ internal sealed class PlotPlanSvgRenderer
         return false;
     }
 
-    private static void RenderCartesian(StringBuilder builder, PlotPlan plan, bool preservePhysicalAspect = false)
+    private static void RenderCartesian(StringBuilder builder, PlotPlan plan, bool transposedPointAxes = false)
     {
         if (plan.Coordinate?.Kind == CoordinateKind.TransposedCartesian)
         {
@@ -210,7 +210,7 @@ internal sealed class PlotPlanSvgRenderer
                             }).ToImmutableArray()
                         }).ToImmutableArray()
                     }).ToImmutableArray()
-                }, preservePhysicalAspect: true);
+                }, transposedPointAxes: true);
                 return;
             }
             RenderTransposedCartesian(builder, plan);
@@ -282,7 +282,7 @@ internal sealed class PlotPlanSvgRenderer
         var plotWidth = Math.Max(minPlotWidth, totalWidth - plotLeft - plotRight);
         var plotHeight = plan.Bounds.Height - Top - Bottom;
 
-        if (preservePhysicalAspect)
+        if (transposedPointAxes)
         {
             // Legend gutters may reduce the available plot, but must not change physical unit sizes.
             var ratio = (plan.Bounds.Height - Top - Bottom) / (plan.Bounds.Width - Left - Right);
@@ -388,7 +388,8 @@ internal sealed class PlotPlanSvgRenderer
                     var pointScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null)
                         ? y2Scale ?? yScale
                         : yScale;
-                    RenderPoints(builder, plan, layer, categories.Length, area, xScale, pointScale, color, smartLabels);
+                    RenderPoints(builder, plan, layer, categories.Length, area, xScale, pointScale, color, smartLabels,
+                        horizontalErrors: transposedPointAxes);
                     break;
                 case MarkKind.Rule:
                     RenderRule(builder, layer, area, xScale, yScale, overlayLabels);
@@ -1808,7 +1809,7 @@ internal sealed class PlotPlanSvgRenderer
 
     private static void RenderPoints(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
         in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? yScale, string color,
-        ICollection<SmartLabel> smartLabels)
+        ICollection<SmartLabel> smartLabels, bool horizontalErrors = false)
     {
         if (xScale is null || yScale is null) return;
         var minimumSize = 0m;
@@ -1896,7 +1897,22 @@ internal sealed class PlotPlanSvgRenderer
             var y = MapY(yValue.Value, yScale, area.Height) + datum.DisplayOffsetY;
             var errorLow = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorLow) ?? ChartValue.Null());
             var errorHigh = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorHigh) ?? ChartValue.Null());
-            if (errorLow.HasValue && errorHigh.HasValue)
+            if (errorLow.HasValue && errorHigh.HasValue && horizontalErrors)
+            {
+                // Error endpoints remain semantic Y values; the transposed adapter maps Y to X.
+                var lowX = MapX(errorLow.Value, xScale, area) + datum.DisplayOffsetX;
+                var highX = MapX(errorHigh.Value, xScale, area) + datum.DisplayOffsetX;
+                const decimal capHeight = 4m;
+                builder.AppendLine($"<g class='plot-error-bar' data-row-index='{datum.RowIndex}'>");
+                builder.AppendLine($"<line class='plot-error-bar-stem' x1='{N(lowX)}' y1='{N(y)}' x2='{N(highX)}' y2='{N(y)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                if (hasCaps)
+                {
+                    builder.AppendLine($"<line class='plot-error-bar-cap' x1='{N(lowX)}' y1='{N(y - capHeight)}' x2='{N(lowX)}' y2='{N(y + capHeight)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                    builder.AppendLine($"<line class='plot-error-bar-cap' x1='{N(highX)}' y1='{N(y - capHeight)}' x2='{N(highX)}' y2='{N(y + capHeight)}' stroke='{Esc(datumColor)}' stroke-width='1.5'/>");
+                }
+                builder.AppendLine("</g>");
+            }
+            else if (errorLow.HasValue && errorHigh.HasValue)
             {
                 var lowY = MapY(errorLow.Value, yScale, area.Height) + datum.DisplayOffsetY;
                 var highY = MapY(errorHigh.Value, yScale, area.Height) + datum.DisplayOffsetY;

@@ -311,8 +311,13 @@ semantics and backend evidence before its rejection can be lifted.
   domains, facets and relayout. Native/static SVG uses physical axes; terminal/accessibility retain
   semantic values. Parser/formatter/designer/contract round trips and deterministic plan/SVG fixtures
   live in `TransposedAspectRatioTests`.
+- [x] **Error bars on continuous transposed POINT aspect charts.** Endpoints expand semantic Y
+  domains, then render as horizontal whiskers with vertical optional caps. Covered for linear/log
+  and reversed scales, resize, independent facets, missing bounds, authoring/contract round trips,
+  lineage, LSP rename, terminal intervals and static PDF. New deterministic plan/SVG fixtures live
+  in `TransposedAspectErrorBarTests`.
 - [ ] **Remaining physical aspect combinations.** Transposed non-POINT layers, offsets, positional
-  adjustments, stacking, secondary axes and error bars remain rejected. Categorical, temporal,
+  adjustments, stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**
   `AdvancedChartSemanticValidator.cs:697` — today the author is told to stage separate series or
