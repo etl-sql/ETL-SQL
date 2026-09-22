@@ -122,7 +122,7 @@ CREATE VISUAL name AS CUSTOM (
 
 Use one quantitative field or `DATUM` binding on X or Y with `IDENTITY` (the default position).
 Set `INHERIT_ENCODINGS = OFF` when shared encodings would add other channels.
-Ranged, adjusted, conditional, and multi-channel rules are rejected in this combination.
+Ranged, conditional, and multi-channel rules are rejected in this combination.
 A Y reference is vertical and an X reference is horizontal. Constants contribute to global and
 independent facet domains; labels and accessible descriptions retain the semantic axis and value.
 A field binding draws one rule per distinct non-null numeric threshold within each facet, in source
@@ -159,6 +159,35 @@ To draw the distinct estimates as reference rules, replace the example's thresho
 ```sql
 ENCODINGS (Y = Estimate (TYPE = QUANTITATIVE, SCALE = estimates))
 ```
+
+Reference rules also accept `NUDGE` with `UNIT = EM` or `UNIT = BAND`, along the bound axis only.
+For a Y rule, X must be zero; for an X rule, Y must be zero. The rule and its label move together
+while the line keeps spanning the plot. Positive X moves up and positive Y moves right, independently
+of scale reversal. EM uses 12 pixels per unit; BAND uses the fitted plot height for X and width for Y,
+excluding axis margins and before renderer-specific legend layout. Facets and resizing recompute BAND
+displacement. Threshold values, domains, terminal text, and accessible values remain unchanged.
+JITTER is not supported on these rules.
+
+For example, add this position to the Y threshold layer above to move it right by three pixels:
+
+```sql
+POSITION = NUDGE(X = 0, Y = 0.25, UNIT = EM)
+```
+
+Use `UNIT = BAND` with `Y = 0.03` to move it by three percent of the fitted plot width instead.
+
+For DATA nudges, only the bound axis is required. The rule moves to where its threshold plus the
+nudge would map on the original scale, including reversal, logarithmic mapping, side legends,
+facets and resizing. The other amplitude must be zero. Raw thresholds and domains stay unchanged;
+null thresholds draw no rule. On a logarithmic scale, both the original and shifted threshold must
+be positive. For example, move the Y rule to the position of its threshold plus 0.5:
+
+```sql
+POSITION = NUDGE(X = 0, Y = 0.5, UNIT = DATA)
+```
+
+Isolated single-axis rules do not inherit color groups from other layers. A color-grouped POINT
+layer therefore does not duplicate reference rules or their accessible values.
 
 ## Fixed physical units on transposed points
 

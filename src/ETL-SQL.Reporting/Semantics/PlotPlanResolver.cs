@@ -574,8 +574,10 @@ public sealed class PlotPlanResolver
                 continue;
             }
 
+            // COMPAT_BREAK: 0.20 — isolated single-axis rules must not inherit another layer's color groups.
+            var isolatedRule = layer.Mark == MarkKind.Rule && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null };
             var colorBinding = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color)
-                ?? spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
+                ?? (isolatedRule ? null : spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color));
             var explicitSeries = layer.Style.FirstOrDefault(token => token.Name == "series")?.Value;
             if (colorBinding?.SemanticKind is not DataSemanticKind.Quantitative && colorBinding?.Field is { } colorField && columns.TryGetValue(colorField, out var colorColumn))
             {
@@ -1596,7 +1598,7 @@ public sealed class PlotPlanResolver
                             : transposedPlacementViewport is not null && position.Unit == PositionAdjustmentUnit.Band
                             ? (X: position.Y * (viewport!.Width - 80m), Y: -position.X * (viewport.Height - 100m))
                             : transposedPlacementViewport is not null && position.Unit == PositionAdjustmentUnit.Data
-                            ? ResolveTransposedDataNudge(position, datum, xScale!, yScale!, DataArea(viewport!), layer.Id)
+                            ? ResolveTransposedDataNudge(position, datum, xScale!, yScale!, DataArea(viewport!), layer.Id, layer.Mark == MarkKind.Rule)
                             : ResolveNudge(position, datum, xScale, yScale, datumBounds, xBand, yBand, layer.Id);
                         offsetX += nudge.X;
                         offsetY += nudge.Y;
@@ -1621,10 +1623,20 @@ public sealed class PlotPlanResolver
     }
 
     private static (decimal X, decimal Y) ResolveTransposedDataNudge(PositionAdjustmentSpec position, ResolvedDatum datum,
-        ResolvedScale xScale, ResolvedScale yScale, PlotBounds area, string layerId)
+        ResolvedScale xScale, ResolvedScale yScale, PlotBounds area, string layerId, bool singleAxisRule)
     {
         var x = Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
         var y = Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
+        if (singleAxisRule)
+        {
+            // Missing thresholds draw no rule; only the bound scale participates in displacement.
+            if (datum.IsGap) return (0m, 0m);
+            if (x.HasValue)
+                return (0m, DataNudge(x.Value, position.X, xScale, area.Height, layerId, "X") * (xScale.Reverse ? 1m : -1m));
+            if (y.HasValue)
+                return (DataNudge(y.Value, position.Y, yScale, area.Width, layerId, "Y") * (yScale.Reverse ? -1m : 1m), 0m);
+            return (0m, 0m);
+        }
         if (!x.HasValue || !y.HasValue)
             throw new InvalidOperationException($"Layer '{layerId}' data-domain NUDGE requires numeric X and Y datum values.");
         return (DataNudge(y.Value, position.Y, yScale, area.Width, layerId, "Y") * (yScale.Reverse ? -1m : 1m),

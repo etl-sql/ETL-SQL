@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.20.0 — Semantic: Isolated transposed reference rules ignore unrelated color groups
+- **What changed**: Single-axis RULE layers on transposed fixed-aspect charts no longer inherit color grouping from other layers. Previously a POINT color binding duplicated reference lines and accessible thresholds once per color group.
+- **Who is affected**: CUSTOM charts combining these RULE layers with color-grouped marks.
+- **Migration**: No script change is needed. Each rule layer now draws each distinct threshold once per facet.
+- **Diagnostic**: N/A — reporting resolution.
+- **Earliest removal**: N/A.
+
 ### v0.20.0 — TypeSystem: Tool output preserves exact JSON numbers
 - **What changed**: Integer and decimal tool output no longer rounds through binary double precision before expected-schema conversion. Floating-point columns retain floating-point conversion.
 - **Who is affected**: Scripts consuming large integers or high-precision decimals from tools.

@@ -3287,8 +3287,8 @@ internal sealed class PlotPlanSvgRenderer
                 var number = raw is null ? null : PlotPlanResolver.Number(raw);
                 if (!number.HasValue || scale is null) return;
                 var axis = vertical ? "Y" : "X";
-                var x1 = vertical ? MapX(number.Value, scale, area) : area.Left;
-                var y1 = vertical ? area.Top : MapY(number.Value, scale, area.Height);
+                var x1 = vertical ? MapX(number.Value, scale, area) + datum.DisplayOffsetX : area.Left;
+                var y1 = vertical ? area.Top : MapY(number.Value, scale, area.Height) + datum.DisplayOffsetY;
                 var x2 = vertical ? x1 : area.Right;
                 var y2 = vertical ? area.Bottom : y1;
                 builder.AppendLine($"<line class='plot-reference-rule' data-layer-id='{Esc(layer.Id)}' data-semantic-axis='{axis}' x1='{N(x1)}' y1='{N(y1)}' x2='{N(x2)}' y2='{N(y2)}' stroke='{Esc(color)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}><title>{Esc(label ?? layer.Id)}: {axis} = {Esc(PlotPlanResolver.Display(raw!))}</title></line>");

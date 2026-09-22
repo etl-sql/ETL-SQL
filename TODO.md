@@ -348,13 +348,23 @@ semantics and backend evidence before its rejection can be lifted.
 - [x] **Constant RULE layers on continuous transposed aspect charts.** Quantitative DATUM X/Y
   references follow the physical axes through reversal, logarithmic scales, facets and resize.
   SVG labels, terminal output and accessible fallback preserve semantic axes and values.
-  Authoring/contracts reject ranged, adjusted and conditional rules in this composition.
+  Authoring/contracts reject ranged and conditional rules in this composition.
   Regression coverage includes domains, round trips, lineage, PDF export and deterministic goldens.
 - [x] **Field-backed RULE layers on continuous transposed aspect charts.** One rule per distinct
   non-null numeric X/Y threshold, in source order within each facet. Shared selection preserves
   every threshold in SVG, terminal and accessible fallback without duplicating coincident rules.
   Coverage includes nulls, duplicate values, independent facets, logarithmic/reversed axes, resize,
   domains, authoring/contracts, lineage, LSP rename, PDF and unchanged constant-rule goldens.
+- [x] **EM/BAND nudges on transposed single-axis RULE layers.** Rules accept displacement along
+  the bound axis only, preserving plot-spanning extent and moving labels with the line. Physical
+  direction follows point/text placement; raw thresholds, domains and terminal/fallback stay intact.
+  `TransposedAspectRuleNudgeTests` covers constant/field rules, facets, logarithmic/reversed scales,
+  resize, invalid placements, round trips, lineage, PDF and deterministic goldens. LSP covers rename.
+- [x] **DATA nudges on transposed single-axis RULE layers.** Bound thresholds map through their
+  own linear/logarithmic and reversed scales using shared plot sizing, including side legends,
+  facets and resize. Nulls are skipped, non-positive logarithmic targets fail, and raw values stay
+  intact. `TransposedAspectRuleDataNudgeTests` verifies mapped geometry and isolated color grouping;
+  authoring, lineage, LSP rename, PDF and deterministic fixtures cover the new composition.
 - [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/single-axis RULE,
   stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.

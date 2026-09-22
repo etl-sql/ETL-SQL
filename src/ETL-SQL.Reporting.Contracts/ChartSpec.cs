@@ -419,10 +419,13 @@ public sealed record ChartSpec(
                 foreach (var layer in Layers.Where(layer => layer.Mark == MarkKind.Rule))
                 {
                     var bindings = layer.Bindings.Where(binding => binding.Channel is not (FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap)).ToArray();
-                    if (layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) || !layer.Conditions.IsDefaultOrEmpty ||
+                    if (layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or
+                        { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data }) || !layer.Conditions.IsDefaultOrEmpty ||
                         bindings.Length != 1 || bindings[0].Channel is not (FieldChannel.X or FieldChannel.Y) ||
-                        bindings[0].SourceKind is not (BindingSourceKind.Datum or BindingSourceKind.Field) || bindings[0].SemanticKind != DataSemanticKind.Quantitative)
-                        throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO RULE requires one quantitative field or DATUM X or Y binding, IDENTITY, and no CONDITIONS or other encodings.");
+                        bindings[0].SourceKind is not (BindingSourceKind.Datum or BindingSourceKind.Field) || bindings[0].SemanticKind != DataSemanticKind.Quantitative ||
+                        layer.Position is { Kind: PositionAdjustmentKind.Nudge } position &&
+                        (bindings[0].Channel == FieldChannel.X ? position.Y != 0m : position.X != 0m))
+                        throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO RULE requires one quantitative field or DATUM X or Y binding, IDENTITY or NUDGE UNIT EM/BAND/DATA along the bound axis only, and no CONDITIONS or other encodings.");
                 }
         }
         if (Facet is not null)

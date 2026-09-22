@@ -197,10 +197,13 @@ public sealed class ReportRenameProviderTests
     }
 
     [Theory]
-    [InlineData(false, "estimates =", 3)]
-    [InlineData(true, "estimates =", 3)]
-    [InlineData(true, "Estimate (", 2)]
-    public async Task TransposedAspectRule_RenamesScaleAndField(bool field, string token, int expectedEdits)
+    [InlineData(false, "estimates =", 3, "IDENTITY")]
+    [InlineData(true, "estimates =", 3, "IDENTITY")]
+    [InlineData(true, "Estimate (", 2, "IDENTITY")]
+    [InlineData(false, "estimates =", 3, "EM")]
+    [InlineData(true, "Estimate (", 2, "BAND")]
+    [InlineData(true, "Estimate (", 2, "DATA")]
+    public async Task TransposedAspectRule_RenamesScaleAndField(bool field, string token, int expectedEdits, string unit)
     {
         var script = """
             CREATE VISUAL Measurement AS CUSTOM (
@@ -227,6 +230,7 @@ public sealed class ReportRenameProviderTests
             );
             """;
         if (field) script = script.Replace("DATUM(5)", "Estimate", System.StringComparison.Ordinal);
+        if (unit != "IDENTITY") script = script.Replace("Z_INDEX = 1,", $"Z_INDEX = 1, POSITION = NUDGE(X = 0, Y = 0.03, UNIT = {unit}),", System.StringComparison.Ordinal);
         Assert.Empty(new Parser(new Lexer(script).Tokenize(), script).Parse().Diagnostics);
         var (provider, uri) = Provider(script);
         var result = await provider.Handle(new RenameParams
