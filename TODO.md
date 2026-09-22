@@ -345,7 +345,17 @@ semantics and backend evidence before its rejection can be lifted.
   facets and resize. Point intervals move with their anchors; raw values and domains stay intact.
   `TransposedAspectDataNudgeTests` covers mapped-anchor geometry, composition, invalid log/null
   inputs, round trips, lineage, terminal/PDF and deterministic fixtures. LSP covers DATA nudge rename.
-- [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT,
+- [x] **Constant RULE layers on continuous transposed aspect charts.** Quantitative DATUM X/Y
+  references follow the physical axes through reversal, logarithmic scales, facets and resize.
+  SVG labels, terminal output and accessible fallback preserve semantic axes and values.
+  Authoring/contracts reject ranged, adjusted and conditional rules in this composition.
+  Regression coverage includes domains, round trips, lineage, PDF export and deterministic goldens.
+- [x] **Field-backed RULE layers on continuous transposed aspect charts.** One rule per distinct
+  non-null numeric X/Y threshold, in source order within each facet. Shared selection preserves
+  every threshold in SVG, terminal and accessible fallback without duplicating coincident rules.
+  Coverage includes nulls, duplicate values, independent facets, logarithmic/reversed axes, resize,
+  domains, authoring/contracts, lineage, LSP rename, PDF and unchanged constant-rule goldens.
+- [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/single-axis RULE,
   stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**

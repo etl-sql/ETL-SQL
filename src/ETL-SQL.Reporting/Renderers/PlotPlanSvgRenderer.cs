@@ -391,7 +391,7 @@ internal sealed class PlotPlanSvgRenderer
                         horizontalErrors: transposedPointAxes);
                     break;
                 case MarkKind.Rule:
-                    RenderRule(builder, layer, area, xScale, yScale, overlayLabels);
+                    RenderRule(builder, layer, area, xScale, yScale, overlayLabels, transposedPointAxes);
                     break;
                 case MarkKind.Text:
                     RenderText(layer, categories.Length, area, xScale,
@@ -3266,7 +3266,7 @@ internal sealed class PlotPlanSvgRenderer
     }
 
     private static void RenderRule(StringBuilder builder, ResolvedMarkLayer layer, in CartesianPlotArea area,
-        ResolvedScale? xScale, ResolvedScale? yScale, ICollection<OverlayLabel> overlayLabels)
+        ResolvedScale? xScale, ResolvedScale? yScale, ICollection<OverlayLabel> overlayLabels, bool transposedAspect = false)
     {
         var xVal = layer.Data.Select(datum => Channel(datum, FieldChannel.X)).FirstOrDefault(item => item is not null && item.Kind != ChartValueKind.Null);
         var yVal = layer.Data.Select(datum => Channel(datum, FieldChannel.Y)).FirstOrDefault(item => item is not null && item.Kind != ChartValueKind.Null);
@@ -3274,6 +3274,29 @@ internal sealed class PlotPlanSvgRenderer
         var label = LayerStyle(layer, "label");
         var strokeWidth = LayerStyle(layer, "stroke_width") ?? LayerStyle(layer, "width") ?? "2";
         var dashAttributes = LineStyleAttributes(LayerStyle(layer, "lineStyle"));
+
+        if (transposedAspect)
+        {
+            foreach (var datum in PlotPlanResolver.ReferenceRuleData(layer.Data))
+            {
+                var ruleX = Channel(datum, FieldChannel.X);
+                var ruleY = Channel(datum, FieldChannel.Y);
+                var vertical = ruleX is not null;
+                var raw = vertical ? ruleX : ruleY;
+                var scale = vertical ? xScale : yScale;
+                var number = raw is null ? null : PlotPlanResolver.Number(raw);
+                if (!number.HasValue || scale is null) return;
+                var axis = vertical ? "Y" : "X";
+                var x1 = vertical ? MapX(number.Value, scale, area) : area.Left;
+                var y1 = vertical ? area.Top : MapY(number.Value, scale, area.Height);
+                var x2 = vertical ? x1 : area.Right;
+                var y2 = vertical ? area.Bottom : y1;
+                builder.AppendLine($"<line class='plot-reference-rule' data-layer-id='{Esc(layer.Id)}' data-semantic-axis='{axis}' x1='{N(x1)}' y1='{N(y1)}' x2='{N(x2)}' y2='{N(y2)}' stroke='{Esc(color)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}><title>{Esc(label ?? layer.Id)}: {axis} = {Esc(PlotPlanResolver.Display(raw!))}</title></line>");
+                if (!string.IsNullOrWhiteSpace(label))
+                    builder.AppendLine($"<text class='plot-reference-rule-label' x='{N(vertical ? x1 + 4m : area.Right - 4m)}' y='{N(vertical ? area.Top + 12m : y1 - 4m)}' text-anchor='{(vertical ? "start" : "end")}' font-size='10' fill='{Esc(color)}'>{Esc(label)}</text>");
+            }
+            return;
+        }
 
         var ranged = false;
         for (var index = 0; index < layer.Data.Length; index++)

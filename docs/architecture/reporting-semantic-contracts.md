@@ -1,4 +1,4 @@
-﻿# Reporting Semantic Contracts
+# Reporting Semantic Contracts
 
 ETL-SQL owns a renderer-neutral, versioned reporting contract between Report-SQL authoring and every
 graphical or semantic output backend. The contract implementation is
@@ -93,8 +93,17 @@ they do not claim physical-distance fidelity.
 This increment retains ChartSpec v2 and PlotPlan v3: it adds no serialized fields or enum values,
 and existing valid specifications retain their behavior and fingerprints. Older ChartSpec validators
 reject the newly allowed combination. Regenerate output with a supporting renderer; serialization
-compatibility alone does not establish rendering support. Marks other than POINT/TEXT, secondary axes,
+compatibility alone does not establish rendering support. Marks other than POINT/TEXT and single-axis RULE, secondary axes,
 stacking remain rejected for transposed aspect ratios.
+
+Single-axis RULE layers require exactly one quantitative field or DATUM binding on X or Y, IDENTITY,
+and no conditions or other encodings. Y rules are vertical; X rules are horizontal.
+Constants participate in global and independent facet domains. SVG labels and titles, terminal
+output, and accessible fallback retain the semantic axis and value. Field-backed rules select one
+representative row per distinct numeric threshold, in first-seen order. SVG and terminal select after
+facet filtering; fallback selects across the chart. Null/gap rows do not draw rules. The shared
+`PlotPlanResolver.ReferenceRuleData` owns selection; raw plan rows remain intact. Ranged, conditional,
+and adjusted rules remain rejected in this composition. Contract versions remain unchanged.
 
 Error bars on these points retain `ErrorLow`/`ErrorHigh` in the semantic Y domain.
 Their endpoints participate in global and independent facet domains before viewport fitting.

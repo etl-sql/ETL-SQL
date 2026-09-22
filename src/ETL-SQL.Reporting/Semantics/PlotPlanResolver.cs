@@ -1212,7 +1212,11 @@ public sealed class PlotPlanResolver
             {
                 Detail = item.Detail is null ? offsetDetail : $"{item.Detail}; {offsetDetail}"
             };
-        })).Concat(layers.Where(layer => layer.Mark == MarkKind.Rule).Select((layer, index) =>
+        })).Concat(layers.Where(layer => layer.Mark == MarkKind.Rule)
+            .SelectMany(layer => spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null }
+                ? ReferenceRuleData(layer.Data).Select(datum => layer with { Data = [datum] }).DefaultIfEmpty(layer with { Data = [] })
+                : [layer])
+            .Select((layer, index) =>
         {
             var value = layer.Data.SelectMany(datum => datum.Channels)
                 .FirstOrDefault(channel => channel.Channel == FieldChannel.Y && channel.Value.Kind != ChartValueKind.Null)
@@ -1224,6 +1228,8 @@ public sealed class PlotPlanResolver
                 ? rawLabel
                 : (overlayKind == "ReferenceLine" ? "Reference" : overlayKind ?? layer.Id);
             var detail = overlayKind == "ReferenceLine" ? "author reference line" : "labeled reference rule";
+            if (spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } && value is not null)
+                detail = $"{value.Channel} = {value.DisplayValue ?? formatter.Format(value.Value)}; {(value.Channel == FieldChannel.X ? "horizontal" : "vertical")} reference rule";
             return new SemanticFallbackItem(label, value is null ? "" : value.DisplayValue ?? formatter.Format(value.Value), ((sourceLayers.Count + 1) * 100000) + index)
             { Detail = detail, Group = "Reference" };
         })).ToImmutableArray();
@@ -1729,6 +1735,18 @@ public sealed class PlotPlanResolver
                 return channels[i].Value;
         }
         return null;
+    }
+
+    /// <summary>One reference per distinct numeric threshold, in source order within the supplied panel.</summary>
+    internal static IEnumerable<ResolvedDatum> ReferenceRuleData(IEnumerable<ResolvedDatum> data)
+    {
+        var seen = new HashSet<(FieldChannel Channel, decimal Value)>();
+        foreach (var datum in data)
+        {
+            var channel = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.X or FieldChannel.Y);
+            if (datum.IsGap || channel is null || Number(channel.Value) is not { } number) continue;
+            if (seen.Add((channel.Channel, number))) yield return datum;
+        }
     }
 
     private static string? ValueKey(ChartValue value) => value.Kind == ChartValueKind.Null ? null : Display(value);

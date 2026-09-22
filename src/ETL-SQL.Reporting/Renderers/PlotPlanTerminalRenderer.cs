@@ -96,6 +96,19 @@ internal static class PlotPlanTerminalRenderer
             .Where(item => item.Data.Count > 0)
             .ToList();
 
+        var referenceRules = activeLayers.Where(item => item.Layer.Mark == MarkKind.Rule &&
+            plan.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null }).ToList();
+        activeLayers = activeLayers.Except(referenceRules).ToList();
+        foreach (var item in referenceRules)
+            foreach (var datum in PlotPlanResolver.ReferenceRuleData(item.Data))
+            {
+                var channel = datum.Channels.FirstOrDefault(channel =>
+                    channel.Channel is FieldChannel.X or FieldChannel.Y && channel.Value.Kind != ChartValueKind.Null);
+                if (channel is null) continue;
+                var label = item.Layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value ?? item.Layer.Id;
+                content.Add(new Text($"{label}: {channel.Channel} = {channel.DisplayValue ?? PlotPlanResolver.Display(channel.Value)}"));
+            }
+
         var bandLayers = activeLayers.Where(item =>
             item.Layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase) &&
                 token.Value.Equals("ReferenceBand", StringComparison.OrdinalIgnoreCase))).ToList();

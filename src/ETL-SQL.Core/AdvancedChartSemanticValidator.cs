@@ -752,12 +752,21 @@ public static class AdvancedChartSemanticValidator
         else if (!ContinuousPositionalScale(chart, AdvancedChartChannel.X) || !ContinuousPositionalScale(chart, AdvancedChartChannel.Y))
             Add(results, node, "ASPECT_RATIO requires continuous quantitative primary X and Y scales.");
         if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian && chart.Layers.Any(layer =>
-            layer.Mark is not (AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Text) ||
+            layer.Mark is not (AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Text or AdvancedChartMarkKind.Rule) ||
             layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or { Kind: AdvancedChartPositionKind.Jitter } or
             { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data }) ||
             EffectiveEncodings(chart, layer).Any(encoding => encoding.Stack != AdvancedChartStackMode.None ||
                 encoding.Channel == AdvancedChartChannel.Y2)))
-            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers and TEXT layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
+            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers, TEXT layers and single-axis RULE layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
+        if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian)
+            foreach (var layer in chart.Layers.Where(layer => layer.Mark == AdvancedChartMarkKind.Rule))
+            {
+                var encodings = EffectiveEncodings(chart, layer);
+                if (layer.Position.Kind != AdvancedChartPositionKind.Identity || layer.Conditions.Length > 0 ||
+                    encodings.Count != 1 || encodings[0].Channel is not (AdvancedChartChannel.X or AdvancedChartChannel.Y) ||
+                    encodings[0].Source.Kind is not (AdvancedChartBindingSourceKind.Datum or AdvancedChartBindingSourceKind.Field) || encodings[0].DataKind != AdvancedChartDataKind.Quantitative)
+                    Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO RULE requires one quantitative field or DATUM X or Y binding, IDENTITY, and no CONDITIONS or other encodings.");
+            }
     }
 
     private static void ValidateFacetAndResolution(List<Diagnostic> results, AdvancedChartDefinition chart, AstNode chartNode)

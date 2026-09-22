@@ -196,6 +196,50 @@ public sealed class ReportRenameProviderTests
         Assert.All(edits, edit => Assert.Equal("renamed", edit.NewText));
     }
 
+    [Theory]
+    [InlineData(false, "estimates =", 3)]
+    [InlineData(true, "estimates =", 3)]
+    [InlineData(true, "Estimate (", 2)]
+    public async Task TransposedAspectRule_RenamesScaleAndField(bool field, string token, int expectedEdits)
+    {
+        var script = """
+            CREATE VISUAL Measurement AS CUSTOM (
+              SOURCE = #prepared,
+              CHART (
+                COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+                SCALES (
+                  distances = LINEAR (CHANNEL = X, MIN = 0, MAX = 10),
+                  estimates = LINEAR (CHANNEL = Y, MIN = 0, MAX = 10)
+                ),
+                LAYERS (
+                  observations = POINT (ENCODINGS (
+                    X = Distance (TYPE = QUANTITATIVE, SCALE = distances),
+                    Y = Estimate (TYPE = QUANTITATIVE, SCALE = estimates)
+                  )),
+                  threshold = RULE (
+                    Z_INDEX = 1,
+                    INHERIT_ENCODINGS = OFF,
+                    ENCODINGS (Y = DATUM(5) (TYPE = QUANTITATIVE, SCALE = estimates)),
+                    STYLE (LABEL = '<target>', COLOR = '#112233')
+                  )
+                )
+              )
+            );
+            """;
+        if (field) script = script.Replace("DATUM(5)", "Estimate", System.StringComparison.Ordinal);
+        Assert.Empty(new Parser(new Lexer(script).Tokenize(), script).Parse().Diagnostics);
+        var (provider, uri) = Provider(script);
+        var result = await provider.Handle(new RenameParams
+        {
+            TextDocument = new TextDocumentIdentifier(uri),
+            Position = PositionOf(script, token),
+            NewName = "renamed"
+        }, CancellationToken.None);
+        var edits = Assert.IsAssignableFrom<IEnumerable<TextEdit>>(result!.Changes![uri]).ToList();
+        Assert.Equal(expectedEdits, edits.Count);
+        Assert.All(edits, edit => Assert.Equal("renamed", edit.NewText));
+    }
+
     private static (ReportRenameProvider Provider, DocumentUri Uri) Provider(string script = ScriptText)
     {
         var uri = DocumentUri.From("untitled:advanced-chart.rptsql");

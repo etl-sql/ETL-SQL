@@ -191,7 +191,7 @@ filters.
 
 The native `ChartSpec` → `PlotPlan` spine is shipped and remains closed as a foundation initiative.
 The next increment should address semantic combinations that deliberately fail validation today:
-renderer-neutral polar/radial stacking, physical aspect semantics beyond continuous Cartesian and transposed point/text plots,
+renderer-neutral polar/radial stacking, physical aspect semantics beyond continuous Cartesian and transposed point/text plots with single-axis reference rules,
 and safe row-level conditions for connected `LINE` and `AREA` marks.
 
 **Why later:** These are useful expressiveness gains, but no current catalog visual or renderer

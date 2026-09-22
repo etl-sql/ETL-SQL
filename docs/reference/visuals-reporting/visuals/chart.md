@@ -85,7 +85,7 @@ CREATE VISUAL name AS CUSTOM (
 
 ## Mappings
 
-- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` and `TEXT` layers with `IDENTITY`, `JITTER`, or `NUDGE(..., UNIT = EM|BAND|DATA)`, without stacking or secondary axes. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
+- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` and `TEXT` layers with `IDENTITY`, `JITTER`, or `NUDGE(..., UNIT = EM|BAND|DATA)`, without stacking or secondary axes. Single-axis RULE layers are also supported under the restrictions below. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
 - **SCALES** — Optionally declares named `LINEAR`, `LOGARITHMIC`, `TIME`, `BAND`, `POINT`, `ORDINAL`, or `IDENTITY` scales. Encoding `SCALE` references must name a declared scale; omission requests deterministic inference from the required `TYPE`, channel, mark, and coordinate.
 - **RANGE** — Adds a dependency-free sRGB sequential or diverging output range to a quantitative `COLOR` scale. Colors use portable `#RRGGBB`; values clamp at the domain, nulls use `NULL_COLOR`, and a diverging midpoint must lie inside the resolved domain.
 - **Scale axis controls** — `MIN`/`MAX` set the domain, `INCLUDE_ZERO` expands a quantitative domain to zero, `REVERSE` flips its display direction, `MAJOR_TICK_COUNT` or `TICK_INTERVAL` controls major ticks, `MINOR_TICKS` adds midpoint ticks, `TIME_UNIT` truncates/bins temporal scales by calendar unit (`AUTO`, `DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`), `TICK_FORMAT` applies a custom date/time or numeric format pattern, and `LABEL_ROTATION`/`LABEL_SKIP` control crowded tick labels. `OUTER_PADDING = 0..1` adds space before the first and after the last category on `BAND` scales only.
@@ -117,6 +117,48 @@ CREATE VISUAL name AS CUSTOM (
 - **HOVER_FOCUS = NONE|SELF|SERIES** — On mark layers, controls pointer hover emphasis. `NONE` (default) applies standard hover effects, `SELF` dims other marks in the plot, and `SERIES` highlights the active series across all categories while dimming unrelated series.
 - **ANNOTATIONS (POINT (...))** — Attaches data point and coordinate callouts to chart series. `SERIES` specifies the target layer or series name, `TYPE` selects `MAX`, `MIN`, or `COORD(x, y)`, `LABEL` sets the callout text, and `SYMBOL` selects the marker style (`'pin'`, `'arrow'`, or `'circle'`).
 - **Visible transformations** — Aggregation, filtering, calculation, lookup, windowing, and statistical preparation belong in preceding ETL-SQL/`#temp` statements, not in `CHART`.
+
+## Reference rules on transposed points
+
+Use one quantitative field or `DATUM` binding on X or Y with `IDENTITY` (the default position).
+Set `INHERIT_ENCODINGS = OFF` when shared encodings would add other channels.
+Ranged, adjusted, conditional, and multi-channel rules are rejected in this combination.
+A Y reference is vertical and an X reference is horizontal. Constants contribute to global and
+independent facet domains; labels and accessible descriptions retain the semantic axis and value.
+A field binding draws one rule per distinct non-null numeric threshold within each facet, in source
+order. Repeated values share a rule. Terminal output follows the same rule selection; accessible
+fallback lists distinct thresholds across the whole chart. Null-only layers have no rule geometry.
+
+```sql
+CREATE VISUAL Measurement AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    SCALES (
+      distances = LINEAR (CHANNEL = X, MIN = 0, MAX = 10),
+      estimates = LINEAR (CHANNEL = Y, MIN = 0, MAX = 10)
+    ),
+    LAYERS (
+      observations = POINT (ENCODINGS (
+        X = Distance (TYPE = QUANTITATIVE, SCALE = distances),
+        Y = Estimate (TYPE = QUANTITATIVE, SCALE = estimates)
+      )),
+      threshold = RULE (
+        Z_INDEX = 1,
+        INHERIT_ENCODINGS = OFF,
+        ENCODINGS (Y = DATUM(5) (TYPE = QUANTITATIVE, SCALE = estimates)),
+        STYLE (LABEL = '<target>', COLOR = '#112233')
+      )
+    )
+  )
+);
+```
+
+To draw the distinct estimates as reference rules, replace the example's threshold encoding with:
+
+```sql
+ENCODINGS (Y = Estimate (TYPE = QUANTITATIVE, SCALE = estimates))
+```
 
 ## Fixed physical units on transposed points
 

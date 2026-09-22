@@ -409,12 +409,21 @@ public sealed record ChartSpec(
                 yScale?.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic))
                 throw new InvalidDataException("ASPECT_RATIO requires continuous quantitative primary X and Y scales.");
             if (Coordinate.Kind == CoordinateKind.TransposedCartesian && Layers.Any(layer =>
-                layer.Mark is not (MarkKind.Point or MarkKind.Text) ||
+                layer.Mark is not (MarkKind.Point or MarkKind.Text or MarkKind.Rule) ||
                 layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or { Kind: PositionAdjustmentKind.Jitter } or
                 { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data }) ||
                 layer.Bindings.Any(binding => binding.Stack != StackMode.None ||
                     binding.Channel == FieldChannel.Y2)))
-                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers and TEXT layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
+                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers, TEXT layers and single-axis RULE layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
+            if (Coordinate.Kind == CoordinateKind.TransposedCartesian)
+                foreach (var layer in Layers.Where(layer => layer.Mark == MarkKind.Rule))
+                {
+                    var bindings = layer.Bindings.Where(binding => binding.Channel is not (FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap)).ToArray();
+                    if (layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) || !layer.Conditions.IsDefaultOrEmpty ||
+                        bindings.Length != 1 || bindings[0].Channel is not (FieldChannel.X or FieldChannel.Y) ||
+                        bindings[0].SourceKind is not (BindingSourceKind.Datum or BindingSourceKind.Field) || bindings[0].SemanticKind != DataSemanticKind.Quantitative)
+                        throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO RULE requires one quantitative field or DATUM X or Y binding, IDENTITY, and no CONDITIONS or other encodings.");
+                }
         }
         if (Facet is not null)
         {
