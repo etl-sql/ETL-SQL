@@ -191,15 +191,17 @@ layer therefore does not duplicate reference rules or their accessible values.
 
 ## Ranged rules on transposed fixed-aspect charts
 
-A ranged RULE accepts exactly `X`, `Y_START`, `Y_END`, or exactly `Y`, `X_START`, `X_END`.
-All three bindings must be quantitative fields or `DATUM` constants. Use `IDENTITY` placement
+A ranged RULE accepts exactly `X`, `Y_START`, `Y_END`; exactly `Y`, `X_START`, `X_END`;
+or all four endpoint channels `X_START`, `X_END`, `Y_START`, `Y_END` for a diagonal segment.
+All bindings must be quantitative fields or `DATUM` constants. Use `IDENTITY` placement
 (the default), without conditions or additional encodings. A semantic Y interval becomes horizontal;
 a semantic X interval becomes vertical. Endpoints expand global and independent facet domains.
 One segment is retained per source row, including coincident segments. Rows with a missing anchor
 or endpoint draw no segment and contribute no interval to terminal or accessible output.
 Endpoint order is preserved, including descending intervals. Terminal and accessible descriptions
-include the fixed coordinate and both raw endpoints. Nudges, jitter, and diagonal segments with
-both X and Y endpoint pairs are not supported in this composition.
+include every raw endpoint and any fixed coordinate. A diagonal joins `(X_START, Y_START)` to
+`(X_END, Y_END)` after transposition. Coincident endpoints retain a zero-length segment and its
+accessible values. Nudges and jitter are not supported on ranged rules in this composition.
 
 ```sql
 CREATE VISUAL Measurement AS CUSTOM (
@@ -219,6 +221,37 @@ CREATE VISUAL Measurement AS CUSTOM (
         Z_INDEX = 1,
         INHERIT_ENCODINGS = OFF,
         ENCODINGS (X = Distance (TYPE = QUANTITATIVE, SCALE = distances), Y_START = LowerBound (TYPE = QUANTITATIVE, SCALE = estimates), Y_END = UpperBound (TYPE = QUANTITATIVE, SCALE = estimates)),
+        STYLE (LABEL = '<target>', COLOR = '#112233')
+      )
+    )
+  )
+);
+```
+
+## Diagonal rules on transposed fixed-aspect charts
+
+Stage each segment's four endpoints in the source. Both X endpoints contribute to the X domain;
+both Y endpoints contribute to the Y domain, including independent facets. Endpoint order and
+source rows remain intact. A row missing any endpoint contributes no segment or interval output.
+
+```sql
+CREATE VISUAL Measurement AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    SCALES (
+      distances = LINEAR (CHANNEL = X, MIN = 0, MAX = 10),
+      estimates = LINEAR (CHANNEL = Y, MIN = 0, MAX = 10)
+    ),
+    LAYERS (
+      observations = POINT (ENCODINGS (
+        X = Distance (TYPE = QUANTITATIVE, SCALE = distances),
+        Y = Estimate (TYPE = QUANTITATIVE, SCALE = estimates)
+      )),
+      threshold = RULE (
+        Z_INDEX = 1,
+        INHERIT_ENCODINGS = OFF,
+        ENCODINGS (X_START = StartX (TYPE = QUANTITATIVE, SCALE = distances), X_END = EndX (TYPE = QUANTITATIVE, SCALE = distances), Y_START = LowerBound (TYPE = QUANTITATIVE, SCALE = estimates), Y_END = UpperBound (TYPE = QUANTITATIVE, SCALE = estimates)),
         STYLE (LABEL = '<target>', COLOR = '#112233')
       )
     )

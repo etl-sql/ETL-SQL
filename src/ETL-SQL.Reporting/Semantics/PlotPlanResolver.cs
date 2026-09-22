@@ -1774,6 +1774,7 @@ public sealed class PlotPlanResolver
         var ys = Value(FieldChannel.YStart);
         var ye = Value(FieldChannel.YEnd);
         if (transposed) (x, y, xs, xe, ys, ye) = (y, x, ys, ye, xs, xe);
+        if (xs is not null && xe is not null && ys is not null && ye is not null) return $"X = {xs} to {xe}; Y = {ys} to {ye}";
         if (x is not null && ys is not null && ye is not null) return $"X = {x}; Y = {ys} to {ye}";
         if (y is not null && xs is not null && xe is not null) return $"X = {xs} to {xe}; Y = {y}";
         return null;

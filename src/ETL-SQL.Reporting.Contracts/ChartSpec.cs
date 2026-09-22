@@ -421,7 +421,8 @@ public sealed record ChartSpec(
                     var bindings = layer.Bindings.Where(binding => binding.Channel is not (FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap)).ToArray();
                     var channels = bindings.Select(binding => binding.Channel).ToHashSet();
                     var ranged = channels.SetEquals([FieldChannel.X, FieldChannel.YStart, FieldChannel.YEnd]) ||
-                        channels.SetEquals([FieldChannel.Y, FieldChannel.XStart, FieldChannel.XEnd]);
+                        channels.SetEquals([FieldChannel.Y, FieldChannel.XStart, FieldChannel.XEnd]) ||
+                        channels.SetEquals([FieldChannel.XStart, FieldChannel.XEnd, FieldChannel.YStart, FieldChannel.YEnd]);
                     if (ranged)
                     {
                         if (layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) || !layer.Conditions.IsDefaultOrEmpty ||

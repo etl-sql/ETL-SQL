@@ -370,6 +370,12 @@ semantics and backend evidence before its rejection can be lifted.
   and resize. IDENTITY only; raw intervals and endpoint order remain visible in terminal/fallback.
   `TransposedAspectRangeRuleTests` covers geometry, missing values, constants, domains, round trips,
   lineage, PDF and deterministic goldens. LSP covers endpoint/scale rename; no wire fields changed.
+- [x] **Diagonal RULE segments on continuous transposed aspect charts.** Four quantitative
+  endpoints map paired starts to paired ends with IDENTITY placement. Both domains include their
+  endpoints; terminal/fallback retain both raw intervals. Missing endpoints skip rows, while
+  descending and zero-length segments retain order and values. `TransposedAspectDiagonalRuleTests`
+  covers facets, reversal, logarithmic mapping, resize, contracts, authoring, lineage and PDF;
+  LSP covers endpoint/scale rename and deterministic goldens preserve existing output.
 - [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/supported RULE,
   stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.

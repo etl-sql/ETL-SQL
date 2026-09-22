@@ -104,9 +104,10 @@ internal static class PlotPlanTerminalRenderer
             {
                 var channel = datum.Channels.FirstOrDefault(channel =>
                     channel.Channel is FieldChannel.X or FieldChannel.Y && channel.Value.Kind != ChartValueKind.Null);
-                if (channel is null) continue;
+                var range = PlotPlanResolver.RangeRuleDescription(datum);
+                if (range is null && channel is null) continue;
                 var label = item.Layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value ?? item.Layer.Id;
-                var description = PlotPlanResolver.RangeRuleDescription(datum) ?? $"{channel.Channel} = {channel.DisplayValue ?? PlotPlanResolver.Display(channel.Value)}";
+                var description = range ?? $"{channel!.Channel} = {channel.DisplayValue ?? PlotPlanResolver.Display(channel.Value)}";
                 content.Add(new Text($"{label}: {description}"));
             }
 

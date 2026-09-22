@@ -764,7 +764,8 @@ public static class AdvancedChartSemanticValidator
                 var encodings = EffectiveEncodings(chart, layer);
                 var channels = encodings.Select(encoding => encoding.Channel).ToHashSet();
                 var ranged = channels.SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd]) ||
-                    channels.SetEquals([AdvancedChartChannel.Y, AdvancedChartChannel.XStart, AdvancedChartChannel.XEnd]);
+                    channels.SetEquals([AdvancedChartChannel.Y, AdvancedChartChannel.XStart, AdvancedChartChannel.XEnd]) ||
+                    channels.SetEquals([AdvancedChartChannel.XStart, AdvancedChartChannel.XEnd, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd]);
                 if (ranged)
                 {
                     if (layer.Position.Kind != AdvancedChartPositionKind.Identity || layer.Conditions.Length > 0 ||

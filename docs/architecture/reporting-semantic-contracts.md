@@ -114,12 +114,15 @@ plot sizing including legend space. Null/gap thresholds are skipped; positive lo
 and targets are required. No unbound anchor is required. Single-axis rules do not inherit another
 layer's color series; this correction is recorded in `BREAKING_CHANGES.md`.
 
-Ranged RULE accepts X + Y_START/Y_END or Y + X_START/X_END, quantitative field/DATUM bindings
+Ranged RULE accepts X + Y_START/Y_END, Y + X_START/X_END, or both endpoint pairs for diagonal segments, with quantitative field/DATUM bindings
 and IDENTITY only. The SVG adapter transposes both endpoint channels, while the authoritative plan
 retains semantic channels. Complete source rows remain distinct; missing anchors/endpoints are
 skipped. Shared interval descriptions preserve fixed coordinates and both endpoints in SVG titles,
 terminal text and accessible fallback. Endpoint order is preserved. Both endpoints participate in
-global/facet domains before aspect fitting. No wire fields or versions change.
+global/facet domains before aspect fitting. Diagonal segments join the paired start coordinates
+to the paired end coordinates; no primary X/Y anchor is required. All four endpoint values remain
+visible in terminal/fallback even for zero-length segments. Missing any endpoint skips the row.
+No wire fields or versions change.
 
 Error bars on these points retain `ErrorLow`/`ErrorHigh` in the semantic Y domain.
 Their endpoints participate in global and independent facet domains before viewport fitting.

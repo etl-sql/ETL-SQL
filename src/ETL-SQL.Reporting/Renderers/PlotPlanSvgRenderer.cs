@@ -189,7 +189,7 @@ internal sealed class PlotPlanSvgRenderer
         {
             if (plan.Coordinate.AspectRatio is not null)
             {
-                // Adapt point coordinates to physical axes without mutating the authoritative plan.
+                // Adapt positional coordinates to physical axes without mutating the authoritative plan.
                 static FieldChannel Transpose(FieldChannel channel) => channel switch
                 {
                     FieldChannel.X => FieldChannel.Y,

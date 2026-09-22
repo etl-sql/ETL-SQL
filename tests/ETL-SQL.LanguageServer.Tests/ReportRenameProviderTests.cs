@@ -245,9 +245,11 @@ public sealed class ReportRenameProviderTests
     }
 
     [Theory]
-    [InlineData("estimates =", 4)]
-    [InlineData("LowerBound (", 1)]
-    public async Task TransposedRangeRule_RenamesScaleAndEndpoint(string token, int count)
+    [InlineData("estimates =", 4, false)]
+    [InlineData("LowerBound (", 1, false)]
+    [InlineData("distances =", 4, true)]
+    [InlineData("StartX (", 1, true)]
+    public async Task TransposedRangeRule_RenamesScaleAndEndpoint(string token, int count, bool diagonal)
     {
         var script = """
             CREATE VISUAL Measurement AS CUSTOM (
@@ -273,6 +275,7 @@ public sealed class ReportRenameProviderTests
               )
             );
             """;
+        if (diagonal) script = script.Replace("ENCODINGS (X = Distance (TYPE = QUANTITATIVE, SCALE = distances), Y_START", "ENCODINGS (X_START = StartX (TYPE = QUANTITATIVE, SCALE = distances), X_END = EndX (TYPE = QUANTITATIVE, SCALE = distances), Y_START", System.StringComparison.Ordinal);
         Assert.Empty(new Parser(new Lexer(script).Tokenize(), script).Parse().Diagnostics);
         var (provider, uri) = Provider(script);
         var result = await provider.Handle(new RenameParams
