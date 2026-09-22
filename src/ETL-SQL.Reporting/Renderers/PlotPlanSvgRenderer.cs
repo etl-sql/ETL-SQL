@@ -284,11 +284,10 @@ internal sealed class PlotPlanSvgRenderer
 
         if (transposedPointAxes)
         {
-            // Legend gutters may reduce the available plot, but must not change physical unit sizes.
-            var ratio = (plan.Bounds.Height - Top - Bottom) / (plan.Bounds.Width - Left - Right);
-            plotWidth = Math.Min(plotWidth, plan.Bounds.Width - Left - Right);
-            plotWidth = Math.Min(plotWidth, plotHeight / ratio);
-            plotHeight = plotWidth * ratio;
+            var physical = TransposedAspectLayout.Resolve(plan.Bounds, plan.Style, plan.Layers, plan.Legend.Length);
+            plotLeft = physical.X;
+            plotWidth = physical.Width;
+            plotHeight = physical.Height;
         }
         CartesianPlotArea area = new(plotLeft, Top, plotWidth, plotHeight);
 

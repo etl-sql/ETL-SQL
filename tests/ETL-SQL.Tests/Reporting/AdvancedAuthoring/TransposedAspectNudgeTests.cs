@@ -107,17 +107,18 @@ public sealed class TransposedAspectNudgeTests
 
     [Theory]
     [InlineData("NUDGE(X = 1, Y = 1, UNIT = DATA)")]
-    public void UnsupportedUnits_StillFailAuthoringAndContractValidation(string position)
+    public void DataNudgeWithoutAspect_StillFailsAuthoringAndContractValidation(string position)
     {
-        var invalid = Parse(Script.Replace("NUDGE(X = 1, Y = -0.5, UNIT = EM)", position, StringComparison.Ordinal));
+        var invalid = Parse(Script.Replace("NUDGE(X = 1, Y = -0.5, UNIT = EM)", position, StringComparison.Ordinal)
+            .Replace(", ASPECT_RATIO = 2", "", StringComparison.Ordinal));
         Assert.Contains(AdvancedChartSemanticValidator.Validate(invalid), diagnostic =>
             diagnostic.Code == "RPT-CHART" && diagnostic.Line > 0 && diagnostic.Column > 0 &&
-            diagnostic.Message.Contains("NUDGE UNIT EM", StringComparison.Ordinal));
+            diagnostic.Message.Contains("data-domain NUDGE", StringComparison.Ordinal));
         var (spec, _) = Lower(Script);
         var unsupported = new PositionAdjustmentSpec(PositionAdjustmentKind.Nudge, .1m, .1m,
                 Unit: position.Contains("DATA", StringComparison.Ordinal) ? PositionAdjustmentUnit.Data : PositionAdjustmentUnit.Band);
-        var contract = spec with { Layers = [spec.Layers[0] with { Position = unsupported }] };
-        Assert.Contains("NUDGE UNIT EM", Assert.Throws<InvalidDataException>(contract.Validate).Message);
+        var contract = spec with { Coordinate = spec.Coordinate with { AspectRatio = null }, Layers = [spec.Layers[0] with { Position = unsupported }] };
+        Assert.Contains("data-domain NUDGE", Assert.Throws<InvalidDataException>(contract.Validate).Message);
     }
 
     [Fact]

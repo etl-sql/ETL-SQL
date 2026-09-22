@@ -411,10 +411,10 @@ public sealed record ChartSpec(
             if (Coordinate.Kind == CoordinateKind.TransposedCartesian && Layers.Any(layer =>
                 layer.Mark is not (MarkKind.Point or MarkKind.Text) ||
                 layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or { Kind: PositionAdjustmentKind.Jitter } or
-                { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band }) ||
+                { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data }) ||
                 layer.Bindings.Any(binding => binding.Stack != StackMode.None ||
-                    binding.Channel is FieldChannel.Y2 or FieldChannel.XOffset or FieldChannel.YOffset)))
-                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers and TEXT layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND, without stacking, offset channels, or secondary axes.");
+                    binding.Channel == FieldChannel.Y2)))
+                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers and TEXT layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
         }
         if (Facet is not null)
         {
@@ -512,8 +512,9 @@ public sealed record ChartSpec(
                 if (position.Kind == PositionAdjustmentKind.Jitter && (position.X < 0m || position.Y < 0m || position.X > 1m || position.Y > 1m))
                     throw new InvalidDataException($"Layer '{layer.Id}' JITTER amplitudes must be between zero and one.");
                 if (position.Kind == PositionAdjustmentKind.Nudge && position.Unit == PositionAdjustmentUnit.Data &&
-                    Coordinate.Kind != CoordinateKind.Cartesian)
-                    throw new InvalidDataException($"Layer '{layer.Id}' data-domain NUDGE requires Cartesian coordinates.");
+                    Coordinate.Kind != CoordinateKind.Cartesian &&
+                    Coordinate is not { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
+                    throw new InvalidDataException($"Layer '{layer.Id}' data-domain NUDGE requires Cartesian coordinates or a supported transposed ASPECT_RATIO composition.");
             }
             foreach (var binding in layer.Bindings)
             {

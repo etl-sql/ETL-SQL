@@ -382,8 +382,9 @@ public static class AdvancedChartSemanticValidator
         if (position.Kind == AdvancedChartPositionKind.Jitter && (position.X < 0m || position.Y < 0m || position.X > 1m || position.Y > 1m))
             Add(results, node, $"Layer '{layer.Name}' JITTER amplitudes must be between zero and one.");
         if (position.Kind == AdvancedChartPositionKind.Nudge && position.Unit == AdvancedChartPositionUnit.Data &&
-            chart.Coordinate.Kind != AdvancedChartCoordinateKind.Cartesian)
-            Add(results, node, $"Layer '{layer.Name}' data-domain NUDGE requires Cartesian coordinates.");
+            chart.Coordinate.Kind != AdvancedChartCoordinateKind.Cartesian &&
+            chart.Coordinate is not { Kind: AdvancedChartCoordinateKind.TransposedCartesian, AspectRatio: not null })
+            Add(results, node, $"Layer '{layer.Name}' data-domain NUDGE requires Cartesian coordinates or a supported transposed ASPECT_RATIO composition.");
     }
 
     private static void ValidateLayerShape(
@@ -753,10 +754,10 @@ public static class AdvancedChartSemanticValidator
         if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian && chart.Layers.Any(layer =>
             layer.Mark is not (AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Text) ||
             layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or { Kind: AdvancedChartPositionKind.Jitter } or
-            { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band }) ||
+            { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data }) ||
             EffectiveEncodings(chart, layer).Any(encoding => encoding.Stack != AdvancedChartStackMode.None ||
-                encoding.Channel is AdvancedChartChannel.Y2 or AdvancedChartChannel.XOffset or AdvancedChartChannel.YOffset)))
-            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers and TEXT layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND, without stacking, offset channels, or secondary axes.");
+                encoding.Channel == AdvancedChartChannel.Y2)))
+            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers and TEXT layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
     }
 
     private static void ValidateFacetAndResolution(List<Diagnostic> results, AdvancedChartDefinition chart, AstNode chartNode)

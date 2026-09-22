@@ -29,7 +29,7 @@ public sealed class PlotPlanResolver
         var columns = data.Columns.ToDictionary(column => column.Name, StringComparer.OrdinalIgnoreCase);
         var formatter = new ChartValueFormatter(spec.Formatting);
         var facets = ResolveFacets(spec, columns, plan.Scales, bounds, formatter);
-        var layers = ResolveDisplayOffsets(spec, data, columns, plan.Layers, plan.Scales, facets, bounds);
+        var layers = ResolveDisplayOffsets(spec, data, columns, plan.Layers, plan.Scales, facets, bounds, plan.Legend.Length);
         layers = ResolveMarkExtents(spec, layers);
         var summary = BuildSummary(spec, data, plan.Series, layers, plan.Scales, facets,
             plan.Nulls.GapRows, plan.Nulls.SkippedRows);
@@ -160,7 +160,7 @@ public sealed class PlotPlanResolver
     {
         var facets = ResolveFacets(spec, independent.Columns, independent.Scales, bounds, independent.Formatter);
         var layers = ResolveDisplayOffsets(spec, data, independent.Columns, independent.Layers,
-            independent.Scales, facets, bounds);
+            independent.Scales, facets, bounds, independent.Legend.Length);
         var summary = BuildSummary(spec, data, independent.Series, layers, independent.Scales, facets,
             independent.Nulls.GapRows, independent.Nulls.SkippedRows);
 
@@ -1152,6 +1152,15 @@ public sealed class PlotPlanResolver
         }
     }
 
+    internal static string? OffsetDetail(ResolvedDatum datum)
+    {
+        var groups = datum.Channels.Where(channel => channel.Channel is FieldChannel.XOffset or FieldChannel.YOffset)
+            .OrderBy(channel => channel.Channel)
+            .Select(channel => $"{(channel.Channel == FieldChannel.XOffset ? "X_OFFSET" : "Y_OFFSET")}: " +
+                (channel.Value.Kind == ChartValueKind.Null ? "null (unshifted)" : channel.DisplayValue ?? Display(channel.Value))).ToArray();
+        return groups.Length == 0 ? null : string.Join(", ", groups);
+    }
+
     internal static string? TextLabel(ResolvedDatum datum)
     {
         if (!datum.Encodings.IsDefaultOrEmpty)
@@ -1190,12 +1199,18 @@ public sealed class PlotPlanResolver
                 "Forecast" => "forecast",
                 _ => null
             };
-            return new SemanticFallbackItem(label ?? $"Row {index + 1}", datum.IsGap ? "gap" : value is null ? "" : value.DisplayValue ?? formatter.Format(value.Value), (layerIndex * 100000) + index)
+            var item = new SemanticFallbackItem(label ?? $"Row {index + 1}", datum.IsGap ? "gap" : value is null ? "" : value.DisplayValue ?? formatter.Format(value.Value), (layerIndex * 100000) + index)
             {
                 Group = layer.SeriesKey ?? (overlayKind is "Forecast" or "ForecastConfidence" or "ForecastAnomaly" ? layer.Id : null),
                 Detail = datum.IsGap ? "null gap" : confidenceDetail ?? errorDetail ?? interval ?? overlayDetail ?? conditionDetail ?? (layer.Mark == MarkKind.Arc && numeric.HasValue && total > 0m
                     ? $"{numeric.Value / total:P1} of total"
                     : null)
+            };
+            var offsetDetail = spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null }
+                ? OffsetDetail(datum) : null;
+            return offsetDetail is null ? item : item with
+            {
+                Detail = item.Detail is null ? offsetDetail : $"{item.Detail}; {offsetDetail}"
             };
         })).Concat(layers.Where(layer => layer.Mark == MarkKind.Rule).Select((layer, index) =>
         {
@@ -1479,7 +1494,8 @@ public sealed class PlotPlanResolver
         ImmutableArray<ResolvedMarkLayer> layers,
         ImmutableArray<ResolvedScale> scales,
         ImmutableArray<ResolvedFacetPanel> facets,
-        PlotBounds bounds)
+        PlotBounds bounds,
+        int legendCount)
     {
         var panelByRow = facets.SelectMany(panel => panel.RowIndices.Select(row => (row, panel)))
             .ToDictionary(item => item.row, item => item.panel);
@@ -1510,8 +1526,17 @@ public sealed class PlotPlanResolver
 
         var transposedPlacementViewport = spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
             layers.Any(layer => layer.Position is { Kind: PositionAdjustmentKind.Jitter } or
-            { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Band })
+            { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data } ||
+                layer.Data.Any(datum => datum.Channels.Any(channel => channel.Channel is FieldChannel.XOffset or FieldChannel.YOffset)))
             ? ResolveCartesianViewport(spec.Coordinate, scales, bounds) : null;
+
+        var dataAreas = new Dictionary<PlotBounds, PlotBounds>();
+        PlotBounds DataArea(PlotBounds viewport)
+        {
+            if (!dataAreas.TryGetValue(viewport, out var area))
+                dataAreas[viewport] = area = TransposedAspectLayout.Resolve(viewport, spec.Theme.Tokens, layers, legendCount);
+            return area;
+        }
 
         return layers.Select(layer => layer with
         {
@@ -1526,6 +1551,12 @@ public sealed class PlotPlanResolver
                 var yBand = datumBounds.Height / Math.Max(1, yScale?.Categories.Length ?? 1);
                 var offsetX = ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, xBand);
                 var offsetY = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, yBand);
+                if (transposedPlacementViewport is not null)
+                {
+                    var viewport = panel?.CartesianViewport ?? transposedPlacementViewport;
+                    offsetX = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, viewport.Width - 80m, respectReverse: true);
+                    offsetY = -ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, viewport.Height - 100m, respectReverse: true);
+                }
                 if (layer.Position is { } position)
                 {
                     if (position.Kind == PositionAdjustmentKind.Jitter)
@@ -1558,6 +1589,8 @@ public sealed class PlotPlanResolver
                             ? (X: position.Y * 12m, Y: -position.X * 12m)
                             : transposedPlacementViewport is not null && position.Unit == PositionAdjustmentUnit.Band
                             ? (X: position.Y * (viewport!.Width - 80m), Y: -position.X * (viewport.Height - 100m))
+                            : transposedPlacementViewport is not null && position.Unit == PositionAdjustmentUnit.Data
+                            ? ResolveTransposedDataNudge(position, datum, xScale!, yScale!, DataArea(viewport!), layer.Id)
                             : ResolveNudge(position, datum, xScale, yScale, datumBounds, xBand, yBand, layer.Id);
                         offsetX += nudge.X;
                         offsetY += nudge.Y;
@@ -1569,14 +1602,27 @@ public sealed class PlotPlanResolver
     }
 
     private static decimal ResolveOffsetChannel(ResolvedDatum datum, FieldChannel channel,
-        ImmutableArray<ResolvedScale> scales, decimal band)
+        ImmutableArray<ResolvedScale> scales, decimal band, bool respectReverse = false)
     {
         var value = Channel(datum, channel);
         if (value is null || value.Kind == ChartValueKind.Null) return 0m;
-        var categories = scales.FirstOrDefault(scale => scale.Channel == channel)?.Categories ?? [];
+        var scale = scales.FirstOrDefault(scale => scale.Channel == channel);
+        var categories = scale?.Categories ?? [];
         var index = categories.IndexOf(Display(value));
-        return index < 0 || categories.Length < 2 ? 0m :
-            (((index + .5m) / categories.Length) - .5m) * band;
+        if (index < 0 || categories.Length < 2) return 0m;
+        if (respectReverse && scale!.Reverse) index = categories.Length - 1 - index;
+        return (((index + .5m) / categories.Length) - .5m) * band;
+    }
+
+    private static (decimal X, decimal Y) ResolveTransposedDataNudge(PositionAdjustmentSpec position, ResolvedDatum datum,
+        ResolvedScale xScale, ResolvedScale yScale, PlotBounds area, string layerId)
+    {
+        var x = Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
+        var y = Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
+        if (!x.HasValue || !y.HasValue)
+            throw new InvalidOperationException($"Layer '{layerId}' data-domain NUDGE requires numeric X and Y datum values.");
+        return (DataNudge(y.Value, position.Y, yScale, area.Width, layerId, "Y") * (yScale.Reverse ? -1m : 1m),
+            DataNudge(x.Value, position.X, xScale, area.Height, layerId, "X") * (xScale.Reverse ? 1m : -1m));
     }
 
     private static (decimal X, decimal Y) ResolveNudge(PositionAdjustmentSpec position, ResolvedDatum datum,

@@ -107,12 +107,16 @@ internal static class PlotPlanTerminalRenderer
         foreach (var item in textLayers)
         {
             var table = new Table().Border(TableBorder.Simple).AddColumn("Annotation").AddColumn("X").AddColumn("Y");
+            var hasOffsetGroups = item.Data.Any(datum => PlotPlanResolver.OffsetDetail(datum) is not null);
+            if (hasOffsetGroups) table.AddColumn("Groups");
             foreach (var datum in item.Data)
             {
                 var label = PlotPlanResolver.TextLabel(datum);
                 if (string.IsNullOrEmpty(label)) continue;
-                table.AddRow(Markup.Escape(label), Markup.Escape(DisplayChannel(datum, FieldChannel.X) ?? ""),
-                    Markup.Escape(datum.IsGap ? "gap" : DisplayChannel(datum, FieldChannel.Y) ?? ""));
+                var cells = new List<string> { Markup.Escape(label), Markup.Escape(DisplayChannel(datum, FieldChannel.X) ?? ""),
+                    Markup.Escape(datum.IsGap ? "gap" : DisplayChannel(datum, FieldChannel.Y) ?? "") };
+                if (hasOffsetGroups) cells.Add(Markup.Escape(PlotPlanResolver.OffsetDetail(datum) ?? ""));
+                table.AddRow(cells.ToArray());
             }
             content.Add(table);
         }
@@ -275,6 +279,9 @@ internal static class PlotPlanTerminalRenderer
         var errorDetails = layers.SelectMany(l => l.Data.Select(d =>
         {
             var detail = ConfidenceIntervalDetail(d) ?? ErrorBarDetail(d);
+            if (plan.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
+                PlotPlanResolver.OffsetDetail(d) is { } groups)
+                detail = detail is null ? groups : $"{detail}; {groups}";
             return detail != null ? $"{Label(d)}: {detail}" : null;
         })).Where(d => d != null).ToList();
 

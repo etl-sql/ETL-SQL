@@ -85,7 +85,7 @@ CREATE VISUAL name AS CUSTOM (
 
 ## Mappings
 
-- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` and `TEXT` layers with `IDENTITY`, `JITTER`, or `NUDGE(..., UNIT = EM|BAND)`, without stacking, offset channels, or secondary axes. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
+- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` and `TEXT` layers with `IDENTITY`, `JITTER`, or `NUDGE(..., UNIT = EM|BAND|DATA)`, without stacking or secondary axes. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
 - **SCALES** — Optionally declares named `LINEAR`, `LOGARITHMIC`, `TIME`, `BAND`, `POINT`, `ORDINAL`, or `IDENTITY` scales. Encoding `SCALE` references must name a declared scale; omission requests deterministic inference from the required `TYPE`, channel, mark, and coordinate.
 - **RANGE** — Adds a dependency-free sRGB sequential or diverging output range to a quantitative `COLOR` scale. Colors use portable `#RRGGBB`; values clamp at the domain, nulls use `NULL_COLOR`, and a diverging midpoint must lie inside the resolved domain.
 - **Scale axis controls** — `MIN`/`MAX` set the domain, `INCLUDE_ZERO` expands a quantitative domain to zero, `REVERSE` flips its display direction, `MAJOR_TICK_COUNT` or `TICK_INTERVAL` controls major ticks, `MINOR_TICKS` adds midpoint ticks, `TIME_UNIT` truncates/bins temporal scales by calendar unit (`AUTO`, `DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`), `TICK_FORMAT` applies a custom date/time or numeric format pattern, and `LABEL_ROTATION`/`LABEL_SKIP` control crowded tick labels. `OUTER_PADDING = 0..1` adds space before the first and after the last category on `BAND` scales only.
@@ -98,10 +98,12 @@ CREATE VISUAL name AS CUSTOM (
 
 ## Options
 
-- **Placement** — `STACK` accumulates quantitative Y/Y2 values for Cartesian and transposed Cartesian layouts; polar/radial stacking is rejected until it has portable geometry. Offset channels dodge categories, `BAND_SIZE` controls relative thickness, and `Z_INDEX` controls paint order. `JITTER` uses a stable key and deterministic hash; `NUDGE` is resolved after domains without changing raw values. For transposed fixed-aspect points and text, `NUDGE` accepts `UNIT = EM`: one em is the portable 12-pixel unit, positive X moves up, and positive Y moves right. Negative values move in the opposite direction. This presentation displacement does not follow scale reversal; the point and its error bar move together. DATA nudges remain unsupported for this combination.
-- **Transposed fixed-aspect BAND nudges** — On continuous POINT/TEXT charts, `NUDGE(..., UNIT = BAND)` treats each primary axis as one band. X is a fraction of the fitted plot height and Y is a fraction of its width, excluding fixed axis margins and before renderer-specific legend layout. Positive X moves up, positive Y moves right, and negative values reverse those directions. Displacement is independent of scale reversal and raw values. Each facet uses its fitted viewport; resizing recomputes pixel offsets. Points, intervals, and text with the same nudge remain aligned. Data-domain nudges are still rejected for this combination.
+- **Placement** — `STACK` accumulates quantitative Y/Y2 values for Cartesian and transposed Cartesian layouts; polar/radial stacking is rejected until it has portable geometry. Offset channels dodge categories, `BAND_SIZE` controls relative thickness, and `Z_INDEX` controls paint order. `JITTER` uses a stable key and deterministic hash; `NUDGE` is resolved after domains without changing raw values. For transposed fixed-aspect points and text, `NUDGE` accepts `UNIT = EM`: one em is the portable 12-pixel unit, positive X moves up, and positive Y moves right. Negative values move in the opposite direction. This presentation displacement does not follow scale reversal; the point and its error bar move together.
+- **Transposed fixed-aspect offset groups** — `X_OFFSET` and `Y_OFFSET` accept nominal/ordinal groups on POINT/TEXT charts. X groups move vertically and Y groups horizontally. Group centers divide one fitted plot band into equal slots, centered around the original position; the metric excludes fixed axis margins and precedes renderer-specific legend layout. `ORDER` sets category order and `REVERSE` on the offset scale reverses its slots. Reversing a primary X/Y scale does not reverse grouping displacement. Null, unmatched, and singleton groups have zero displacement. Facets retain the shared category slots but scale displacement to each fitted viewport. EM/BAND/DATA nudges and jitter add to these offsets. Error intervals move with points, and group names remain in terminal and accessible descriptions.
+- **Transposed fixed-aspect DATA nudges** — `NUDGE(..., UNIT = DATA)` moves the anchor to where X + nudge X and Y + nudge Y would map on the original scales. This displacement follows scale reversal and logarithmic mapping, uses each facet's axes, and accounts for side-legend space. Raw values and domains do not change. Error bars translate with their point by the anchor displacement, keeping their original span; the endpoints are not independently shifted in data space. Numeric X/Y are required on every row, and a logarithmic anchor and its shifted target must both remain positive. Text consumes the same displacement before collision placement. Categorical offsets add to the DATA displacement.
+- **Transposed fixed-aspect BAND nudges** — On continuous POINT/TEXT charts, `NUDGE(..., UNIT = BAND)` treats each primary axis as one band. X is a fraction of the fitted plot height and Y is a fraction of its width, excluding fixed axis margins and before renderer-specific legend layout. Positive X moves up, positive Y moves right, and negative values reverse those directions. Displacement is independent of scale reversal and raw values. Each facet uses its fitted viewport; resizing recomputes pixel offsets. Points, intervals, and text with the same nudge remain aligned.
 - **Transposed fixed-aspect jitter** — `JITTER` supports POINT and TEXT with amplitudes from 0 to 1 and a unique, non-null `KEY` field. X amplitude is a fraction of the fitted plot height; Y amplitude is a fraction of its width, after removing the fixed axis margins and before renderer-specific legend layout. A stable seeded hash selects a signed displacement within each amplitude. X moves vertically and Y horizontally; reversal does not flip the displacement. Resizing recomputes pixel offsets from the same hashes, including independent facet viewports. Point error bars move with their point. Hash identity includes the layer's mark, order and channels, so independently jittered text and point layers need not coincide. Terminal and accessible values remain unchanged.
-- **Transposed fixed-aspect text** — `TEXT` layers use the same primary X/Y scales and EM/BAND offsets as points, and can appear alone or alongside points and error bars. Labels use collision placement; labels that cannot fit remain in SVG descriptions and semantic fallback. Terminal output includes annotation text and raw X/Y values. Conditions support `TEXT`, `COLOR`, `SIZE` (font pixels, clamped to 1–100), and `OPACITY` (clamped to 0–1).
+- **Transposed fixed-aspect text** — `TEXT` layers use the same primary X/Y scales and EM/BAND/DATA offsets as points, and can appear alone or alongside points and error bars. Labels use collision placement; labels that cannot fit remain in SVG descriptions and semantic fallback. Terminal output includes annotation text and raw X/Y values. Conditions support `TEXT`, `COLOR`, `SIZE` (font pixels, clamped to 1–100), and `OPACITY` (clamped to 0–1).
 - **Intervals** — Paired `Y_START`/`Y_END` creates an AREA ribbon, a vertical RULE span, or a ranged RECT such as a qualitative band or a floating variance bar; `X_START`/`X_END` supplies the symmetric horizontal range, which on a RECT with a continuous X scale is an explicit-bin histogram. Both endpoints are required, must share a quantitative or temporal `TYPE`, and both take part in scale-domain resolution. A ranged RECT owns its extent on that axis, so it rejects `Y`/`Y2` alongside `Y_START`/`Y_END` and `X`/`X2` alongside `X_START`/`X_END`; `STACK` computes its own endpoints and is unaffected. Endpoint calculations stay in SQL.
 - **TICK** — Draws a short category-local quantitative observation or target. It requires nominal/ordinal X and quantitative Y. `ORIENTATION = AUTO` resolves to a horizontal segment across the category band; `HORIZONTAL` and `VERTICAL` make that choice explicit. TICK is distinct from plot-spanning/ranged `RULE`; its `BAND_SIZE` is relative to the category band and `THICKNESS` is bounded to `(0, 1]` em.
 - **Error bars** — `POINT` and `RECT` layers support paired `ERROR_LOW` and `ERROR_HIGH` encoding channels under Cartesian or transposed Cartesian coordinates. Both channels require quantitative type, share the primary Y scale, and expand the scale domain to encompass the whiskers. Absolute endpoints are pre-computed in SQL. Optional layer style `STYLE (ERROR_BAR_STYLE = 'CAPS')` or `STYLE (ERROR_BAR_STYLE = 'NO_CAPS')` controls whether endpoint caps are drawn (defaults to `'CAPS'`). On transposed `POINT` charts with `ASPECT_RATIO`, whiskers run horizontally and caps run vertically; endpoint values still use the semantic Y scale and expand its domain before the aspect viewport is fitted. On `RECT`, whiskers anchor to the category position and primary quantitative value, and error channels cannot be combined with ranged rectangle or boxplot/candlestick channels.
@@ -150,6 +152,50 @@ CREATE VISUAL PhysicalScatter AS CUSTOM (
 - **Source** — `#prepared` supplies quantitative `Distance`, `Elevation`, `LowerBound`, and `UpperBound` columns, plus nominal `Caption` labels.
 - **ASPECT_RATIO = 2** — One Elevation unit spans twice the physical distance of one Distance unit, including after transposition.
 - **NUDGE** — Moves each point and its interval 12 pixels up and 6 pixels left without changing the reported values. Omit `POSITION` for no displacement.
+
+## Grouped displacement on transposed points
+
+```sql
+CREATE VISUAL GroupedMeasurements AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    SCALES (cohorts = BAND (CHANNEL = X_OFFSET, ORDER = ('control', 'treated'))),
+    LAYERS (observations = POINT (
+      ENCODINGS (
+        X = Distance (TYPE = QUANTITATIVE),
+        Y = Elevation (TYPE = QUANTITATIVE),
+        X_OFFSET = Cohort (TYPE = NOMINAL, SCALE = cohorts)
+      )
+    ))
+  )
+);
+```
+
+- **Source** — `#prepared` supplies quantitative `Distance` and `Elevation`, plus nominal `Cohort`.
+- **X_OFFSET** — With two groups, control moves down by one-quarter of fitted plot height and treated moves up by one-quarter. Raw measurements remain unchanged.
+
+## Data-unit displacement on transposed points
+
+```sql
+CREATE VISUAL AdjustedLabels AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    LAYERS (labels = TEXT (
+      POSITION = NUDGE(X = 0.5, Y = -0.5, UNIT = DATA),
+      ENCODINGS (
+        X = Distance (TYPE = QUANTITATIVE),
+        Y = Elevation (TYPE = QUANTITATIVE),
+        TEXT = Caption (TYPE = NOMINAL)
+      )
+    ))
+  )
+);
+```
+
+- **Source** — `#prepared` supplies non-null quantitative `Distance` and `Elevation`, plus nominal `Caption`.
+- **NUDGE** — Places label anchors at the display position of Distance + 0.5 and Elevation - 0.5, keeping the reported measurements intact.
 
 ## Relative displacement on transposed points
 

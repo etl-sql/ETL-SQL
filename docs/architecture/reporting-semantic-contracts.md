@@ -94,7 +94,7 @@ This increment retains ChartSpec v2 and PlotPlan v3: it adds no serialized field
 and existing valid specifications retain their behavior and fingerprints. Older ChartSpec validators
 reject the newly allowed combination. Regenerate output with a supporting renderer; serialization
 compatibility alone does not establish rendering support. Marks other than POINT/TEXT, secondary axes,
-stacking, offset channels and DATA nudges remain rejected for transposed aspect ratios.
+stacking remain rejected for transposed aspect ratios.
 
 Error bars on these points retain `ErrorLow`/`ErrorHigh` in the semantic Y domain.
 Their endpoints participate in global and independent facet domains before viewport fitting.
@@ -137,6 +137,29 @@ Positive semantic X moves up and positive Y moves right independently of scale r
 Points, error intervals and text consume the same offsets. Raw values, domains, fallback and terminal
 output remain unchanged. This extends validation without changing ChartSpec v2 or PlotPlan v3;
 older validators reject the combination, and existing valid specifications retain their fingerprints.
+
+`X_OFFSET` and `Y_OFFSET` are accepted on the same continuous transposed POINT/TEXT composition.
+For category index `i` in `n` ordered groups, the centered slot fraction is `(i + 0.5) / n - 0.5`.
+X_OFFSET contributes the negative fraction of fitted plot height to DisplayOffsetY; Y_OFFSET
+contributes the fraction of fitted plot width to DisplayOffsetX. The metric matches BAND nudges,
+including facets and relayout. Offset-scale reversal reverses category indices; primary-scale
+reversal does not change displacement. Null, unmatched and singleton groups contribute zero.
+Offsets compose additively with EM/BAND/DATA nudges and jitter. Terminal rows and fallback details carry
+the original group labels, including null groups, while raw measures and domains remain intact.
+The extension retains ChartSpec v2 and PlotPlan v3 and existing valid chart fingerprints; older
+validators reject the newly allowed combination.
+
+`NUDGE UNIT DATA` maps each original anchor and its shifted X/Y values through the same
+continuous scales, then stores their physical-coordinate difference as display offsets.
+Semantic Y maps horizontally and X vertically, including reversal and logarithmic mapping.
+`TransposedAspectLayout` shares fitted plot sizing between resolution and SVG, accounting for
+side legends and overlay gutters; facets use their own scales and fitted frame. The existing
+EM/BAND/jitter/group metrics stay unchanged. DATA nudges require numeric X/Y on every row;
+nonpositive logarithmic anchors or targets fail before rendering. Raw values, domains and
+fallback remain unchanged. Error bars translate rigidly by their point's anchor displacement,
+including on log scales. Text consumes the displacement before label collision placement.
+This adds no wire fields or enum values: ChartSpec v2 and PlotPlan v3 remain current, older
+validators reject the new combination, and existing valid-chart fingerprints stay unchanged.
 
 ## Cross-backend conformance
 
