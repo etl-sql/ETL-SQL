@@ -106,7 +106,8 @@ internal static class PlotPlanTerminalRenderer
                     channel.Channel is FieldChannel.X or FieldChannel.Y && channel.Value.Kind != ChartValueKind.Null);
                 if (channel is null) continue;
                 var label = item.Layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value ?? item.Layer.Id;
-                content.Add(new Text($"{label}: {channel.Channel} = {channel.DisplayValue ?? PlotPlanResolver.Display(channel.Value)}"));
+                var description = PlotPlanResolver.RangeRuleDescription(datum) ?? $"{channel.Channel} = {channel.DisplayValue ?? PlotPlanResolver.Display(channel.Value)}";
+                content.Add(new Text($"{label}: {description}"));
             }
 
         var bandLayers = activeLayers.Where(item =>

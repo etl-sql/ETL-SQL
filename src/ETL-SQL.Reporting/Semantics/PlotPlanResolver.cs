@@ -1215,9 +1215,13 @@ public sealed class PlotPlanResolver
                 Detail = item.Detail is null ? offsetDetail : $"{item.Detail}; {offsetDetail}"
             };
         })).Concat(layers.Where(layer => layer.Mark == MarkKind.Rule)
-            .SelectMany(layer => spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null }
-                ? ReferenceRuleData(layer.Data).Select(datum => layer with { Data = [datum] }).DefaultIfEmpty(layer with { Data = [] })
-                : [layer])
+            .SelectMany(layer =>
+            {
+                if (spec.Coordinate is not { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
+                    return Enumerable.Repeat(layer, 1);
+                var references = ReferenceRuleData(layer.Data).Select(datum => layer with { Data = [datum] });
+                return layer.Data.Any(IsRangeRule) ? references : references.DefaultIfEmpty(layer with { Data = [] });
+            })
             .Select((layer, index) =>
         {
             var value = layer.Data.SelectMany(datum => datum.Channels)
@@ -1232,6 +1236,10 @@ public sealed class PlotPlanResolver
             var detail = overlayKind == "ReferenceLine" ? "author reference line" : "labeled reference rule";
             if (spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } && value is not null)
                 detail = $"{value.Channel} = {value.DisplayValue ?? formatter.Format(value.Value)}; {(value.Channel == FieldChannel.X ? "horizontal" : "vertical")} reference rule";
+            if (spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
+                layer.Data.FirstOrDefault() is { } rangeDatum && RangeRuleDescription(rangeDatum) is { } range)
+                return new SemanticFallbackItem(label, range, ((sourceLayers.Count + 1) * 100000) + index)
+                { Detail = "reference segment", Group = "Reference" };
             return new SemanticFallbackItem(label, value is null ? "" : value.DisplayValue ?? formatter.Format(value.Value), ((sourceLayers.Count + 1) * 100000) + index)
             { Detail = detail, Group = "Reference" };
         })).ToImmutableArray();
@@ -1749,12 +1757,39 @@ public sealed class PlotPlanResolver
         return null;
     }
 
-    /// <summary>One reference per distinct numeric threshold, in source order within the supplied panel.</summary>
+    internal static bool IsRangeRule(ResolvedDatum datum) => datum.Channels.Any(channel =>
+        channel.Channel is FieldChannel.XStart or FieldChannel.XEnd or FieldChannel.YStart or FieldChannel.YEnd);
+
+    internal static string? RangeRuleDescription(ResolvedDatum datum, bool transposed = false)
+    {
+        string? Value(FieldChannel channel)
+        {
+            var resolved = datum.Channels.FirstOrDefault(value => value.Channel == channel);
+            return resolved is null || Number(resolved.Value) is null ? null : resolved.DisplayValue ?? Display(resolved.Value);
+        }
+        var x = Value(FieldChannel.X);
+        var y = Value(FieldChannel.Y);
+        var xs = Value(FieldChannel.XStart);
+        var xe = Value(FieldChannel.XEnd);
+        var ys = Value(FieldChannel.YStart);
+        var ye = Value(FieldChannel.YEnd);
+        if (transposed) (x, y, xs, xe, ys, ye) = (y, x, ys, ye, xs, xe);
+        if (x is not null && ys is not null && ye is not null) return $"X = {x}; Y = {ys} to {ye}";
+        if (y is not null && xs is not null && xe is not null) return $"X = {xs} to {xe}; Y = {y}";
+        return null;
+    }
+
+    /// <summary>Complete range rows, or one reference per distinct numeric threshold, in source order.</summary>
     internal static IEnumerable<ResolvedDatum> ReferenceRuleData(IEnumerable<ResolvedDatum> data)
     {
         var seen = new HashSet<(FieldChannel Channel, decimal Value)>();
         foreach (var datum in data)
         {
+            if (IsRangeRule(datum))
+            {
+                if (!datum.IsGap && RangeRuleDescription(datum) is not null) yield return datum;
+                continue;
+            }
             var channel = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.X or FieldChannel.Y);
             if (datum.IsGap || channel is null || Number(channel.Value) is not { } number) continue;
             if (seen.Add((channel.Channel, number))) yield return datum;

@@ -414,11 +414,22 @@ public sealed record ChartSpec(
                 { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data }) ||
                 layer.Bindings.Any(binding => binding.Stack != StackMode.None ||
                     binding.Channel == FieldChannel.Y2)))
-                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers, TEXT layers and single-axis RULE layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
+                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers, TEXT layers and RULE layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
             if (Coordinate.Kind == CoordinateKind.TransposedCartesian)
                 foreach (var layer in Layers.Where(layer => layer.Mark == MarkKind.Rule))
                 {
                     var bindings = layer.Bindings.Where(binding => binding.Channel is not (FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap)).ToArray();
+                    var channels = bindings.Select(binding => binding.Channel).ToHashSet();
+                    var ranged = channels.SetEquals([FieldChannel.X, FieldChannel.YStart, FieldChannel.YEnd]) ||
+                        channels.SetEquals([FieldChannel.Y, FieldChannel.XStart, FieldChannel.XEnd]);
+                    if (ranged)
+                    {
+                        if (layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) || !layer.Conditions.IsDefaultOrEmpty ||
+                            bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative ||
+                                binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)))
+                            throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO RULE segments require quantitative field/DATUM bindings, IDENTITY, and no CONDITIONS.");
+                        continue;
+                    }
                     if (layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or
                         { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data }) || !layer.Conditions.IsDefaultOrEmpty ||
                         bindings.Length != 1 || bindings[0].Channel is not (FieldChannel.X or FieldChannel.Y) ||

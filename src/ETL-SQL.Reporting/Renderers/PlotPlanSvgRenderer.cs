@@ -194,6 +194,10 @@ internal sealed class PlotPlanSvgRenderer
                 {
                     FieldChannel.X => FieldChannel.Y,
                     FieldChannel.Y => FieldChannel.X,
+                    FieldChannel.XStart => FieldChannel.YStart,
+                    FieldChannel.XEnd => FieldChannel.YEnd,
+                    FieldChannel.YStart => FieldChannel.XStart,
+                    FieldChannel.YEnd => FieldChannel.XEnd,
                     _ => channel
                 };
                 RenderCartesian(builder, plan with
@@ -3279,6 +3283,24 @@ internal sealed class PlotPlanSvgRenderer
         {
             foreach (var datum in PlotPlanResolver.ReferenceRuleData(layer.Data))
             {
+                if (PlotPlanResolver.IsRangeRule(datum))
+                {
+                    if (xScale is null || yScale is null) continue;
+                    var startX = PlotPlanResolver.Number(Channel(datum, FieldChannel.XStart) ?? Channel(datum, FieldChannel.X) ?? ChartValue.Null());
+                    var endX = PlotPlanResolver.Number(Channel(datum, FieldChannel.XEnd) ?? Channel(datum, FieldChannel.X) ?? ChartValue.Null());
+                    var startY = PlotPlanResolver.Number(Channel(datum, FieldChannel.YStart) ?? Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
+                    var endY = PlotPlanResolver.Number(Channel(datum, FieldChannel.YEnd) ?? Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
+                    if (!startX.HasValue || !endX.HasValue || !startY.HasValue || !endY.HasValue) continue;
+                    var ax = MapX(startX.Value, xScale, area);
+                    var bx = MapX(endX.Value, xScale, area);
+                    var ay = MapY(startY.Value, yScale, area.Height);
+                    var by = MapY(endY.Value, yScale, area.Height);
+                    var description = PlotPlanResolver.RangeRuleDescription(datum, transposed: true);
+                    builder.AppendLine($"<line class='plot-range-rule' data-layer-id='{Esc(layer.Id)}' data-row-index='{datum.RowIndex}' x1='{N(ax)}' y1='{N(ay)}' x2='{N(bx)}' y2='{N(by)}' stroke='{Esc(color)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}><title>{Esc(label ?? layer.Id)}: {Esc(description ?? "")}</title></line>");
+                    if (!string.IsNullOrWhiteSpace(label))
+                        builder.AppendLine($"<text class='plot-reference-rule-label' x='{N(bx + 4m)}' y='{N(by - 4m)}' font-size='10' fill='{Esc(color)}'>{Esc(label)}</text>");
+                    continue;
+                }
                 var ruleX = Channel(datum, FieldChannel.X);
                 var ruleY = Channel(datum, FieldChannel.Y);
                 var vertical = ruleX is not null;

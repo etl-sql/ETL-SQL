@@ -757,11 +757,22 @@ public static class AdvancedChartSemanticValidator
             { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data }) ||
             EffectiveEncodings(chart, layer).Any(encoding => encoding.Stack != AdvancedChartStackMode.None ||
                 encoding.Channel == AdvancedChartChannel.Y2)))
-            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers, TEXT layers and single-axis RULE layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
+            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers, TEXT layers and RULE layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
         if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian)
             foreach (var layer in chart.Layers.Where(layer => layer.Mark == AdvancedChartMarkKind.Rule))
             {
                 var encodings = EffectiveEncodings(chart, layer);
+                var channels = encodings.Select(encoding => encoding.Channel).ToHashSet();
+                var ranged = channels.SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd]) ||
+                    channels.SetEquals([AdvancedChartChannel.Y, AdvancedChartChannel.XStart, AdvancedChartChannel.XEnd]);
+                if (ranged)
+                {
+                    if (layer.Position.Kind != AdvancedChartPositionKind.Identity || layer.Conditions.Length > 0 ||
+                        encodings.Any(encoding => encoding.DataKind != AdvancedChartDataKind.Quantitative ||
+                            encoding.Source.Kind is not (AdvancedChartBindingSourceKind.Field or AdvancedChartBindingSourceKind.Datum)))
+                        Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO RULE segments require quantitative field/DATUM bindings, IDENTITY, and no CONDITIONS.");
+                    continue;
+                }
                 if (layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or
                     { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data }) || layer.Conditions.Length > 0 ||
                     encodings.Count != 1 || encodings[0].Channel is not (AdvancedChartChannel.X or AdvancedChartChannel.Y) ||

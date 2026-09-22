@@ -93,7 +93,7 @@ they do not claim physical-distance fidelity.
 This increment retains ChartSpec v2 and PlotPlan v3: it adds no serialized fields or enum values,
 and existing valid specifications retain their behavior and fingerprints. Older ChartSpec validators
 reject the newly allowed combination. Regenerate output with a supporting renderer; serialization
-compatibility alone does not establish rendering support. Marks other than POINT/TEXT and single-axis RULE, secondary axes,
+compatibility alone does not establish rendering support. Marks other than POINT/TEXT and supported RULE, secondary axes,
 stacking remain rejected for transposed aspect ratios.
 
 Single-axis RULE layers require exactly one quantitative field or DATUM binding on X or Y, IDENTITY or EM/BAND/DATA NUDGE along the bound axis,
@@ -102,7 +102,7 @@ Constants participate in global and independent facet domains. SVG labels and ti
 output, and accessible fallback retain the semantic axis and value. Field-backed rules select one
 representative row per distinct numeric threshold, in first-seen order. SVG and terminal select after
 facet filtering; fallback selects across the chart. Null/gap rows do not draw rules. The shared
-`PlotPlanResolver.ReferenceRuleData` owns selection; raw plan rows remain intact. Ranged, conditional,
+`PlotPlanResolver.ReferenceRuleData` owns selection; raw plan rows remain intact. Conditional
 and jittered rules remain rejected in this composition. All nudges must have zero
 amplitude on the unbound axis. The resolver uses the point/text displacement contract; SVG consumes
 the perpendicular offset for both the rule and label while preserving its plot-spanning extent.
@@ -113,6 +113,13 @@ DATA rule nudges map the bound threshold plus its displacement on the original s
 plot sizing including legend space. Null/gap thresholds are skipped; positive logarithmic anchors
 and targets are required. No unbound anchor is required. Single-axis rules do not inherit another
 layer's color series; this correction is recorded in `BREAKING_CHANGES.md`.
+
+Ranged RULE accepts X + Y_START/Y_END or Y + X_START/X_END, quantitative field/DATUM bindings
+and IDENTITY only. The SVG adapter transposes both endpoint channels, while the authoritative plan
+retains semantic channels. Complete source rows remain distinct; missing anchors/endpoints are
+skipped. Shared interval descriptions preserve fixed coordinates and both endpoints in SVG titles,
+terminal text and accessible fallback. Endpoint order is preserved. Both endpoints participate in
+global/facet domains before aspect fitting. No wire fields or versions change.
 
 Error bars on these points retain `ErrorLow`/`ErrorHigh` in the semantic Y domain.
 Their endpoints participate in global and independent facet domains before viewport fitting.

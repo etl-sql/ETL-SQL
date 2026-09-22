@@ -348,7 +348,7 @@ semantics and backend evidence before its rejection can be lifted.
 - [x] **Constant RULE layers on continuous transposed aspect charts.** Quantitative DATUM X/Y
   references follow the physical axes through reversal, logarithmic scales, facets and resize.
   SVG labels, terminal output and accessible fallback preserve semantic axes and values.
-  Authoring/contracts reject ranged and conditional rules in this composition.
+  Authoring/contracts reject conditional rules in this composition.
   Regression coverage includes domains, round trips, lineage, PDF export and deterministic goldens.
 - [x] **Field-backed RULE layers on continuous transposed aspect charts.** One rule per distinct
   non-null numeric X/Y threshold, in source order within each facet. Shared selection preserves
@@ -365,7 +365,12 @@ semantics and backend evidence before its rejection can be lifted.
   facets and resize. Nulls are skipped, non-positive logarithmic targets fail, and raw values stay
   intact. `TransposedAspectRuleDataNudgeTests` verifies mapped geometry and isolated color grouping;
   authoring, lineage, LSP rename, PDF and deterministic fixtures cover the new composition.
-- [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/single-axis RULE,
+- [x] **Ranged RULE segments on continuous transposed aspect charts.** X + Y_START/Y_END and
+  Y + X_START/X_END map both endpoints through transposition, reversal, logarithmic scales, facets
+  and resize. IDENTITY only; raw intervals and endpoint order remain visible in terminal/fallback.
+  `TransposedAspectRangeRuleTests` covers geometry, missing values, constants, domains, round trips,
+  lineage, PDF and deterministic goldens. LSP covers endpoint/scale rename; no wire fields changed.
+- [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/supported RULE,
   stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**

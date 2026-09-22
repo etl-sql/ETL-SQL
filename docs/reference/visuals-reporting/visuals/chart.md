@@ -122,7 +122,7 @@ CREATE VISUAL name AS CUSTOM (
 
 Use one quantitative field or `DATUM` binding on X or Y with `IDENTITY` (the default position).
 Set `INHERIT_ENCODINGS = OFF` when shared encodings would add other channels.
-Ranged, conditional, and multi-channel rules are rejected in this combination.
+Conditional rules and encodings beyond the supported single-axis or ranged forms are rejected in this combination.
 A Y reference is vertical and an X reference is horizontal. Constants contribute to global and
 independent facet domains; labels and accessible descriptions retain the semantic axis and value.
 A field binding draws one rule per distinct non-null numeric threshold within each facet, in source
@@ -188,6 +188,43 @@ POSITION = NUDGE(X = 0, Y = 0.5, UNIT = DATA)
 
 Isolated single-axis rules do not inherit color groups from other layers. A color-grouped POINT
 layer therefore does not duplicate reference rules or their accessible values.
+
+## Ranged rules on transposed fixed-aspect charts
+
+A ranged RULE accepts exactly `X`, `Y_START`, `Y_END`, or exactly `Y`, `X_START`, `X_END`.
+All three bindings must be quantitative fields or `DATUM` constants. Use `IDENTITY` placement
+(the default), without conditions or additional encodings. A semantic Y interval becomes horizontal;
+a semantic X interval becomes vertical. Endpoints expand global and independent facet domains.
+One segment is retained per source row, including coincident segments. Rows with a missing anchor
+or endpoint draw no segment and contribute no interval to terminal or accessible output.
+Endpoint order is preserved, including descending intervals. Terminal and accessible descriptions
+include the fixed coordinate and both raw endpoints. Nudges, jitter, and diagonal segments with
+both X and Y endpoint pairs are not supported in this composition.
+
+```sql
+CREATE VISUAL Measurement AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    SCALES (
+      distances = LINEAR (CHANNEL = X, MIN = 0, MAX = 10),
+      estimates = LINEAR (CHANNEL = Y, MIN = 0, MAX = 10)
+    ),
+    LAYERS (
+      observations = POINT (ENCODINGS (
+        X = Distance (TYPE = QUANTITATIVE, SCALE = distances),
+        Y = Estimate (TYPE = QUANTITATIVE, SCALE = estimates)
+      )),
+      threshold = RULE (
+        Z_INDEX = 1,
+        INHERIT_ENCODINGS = OFF,
+        ENCODINGS (X = Distance (TYPE = QUANTITATIVE, SCALE = distances), Y_START = LowerBound (TYPE = QUANTITATIVE, SCALE = estimates), Y_END = UpperBound (TYPE = QUANTITATIVE, SCALE = estimates)),
+        STYLE (LABEL = '<target>', COLOR = '#112233')
+      )
+    )
+  )
+);
+```
 
 ## Fixed physical units on transposed points
 
