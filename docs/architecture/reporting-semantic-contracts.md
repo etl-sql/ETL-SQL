@@ -94,7 +94,7 @@ This increment retains ChartSpec v2 and PlotPlan v3: it adds no serialized field
 and existing valid specifications retain their behavior and fingerprints. Older ChartSpec validators
 reject the newly allowed combination. Regenerate output with a supporting renderer; serialization
 compatibility alone does not establish rendering support. Marks other than POINT/TEXT, secondary axes,
-stacking, offset channels and DATA/BAND nudges remain rejected for transposed aspect ratios.
+stacking, offset channels and DATA nudges remain rejected for transposed aspect ratios.
 
 Error bars on these points retain `ErrorLow`/`ErrorHigh` in the semantic Y domain.
 Their endpoints participate in global and independent facet domains before viewport fitting.
@@ -127,6 +127,16 @@ channel sequence, so separate point/text layers may have different offsets. Keys
 be unique and non-null. Raw channels, scale domains, fallback and terminal values stay unchanged.
 This lifts a validation restriction without adding fields to ChartSpec v2 or PlotPlan v3; older
 validators reject it. Existing valid Cartesian and transposed chart goldens remain unchanged.
+
+`NUDGE UNIT BAND` uses the same fitted plot metric for continuous transposed POINT/TEXT:
+`DisplayOffsetX = Y * (viewport.Width - 80)` and
+`DisplayOffsetY = -X * (viewport.Height - 100)`. A continuous primary axis has one band.
+The metric excludes fixed axis chrome and precedes renderer-specific legend layout, matching
+jitter. Facets select the row's fitted viewport; relayout recalculates the physical displacement.
+Positive semantic X moves up and positive Y moves right independently of scale reversal or kind.
+Points, error intervals and text consume the same offsets. Raw values, domains, fallback and terminal
+output remain unchanged. This extends validation without changing ChartSpec v2 or PlotPlan v3;
+older validators reject the combination, and existing valid specifications retain their fingerprints.
 
 ## Cross-backend conformance
 

@@ -138,7 +138,6 @@ public sealed class TransposedAspectTextTests
 
     [Theory]
     [InlineData("UNIT = EM", "UNIT = DATA")]
-    [InlineData("UNIT = EM", "UNIT = BAND")]
     [InlineData("labels = TEXT", "labels = LINE")]
     public void UnsupportedCombinations_StillHavePositionedDiagnostics(string oldValue, string newValue)
     {

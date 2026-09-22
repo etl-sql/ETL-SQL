@@ -753,10 +753,10 @@ public static class AdvancedChartSemanticValidator
         if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian && chart.Layers.Any(layer =>
             layer.Mark is not (AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Text) ||
             layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or { Kind: AdvancedChartPositionKind.Jitter } or
-            { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em }) ||
+            { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band }) ||
             EffectiveEncodings(chart, layer).Any(encoding => encoding.Stack != AdvancedChartStackMode.None ||
                 encoding.Channel is AdvancedChartChannel.Y2 or AdvancedChartChannel.XOffset or AdvancedChartChannel.YOffset)))
-            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers and TEXT layers with IDENTITY, JITTER or NUDGE UNIT EM, without stacking, offset channels, or secondary axes.");
+            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers and TEXT layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND, without stacking, offset channels, or secondary axes.");
     }
 
     private static void ValidateFacetAndResolution(List<Diagnostic> results, AdvancedChartDefinition chart, AstNode chartNode)

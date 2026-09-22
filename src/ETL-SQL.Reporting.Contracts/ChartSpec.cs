@@ -411,10 +411,10 @@ public sealed record ChartSpec(
             if (Coordinate.Kind == CoordinateKind.TransposedCartesian && Layers.Any(layer =>
                 layer.Mark is not (MarkKind.Point or MarkKind.Text) ||
                 layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or { Kind: PositionAdjustmentKind.Jitter } or
-                { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em }) ||
+                { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band }) ||
                 layer.Bindings.Any(binding => binding.Stack != StackMode.None ||
                     binding.Channel is FieldChannel.Y2 or FieldChannel.XOffset or FieldChannel.YOffset)))
-                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers and TEXT layers with IDENTITY, JITTER or NUDGE UNIT EM, without stacking, offset channels, or secondary axes.");
+                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers and TEXT layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND, without stacking, offset channels, or secondary axes.");
         }
         if (Facet is not null)
         {

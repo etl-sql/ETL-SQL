@@ -107,7 +107,6 @@ public sealed class TransposedAspectNudgeTests
 
     [Theory]
     [InlineData("NUDGE(X = 1, Y = 1, UNIT = DATA)")]
-    [InlineData("NUDGE(X = 0.1, Y = 0.1, UNIT = BAND)")]
     public void UnsupportedUnits_StillFailAuthoringAndContractValidation(string position)
     {
         var invalid = Parse(Script.Replace("NUDGE(X = 1, Y = -0.5, UNIT = EM)", position, StringComparison.Ordinal));

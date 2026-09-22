@@ -330,8 +330,13 @@ semantics and backend evidence before its rejection can be lifted.
   moves point intervals together. Raw channels, domains and terminal/fallback values stay intact.
   `TransposedAspectJitterTests` covers geometry, key/seed stability, invalid inputs, round trips,
   lineage, PDF and deterministic goldens; LSP covers stable-key rename. No wire fields changed.
+- [x] **BAND nudges on continuous transposed POINT/TEXT aspect charts.** Continuous axes use
+  one fitted plot band; semantic X/Y offsets follow physical vertical/horizontal axes without
+  changing raw values or domains. Facets, resize, reversed/log scales, point intervals, text,
+  round trips, lineage, LSP rename, terminal/PDF and deterministic fixtures are covered by
+  `TransposedAspectBandNudgeTests`. ChartSpec v2 and PlotPlan v3 wire shapes are unchanged.
 - [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT, offset channels,
-  DATA/BAND nudges, stacking and secondary axes remain rejected. Categorical, temporal,
+  DATA nudges, stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**
   `AdvancedChartSemanticValidator.cs:697` — today the author is told to stage separate series or

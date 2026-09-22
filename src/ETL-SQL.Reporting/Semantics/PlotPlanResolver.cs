@@ -1508,8 +1508,9 @@ public sealed class PlotPlanResolver
                 throw new InvalidOperationException($"Layer '{layer.Id}' JITTER key field '{keyField}' contains duplicate value '{duplicate.Key}'.");
         }
 
-        var transposedJitterViewport = spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
-            layers.Any(layer => layer.Position?.Kind == PositionAdjustmentKind.Jitter)
+        var transposedPlacementViewport = spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
+            layers.Any(layer => layer.Position is { Kind: PositionAdjustmentKind.Jitter } or
+            { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Band })
             ? ResolveCartesianViewport(spec.Coordinate, scales, bounds) : null;
 
         return layers.Select(layer => layer with
@@ -1531,11 +1532,11 @@ public sealed class PlotPlanResolver
                     {
                         var key = ValueKey(columns[position.StableKeyField!].Values[datum.RowIndex])!;
                         var identity = LayerPlacementIdentity(layer);
-                        if (transposedJitterViewport is not null)
+                        if (transposedPlacementViewport is not null)
                         {
                             // Jitter amplitudes use the fitted plot before renderer-specific legend layout.
                             // Semantic X moves vertically; semantic Y moves horizontally.
-                            var viewport = panel?.CartesianViewport ?? transposedJitterViewport;
+                            var viewport = panel?.CartesianViewport ?? transposedPlacementViewport;
                             offsetX += SignedHash(spec.Id, identity, key, "y", position.Seed) * position.Y * (viewport.Width - 80m);
                             offsetY -= SignedHash(spec.Id, identity, key, "x", position.Seed) * position.X * (viewport.Height - 100m);
                         }
@@ -1551,9 +1552,12 @@ public sealed class PlotPlanResolver
                     {
                         // Display offsets are physical coordinates. For the fixed-aspect transposed
                         // point composition, semantic X is vertical and semantic Y is horizontal.
+                        var viewport = panel?.CartesianViewport ?? transposedPlacementViewport;
                         var nudge = spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
                             position.Unit == PositionAdjustmentUnit.Em
                             ? (X: position.Y * 12m, Y: -position.X * 12m)
+                            : transposedPlacementViewport is not null && position.Unit == PositionAdjustmentUnit.Band
+                            ? (X: position.Y * (viewport!.Width - 80m), Y: -position.X * (viewport.Height - 100m))
                             : ResolveNudge(position, datum, xScale, yScale, datumBounds, xBand, yBand, layer.Id);
                         offsetX += nudge.X;
                         offsetY += nudge.Y;
