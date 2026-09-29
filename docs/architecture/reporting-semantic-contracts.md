@@ -154,7 +154,7 @@ channel sequence. Missing endpoints still skip rendering and fallback. Single-ax
 accept JITTER only along the bound axis. ChartSpec v2 and PlotPlan v3 retain their existing wire shapes.
 
 RECT accepts exactly four quantitative field/DATUM endpoints (X_START/X_END/Y_START/Y_END) with
-IDENTITY or EM/BAND/DATA NUDGE placement and no conditions or additional encodings. The physical-axis adapter exchanges
+IDENTITY, JITTER or EM/BAND/DATA NUDGE placement and no conditions or additional encodings. The physical-axis adapter exchanges
 both endpoint pairs locally; authoritative plan channels stay semantic. Each endpoint contributes
 to global and independent facet domains. SVG uses the minimum mapped corner and absolute mapped
 span on each physical axis, without minimum bar dimensions. Zero-area and subpixel rectangles
@@ -170,7 +170,10 @@ before legend layout. Direction stays physical under reversed scales. DATA nudge
 X_START/Y_START corner and its shifted value through the original per-panel scales and the
 plot area after legend layout. Their difference translates both corners, preserving screen dimensions
 even on log axes and descending intervals. Incomplete rectangles skip placement; nonpositive
-logarithmic anchor targets fail. Domain values and fallback text stay unchanged. JITTER remains rejected. Native/static SVG share the geometry; terminal output
+logarithmic anchor targets fail. Domain values and fallback text stay unchanged. Rectangle JITTER
+uses the shared stable-key hash and fitted pre-legend viewport fractions, translating the entire
+rectangle without changing dimensions. All source keys are validated, including gaps. Row reorder
+and layer rename preserve displacement; seeds change it. Coincident rows remain separate. Native/static SVG share the geometry; terminal output
 preserves values rather than physical distance. ChartSpec v2 and PlotPlan v3 require no new fields.
 Unfaceted terminal output now selects rows from every layer, fixing omission of rows outside the
 first color group; that existing-behavior correction is recorded in `BREAKING_CHANGES.md`.

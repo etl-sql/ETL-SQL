@@ -120,30 +120,38 @@ public sealed class TransposedAspectRangeRectTests
     }
 
     [Theory]
-    [InlineData(false, false, false, false)]
-    [InlineData(false, false, false, true)]
-    [InlineData(true, false, false, false)]
-    [InlineData(true, false, false, true)]
-    [InlineData(false, true, false, false)]
-    [InlineData(false, true, false, true)]
-    [InlineData(true, true, false, false)]
-    [InlineData(true, true, false, true)]
-    [InlineData(false, false, true, false)]
-    [InlineData(false, false, true, true)]
-    [InlineData(true, false, true, false)]
-    [InlineData(true, false, true, true)]
-    [InlineData(false, true, true, false)]
-    [InlineData(false, true, true, true)]
-    [InlineData(true, true, true, false)]
-    [InlineData(true, true, true, true)]
-    public void DisplayNudge_TranslatesWholeRectangleWithoutChangingSemanticOutput(bool reverse, bool logarithmic, bool facets, bool band)
+    [InlineData(false, false, false, "EM")]
+    [InlineData(false, false, false, "BAND")]
+    [InlineData(false, false, false, "JITTER")]
+    [InlineData(true, false, false, "EM")]
+    [InlineData(true, false, false, "BAND")]
+    [InlineData(true, false, false, "JITTER")]
+    [InlineData(false, true, false, "EM")]
+    [InlineData(false, true, false, "BAND")]
+    [InlineData(false, true, false, "JITTER")]
+    [InlineData(true, true, false, "EM")]
+    [InlineData(true, true, false, "BAND")]
+    [InlineData(true, true, false, "JITTER")]
+    [InlineData(false, false, true, "EM")]
+    [InlineData(false, false, true, "BAND")]
+    [InlineData(false, false, true, "JITTER")]
+    [InlineData(true, false, true, "EM")]
+    [InlineData(true, false, true, "BAND")]
+    [InlineData(true, false, true, "JITTER")]
+    [InlineData(false, true, true, "EM")]
+    [InlineData(false, true, true, "BAND")]
+    [InlineData(false, true, true, "JITTER")]
+    [InlineData(true, true, true, "EM")]
+    [InlineData(true, true, true, "BAND")]
+    [InlineData(true, true, true, "JITTER")]
+    public void DisplayPlacement_TranslatesWholeRectangleWithoutChangingSemanticOutput(bool reverse, bool logarithmic, bool facets, string unit)
     {
         var sql = Script;
         if (reverse) sql = sql.Replace("MIN = 0,", "REVERSE = ON, MIN = 0,", StringComparison.Ordinal);
         if (logarithmic) sql = sql.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal).Replace("MIN = 0,", "INCLUDE_ZERO = OFF, MIN = 1,", StringComparison.Ordinal);
         if (facets) sql = sql.Replace("SCALES (", "FACET (WRAP = Cohort, COLUMNS = 2), RESOLVE (X = INDEPENDENT, Y = INDEPENDENT), SCALES (", StringComparison.Ordinal);
         var (baselineSpec, data) = Lower(sql);
-        var (spec, _) = Lower(WithNudge(sql, band ? "BAND" : "EM"));
+        var (spec, _) = Lower(WithPlacement(sql, unit));
         var resolver = new PlotPlanResolver();
         var original = resolver.Resolve(spec, data);
         foreach (var bounds in new[] { original.Bounds, new PlotBounds(0m, 0m, 1000m, 700m) })
@@ -157,8 +165,18 @@ public sealed class TransposedAspectRangeRectTests
             for (var row = 0; row < actual.Length; row++)
             {
                 var viewport = facets ? Assert.Single(plan.Facets, panel => panel.RowIndices.Contains(row)).CartesianViewport! : plan.CartesianViewport!;
-                var dx = band ? -.03m * (viewport.Width - 80m) : 12m;
-                var dy = band ? -.02m * (viewport.Height - 100m) : 6m;
+                var dx = unit == "BAND" ? -.03m * (viewport.Width - 80m) : 12m;
+                var dy = unit == "BAND" ? -.02m * (viewport.Height - 100m) : 6m;
+                if (unit == "JITTER")
+                {
+                    var datum = plan.Layers.Single(layer => layer.Mark == MarkKind.Rect).Data[row];
+                    dx = datum.DisplayOffsetX;
+                    dy = datum.DisplayOffsetY;
+                    Assert.NotEqual(0m, dx);
+                    Assert.NotEqual(0m, dy);
+                    Assert.InRange(Math.Abs(dx), 0m, .03m * (viewport.Width - 80m));
+                    Assert.InRange(Math.Abs(dy), 0m, .02m * (viewport.Height - 100m));
+                }
                 Assert.InRange(Read(actual[row], "x") - Read(expected[row], "x") - dx, -.002m, .002m);
                 Assert.InRange(Read(actual[row], "y") - Read(expected[row], "y") - dy, -.002m, .002m);
                 Assert.Equal(Read(expected[row], "width"), Read(actual[row], "width"));
@@ -179,18 +197,22 @@ public sealed class TransposedAspectRangeRectTests
     [InlineData("StartX", "EM")]
     [InlineData("StartX", "BAND")]
     [InlineData("StartX", "DATA")]
+    [InlineData("StartX", "JITTER")]
     [InlineData("EndX", "EM")]
     [InlineData("EndX", "BAND")]
     [InlineData("EndX", "DATA")]
+    [InlineData("EndX", "JITTER")]
     [InlineData("LowerBound", "EM")]
     [InlineData("LowerBound", "BAND")]
     [InlineData("LowerBound", "DATA")]
+    [InlineData("LowerBound", "JITTER")]
     [InlineData("UpperBound", "EM")]
     [InlineData("UpperBound", "BAND")]
     [InlineData("UpperBound", "DATA")]
+    [InlineData("UpperBound", "JITTER")]
     public void MissingEndpoint_SkipsRectangleAndReportsGap(string field, string unit)
     {
-        var (spec, data) = Lower(WithNudge(Script, unit));
+        var (spec, data) = Lower(WithPlacement(Script, unit));
         data = data with
         {
             Columns = data.Columns.Select(column => column.Name == field
@@ -232,7 +254,6 @@ public sealed class TransposedAspectRangeRectTests
     }
 
     [Theory]
-    [InlineData("POSITION = JITTER(X = 0.1, Y = 0, KEY = Distance, SEED = 3),")]
     [InlineData("CONDITIONS (COLOR WHEN Estimate > 0 THEN '#112233'),")]
     public void UnsupportedPresentation_HasPositionedDiagnostic(string option)
     {
@@ -263,9 +284,10 @@ public sealed class TransposedAspectRangeRectTests
     [InlineData("EM")]
     [InlineData("BAND")]
     [InlineData("DATA")]
+    [InlineData("JITTER")]
     public void Labels_KeepBothSemanticIntervalsAfterTransposition(string unit)
     {
-        var (spec, data) = Lower(WithNudge(Script, unit));
+        var (spec, data) = Lower(WithPlacement(Script, unit));
         spec = spec with { Theme = spec.Theme with { Tokens = [.. spec.Theme.Tokens, new StyleToken("DATA_LABELS", "ON")] } };
         var plan = new PlotPlanResolver().Resolve(spec, data);
         var svg = XDocument.Parse(new SvgChartRenderer().Render(plan));
@@ -312,11 +334,12 @@ public sealed class TransposedAspectRangeRectTests
     [InlineData("EM")]
     [InlineData("BAND")]
     [InlineData("DATA")]
+    [InlineData("JITTER")]
     public async Task ConstantsAuthoringContractsAndPdf_PreserveBothIntervals(string unit)
     {
         var sql = Script.Replace("StartX (", "DATUM(2) (", StringComparison.Ordinal).Replace("EndX (", "DATUM(8) (", StringComparison.Ordinal)
             .Replace("LowerBound (", "DATUM(1) (", StringComparison.Ordinal).Replace("UpperBound (", "DATUM(4) (", StringComparison.Ordinal);
-        sql = WithNudge(sql, unit);
+        sql = WithPlacement(sql, unit);
         var statement = Parse(sql);
         Assert.Equal(statement.ToSql(), Parse(statement.ToSql()).ToSql());
         var source = sql + "CREATE PAGE Dashboard AS DASHBOARD (LAYOUT (STRUCTURE = 'A', MAP ('A' = Measurement)));";
@@ -330,8 +353,8 @@ public sealed class TransposedAspectRangeRectTests
         var (spec, data) = Lower(sql);
         spec = spec with { Layers = [spec.Layers[1]] };
         Assert.Equal(ChartContractSerializer.Serialize(spec), ChartContractSerializer.Serialize(ChartContractSerializer.DeserializeChartSpec(ChartContractSerializer.Serialize(spec))));
-        var invalid = spec with { Layers = [spec.Layers[0] with { Position = new PositionAdjustmentSpec(PositionAdjustmentKind.Jitter, 0m, 1m, StableKeyField: "Distance") }] };
-        Assert.Contains("ASPECT_RATIO RECT", Assert.Throws<InvalidDataException>(invalid.Validate).Message);
+        var invalid = spec with { Layers = [spec.Layers[0] with { Position = new PositionAdjustmentSpec(PositionAdjustmentKind.Jitter, 0m, 1m) }] };
+        Assert.Contains("stable KEY", Assert.Throws<InvalidDataException>(invalid.Validate).Message);
         var plan = new PlotPlanResolver().Resolve(spec, data);
         Assert.Equal(3, Elements(XDocument.Parse(new SvgChartRenderer().Render(plan)), "plot-range-rect").Length);
         Assert.Equal(3, plan.Fallback.Items.Length);
@@ -366,15 +389,16 @@ public sealed class TransposedAspectRangeRectTests
     [InlineData("EM")]
     [InlineData("BAND")]
     [InlineData("DATA")]
+    [InlineData("JITTER")]
     public void PlanAndSvg_MatchDeterministicGoldens(string unit)
     {
-        var (spec, data) = Lower(WithNudge(Script, unit));
+        var (spec, data) = Lower(WithPlacement(Script, unit));
         var plan = new PlotPlanResolver().Resolve(spec, data);
         static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.Replace("\r\n", "\n", StringComparison.Ordinal))));
         var planHash = Hash(ChartContractSerializer.Serialize(plan));
         var svgHash = Hash(new SvgChartRenderer().Render(plan));
-        var expectedPlan = unit == "DATA" ? "48E0239DFBACB044F2936704CD437D1838DAA1A4DF522C6E4462E422F30E3789" : unit == "BAND" ? "CAFB28630BE4C369FCD266692D322C22188AFB9CC958A8A5FF11E1F0EA163DFD" : unit == "EM" ? "4D6087141ED98D175AF37B17C2EA3EB66692613F3119A847F38C3E00775C46F0" : "68932913300EC5E4D82BF299FEE4EB30A55D1F9F18A504CC628AAC5F592CA179";
-        var expectedSvg = unit == "DATA" ? "8711F674079A91D3C913393C987C9E586FDD1056BB3699BFDFE442230C486575" : unit == "BAND" ? "BC5F33CDBD6BD27A592B502D1DBAA67B1DE47420CAB7D735907A6FD591407D36" : unit == "EM" ? "A9428FA05DDDCF16B8B44F5B8E094AFEE5AEB2033AB0E84FF689D0B81BECCC33" : "38260F65E0EB9522CE44EFCD41400E855EB3D6509BB4153FC04D7B165DEAECFD";
+        var expectedPlan = unit == "JITTER" ? "88E565885A3097EFF860F24B8E3BC7A30E2EEC7644C7782C91F35FFBD98C694E" : unit == "DATA" ? "48E0239DFBACB044F2936704CD437D1838DAA1A4DF522C6E4462E422F30E3789" : unit == "BAND" ? "CAFB28630BE4C369FCD266692D322C22188AFB9CC958A8A5FF11E1F0EA163DFD" : unit == "EM" ? "4D6087141ED98D175AF37B17C2EA3EB66692613F3119A847F38C3E00775C46F0" : "68932913300EC5E4D82BF299FEE4EB30A55D1F9F18A504CC628AAC5F592CA179";
+        var expectedSvg = unit == "JITTER" ? "9EA6C399B7210B2DB6D51D50F64544C8FD33F741FBA5444C07C53D9DADF586CB" : unit == "DATA" ? "8711F674079A91D3C913393C987C9E586FDD1056BB3699BFDFE442230C486575" : unit == "BAND" ? "BC5F33CDBD6BD27A592B502D1DBAA67B1DE47420CAB7D735907A6FD591407D36" : unit == "EM" ? "A9428FA05DDDCF16B8B44F5B8E094AFEE5AEB2033AB0E84FF689D0B81BECCC33" : "38260F65E0EB9522CE44EFCD41400E855EB3D6509BB4153FC04D7B165DEAECFD";
         Assert.True(planHash == expectedPlan && svgHash == expectedSvg, $"Plan: {planHash}; SVG: {svgHash}");
     }
 
@@ -394,7 +418,7 @@ public sealed class TransposedAspectRangeRectTests
         if (logarithmic) sql = sql.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal).Replace("MIN = 0,", "INCLUDE_ZERO = OFF, MIN = 1,", StringComparison.Ordinal);
         if (facets) sql = sql.Replace("SCALES (", "FACET (WRAP = Cohort, COLUMNS = 2), RESOLVE (X = INDEPENDENT, Y = INDEPENDENT), SCALES (", StringComparison.Ordinal);
         var (baselineSpec, data) = Lower(sql);
-        var (spec, _) = Lower(WithNudge(sql, "DATA"));
+        var (spec, _) = Lower(WithPlacement(sql, "DATA"));
         var theme = spec.Theme with { Tokens = [.. spec.Theme.Tokens, new StyleToken("LEGEND_POSITION", "LEFT")] };
         spec = spec with { Theme = theme };
         baselineSpec = baselineSpec with { Theme = theme };
@@ -454,7 +478,7 @@ public sealed class TransposedAspectRangeRectTests
     [InlineData(false)]
     public void DataNudge_LogarithmicTargetMustBePositive(bool xAxis)
     {
-        var (spec, data) = Lower(WithNudge(Script.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal)
+        var (spec, data) = Lower(WithPlacement(Script.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal)
             .Replace("MIN = 0,", "INCLUDE_ZERO = OFF, MIN = 1,", StringComparison.Ordinal), "DATA"));
         spec = spec with
         {
@@ -468,7 +492,7 @@ public sealed class TransposedAspectRangeRectTests
     [Fact]
     public void DataNudge_DoesNotAddTheAmountToTheOppositeEndpoint()
     {
-        var (spec, data) = Lower(WithNudge(Script.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal)
+        var (spec, data) = Lower(WithPlacement(Script.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal)
             .Replace("MIN = 0,", "INCLUDE_ZERO = OFF, MIN = 0.1,", StringComparison.Ordinal), "DATA"));
         data = data with
         {
@@ -493,7 +517,7 @@ public sealed class TransposedAspectRangeRectTests
     [InlineData("UpperBound")]
     public void DataNudge_IncompleteRectangleSkipsInvalidLogarithmicTarget(string field)
     {
-        var sql = WithNudge(Script.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal)
+        var sql = WithPlacement(Script.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal)
             .Replace("MIN = 0,", "INCLUDE_ZERO = OFF, MIN = 1,", StringComparison.Ordinal), "DATA")
             .Replace("X = -0.5, Y = 0.5", "X = -100, Y = -100", StringComparison.Ordinal);
         var (spec, data) = Lower(sql);
@@ -511,8 +535,109 @@ public sealed class TransposedAspectRangeRectTests
         });
     }
 
-    private static string WithNudge(string sql, string unit) => unit == "IDENTITY" ? sql : sql.Replace("Z_INDEX = 1,",
-        unit == "DATA" ? "Z_INDEX = 1, POSITION = NUDGE(X = -0.5, Y = 0.5, UNIT = DATA),"
+    [Fact]
+    public void Jitter_FollowsKeysAcrossReorderRenameAndResize()
+    {
+        var (spec, data) = Lower(WithPlacement(Script, "JITTER"));
+        var resolver = new PlotPlanResolver();
+        var original = resolver.Resolve(spec, data);
+        var reordered = data with
+        {
+            Columns = data.Columns.Select(column => column with
+            {
+                Values = column.Values.Reverse().ToImmutableArray(),
+                DisplayValues = column.DisplayValues.IsDefaultOrEmpty ? column.DisplayValues : column.DisplayValues.Reverse().ToImmutableArray()
+            }).ToImmutableArray()
+        };
+        var renamed = spec with { Layers = spec.Layers.Select(layer => layer.Mark == MarkKind.Rect ? layer with { Id = "renamed" } : layer).ToImmutableArray() };
+        static (decimal Key, decimal X, decimal Y)[] Offsets(PlotPlan plan, ChartDataSet source) => plan.Layers.Single(layer => layer.Mark == MarkKind.Rect).Data
+            .Select(datum => (Key: PlotPlanResolver.Number(source.Columns.Single(column => column.Name == "Distance").Values[datum.RowIndex])!.Value,
+                X: datum.DisplayOffsetX, Y: datum.DisplayOffsetY)).OrderBy(item => item.Key).ToArray();
+        Assert.Equal(Offsets(original, data), Offsets(resolver.Resolve(renamed, reordered), reordered));
+        var changedSeed = spec with
+        {
+            Layers = spec.Layers.Select(layer => layer.Mark == MarkKind.Rect
+            ? layer with { Position = layer.Position! with { Seed = 43 } } : layer).ToImmutableArray()
+        };
+        Assert.NotEqual(Offsets(original, data), Offsets(resolver.Resolve(changedSeed, data), data));
+        var resized = resolver.Relayout(spec, data, original, new PlotBounds(0m, 0m, 1000m, 700m));
+        var oldOffsets = Offsets(original, data);
+        var nextOffsets = Offsets(resized, data);
+        for (var row = 0; row < oldOffsets.Length; row++)
+        {
+            Assert.InRange(nextOffsets[row].X / (resized.CartesianViewport!.Width - 80m) - oldOffsets[row].X / (original.CartesianViewport!.Width - 80m), -.0000001m, .0000001m);
+            Assert.InRange(nextOffsets[row].Y / (resized.CartesianViewport!.Height - 100m) - oldOffsets[row].Y / (original.CartesianViewport!.Height - 100m), -.0000001m, .0000001m);
+        }
+        // The stable key is a lineage dependency even when it is not a positional binding.
+        var sql = WithPlacement(Script, "JITTER").Replace("X = Distance (", "X = DATUM(3) (", StringComparison.Ordinal);
+        var tracker = new LineageTracker(ETL_SQL.Common.NullLogger.Instance);
+        new ETL_SQL.Analysis.Lineage.LineageAnalyzer(tracker).Analyze(new Parser(new Lexer(sql).Tokenize(), sql).Parse());
+        Assert.Contains(tracker.GetFullLineage(), entry => entry.TargetTable == "report:Measurement" && entry.SourceColumns.Contains("Distance"));
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("null")]
+    [InlineData("duplicate")]
+    public void Jitter_RejectsInvalidKeysEvenWhenAllRectanglesAreGaps(string problem)
+    {
+        var (spec, data) = Lower(WithPlacement(Script, "JITTER"));
+        data = data with
+        {
+            Columns = data.Columns.Select(column => column.Name == "EndX" ? column with
+            { Values = [ChartValue.Null(), ChartValue.Null(), ChartValue.Null()], DisplayValues = [] }
+        : column.Name == "Distance" ? column with
+        { Values = column.Values.SetItem(0, problem == "null" ? ChartValue.Null() : column.Values[1]), DisplayValues = [] } : column).ToImmutableArray()
+        };
+        if (problem == "missing") spec = spec with
+        {
+            Layers = spec.Layers.Select(layer => layer.Mark == MarkKind.Rect
+            ? layer with { Position = layer.Position! with { StableKeyField = "Missing" } } : layer).ToImmutableArray()
+        };
+        Assert.Contains(problem == "missing" ? "does not exist" : problem == "null" ? "nulls" : "duplicate",
+            Assert.Throws<InvalidOperationException>(() => new PlotPlanResolver().Resolve(spec, data)).Message);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Jitter_ZeroAmplitudeLeavesTheOtherPhysicalAxisFixed(bool xOnly)
+    {
+        var (spec, data) = Lower(WithPlacement(Script, "JITTER"));
+        spec = spec with
+        {
+            Layers = spec.Layers.Select(layer => layer.Mark == MarkKind.Rect
+            ? layer with { Position = layer.Position! with { X = xOnly ? 1m : 0m, Y = xOnly ? 0m : 1m } } : layer).ToImmutableArray()
+        };
+        var plan = new PlotPlanResolver().Resolve(spec, data);
+        Assert.All(plan.Layers.Single(layer => layer.Mark == MarkKind.Rect).Data, datum =>
+        {
+            Assert.Equal(0m, xOnly ? datum.DisplayOffsetX : datum.DisplayOffsetY);
+            Assert.NotEqual(0m, xOnly ? datum.DisplayOffsetY : datum.DisplayOffsetX);
+            Assert.InRange(Math.Abs(xOnly ? datum.DisplayOffsetY : datum.DisplayOffsetX), 0m,
+                xOnly ? plan.CartesianViewport!.Height - 100m : plan.CartesianViewport!.Width - 80m);
+        });
+    }
+
+    [Theory]
+    [InlineData(-0.1)]
+    [InlineData(1.1)]
+    public void Jitter_RejectsInvalidAmplitudesInAuthoringAndContract(double amplitude)
+    {
+        var sql = WithPlacement(Script, "JITTER").Replace("X = 0.02", $"X = {amplitude.ToString(CultureInfo.InvariantCulture)}", StringComparison.Ordinal);
+        Assert.Contains(AdvancedChartSemanticValidator.Validate(Parse(sql)), diagnostic => diagnostic.Line > 0 && diagnostic.Column > 0 && diagnostic.Message.Contains("amplitudes", StringComparison.Ordinal));
+        var (spec, _) = Lower(WithPlacement(Script, "JITTER"));
+        spec = spec with
+        {
+            Layers = spec.Layers.Select(layer => layer.Mark == MarkKind.Rect
+            ? layer with { Position = layer.Position! with { X = (decimal)amplitude } } : layer).ToImmutableArray()
+        };
+        Assert.Contains("amplitudes", Assert.Throws<InvalidDataException>(spec.Validate).Message);
+    }
+
+    private static string WithPlacement(string sql, string unit) => unit == "IDENTITY" ? sql : sql.Replace("Z_INDEX = 1,",
+        unit == "JITTER" ? "Z_INDEX = 1, POSITION = JITTER(X = 0.02, Y = 0.03, KEY = Distance, SEED = 42),"
+        : unit == "DATA" ? "Z_INDEX = 1, POSITION = NUDGE(X = -0.5, Y = 0.5, UNIT = DATA),"
         : unit == "BAND" ? "Z_INDEX = 1, POSITION = NUDGE(X = 0.02, Y = -0.03, UNIT = BAND),"
         : "Z_INDEX = 1, POSITION = NUDGE(X = -0.5, Y = 1, UNIT = EM),", StringComparison.Ordinal);
 

@@ -448,8 +448,13 @@ semantics and backend evidence before its rejection can be lifted.
   corner anchors a rigid display translation through the original scales and final plot area.
   Dimensions and raw intervals remain unchanged, including descending/logarithmic ranges.
   Facets, resize, side legends, missing endpoints, invalid log targets, authoring/contract round
-  trips, LSP rename, PDF and deterministic plan/SVG tests cover the combination. Rectangle JITTER
-  remains rejected; wire versions are unchanged.
+  trips, LSP rename, PDF and deterministic plan/SVG tests cover the combination. Wire versions
+  are unchanged.
+- [x] **Deterministic JITTER on four-endpoint transposed aspect RECT layers.** Stable keys
+  and seeds translate complete rectangles using fitted viewport fractions. Dimensions and raw
+  intervals remain unchanged. Reorder/rename/resize, facets, reversed/log axes, nulls, invalid keys
+  and amplitudes, lineage, authoring/contract round trips, LSP rename, PDF and deterministic
+  plan/SVG tests cover the combination. Wire versions are unchanged.
 - [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/supported RULE/RECT,
   stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.

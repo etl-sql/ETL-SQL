@@ -423,10 +423,10 @@ public sealed record ChartSpec(
                     if (layer.Mark == MarkKind.Rect)
                     {
                         if (!channels.SetEquals([FieldChannel.XStart, FieldChannel.XEnd, FieldChannel.YStart, FieldChannel.YEnd]) ||
-                            layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data }) || !layer.Conditions.IsDefaultOrEmpty ||
+                            layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or { Kind: PositionAdjustmentKind.Jitter } or { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data }) || !layer.Conditions.IsDefaultOrEmpty ||
                             bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative ||
                                 binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)))
-                            throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO RECT requires exactly four quantitative field/DATUM X_START/X_END/Y_START/Y_END bindings, IDENTITY or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
+                            throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO RECT requires exactly four quantitative field/DATUM X_START/X_END/Y_START/Y_END bindings, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
                         continue;
                     }
                     var ranged = channels.SetEquals([FieldChannel.X, FieldChannel.YStart, FieldChannel.YEnd]) ||

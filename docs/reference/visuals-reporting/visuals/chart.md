@@ -318,7 +318,7 @@ CREATE VISUAL Measurement AS CUSTOM (
 ## Rectangles on transposed fixed-aspect charts
 
 RECT supports exactly four quantitative field or DATUM bindings: `X_START`, `X_END`,
-`Y_START` and `Y_END`. Use IDENTITY or `NUDGE(..., UNIT = EM|BAND|DATA)` placement without conditions, stacking, secondary axes
+`Y_START` and `Y_END`. Use IDENTITY, JITTER or `NUDGE(..., UNIT = EM|BAND|DATA)` placement without conditions, stacking, secondary axes
 or additional encodings. Each row defines a rectangle between its paired corners. Semantic Y
 maps horizontally and X vertically, including reversed/logarithmic scales, independent facets
 and resizing. Every endpoint contributes to its scale domain.
@@ -346,7 +346,13 @@ displacement translates the whole rectangle. Width and height stay unchanged, in
 logarithmic axes. Reversed scales reverse the displacement; facets use their own scales and
 plot area after legend layout. Raw intervals and domains stay unchanged. A missing endpoint
 skips placement and remains a gap. Logarithmic anchor targets must stay positive.
-JITTER remains unsupported on these rectangles.
+JITTER moves each whole rectangle by a deterministic offset using its stable KEY and SEED.
+X and Y amplitudes must be between zero and one; they bound fractions of fitted plot height
+and width respectively, before legend layout. Reversed axes do not reverse these display offsets.
+Row reorder and layer rename preserve the offsets; a new seed changes them. Resizing scales
+the offsets with the viewport. Keys must exist, be non-null and be unique across all source rows,
+including gaps. Coincident rectangles remain distinct. Dimensions, domains and reported
+intervals stay unchanged.
 
 ```sql
 CREATE VISUAL Regions AS CUSTOM (
@@ -355,7 +361,7 @@ CREATE VISUAL Regions AS CUSTOM (
     COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
     LAYERS (regions = RECT (
       INHERIT_ENCODINGS = OFF,
-      POSITION = NUDGE(X = -0.5, Y = 0.5, UNIT = DATA),
+      POSITION = JITTER(X = 0.02, Y = 0.03, KEY = Distance, SEED = 42),
       ENCODINGS (
         X_START = StartX (TYPE = QUANTITATIVE),
         X_END = EndX (TYPE = QUANTITATIVE),

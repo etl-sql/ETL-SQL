@@ -104,7 +104,7 @@ public static class VisualCapabilityMatrix
         Chart(VisualType.Combo, "COMBO", "Layered", "bar/line combo", "Click, cross-filter, tooltip"),
         Chart(VisualType.Custom, "CUSTOM", "Advanced / Layered", "advanced chart", "Click, cross-filter, tooltip") with
         {
-            Notes = "Shared PlotPlan; continuous transposed POINT/TEXT aspect ratios, constant/field-backed reference rules with bound-axis jitter and EM/BAND/DATA nudges, IDENTITY/JITTER/EM/BAND/DATA ranged/diagonal rules, IDENTITY/EM/BAND/DATA NUDGE four-endpoint rectangles, error bars, offset groups, EM/BAND/DATA nudges and deterministic jitter in native/static SVG; terminal retains semantic values, not physical distances"
+            Notes = "Shared PlotPlan; continuous transposed POINT/TEXT aspect ratios, constant/field-backed reference rules with bound-axis jitter and EM/BAND/DATA nudges, IDENTITY/JITTER/EM/BAND/DATA ranged/diagonal rules, IDENTITY/JITTER/EM/BAND/DATA NUDGE four-endpoint rectangles, error bars, offset groups, EM/BAND/DATA nudges and deterministic jitter in native/static SVG; terminal retains semantic values, not physical distances"
         },
         Control(VisualType.Table, "TABLE", "Tabular", "Tabulator / HTML table", "Markdown, CSV, and static table exporters", "Spectre table", "Sort, filter, pagination, row click", browserLevel: CapabilityLevel.ThirdPartyDependency),
         Control(VisualType.Card, "CARD", "KPI", "native DOM card", "Markdown and static card exporters", "Spectre panel", "Click, navigation"),
