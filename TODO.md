@@ -166,10 +166,8 @@ containers, and clause-level patching that keeps hand-written clauses on a desig
   conditional formatting already is.
 - [ ] **P2 — Mobile layout.** The grammar has a mobile page layout (`STRUCTURE`, `MAP`,
   `BREAKPOINT`) and Studio has nothing for it.
-- [ ] **Decision — the semantic model.** Report-SQL has no measures or relationships; a dashboard's
-  numbers come from SQL datasets. Decide whether that is the deliberate ETL-SQL answer to Power BI's
-  model (then add a guided "calculated column" and "measure" helper that writes the dataset SQL) or a
-  language gap to design. Record the decision either way; the ER view today is read-only.
+- [x] **Decision — the semantic model.** Decided 2026-09-29: deliberate. Modelling happens in the query that builds the dataset or the #temp table, which the author owns and can read; no measures or relationships are added to the language. Guided helpers that write that SQL remain welcome.
+
 **Fresh-eyes review — learning path and primary-editor readiness (2026-09-07)**
 
 Reviewed the canonical Studio modules, both host adapters, and Portal authorization; drove the shared
@@ -238,7 +236,7 @@ tree, and the payload budget. Complements the review above rather than repeating
 409, WorkstationEditor `baseRevision` and external-change polling), editor search/goto, and the
 bounded result grid with CSV/XLSX/JSON export were checked and are present.
 
-- [ ] **Correct the host count before certifying against it.** `createStudioWorkbench` is mounted in
+- [x] **Correct the host count before certifying against it.** Done 2026-09-29: Studio mounts in the Portal and the Workstation editor (plus the sandbox); ReportPlayer no longer receives `designer/` and VS Code receives only the designer's import closure, enforced by `sync-assets.js -Check`. `createStudioWorkbench` is mounted in
   two places plus the sandbox: the [Portal page module](src/ETL-SQL.Portal/wwwroot/js/pages/studio.js),
   [StudioShell.cs](src/ETL-SQL.WorkstationEditor/StudioShell.cs), and
   `tools/ui-sandbox/stories/studio.story.js`. `ReportPlayer/wwwroot/designer/` and

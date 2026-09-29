@@ -149,12 +149,14 @@ src/ETL-SQL.ReportRuntime/Resources/Shared/designer/
 
 ### Sync targets
 
-| Host | Sync destination | Triggered by |
+| Host | Sync destination | What it receives |
 |---|---|---|
-| Portal | `src/ETL-SQL.Portal/wwwroot/designer/` | `sync-assets.js` |
-| VS Code extension | `src/etl-sql-vscode/media/designer/` | `sync-assets.js` |
+| Portal | `src/ETL-SQL.Portal/wwwroot/designer/` | Everything: the designer and Studio |
+| Workstation editor | `src/ETL-SQL.WorkstationEditor/wwwroot/designer/` | Everything: the designer and Studio |
+| VS Code extension | `src/etl-sql-vscode/media/designer/` | The report designer and connection wizard only — the import closure of `designer.js`, `connection-wizard.js`, and `designer.css`. No Studio modules. |
+| ReportPlayer | — | Nothing under `designer/`; it serves the report runtime only |
 
-Follows the identical pattern used for `ETL-SQL.ReportRuntime/Resources/Shared/` today. Generated copies carry the canonical-source banner. Never edit the sync destinations directly.
+All copies are written by `node scripts/sync-assets.js`. It computes the VS Code set from the import graph on every run, deletes a copy a host does not load, and `-Check` fails when one reappears. Generated copies carry the canonical-source banner. Never edit the sync destinations directly; tests import Studio modules from `Resources/Shared`, not from a host copy.
 
 ### Host integration
 

@@ -50,7 +50,7 @@ describe('Pipeline task editing layer', () => {
         (globalThis as any).document = document;
         host = document.getElementById('host')!;
         canvas = document.getElementById('canvas')!;
-        attach = (await import('../../media/designer/studio-pipeline-canvas.js')).attachPipelineTaskEditing;
+        attach = (await import('../../../ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-pipeline-canvas.js')).attachPipelineTaskEditing;
     });
 
     test('only labelled cards become editable', () => {
@@ -135,10 +135,13 @@ describe('Pipeline task editing layer', () => {
 
         const kinds = [...host.querySelectorAll('[data-task-kind]')].map(chip => (chip as HTMLElement).dataset.taskKind);
         expect(kinds).toEqual([
-            'execution', 'validation', 'notification', 'throw', 'waitfor',
+            // Ordered as an ETL pipeline reads: extract, transform, validate, load, clean up, then the
+            // control flow and file work that arrange it, with native SQL last as the escape hatch.
+            'extract', 'reshape', 'join', 'summarise', 'validation', 'expectschema', 'load', 'upsert', 'droptemp',
             'if', 'foreach', 'for', 'while', 'parallel', 'transaction', 'break', 'continue',
             'copyfile', 'movefile', 'renamefile', 'deletefile',
             'createdirectory', 'copydirectory', 'movedirectory', 'renamedirectory', 'deletedirectorycontents', 'deletedirectory',
+            'notification', 'throw', 'waitfor', 'execution',
         ]);
 
         // Nothing in the palette is a dead control: each kind has passed its emission gate, so none
@@ -395,7 +398,8 @@ describe('Pipeline task editing layer', () => {
             onNest: (nest: any) => { nests.push(nest); },
         });
 
-        expect(host.textContent).toContain('inside');
+        // Named for the block it is in, the way the script nests it.
+        expect(host.textContent).toContain('in load_all');
         (host.querySelector('[data-task-unnest]') as HTMLElement).click();
         expect(nests).toEqual([{ id: 'load_orders', container: null }]);
     });

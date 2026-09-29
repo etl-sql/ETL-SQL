@@ -13,7 +13,7 @@ describe('Studio authoring presentation primitives', () => {
     let ui: any;
 
     beforeEach(async () => {
-        ui = await import('../../media/designer/studio-authoring-ui.js');
+        ui = await import('../../../ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-authoring-ui.js');
     });
 
     test('noteMarkup escapes plain text, including a server message', () => {
@@ -56,7 +56,7 @@ describe('Query workbench connection preamble', () => {
         (globalThis as any).document = dom.window.document;
         (globalThis as any).HTMLElement = dom.window.HTMLElement;
         (globalThis as any).customElements = dom.window.customElements;
-        workbench = await import('../../media/designer/studio-query-workbench.js');
+        workbench = await import('../../../ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-query-workbench.js');
     });
 
     const routes = { parse: '/api/designer/parse' };
@@ -133,7 +133,7 @@ describe('Query workbench script composition and execution context', () => {
         (globalThis as any).document = dom.window.document;
         (globalThis as any).HTMLElement = dom.window.HTMLElement;
         (globalThis as any).customElements = dom.window.customElements;
-        workbench = await import('../../media/designer/studio-query-workbench.js');
+        workbench = await import('../../../ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-query-workbench.js');
     });
 
     test('remote context wraps query in EXECUTE <conn> BEGIN ... END', () => {
@@ -191,7 +191,7 @@ describe('Query workbench firstResultSet result extraction', () => {
         (globalThis as any).document = dom.window.document;
         (globalThis as any).HTMLElement = dom.window.HTMLElement;
         (globalThis as any).customElements = dom.window.customElements;
-        workbench = await import('../../media/designer/studio-query-workbench.js');
+        workbench = await import('../../../ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-query-workbench.js');
     });
 
     test('treats a flat result with rows: [] as a valid zero-row result set', () => {
@@ -232,7 +232,7 @@ describe('Query workbench interactive preview fidelity and educational empty res
         (globalThis as any).document = dom.window.document;
         (globalThis as any).HTMLElement = dom.window.HTMLElement;
         (globalThis as any).customElements = dom.window.customElements;
-        workbench = await import('../../media/designer/studio-query-workbench.js');
+        workbench = await import('../../../ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-query-workbench.js');
     });
 
     const routes = {

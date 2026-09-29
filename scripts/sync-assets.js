@@ -176,6 +176,59 @@ async function syncOrCheckBundle() {
     console.log(`  ${RUNTIME_BUNDLE} OK`);
 }
 
+// ── What each host actually loads ────────────────────────────────────────────
+//
+// Every host used to receive the whole Shared tree. ReportPlayer never loads anything under
+// designer/, and the VS Code extension loads the report designer and the connection wizard, not
+// Studio — yet both shipped all of Studio. Unloaded files still cost a sync, a drift check, and
+// surface in a webview's resource roots, and they read as supported when nothing mounts them.
+//
+// VS Code's designer set is the import closure of the files its webviews name, walked here on every
+// run, so moving a module between files cannot silently drop one the designer still needs.
+const VSCODE_DESIGNER_ENTRIES = ['designer/designer.js', 'designer/connection-wizard.js', 'designer/designer.css'];
+const MODULE_SPECIFIER = /(?:import|export)\s[^'"]*?from\s*['"](\.[^'"]+)['"]|import\s*\(\s*['"](\.[^'"]+)['"]\s*\)|import\s*['"](\.[^'"]+)['"]/g;
+
+async function importClosure(entries) {
+    const seen = new Set();
+    const stack = [...entries];
+    while (stack.length) {
+        const rel = stack.pop();
+        if (seen.has(rel)) continue;
+        seen.add(rel);
+        const file = path.join(sharedDir, rel);
+        if (!rel.endsWith('.js') || !(await existsAsync(file))) continue;
+        const text = await fs.readFile(file, 'utf8');
+        for (const match of text.matchAll(MODULE_SPECIFIER)) {
+            const target = match[1] || match[2] || match[3];
+            stack.push(path.relative(sharedDir, path.resolve(path.dirname(file), target)).replace(/\\/g, '/'));
+        }
+    }
+    return seen;
+}
+
+/** Whether a Shared file belongs in a host, by its path relative to Shared. */
+function hostWants(label, normalizedRel, vsCodeDesigner) {
+    if (!normalizedRel.startsWith('designer/')) return true;
+    if (label === 'ReportPlayer') return false;
+    if (label === 'VS Code') return vsCodeDesigner.has(normalizedRel);
+    return true;
+}
+
+/**
+ * A host copy of a file the host does not load: removed on sync, reported on check. Without the
+ * removal the copies already in the repository would stay forever, still synced by nothing.
+ */
+async function removeUnwanted(relativePath, targetDir, label) {
+    const targetPath = path.join(targetDir, relativePath);
+    if (!(await existsAsync(targetPath))) return;
+    if (checkMode) {
+        drift.push(`${label} ships ${relativePath}, which it never loads`);
+        return;
+    }
+    await fs.unlink(targetPath);
+    console.log(`    -> ${label} removed (not loaded by this host)`);
+}
+
 async function existsAsync(p) {
     try {
         await fs.access(p);
@@ -237,19 +290,27 @@ async function run() {
 
     await syncOrCheckBundle();
     const files = await walk(sharedDir);
+    const vsCodeDesigner = await importClosure(VSCODE_DESIGNER_ENTRIES);
 
     for (const file of files) {
         const verb = checkMode ? "Checking" : "Syncing";
         const relativePath = getAssetRelativePath(file);
+        const normalizedRel = relativePath.replace(/\\/g, '/');
         console.log(`  ${verb} ${relativePath}...`);
 
         const fileContent = await fs.readFile(file, 'utf8');
 
-        // 1. VS Code Media
-        await syncOrCheck(file, relativePath, vsCodeMedia, "VS Code", fileContent);
+        // 1. VS Code Media — the designer and connection wizard, not Studio
+        if (hostWants("VS Code", normalizedRel, vsCodeDesigner))
+            await syncOrCheck(file, relativePath, vsCodeMedia, "VS Code", fileContent);
+        else
+            await removeUnwanted(relativePath, vsCodeMedia, "VS Code");
 
-        // 2. ReportPlayer
-        await syncOrCheck(file, relativePath, playerWwwRoot, "ReportPlayer", fileContent);
+        // 2. ReportPlayer — the report runtime only
+        if (hostWants("ReportPlayer", normalizedRel, vsCodeDesigner))
+            await syncOrCheck(file, relativePath, playerWwwRoot, "ReportPlayer", fileContent);
+        else
+            await removeUnwanted(relativePath, playerWwwRoot, "ReportPlayer");
 
         // 2b. Workstation Editor / desktop Studio
         await syncOrCheck(file, relativePath, workstationWwwRoot, "WorkstationEditor", fileContent);
