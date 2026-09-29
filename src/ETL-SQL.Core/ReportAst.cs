@@ -610,6 +610,12 @@ public record PrintLayoutOverride
     public bool? PageBreakAfter { get; init; }
     public bool? KeepTogether { get; init; }
     public bool? ExcludeFromPrint { get; init; }
+
+    /// <summary>
+    /// <c>HEADER</c> or <c>FOOTER</c> to print this TEXT or IMAGE visual in every physical page's
+    /// header or footer instead of in the body; null for an ordinary visual.
+    /// </summary>
+    public string? Band { get; init; }
 }
 
 /// <summary>

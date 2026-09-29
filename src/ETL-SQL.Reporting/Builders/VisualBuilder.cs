@@ -91,7 +91,8 @@ namespace ETL_SQL.Reporting.Builders
                     PageBreakBefore = vStmt.PrintLayout.PageBreakBefore,
                     PageBreakAfter = vStmt.PrintLayout.PageBreakAfter,
                     KeepTogether = vStmt.PrintLayout.KeepTogether,
-                    ExcludeFromPrint = vStmt.PrintLayout.ExcludeFromPrint
+                    ExcludeFromPrint = vStmt.PrintLayout.ExcludeFromPrint,
+                    Band = vStmt.PrintLayout.Band
                 },
                 RowDetail = vStmt.RowDetail == null ? null : new RowDetailManifest
                 {

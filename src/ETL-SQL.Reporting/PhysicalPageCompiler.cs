@@ -31,6 +31,15 @@ public class PhysicalPageCompiler
             maxYForPage = 8.5 - (double)(layout.MarginTop ?? 1.0m) - (double)(layout.MarginBottom ?? 1.0m);
         }
 
+        // Bands print in every page's header and footer rather than in the body, so they are not laid
+        // out here, and the room they take comes off every page.
+        var bands = manifest.Visuals
+            .Where(visual => visual.PrintLayout?.Band is not null && visual.PrintLayout.ExcludeFromPrint != true)
+            .ToList();
+        var headers = bands.Where(visual => string.Equals(visual.PrintLayout!.Band, "HEADER", StringComparison.OrdinalIgnoreCase)).ToList();
+        var footers = bands.Except(headers).ToList();
+        maxYForPage -= BandAllowance * (headers.Count + footers.Count);
+
         var rows = ParseStructureRows(page.Structure);
 
         foreach (var row in rows)
@@ -44,7 +53,7 @@ public class PhysicalPageCompiler
                 if (page.SlotMap.TryGetValue(slot, out var visName))
                 {
                     var vis = manifest.Visuals.FirstOrDefault(v => v.Name.Equals(visName, StringComparison.OrdinalIgnoreCase));
-                    if (vis != null && vis.PrintLayout?.ExcludeFromPrint != true)
+                    if (vis != null && vis.PrintLayout?.ExcludeFromPrint != true && vis.PrintLayout?.Band is null)
                     {
                         rowVisuals.Add(vis);
                         double visHeight = MeasureVisualHeight(vis);
@@ -97,8 +106,23 @@ public class PhysicalPageCompiler
         // Remove empty trailing pages
         result.RemoveAll(p => p.Visuals.Count == 0 && p.PageNumber > 1);
 
+        foreach (var physical in result)
+        {
+            physical.Header = headers.Select(band => BandText(band, manifest, physical.PageNumber, result.Count)).ToList();
+            physical.Footer = footers.Select(band => BandText(band, manifest, physical.PageNumber, result.Count)).ToList();
+        }
+
         return result;
     }
+
+    /// <summary>Inches one band takes from the body of every page.</summary>
+    private const double BandAllowance = 0.35;
+
+    /// <summary>A band as it prints on one page. An image is named, since the preview lists text.</summary>
+    private static string BandText(VisualManifest band, ReportManifest manifest, int page, int pages) =>
+        string.Equals(band.VisualType, "IMAGE", StringComparison.OrdinalIgnoreCase)
+            ? $"Image: {band.Name}"
+            : ReportTextTemplate.Render(ReportVisualContent.ResolveTextContent(band) ?? string.Empty, band, manifest, page, pages);
 
     private double MeasureVisualHeight(VisualManifest vis)
     {

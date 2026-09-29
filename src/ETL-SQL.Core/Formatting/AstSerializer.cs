@@ -1428,6 +1428,7 @@ public static class AstSerializer
         if (layout.PageBreakAfter.HasValue) parts.Add($"PAGE_BREAK_AFTER = {(layout.PageBreakAfter.Value ? "ON" : "OFF")}");
         if (layout.KeepTogether.HasValue) parts.Add($"KEEP_TOGETHER = {(layout.KeepTogether.Value ? "ON" : "OFF")}");
         if (layout.ExcludeFromPrint.HasValue) parts.Add($"EXCLUDE_FROM_PRINT = {(layout.ExcludeFromPrint.Value ? "ON" : "OFF")}");
+        if (layout.Band is { } band) parts.Add($"BAND = {band}");
         return "PRINT_LAYOUT (" + string.Join(", ", parts) + ")";
     }
 

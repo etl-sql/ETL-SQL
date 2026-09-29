@@ -403,6 +403,13 @@ public class ReportParser : ParserComponent
                 throw new SyntaxException("TEMPLATE is only valid on HTML visuals.", startToken.Line, startToken.Column);
         }
 
+        // A band repeats on every printed page. Text and a logo are what page furniture is; a chart or
+        // a table in a header would print whole on every sheet, which is never what was meant.
+        if (printLayout?.Band is not null && visualType != VisualType.Text && visualType != VisualType.Image)
+            throw new SyntaxException(
+                $"CREATE VISUAL '{name}': only TEXT or IMAGE visuals can be a page band (BAND = {printLayout.Band}).",
+                startToken.Line, startToken.Column);
+
         if (source == null)
         {
             if (visualType == VisualType.Text
@@ -1650,6 +1657,16 @@ public class ReportParser : ParserComponent
                 Advance();
                 Match(TokenType.EQUALS);
                 layout = layout with { ExcludeFromPrint = ParseOnOffValue() == "ON" };
+            }
+            else if (IsCurrentValue("BAND"))
+            {
+                Advance();
+                Match(TokenType.EQUALS);
+                var bandToken = Advance();
+                var band = bandToken.Value.Trim('\'', '"').ToUpperInvariant();
+                if (band is not ("HEADER" or "FOOTER"))
+                    throw new SyntaxException($"BAND must be HEADER or FOOTER, not '{bandToken.Value}'.", bandToken.Line, bandToken.Column);
+                layout = layout with { Band = band };
             }
             else
             {

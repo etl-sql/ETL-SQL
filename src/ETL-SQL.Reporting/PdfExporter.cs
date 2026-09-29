@@ -165,12 +165,16 @@ namespace ETL_SQL.Reporting
             style.Font.Name = "Arial";
             style.Font.Size = Unit.FromPoint(10);
 
+            // Page bands print in every section's header or footer, never in the body. Images are
+            // written to temp files once, here, because every section repeats them.
+            var bands = await CollectBandsAsync(manifest, tempFiles, cancellationToken);
+
             var section = document.AddSection();
             // The heading block shares the first declared page's paper. It used to be laid out with
             // the A4 defaults and then followed by a *new* section per page — so a Letter landscape
             // report exported an A4 portrait sheet carrying nothing but its title, and every page
             // count was one higher than the report described.
-            ApplyPageSetup(section, manifest.Pages.FirstOrDefault()?.PrintLayout, manifest);
+            ApplyPageSetup(section, manifest.Pages.FirstOrDefault()?.PrintLayout, manifest, bands);
 
             // ── Report header ─────────────────────────────────────────────────
             var titlePara = section.AddParagraph(
@@ -224,14 +228,14 @@ namespace ETL_SQL.Reporting
                     else
                     {
                         pageSection = document.AddSection();
-                        ApplyPageSetup(pageSection, page.PrintLayout, manifest);
+                        ApplyPageSetup(pageSection, page.PrintLayout, manifest, bands);
                     }
 
                     foreach (var (_, vName) in page.SlotMap.OrderBy(kv => kv.Key))
                     {
                         if (!seen.Add(vName)) continue;
                         var v = manifest.Visuals.FirstOrDefault(x => string.Equals(x.Name, vName, StringComparison.OrdinalIgnoreCase));
-                        if (v != null)
+                        if (v != null && !IsBand(v))
                             await RenderVisualAsync(pageSection, v, manifest, tempFiles, cancellationToken);
                     }
                 }
@@ -239,20 +243,136 @@ namespace ETL_SQL.Reporting
                 // Any loose visuals
                 foreach (var v in manifest.Visuals)
                 {
-                    if (seen.Add(v.Name))
+                    if (seen.Add(v.Name) && !IsBand(v))
                         await RenderVisualAsync(section, v, manifest, tempFiles, cancellationToken);
                 }
             }
             else
             {
-                foreach (var visual in manifest.Visuals)
+                foreach (var visual in manifest.Visuals.Where(visual => !IsBand(visual)))
                     await RenderVisualAsync(section, visual, manifest, tempFiles, cancellationToken);
             }
 
             return document;
         }
 
-        private static void ApplyPageSetup(Section section, PageLayoutDefinitionManifest? layout, ReportManifest manifest)
+        private static bool IsBand(VisualManifest visual) => visual.PrintLayout?.Band is not null;
+
+        /// <summary>A page band ready to print: its visual, and for an image the file it was written to.</summary>
+        private sealed record PageBand(VisualManifest Visual, string? ImagePath);
+
+        private sealed record PageBands(IReadOnlyList<PageBand> Headers, IReadOnlyList<PageBand> Footers);
+
+        private async Task<PageBands> CollectBandsAsync(ReportManifest manifest, List<string> tempFiles, CancellationToken cancellationToken)
+        {
+            var headers = new List<PageBand>();
+            var footers = new List<PageBand>();
+            foreach (var visual in manifest.Visuals.Where(visual => IsBand(visual) && visual.PrintLayout?.ExcludeFromPrint != true))
+            {
+                string? image = null;
+                if (string.Equals(visual.VisualType, "IMAGE", StringComparison.OrdinalIgnoreCase))
+                {
+                    var src = visual.Options.GetValueOrDefault("SRC") ?? visual.Options.GetValueOrDefault("src");
+                    // An image that cannot be embedded is left out of the band: a placeholder repeated
+                    // on every page would be worse than the logo simply being absent.
+                    image = string.IsNullOrWhiteSpace(src) ? null : await DataUriToTempImageAsync(src, tempFiles, cancellationToken);
+                    if (image is null) continue;
+                }
+
+                var band = new PageBand(visual, image);
+                if (string.Equals(visual.PrintLayout!.Band, "HEADER", StringComparison.OrdinalIgnoreCase)) headers.Add(band);
+                else footers.Add(band);
+            }
+
+            return new PageBands(headers, footers);
+        }
+
+        /// <summary>
+        /// Draws the report's bands into one section's header and footer. A declared footer replaces the
+        /// built-in "Generated … Page X of Y" line; a report that declares none keeps it.
+        /// </summary>
+        private static void AddBands(Section section, ReportManifest manifest, PageBands bands)
+        {
+            foreach (var band in bands.Headers) AddBand(section.Headers.Primary, band, manifest);
+            if (bands.Footers.Count == 0)
+            {
+                AddFooter(section, manifest);
+                return;
+            }
+
+            foreach (var band in bands.Footers) AddBand(section.Footers.Primary, band, manifest);
+        }
+
+        private static void AddBand(HeaderFooter area, PageBand band, ReportManifest manifest)
+        {
+            if (band.ImagePath is { } image)
+            {
+                var picture = area.AddImage(image);
+                picture.Height = Unit.FromPoint(BandImageHeightPt);
+                picture.LockAspectRatio = true;
+                return;
+            }
+
+            var text = ReportVisualContent.ResolveTextContent(band.Visual);
+            if (string.IsNullOrWhiteSpace(text)) return;
+
+            var para = area.AddParagraph();
+            para.Format.Font.Size = Unit.FromPoint(9);
+            para.Format.Font.Color = _greyDark1;
+            para.Format.Alignment = (band.Visual.Options.GetValueOrDefault("ALIGN") ?? band.Visual.Options.GetValueOrDefault("align"))
+                ?.Trim('\'').ToLowerInvariant() switch
+            {
+                "center" => ParagraphAlignment.Center,
+                "right" => ParagraphAlignment.Right,
+                _ => ParagraphAlignment.Left,
+            };
+            AddTemplated(para, ReportTextTemplate.Segments(text.Replace("**", "").Replace("`", ""), band.Visual, manifest));
+        }
+
+        /// <summary>Resolved text into a paragraph, with live page fields where the page numbers go.</summary>
+        private static void AddTemplated(Paragraph para, IReadOnlyList<ReportTextSegment> segments)
+        {
+            foreach (var segment in segments)
+            {
+                switch (segment.Kind)
+                {
+                    case ReportTextSegmentKind.PageNumber: para.AddPageField(); break;
+                    case ReportTextSegmentKind.PageCount: para.AddNumPagesField(); break;
+                    default: para.AddText(segment.Text); break;
+                }
+            }
+        }
+
+        private const double BandDistancePt = 18;
+        private const double BandImageHeightPt = 28;
+        private const double BandTextHeightPt = 13;
+
+        /// <summary>
+        /// Keeps the body clear of the bands. MigraDoc draws a header from <c>HeaderDistance</c> and the
+        /// body from <c>TopMargin</c>, so a margin smaller than the header overlapped the first line of
+        /// every page with it.
+        /// </summary>
+        private static void ReserveBandSpace(Section section, PageBands bands)
+        {
+            static double Height(IReadOnlyList<PageBand> list) =>
+                list.Sum(band => band.ImagePath is null ? BandTextHeightPt : BandImageHeightPt + 2);
+
+            if (bands.Headers.Count > 0)
+            {
+                section.PageSetup.HeaderDistance = Unit.FromPoint(BandDistancePt);
+                var needed = BandDistancePt + Height(bands.Headers) + 8;
+                if (section.PageSetup.TopMargin.Point < needed) section.PageSetup.TopMargin = Unit.FromPoint(needed);
+            }
+
+            if (bands.Footers.Count > 0)
+            {
+                section.PageSetup.FooterDistance = Unit.FromPoint(BandDistancePt);
+                var needed = BandDistancePt + Height(bands.Footers) + 8;
+                if (section.PageSetup.BottomMargin.Point < needed) section.PageSetup.BottomMargin = Unit.FromPoint(needed);
+            }
+        }
+
+        private static void ApplyPageSetup(Section section, PageLayoutDefinitionManifest? layout, ReportManifest manifest, PageBands bands)
         {
             if (layout == null)
             {
@@ -261,7 +381,8 @@ namespace ETL_SQL.Reporting
                 section.PageSetup.BottomMargin = Unit.FromPoint(36);
                 section.PageSetup.LeftMargin = Unit.FromPoint(36);
                 section.PageSetup.RightMargin = Unit.FromPoint(36);
-                AddFooter(section, manifest);
+                ReserveBandSpace(section, bands);
+                AddBands(section, manifest, bands);
                 return;
             }
 
@@ -282,7 +403,8 @@ namespace ETL_SQL.Reporting
             if (layout.MarginLeft.HasValue) section.PageSetup.LeftMargin = Unit.FromInch((double)layout.MarginLeft.Value);
             if (layout.MarginRight.HasValue) section.PageSetup.RightMargin = Unit.FromInch((double)layout.MarginRight.Value);
 
-            AddFooter(section, manifest);
+            ReserveBandSpace(section, bands);
+            AddBands(section, manifest, bands);
         }
 
         private static void AddFooter(Section section, ReportManifest manifest)
@@ -324,7 +446,7 @@ namespace ETL_SQL.Reporting
             {
                 case "TABLE": await RenderTableAsync(section, v, tempFiles, cancellationToken); break;
                 case "CARD": await RenderCardAsync(section, v, tempFiles, cancellationToken); break;
-                case "TEXT": RenderText(section, v); break;
+                case "TEXT": RenderText(section, v, manifest); break;
                 case "HTML": RenderHtmlFallback(section, v); break;
                 case "IMAGE": await RenderImageAsync(section, v, tempFiles, cancellationToken); break;
 
@@ -582,14 +704,16 @@ namespace ETL_SQL.Reporting
             return path;
         }
 
-        private static void RenderText(Section section, VisualManifest v)
+        private static void RenderText(Section section, VisualManifest v, ReportManifest manifest)
         {
             var textContent = ReportVisualContent.ResolveTextContent(v);
             if (string.IsNullOrWhiteSpace(textContent)) return;
 
+            // The same template the browser fills in, so the page and the screen say the same thing.
             foreach (var (text, heading) in MarkdownToLines(textContent))
             {
-                var p = section.AddParagraph(text);
+                var p = section.AddParagraph();
+                AddTemplated(p, ReportTextTemplate.Segments(text, v, manifest));
                 p.Format.SpaceBefore = Unit.FromPoint(heading ? 8 : 2);
                 p.Format.Font.Size = Unit.FromPoint(heading ? 12 : 10);
                 p.Format.Font.Bold = heading;

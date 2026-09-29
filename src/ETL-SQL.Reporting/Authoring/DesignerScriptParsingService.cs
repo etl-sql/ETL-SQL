@@ -319,6 +319,7 @@ public sealed class DesignerScriptParsingService
             if (v.PrintLayout.PageBreakAfter.HasValue) parts.Add($"PAGE_BREAK_AFTER = {(v.PrintLayout.PageBreakAfter.Value ? "ON" : "OFF")}");
             if (v.PrintLayout.KeepTogether.HasValue) parts.Add($"KEEP_TOGETHER = {(v.PrintLayout.KeepTogether.Value ? "ON" : "OFF")}");
             if (v.PrintLayout.ExcludeFromPrint.HasValue) parts.Add($"EXCLUDE_FROM_PRINT = {(v.PrintLayout.ExcludeFromPrint.Value ? "ON" : "OFF")}");
+            if (v.PrintLayout.Band is { } band) parts.Add($"BAND = {band}");
             options["print_layout"] = $"PRINT_LAYOUT ({string.Join(", ", parts)})";
         }
         if (v.AdvancedChart != null)

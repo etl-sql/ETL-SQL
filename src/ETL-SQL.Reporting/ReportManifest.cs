@@ -1510,5 +1510,10 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("pageBreakAfter")] public bool? PageBreakAfter { get; set; }
         [JsonPropertyName("keepTogether")] public bool? KeepTogether { get; set; }
         [JsonPropertyName("excludeFromPrint")] public bool? ExcludeFromPrint { get; set; }
+
+        /// <summary><c>HEADER</c> or <c>FOOTER</c>: printed on every physical page instead of in the body.</summary>
+        [JsonPropertyName("band")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Band { get; set; }
     }
 }

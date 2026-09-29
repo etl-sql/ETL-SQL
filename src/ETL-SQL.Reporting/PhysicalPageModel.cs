@@ -13,6 +13,14 @@ public class PhysicalPageModel
 
     [JsonPropertyName("visuals")]
     public List<PlacedVisual> Visuals { get; set; } = new();
+
+    /// <summary>The header bands as they print on this page, page number filled in.</summary>
+    [JsonPropertyName("header")]
+    public List<string> Header { get; set; } = new();
+
+    /// <summary>The footer bands as they print on this page, page number filled in.</summary>
+    [JsonPropertyName("footer")]
+    public List<string> Footer { get; set; } = new();
 }
 
 public class PlacedVisual
