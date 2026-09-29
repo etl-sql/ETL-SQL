@@ -438,7 +438,12 @@ semantics and backend evidence before its rejection can be lifted.
 - [x] **EM nudges on four-endpoint transposed aspect RECT layers.** The complete rectangle
   translates in physical units without changing dimensions, domains or raw intervals. Reversed/log
   axes, independent facets, resize, authoring/contract round trips, LSP rename and PDF are covered
-  by the rectangle tests. BAND/DATA nudges and JITTER remain rejected. Wire versions are unchanged.
+  by the rectangle tests. Wire versions are unchanged.
+- [x] **BAND nudges on four-endpoint transposed aspect RECT layers.** Whole-rectangle
+  displacement uses the fitted viewport fraction for each physical axis, including independent
+  facets and resize. Raw intervals, dimensions and domains stay unchanged. Geometry, nulls,
+  labels, authoring/contract round trips, LSP rename, PDF and deterministic plan/SVG tests cover
+  the combination. DATA nudges and JITTER remain rejected; wire versions are unchanged.
 - [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/supported RULE/RECT,
   stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.

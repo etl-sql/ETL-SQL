@@ -120,22 +120,30 @@ public sealed class TransposedAspectRangeRectTests
     }
 
     [Theory]
-    [InlineData(false, false, false)]
-    [InlineData(true, false, false)]
-    [InlineData(false, true, false)]
-    [InlineData(true, true, false)]
-    [InlineData(false, false, true)]
-    [InlineData(true, false, true)]
-    [InlineData(false, true, true)]
-    [InlineData(true, true, true)]
-    public void EmNudge_TranslatesWholeRectangleWithoutChangingSemanticOutput(bool reverse, bool logarithmic, bool facets)
+    [InlineData(false, false, false, false)]
+    [InlineData(false, false, false, true)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, false, false, true)]
+    [InlineData(false, true, false, false)]
+    [InlineData(false, true, false, true)]
+    [InlineData(true, true, false, false)]
+    [InlineData(true, true, false, true)]
+    [InlineData(false, false, true, false)]
+    [InlineData(false, false, true, true)]
+    [InlineData(true, false, true, false)]
+    [InlineData(true, false, true, true)]
+    [InlineData(false, true, true, false)]
+    [InlineData(false, true, true, true)]
+    [InlineData(true, true, true, false)]
+    [InlineData(true, true, true, true)]
+    public void DisplayNudge_TranslatesWholeRectangleWithoutChangingSemanticOutput(bool reverse, bool logarithmic, bool facets, bool band)
     {
         var sql = Script;
         if (reverse) sql = sql.Replace("MIN = 0,", "REVERSE = ON, MIN = 0,", StringComparison.Ordinal);
         if (logarithmic) sql = sql.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal).Replace("MIN = 0,", "INCLUDE_ZERO = OFF, MIN = 1,", StringComparison.Ordinal);
         if (facets) sql = sql.Replace("SCALES (", "FACET (WRAP = Cohort, COLUMNS = 2), RESOLVE (X = INDEPENDENT, Y = INDEPENDENT), SCALES (", StringComparison.Ordinal);
         var (baselineSpec, data) = Lower(sql);
-        var (spec, _) = Lower(sql.Replace("Z_INDEX = 1,", "Z_INDEX = 1, POSITION = NUDGE(X = -0.5, Y = 1, UNIT = EM),", StringComparison.Ordinal));
+        var (spec, _) = Lower(WithNudge(sql, band ? "BAND" : "EM"));
         var resolver = new PlotPlanResolver();
         var original = resolver.Resolve(spec, data);
         foreach (var bounds in new[] { original.Bounds, new PlotBounds(0m, 0m, 1000m, 700m) })
@@ -148,8 +156,11 @@ public sealed class TransposedAspectRangeRectTests
             Assert.Equal(3, actual.Length);
             for (var row = 0; row < actual.Length; row++)
             {
-                Assert.Equal(Read(expected[row], "x") + 12m, Read(actual[row], "x"));
-                Assert.Equal(Read(expected[row], "y") + 6m, Read(actual[row], "y"));
+                var viewport = facets ? Assert.Single(plan.Facets, panel => panel.RowIndices.Contains(row)).CartesianViewport! : plan.CartesianViewport!;
+                var dx = band ? -.03m * (viewport.Width - 80m) : 12m;
+                var dy = band ? -.02m * (viewport.Height - 100m) : 6m;
+                Assert.InRange(Read(actual[row], "x") - Read(expected[row], "x") - dx, -.002m, .002m);
+                Assert.InRange(Read(actual[row], "y") - Read(expected[row], "y") - dy, -.002m, .002m);
                 Assert.Equal(Read(expected[row], "width"), Read(actual[row], "width"));
                 Assert.Equal(Read(expected[row], "height"), Read(actual[row], "height"));
                 Assert.Equal(expected[row].Value, actual[row].Value);
@@ -161,17 +172,21 @@ public sealed class TransposedAspectRangeRectTests
     }
 
     [Theory]
-    [InlineData("StartX", false)]
-    [InlineData("EndX", false)]
-    [InlineData("LowerBound", false)]
-    [InlineData("UpperBound", false)]
-    [InlineData("StartX", true)]
-    [InlineData("EndX", true)]
-    [InlineData("LowerBound", true)]
-    [InlineData("UpperBound", true)]
-    public void MissingEndpoint_SkipsRectangleAndReportsGap(string field, bool nudge)
+    [InlineData("StartX", "IDENTITY")]
+    [InlineData("EndX", "IDENTITY")]
+    [InlineData("LowerBound", "IDENTITY")]
+    [InlineData("UpperBound", "IDENTITY")]
+    [InlineData("StartX", "EM")]
+    [InlineData("StartX", "BAND")]
+    [InlineData("EndX", "EM")]
+    [InlineData("EndX", "BAND")]
+    [InlineData("LowerBound", "EM")]
+    [InlineData("LowerBound", "BAND")]
+    [InlineData("UpperBound", "EM")]
+    [InlineData("UpperBound", "BAND")]
+    public void MissingEndpoint_SkipsRectangleAndReportsGap(string field, string unit)
     {
-        var (spec, data) = Lower(nudge ? Script.Replace("Z_INDEX = 1,", "Z_INDEX = 1, POSITION = NUDGE(X = -0.5, Y = 1, UNIT = EM),", StringComparison.Ordinal) : Script);
+        var (spec, data) = Lower(WithNudge(Script, unit));
         data = data with
         {
             Columns = data.Columns.Select(column => column.Name == field
@@ -213,7 +228,6 @@ public sealed class TransposedAspectRangeRectTests
     }
 
     [Theory]
-    [InlineData("POSITION = NUDGE(X = 0, Y = 1, UNIT = BAND),")]
     [InlineData("POSITION = NUDGE(X = 0, Y = 1, UNIT = DATA),")]
     [InlineData("POSITION = JITTER(X = 0.1, Y = 0, KEY = Distance, SEED = 3),")]
     [InlineData("CONDITIONS (COLOR WHEN Estimate > 0 THEN '#112233'),")]
@@ -242,11 +256,12 @@ public sealed class TransposedAspectRangeRectTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Labels_KeepBothSemanticIntervalsAfterTransposition(bool nudge)
+    [InlineData("IDENTITY")]
+    [InlineData("EM")]
+    [InlineData("BAND")]
+    public void Labels_KeepBothSemanticIntervalsAfterTransposition(string unit)
     {
-        var (spec, data) = Lower(nudge ? Script.Replace("Z_INDEX = 1,", "Z_INDEX = 1, POSITION = NUDGE(X = -0.5, Y = 1, UNIT = EM),", StringComparison.Ordinal) : Script);
+        var (spec, data) = Lower(WithNudge(Script, unit));
         spec = spec with { Theme = spec.Theme with { Tokens = [.. spec.Theme.Tokens, new StyleToken("DATA_LABELS", "ON")] } };
         var plan = new PlotPlanResolver().Resolve(spec, data);
         var svg = XDocument.Parse(new SvgChartRenderer().Render(plan));
@@ -289,13 +304,14 @@ public sealed class TransposedAspectRangeRectTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ConstantsAuthoringContractsAndPdf_PreserveBothIntervals(bool nudge)
+    [InlineData("IDENTITY")]
+    [InlineData("EM")]
+    [InlineData("BAND")]
+    public async Task ConstantsAuthoringContractsAndPdf_PreserveBothIntervals(string unit)
     {
         var sql = Script.Replace("StartX (", "DATUM(2) (", StringComparison.Ordinal).Replace("EndX (", "DATUM(8) (", StringComparison.Ordinal)
             .Replace("LowerBound (", "DATUM(1) (", StringComparison.Ordinal).Replace("UpperBound (", "DATUM(4) (", StringComparison.Ordinal);
-        if (nudge) sql = sql.Replace("Z_INDEX = 1,", "Z_INDEX = 1, POSITION = NUDGE(X = -0.5, Y = 1, UNIT = EM),", StringComparison.Ordinal);
+        sql = WithNudge(sql, unit);
         var statement = Parse(sql);
         Assert.Equal(statement.ToSql(), Parse(statement.ToSql()).ToSql());
         var source = sql + "CREATE PAGE Dashboard AS DASHBOARD (LAYOUT (STRUCTURE = 'A', MAP ('A' = Measurement)));";
@@ -309,7 +325,7 @@ public sealed class TransposedAspectRangeRectTests
         var (spec, data) = Lower(sql);
         spec = spec with { Layers = [spec.Layers[1]] };
         Assert.Equal(ChartContractSerializer.Serialize(spec), ChartContractSerializer.Serialize(ChartContractSerializer.DeserializeChartSpec(ChartContractSerializer.Serialize(spec))));
-        var invalid = spec with { Layers = [spec.Layers[0] with { Position = new PositionAdjustmentSpec(PositionAdjustmentKind.Nudge, 0m, 1m) }] };
+        var invalid = spec with { Layers = [spec.Layers[0] with { Position = new PositionAdjustmentSpec(PositionAdjustmentKind.Nudge, 0m, 1m, Unit: PositionAdjustmentUnit.Data) }] };
         Assert.Contains("ASPECT_RATIO RECT", Assert.Throws<InvalidDataException>(invalid.Validate).Message);
         var plan = new PlotPlanResolver().Resolve(spec, data);
         Assert.Equal(3, Elements(XDocument.Parse(new SvgChartRenderer().Render(plan)), "plot-range-rect").Length);
@@ -341,19 +357,24 @@ public sealed class TransposedAspectRangeRectTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void PlanAndSvg_MatchDeterministicGoldens(bool nudge)
+    [InlineData("IDENTITY")]
+    [InlineData("EM")]
+    [InlineData("BAND")]
+    public void PlanAndSvg_MatchDeterministicGoldens(string unit)
     {
-        var (spec, data) = Lower(nudge ? Script.Replace("Z_INDEX = 1,", "Z_INDEX = 1, POSITION = NUDGE(X = -0.5, Y = 1, UNIT = EM),", StringComparison.Ordinal) : Script);
+        var (spec, data) = Lower(WithNudge(Script, unit));
         var plan = new PlotPlanResolver().Resolve(spec, data);
         static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.Replace("\r\n", "\n", StringComparison.Ordinal))));
         var planHash = Hash(ChartContractSerializer.Serialize(plan));
         var svgHash = Hash(new SvgChartRenderer().Render(plan));
-        var expectedPlan = nudge ? "4D6087141ED98D175AF37B17C2EA3EB66692613F3119A847F38C3E00775C46F0" : "68932913300EC5E4D82BF299FEE4EB30A55D1F9F18A504CC628AAC5F592CA179";
-        var expectedSvg = nudge ? "A9428FA05DDDCF16B8B44F5B8E094AFEE5AEB2033AB0E84FF689D0B81BECCC33" : "38260F65E0EB9522CE44EFCD41400E855EB3D6509BB4153FC04D7B165DEAECFD";
+        var expectedPlan = unit == "BAND" ? "CAFB28630BE4C369FCD266692D322C22188AFB9CC958A8A5FF11E1F0EA163DFD" : unit == "EM" ? "4D6087141ED98D175AF37B17C2EA3EB66692613F3119A847F38C3E00775C46F0" : "68932913300EC5E4D82BF299FEE4EB30A55D1F9F18A504CC628AAC5F592CA179";
+        var expectedSvg = unit == "BAND" ? "BC5F33CDBD6BD27A592B502D1DBAA67B1DE47420CAB7D735907A6FD591407D36" : unit == "EM" ? "A9428FA05DDDCF16B8B44F5B8E094AFEE5AEB2033AB0E84FF689D0B81BECCC33" : "38260F65E0EB9522CE44EFCD41400E855EB3D6509BB4153FC04D7B165DEAECFD";
         Assert.True(planHash == expectedPlan && svgHash == expectedSvg, $"Plan: {planHash}; SVG: {svgHash}");
     }
+
+    private static string WithNudge(string sql, string unit) => unit == "IDENTITY" ? sql : sql.Replace("Z_INDEX = 1,",
+        unit == "BAND" ? "Z_INDEX = 1, POSITION = NUDGE(X = 0.02, Y = -0.03, UNIT = BAND),"
+        : "Z_INDEX = 1, POSITION = NUDGE(X = -0.5, Y = 1, UNIT = EM),", StringComparison.Ordinal);
 
     private static XElement[] Elements(XDocument document, string name) => document.Descendants().Where(element => (string?)element.Attribute("class") == name).ToArray();
     private static decimal Read(XElement element, string name) => decimal.Parse(element.Attribute(name)!.Value, CultureInfo.InvariantCulture);
