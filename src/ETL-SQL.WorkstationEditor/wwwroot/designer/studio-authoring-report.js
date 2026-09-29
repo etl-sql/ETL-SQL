@@ -370,103 +370,134 @@ export function createStudioAuthoringReport(hostContext) {
             paint();
         });
     }
+    /**
+     * Page furniture: a header and a footer that print on every physical page.
+     *
+     * Each is a TEXT or IMAGE visual marked `PRINT_LAYOUT (BAND = HEADER | FOOTER)`, so the script
+     * says exactly what the page will do. It used to write an ordinary visual with a KEEP_TOGETHER
+     * rule: it printed once, where it sat in the layout, and its {{PAGE}} tokens printed as written.
+     */
     async function runFurnitureStep() {
         const doc = hostContext.getActiveDocument();
         const draft = {
-            headerKind: 'text',
-            header: doc?.name?.replace(/\.rptsql$/i, '').replace(/[_-]+/g, ' ') || 'Report',
-            headerImage: '/images/logo.png',
-            footer: 'Page {{PAGE}} of {{PAGES}}',
-            addHeader: true,
-            addFooter: true,
+            header: {
+                add: true, kind: 'text', dataset: '',
+                text: `${doc?.name?.replace(/\.rptsql$/i, '').replace(/[_-]+/g, ' ') || '{{TITLE}}'} · {{CURRENT_DATE}}`,
+                image: 'data:image/png;base64,',
+            },
+            footer: { add: true, kind: 'text', dataset: '', text: 'Page {{PAGE}} of {{PAGES}}', image: 'data:image/png;base64,' },
             breakAfterDetails: false,
+        };
+        // What a band can say, read from the script: its parameters, and its datasets for a data field.
+        let parameters = [];
+        let datasets = [];
+        try {
+            const parsed = await hostContext.request(hostContext.routes.parse, { body: { script: hostContext.shell.getScriptText() } });
+            parameters = (parsed.designState?.parameters || []).map((parameter) => String(parameter.name).replace(/^@/, ''));
+            datasets = (parsed.designState?.datasets || []).map((dataset) => String(dataset.name)).filter(Boolean);
+        }
+        catch {
+            // The date, title, and page tokens still work without them.
+        }
+        const tokenButtons = (which) => [
+            ['{{PAGE}}', '+ Page #'],
+            ['{{PAGES}}', '+ Total pages'],
+            ['Page {{PAGE}} of {{PAGES}}', 'Page X of Y'],
+            ['{{CURRENT_DATE}}', '+ Date'],
+            ['{{TITLE}}', '+ Report title'],
+            ...parameters.map(name => [`{{@${name}}}`, `+ @${name}`]),
+        ].map(([token, label]) => `<button type="button" class="btn btn-xs" data-insert-token="${which}"
+            data-token="${escapeHtml(token)}">${escapeHtml(label)}</button>`).join('');
+        const bandMarkup = (which) => {
+            const band = draft[which];
+            const title = which === 'header' ? 'header' : 'footer';
+            if (!band.add)
+                return '';
+            return `
+                <div style="display:flex;gap:12px;margin:4px 0 6px 0;">
+                    <label style="font-size:12px;"><input type="radio" name="furniture_${which}_kind" value="text"
+                        ${band.kind === 'text' ? 'checked' : ''} data-band-kind="${which}"> Text & fields</label>
+                    <label style="font-size:12px;"><input type="radio" name="furniture_${which}_kind" value="image"
+                        ${band.kind === 'image' ? 'checked' : ''} data-band-kind="${which}"> Image / logo</label>
+                </div>
+                ${band.kind === 'text' ? `
+                    <label class="etlsql-studio-guided-field"><span>${escapeHtml(title[0].toUpperCase() + title.slice(1))} text</span>
+                        <input type="text" data-band-text="${which}" value="${escapeHtml(band.text)}"></label>
+                    <div style="display:flex;gap:6px;margin:2px 0 6px 0;flex-wrap:wrap;align-items:center;">
+                        <span style="font-size:11px;color:var(--portal-muted,#7a8798);">Insert:</span>${tokenButtons(which)}
+                    </div>
+                    ${datasets.length ? `<div style="display:flex;gap:6px;margin:0 0 8px 0;flex-wrap:wrap;align-items:center;">
+                        <span style="font-size:11px;color:var(--portal-muted,#7a8798);">A value from data:</span>
+                        <select data-band-dataset="${which}"><option value="">Dataset…</option>${datasets.map(name => `<option${name === band.dataset ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('')}</select>
+                        <input type="text" data-band-column="${which}" placeholder="Column" style="width:120px" spellcheck="false">
+                        <button type="button" class="btn btn-xs" data-insert-column="${which}">Insert</button>
+                    </div>` : ''}` : `
+                    <label class="etlsql-studio-guided-field"><span>Image as a data: URI</span>
+                        <input type="text" data-band-image="${which}" value="${escapeHtml(band.image)}" placeholder="data:image/png;base64,…"></label>`}`;
         };
         await hostContext.studioDialog({ kicker: 'Step 5 · Header + footer', title: 'Add page furniture' }, api => {
             const paint = () => api.render({
-                lede: 'Page <strong>furniture</strong> is the content that frames every printed page. '
-                    + 'These are TEXT and IMAGE bands with a <code>KEEP_TOGETHER</code> print rule, so they never split across a page boundary.',
+                lede: 'Page <strong>furniture</strong> prints at the top and bottom of <em>every</em> physical page. '
+                    + 'Each is a TEXT or IMAGE visual marked <code>PRINT_LAYOUT (BAND = HEADER)</code> or '
+                    + '<code>BAND = FOOTER</code>; the page numbers, the date, and parameters are filled in as each page prints.',
                 body: `
                     <label class="etlsql-studio-guided-check">
-                        <input type="checkbox" data-furniture-header ${draft.addHeader ? 'checked' : ''}> Add a page header</label>
-                    ${draft.addHeader ? `
-                        <div style="display:flex;gap:12px;margin:4px 0 6px 0;">
-                            <label style="font-size:12px;"><input type="radio" name="furniture_header_kind" value="text" ${draft.headerKind === 'text' ? 'checked' : ''} data-header-kind> Text & dynamic fields</label>
-                            <label style="font-size:12px;"><input type="radio" name="furniture_header_kind" value="image" ${draft.headerKind === 'image' ? 'checked' : ''} data-header-kind> Image / Logo</label>
-                        </div>
-                        ${draft.headerKind === 'text' ? `
-                            <label class="etlsql-studio-guided-field"><span>Header text</span>
-                                <input type="text" data-header-text value="${escapeHtml(draft.header)}"></label>
-                            <div style="display:flex;gap:6px;margin:2px 0 8px 0;flex-wrap:wrap;align-items:center;">
-                                <span style="font-size:11px;color:var(--portal-muted,#7a8798);">Tokens:</span>
-                                <button type="button" class="btn btn-xs" data-insert-token="header" data-token="{{PAGE}}">+ Page #</button>
-                                <button type="button" class="btn btn-xs" data-insert-token="header" data-token="{{PAGES}}">+ Total Pages</button>
-                                <button type="button" class="btn btn-xs" data-insert-token="header" data-token="{{CURRENT_DATE}}">+ Date</button>
-                            </div>` : `
-                            <label class="etlsql-studio-guided-field"><span>Image URL or file path</span>
-                                <input type="text" data-header-image value="${escapeHtml(draft.headerImage)}" placeholder="/images/logo.png or https://..."></label>`}` : ''}
+                        <input type="checkbox" data-furniture-add="header" ${draft.header.add ? 'checked' : ''}> Add a page header</label>
+                    ${bandMarkup('header')}
                     <label class="etlsql-studio-guided-check" style="margin-top:8px;">
-                        <input type="checkbox" data-furniture-footer ${draft.addFooter ? 'checked' : ''}> Add a page footer</label>
-                    ${draft.addFooter ? `
-                        <label class="etlsql-studio-guided-field"><span>Footer text</span>
-                            <input type="text" data-footer-text value="${escapeHtml(draft.footer)}"></label>
-                        <div style="display:flex;gap:6px;margin:2px 0 8px 0;flex-wrap:wrap;align-items:center;">
-                            <span style="font-size:11px;color:var(--portal-muted,#7a8798);">Tokens:</span>
-                            <button type="button" class="btn btn-xs" data-insert-token="footer" data-token="{{PAGE}}">+ Page #</button>
-                            <button type="button" class="btn btn-xs" data-insert-token="footer" data-token="{{PAGES}}">+ Total Pages</button>
-                            <button type="button" class="btn btn-xs" data-insert-token="footer" data-token="{{CURRENT_DATE}}">+ Date</button>
-                            <button type="button" class="btn btn-xs" data-insert-token="footer" data-token="Page {{PAGE}} of {{PAGES}}">Page X of Y</button>
-                        </div>` : ''}
+                        <input type="checkbox" data-furniture-add="footer" ${draft.footer.add ? 'checked' : ''}> Add a page footer</label>
+                    ${bandMarkup('footer')}
                     <label class="etlsql-studio-guided-check" style="margin-top:8px;">
                         <input type="checkbox" data-furniture-break ${draft.breakAfterDetails ? 'checked' : ''}>
                         Start a new page after the detail table</label>`
-                    + mutationExplanationMarkup(`Adds ${[draft.addHeader ? (draft.headerKind === 'image' ? 'a logo image' : 'a header band') : null, draft.addFooter ? 'a footer band' : null]
-                        .filter(Boolean).join(' and ') || 'nothing yet'} to the page`
+                    + (draft.footer.add ? guidedNoteMarkup('A footer of your own replaces the default "Generated … Page X of Y" line.', 'info') : '')
+                    + ([draft.header, draft.footer].some(band => band.add && band.kind === 'image')
+                        ? guidedNoteMarkup('An image prints only as a data: URI; one that cannot be embedded is left out of the band.', 'info') : '')
+                    + mutationExplanationMarkup(`Adds ${[draft.header.add ? 'a header band' : null, draft.footer.add ? 'a footer band' : null]
+                        .filter(Boolean).join(' and ') || 'nothing yet'}`
                         + `${draft.breakAfterDetails ? ', and sets the detail table to start a new page after it' : ''}. `
-                        + 'The bands print on every physical page; the data visuals are untouched.')
-                    + (draft.addHeader || draft.addFooter ? '' : guidedNoteMarkup('Nothing selected — pick a header, a footer, or both.', 'warning')),
+                        + 'The data visuals are untouched.')
+                    + (draft.header.add || draft.footer.add ? '' : guidedNoteMarkup('Nothing selected — pick a header, a footer, or both.', 'warning')),
                 actions: [
                     { id: 'cancel', label: 'Cancel', run: () => api.close(null) },
                     {
-                        id: 'add', label: 'Add furniture', primary: true, disabled: !draft.addHeader && !draft.addFooter, run: async () => {
+                        id: 'add', label: 'Add furniture', primary: true, disabled: !draft.header.add && !draft.footer.add, run: async () => {
                             api.busy(true);
                             const added = await hostContext.mutate('Add page header and footer', design => {
                                 const page = design.pages[0];
                                 page.mode = 'Paginated';
                                 page.visuals ||= [];
                                 const bottom = () => page.visuals.reduce((max, visual) => Math.max(max, visual.gridRow + visual.gridRowSpan - 1), 0);
-                                const band = (slug, title, text) => ({
-                                    id: `studio_${slug}_${Date.now().toString(36)}`,
-                                    name: hostContext.uniqueVisualName(design, `page_${slug}`),
-                                    type: 'TEXT', gridCol: 1, gridRow: bottom() + 1, gridColSpan: 12, gridRowSpan: 2,
-                                    title,
-                                    dataset: null,
-                                    mappings: {},
-                                    options: {
-                                        text_default: `'${String(text).replace(/'/g, "''")}'`,
-                                        print_layout: 'PRINT_LAYOUT (KEEP_TOGETHER = ON)',
-                                    },
-                                });
-                                if (draft.addHeader) {
-                                    if (draft.headerKind === 'image') {
-                                        page.visuals.push({
-                                            id: `studio_header_logo_${Date.now().toString(36)}`,
-                                            name: hostContext.uniqueVisualName(design, 'page_header_logo'),
-                                            type: 'IMAGE', gridCol: 1, gridRow: bottom() + 1, gridColSpan: 12, gridRowSpan: 2,
-                                            title: 'Report logo',
-                                            dataset: null,
-                                            mappings: {},
-                                            options: {
-                                                src: `'${String(draft.headerImage).replace(/'/g, "''")}'`,
-                                                print_layout: 'PRINT_LAYOUT (KEEP_TOGETHER = ON)',
-                                            },
+                                const quote = (text) => `'${String(text).replace(/'/g, "''")}'`;
+                                const addBand = (which) => {
+                                    const band = draft[which];
+                                    if (!band.add)
+                                        return;
+                                    const printLayout = `PRINT_LAYOUT (BAND = ${which.toUpperCase()})`;
+                                    const common = {
+                                        id: `studio_page_${which}_${Date.now().toString(36)}`,
+                                        gridCol: 1, gridRow: bottom() + 1, gridColSpan: 12, gridRowSpan: 1,
+                                        title: which === 'header' ? 'Page header' : 'Page footer',
+                                        mappings: {},
+                                    };
+                                    page.visuals.push(band.kind === 'image'
+                                        ? {
+                                            ...common,
+                                            name: hostContext.uniqueVisualName(design, `page_${which}_logo`),
+                                            type: 'IMAGE', dataset: null,
+                                            options: { src: quote(band.image), print_layout: printLayout },
+                                        }
+                                        : {
+                                            ...common,
+                                            name: hostContext.uniqueVisualName(design, `page_${which}`),
+                                            type: 'TEXT',
+                                            // A data field reads the band's own first row, so the band reads that dataset.
+                                            dataset: band.dataset || null,
+                                            options: { text_default: quote(band.text), print_layout: printLayout },
                                         });
-                                    }
-                                    else {
-                                        page.visuals.push(band('header', 'Page header', draft.header));
-                                    }
-                                }
-                                if (draft.addFooter)
-                                    page.visuals.push(band('footer', 'Page footer', draft.footer));
+                                };
+                                addBand('header');
+                                addBand('footer');
                                 if (draft.breakAfterDetails) {
                                     const table = page.visuals.find((visual) => visual.type === 'TABLE');
                                     if (table) {
@@ -484,30 +515,47 @@ export function createStudioAuthoringReport(hostContext) {
                     },
                 ],
                 wire: host => {
-                    host.querySelector('[data-furniture-header]')?.addEventListener('change', event => { draft.addHeader = asInput(event.target).checked; paint(); });
-                    host.querySelector('[data-furniture-footer]')?.addEventListener('change', event => { draft.addFooter = asInput(event.target).checked; paint(); });
+                    const readText = () => {
+                        for (const which of ['header', 'footer']) {
+                            const text = host.querySelector(`[data-band-text="${which}"]`);
+                            if (text)
+                                draft[which].text = text.value;
+                            const image = host.querySelector(`[data-band-image="${which}"]`);
+                            if (image)
+                                draft[which].image = image.value;
+                        }
+                    };
+                    const append = (which, token) => {
+                        const input = host.querySelector(`[data-band-text="${which}"]`);
+                        if (!input)
+                            return;
+                        input.value = input.value ? `${input.value} ${token}` : token;
+                        draft[which].text = input.value;
+                    };
+                    host.querySelectorAll('[data-furniture-add]').forEach(box => box.addEventListener('change', event => {
+                        readText();
+                        draft[asHtml(box).dataset.furnitureAdd].add = asInput(event.target).checked;
+                        paint();
+                    }));
                     host.querySelector('[data-furniture-break]')?.addEventListener('change', event => { draft.breakAfterDetails = asInput(event.target).checked; });
-                    host.querySelectorAll('[data-header-kind]').forEach(r => r.addEventListener('change', event => { draft.headerKind = asInput(event.target).value; paint(); }));
-                    host.querySelector('[data-header-text]')?.addEventListener('input', event => { draft.header = asInput(event.target).value; });
-                    host.querySelector('[data-header-image]')?.addEventListener('input', event => { draft.headerImage = asInput(event.target).value; });
-                    host.querySelector('[data-footer-text]')?.addEventListener('input', event => { draft.footer = asInput(event.target).value; });
+                    host.querySelectorAll('[data-band-kind]').forEach(radio => radio.addEventListener('change', event => {
+                        readText();
+                        draft[asHtml(radio).dataset.bandKind].kind = asInput(event.target).value;
+                        paint();
+                    }));
+                    host.querySelectorAll('[data-band-text], [data-band-image]').forEach(input => input.addEventListener('input', readText));
+                    host.querySelectorAll('[data-band-dataset]').forEach(select => select.addEventListener('change', event => {
+                        draft[asHtml(select).dataset.bandDataset].dataset = asSelect(event.target).value;
+                    }));
                     host.querySelectorAll('[data-insert-token]').forEach(btn => btn.addEventListener('click', () => {
-                        const target = asHtml(btn).dataset.insertToken;
-                        const token = asHtml(btn).dataset.token || '';
-                        if (target === 'header') {
-                            const input = host.querySelector('[data-header-text]');
-                            if (input) {
-                                input.value = input.value ? `${input.value} ${token}` : token;
-                                draft.header = input.value;
-                            }
-                        }
-                        else if (target === 'footer') {
-                            const input = host.querySelector('[data-footer-text]');
-                            if (input) {
-                                input.value = input.value ? `${input.value} ${token}` : token;
-                                draft.footer = input.value;
-                            }
-                        }
+                        append(asHtml(btn).dataset.insertToken, asHtml(btn).dataset.token || '');
+                    }));
+                    host.querySelectorAll('[data-insert-column]').forEach(btn => btn.addEventListener('click', () => {
+                        const which = asHtml(btn).dataset.insertColumn;
+                        const column = host.querySelector(`[data-band-column="${which}"]`)?.value.trim() || '';
+                        if (!/^[A-Za-z0-9_]+$/.test(column) || !draft[which].dataset)
+                            return;
+                        append(which, `{${column}}`);
                     }));
                 },
             });

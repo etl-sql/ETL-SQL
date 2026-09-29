@@ -139,11 +139,13 @@ public sealed class StudioPaginatedJourneyTests(StudioAuthoringFixture fixture)
 
         // ── Step 5 · Header, footer and page break ───────────────────────────
         await page.Locator("[data-workflow-step='furniture']").ClickAsync();
-        await page.Locator("[data-furniture-header]").CheckAsync();
-        await page.Locator("[data-furniture-footer]").CheckAsync();
+        await page.Locator("[data-furniture-add='header']").CheckAsync();
+        await page.Locator("[data-furniture-add='footer']").CheckAsync();
         await page.Locator("[data-furniture-break]").CheckAsync();
         await page.Locator("[data-dialog-action='add']").ClickAsync();
-        await WaitForScriptAsync(page, "HEADER", "the page header");
+        // Real bands, not ordinary visuals that happen to be called header and footer.
+        await WaitForScriptAsync(page, "BAND = HEADER", "the page header band");
+        await WaitForScriptAsync(page, "BAND = FOOTER", "the page footer band");
 
         // ── Step 6 · Page setup ──────────────────────────────────────────────
         await page.Locator("[data-page-setup='pageSize']").SelectOptionAsync("A4");
@@ -204,6 +206,20 @@ public sealed class StudioPaginatedJourneyTests(StudioAuthoringFixture fixture)
                 $"The exported PDF has {pages} page(s). A paginated report of 120 grouped rows with a "
                 + "page break after its details is not one page, so either the break or the pagination "
                 + "did not reach the renderer.");
+
+            // The footer the helper wrote prints on every page, numbered, with nothing left in braces.
+            using var stream = new MemoryStream(pdf);
+            using var document = PdfSharp.Pdf.IO.PdfReader.Open(stream, PdfSharp.Pdf.IO.PdfDocumentOpenMode.Import);
+            for (var index = 0; index < document.PageCount; index++)
+            {
+                var text = PageText(document.Pages[index]);
+                Assert.Matches($@"Page ?{index + 1} ?of ?{document.PageCount}", text);
+                Assert.DoesNotContain("{{", text, StringComparison.Ordinal);
+                // The built-in footer also says "Page N of M", so the band is told apart by what it
+                // replaces: the default "Generated:" line is gone, and the header's date is there.
+                Assert.DoesNotContain("Generated:", text, StringComparison.Ordinal);
+                Assert.True(System.Text.RegularExpressions.Regex.IsMatch(text, @"\d{4}- ?\d{2}- ?\d{2}"), $"Page {index + 1} has no header date: {text}");
+            }
         }
         finally
         {
@@ -243,6 +259,36 @@ public sealed class StudioPaginatedJourneyTests(StudioAuthoringFixture fixture)
     /// in a PDF library to answer a yes/no question would be a dependency the repository would then
     /// have to license, inventory, and keep.</para>
     /// </summary>
+    /// <summary>The strings drawn on one PDF page, whitespace collapsed. A shallow read of its content stream.</summary>
+    private static string PageText(PdfSharp.Pdf.PdfPage page)
+    {
+        var raw = new List<byte>();
+        var contents = page.Contents;
+        for (var index = 0; index < contents.Elements.Count; index++)
+        {
+            var bytes = contents.Elements.GetDictionary(index)?.Stream?.Value;
+            if (bytes is null) continue;
+            if (bytes.Length > 2 && bytes[0] == 0x78)
+            {
+                using var input = new MemoryStream(bytes);
+                using var inflate = new System.IO.Compression.ZLibStream(input, System.IO.Compression.CompressionMode.Decompress);
+                using var output = new MemoryStream();
+                inflate.CopyTo(output);
+                raw.AddRange(output.ToArray());
+            }
+            else
+            {
+                raw.AddRange(bytes);
+            }
+        }
+
+        var content = System.Text.Encoding.Latin1.GetString(raw.ToArray());
+        var text = new System.Text.StringBuilder();
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(content, @"\((?<text>(?:\\.|[^\\()])*)\)\s*Tj"))
+            text.Append(match.Groups["text"].Value).Append(' ');
+        return System.Text.RegularExpressions.Regex.Replace(text.ToString(), @"\s+", " ");
+    }
+
     private static int CountPdfPages(byte[] pdf)
     {
         var text = System.Text.Encoding.Latin1.GetString(pdf);

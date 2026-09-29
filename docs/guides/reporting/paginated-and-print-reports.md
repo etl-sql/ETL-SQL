@@ -145,6 +145,27 @@ When a `TABLE` visual contains more rows than can fit on a single physical sheet
 
 ---
 
+## Page Headers and Footers
+
+Mark a `TEXT` or `IMAGE` visual with `PRINT_LAYOUT (BAND = HEADER)` or `BAND = FOOTER` to print it at the top or bottom of every physical page. A band's text can show the page number, the page count, the build date, the report title, a parameter, or a value from its own data:
+
+```sql
+CREATE VISUAL StatementHeader AS TEXT (
+  CONTENT = '{{TITLE}} — {{@dept}} — as of {{@asOfDate}}',
+  PRINT_LAYOUT (BAND = HEADER)
+);
+
+CREATE VISUAL StatementFooter AS TEXT (
+  CONTENT = 'Printed {{CURRENT_DATE}} · Page {{PAGE}} of {{PAGES}}',
+  OPTIONS (ALIGN = 'right'),
+  PRINT_LAYOUT (BAND = FOOTER)
+);
+```
+
+A declared footer replaces the default "Generated … Page X of Y" line. In ETL-SQL Studio, **Header + footer** in the paginated report steps writes these visuals for you. The full token list is in the [PRINT_LAYOUT reference](../../reference/visuals-reporting/report/print-layout.md#page-header-and-footer-bands).
+
+---
+
 ## Common Pitfalls
 
 - **Missing `APPLY_PARAMETERS` on paginated prompts**: On a `PAGINATED` page, prompt inputs stage their changes locally. If you do not provide a button with `ACTIONS (ON_CLICK = APPLY_PARAMETERS)`, the report will not re-execute when users select new values.

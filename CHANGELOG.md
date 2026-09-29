@@ -14,6 +14,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Page headers and footers for paginated reports. A `TEXT` or `IMAGE` visual marked
+  `PRINT_LAYOUT (BAND = HEADER | FOOTER)` prints at the top or bottom of every physical page
+  instead of once in the body. Band text resolves `{{PAGE}}`, `{{PAGES}}`, `{{CURRENT_DATE}}`,
+  `{{TITLE}}`, `{{@Parameter}}`, and `{Column FORMAT '…'}` from the band's own data. A declared
+  footer replaces the built-in "Generated … Page X of Y" line, and the physical-page preview lists
+  each page's bands. Studio's **Header + footer** step now writes bands, offers an image for the
+  footer as well as the header, and inserts the title, parameters, and data fields.
+
 - The Studio pipeline map reads as a pipeline. A labelled step's card is titled with its label, with
   the statement underneath (`read_users` over `SELECT INTO #staged_users`). Where a `#temp` table is
   handed from the step that wrote it to a step that reads it, the line carries its name in its own
@@ -184,6 +192,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - The Studio pipeline map now shows its connectors. Every DAG edge was being drawn off screen, and
   the map zoomed out until steps became unreadable pills. Connectors now carry arrowheads, and the
   map opens at a readable zoom on the first step.
+
+- A `TEXT` visual's `{Column}` template is filled in when the report is exported to PDF. It was
+  only ever resolved in the browser, so printed reports showed the braces as written. The
+  `{{PAGE}} of {{PAGES}}` tokens Studio wrote into page furniture had the same problem: nothing
+  in the engine resolved them.
 
 - Closing the Studio browser window now stops the host. `etl-sql studio` hosts stop two minutes
   after the last browser disconnects, provided nothing is running or unsaved; reopening within that

@@ -133,10 +133,13 @@ rights just to learn.
 
 **Remaining paginated authoring work**
 
-- [ ] Complete paginated header/footer authoring. Header images and page/date token buttons exist,
+- [x] Complete paginated header/footer authoring. Header images and page/date token buttons exist,
   but footer images and data-field bindings do not. Verify that generated page tokens resolve in
   printed output and that header/footer bands repeat on physical pages; the helper currently
   creates ordinary TEXT/IMAGE visuals with KEEP_TOGETHER only.
+  Done 2026-09-29: `PRINT_LAYOUT (BAND = HEADER | FOOTER)` on TEXT/IMAGE visuals prints on every PDF
+  page with live page fields; `ReportTextTemplate` resolves page, date, title, parameter and
+  `{Column}` tokens; the Studio step writes bands, footer images, and data/parameter tokens.
 
 **Fresh-eyes review — learning path and primary-editor readiness (2026-09-07)**
 

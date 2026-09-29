@@ -19,6 +19,7 @@ CREATE VISUAL DepartmentChart AS BAR (
 - **PAGE_BREAK_AFTER = ON|OFF** — Forces a page break immediately after this visual.
 - **KEEP_TOGETHER = ON|OFF** — Instructs the paginator to avoid breaking the visual across multiple pages if possible.
 - **EXCLUDE_FROM_PRINT = ON|OFF** — Hides this visual during PDF rendering or print generation.
+- **BAND = HEADER|FOOTER** — `TEXT` and `IMAGE` only: prints the visual in every page's header or footer. See [Page header and footer bands](../../visuals-reporting/report/print-layout.md#page-header-and-footer-bands).
 
 ## References
 - [Report SQL Guide](../../../guides/feature-guides/report-sql.md)

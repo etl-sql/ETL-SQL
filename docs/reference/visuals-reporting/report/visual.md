@@ -19,7 +19,8 @@ CREATE VISUAL <name> AS <TYPE> (
     [PAGE_BREAK_BEFORE = ON | OFF,]
     [PAGE_BREAK_AFTER = ON | OFF,]
     [KEEP_TOGETHER = ON | OFF,]
-    [EXCLUDE_FROM_PRINT = ON | OFF]
+    [EXCLUDE_FROM_PRINT = ON | OFF,]
+    [BAND = HEADER | FOOTER]
   ),]
   [ROW_DETAIL (
     TARGET = <ChildVisualName>,
@@ -144,6 +145,7 @@ Use `CASCADE` on `SLICER` and `MULTISELECT` controls whose option set depends on
 - **PAGE_BREAK_AFTER = ON | OFF** — Inserts a physical page break immediately after this visual.
 - **KEEP_TOGETHER = ON | OFF** — Prevents splitting this visual across physical page breaks.
 - **EXCLUDE_FROM_PRINT = ON | OFF** — Omits the visual from printed output and PDF export (useful for prompt controls or action buttons).
+- **BAND = HEADER | FOOTER** — `TEXT` and `IMAGE` only. Prints the visual in every physical page's header or footer instead of the body, with page-number, date, title, and parameter tokens. See [PRINT_LAYOUT](print-layout.md#page-header-and-footer-bands).
 
 ## Expandable Master/Detail Rows (`ROW_DETAIL`)
 
