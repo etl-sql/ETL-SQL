@@ -408,6 +408,89 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
         Assert.Empty(session.PageErrors);
     }
 
+    /// <summary>
+    /// Transforms built from the palette, each reading the #temp an earlier step staged: the #temp
+    /// tables are offered by name, and their columns are ticked rather than typed.
+    /// </summary>
+    [Fact]
+    public async Task TransformsAreBuiltFromThePaletteOnStagedTables()
+    {
+        using var workspace = new StudioTempWorkspace();
+        var file = Path.Combine(workspace.Root, "transforms.etlsql");
+        await File.WriteAllTextAsync(file, Seed + """
+
+            read_users:
+            SELECT UserID, UserName
+            INTO #staged_users
+            FROM sample_data.Users;
+            """);
+
+        await using var host = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            workspace.Root, file, 0, false, "transform-token",
+            StudioMode: true, InstanceId: Guid.NewGuid().ToString("D")));
+        await host.StartAsync();
+
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=transform-token");
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
+            new PageWaitForFunctionOptions { Timeout = 20_000 });
+        await page.Locator("[data-projection='split']").ClickAsync();
+
+        // ── Filter & pick columns ────────────────────────────────────────────
+        await page.Locator("[data-task-kind='reshape']").ClickAsync();
+        await page.Locator("[data-task-id]").FillAsync("clean_users");
+        await page.Locator("datalist[id^='etlsql-task-temps'] option[value='#staged_users']").First.WaitForAsync(
+            new LocatorWaitForOptions { State = WaitForSelectorState.Attached, Timeout = 15_000 });
+        var source = page.Locator("[data-task-field='source']");
+        await source.FillAsync("#staged_users");
+        await source.DispatchEventAsync("change");
+        await page.Locator("[data-column-pick='columns'][value='UserID']").CheckAsync();
+        await page.Locator("[data-task-field='derived']").FillAsync("UPPER(UserName) AS UserNameUpper");
+        await page.Locator("[data-task-field='target']").FillAsync("#clean_users");
+        const string reshape = "clean_users:\nSELECT UserID, UPPER(UserName) AS UserNameUpper\nINTO #clean_users\nFROM #staged_users;";
+        await page.WaitForFunctionAsync(
+            "text => document.querySelector('[data-task-preview]')?.textContent === text", reshape,
+            new PageWaitForFunctionOptions { Timeout = 15_000 });
+        await CommitTaskAsync(page, "clean_users");
+
+        // ── Summarise ────────────────────────────────────────────────────────
+        await page.Locator("[data-task-kind='summarise']").ClickAsync();
+        await page.Locator("[data-task-id]").FillAsync("count_names");
+        var summarySource = page.Locator("[data-task-field='source']");
+        await summarySource.FillAsync("#clean_users");
+        await summarySource.DispatchEventAsync("change");
+        // The column the reshape calculated is offered by the name it was given.
+        await page.Locator("[data-column-pick='columns'][value='UserNameUpper']").CheckAsync(
+            new LocatorCheckOptions { Timeout = 15_000 });
+        await page.Locator("[data-task-field='measures']").FillAsync("COUNT(*) AS Users");
+        await page.Locator("[data-task-field='target']").FillAsync("#name_counts");
+        await CommitTaskAsync(page, "count_names");
+
+        // ── Join ─────────────────────────────────────────────────────────────
+        await page.Locator("[data-task-kind='join']").ClickAsync();
+        await page.Locator("[data-task-id]").FillAsync("with_counts");
+        var left = page.Locator("[data-task-field='source']");
+        await left.FillAsync("#clean_users");
+        await left.DispatchEventAsync("change");
+        var right = page.Locator("[data-task-field='right']");
+        await right.FillAsync("#name_counts");
+        await right.DispatchEventAsync("change");
+        await page.Locator("[data-task-field='jointype']").SelectOptionAsync("LEFT");
+        await page.Locator("[data-column-pick='keys'][value='UserNameUpper']").CheckAsync(new LocatorCheckOptions { Timeout = 15_000 });
+        await page.Locator("[data-column-pick='columns'][value='Users']").CheckAsync(new LocatorCheckOptions { Timeout = 15_000 });
+        await page.Locator("[data-task-field='target']").FillAsync("#with_counts");
+        await CommitTaskAsync(page, "with_counts");
+
+        var script = (await ScriptAsync(page)).Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Contains(reshape, script, StringComparison.Ordinal);
+        Assert.Contains("count_names:\nSELECT UserNameUpper, COUNT(*) AS Users\nINTO #name_counts\nFROM #clean_users\nGROUP BY UserNameUpper;",
+            script, StringComparison.Ordinal);
+        Assert.Contains("with_counts:\nSELECT l.*, r.Users\nINTO #with_counts\nFROM #clean_users AS l\nLEFT JOIN #name_counts AS r\n    ON l.UserNameUpper = r.UserNameUpper;",
+            script, StringComparison.Ordinal);
+        Assert.Empty(session.PageErrors);
+    }
+
     private static Task<string> ScriptAsync(IPage page) =>
         page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()");
 

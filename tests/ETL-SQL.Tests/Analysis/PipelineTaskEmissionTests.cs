@@ -33,6 +33,7 @@ public class PipelineTaskEmissionTests
         CREATE CONNECTION mailer AS SMTP('smtp.example.com', PORT = 587);
 
         SELECT 1 AS Ok INTO #orders;
+        SELECT 1 AS Ok, 'x' AS Label INTO #labels;
 
         DECLARE @keep_going BOOL = TRUE;
 
@@ -197,6 +198,23 @@ public class PipelineTaskEmissionTests
             PipelineTaskKind.Upsert,
             new PipelineTaskDraft("sync_orders", PipelineTaskKind.Upsert,
                 Connection: "staging_db", Table: "OrderFlags", Keys: "Ok", Columns: "Ok", Source: "#orders")
+        },
+
+        // ── Transforming ─────────────────────────────────────────────────────
+        {
+            PipelineTaskKind.Reshape,
+            new PipelineTaskDraft("flag_orders", PipelineTaskKind.Reshape,
+                Source: "#orders", Target: "#flagged", Columns: "Ok", Derived: "Ok * 2 AS Doubled", Condition: "Ok > 0")
+        },
+        {
+            PipelineTaskKind.Join,
+            new PipelineTaskDraft("label_orders", PipelineTaskKind.Join,
+                Source: "#orders", Right: "#labels", JoinType: "LEFT", Keys: "Ok", Columns: "Label", Target: "#labelled")
+        },
+        {
+            PipelineTaskKind.Summarise,
+            new PipelineTaskDraft("count_orders", PipelineTaskKind.Summarise,
+                Source: "#orders", Columns: "Ok", Measures: "COUNT(*) AS Orders", Target: "#order_counts")
         },
     };
 

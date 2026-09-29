@@ -1150,12 +1150,12 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         // control — a chip that cannot write its statement would be worse than no chip. The count is
         // deliberately exact: it is the vocabulary the canvas claims to teach, and a chip quietly
         // disappearing from a drawer is the kind of loss nothing else here would notice.
-        Assert.Equal(26, await page.Locator("[data-task-kind]").CountAsync());
+        Assert.Equal(29, await page.Locator("[data-task-kind]").CountAsync());
         Assert.Equal(0, await page.Locator("[data-task-kind][disabled]").CountAsync());
 
         // Grouped, and every chip is a drag source: the drag is the gesture the canvas exists for.
-        Assert.Equal(8, await page.Locator("[data-palette-group]").CountAsync());
-        Assert.Equal(26, await page.Locator("[data-task-kind][draggable='true']").CountAsync());
+        Assert.Equal(9, await page.Locator("[data-palette-group]").CountAsync());
+        Assert.Equal(29, await page.Locator("[data-task-kind][draggable='true']").CountAsync());
 
         // Renaming goes through the task editor, and writes only the label.
         await task.ClickAsync();

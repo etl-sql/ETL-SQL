@@ -191,6 +191,21 @@ public enum PipelineTaskKind
     /// inserts the ones that do not.
     /// </summary>
     Upsert,
+
+    /// <summary>
+    /// <c>SELECT cols[, expr AS name] INTO #next FROM #prev [WHERE …]</c> — keeps some columns, adds
+    /// calculated ones, and filters rows, from one <c>#temp</c> into another.
+    /// </summary>
+    Reshape,
+
+    /// <summary>
+    /// <c>SELECT l.*, r.cols INTO #next FROM #left AS l INNER|LEFT JOIN #right AS r ON …</c> — brings
+    /// chosen columns across from a second <c>#temp</c>, matched on same-named keys.
+    /// </summary>
+    Join,
+
+    /// <summary><c>SELECT groups, measures INTO #next FROM #prev GROUP BY groups</c>.</summary>
+    Summarise,
 }
 
 /// <summary>How a kind behaves, for the handful of places that have to ask.</summary>
@@ -313,7 +328,11 @@ public sealed record PipelineTaskDraft(
     string? Into = null,
     string? Table = null,
     string? Columns = null,
-    string? Keys = null);
+    string? Keys = null,
+    string? Right = null,
+    string? JoinType = null,
+    string? Measures = null,
+    string? Derived = null);
 
 /// <summary>
 /// The field edits a host received, by the names <see cref="PipelineTask.Fields"/> reports.
@@ -600,6 +619,48 @@ public sealed partial class PipelineTaskAuthoringService
         PipelineTaskKind.Extract when !string.IsNullOrWhiteSpace(draft.Condition)
             && UnusableExpression(draft.Condition!) is { } badFilter => badFilter,
 
+        // ── Transforming ─────────────────────────────────────────────────────
+        PipelineTaskKind.Reshape or PipelineTaskKind.Join or PipelineTaskKind.Summarise when string.IsNullOrWhiteSpace(draft.Source) =>
+            "A transform needs the #temp table it reads.",
+        PipelineTaskKind.Reshape or PipelineTaskKind.Join or PipelineTaskKind.Summarise when !IsValidTaskId(TempName(draft.Source)) =>
+            $"'{draft.Source!.Trim()}' is not a usable #temp table name.",
+        PipelineTaskKind.Reshape or PipelineTaskKind.Join or PipelineTaskKind.Summarise when string.IsNullOrWhiteSpace(draft.Target) =>
+            "A transform needs the #temp table it writes.",
+        PipelineTaskKind.Reshape or PipelineTaskKind.Join or PipelineTaskKind.Summarise when !IsValidTaskId(TempName(draft.Target)) =>
+            $"'{draft.Target!.Trim()}' is not a usable #temp table name.",
+        PipelineTaskKind.Reshape or PipelineTaskKind.Join or PipelineTaskKind.Summarise
+            when ColumnNames(draft.Columns).FirstOrDefault(name => !IsValidTaskId(name)) is { } badPick =>
+            $"'{badPick}' is not a column name.",
+        PipelineTaskKind.Reshape when !string.IsNullOrWhiteSpace(draft.Derived) && UnusableExpression(draft.Derived!) is { } badDerived =>
+            badDerived,
+        PipelineTaskKind.Reshape when !string.IsNullOrWhiteSpace(draft.Condition) && UnusableExpression(draft.Condition!) is { } badWhere =>
+            badWhere,
+
+        PipelineTaskKind.Join when string.IsNullOrWhiteSpace(draft.Right) =>
+            "A join needs the #temp table it joins to.",
+        PipelineTaskKind.Join when !IsValidTaskId(TempName(draft.Right)) =>
+            $"'{draft.Right!.Trim()}' is not a usable #temp table name.",
+        PipelineTaskKind.Join when JoinKeyword(draft.JoinType) is null =>
+            $"'{draft.JoinType}' is not a join this step writes. Use INNER or LEFT.",
+        PipelineTaskKind.Join when ColumnNames(draft.Keys).Count == 0 =>
+            "A join needs the columns it matches on.",
+        PipelineTaskKind.Join when ColumnNames(draft.Keys).FirstOrDefault(name => !IsValidTaskId(name)) is { } badJoinKey =>
+            $"'{badJoinKey}' is not a column name.",
+        PipelineTaskKind.Join when ColumnNames(draft.Columns).Count == 0 =>
+            "A join needs the columns it brings across from the second table.",
+
+        PipelineTaskKind.Summarise when string.IsNullOrWhiteSpace(draft.Measures) =>
+            "A summary needs what it measures, such as SUM(Total) AS TotalSales.",
+        PipelineTaskKind.Summarise when UnusableExpression(draft.Measures!) is { } badMeasure => badMeasure,
+
+        _ => null,
+    };
+
+    /// <summary>The JOIN a join step writes, or null for one it does not.</summary>
+    private static string? JoinKeyword(string? type) => (type ?? "INNER").Trim().ToUpperInvariant() switch
+    {
+        "" or "INNER" => "INNER JOIN",
+        "LEFT" => "LEFT JOIN",
         _ => null,
     };
 
@@ -628,7 +689,13 @@ public sealed partial class PipelineTaskAuthoringService
             return PipelineEditResult.Refused(string.Empty, $"'{draft.Id}' is not a usable task label.");
         if (Incomplete(draft) is { } missing)
             return PipelineEditResult.Refused(string.Empty, missing);
-        return PipelineEditResult.Ok(RenderTask(draft, "\n"));
+
+        // Expressions go in as typed, so what they make is read back before it is shown: a preview of
+        // a statement the parser rejects would teach syntax that does not exist.
+        var rendered = RenderTask(draft, "\n");
+        return TryParse(rendered, out _, out var parseError)
+            ? PipelineEditResult.Ok(rendered)
+            : PipelineEditResult.Refused(string.Empty, parseError);
     }
 
     /// <summary>What to call a path-carrying kind in a message the author reads.</summary>
@@ -2457,7 +2524,12 @@ public sealed partial class PipelineTaskAuthoringService
         BreakStatement => PipelineTaskKind.Break,
         ContinueStatement => PipelineTaskKind.Continue,
         WaitForStatement => PipelineTaskKind.WaitFor,
-        SelectStatement { IntoTable: not null } => PipelineTaskKind.Extract,
+        // A SELECT INTO reading a connection's table is an extract; one reading a #temp is a transform,
+        // named for what it does to it.
+        SelectStatement { IntoTable: not null } select when !ReadsATempTable(select) => PipelineTaskKind.Extract,
+        SelectStatement { IntoTable: not null, Joins.Count: > 0 } => PipelineTaskKind.Join,
+        SelectStatement { IntoTable: not null, GroupBy.Count: > 0 } => PipelineTaskKind.Summarise,
+        SelectStatement { IntoTable: not null } => PipelineTaskKind.Reshape,
         InsertStatement => PipelineTaskKind.Load,
         MergeStatement => PipelineTaskKind.Upsert,
         // A TRY/CATCH that opens a transaction is a scope; one that does not is the author's own
@@ -2465,6 +2537,9 @@ public sealed partial class PipelineTaskAuthoringService
         TryCatchStatement scope when OpensATransaction(scope) => PipelineTaskKind.Transaction,
         _ => null,
     };
+
+    private static bool ReadsATempTable(SelectStatement select) =>
+        select.FromTable?.TableName?.StartsWith('#') == true;
 
     private static bool OpensATransaction(TryCatchStatement scope) =>
         scope.TryBody is BlockStatement { Statements: [BeginTransactionStatement, ..] };
@@ -2704,8 +2779,44 @@ public sealed partial class PipelineTaskAuthoringService
 
         PipelineTaskKind.Upsert => RenderUpsert(draft, lineEnding),
 
+        // ── Transforming ─────────────────────────────────────────────────────
+        PipelineTaskKind.Reshape =>
+            $"{draft.Id}:{lineEnding}"
+            + $"SELECT {string.Join(", ", ReshapeColumns(draft))}{lineEnding}"
+            + $"INTO #{TempName(draft.Target)}{lineEnding}"
+            + $"FROM #{TempName(draft.Source)}"
+            + (string.IsNullOrWhiteSpace(draft.Condition) ? string.Empty : $"{lineEnding}WHERE {draft.Condition.Trim()}")
+            + ";",
+
+        PipelineTaskKind.Join =>
+            $"{draft.Id}:{lineEnding}"
+            + $"SELECT l.*, {string.Join(", ", ColumnNames(draft.Columns).Select(column => $"r.{column}"))}{lineEnding}"
+            + $"INTO #{TempName(draft.Target)}{lineEnding}"
+            + $"FROM #{TempName(draft.Source)} AS l{lineEnding}"
+            + $"{JoinKeyword(draft.JoinType)} #{TempName(draft.Right)} AS r{lineEnding}"
+            + $"    ON {string.Join(" AND ", ColumnNames(draft.Keys).Select(key => $"l.{key} = r.{key}"))};",
+
+        PipelineTaskKind.Summarise =>
+            $"{draft.Id}:{lineEnding}"
+            + $"SELECT {string.Join(", ", ColumnNames(draft.Columns).Append(draft.Measures!.Trim()))}{lineEnding}"
+            + $"INTO #{TempName(draft.Target)}{lineEnding}"
+            + $"FROM #{TempName(draft.Source)}"
+            + (ColumnNames(draft.Columns) is { Count: > 0 } groups ? $"{lineEnding}GROUP BY {string.Join(", ", groups)}" : string.Empty)
+            + ";",
+
         _ => throw new ArgumentOutOfRangeException(nameof(draft), draft.Kind, "Unknown pipeline task kind."),
     };
+
+    /// <summary>
+    /// A reshape's select list: the columns kept (every one when none is picked) and then the
+    /// calculated ones, so an added column always sits after what it was calculated from.
+    /// </summary>
+    private static IEnumerable<string> ReshapeColumns(PipelineTaskDraft draft)
+    {
+        var kept = ColumnNames(draft.Columns);
+        if (kept.Count == 0) kept.Add("*");
+        return string.IsNullOrWhiteSpace(draft.Derived) ? kept : kept.Append(draft.Derived.Trim());
+    }
 
     /// <summary>
     /// A MERGE on the draft's keys. The other columns are updated where a row matches and every column

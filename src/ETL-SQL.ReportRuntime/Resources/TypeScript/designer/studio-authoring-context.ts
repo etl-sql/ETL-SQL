@@ -126,7 +126,14 @@ export interface PipelineTaskField {
      * and `columns` offers the chosen table's columns as checkboxes, written as a comma list. Typing
      * still works — a table the schema read could not see is still a table.
      */
-    picker?: 'table' | 'columns';
+    picker?: 'table' | 'columns' | 'temp' | 'choice';
+    /**
+     * For a `columns` picker: whose columns to offer. `table` is the connection table in the `table`
+     * field; `source` and `right` are the #temp tables named in those fields.
+     */
+    columnsFrom?: 'table' | 'source' | 'right';
+    /** For a `choice` picker: the values it may hold, in the order they are offered. */
+    choices?: ReadonlyArray<string>;
 }
 
 export interface StudioAuthoringSurfacesHandle {

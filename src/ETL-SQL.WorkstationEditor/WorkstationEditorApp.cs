@@ -610,7 +610,11 @@ public static class WorkstationEditorApp
                 request.Into,
                 request.Table,
                 request.Columns,
-                request.Keys);
+                request.Keys,
+                request.Right,
+                request.JoinType,
+                request.Measures,
+                request.Derived);
 
             // What the draft would write, from the same renderer an add uses. Nothing is written.
             if (string.Equals(request.Op, "preview", StringComparison.OrdinalIgnoreCase))
@@ -1328,7 +1332,11 @@ public sealed record PipelineTaskAuthoringRequest(
     string? Into = null,
     string? Table = null,
     string? Columns = null,
-    string? Keys = null);
+    string? Keys = null,
+    string? Right = null,
+    string? JoinType = null,
+    string? Measures = null,
+    string? Derived = null);
 public sealed record PipelineScopeAuthoringRequest(string? Script, string? Id, int? Line = null);
 
 public sealed record DataModelAuthoringRequest(string? Script, string? DocumentUri = null);

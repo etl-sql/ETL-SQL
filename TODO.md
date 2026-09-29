@@ -118,7 +118,10 @@ rights just to learn.
   - [x] Slice 1 (2026-09-29): palette grouped Extract → Validate → Load → files → notify → flow →
     Advanced (native SQL); Read a table / Insert rows / Upsert rows write SELECT INTO, INSERT…SELECT and
     MERGE, with table and column pickers and a live preview from the host's own renderer.
-  - [ ] Slice 2: transform steps (filter/pick columns, add column, join, summarise).
+  - [x] Slice 2 (2026-09-29): Filter & pick columns (with calculated columns), Join (INNER/LEFT on
+    same-named keys) and Summarise, all `SELECT … INTO #next FROM #prev`; #temp tables and their columns
+    are offered from the host's scope service. A pipeline built only from palette steps is executed in
+    PipelineTransformTaskTests and checked by its own ASSERT steps.
   - [ ] Slice 3: validate/cleanup steps, readable card names, #temp-labelled data edges, first-use notes.
 - [ ] The dataset wizard reads a connection's schema without asking the host to analyse the script
   first, so on the desktop host a just-declared connection reads as "not registered for this

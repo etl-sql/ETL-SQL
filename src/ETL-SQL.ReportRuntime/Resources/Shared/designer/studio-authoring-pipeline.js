@@ -102,13 +102,35 @@ export function createStudioAuthoringPipeline(hostContext) {
             { name: 'condition', label: 'Only rows where', placeholder: 'Active = 1', mono: true, optional: true },
             { name: 'target', label: 'Stage into', placeholder: '#staged_users', mono: true, hint: 'A #temp table. It lasts for this run, and every later step can read it by name.' },
         ],
+        // ── Transforming ─────────────────────────────────────────────────────
+        reshape: [
+            { name: 'source', label: 'From', placeholder: '#staged_users', mono: true, picker: 'temp' },
+            { name: 'columns', label: 'Keep columns', placeholder: 'All columns', mono: true, optional: true, picker: 'columns', columnsFrom: 'source', hint: 'Leave all unticked to keep every column.' },
+            { name: 'derived', label: 'Add columns', placeholder: 'UPPER(UserName) AS UserNameUpper', mono: true, optional: true, hint: 'An expression and the name it gets: expression AS name. Separate several with commas.' },
+            { name: 'condition', label: 'Only rows where', placeholder: 'Active = 1', mono: true, optional: true },
+            { name: 'target', label: 'Into', placeholder: '#clean_users', mono: true, hint: 'A new #temp table. The one it reads is left as it was.' },
+        ],
+        join: [
+            { name: 'source', label: 'Left table', placeholder: '#staged_users', mono: true, picker: 'temp', hint: 'Every column of this one is kept.' },
+            { name: 'right', label: 'Join to', placeholder: '#orders', mono: true, picker: 'temp' },
+            { name: 'jointype', label: 'Keep', placeholder: '', picker: 'choice', choices: ['INNER', 'LEFT'], hint: 'INNER keeps rows that match on both sides; LEFT keeps every left row, with blanks where nothing matched.' },
+            { name: 'keys', label: 'Match on', placeholder: 'UserID', mono: true, picker: 'columns', columnsFrom: 'source', hint: 'Columns with the same name in both tables.' },
+            { name: 'columns', label: 'Bring across', placeholder: 'Total, OrderDate', mono: true, picker: 'columns', columnsFrom: 'right' },
+            { name: 'target', label: 'Into', placeholder: '#users_orders', mono: true },
+        ],
+        summarise: [
+            { name: 'source', label: 'From', placeholder: '#orders', mono: true, picker: 'temp' },
+            { name: 'columns', label: 'Group by', placeholder: 'Region', mono: true, optional: true, picker: 'columns', columnsFrom: 'source', hint: 'Leave all unticked for a single total row.' },
+            { name: 'measures', label: 'Measure', placeholder: 'SUM(Total) AS TotalSales, COUNT(*) AS Orders', mono: true, hint: 'SUM, COUNT, AVG, MIN or MAX of a column, and the name it gets: SUM(Total) AS TotalSales.' },
+            { name: 'target', label: 'Into', placeholder: '#sales_by_region', mono: true },
+        ],
         load: [
-            { name: 'source', label: 'Rows from', placeholder: '#staged_users', mono: true, hint: 'The #temp table an earlier step staged.' },
+            { name: 'source', label: 'Rows from', placeholder: '#staged_users', mono: true, picker: 'temp', hint: 'The #temp table an earlier step staged.' },
             { name: 'table', label: 'Insert into table', placeholder: 'UsersArchive', mono: true, picker: 'table' },
             { name: 'columns', label: 'Columns', placeholder: 'UserID, UserName', mono: true, picker: 'columns', hint: 'Named on both sides, so each value lands in the right column.' },
         ],
         upsert: [
-            { name: 'source', label: 'Rows from', placeholder: '#staged_users', mono: true, hint: 'The #temp table an earlier step staged.' },
+            { name: 'source', label: 'Rows from', placeholder: '#staged_users', mono: true, picker: 'temp', hint: 'The #temp table an earlier step staged.' },
             { name: 'table', label: 'Upsert into table', placeholder: 'Users', mono: true, picker: 'table' },
             { name: 'keys', label: 'Match on', placeholder: 'UserID', mono: true, picker: 'columns', hint: 'The key columns that say a row already exists.' },
             { name: 'columns', label: 'Columns to update', placeholder: 'UserName, Email', mono: true, optional: true, picker: 'columns', hint: 'Updated on a match, and inserted with the keys on a new row.' },
@@ -127,6 +149,12 @@ export function createStudioAuthoringPipeline(hostContext) {
         extract: 'The connection is one this script declares. The rows are copied into a #temp table that '
             + 'lives only for this run — later steps read it by name, and nothing is written back to the source.',
         load: 'Rows are read from a #temp table an earlier step staged, and appended to the table on the connection.',
+        reshape: 'This reads one #temp table and writes a new one. Nothing is changed in place, so the '
+            + 'table it read is still there for any later step that wants the original.',
+        join: 'Rows are matched on columns with the same name in both #temp tables. Every column of the left '
+            + 'table is kept; from the other, only the columns you bring across.',
+        summarise: 'Each group becomes one row. Every column you group by is kept, and each measure is '
+            + 'calculated over the rows in that group.',
         upsert: 'This is a MERGE. The engine holds every matching row while it runs, so at large scale filter '
             + 'the #temp table first, or split the load into batches.',
     };
@@ -207,16 +235,34 @@ export function createStudioAuthoringPipeline(hostContext) {
         // Prefilled with what the statement holds now, so Apply without a change writes nothing.
         for (const field of fields)
             draft[field.name] = String(offered[field.name] ?? '');
+        // A choice always holds one of its values, so the statement previewed is one that can be written.
+        for (const field of fields) {
+            if (field.picker === 'choice' && !draft[field.name])
+                draft[field.name] = field.choices?.[0] ?? '';
+        }
         let workbench = null;
         // The connection's tables, read once per connection chosen, for the table and column pickers.
         // A failed read is kept apart from an empty one: the fields still take typing either way, and
         // the dialog says which it was rather than implying the connection has no tables.
-        const usesPickers = fields.some(field => field.picker);
+        const usesPickers = fields.some(field => field.picker === 'table' || (field.picker === 'columns' && (field.columnsFrom ?? 'table') === 'table'));
         let schema = null;
         const tableNamed = (name) => (schema?.tables ?? [])
             .find((table) => String(table.name).toLowerCase() === String(name || '').trim().toLowerCase());
         const columnsOf = (name) => (tableNamed(name)?.columns ?? [])
             .map((column) => String(column?.name ?? column));
+        // The #temp tables staged above this task, with the columns the host could work out from the
+        // statements that made them. Read from the host's own scope service, so the list is positional:
+        // a #temp made further down the script is not offered, because it does not exist yet here.
+        const usesTemps = fields.some(field => field.picker === 'temp' || field.columnsFrom === 'source' || field.columnsFrom === 'right');
+        let temps = null;
+        const tempNamed = (name) => (temps ?? [])
+            .find((table) => String(table.name).replace(/^#/, '').toLowerCase() === String(name || '').trim().replace(/^#/, '').toLowerCase());
+        const columnsFor = (field) => {
+            const from = field?.columnsFrom ?? 'table';
+            if (from === 'table')
+                return columnsOf(draft.table);
+            return (tempNamed(draft[from])?.columns ?? []).map((column) => String(column?.name ?? column));
+        };
         const listOf = (text) => String(text || '').split(',').map(part => part.trim()).filter(Boolean);
         // What the draft would write, shown while it is filled in. It comes from the host's own
         // renderer, so the statement on screen is the statement Add writes — never a browser copy.
@@ -343,6 +389,8 @@ export function createStudioAuthoringPipeline(hostContext) {
                     }
                     if (previews)
                         schedulePreview(host, 0);
+                    if (usesTemps && temps === null)
+                        void loadTemps(host);
                     if (usesPickers && needsConnection && draft.connection && schema?.connection !== draft.connection) {
                         void loadSchema(host, draft.connection);
                     }
@@ -382,14 +430,23 @@ export function createStudioAuthoringPipeline(hostContext) {
             /** One field: a text box, with the connection's tables or a table's columns to pick from. */
             function fieldMarkup(field) {
                 const value = String(draft[field.name] || '');
+                if (field.picker === 'choice') {
+                    return `<label>${escapeHtml(field.label)}
+                            <select data-task-field="${escapeHtml(field.name)}">${(field.choices ?? []).map(choice => `<option${choice === value.toUpperCase() ? ' selected' : ''}>${escapeHtml(choice)}</option>`).join('')}</select>
+                            ${field.hint ? `<small>${escapeHtml(field.hint)}</small>` : ''}
+                        </label>`;
+                }
+                const listed = field.picker === 'table' || field.picker === 'temp';
                 return `<label>${escapeHtml(field.label)}${field.optional ? ' <em>(optional)</em>' : ''}
                         <input type="text" data-task-field="${escapeHtml(field.name)}"
                             value="${escapeHtml(value)}"
                             placeholder="${escapeHtml(field.placeholder || '')}"
-                            ${field.picker === 'table' ? `list="etlsql-task-tables-${escapeHtml(field.name)}"` : ''}
+                            ${listed ? `list="etlsql-task-${field.picker}s-${escapeHtml(field.name)}"` : ''}
                             ${field.mono ? 'spellcheck="false"' : ''}>
                         ${field.picker === 'table' ? `<datalist id="etlsql-task-tables-${escapeHtml(field.name)}"
                             data-table-picks>${tableOptionsMarkup()}</datalist>` : ''}
+                        ${field.picker === 'temp' ? `<datalist id="etlsql-task-temps-${escapeHtml(field.name)}"
+                            data-temp-picks>${tempOptionsMarkup()}</datalist>` : ''}
                         ${field.picker === 'columns' ? `<span class="etlsql-studio-column-picks"
                             data-column-picks="${escapeHtml(field.name)}">${columnPicksMarkup(field.name)}</span>` : ''}
                         ${field.hint ? `<small>${escapeHtml(field.hint)}</small>` : ''}
@@ -399,9 +456,12 @@ export function createStudioAuthoringPipeline(hostContext) {
                 const tables = (schema?.connection === draft.connection ? schema?.tables : null) ?? [];
                 return tables.map((table) => `<option value="${escapeHtml(table.name)}">`).join('');
             }
+            function tempOptionsMarkup() {
+                return (temps ?? []).map((table) => `<option value="${escapeHtml(table.name)}">`).join('');
+            }
             function columnPicksMarkup(name) {
                 const chosen = new Set(listOf(draft[name]).map(column => column.toLowerCase()));
-                return columnsOf(draft.table).map(column => `<label>
+                return columnsFor(fields.find(field => field.name === name)).map(column => `<label>
                         <input type="checkbox" data-column-pick="${escapeHtml(name)}" value="${escapeHtml(column)}"
                             ${chosen.has(column.toLowerCase()) ? 'checked' : ''}> ${escapeHtml(column)}</label>`).join('');
             }
@@ -413,6 +473,8 @@ export function createStudioAuthoringPipeline(hostContext) {
             function refreshPickers(host) {
                 for (const list of host.querySelectorAll('[data-table-picks]'))
                     list.innerHTML = tableOptionsMarkup();
+                for (const list of host.querySelectorAll('[data-temp-picks]'))
+                    list.innerHTML = tempOptionsMarkup();
                 for (const picks of host.querySelectorAll('[data-column-picks]')) {
                     picks.innerHTML = columnPicksMarkup(asInput(picks).dataset.columnPicks || '');
                 }
@@ -422,6 +484,26 @@ export function createStudioAuthoringPipeline(hostContext) {
                         ? guidedNoteMarkup([`The tables of ${draft.connection} could not be read (${schema.failed}). Type the names instead.`], 'warning')
                         : '';
                 }
+            }
+            /**
+             * The #temp tables in scope at the end of the script, asked of the host's scope service.
+             * A marker statement is appended because the service reports what is visible *before* the
+             * line it is given, and the last real statement's own #temp has to count.
+             */
+            async function loadTemps(host) {
+                temps = [];
+                const script = `${hostContext.shell.getScriptText().replace(/\s*$/, '')}\n\nPRINT 'studio';\n`;
+                try {
+                    const scope = await hostContext.request(hostContext.routes.pipelineScope, {
+                        body: { script, line: script.split('\n').length - 1 },
+                    });
+                    temps = scope?.resolved === false ? [] : (scope?.tempTables ?? []);
+                }
+                catch {
+                    temps = [];
+                }
+                readFields(host);
+                refreshPickers(host);
             }
             async function loadSchema(host, connection) {
                 schema = { connection, tables: null, failed: null };

@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- The Studio pipeline palette has a Transform group. **Filter & pick columns** keeps the columns you
+  tick, adds calculated ones (`UPPER(UserName) AS UserNameUpper`), and filters rows; **Join** brings
+  chosen columns across from a second `#temp` table, INNER or LEFT, matched on same-named keys; and
+  **Summarise** groups rows and applies measures such as `SUM(Total) AS TotalSales`. Each writes
+  `SELECT … INTO #next FROM #prev`. The `#temp` tables staged earlier in the script, and their
+  columns, are offered by name, and the preview refuses an expression that would not parse.
+
 - The Studio pipeline palette now follows an ETL pipeline: Extract, Validate, Load, files and
   folders, notifications, control flow, and an Advanced group holding native SQL. New steps:
   **Read a table** writes `SELECT … INTO #temp FROM connection.table [WHERE …]`, **Insert rows**

@@ -104,6 +104,31 @@ const pipelineTaskGroups = Object.freeze([
         ]),
     }),
     Object.freeze({
+        id: 'transform',
+        label: 'Transform',
+        hint: 'Turn one #temp table into another: pick and add columns, join, or summarise.',
+        kinds: Object.freeze([
+            Object.freeze({
+                id: 'reshape',
+                label: 'Filter & pick columns',
+                glyph: '⫶',
+                hint: 'Keep the columns you want, add calculated ones, and keep only the rows that match.',
+            }),
+            Object.freeze({
+                id: 'join',
+                label: 'Join',
+                glyph: '⋈',
+                hint: 'Bring columns across from a second #temp table, matching rows on key columns.',
+            }),
+            Object.freeze({
+                id: 'summarise',
+                label: 'Summarise',
+                glyph: 'Σ',
+                hint: 'Group rows and total, count, or average them.',
+            }),
+        ]),
+    }),
+    Object.freeze({
         id: 'validate',
         label: 'Validate',
         hint: 'Stop the run when the data is not what you expected.',

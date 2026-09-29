@@ -200,7 +200,11 @@ public record PipelineTaskRequest(
     string? Into = null,
     string? Table = null,
     string? Columns = null,
-    string? Keys = null);
+    string? Keys = null,
+    string? Right = null,
+    string? JoinType = null,
+    string? Measures = null,
+    string? Derived = null);
 
 /// <summary>
 /// The result of a pipeline edit. <c>Applied</c> false with an <c>Error</c> is an ordinary answer —

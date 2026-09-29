@@ -40,7 +40,10 @@ type PipelineTaskKind =
     | 'waitfor'
     | 'extract'
     | 'load'
-    | 'upsert';
+    | 'upsert'
+    | 'reshape'
+    | 'join'
+    | 'summarise';
 
 /** PipelineEdgeCondition, as it crosses the wire. Matched case-insensitively on the way in. */
 type PipelineEdgeCondition =
