@@ -152,6 +152,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   the map zoomed out until steps became unreadable pills. Connectors now carry arrowheads, and the
   map opens at a readable zoom on the first step.
 
+- Closing the Studio browser window now stops the host. `etl-sql studio` hosts stop two minutes
+  after the last browser disconnects, provided nothing is running or unsaved; reopening within that
+  window reconnects to the same host. The host used to keep running until **Exit Studio**, holding
+  its port and locking the build output. `--idle-timeout-minutes 0` keeps the previous behaviour.
+
 - A labelled IF on the pipeline map is now a canvas task. Its card was missing its label, so it
   could not be selected or have tasks dropped into it. A `CASE … END` inside a pipeline block no
   longer ends the block early when the canvas inserts a task.

@@ -345,8 +345,8 @@ namespace ETL_SQL.App
         };
         private static readonly Option<int> StudioIdleShutdownOption = new("--idle-timeout-minutes", Array.Empty<string>())
         {
-            Description = "Stop the host after this many idle minutes; zero disables idle shutdown",
-            DefaultValueFactory = _ => 0
+            Description = "Stop the host after this many minutes with no browser connected (default 2); zero keeps it running until stopped",
+            DefaultValueFactory = _ => 2
         };
         private static readonly Option<bool> DoctorStrictOption = new("--strict", Array.Empty<string>())
         {

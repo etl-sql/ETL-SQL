@@ -2036,11 +2036,10 @@ CREATE PAGE Main AS DASHBOARD (
                 psi.ArgumentList.Add("--port");
                 psi.ArgumentList.Add(requestedPort.Value.ToString());
             }
-            if (ctx.StudioIdleShutdownMinutes > 0)
-            {
-                psi.ArgumentList.Add("--idle-timeout-minutes");
-                psi.ArgumentList.Add(ctx.StudioIdleShutdownMinutes.ToString());
-            }
+            // Always passed, zero included: the host defaults to stopping after its last browser
+            // leaves, so leaving the flag off for zero would turn "never stop" into the default.
+            psi.ArgumentList.Add("--idle-timeout-minutes");
+            psi.ArgumentList.Add(Math.Max(0, ctx.StudioIdleShutdownMinutes).ToString(System.Globalization.CultureInfo.InvariantCulture));
             if (!ctx.ServeNoBrowser || ctx.StudioNewWindow || ctx.StudioAction == "open")
                 psi.ArgumentList.Add("--open");
 

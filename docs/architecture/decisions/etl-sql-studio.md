@@ -62,8 +62,11 @@ for the same project, with content-revision checks preventing one host from over
 changes made by another.
 
 Browser clients renew authenticated heartbeats. Tab-close signals are advisory; the host also
-expires missed heartbeats and may apply a configured idle timeout once all clients are gone, no run
-is active, and no server draft is pending. The explicit **Exit Studio** flow checks dirty documents
+expires missed heartbeats and stops after an idle timeout once all clients are gone, no run is
+active, and no server draft is pending. The timeout defaults to two minutes — long enough to reopen a
+closed tab and reconnect — and `--idle-timeout-minutes 0` keeps the host running until it is stopped.
+It used to default to never, which left a host running after its window closed, holding its port and
+locking the build output. The explicit **Exit Studio** flow checks dirty documents
 and active runs, requests graceful application shutdown, and polls for a bounded period so the UI
 can report whether the host actually stopped.
 

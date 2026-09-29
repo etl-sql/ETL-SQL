@@ -56,6 +56,26 @@ public sealed class WorkstationEditorTests
         Assert.Equal(12, options.IdleShutdownMinutes);
     }
 
+    /// <summary>
+    /// A Studio host stops a short while after its last browser leaves. It used to default to never:
+    /// closing the window left the host running, holding its port and locking the build output.
+    /// </summary>
+    [Fact]
+    public void Options_StudioStopsAfterItsLastBrowserByDefault()
+    {
+        using var temp = new TempWorkspace();
+
+        var studio = WorkstationEditorOptions.Parse([temp.Root, "--studio"], Directory.GetCurrentDirectory());
+        var never = WorkstationEditorOptions.Parse(
+            [temp.Root, "--studio", "--idle-timeout-minutes", "0"], Directory.GetCurrentDirectory());
+        var editor = WorkstationEditorOptions.Parse([temp.Root], Directory.GetCurrentDirectory());
+
+        Assert.Equal(WorkstationEditorOptions.DefaultStudioIdleShutdownMinutes, studio.IdleShutdownMinutes);
+        Assert.Equal(2, WorkstationEditorOptions.DefaultStudioIdleShutdownMinutes);
+        Assert.Equal(0, never.IdleShutdownMinutes);
+        Assert.Equal(0, editor.IdleShutdownMinutes);
+    }
+
     [Fact]
     public void Workspace_RejectsTraversalAndNonScriptFiles()
     {

@@ -78,6 +78,26 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal(4321, captured.ServePort);
         }
 
+        /// <summary>
+        /// `etlsql studio` stops its host two minutes after the last browser leaves unless told
+        /// otherwise, and an explicit zero still means "never" — it must not be read as "unset".
+        /// </summary>
+        [Theory]
+        [InlineData(new[] { "studio", "workspace" }, 2)]
+        [InlineData(new[] { "studio", "workspace", "--idle-timeout-minutes", "0" }, 0)]
+        public async Task CliOrchestrator_StudioIdleShutdownDefaultsToTwoMinutes(string[] arguments, int expected)
+        {
+            CliContext? captured = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                captured = ctx;
+                return Task.FromResult(0);
+            });
+
+            Assert.Equal(0, await root.Parse(arguments).InvokeAsync());
+            Assert.Equal(expected, captured!.StudioIdleShutdownMinutes);
+        }
+
         [Theory]
         [InlineData("list", "list")]
         [InlineData("open", "open")]

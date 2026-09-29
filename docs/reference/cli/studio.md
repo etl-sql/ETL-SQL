@@ -18,7 +18,7 @@ etl-sql studio <subcommand> [project] [options]
 
 | Option | Description |
 | :--- | :--- |
-| `--idle-timeout-minutes` | Stop the host after this many idle minutes; zero disables idle shutdown |
+| `--idle-timeout-minutes` | Stop the host after this many minutes with no browser connected (default 2); zero keeps it running until stopped |
 | `--new-instance` | Start an independent host for the same project (advanced) |
 | `--new-window` | Open another browser window against the healthy host for this project |
 | `--no-browser` | Do not automatically open the browser on start |

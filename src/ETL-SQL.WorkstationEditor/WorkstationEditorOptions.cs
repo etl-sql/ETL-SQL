@@ -14,6 +14,14 @@ public sealed record WorkstationEditorOptions(
     string? InstanceId = null,
     int IdleShutdownMinutes = 0)
 {
+    /// <summary>
+    /// How long a Studio host waits after its last browser leaves before it stops, when the command
+    /// line does not say. Zero used to be the default and meant never: closing the window left the
+    /// host running, holding its port and locking the build output. A reopened tab inside this window
+    /// reconnects to the same host. <c>--idle-timeout-minutes 0</c> still means never.
+    /// </summary>
+    public const int DefaultStudioIdleShutdownMinutes = 2;
+
     public static WorkstationEditorOptions Parse(string[] args, string invocationDirectory)
     {
         string? path = null;
@@ -23,7 +31,7 @@ public sealed record WorkstationEditorOptions(
         bool studioMode = false;
         string? token = null;
         string? instanceId = null;
-        var idleShutdownMinutes = 0;
+        int? idleShutdownMinutes = null;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -55,8 +63,9 @@ public sealed record WorkstationEditorOptions(
             }
             else if (args[i] == "--idle-timeout-minutes" && i + 1 < args.Length)
             {
-                if (!int.TryParse(args[++i], out idleShutdownMinutes) || idleShutdownMinutes < 0)
+                if (!int.TryParse(args[++i], out var minutes) || minutes < 0)
                     throw new ArgumentException("--idle-timeout-minutes must be zero or a positive integer.");
+                idleShutdownMinutes = minutes;
             }
             else if (args[i].StartsWith("-", StringComparison.Ordinal))
             {
@@ -97,7 +106,7 @@ public sealed record WorkstationEditorOptions(
             openBrowser,
             studioMode,
             instanceId ?? Guid.NewGuid().ToString("D"),
-            idleShutdownMinutes);
+            idleShutdownMinutes ?? (studioMode ? DefaultStudioIdleShutdownMinutes : 0));
     }
 
     internal string LocalhostUrl => $"http://{IPAddress.Loopback}:{Port}";
