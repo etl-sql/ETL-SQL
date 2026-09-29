@@ -9,6 +9,7 @@
  * Selected visual and report property editors.
  */
 import { VTYPES, controlTarget, datasetValue, queryElement, queryElements } from './designer-context.js';
+import { filterSourceOn, parametersRead, readClickAction, readEmitTargets, readRowDetail, selectionKey, splitNames, writeClickAction, writeRowDetail } from './designer-interactions.js';
 import { esc } from './designer-util.js';
 import { renderFormattingSectionHtml, renderVisualFormatInspectorHtml, toHexColor } from './visual-format-inspector.js';
 import { CHART_AGGREGATES, VISUAL_ROLES, aggregateExpression } from './visual-preview.js';
@@ -19,11 +20,34 @@ export function createDesignerInspector(context) {
         { value: 'ERROR', label: 'Refuse the change' },
     ];
     const INTERACTION_EFFECTS = [
-        { value: 'HIGHLIGHT', label: 'Highlight matching data', note: 'Keeps every row and dims the rest.' },
-        { value: 'FILTER', label: 'Filter to matching rows', note: 'Re-queries this visual and hides the rest.' },
-        { value: 'NONE', label: 'Ignore selections elsewhere', note: 'This visual never reacts to another one.' },
+        { value: 'HIGHLIGHT', label: 'Linked — highlight matching data', note: 'A selection elsewhere keeps every row here and dims the rest.' },
+        { value: 'FILTER', label: 'Linked — filter to matching rows', note: 'A selection elsewhere re-queries this visual and hides the rest.' },
+        { value: 'NONE', label: 'Never linked', note: 'This visual never sends or reacts to a selection.' },
     ];
+    const CLICK_KINDS = [
+        { value: 'NONE', label: 'Nothing' },
+        { value: 'DRILL_DOWN', label: 'Show details in another visual' },
+        { value: 'DRILL_IN', label: 'Drill into the next level' },
+        { value: 'NAVIGATE_PAGE', label: 'Go to a page' },
+        { value: 'SET_PARAMETER', label: 'Set a parameter' },
+        { value: 'CUSTOM', label: 'Custom action' },
+    ];
+    /** Visuals with no rows of their own: they neither send nor receive a selection. */
+    const NON_DATA_TYPES = new Set(['CONTAINER', 'BUTTON', 'TEXT', 'IMAGE']);
+    /** Visuals the dialect refuses ACTIONS on. */
+    const DISPLAY_ONLY_TYPES = new Set(['TEXT', 'CARD', 'IMAGE', 'CONTAINER']);
     const ROLES = ['X', 'Y', 'VALUE', 'CATEGORY', 'SERIES', 'LABEL', 'TOOLTIP'];
+    /**
+     * A click action the author has started but not finished, by visual id. An incomplete action
+     * writes nothing to the script, so without this the picker would forget the author's choice
+     * on the next render.
+     */
+    const clickDrafts = new Map();
+    /**
+     * A row detail with a match the author has added but not filled in, by visual id. It is used
+     * only while it still writes the clause the script holds, so an edit made in the script wins.
+     */
+    const rowDetailDrafts = new Map();
     /**
      * Columns this visual can key a selection on: what it maps, what its dataset declares, and what
      * the host can see in its own data sample.
@@ -373,13 +397,128 @@ export function createDesignerInspector(context) {
         const matchingColumn = String(v.options?.['interaction:MATCHING'] || '').trim();
         const isSlicerLike = v.type === 'SLICER' || v.type === 'MULTISELECT';
         const cascade = readCascade(v.options?.cascade);
+        // How the runtime links visuals: a visual responds to a selection elsewhere only when it
+        // declares ON_SELECT, and sends one when it declares ON_SELECT or is a table or slicer
+        // (ChartInteractionResolver.SelectionModeFor). The old default label said an unlinked
+        // visual highlighted; it ignores selections.
+        const sendsByDefault = v.type === 'TABLE' || v.type === 'SLICER';
+        const linked = onSelect !== '' && onSelect !== 'NONE';
+        const sendsSelection = linked || (onSelect === '' && sendsByDefault);
+        const defaultLinkLabel = sendsByDefault ? 'Default \u2014 clicks send a selection' : 'Not linked';
         const interactionEffect = INTERACTION_EFFECTS.find(effect => effect.value === onSelect);
         const interactionNote = onSelect === 'NONE'
-            ? 'Selecting data in another visual leaves this one alone.'
-            : `${interactionEffect ? interactionEffect.note : 'Selecting data in another visual dims the rows that do not match.'}`
-                + (matchingColumn
-                    ? ` Rows are matched on ${matchingColumn}.`
-                    : ' Rows are matched on this visual\u2019s category field.');
+            ? 'Clicks here select nothing, and selections elsewhere leave this visual alone.'
+            : !linked
+                ? (sendsByDefault
+                    ? 'Clicking a row sends a selection to linked visuals. Selections elsewhere leave this one alone.'
+                    : 'Clicks here select nothing, and selections elsewhere leave this visual alone.')
+                : `Clicking here sends a selection to linked visuals. ${interactionEffect ? interactionEffect.note : ''}`
+                    + (matchingColumn
+                        ? ` Rows are matched on ${matchingColumn}.`
+                        : ' Rows are matched on this visual\u2019s category field.');
+        // Who a selection reaches (EMIT_FILTER). No boxes ticked means every linked visual.
+        const pageVisuals = context.curVis().filter(other => other.id !== v.id && !NON_DATA_TYPES.has(String(other.type || '').toUpperCase()));
+        const pageVisualNames = new Set(pageVisuals.map(other => String(other.name).toLowerCase()));
+        const linkedNames = new Set(pageVisuals
+            .filter(other => /^(HIGHLIGHT|FILTER)$/i.test(String(other.options?.['interaction:ON_SELECT'] || '')))
+            .map(other => String(other.name).toLowerCase()));
+        const emitTargets = readEmitTargets(v.options?.emit_filter);
+        const emitTargetSet = new Set(emitTargets.map(name => name.toLowerCase()));
+        // An authored target this page does not show is kept, ticked, so an edit never drops it.
+        const emitCandidates = [
+            ...pageVisuals.map(other => String(other.name)),
+            ...emitTargets.filter(name => !pageVisualNames.has(name.toLowerCase())),
+        ];
+        const unlinkedTargets = emitTargets.filter(name => pageVisualNames.has(name.toLowerCase()) && !linkedNames.has(name.toLowerCase()));
+        const emitNote = (emitTargets.length
+            ? `A selection here reaches only ${emitTargets.join(', ')}.`
+            : linkedNames.size
+                ? 'Nothing ticked: a selection here reaches every linked visual.'
+                : 'No visual on this page is linked yet, so a selection here reaches nothing. Link one by setting its cross-filtering.')
+            + (unlinkedTargets.length
+                ? ` ${unlinkedTargets.join(', ')} ${unlinkedTargets.length === 1 ? 'is' : 'are'} not linked, so ${unlinkedTargets.length === 1 ? 'it ignores' : 'they ignore'} the selection until ${unlinkedTargets.length === 1 ? 'its' : 'their'} cross-filtering is set.`
+                : '');
+        // What a linked visual's query has to read. A selection does not filter rows by itself: it
+        // sets a parameter named after the column it was made on while each receiver's query runs
+        // (VisualBuilder.FetchDataAsync), so a receiver that never reads it cannot narrow.
+        const sendsFrom = (other) => {
+            const mode = String(other.options?.['interaction:ON_SELECT'] || '').toUpperCase();
+            return mode ? mode !== 'NONE' : other.type === 'TABLE' || other.type === 'SLICER';
+        };
+        const incoming = new Map();
+        if (linked) {
+            for (const other of pageVisuals) {
+                if (!sendsFrom(other))
+                    continue;
+                const reach = readEmitTargets(other.options?.emit_filter);
+                if (reach.length && !reach.some(name => name.toLowerCase() === String(v.name).toLowerCase()))
+                    continue;
+                const key = selectionKey(other.options, other.mappings);
+                if (key)
+                    incoming.set(key, [...(incoming.get(key) || []), String(other.name)]);
+            }
+        }
+        const reads = parametersRead(v.options?.inline_source);
+        const unreadKeys = [...incoming.keys()].filter(key => !reads.has(`@${key}`.toLowerCase()));
+        const acceptsClickActions = !DISPLAY_ONLY_TYPES.has(String(v.type || '').toUpperCase());
+        const writtenClick = readClickAction(v.options?.['action:ON_CLICK']);
+        const clickAction = writtenClick.kind === 'NONE' ? (clickDrafts.get(v.id) ?? writtenClick) : writtenClick;
+        const otherVisualNames = context.curVis()
+            .filter(other => other.id !== v.id && !NON_DATA_TYPES.has(String(other.type || '').toUpperCase()))
+            .map(other => String(other.name));
+        const pageNames = (context.state.pages || []).map(page => String(page.name));
+        const declaredNames = new Set(declaredParameters.map(item => String(item.name).toLowerCase()));
+        const undeclaredKeys = clickAction.kind === 'DRILL_DOWN'
+            ? clickAction.keys.filter(key => !declaredNames.has(`@${key}`.toLowerCase()))
+            : [];
+        // The drill-down's target has to read what the click sets; offer to write that for it.
+        const drillTarget = clickAction.kind === 'DRILL_DOWN' && clickAction.target
+            ? context.curVis().find(other => String(other.name).toLowerCase() === clickAction.target.toLowerCase()) ?? null
+            : null;
+        const drillUnread = drillTarget && clickAction.kind === 'DRILL_DOWN'
+            ? clickAction.keys.filter(key => !parametersRead(drillTarget.options?.inline_source).has(`@${key}`.toLowerCase())
+                && filterSourceOn(drillTarget.options?.inline_source, key))
+            : [];
+        const clickNote = (() => {
+            switch (clickAction.kind) {
+                case 'DRILL_DOWN': {
+                    const params = clickAction.keys.map(key => `@${key}`).join(' and ');
+                    let note = params
+                        ? `A click sets ${params} to the clicked row's value and re-runs the report${clickAction.target ? `, so ${clickAction.target} must read ${params} in its query` : ''}.`
+                        : 'Name the columns whose clicked values the detail visual should filter on.';
+                    if (undeclaredKeys.length)
+                        note += ` Declare ${undeclaredKeys.map(key => `@${key}`).join(', ')} first; nothing reads an undeclared parameter.`;
+                    if (sendsSelection)
+                        note += ' This visual is linked, so a left click selects; the drill-down is on its right-click menu.';
+                    return note;
+                }
+                case 'DRILL_IN':
+                    return 'A click replaces this visual\u2019s rows with the next level down, keeping the clicked value. Each level must be a column of its source.';
+                case 'NAVIGATE_PAGE':
+                    return sendsSelection ? 'This visual is linked, so a click selects instead of changing page.' : '';
+                case 'SET_PARAMETER':
+                    return `A click sets ${clickAction.parameter || 'the parameter'} to the clicked row's ${clickAction.column || 'value'}, and every visual that reads it re-runs.`
+                        + (sendsSelection ? ' This visual is linked, so a click selects instead.' : '');
+                case 'CUSTOM':
+                    return 'Written exactly as typed. Use the script to combine several actions.';
+                default:
+                    return '';
+            }
+        })();
+        // A table's drill-through (ROW_DETAIL).
+        const rowDetailDraft = rowDetailDrafts.get(v.id);
+        const rowDetail = v.type !== 'TABLE'
+            ? null
+            : rowDetailDraft && v.options?.row_detail === writeRowDetail(rowDetailDraft)
+                ? rowDetailDraft
+                : readRowDetail(v.options?.row_detail);
+        const rowDetailNote = rowDetail?.supported
+            ? `Each row gets an expand button. It shows ${rowDetail.target}\u2019s rows`
+                + (rowDetail.bindings.filter(binding => binding.childColumn && binding.parentColumn).length
+                    ? ` where ${rowDetail.bindings.filter(binding => binding.childColumn && binding.parentColumn).map(binding => `${binding.childColumn} equals this row\u2019s ${binding.parentColumn}`).join(' and ')}`
+                    : '')
+                + `. ${rowDetail.target} usually sets VISIBLE = OFF so it appears only under rows.`
+            : '';
         const cascadeNote = !cascade || !cascade.supported
             ? ''
             : cascade.mode === 'LIVE'
@@ -620,12 +759,9 @@ export function createDesignerInspector(context) {
                         <label class="etlsql-dsgn-label">On Change
                             <input type="text" id="pp-action-on-change" class="form-control" placeholder="e.g., SET_PARAMETER(@var, value)" value="${esc(v.options?.['action:ON_CHANGE'] || '')}">
                         </label>
-                        <label class="etlsql-dsgn-label">On Click
-                            <input type="text" id="pp-action-on-click" class="form-control" placeholder="e.g., DRILL_DOWN(Target = Tbl, Key = region)" value="${esc(v.options?.['action:ON_CLICK'] || '')}">
-                        </label>
-                        <label class="etlsql-dsgn-label">When another visual is selected
+                        <label class="etlsql-dsgn-label">Cross-filtering
                             <select id="pp-interaction-on-select" class="form-control">
-                                <option value=""${onSelect ? '' : ' selected'}>Default — highlight matching data</option>
+                                <option value=""${onSelect ? '' : ' selected'}>${esc(defaultLinkLabel)}</option>
                                 ${INTERACTION_EFFECTS.map(effect => `<option value="${effect.value}"${onSelect === effect.value ? ' selected' : ''}>${esc(effect.label)}</option>`).join('')}
                                 ${onSelect && !INTERACTION_EFFECTS.some(effect => effect.value === onSelect)
             ? `<option value="${esc(onSelect)}" selected>${esc(onSelect)} (authored)</option>` : ''}
@@ -637,9 +773,108 @@ export function createDesignerInspector(context) {
                                 placeholder="Auto — this visual\u2019s category field">
                         </label>`}
                         <p class="etlsql-dsgn-interaction-note">${esc(interactionNote)}</p>
+                        ${unreadKeys.map(key => `
+                        <div class="etlsql-dsgn-unread-key" data-unread-key="${esc(key)}">
+                            <p class="etlsql-dsgn-interaction-note">A selection on ${esc((incoming.get(key) || []).join(', '))} arrives as @${esc(key)}, and this visual’s query does not read it, so the selection cannot narrow it.
+                            ${filterSourceOn(v.options?.inline_source, key) ? '' : ` Add <code>WHERE @${esc(key)} = 'All' OR ${esc(key)} = @${esc(key)}</code> to its query.`}</p>
+                            ${filterSourceOn(v.options?.inline_source, key) ? `<button type="button" class="btn btn-sm" data-filter-on="${esc(key)}">Filter this visual on @${esc(key)}</button>` : ''}
+                        </div>`).join('')}
+                        ${sendsSelection ? `
+                        <fieldset class="etlsql-dsgn-emit-targets" data-emit-targets>
+                            <legend class="etlsql-dsgn-label">A selection here reaches</legend>
+                            ${emitCandidates.length ? emitCandidates.map(name => {
+            const isLinked = linkedNames.has(name.toLowerCase());
+            const known = pageVisualNames.has(name.toLowerCase());
+            return `<label class="etlsql-dsgn-check">
+                                    <input type="checkbox" data-emit-target="${esc(name)}"${emitTargetSet.has(name.toLowerCase()) ? ' checked' : ''}>
+                                    ${esc(name)}${!known ? ' <span class="etlsql-dsgn-hint">(not on this page)</span>' : isLinked ? '' : ' <span class="etlsql-dsgn-hint">(not linked)</span>'}
+                                </label>`;
+        }).join('') : '<p class="etlsql-dsgn-interaction-note">No other visuals on this page yet.</p>'}
+                            <p class="etlsql-dsgn-interaction-note" data-emit-note>${esc(emitNote)}</p>
+                        </fieldset>` : ''}
                         ${columnDatalist(`dsgn-match-cols-${v.id}`, interactionKeyCandidates(v, colNames))}
+
+                        ${acceptsClickActions ? `
+                        <label class="etlsql-dsgn-label">When a data point is clicked
+                            <select id="pp-click-kind" class="form-control">
+                                ${CLICK_KINDS.map(kind => `<option value="${kind.value}"${clickAction.kind === kind.value ? ' selected' : ''}>${esc(kind.label)}</option>`).join('')}
+                            </select>
+                        </label>
+                        ${clickAction.kind === 'DRILL_DOWN' ? `
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Show details in
+                                <select id="pp-click-target" class="form-control">
+                                    ${preservingOptions(otherVisualNames, clickAction.target, '— visual —')}
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Key columns
+                                <input type="text" id="pp-click-keys" class="form-control" spellcheck="false"
+                                    list="dsgn-match-cols-${esc(v.id)}" value="${esc(clickAction.keys.join(', '))}" placeholder="Region, Year">
+                            </label>
+                        </div>
+                        ${drillUnread.map(key => `<button type="button" class="btn btn-sm" data-drill-read="${esc(key)}">Make ${esc(clickAction.target)} read @${esc(key)}</button>`).join('')}` : ''}
+                        ${clickAction.kind === 'DRILL_IN' ? `
+                        <label class="etlsql-dsgn-label">Levels, top first
+                            <input type="text" id="pp-click-levels" class="form-control" spellcheck="false"
+                                list="dsgn-match-cols-${esc(v.id)}" value="${esc(clickAction.levels.join(', '))}" placeholder="Year, Quarter, Month">
+                        </label>` : ''}
+                        ${clickAction.kind === 'NAVIGATE_PAGE' ? `
+                        <label class="etlsql-dsgn-label">Go to page
+                            <select id="pp-click-page" class="form-control">
+                                ${preservingOptions(pageNames, clickAction.page, '— page —')}
+                            </select>
+                        </label>` : ''}
+                        ${clickAction.kind === 'SET_PARAMETER' ? `
+                        <div class="etlsql-dsgn-typography-grid">
+                            <label class="etlsql-dsgn-label">Parameter
+                                <select id="pp-click-parameter" class="form-control">
+                                    ${preservingOptions(declaredParameters.map(item => item.name), clickAction.parameter, '— parameter —')}
+                                </select>
+                            </label>
+                            <label class="etlsql-dsgn-label">Set to the clicked
+                                <input type="text" id="pp-click-column" class="form-control" spellcheck="false"
+                                    list="dsgn-match-cols-${esc(v.id)}" value="${esc(clickAction.column)}" placeholder="column">
+                            </label>
+                        </div>` : ''}
+                        ${clickAction.kind === 'CUSTOM' ? `
+                        <label class="etlsql-dsgn-label">Action
+                            <input type="text" id="pp-action-on-click" class="form-control" spellcheck="false" placeholder="e.g., CLEAR_FILTERS" value="${esc(clickAction.text)}">
+                        </label>` : ''}
+                        ${clickNote ? `<p class="etlsql-dsgn-interaction-note" data-click-note>${esc(clickNote)}</p>` : ''}` : ''}
                     </div>
                 </details>
+
+                ${v.type === 'TABLE' ? `<details class="etlsql-format-group">
+                    <summary>Row detail</summary>
+                    <div class="etlsql-format-group-body">
+                        ${rowDetail && !rowDetail.supported ? `
+                        <p class="etlsql-dsgn-interaction-note">This table has a ROW_DETAIL clause Studio cannot read, so it is left exactly as authored. Edit it in the script.</p>
+                        <pre class="etlsql-dsgn-readonly-clause">${esc(rowDetail.text)}</pre>` : `
+                        <label class="etlsql-dsgn-label">Expanding a row shows
+                            <select id="pp-row-detail-target" class="form-control">
+                                ${preservingOptions(otherVisualNames, rowDetail?.target, 'Nothing — rows do not expand')}
+                            </select>
+                        </label>
+                        ${rowDetail ? `
+                        <div class="etlsql-dsgn-cascade-parents" data-row-detail-bindings>
+                            ${rowDetail.bindings.length ? rowDetail.bindings.map((binding, index) => `
+                                <div class="etlsql-dsgn-cascade-parent">
+                                    <input type="text" class="form-control" data-row-detail-child="${index}" spellcheck="false"
+                                        value="${esc(binding.childColumn)}" placeholder="${esc(rowDetail.target)} column" aria-label="${esc(rowDetail.target)} column">
+                                    <span class="etlsql-dsgn-hint">=</span>
+                                    <input type="text" class="form-control" data-row-detail-parent="${index}" spellcheck="false"
+                                        list="dsgn-match-cols-${esc(v.id)}" value="${esc(binding.parentColumn)}" placeholder="this row's column" aria-label="This row's column">
+                                    <button type="button" class="etlsql-dsgn-cascade-drop" data-row-detail-remove="${index}" aria-label="Remove match">×</button>
+                                </div>`).join('')
+            : `<p class="etlsql-dsgn-interaction-note">No match yet, so every row shows all of ${esc(rowDetail.target)}.</p>`}
+                            <button type="button" class="btn btn-sm" id="pp-row-detail-add">+ Match a column</button>
+                        </div>
+                        <label class="etlsql-dsgn-label">Show at most
+                            <input type="number" id="pp-row-detail-limit" class="form-control" min="1" value="${rowDetail.limit ?? ''}" placeholder="All rows">
+                        </label>
+                        <p class="etlsql-dsgn-interaction-note">${esc(rowDetailNote)}</p>` : ''}`}
+                    </div>
+                </details>` : ''}
 
                 ${isSlicerLike ? `<details class="etlsql-format-group">
                     <summary>Cascading options</summary>
@@ -790,11 +1025,168 @@ export function createDesignerInspector(context) {
             v.options['action:ON_CHANGE'] = val;
         else
             delete v.options['action:ON_CHANGE']; context.syncScriptFromGridDebounced(); });
-        on('#pp-action-on-click', e => { if (!v.options)
-            v.options = {}; const val = controlTarget(e).value.trim(); if (val)
-            v.options['action:ON_CLICK'] = val;
-        else
-            delete v.options['action:ON_CLICK']; context.syncScriptFromGridDebounced(); });
+        // ── Click action ──────────────────────────────────────────────────────
+        const commitClick = (next) => {
+            if (!v.options)
+                v.options = {};
+            const text = writeClickAction(next);
+            if (text) {
+                v.options['action:ON_CLICK'] = text;
+                clickDrafts.delete(v.id);
+            }
+            else {
+                delete v.options['action:ON_CLICK'];
+                if (next.kind === 'NONE')
+                    clickDrafts.delete(v.id);
+                else
+                    clickDrafts.set(v.id, next);
+            }
+            renderProps();
+            context.syncScriptFromGridDebounced();
+        };
+        on('#pp-click-kind', e => {
+            const kind = controlTarget(e).value;
+            const current = writeClickAction(clickAction) || '';
+            const blank = {
+                NONE: { kind: 'NONE' },
+                DRILL_DOWN: { kind: 'DRILL_DOWN', target: '', keys: [] },
+                DRILL_IN: { kind: 'DRILL_IN', levels: [] },
+                NAVIGATE_PAGE: { kind: 'NAVIGATE_PAGE', page: '' },
+                SET_PARAMETER: { kind: 'SET_PARAMETER', parameter: '', column: '' },
+                // Switching to custom starts from what the guided editor wrote, so the author can
+                // extend it rather than retype it.
+                CUSTOM: { kind: 'CUSTOM', text: current },
+            };
+            commitClick(blank[kind]);
+        });
+        on('#pp-click-target', e => {
+            if (clickAction.kind === 'DRILL_DOWN')
+                commitClick({ ...clickAction, target: controlTarget(e).value });
+        });
+        on('#pp-click-keys', e => {
+            if (clickAction.kind === 'DRILL_DOWN')
+                commitClick({ ...clickAction, keys: splitNames(controlTarget(e).value) });
+        });
+        on('#pp-click-levels', e => {
+            if (clickAction.kind === 'DRILL_IN')
+                commitClick({ ...clickAction, levels: splitNames(controlTarget(e).value) });
+        });
+        on('#pp-click-page', e => {
+            if (clickAction.kind === 'NAVIGATE_PAGE')
+                commitClick({ ...clickAction, page: controlTarget(e).value });
+        });
+        on('#pp-click-parameter', e => {
+            if (clickAction.kind === 'SET_PARAMETER')
+                commitClick({ ...clickAction, parameter: controlTarget(e).value });
+        });
+        on('#pp-click-column', e => {
+            if (clickAction.kind === 'SET_PARAMETER')
+                commitClick({ ...clickAction, column: controlTarget(e).value.trim() });
+        });
+        on('#pp-action-on-click', e => commitClick({ kind: 'CUSTOM', text: controlTarget(e).value }));
+        // ── Make a query read the parameter a selection or a drill-down sets ──
+        // Writes the documented pattern into the visual's own source and declares the parameter
+        // with 'All' as its resting value, so the unfiltered report still shows every row.
+        const readParameterIn = (target, column) => {
+            const next = filterSourceOn(target.options?.inline_source, column);
+            if (!next)
+                return;
+            if (!target.options)
+                target.options = {};
+            target.options.inline_source = next;
+            const name = `@${column}`;
+            const parameters = context.state.parameters ?? (context.state.parameters = []);
+            if (!parameters.some(parameter => String(parameter.name).toLowerCase() === name.toLowerCase())) {
+                parameters.push({
+                    name, dataType: 'VARCHAR', initialValue: "'All'",
+                    isInput: false, isOutput: false, isRequired: false, isSensitive: false, isBlockScoped: false,
+                });
+            }
+            renderProps();
+            context.syncScriptFromGridDebounced();
+        };
+        queryElements(context.propsPanel, '[data-filter-on]').forEach(button => {
+            button.addEventListener('click', () => readParameterIn(v, datasetValue(button, 'filterOn')));
+        });
+        queryElements(context.propsPanel, '[data-drill-read]').forEach(button => {
+            button.addEventListener('click', () => {
+                if (drillTarget)
+                    readParameterIn(drillTarget, datasetValue(button, 'drillRead'));
+            });
+        });
+        // ── Who a selection reaches ───────────────────────────────────────────
+        queryElements(context.propsPanel, '[data-emit-target]').forEach(box => {
+            box.addEventListener('change', () => {
+                if (!v.options)
+                    v.options = {};
+                const ticked = Array.from(queryElements(context.propsPanel, '[data-emit-target]'))
+                    .filter(item => item.checked)
+                    .map(item => datasetValue(item, 'emitTarget'))
+                    .filter(Boolean);
+                if (ticked.length)
+                    v.options.emit_filter = ticked.join(', ');
+                else
+                    delete v.options.emit_filter;
+                renderProps();
+                context.syncScriptFromGridDebounced();
+            });
+        });
+        // ── Row detail ────────────────────────────────────────────────────────
+        const commitRowDetail = (next) => {
+            if (!v.options)
+                v.options = {};
+            if (next)
+                v.options.row_detail = writeRowDetail(next);
+            else
+                delete v.options.row_detail;
+            if (next && next.bindings.some(binding => !binding.childColumn || !binding.parentColumn))
+                rowDetailDrafts.set(v.id, next);
+            else
+                rowDetailDrafts.delete(v.id);
+            renderProps();
+            context.syncScriptFromGridDebounced();
+        };
+        const editRowDetail = (change) => {
+            if (!rowDetail?.supported)
+                return;
+            const next = { ...rowDetail, bindings: rowDetail.bindings.map(binding => ({ ...binding })) };
+            change(next);
+            commitRowDetail(next);
+        };
+        on('#pp-row-detail-target', e => {
+            const target = controlTarget(e).value;
+            if (!target) {
+                commitRowDetail(null);
+                return;
+            }
+            commitRowDetail(rowDetail?.supported
+                ? { ...rowDetail, target }
+                : { supported: true, target, bindings: [], limit: null });
+        });
+        on('#pp-row-detail-limit', e => editRowDetail(next => {
+            const limit = Number.parseInt(controlTarget(e).value, 10);
+            next.limit = Number.isFinite(limit) && limit > 0 ? limit : null;
+        }));
+        queryElement(context.propsPanel, '#pp-row-detail-add')?.addEventListener('click', () => editRowDetail(next => { next.bindings.push({ childColumn: '', parentColumn: '' }); }));
+        queryElements(context.propsPanel, '[data-row-detail-remove]').forEach(button => {
+            button.addEventListener('click', () => editRowDetail(next => {
+                next.bindings.splice(Number(datasetValue(button, 'rowDetailRemove')), 1);
+            }));
+        });
+        queryElements(context.propsPanel, '[data-row-detail-child], [data-row-detail-parent]').forEach(input => {
+            input.addEventListener('change', () => editRowDetail(next => {
+                const child = datasetValue(input, 'rowDetailChild');
+                const index = Number(child || datasetValue(input, 'rowDetailParent'));
+                const binding = next.bindings[index];
+                if (!binding)
+                    return;
+                const value = input.value.trim().replace(/^@/, '');
+                if (child)
+                    binding.childColumn = value;
+                else
+                    binding.parentColumn = value;
+            }));
+        });
         on('#pp-interaction-on-select', e => {
             if (!v.options)
                 v.options = {};

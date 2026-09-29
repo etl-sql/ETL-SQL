@@ -14,6 +14,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Cross-filtering, drill-down, and drill-through are authored from Studio's inspector.
+  **Cross-filtering** links a visual, and **A selection here reaches** ticks which visuals a
+  selection may reach (`EMIT_FILTER`). A selection arrives as a parameter named after the clicked
+  column. When a linked visual's query does not read it, the panel says so, and **Filter this visual
+  on @Region** writes `WHERE @Region = 'All' OR Region = @Region` and declares the parameter.
+  **When a data point is clicked** builds `DRILL_DOWN`, `DRILL_IN`, `NAVIGATE_PAGE`, and
+  `SET_PARAMETER` actions from pickers, and offers to make a drill-down's target read the key.
+  Tables get a **Row detail** editor for `ROW_DETAIL` (target, matched columns, row limit). A clause
+  the editor cannot write back exactly is left as authored.
+
 - Page headers and footers for paginated reports. A `TEXT` or `IMAGE` visual marked
   `PRINT_LAYOUT (BAND = HEADER | FOOTER)` prints at the top or bottom of every physical page
   instead of once in the body. Band text resolves `{{PAGE}}`, `{{PAGES}}`, `{{CURRENT_DATE}}`,
@@ -194,6 +204,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   JavaScript shrinks by 27,271 bytes. Stateful designer and Studio closures remain unchanged.
 
 ### Fixed
+
+- Formatting a report no longer deletes a visual's `INTERACTIONS`, `EMIT_FILTER`, or `ROW_DETAIL`
+  clause. The formatter omitted all three, so a format pass silently removed cross-filter wiring and
+  drill-through while the report still built.
+
+- An edit in Studio's designer no longer drops actions from a trigger that runs several
+  (`ON_CLICK = (SET_PARAMETER(...), NAVIGATE_PAGE(...))`). Only the last one was kept.
+
+- Studio's inspector no longer describes an unlinked visual as highlighting selections made
+  elsewhere. It ignores them.
 
 - The Studio pipeline map now shows its connectors. Every DAG edge was being drawn off screen, and
   the map zoomed out until steps became unreadable pills. Connectors now carry arrowheads, and the

@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.20.0 — Runtime: Formatting keeps a visual's interaction clauses
+- **What changed**: Formatting a `CREATE VISUAL` now writes its `INTERACTIONS`, `EMIT_FILTER`, and `ROW_DETAIL` clauses. Previously the formatter omitted all three, so a format pass deleted cross-filter wiring and drill-through, and an `EMIT_FILTER` could come back as an unparseable `EMIT_FILTER:TARGETS` option.
+- **Who is affected**: Anyone comparing formatter output for visuals that use these clauses.
+- **Migration**: None. Re-format to restore clauses an earlier format pass removed.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.20.0 — Semantic: Unfaceted terminal charts retain rows from every layer
 - **What changed**: Terminal charts without facets use the union of all layer row IDs. Previously the first non-RULE layer supplied the row filter, silently omitting other color groups and reference rows.
 - **Who is affected**: Multi-series or multi-layer charts rendered in the terminal without facets.

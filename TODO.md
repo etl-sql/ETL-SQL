@@ -150,15 +150,22 @@ covered and certified: a named dataset, chart builder (KPI, trend, category, tab
 filters the page through a parameter, formatting that survives save and reload, themes, bookmarks,
 containers, and clause-level patching that keeps hand-written clauses on a designer edit.
 
-- [ ] **P1 — Chart-to-chart interactions.** Power BI's default is "click a bar, the other visuals
-  filter". The inspector sets the receive side (`INTERACTIONS (ON_SELECT = …)`), but nothing sets
-  the send side, `EMIT_FILTER (TARGETS = …)`: no per-visual "Edit interactions" view. The dashboard
-  journey certifies slicer filtering only; add a step that clicks a chart mark and asserts the other
-  visuals filter or highlight.
-- [ ] **P1 — Drill-down and drill-through.** The only control is a free-text *On Click* box that
-  expects typed `DRILL_DOWN(Target = …, Key = …)` syntax, and `ROW_DETAIL` (a detail visual bound to
-  the clicked row) has no UI at all. Guide both: pick the target visual or page, bind the key columns,
-  and show the clause it writes.
+- [x] **P1 — Chart-to-chart interactions.** Done 2026-09-29. The inspector links a visual and ticks
+  who its selection reaches (`EMIT_FILTER`). A selection arrives as `@<column>`, so a receiver only
+  narrows if its query reads it; the panel says when it doesn't and writes the `WHERE` and the
+  declaration. Also fixed: the formatter dropped `INTERACTIONS`/`EMIT_FILTER`/`ROW_DETAIL`, and the
+  designer kept only the last action on a multi-action trigger. Proof:
+  `StudioInteractionJourneyTests.ASelectionReachesOnlyTheVisualsItIsSentTo` clicks a bar on the
+  Portal and reads the rows.
+- [x] **P1 — Drill-down and drill-through.** Done 2026-09-29. *When a data point is clicked* builds
+  `DRILL_DOWN`/`DRILL_IN`/`NAVIGATE_PAGE`/`SET_PARAMETER` from pickers (anything else stays custom
+  text), and tables get a *Row detail* editor. Proof: the drill-down and row-detail journeys in
+  `StudioInteractionJourneyTests`.
+  - [ ] Follow-up: a linked chart's left click selects, so its `ON_CLICK` action never runs
+    (`rt-charts.ts`); only `DRILL_DOWN` survives, on the right-click menu. The inspector says so.
+    Decide whether a click should do both.
+  - [ ] Follow-up: a multi-select (Ctrl+click) sends `North,South`, which the written
+    `Region = @Region` filter cannot match.
 - [ ] **P2 — Tooltips.** No UI for `TOOLTIP (FIELDS (col FORMAT …))` or for a container shown as a
   tooltip page. Only the static `TOOLTIP = 'text'` form is reachable without typing.
 - [ ] **P2 — Analytics overlays.** Goal, average, trend, reference line and band, and forecast are

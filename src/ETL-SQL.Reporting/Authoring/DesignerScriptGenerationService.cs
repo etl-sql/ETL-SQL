@@ -282,6 +282,16 @@ public sealed class DesignerScriptGenerationService
         if (interactions.Count > 0)
             AppendLine(sb, $"    INTERACTIONS ({string.Join(", ", interactions)}),", nl);
 
+        if (visual.Options.TryGetValue("emit_filter", out var emitFilter) && !string.IsNullOrWhiteSpace(emitFilter))
+        {
+            var targets = emitFilter.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (targets.Length > 0)
+                AppendLine(sb, $"    EMIT_FILTER (TARGETS = ({string.Join(", ", targets)})),", nl);
+        }
+
+        if (visual.Options.TryGetValue("row_detail", out var rowDetail) && !string.IsNullOrWhiteSpace(rowDetail))
+            AppendLine(sb, $"    {rowDetail.Trim().TrimEnd(',')},", nl);
+
         if (visual.Options.TryGetValue("cascade", out var cascade) && !string.IsNullOrWhiteSpace(cascade))
             AppendLine(sb, $"    {cascade.Trim().TrimEnd(',')},", nl);
 
@@ -628,6 +638,9 @@ public sealed class DesignerScriptGenerationService
         || string.Equals(key, "BUTTON_TYPE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "inline_source", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "cascade", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "emit_filter", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "EMIT_FILTER:TARGETS", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "row_detail", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "text_default", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "print_layout", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "advanced_chart", StringComparison.OrdinalIgnoreCase)

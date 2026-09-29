@@ -282,6 +282,8 @@ public static class AstSerializer
         CreateVisualStatement s => FormatCreateVisual(s),
         TitleDefinition s => FormatTitleDefinition(s),
         CascadeDefinition s => FormatCascade(s),
+        RowDetailDefinition s => FormatRowDetail(s),
+        VisualInteraction s => $"{s.Key} = {s.Value}",
         AdvancedChartDefinition s => FormatAdvancedChart(s),
         HtmlTemplateDefinition s => FormatHtmlTemplate(s),
         CreatePageStatement s => FormatCreatePage(s),
@@ -1503,6 +1505,16 @@ public static class AstSerializer
             sb.AppendLine($"    OVERLAYS ( {string.Join(", ", s.Overlays.Select(FormatOverlay))} ),");
         if (s.Actions.Count > 0)
             sb.AppendLine($"    ACTIONS ( {FormatActions(s.Actions)} ),");
+        // COMPAT_BREAK: 0.20 — formatted output for a visual with INTERACTIONS, EMIT_FILTER, or ROW_DETAIL changes.
+        // The interaction clauses were omitted like TOOLTIP was: a format pass deleted the
+        // author's cross-filter wiring and drill-through, and the report still built.
+        if (s.Interactions.Count > 0)
+            sb.AppendLine($"    INTERACTIONS ( {string.Join(", ", s.Interactions.Select(i => $"{i.Key} = {i.Value}"))} ),");
+        var emitTargets = s.Options.FirstOrDefault(o => o.Key.Equals("EMIT_FILTER:TARGETS", StringComparison.OrdinalIgnoreCase));
+        if (emitTargets != null)
+            sb.AppendLine($"    EMIT_FILTER (TARGETS = ({string.Join(", ", emitTargets.Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))})),");
+        if (s.RowDetail != null)
+            sb.AppendLine($"    {FormatRowDetail(s.RowDetail)},");
         if (s.Cascade != null)
             sb.AppendLine($"    {FormatCascade(s.Cascade)},");
         if (s.AdvancedChart != null)
@@ -1529,7 +1541,8 @@ public static class AstSerializer
     private static List<string> FormatVisualOptions(IReadOnlyCollection<VisualOption> options)
     {
         var result = options
-            .Where(option => !option.Key.StartsWith("DATA_LABELS:", StringComparison.OrdinalIgnoreCase)
+            .Where(option => !option.Key.Equals("EMIT_FILTER:TARGETS", StringComparison.OrdinalIgnoreCase)
+                && !option.Key.StartsWith("DATA_LABELS:", StringComparison.OrdinalIgnoreCase)
                 && !option.Key.StartsWith("SERIES_LABELS:", StringComparison.OrdinalIgnoreCase)
                 && !option.Key.Equals("DATA_LABELS", StringComparison.OrdinalIgnoreCase)
                 && !option.Key.Equals("SERIES_LABELS", StringComparison.OrdinalIgnoreCase))
@@ -1617,6 +1630,16 @@ public static class AstSerializer
         if (def.Fallback != null)
             parts.Add($"FALLBACK = {Quote(def.Fallback)}");
         return string.Join(", ", parts);
+    }
+
+    private static string FormatRowDetail(RowDetailDefinition detail)
+    {
+        var parts = new List<string> { $"TARGET = {detail.TargetName}" };
+        if (detail.Bindings.Count > 0)
+            parts.Add($"BINDINGS ({string.Join(", ", detail.Bindings.Select(b => b.ToSql()))})");
+        if (detail.Limit is int limit)
+            parts.Add($"LIMIT = {limit.ToString(CultureInfo.InvariantCulture)}");
+        return $"ROW_DETAIL ({string.Join(", ", parts)})";
     }
 
     private static string FormatCascade(CascadeDefinition cascade)

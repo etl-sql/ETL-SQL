@@ -289,9 +289,14 @@ public sealed class DesignerScriptParsingService
             options[style.Key] = style.Value;
         }
 
-        foreach (var act in v.Actions)
+        // One entry per trigger, holding every action it runs. Keying each action on its trigger kept
+        // only the last of `ON_CLICK = (A, B)`, and the next edit to the visual deleted the rest.
+        foreach (var trigger in v.Actions.GroupBy(act => act.Trigger.ToUpperInvariant()))
         {
-            options[$"action:{act.Trigger.ToUpper()}"] = act.ToSql();
+            var list = trigger.ToList();
+            options[$"action:{trigger.Key}"] = list.Count == 1
+                ? list[0].ToSql()
+                : $"({string.Join(", ", list.Select(act => act.ToSql()))})";
         }
         foreach (var inter in v.Interactions)
         {
@@ -304,6 +309,19 @@ public sealed class DesignerScriptParsingService
         if (v.Cascade != null)
         {
             options["cascade"] = v.Cascade.ToSql();
+        }
+        // Who a selection made here filters. The parser keeps it as an option, which the designer used
+        // to carry as an opaque key it could neither show nor edit; it is a list of visual names.
+        if (options.Remove("EMIT_FILTER:TARGETS", out var emitTargets))
+        {
+            options["emit_filter"] = string.Join(", ", emitTargets
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+        }
+        // A table's drill-through detail: the visual shown under a clicked row, and the parameters the
+        // row's values are bound to. Carried as the clause, which is what the inspector writes.
+        if (v.RowDetail != null)
+        {
+            options["row_detail"] = v.RowDetail.ToSql();
         }
         // A TEXT band's content lives in its own DEFAULT clause, not in OPTIONS. Without this the
         // designer cannot see the text an author wrote, so a round-trip through the canvas would

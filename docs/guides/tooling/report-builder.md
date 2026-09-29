@@ -68,7 +68,13 @@ Configures selected visual details:
 - **Properties:** Name, type, container group, title, dataset binding, width, and height.
 - **Mappings & Role Validation:** Column assignment text fields with `<datalist>` auto-suggestions and mandatory role validation badges (`* Required` vs `✓ Required` vs `Optional`).
 - **Container Section / Tab Binding:** Input `CONTAINER_SECTION` (e.g. `Tab 1`, `Section A`) when nested inside `TABS` or `ACCORDION` containers.
-- **Actions & Interactions:** `ON_CHANGE` (e.g. `SET_PARAMETER(@var, value)`), `ON_CLICK` (e.g. `DRILL_DOWN(...)`), and `ON_SELECT` (e.g. `HIGHLIGHT`).
+- **Actions & Interactions:**
+  - **Cross-filtering** links the visual (`INTERACTIONS (ON_SELECT = HIGHLIGHT | FILTER)`). A linked visual sends a selection when clicked, and responds to selections made elsewhere. Tables and slicers send by default; charts only once linked.
+  - **A selection here reaches** ticks the visuals a selection may reach (`EMIT_FILTER (TARGETS = (...))`). Nothing ticked means every linked visual.
+  - A selection arrives as a parameter named after the clicked column, for example `@Region`. A linked visual only narrows if its own query reads that parameter. When it doesn't, the panel says so, and **Filter this visual on @Region** writes `WHERE @Region = 'All' OR Region = @Region` into its source and declares `@Region` with `'All'` as its resting value.
+  - **When a data point is clicked** writes `ACTIONS (ON_CLICK = ...)`: show details in another visual (`DRILL_DOWN`), drill into the next level (`DRILL_IN`), go to a page (`NAVIGATE_PAGE`), set a parameter (`SET_PARAMETER`), or a custom action. A drill-down sets `@<key>` for each key column, so the panel offers to make the target read it. A linked visual's click selects instead of running its action; a drill-down stays on its right-click menu.
+  - `ON_CHANGE` (e.g. `SET_PARAMETER(@var, value)`) for input controls.
+- **Row detail** (tables only) writes `ROW_DETAIL (TARGET = ..., BINDINGS (@column = Column), LIMIT = n)`. Each row gets an expand button that shows the target's rows where the named column equals this row's value. The target usually sets `VISIBLE = OFF` so it appears only under rows.
 - **Grid Position:** Fine-tune numeric `Col`, `Row`, `Width` (`W`), and `Height` (`H`).
 
 ---
