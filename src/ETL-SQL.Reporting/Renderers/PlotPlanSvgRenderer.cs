@@ -368,7 +368,7 @@ internal sealed class PlotPlanSvgRenderer
                     else
                     {
                         var rectScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale;
-                        RenderRects(builder, plan, layer, rectLayers, layer.Stack != StackMode.None, categories.Length, area, xScale, rectScale, color, showLabels);
+                        RenderRects(builder, plan, layer, rectLayers, layer.Stack != StackMode.None, categories.Length, area, xScale, rectScale, color, showLabels, transposedPointAxes);
                     }
                     break;
                 case MarkKind.Line:
@@ -1300,7 +1300,7 @@ internal sealed class PlotPlanSvgRenderer
     private static string Anchor(MarkExtentAnchor anchor) => anchor == MarkExtentAnchor.End ? "end" : "start";
 
     private static void RenderRects(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, IReadOnlyList<ResolvedMarkLayer> layers, bool stacked,
-        int categoryCount, in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? scale, string color, bool showLabels)
+        int categoryCount, in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? scale, string color, bool showLabels, bool transposedAspect)
     {
         if (scale is null) return;
         // A non-stacked layer whose author supplied X_START/X_END owns its horizontal extent outright and
@@ -1360,7 +1360,7 @@ internal sealed class PlotPlanSvgRenderer
                 var first = MapX(spanStart.Value, xScale!, area) + datum.DisplayOffsetX;
                 var second = MapX(spanEnd.Value, xScale!, area) + datum.DisplayOffsetX;
                 x = Math.Min(first, second);
-                width = Math.Max(1m, Math.Abs(second - first));
+                width = transposedAspect ? Math.Abs(second - first) : Math.Max(1m, Math.Abs(second - first));
             }
             var datumColor = ResolveDatumColor(colorScale, datum, color);
             var barMinHeightOpt = Style(plan, "BAR_MIN_HEIGHT") ?? LayerStyle(layer, "bar_min_height") ?? LayerStyle(layer, "barMinHeight");
@@ -1370,7 +1370,7 @@ internal sealed class PlotPlanSvgRenderer
                 barMinHeight = bmh;
             }
             var rawHeight = Math.Abs(endY - startY);
-            var barHeight = Math.Max(barMinHeight, rawHeight);
+            var barHeight = transposedAspect ? rawHeight : Math.Max(barMinHeight, rawHeight);
             var top = rangedY ? Math.Min(startY, endY) : (endY <= startY ? (startY - barHeight) : startY);
             var errorLow = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorLow) ?? ChartValue.Null());
             var errorHigh = PlotPlanResolver.Number(Channel(datum, FieldChannel.ErrorHigh) ?? ChartValue.Null());
@@ -1391,7 +1391,7 @@ internal sealed class PlotPlanSvgRenderer
             }
             var rangedClass = rangedY || rangedX ? " class='plot-range-rect'" : string.Empty;
             var rxAttr = rangedY || rangedX ? string.Empty : " rx='1'";
-            var title = rangedY
+            var title = transposedAspect ? PlotPlanResolver.CartesianRangeDescription(datum, transposed: true) ?? "" : rangedY
                 ? $"{FormatDataLabel(start, dataFormat)} to {FormatDataLabel(end, dataFormat)}"
                 : FormatDataLabel(value ?? (end - start), dataFormat);
             var hoverFocus = LayerStyle(layer, "hoverFocus") ?? LayerStyle(layer, "hover_focus") ?? Style(plan, "HOVER_FOCUS");
@@ -1399,7 +1399,7 @@ internal sealed class PlotPlanSvgRenderer
             builder.AppendLine($"<rect{rangedClass} x='{N(x)}' y='{N(top)}' width='{N(width)}' height='{N(barHeight)}'{rxAttr} fill='{Esc(datumColor)}'{extentAttributes} data-row-index='{datum.RowIndex}'{seriesAttr}><title>{Esc(title)}</title></rect>");
             if (showLabels)
             {
-                var label = FormatDataLabel(value ?? (end - start), dataFormat);
+                var label = transposedAspect ? title : FormatDataLabel(value ?? (end - start), dataFormat);
                 var position = labelPosition.ToUpperInvariant();
                 var labelX = x + width / 2m;
                 var labelY = top - 4m;
@@ -3295,7 +3295,7 @@ internal sealed class PlotPlanSvgRenderer
                     var bx = MapX(endX.Value, xScale, area) + datum.DisplayOffsetX;
                     var ay = MapY(startY.Value, yScale, area.Height) + datum.DisplayOffsetY;
                     var by = MapY(endY.Value, yScale, area.Height) + datum.DisplayOffsetY;
-                    var description = PlotPlanResolver.RangeRuleDescription(datum, transposed: true);
+                    var description = PlotPlanResolver.CartesianRangeDescription(datum, transposed: true);
                     builder.AppendLine($"<line class='plot-range-rule' data-layer-id='{Esc(layer.Id)}' data-row-index='{datum.RowIndex}' x1='{N(ax)}' y1='{N(ay)}' x2='{N(bx)}' y2='{N(by)}' stroke='{Esc(color)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}><title>{Esc(label ?? layer.Id)}: {Esc(description ?? "")}</title></line>");
                     if (!string.IsNullOrWhiteSpace(label))
                         builder.AppendLine($"<text class='plot-reference-rule-label' x='{N(bx + 4m)}' y='{N(by - 4m)}' font-size='10' fill='{Esc(color)}'>{Esc(label)}</text>");

@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.20.0 — Semantic: Unfaceted terminal charts retain rows from every layer
+- **What changed**: Terminal charts without facets use the union of all layer row IDs. Previously the first non-RULE layer supplied the row filter, silently omitting other color groups and reference rows.
+- **Who is affected**: Multi-series or multi-layer charts rendered in the terminal without facets.
+- **Migration**: No script change is needed. Terminal output now includes the rows already represented by the resolved plan and graphical output.
+- **Diagnostic**: N/A — terminal rendering.
+- **Earliest removal**: N/A.
+
 ### v0.20.0 — Semantic: Isolated transposed reference rules ignore unrelated color groups
 - **What changed**: Single-axis RULE layers on transposed fixed-aspect charts no longer inherit color grouping from other layers. Previously a POINT color binding duplicated reference lines and accessible thresholds once per color group.
 - **Who is affected**: CUSTOM charts combining these RULE layers with color-grouped marks.

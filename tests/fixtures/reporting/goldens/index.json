@@ -29,7 +29,7 @@
       ]
     },
     "bar_multi_series_stacked.rptsql": {
-      "terminal": "650A073B19824FFDF441D0D372D480D70243237EFDED88CE3A7A5070956C8E61",
+      "terminal": "9F0599D4F73D92544D9B39A5FFED5688DDB23CF89062848D407998B6A95C53E6",
       "visuals": [
         {
           "name": "StackedTierBar",
@@ -40,7 +40,7 @@
       ]
     },
     "bar_stable_ordering.rptsql": {
-      "terminal": "913BFED500E2E3D4CD493BE821E475CE1908747D4BF3AEE92EC0F6434EADDAB5",
+      "terminal": "56E42F082503EAFE5F53219E83BCB2927785A00F8F234EC2F0BC827959A8124E",
       "visuals": [
         {
           "name": "OrderedCategoryBar",
@@ -205,7 +205,7 @@
       ]
     },
     "custom_smart_labels.rptsql": {
-      "terminal": "3932371CB1901BB5A9EA94DEB2C9DEFF30068213819CD7BD92CC865A9E51D3F8",
+      "terminal": "457848A9D75E47EA8B4F7AC7C29ABEA02BAA0E539FCBD6D7B1FECC7BB11A9ABA",
       "visuals": [
         {
           "name": "DenseLabels",
@@ -343,7 +343,7 @@
       ]
     },
     "radar_native_plot_plan.rptsql": {
-      "terminal": "B07A8F35B50E9ADF7CD49E684A737E4C3AFAC15DCC2E925949CE6AD134B035F2",
+      "terminal": "D6917089352EF2594A94E0BAF3146B3872A03A0A036CE287653C83A0AD12D051",
       "visuals": [
         {
           "name": "ModelComparison",
@@ -399,7 +399,7 @@
       ]
     },
     "scatter_multi_series_inferred.rptsql": {
-      "terminal": "333BCB2E641011E67759B1655572421107E2B80C90F5E4896DBCD1A990234650",
+      "terminal": "D10843B3D0317D87610AD40FFF67AC16B68678008676B58DEBF2E2872F9AABAE",
       "visuals": [
         {
           "name": "InferredScatterVisual",

@@ -428,7 +428,14 @@ semantics and backend evidence before its rejection can be lifted.
   Stable-key/seed checks, invalid inputs, nulls, facets, resize, reversal/log scales, authoring and
   contract round trips, lineage, LSP rename, terminal/fallback, PDF and deterministic plan/SVG
   fixtures are covered by `TransposedAspectRuleJitterTests`. Wire versions are unchanged.
-- [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/supported RULE,
+- [x] **Four-endpoint RECT layers on continuous transposed aspect charts.** Quantitative field
+  or DATUM endpoint pairs map exact rectangle extents through reversed/log axes, facets and resize.
+  Zero-area/subpixel ranges retain their dimensions; titles, optional labels, terminal and fallback
+  retain both raw intervals. Missing endpoints report gaps. IDENTITY only, with no extra encodings
+  or conditions. Geometry oracles, domain/null checks, round trips, lineage, LSP rename, PDF and
+  deterministic fixtures live in `TransposedAspectRangeRectTests`; wire versions are unchanged.
+  The terminal row-selection regression and its compatibility note cover previously omitted groups.
+- [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/supported RULE/RECT,
   stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**

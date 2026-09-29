@@ -409,17 +409,26 @@ public sealed record ChartSpec(
                 yScale?.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic))
                 throw new InvalidDataException("ASPECT_RATIO requires continuous quantitative primary X and Y scales.");
             if (Coordinate.Kind == CoordinateKind.TransposedCartesian && Layers.Any(layer =>
-                layer.Mark is not (MarkKind.Point or MarkKind.Text or MarkKind.Rule) ||
+                layer.Mark is not (MarkKind.Point or MarkKind.Text or MarkKind.Rule or MarkKind.Rect) ||
                 layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or { Kind: PositionAdjustmentKind.Jitter } or
                 { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data }) ||
                 layer.Bindings.Any(binding => binding.Stack != StackMode.None ||
                     binding.Channel == FieldChannel.Y2)))
-                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers, TEXT layers and RULE layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
+                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers, TEXT layers, supported RECT layers and RULE layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
             if (Coordinate.Kind == CoordinateKind.TransposedCartesian)
-                foreach (var layer in Layers.Where(layer => layer.Mark == MarkKind.Rule))
+                foreach (var layer in Layers.Where(layer => layer.Mark is MarkKind.Rule or MarkKind.Rect))
                 {
                     var bindings = layer.Bindings.Where(binding => binding.Channel is not (FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap)).ToArray();
                     var channels = bindings.Select(binding => binding.Channel).ToHashSet();
+                    if (layer.Mark == MarkKind.Rect)
+                    {
+                        if (!channels.SetEquals([FieldChannel.XStart, FieldChannel.XEnd, FieldChannel.YStart, FieldChannel.YEnd]) ||
+                            layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) || !layer.Conditions.IsDefaultOrEmpty ||
+                            bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative ||
+                                binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)))
+                            throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO RECT requires exactly four quantitative field/DATUM X_START/X_END/Y_START/Y_END bindings, IDENTITY, and no CONDITIONS.");
+                        continue;
+                    }
                     var ranged = channels.SetEquals([FieldChannel.X, FieldChannel.YStart, FieldChannel.YEnd]) ||
                         channels.SetEquals([FieldChannel.Y, FieldChannel.XStart, FieldChannel.XEnd]) ||
                         channels.SetEquals([FieldChannel.XStart, FieldChannel.XEnd, FieldChannel.YStart, FieldChannel.YEnd]);

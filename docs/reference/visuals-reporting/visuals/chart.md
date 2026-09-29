@@ -85,7 +85,7 @@ CREATE VISUAL name AS CUSTOM (
 
 ## Mappings
 
-- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` and `TEXT` layers with `IDENTITY`, `JITTER`, or `NUDGE(..., UNIT = EM|BAND|DATA)`, without stacking or secondary axes. Single-axis RULE layers are also supported under the restrictions below. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
+- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` and `TEXT` layers with `IDENTITY`, `JITTER`, or `NUDGE(..., UNIT = EM|BAND|DATA)`, without stacking or secondary axes. RULE layers and RECT layers with both endpoint pairs are also supported under the restrictions below. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
 - **SCALES** — Optionally declares named `LINEAR`, `LOGARITHMIC`, `TIME`, `BAND`, `POINT`, `ORDINAL`, or `IDENTITY` scales. Encoding `SCALE` references must name a declared scale; omission requests deterministic inference from the required `TYPE`, channel, mark, and coordinate.
 - **RANGE** — Adds a dependency-free sRGB sequential or diverging output range to a quantitative `COLOR` scale. Colors use portable `#RRGGBB`; values clamp at the domain, nulls use `NULL_COLOR`, and a diverging midpoint must lie inside the resolved domain.
 - **Scale axis controls** — `MIN`/`MAX` set the domain, `INCLUDE_ZERO` expands a quantitative domain to zero, `REVERSE` flips its display direction, `MAJOR_TICK_COUNT` or `TICK_INTERVAL` controls major ticks, `MINOR_TICKS` adds midpoint ticks, `TIME_UNIT` truncates/bins temporal scales by calendar unit (`AUTO`, `DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`), `TICK_FORMAT` applies a custom date/time or numeric format pattern, and `LABEL_ROTATION`/`LABEL_SKIP` control crowded tick labels. `OUTER_PADDING = 0..1` adds space before the first and after the last category on `BAND` scales only.
@@ -311,6 +311,40 @@ CREATE VISUAL Measurement AS CUSTOM (
         STYLE (LABEL = '<target>', COLOR = '#112233')
       )
     )
+  )
+);
+```
+
+## Rectangles on transposed fixed-aspect charts
+
+RECT supports exactly four quantitative field or DATUM bindings: `X_START`, `X_END`,
+`Y_START` and `Y_END`. Use IDENTITY placement without conditions, stacking, secondary axes
+or additional encodings. Each row defines a rectangle between its paired corners. Semantic Y
+maps horizontally and X vertically, including reversed/logarithmic scales, independent facets
+and resizing. Every endpoint contributes to its scale domain.
+
+The rectangle uses the exact mapped width and height. Minimum bar dimensions do not apply:
+subpixel ranges retain their size, and a zero-width or zero-height interval remains a zero-area
+rectangle with accessible values. Descending endpoints draw the same extent but retain their
+original order in SVG titles, optional data labels, terminal output and accessible fallback.
+A missing endpoint draws no rectangle and is reported as a gap. Coincident rows remain distinct.
+These isolated rectangles do not inherit color groups from another layer. Use STYLE for a fixed color.
+
+```sql
+CREATE VISUAL Regions AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    LAYERS (regions = RECT (
+      INHERIT_ENCODINGS = OFF,
+      ENCODINGS (
+        X_START = StartX (TYPE = QUANTITATIVE),
+        X_END = EndX (TYPE = QUANTITATIVE),
+        Y_START = LowerBound (TYPE = QUANTITATIVE),
+        Y_END = UpperBound (TYPE = QUANTITATIVE)
+      ),
+      STYLE (COLOR = '#112233')
+    ))
   )
 );
 ```

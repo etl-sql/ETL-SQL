@@ -80,9 +80,9 @@ Golden SHA-256 fingerprints in `GrammarOfGraphicsContractTests` make an accident
 CI. An intentional compatible or breaking change must introduce an explicit version decision and
 update the fixtures and compatibility expectations together.
 
-## Transposed point aspect ratios
+## Transposed physical aspect ratios
 
-Continuous primary-axis `POINT` and `TEXT` compositions accept `ASPECT_RATIO` with
+Continuous primary-axis `POINT` and `TEXT` compositions, with supported RULE/RECT layers, accept `ASPECT_RATIO` with
 `TRANSPOSED_CARTESIAN`. The ratio is physical semantic Y-unit size divided by X-unit size;
 logarithmic spans use decades. The resolver fits the viewport using
 `height / width = xSpan / (aspectRatio * ySpan)`, including facet panels and relayout.
@@ -91,9 +91,10 @@ Static export consumes the same SVG. Terminal and accessible output retain raw v
 they do not claim physical-distance fidelity.
 
 This increment retains ChartSpec v2 and PlotPlan v3: it adds no serialized fields or enum values,
-and existing valid specifications retain their behavior and fingerprints. Older ChartSpec validators
+and existing valid specifications retain their plan and SVG fingerprints. The terminal row-selection
+correction described below changes output for previously omitted series. Older ChartSpec validators
 reject the newly allowed combination. Regenerate output with a supporting renderer; serialization
-compatibility alone does not establish rendering support. Marks other than POINT/TEXT and supported RULE, secondary axes,
+compatibility alone does not establish rendering support. Marks other than POINT/TEXT and supported RULE/RECT, secondary axes,
 stacking remain rejected for transposed aspect ratios.
 
 Single-axis RULE layers require exactly one quantitative field or DATUM binding on X or Y, IDENTITY, JITTER or EM/BAND/DATA NUDGE along the bound axis,
@@ -151,6 +152,21 @@ unique/non-null across all source rows, including incomplete segments. Row reord
 preserve offsets; seed changes do not. Existing hash identity includes chart ID, mark, Z index and
 channel sequence. Missing endpoints still skip rendering and fallback. Single-axis reference rules
 accept JITTER only along the bound axis. ChartSpec v2 and PlotPlan v3 retain their existing wire shapes.
+
+RECT accepts exactly four quantitative field/DATUM endpoints (X_START/X_END/Y_START/Y_END) with
+IDENTITY placement and no conditions or additional encodings. The physical-axis adapter exchanges
+both endpoint pairs locally; authoritative plan channels stay semantic. Each endpoint contributes
+to global and independent facet domains. SVG uses the minimum mapped corner and absolute mapped
+span on each physical axis, without minimum bar dimensions. Zero-area and subpixel rectangles
+therefore preserve their physical extent. Isolated rectangles ignore unrelated layer color groups.
+
+The shared `CartesianRangeDescription` preserves both intervals and endpoint order in SVG titles,
+optional labels, terminal rows and accessible fallback. Incomplete rows draw no rectangle and are
+reported as gaps. Complete coincident rows remain distinct. The resolved extent is `None` because
+these rectangles have no value baseline. Native/static SVG share the geometry; terminal output
+preserves values rather than physical distance. ChartSpec v2 and PlotPlan v3 require no new fields.
+Unfaceted terminal output now selects rows from every layer, fixing omission of rows outside the
+first color group; that existing-behavior correction is recorded in `BREAKING_CHANGES.md`.
 
 Error bars on these points retain `ErrorLow`/`ErrorHigh` in the semantic Y domain.
 Their endpoints participate in global and independent facet domains before viewport fitting.

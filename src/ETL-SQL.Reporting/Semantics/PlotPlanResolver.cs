@@ -575,9 +575,9 @@ public sealed class PlotPlanResolver
             }
 
             // COMPAT_BREAK: 0.20 — isolated single-axis rules must not inherit another layer's color groups.
-            var isolatedRule = layer.Mark == MarkKind.Rule && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null };
+            var isolatedGeometry = layer.Mark is (MarkKind.Rule or MarkKind.Rect) && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null };
             var colorBinding = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color)
-                ?? (isolatedRule ? null : spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color));
+                ?? (isolatedGeometry ? null : spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color));
             var explicitSeries = layer.Style.FirstOrDefault(token => token.Name == "series")?.Value;
             if (colorBinding?.SemanticKind is not DataSemanticKind.Quantitative && colorBinding?.Field is { } colorField && columns.TryGetValue(colorField, out var colorColumn))
             {
@@ -1182,6 +1182,15 @@ public sealed class PlotPlanResolver
             .Where(value => value is not null).Sum(value => Math.Max(0m, Number(value!.Value) ?? 0m));
         var items = sourceLayers.SelectMany((layer, layerIndex) => layer.Data.Select((datum, index) =>
         {
+            if (layer.Mark == MarkKind.Rect && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
+            {
+                var range = datum.IsGap ? null : CartesianRangeDescription(datum);
+                return new SemanticFallbackItem($"Row {datum.RowIndex + 1}", range ?? "gap", (layerIndex * 100000) + index)
+                {
+                    Group = layer.SeriesKey ?? layer.Id,
+                    Detail = range is null ? "null gap" : "rectangle range"
+                };
+            }
             var label = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Region or FieldChannel.Route or FieldChannel.Text or FieldChannel.X or FieldChannel.Theta)?.DisplayValue
                 ?? (index < categories.Length ? categories[index] : $"Row {index + 1}");
             if (layer.Mark == MarkKind.Text && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
@@ -1237,7 +1246,7 @@ public sealed class PlotPlanResolver
             if (spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } && value is not null)
                 detail = $"{value.Channel} = {value.DisplayValue ?? formatter.Format(value.Value)}; {(value.Channel == FieldChannel.X ? "horizontal" : "vertical")} reference rule";
             if (spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
-                layer.Data.FirstOrDefault() is { } rangeDatum && RangeRuleDescription(rangeDatum) is { } range)
+                layer.Data.FirstOrDefault() is { } rangeDatum && CartesianRangeDescription(rangeDatum) is { } range)
                 return new SemanticFallbackItem(label, range, ((sourceLayers.Count + 1) * 100000) + index)
                 { Detail = "reference segment", Group = "Reference" };
             return new SemanticFallbackItem(label, value is null ? "" : value.DisplayValue ?? formatter.Format(value.Value), ((sourceLayers.Count + 1) * 100000) + index)
@@ -1770,7 +1779,7 @@ public sealed class PlotPlanResolver
     internal static bool IsRangeRule(ResolvedDatum datum) => datum.Channels.Any(channel =>
         channel.Channel is FieldChannel.XStart or FieldChannel.XEnd or FieldChannel.YStart or FieldChannel.YEnd);
 
-    internal static string? RangeRuleDescription(ResolvedDatum datum, bool transposed = false)
+    internal static string? CartesianRangeDescription(ResolvedDatum datum, bool transposed = false)
     {
         string? Value(FieldChannel channel)
         {
@@ -1798,7 +1807,7 @@ public sealed class PlotPlanResolver
         {
             if (IsRangeRule(datum))
             {
-                if (!datum.IsGap && RangeRuleDescription(datum) is not null) yield return datum;
+                if (!datum.IsGap && CartesianRangeDescription(datum) is not null) yield return datum;
                 continue;
             }
             var channel = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.X or FieldChannel.Y);

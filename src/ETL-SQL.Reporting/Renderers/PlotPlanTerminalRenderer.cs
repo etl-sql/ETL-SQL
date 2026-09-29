@@ -104,7 +104,7 @@ internal static class PlotPlanTerminalRenderer
             {
                 var channel = datum.Channels.FirstOrDefault(channel =>
                     channel.Channel is FieldChannel.X or FieldChannel.Y && channel.Value.Kind != ChartValueKind.Null);
-                var range = PlotPlanResolver.RangeRuleDescription(datum);
+                var range = PlotPlanResolver.CartesianRangeDescription(datum);
                 if (range is null && channel is null) continue;
                 var label = item.Layer.Style.FirstOrDefault(token => token.Name.Equals("label", StringComparison.OrdinalIgnoreCase))?.Value ?? item.Layer.Id;
                 var description = range ?? $"{channel!.Channel} = {channel.DisplayValue ?? PlotPlanResolver.Display(channel.Value)}";
@@ -431,6 +431,13 @@ internal static class PlotPlanTerminalRenderer
 
     private static IRenderable RenderRectangles(PlotPlan plan, ResolvedMarkLayer layer, IReadOnlyList<ResolvedDatum> data, string series, string color, int width)
     {
+        if (plan.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
+        {
+            var rangeRows = new List<IRenderable> { new Markup($"[bold]{Markup.Escape(series)}[/] [grey](rectangle ranges)[/]") };
+            foreach (var datum in data)
+                rangeRows.Add(new Markup(Markup.Escape(datum.IsGap ? "gap" : PlotPlanResolver.CartesianRangeDescription(datum) ?? "gap")));
+            return new Rows(rangeRows);
+        }
         if (IsRangedRect(layer, data)) return RenderRangedRectangles(data, series, color, width);
         var isHeatmap = data.Count > 0 &&
             data.Select(d => DisplayChannel(d, FieldChannel.X)).Where(s => !string.IsNullOrEmpty(s)).Distinct().Count() > 1 &&
@@ -856,6 +863,10 @@ internal static class PlotPlanTerminalRenderer
                     panel.ColumnLabel is null ? panel.RowLabel : $"{panel.RowLabel} / {panel.ColumnLabel}";
                 return (label, panel.RowIndices.ToHashSet());
             }).ToList();
+        var allData = plan.Layers.SelectMany(layer => layer.Data);
+        if (!allData.Any(datum => datum.Channels.Any(channel => channel.Channel is FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap)))
+            // COMPAT_BREAK: 0.20 — unfaceted output must include rows from every color group and layer.
+            return [("All data", allData.Select(datum => datum.RowIndex).ToHashSet())];
         var source = plan.Layers.FirstOrDefault(layer => layer.Mark is not MarkKind.Rule)?.Data ?? [];
         var groups = source.GroupBy(datum =>
         {

@@ -1,7 +1,7 @@
 ╭─Dense multi-series labels────────────────────────────────────────────────────────────────────────╮
 │ Dense multi-series labels: 24 rows, 2 ordered layers, 2 series, 1 facet panels, 0 gaps, 0        │
 │ skipped rows.                                                                                    │
-│ ● Actual (Braille line; 0 gaps)                                                                  │
+│ ● Actual  ● Forecast (Braille line; 0 gaps)                                                      │
 │     12 ┼                                           ⣀⣀⠤⠔⠒⠉                                        │
 │        │                                    ⢀⣀⠤⠒⠒⠉⠉                                              │
 │        │                             ⣀⡠⠤⠔⠒⠊⠉⠁                                                    │
