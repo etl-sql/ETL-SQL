@@ -172,30 +172,45 @@ public class DesignerController : ControllerBase
         try
         {
             var script = req.Script ?? string.Empty;
+            PipelineTaskDraft Draft(PipelineTaskKind kind) => new(
+                req.Id ?? string.Empty,
+                kind,
+                req.Connection,
+                req.Body,
+                req.Source,
+                req.Target,
+                req.Condition,
+                req.Message,
+                req.Recipient,
+                req.Sender,
+                req.Subject,
+                req.After,
+                req.Variable,
+                req.Collection,
+                req.Start,
+                req.End,
+                req.Step,
+                req.Delay,
+                req.Until,
+                req.Into,
+                req.Table,
+                req.Columns,
+                req.Keys);
+
+            // What the draft would write, from the same renderer an add uses. Nothing is written: the
+            // script comes back as it was sent, and the statement travels beside it.
+            if (string.Equals(req.Op, "preview", StringComparison.OrdinalIgnoreCase))
+            {
+                var rendered = ParseTaskKind(req.Kind) is { } previewKind
+                    ? _pipelineTasks.Preview(Draft(previewKind))
+                    : PipelineEditResult.Refused(string.Empty, $"This host does not know a task kind called '{req.Kind}'.");
+                return Ok(new PipelineTaskResponse(false, script, rendered.Error, [], rendered.Applied ? rendered.Script : null));
+            }
+
             var result = (req.Op ?? string.Empty).ToLowerInvariant() switch
             {
                 "add" => ParseTaskKind(req.Kind) is { } kind
-                    ? _pipelineTasks.Add(script, new PipelineTaskDraft(
-                        req.Id ?? string.Empty,
-                        kind,
-                        req.Connection,
-                        req.Body,
-                        req.Source,
-                        req.Target,
-                        req.Condition,
-                        req.Message,
-                        req.Recipient,
-                        req.Sender,
-                        req.Subject,
-                        req.After,
-                        req.Variable,
-                        req.Collection,
-                        req.Start,
-                        req.End,
-                        req.Step,
-                        req.Delay,
-                        req.Until,
-                        req.Into))
+                    ? _pipelineTasks.Add(script, Draft(kind))
                     : PipelineEditResult.Refused(script, $"This host does not know a task kind called '{req.Kind}'."),
                 "update" => _pipelineTasks.Update(script, req.Id ?? string.Empty, req.NewId, req.Connection, req.Body, req.Variable, req.Collection,
                     PipelineTaskFieldEdits.From(req.Source, req.Target, req.Condition, req.Message, req.Recipient, req.Sender,

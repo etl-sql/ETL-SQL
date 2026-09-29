@@ -587,33 +587,54 @@ public static class WorkstationEditorApp
         app.MapPost("/api/designer/pipeline-task", (PipelineTaskAuthoringRequest request) =>
         {
             var script = request.Script ?? string.Empty;
+            ETL_SQL.Analysis.Services.PipelineTaskDraft Draft(ETL_SQL.Analysis.Services.PipelineTaskKind kind) => new(
+                request.Id ?? string.Empty,
+                kind,
+                request.Connection,
+                request.Body,
+                request.Source,
+                request.Target,
+                request.Condition,
+                request.Message,
+                request.Recipient,
+                request.Sender,
+                request.Subject,
+                request.After,
+                request.Variable,
+                request.Collection,
+                request.Start,
+                request.End,
+                request.Step,
+                request.Delay,
+                request.Until,
+                request.Into,
+                request.Table,
+                request.Columns,
+                request.Keys);
+
+            // What the draft would write, from the same renderer an add uses. Nothing is written.
+            if (string.Equals(request.Op, "preview", StringComparison.OrdinalIgnoreCase))
+            {
+                var rendered = ETL_SQL.Analysis.Services.PipelineTaskKinds.Parse(request.Kind) is { } previewKind
+                    ? pipelineTasks.Preview(Draft(previewKind))
+                    : ETL_SQL.Analysis.Services.PipelineEditResult.Refused(string.Empty, $"This host does not know a task kind called '{request.Kind}'.");
+                return Results.Json(new
+                {
+                    applied = false,
+                    script,
+                    error = rendered.Error,
+                    tasks = Array.Empty<object>(),
+                    preview = rendered.Applied ? rendered.Script : null,
+                }, JsonOptions);
+            }
+
             var result = (request.Op ?? string.Empty).ToLowerInvariant() switch
             {
                 // A kind this host does not know is refused by name. It used to fall back to an
                 // execution task, which turned a palette chip saying MOVE DIRECTORY into an EXECUTE
                 // block the author never asked for and only found out about at run time.
                 "add" => ETL_SQL.Analysis.Services.PipelineTaskKinds.Parse(request.Kind) is { } kind
-                    ? pipelineTasks.Add(script, new ETL_SQL.Analysis.Services.PipelineTaskDraft(
-                        request.Id ?? string.Empty,
-                        kind,
-                        request.Connection,
-                        request.Body,
-                        request.Source,
-                        request.Target,
-                        request.Condition,
-                        request.Message,
-                        request.Recipient,
-                        request.Sender,
-                        request.Subject,
-                        request.After,
-                        request.Variable,
-                        request.Collection,
-                        request.Start,
-                        request.End,
-                        request.Step,
-                        request.Delay,
-                        request.Until,
-                        request.Into))
+                    ? pipelineTasks.Add(script, Draft(kind))
                     : ETL_SQL.Analysis.Services.PipelineEditResult.Refused(
                         script, $"This host does not know a task kind called '{request.Kind}'."),
                 "update" => pipelineTasks.Update(
@@ -1304,7 +1325,10 @@ public sealed record PipelineTaskAuthoringRequest(
     string? Step = null,
     string? Delay = null,
     bool Until = false,
-    string? Into = null);
+    string? Into = null,
+    string? Table = null,
+    string? Columns = null,
+    string? Keys = null);
 public sealed record PipelineScopeAuthoringRequest(string? Script, string? Id, int? Line = null);
 
 public sealed record DataModelAuthoringRequest(string? Script, string? DocumentUri = null);

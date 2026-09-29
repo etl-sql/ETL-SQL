@@ -324,6 +324,90 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
         Assert.Empty(session.PageErrors);
     }
 
+    /// <summary>
+    /// An extract and a load, built entirely from the palette: pick a table from the connection, tick
+    /// its columns, name the #temp, and watch the statement being written before it is added.
+    ///
+    /// <para>This is the part of SSIS the canvas could not do at all. Staging needed typing, and the
+    /// only data chip ran vendor SQL on the remote database.</para>
+    /// </summary>
+    [Fact]
+    public async Task AnExtractAndALoadAreBuiltFromThePalette()
+    {
+        using var workspace = new StudioTempWorkspace();
+        var file = Path.Combine(workspace.Root, "extract_load.etlsql");
+        await File.WriteAllTextAsync(file, Seed);
+
+        await using var host = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            workspace.Root, file, 0, false, "data-token",
+            StudioMode: true, InstanceId: Guid.NewGuid().ToString("D")));
+        await host.StartAsync();
+
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=data-token");
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
+            new PageWaitForFunctionOptions { Timeout = 20_000 });
+        await page.Locator("[data-projection='split']").ClickAsync();
+
+        // ── Read a table ─────────────────────────────────────────────────────
+        await page.Locator("[data-task-kind='extract']").ClickAsync();
+        await page.Locator("[data-task-id]").FillAsync("read_users");
+
+        // The table list is the connection's own, read from its schema.
+        try
+        {
+            await page.Locator("datalist[id^='etlsql-task-tables'] option[value='Users']").WaitForAsync(
+                new LocatorWaitForOptions { State = WaitForSelectorState.Attached, Timeout = 15_000 });
+        }
+        catch (TimeoutException exception)
+        {
+            var note = await page.Locator("[data-schema-note]").InnerTextAsync();
+            var connection = await page.Locator("[data-task-connection]").InputValueAsync();
+            var options = await page.Locator("datalist[id^='etlsql-task-tables'] option").CountAsync();
+            throw new Xunit.Sdk.XunitException(
+                $"The table suggestions never arrived. Connection: '{connection}'; options: {options}; "
+                + $"schema note: '{note}'.", exception);
+        }
+        var table = page.Locator("[data-task-field='table']");
+        await table.FillAsync("Users");
+        await table.DispatchEventAsync("change");
+
+        // Its columns are ticked rather than typed.
+        await page.Locator("[data-column-pick='columns'][value='UserID']").CheckAsync();
+        await page.Locator("[data-column-pick='columns'][value='UserName']").CheckAsync();
+        Assert.Equal("UserID, UserName", await page.Locator("[data-task-field='columns']").InputValueAsync());
+        await page.Locator("[data-task-field='target']").FillAsync("#staged_users");
+
+        // The statement is on screen before anything is written.
+        const string extract = "read_users:\nSELECT UserID, UserName\nINTO #staged_users\nFROM sample_data.Users;";
+        await page.WaitForFunctionAsync(
+            "text => document.querySelector('[data-task-preview]')?.textContent === text", extract,
+            new PageWaitForFunctionOptions { Timeout = 15_000 });
+        Assert.DoesNotContain("read_users", await ScriptAsync(page), StringComparison.Ordinal);
+        await CommitTaskAsync(page, "read_users");
+
+        // ── Insert rows ──────────────────────────────────────────────────────
+        await page.Locator("[data-task-kind='load']").ClickAsync();
+        await page.Locator("[data-task-id]").FillAsync("load_users");
+        await page.Locator("[data-task-field='source']").FillAsync("#staged_users");
+        await page.Locator("[data-task-field='table']").FillAsync("Users");
+        await page.Locator("[data-task-field='columns']").FillAsync("UserID, UserName");
+        await CommitTaskAsync(page, "load_users");
+
+        var script = (await ScriptAsync(page)).Replace("\r\n", "\n", StringComparison.Ordinal);
+        const string load = "load_users:\nINSERT INTO sample_data.Users (UserID, UserName)\nSELECT UserID, UserName\nFROM #staged_users;";
+        Assert.Contains(extract, script, StringComparison.Ordinal);
+        Assert.Contains(load, script, StringComparison.Ordinal);
+        Assert.True(script.IndexOf(extract, StringComparison.Ordinal) < script.IndexOf(load, StringComparison.Ordinal),
+            "The load was written before the extract it reads from.");
+
+        // Both are tasks on the map, not read-only stages.
+        await page.Locator("[data-task-key='read_users']").WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
+        await page.Locator("[data-task-key='load_users']").WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
+        Assert.Empty(session.PageErrors);
+    }
+
     private static Task<string> ScriptAsync(IPage page) =>
         page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()");
 

@@ -95,12 +95,41 @@ export function createStudioAuthoringPipeline(hostContext) {
         if: [
             { name: 'condition', label: 'Only when', placeholder: '(SELECT COUNT(*) FROM #orders) > 0', mono: true },
         ],
+        // ── Moving data ──────────────────────────────────────────────────────
+        extract: [
+            { name: 'table', label: 'Read from table', placeholder: 'Users', mono: true, picker: 'table' },
+            { name: 'columns', label: 'Columns', placeholder: 'All columns', mono: true, optional: true, picker: 'columns', hint: 'Leave all unticked to read every column.' },
+            { name: 'condition', label: 'Only rows where', placeholder: 'Active = 1', mono: true, optional: true },
+            { name: 'target', label: 'Stage into', placeholder: '#staged_users', mono: true, hint: 'A #temp table. It lasts for this run, and every later step can read it by name.' },
+        ],
+        load: [
+            { name: 'source', label: 'Rows from', placeholder: '#staged_users', mono: true, hint: 'The #temp table an earlier step staged.' },
+            { name: 'table', label: 'Insert into table', placeholder: 'UsersArchive', mono: true, picker: 'table' },
+            { name: 'columns', label: 'Columns', placeholder: 'UserID, UserName', mono: true, picker: 'columns', hint: 'Named on both sides, so each value lands in the right column.' },
+        ],
+        upsert: [
+            { name: 'source', label: 'Rows from', placeholder: '#staged_users', mono: true, hint: 'The #temp table an earlier step staged.' },
+            { name: 'table', label: 'Upsert into table', placeholder: 'Users', mono: true, picker: 'table' },
+            { name: 'keys', label: 'Match on', placeholder: 'UserID', mono: true, picker: 'columns', hint: 'The key columns that say a row already exists.' },
+            { name: 'columns', label: 'Columns to update', placeholder: 'UserName, Email', mono: true, optional: true, picker: 'columns', hint: 'Updated on a match, and inserted with the keys on a new row.' },
+        ],
         // BREAK and CONTINUE are the whole statement. The editor still opens, because the label is
         // how the canvas will address the card afterwards, and it is the only thing to fill in.
         break: [],
         continue: [],
     };
-    const PIPELINE_KINDS_NEEDING_CONNECTION = new Set(['execution', 'notification']);
+    const PIPELINE_KINDS_NEEDING_CONNECTION = new Set(['execution', 'notification', 'extract', 'load', 'upsert']);
+    /**
+     * Said once, where the idea first appears, rather than in a help page nobody opens. Each of these
+     * is a thing a SQL user would not know about ETL-SQL until they had been bitten by it.
+     */
+    const PIPELINE_KIND_EXPLANATIONS = {
+        extract: 'The connection is one this script declares. The rows are copied into a #temp table that '
+            + 'lives only for this run — later steps read it by name, and nothing is written back to the source.',
+        load: 'Rows are read from a #temp table an earlier step staged, and appended to the table on the connection.',
+        upsert: 'This is a MERGE. The engine holds every matching row while it runs, so at large scale filter '
+            + 'the #temp table first, or split the load into batches.',
+    };
     /**
      * Where the statement is about to be written, in the words of the script rather than the canvas.
      *
@@ -179,6 +208,21 @@ export function createStudioAuthoringPipeline(hostContext) {
         for (const field of fields)
             draft[field.name] = String(offered[field.name] ?? '');
         let workbench = null;
+        // The connection's tables, read once per connection chosen, for the table and column pickers.
+        // A failed read is kept apart from an empty one: the fields still take typing either way, and
+        // the dialog says which it was rather than implying the connection has no tables.
+        const usesPickers = fields.some(field => field.picker);
+        let schema = null;
+        const tableNamed = (name) => (schema?.tables ?? [])
+            .find((table) => String(table.name).toLowerCase() === String(name || '').trim().toLowerCase());
+        const columnsOf = (name) => (tableNamed(name)?.columns ?? [])
+            .map((column) => String(column?.name ?? column));
+        const listOf = (text) => String(text || '').split(',').map(part => part.trim()).filter(Boolean);
+        // What the draft would write, shown while it is filled in. It comes from the host's own
+        // renderer, so the statement on screen is the statement Add writes — never a browser copy.
+        const previews = !editing && taskKind !== 'execution';
+        let previewTimer = null;
+        let previewTurn = 0;
         return hostContext.studioDialog({
             kicker: 'Pipeline task',
             title: editing ? `Edit ${task.id}` : `New ${taskKindLabel(taskKind).toLowerCase()} task`,
@@ -240,14 +284,17 @@ export function createStudioAuthoringPipeline(hostContext) {
                             ${needsConnection ? `<label>Connection
                                 <select data-task-connection>${aliases.map(alias => `<option${alias === draft.connection ? ' selected' : ''}>${escapeHtml(alias)}</option>`).join('')}</select>
                             </label>` : ''}
-                            ${fields.map(field => `<label>${escapeHtml(field.label)}${field.optional ? ' <em>(optional)</em>' : ''}
-                                <input type="text" data-task-field="${escapeHtml(field.name)}"
-                                    value="${escapeHtml(draft[field.name] || '')}"
-                                    placeholder="${escapeHtml(field.placeholder || '')}"
-                                    ${field.mono ? 'spellcheck="false"' : ''}>
-                                ${field.hint ? `<small>${escapeHtml(field.hint)}</small>` : ''}
-                            </label>`).join('')}
+                            ${fields.map(fieldMarkup).join('')}
                         </div>`
+                    + (usesPickers ? `<div data-schema-note>${schema?.failed ? guidedNoteMarkup([
+                        `The tables of ${draft.connection} could not be read (${schema.failed}). Type the names instead.`,
+                    ], 'warning') : ''}</div>` : '')
+                    + (!editing && PIPELINE_KIND_EXPLANATIONS[taskKind]
+                        ? guidedNoteMarkup(PIPELINE_KIND_EXPLANATIONS[taskKind], 'info') : '')
+                    + (previews ? `<div class="etlsql-studio-task-preview">
+                            <span>Writes this into the script</span>
+                            <pre data-task-preview aria-live="polite"></pre>
+                        </div>` : '')
                     + (taskKind === 'execution'
                         ? `<div class="etlsql-studio-workbench" data-task-workbench></div>`
                             + guidedNoteMarkup([
@@ -269,7 +316,36 @@ export function createStudioAuthoringPipeline(hostContext) {
                     { id: 'save', label: editing ? 'Apply' : 'Add task', primary: true, run: save },
                 ],
                 wire: async (host) => {
-                    host.querySelector('[data-task-id]')?.addEventListener('input', event => { draft.id = asInput(event.target).value; });
+                    host.querySelector('[data-task-id]')?.addEventListener('input', event => {
+                        draft.id = asInput(event.target).value;
+                        schedulePreview(host);
+                    });
+                    for (const input of host.querySelectorAll('[data-task-field]')) {
+                        input.addEventListener('input', () => { readFields(host); schedulePreview(host); });
+                    }
+                    // A different table has different columns, so its column ticks are refilled.
+                    for (const input of host.querySelectorAll('[data-task-field][list]')) {
+                        input.addEventListener('change', () => { readFields(host); refreshPickers(host); });
+                    }
+                    // On the container, because its ticks are replaced whenever the table changes.
+                    for (const picks of host.querySelectorAll('[data-column-picks]')) {
+                        picks.addEventListener('change', () => {
+                            const name = asInput(picks).dataset.columnPicks || '';
+                            const picked = [...picks.querySelectorAll('[data-column-pick]')]
+                                .filter(item => item.checked)
+                                .map(item => asInput(item).value);
+                            const field = asInput(host.querySelector(`[data-task-field="${name}"]`));
+                            if (field)
+                                field.value = picked.join(', ');
+                            readFields(host);
+                            schedulePreview(host);
+                        });
+                    }
+                    if (previews)
+                        schedulePreview(host, 0);
+                    if (usesPickers && needsConnection && draft.connection && schema?.connection !== draft.connection) {
+                        void loadSchema(host, draft.connection);
+                    }
                     host.querySelector('[data-task-connection]')?.addEventListener('change', event => {
                         // The workbench binds its run and its preamble to one alias, so repointing
                         // rebuilds it rather than leaving it running against the previous one.
@@ -303,6 +379,112 @@ export function createStudioAuthoringPipeline(hostContext) {
                 workbench = null;
                 paint();
             };
+            /** One field: a text box, with the connection's tables or a table's columns to pick from. */
+            function fieldMarkup(field) {
+                const value = String(draft[field.name] || '');
+                return `<label>${escapeHtml(field.label)}${field.optional ? ' <em>(optional)</em>' : ''}
+                        <input type="text" data-task-field="${escapeHtml(field.name)}"
+                            value="${escapeHtml(value)}"
+                            placeholder="${escapeHtml(field.placeholder || '')}"
+                            ${field.picker === 'table' ? `list="etlsql-task-tables-${escapeHtml(field.name)}"` : ''}
+                            ${field.mono ? 'spellcheck="false"' : ''}>
+                        ${field.picker === 'table' ? `<datalist id="etlsql-task-tables-${escapeHtml(field.name)}"
+                            data-table-picks>${tableOptionsMarkup()}</datalist>` : ''}
+                        ${field.picker === 'columns' ? `<span class="etlsql-studio-column-picks"
+                            data-column-picks="${escapeHtml(field.name)}">${columnPicksMarkup(field.name)}</span>` : ''}
+                        ${field.hint ? `<small>${escapeHtml(field.hint)}</small>` : ''}
+                    </label>`;
+            }
+            function tableOptionsMarkup() {
+                const tables = (schema?.connection === draft.connection ? schema?.tables : null) ?? [];
+                return tables.map((table) => `<option value="${escapeHtml(table.name)}">`).join('');
+            }
+            function columnPicksMarkup(name) {
+                const chosen = new Set(listOf(draft[name]).map(column => column.toLowerCase()));
+                return columnsOf(draft.table).map(column => `<label>
+                        <input type="checkbox" data-column-pick="${escapeHtml(name)}" value="${escapeHtml(column)}"
+                            ${chosen.has(column.toLowerCase()) ? 'checked' : ''}> ${escapeHtml(column)}</label>`).join('');
+            }
+            /**
+             * Refills the table suggestions and column ticks in place. Never a repaint: the schema
+             * arrives while the author is typing, and redrawing the dialog under them moved what
+             * they typed into whichever box the caret landed in next.
+             */
+            function refreshPickers(host) {
+                for (const list of host.querySelectorAll('[data-table-picks]'))
+                    list.innerHTML = tableOptionsMarkup();
+                for (const picks of host.querySelectorAll('[data-column-picks]')) {
+                    picks.innerHTML = columnPicksMarkup(asInput(picks).dataset.columnPicks || '');
+                }
+                const note = host.querySelector('[data-schema-note]');
+                if (note) {
+                    note.innerHTML = usesPickers && schema?.failed
+                        ? guidedNoteMarkup([`The tables of ${draft.connection} could not be read (${schema.failed}). Type the names instead.`], 'warning')
+                        : '';
+                }
+            }
+            async function loadSchema(host, connection) {
+                schema = { connection, tables: null, failed: null };
+                const documentUri = hostContext.getActiveDocument()?.path || 'studio';
+                try {
+                    // A host learns a document's connections by analysing its script. The editor
+                    // does that on a debounce, so a dialog opened soon after the connection was
+                    // written asked about one the host had not registered yet, and was told it
+                    // did not exist. The Data rail's connection list does the same first.
+                    await hostContext.request(hostContext.routes.analyze, {
+                        body: { script: hostContext.shell.getScriptText(), documentUri },
+                    }).catch(() => undefined);
+                    const read = await hostContext.request(hostContext.routes.schema, {
+                        method: 'GET',
+                        query: { connection, documentUri },
+                        fallbackError: `The tables of ${connection} could not be read.`,
+                    });
+                    if (schema?.connection !== connection)
+                        return;
+                    schema = { connection, tables: read?.tables ?? [], failed: null };
+                }
+                catch (error) {
+                    if (schema?.connection !== connection)
+                        return;
+                    schema = { connection, tables: [], failed: error?.message || 'unknown error' };
+                }
+                readFields(host);
+                refreshPickers(host);
+            }
+            function schedulePreview(host, delay = 250) {
+                if (!previews)
+                    return;
+                if (previewTimer)
+                    clearTimeout(previewTimer);
+                previewTimer = setTimeout(() => { void refreshPreview(host); }, delay);
+            }
+            async function refreshPreview(host) {
+                const target = host.querySelector('[data-task-preview]');
+                if (!target)
+                    return;
+                const turn = ++previewTurn;
+                const body = {
+                    op: 'preview',
+                    kind: taskKind,
+                    id: asInput(host.querySelector('[data-task-id]'))?.value.trim() ?? draft.id,
+                    connection: needsConnection ? draft.connection : undefined,
+                };
+                for (const field of fields)
+                    body[field.name] = draft[field.name];
+                try {
+                    const answer = await hostContext.request(hostContext.routes.pipelineTask, { body: { script: '', ...body } });
+                    if (turn !== previewTurn)
+                        return;
+                    target.classList.toggle('is-incomplete', !answer?.preview);
+                    target.textContent = answer?.preview || answer?.error || 'Fill in the fields to see the statement.';
+                }
+                catch (error) {
+                    if (turn !== previewTurn)
+                        return;
+                    target.classList.add('is-incomplete');
+                    target.textContent = error?.message || 'The statement could not be previewed.';
+                }
+            }
             paint();
         });
     }

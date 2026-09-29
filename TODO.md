@@ -115,6 +115,14 @@ rights just to learn.
   focused helpers for ETL-SQL-owned statements. Explain connection data, `#temp` tables, and named
   report datasets where they are introduced. Keep user-supplied native SQL an explicitly labelled
   advanced escape hatch; do not turn this into a vendor SQL builder.
+  - [x] Slice 1 (2026-09-29): palette grouped Extract → Validate → Load → files → notify → flow →
+    Advanced (native SQL); Read a table / Insert rows / Upsert rows write SELECT INTO, INSERT…SELECT and
+    MERGE, with table and column pickers and a live preview from the host's own renderer.
+  - [ ] Slice 2: transform steps (filter/pick columns, add column, join, summarise).
+  - [ ] Slice 3: validate/cleanup steps, readable card names, #temp-labelled data edges, first-use notes.
+- [ ] The dataset wizard reads a connection's schema without asking the host to analyse the script
+  first, so on the desktop host a just-declared connection reads as "not registered for this
+  document". The pipeline task dialog had the same race and now analyses before reading.
 
 **Remaining paginated authoring work**
 

@@ -121,6 +121,12 @@ export interface PipelineTaskField {
     mono?: boolean;
     optional?: boolean;
     hint?: string;
+    /**
+     * A field filled from the connection rather than typed: `table` offers the connection's tables,
+     * and `columns` offers the chosen table's columns as checkboxes, written as a comma list. Typing
+     * still works — a table the schema read could not see is still a table.
+     */
+    picker?: 'table' | 'columns';
 }
 
 export interface StudioAuthoringSurfacesHandle {

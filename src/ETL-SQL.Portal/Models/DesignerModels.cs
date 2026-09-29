@@ -197,13 +197,19 @@ public record PipelineTaskRequest(
     string? Step = null,
     string? Delay = null,
     bool Until = false,
-    string? Into = null);
+    string? Into = null,
+    string? Table = null,
+    string? Columns = null,
+    string? Keys = null);
 
 /// <summary>
 /// The result of a pipeline edit. <c>Applied</c> false with an <c>Error</c> is an ordinary answer —
 /// the script comes back unchanged and the canvas says why, rather than redrawing as if it worked.
 /// </summary>
-public record PipelineTaskResponse(bool Applied, string Script, string? Error, List<PipelineTaskDto> Tasks);
+/// <param name="Preview">
+/// preview only: the statement the draft would write. The script is returned unchanged.
+/// </param>
+public record PipelineTaskResponse(bool Applied, string Script, string? Error, List<PipelineTaskDto> Tasks, string? Preview = null);
 
 /// <param name="DependsOn">What this task declares it runs after; several of them is a join.</param>
 /// <param name="Guarded">

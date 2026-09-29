@@ -180,6 +180,38 @@ public class PipelineTaskEmissionTests
             PipelineTaskKind.WaitFor,
             new PipelineTaskDraft("pause_before_retry", PipelineTaskKind.WaitFor, Delay: "00:00:30")
         },
+
+        // ── Moving data ──────────────────────────────────────────────────────
+        {
+            PipelineTaskKind.Extract,
+            new PipelineTaskDraft("read_orders", PipelineTaskKind.Extract,
+                Connection: "staging_db", Table: "Orders", Columns: "OrderId, Total",
+                Condition: "Total > 0", Target: "#staged_orders")
+        },
+        {
+            PipelineTaskKind.Load,
+            new PipelineTaskDraft("archive_orders", PipelineTaskKind.Load,
+                Connection: "staging_db", Table: "OrdersArchive", Columns: "Ok", Source: "#orders")
+        },
+        {
+            PipelineTaskKind.Upsert,
+            new PipelineTaskDraft("sync_orders", PipelineTaskKind.Upsert,
+                Connection: "staging_db", Table: "OrderFlags", Keys: "Ok", Columns: "Ok", Source: "#orders")
+        },
+    };
+
+    /// <summary>
+    /// The one finding a kind is allowed to introduce, because it is true of every statement of that
+    /// kind and no emitted form can avoid it.
+    ///
+    /// <para>The engine materialises a MERGE's whole match set, and FullyMaterializingDml says so on
+    /// every MERGE, however it is written. The upsert reads from a staged <c>#temp</c>, which is the
+    /// mitigation the warning recommends; the task editor repeats the caveat so the author meets it
+    /// before a large run. Any other finding on an upsert still fails.</para>
+    /// </summary>
+    private static readonly Dictionary<PipelineTaskKind, string> ExpectedFindings = new()
+    {
+        [PipelineTaskKind.Upsert] = "FullyMaterializingDml",
     };
 
     private static Script Parse(string script) =>
@@ -218,7 +250,9 @@ public class PipelineTaskEmissionTests
         // The task must not introduce a lint finding of its own. Comparing against the preamble's own
         // findings keeps this honest: it fails on what the emitted statement added, not on whatever
         // the fixture already trips.
-        var introduced = after.Except(before, StringComparer.Ordinal).ToList();
+        var introduced = after.Except(before, StringComparer.Ordinal)
+            .Where(finding => !ExpectedFindings.TryGetValue(kind, out var rule) || !finding.Contains($" {rule}:", StringComparison.Ordinal))
+            .ToList();
         Assert.True(introduced.Count == 0,
             $"The {kind} task introduced lint findings:\n  " + string.Join("\n  ", introduced));
 
@@ -328,6 +362,13 @@ public class PipelineTaskEmissionTests
             (new PipelineTaskDraft("t", PipelineTaskKind.Throw), "message it fails with"),
             (new PipelineTaskDraft("t", PipelineTaskKind.WaitFor), "hh:mm:ss"),
             (new PipelineTaskDraft("t", PipelineTaskKind.WaitFor, Delay: "half an hour"), "is not a time"),
+            (new PipelineTaskDraft("t", PipelineTaskKind.Extract, Connection: "staging_db", Target: "#x"), "table it reads"),
+            (new PipelineTaskDraft("t", PipelineTaskKind.Extract, Connection: "staging_db", Table: "Orders"), "#temp table"),
+            (new PipelineTaskDraft("t", PipelineTaskKind.Extract, Connection: "staging_db", Table: "Orders; DROP", Target: "#x"), "is not a table name"),
+            (new PipelineTaskDraft("t", PipelineTaskKind.Extract, Connection: "staging_db", Table: "Orders", Target: "#x", Columns: "a, b c"), "is not a column"),
+            (new PipelineTaskDraft("t", PipelineTaskKind.Load, Connection: "staging_db", Table: "Archive", Columns: "Ok"), "#temp table"),
+            (new PipelineTaskDraft("t", PipelineTaskKind.Load, Connection: "staging_db", Table: "Archive", Source: "#orders"), "columns"),
+            (new PipelineTaskDraft("t", PipelineTaskKind.Upsert, Connection: "staging_db", Table: "Flags", Columns: "Ok", Source: "#orders"), "key"),
         };
 
         foreach (var (draft, expected) in incomplete)

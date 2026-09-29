@@ -176,6 +176,21 @@ public enum PipelineTaskKind
 
     /// <summary><c>WAITFOR DELAY 'hh:mm:ss'</c> or <c>WAITFOR TIME 'hh:mm:ss'</c>.</summary>
     WaitFor,
+
+    /// <summary>
+    /// <c>SELECT … INTO #temp FROM connection.table [WHERE …]</c> — reads rows from a connection into a
+    /// <c>#temp</c> table the rest of the run can use. ETL-SQL's own statement, run by the engine.
+    /// </summary>
+    Extract,
+
+    /// <summary><c>INSERT INTO connection.table (…) SELECT … FROM #temp</c> — appends staged rows.</summary>
+    Load,
+
+    /// <summary>
+    /// <c>MERGE INTO connection.table … USING #temp … ON keys</c> — updates the rows that exist and
+    /// inserts the ones that do not.
+    /// </summary>
+    Upsert,
 }
 
 /// <summary>How a kind behaves, for the handful of places that have to ask.</summary>
@@ -295,7 +310,10 @@ public sealed record PipelineTaskDraft(
     string? Step = null,
     string? Delay = null,
     bool Until = false,
-    string? Into = null);
+    string? Into = null,
+    string? Table = null,
+    string? Columns = null,
+    string? Keys = null);
 
 /// <summary>
 /// The field edits a host received, by the names <see cref="PipelineTask.Fields"/> reports.
@@ -551,8 +569,67 @@ public sealed partial class PipelineTaskAuthoringService
         PipelineTaskKind.WaitFor when !ClockTime().IsMatch(draft.Delay!.Trim()) =>
             $"'{draft.Delay!.Trim()}' is not a time. Write it as hh:mm:ss.",
 
+        // ── Moving data ──────────────────────────────────────────────────────
+        // Every name here is written into the statement as it is typed, so each one has to be a name
+        // and nothing more: a table field carrying "; DROP" would write a second statement.
+        PipelineTaskKind.Extract or PipelineTaskKind.Load or PipelineTaskKind.Upsert when !IsValidTaskId(draft.Connection) =>
+            $"'{draft.Connection}' is not a usable connection alias.",
+        PipelineTaskKind.Extract when string.IsNullOrWhiteSpace(draft.Table) =>
+            "Reading data needs the table it reads.",
+        PipelineTaskKind.Load or PipelineTaskKind.Upsert when string.IsNullOrWhiteSpace(draft.Table) =>
+            "Loading data needs the table it writes to.",
+        PipelineTaskKind.Extract or PipelineTaskKind.Load or PipelineTaskKind.Upsert when !TableName().IsMatch(draft.Table!.Trim()) =>
+            $"'{draft.Table!.Trim()}' is not a table name. Use a name like Orders or dbo.Orders.",
+        PipelineTaskKind.Extract when string.IsNullOrWhiteSpace(draft.Target) =>
+            "Reading data needs the #temp table it stages the rows in.",
+        PipelineTaskKind.Extract when !IsValidTaskId(TempName(draft.Target)) =>
+            $"'{draft.Target!.Trim()}' is not a usable #temp table name.",
+        PipelineTaskKind.Load or PipelineTaskKind.Upsert when string.IsNullOrWhiteSpace(draft.Source) =>
+            "Loading data needs the #temp table it reads from.",
+        PipelineTaskKind.Load or PipelineTaskKind.Upsert when !IsValidTaskId(TempName(draft.Source)) =>
+            $"'{draft.Source!.Trim()}' is not a usable #temp table name.",
+        PipelineTaskKind.Extract or PipelineTaskKind.Load or PipelineTaskKind.Upsert
+            when ColumnNames(draft.Columns).FirstOrDefault(name => !IsValidTaskId(name)) is { } badColumn =>
+            $"'{badColumn}' is not a column name.",
+        PipelineTaskKind.Load when ColumnNames(draft.Columns).Count == 0 =>
+            "Loading data needs the columns it writes, so rows land in the right place.",
+        PipelineTaskKind.Upsert when ColumnNames(draft.Keys).Count == 0 =>
+            "An upsert needs the key columns that say which rows already exist.",
+        PipelineTaskKind.Upsert when ColumnNames(draft.Keys).FirstOrDefault(name => !IsValidTaskId(name)) is { } badKey =>
+            $"'{badKey}' is not a column name.",
+        PipelineTaskKind.Extract when !string.IsNullOrWhiteSpace(draft.Condition)
+            && UnusableExpression(draft.Condition!) is { } badFilter => badFilter,
+
         _ => null,
     };
+
+    /// <summary>A table name, optionally schema- or database-qualified: <c>Orders</c>, <c>dbo.Orders</c>.</summary>
+    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*){0,2}$")]
+    private static partial Regex TableName();
+
+    /// <summary>A #temp table's name without its <c>#</c>, however it was typed.</summary>
+    private static string TempName(string? name) => (name ?? string.Empty).Trim().TrimStart('#');
+
+    /// <summary>A comma-separated column list, trimmed, blanks dropped.</summary>
+    private static List<string> ColumnNames(string? list) =>
+        (list ?? string.Empty).Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).ToList();
+
+    /// <summary>
+    /// The statement a draft would write, without writing it.
+    ///
+    /// <para>This is what the task editor shows while the author fills it in, and it comes from the
+    /// same renderer an Add uses — a preview built by a second emitter in the browser would drift from
+    /// the one that writes the file, and teach a statement the canvas does not produce.</para>
+    /// </summary>
+    public PipelineEditResult Preview(PipelineTaskDraft draft)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        if (!IsValidTaskId(draft.Id))
+            return PipelineEditResult.Refused(string.Empty, $"'{draft.Id}' is not a usable task label.");
+        if (Incomplete(draft) is { } missing)
+            return PipelineEditResult.Refused(string.Empty, missing);
+        return PipelineEditResult.Ok(RenderTask(draft, "\n"));
+    }
 
     /// <summary>What to call a path-carrying kind in a message the author reads.</summary>
     private static string PathNoun(PipelineTaskKind kind) =>
@@ -2380,6 +2457,9 @@ public sealed partial class PipelineTaskAuthoringService
         BreakStatement => PipelineTaskKind.Break,
         ContinueStatement => PipelineTaskKind.Continue,
         WaitForStatement => PipelineTaskKind.WaitFor,
+        SelectStatement { IntoTable: not null } => PipelineTaskKind.Extract,
+        InsertStatement => PipelineTaskKind.Load,
+        MergeStatement => PipelineTaskKind.Upsert,
         // A TRY/CATCH that opens a transaction is a scope; one that does not is the author's own
         // error handling, and the canvas has nothing to say about it.
         TryCatchStatement scope when OpensATransaction(scope) => PipelineTaskKind.Transaction,
@@ -2605,8 +2685,58 @@ public sealed partial class PipelineTaskAuthoringService
         PipelineTaskKind.WaitFor =>
             $"{draft.Id}:{lineEnding}WAITFOR {(draft.Until ? "TIME" : "DELAY")} {Literal(draft.Delay?.Trim())};",
 
+        // ── Moving data ──────────────────────────────────────────────────────
+        // Written one clause per line, the way the reference pages write them, because this is the
+        // text the author learns the statement from.
+        PipelineTaskKind.Extract =>
+            $"{draft.Id}:{lineEnding}"
+            + $"SELECT {(ColumnNames(draft.Columns) is { Count: > 0 } picked ? string.Join(", ", picked) : "*")}{lineEnding}"
+            + $"INTO #{TempName(draft.Target)}{lineEnding}"
+            + $"FROM {draft.Connection}.{draft.Table!.Trim()}"
+            + (string.IsNullOrWhiteSpace(draft.Condition) ? string.Empty : $"{lineEnding}WHERE {draft.Condition.Trim()}")
+            + ";",
+
+        PipelineTaskKind.Load =>
+            $"{draft.Id}:{lineEnding}"
+            + $"INSERT INTO {draft.Connection}.{draft.Table!.Trim()} ({string.Join(", ", ColumnNames(draft.Columns))}){lineEnding}"
+            + $"SELECT {string.Join(", ", ColumnNames(draft.Columns))}{lineEnding}"
+            + $"FROM #{TempName(draft.Source)};",
+
+        PipelineTaskKind.Upsert => RenderUpsert(draft, lineEnding),
+
         _ => throw new ArgumentOutOfRangeException(nameof(draft), draft.Kind, "Unknown pipeline task kind."),
     };
+
+    /// <summary>
+    /// A MERGE on the draft's keys. The other columns are updated where a row matches and every column
+    /// is inserted where one does not; with only keys there is nothing to update, so the WHEN MATCHED
+    /// clause is left out rather than written empty.
+    /// </summary>
+    private static string RenderUpsert(PipelineTaskDraft draft, string lineEnding)
+    {
+        var keys = ColumnNames(draft.Keys);
+        var others = ColumnNames(draft.Columns)
+            .Where(column => !keys.Contains(column, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        var all = keys.Concat(others).ToList();
+
+        var text = new StringBuilder()
+            .Append($"{draft.Id}:{lineEnding}")
+            .Append($"MERGE INTO {draft.Connection}.{draft.Table!.Trim()} AS tgt{lineEnding}")
+            .Append($"USING #{TempName(draft.Source)} AS src{lineEnding}")
+            .Append($"    ON {string.Join(" AND ", keys.Select(key => $"tgt.{key} = src.{key}"))}{lineEnding}");
+        if (others.Count > 0)
+        {
+            text.Append($"WHEN MATCHED THEN{lineEnding}")
+                .Append($"    UPDATE SET {string.Join(", ", others.Select(column => $"tgt.{column} = src.{column}"))}{lineEnding}");
+        }
+
+        return text
+            .Append($"WHEN NOT MATCHED THEN{lineEnding}")
+            .Append($"    INSERT ({string.Join(", ", all)}){lineEnding}")
+            .Append($"    VALUES ({string.Join(", ", all.Select(column => $"src.{column}"))});")
+            .ToString();
+    }
 
     /// <summary>A labelled file or directory statement over one path.</summary>
     private static string Path1(PipelineTaskDraft draft, string verb, string lineEnding) =>

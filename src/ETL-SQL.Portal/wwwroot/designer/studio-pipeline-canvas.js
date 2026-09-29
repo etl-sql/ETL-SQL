@@ -75,40 +75,51 @@ function asSelect(el) {
  * @type {ReadonlyArray<PipelineTaskGroup>}
  */
 const pipelineTaskGroups = Object.freeze([
+    // The groups follow an ETL pipeline from left to right: read the data, check it, write it
+    // somewhere, then tidy up. Control flow and the native-SQL escape hatch come after, because they
+    // are how a pipeline is arranged rather than what it does.
     Object.freeze({
-        id: 'work',
-        label: 'Work',
-        hint: 'The statements that do something to your data.',
+        id: 'extract',
+        label: 'Extract',
+        hint: 'Read rows from a connection into a #temp table the rest of the run can use.',
         kinds: Object.freeze([
             Object.freeze({
-                id: 'execution',
-                label: 'Execution',
-                glyph: '\u25B6',
-                hint: 'Run a block of SQL on a connection this script declares.',
+                id: 'extract',
+                label: 'Read a table',
+                glyph: '\u21E9',
+                hint: 'Copy rows from a table on a connection into a #temp table. Pick the columns, and filter if you like.',
             }),
+        ]),
+    }),
+    Object.freeze({
+        id: 'validate',
+        label: 'Validate',
+        hint: 'Stop the run when the data is not what you expected.',
+        kinds: Object.freeze([
             Object.freeze({
                 id: 'validation',
-                label: 'Validation',
+                label: 'Assert',
                 glyph: '\u2713',
                 hint: 'Assert a condition and stop the run with a message when it fails.',
             }),
+        ]),
+    }),
+    Object.freeze({
+        id: 'load',
+        label: 'Load',
+        hint: 'Write staged rows from a #temp table into a table on a connection.',
+        kinds: Object.freeze([
             Object.freeze({
-                id: 'notification',
-                label: 'Notification',
-                glyph: '\u2709',
-                hint: 'Send an email through an SMTP connection this script declares.',
+                id: 'load',
+                label: 'Insert rows',
+                glyph: '\u21E7',
+                hint: 'Append every row of a #temp table to a table on a connection.',
             }),
             Object.freeze({
-                id: 'throw',
-                label: 'Fail',
-                glyph: '\u26A1',
-                hint: 'Stop the run with your own error. Inside a TRY, the CATCH takes over.',
-            }),
-            Object.freeze({
-                id: 'waitfor',
-                label: 'Wait',
-                glyph: '\u23F1',
-                hint: 'Pause for a duration, or until a time of day.',
+                id: 'upsert',
+                label: 'Upsert rows',
+                glyph: '\u21C5',
+                hint: 'Update the rows that already exist, by key, and insert the ones that do not.',
             }),
         ]),
     }),
@@ -246,6 +257,45 @@ const pipelineTaskGroups = Object.freeze([
                 label: 'Delete folder',
                 glyph: '\u2326',
                 hint: 'Delete a directory and everything in it.',
+            }),
+        ]),
+    }),
+    Object.freeze({
+        id: 'messages',
+        label: 'Notify and wait',
+        hint: 'Tell someone how the run went, stop it on purpose, or pause it.',
+        kinds: Object.freeze([
+            Object.freeze({
+                id: 'notification',
+                label: 'Notification',
+                glyph: '\u2709',
+                hint: 'Send an email through an SMTP connection this script declares.',
+            }),
+            Object.freeze({
+                id: 'throw',
+                label: 'Fail',
+                glyph: '\u26a1',
+                hint: 'Stop the run with your own error. Inside a TRY, the CATCH takes over.',
+            }),
+            Object.freeze({
+                id: 'waitfor',
+                label: 'Wait',
+                glyph: '\u23f1',
+                hint: 'Pause for a duration, or until a time of day.',
+            }),
+        ]),
+    }),
+    Object.freeze({
+        id: 'advanced',
+        label: 'Advanced',
+        hint: 'For when ETL-SQL has no statement for what you need.',
+        kinds: Object.freeze([
+            Object.freeze({
+                id: 'execution',
+                label: 'Native SQL',
+                glyph: '\u25b6',
+                hint: 'Run SQL written in the connection\'s own dialect, on that database. The engine does not see '
+                    + 'inside it, so prefer the steps above when one fits.',
             }),
         ]),
     }),

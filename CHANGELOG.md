@@ -14,6 +14,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- The Studio pipeline palette now follows an ETL pipeline: Extract, Validate, Load, files and
+  folders, notifications, control flow, and an Advanced group holding native SQL. New steps:
+  **Read a table** writes `SELECT … INTO #temp FROM connection.table [WHERE …]`, **Insert rows**
+  writes `INSERT INTO connection.table (…) SELECT … FROM #temp`, and **Upsert rows** writes a
+  `MERGE` on the key columns you pick. Tables are suggested from the connection, columns are ticked
+  rather than typed, and every new task shows the exact statement it will write before it is added.
+  Labelled `SELECT … INTO`, `INSERT` and `MERGE` statements already in a script are now canvas tasks.
+
 - The Studio pipeline map draws each branch of a `PARALLEL` as its own lane: one row per branch,
   inside a band labelled "Branch N · runs in parallel", with the step after the block placed after
   all of them. A nested `PARALLEL` gets as many rows as its own branches.

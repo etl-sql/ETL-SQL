@@ -37,7 +37,10 @@ type PipelineTaskKind =
     | 'throw'
     | 'break'
     | 'continue'
-    | 'waitfor';
+    | 'waitfor'
+    | 'extract'
+    | 'load'
+    | 'upsert';
 
 /** PipelineEdgeCondition, as it crosses the wire. Matched case-insensitively on the way in. */
 type PipelineEdgeCondition =
@@ -256,6 +259,8 @@ interface PipelineTaskDto {
     variable?: string;
     collection?: string;
     endLine: number;
+    hasElse: boolean;
+    fields?: Record<string, string>;
 }
 
 interface PipelineTaskResponse {
@@ -263,6 +268,7 @@ interface PipelineTaskResponse {
     script: string;
     error?: string;
     tasks: PipelineTaskDto[];
+    preview?: string;
 }
 
 interface PreviewAsRequest {

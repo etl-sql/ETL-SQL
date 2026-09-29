@@ -7002,6 +7002,58 @@ body.vscode-dark .etlsql-cw-missing-hint {
     text-transform: none;
 }
 
+/* A table's columns to tick, under the field they fill. Ticking writes the comma list the field holds. */
+.etlsql-studio-column-picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    max-width: 420px;
+}
+
+.etlsql-studio-pipeline-fields .etlsql-studio-column-picks label {
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    color: var(--portal-text, #f0f6fc);
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    font-size: 0.72rem;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+/* The statement the task will write, shown while it is filled in. */
+.etlsql-studio-task-preview {
+    margin-top: 12px;
+}
+
+.etlsql-studio-task-preview > span {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--portal-text-soft, #8b949e);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.etlsql-studio-task-preview pre {
+    margin: 0;
+    padding: 8px 10px;
+    min-height: 2.5em;
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 4px;
+    background: var(--portal-bg, #0d1117);
+    color: var(--portal-text, #f0f6fc);
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    font-size: 0.75rem;
+    white-space: pre-wrap;
+}
+
+.etlsql-studio-task-preview pre.is-incomplete {
+    color: var(--portal-text-soft, #8b949e);
+    font-style: italic;
+}
+
 .etlsql-studio-pipeline-actions {
     display: flex;
     flex-wrap: wrap;
