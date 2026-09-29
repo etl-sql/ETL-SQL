@@ -775,13 +775,13 @@ public static class AdvancedChartSemanticValidator
                         Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO RULE segments require quantitative field/DATUM bindings, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
                     continue;
                 }
-                if (layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or
+                if (layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or { Kind: AdvancedChartPositionKind.Jitter } or
                     { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data }) || layer.Conditions.Length > 0 ||
                     encodings.Count != 1 || encodings[0].Channel is not (AdvancedChartChannel.X or AdvancedChartChannel.Y) ||
                     encodings[0].Source.Kind is not (AdvancedChartBindingSourceKind.Datum or AdvancedChartBindingSourceKind.Field) || encodings[0].DataKind != AdvancedChartDataKind.Quantitative ||
-                    layer.Position.Kind == AdvancedChartPositionKind.Nudge &&
+                    layer.Position.Kind is (AdvancedChartPositionKind.Nudge or AdvancedChartPositionKind.Jitter) &&
                     (encodings[0].Channel == AdvancedChartChannel.X ? layer.Position.Y != 0m : layer.Position.X != 0m))
-                    Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO RULE requires one quantitative field or DATUM X or Y binding, IDENTITY or NUDGE UNIT EM/BAND/DATA along the bound axis only, and no CONDITIONS or other encodings.");
+                    Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO RULE requires one quantitative field or DATUM X or Y binding, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA along the bound axis only, and no CONDITIONS or other encodings.");
             }
     }
 

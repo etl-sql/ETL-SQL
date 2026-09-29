@@ -113,7 +113,7 @@ public sealed class TransposedAspectRuleNudgeTests
     [InlineData("NUDGE(X = 1, Y = 0, UNIT = EM)")]
     [InlineData("NUDGE(X = 1, Y = 0, UNIT = BAND)")]
     [InlineData("NUDGE(X = 1, Y = 0, UNIT = DATA)")]
-    [InlineData("JITTER(X = 0, Y = 0.1, KEY = Distance, SEED = 3)")]
+    [InlineData("JITTER(X = 0.1, Y = 0, KEY = Distance, SEED = 3)")]
     public void UnsupportedPlacements_HavePositionedDiagnostics(string position)
     {
         var statement = Parse(Script.Replace("Z_INDEX = 1,", $"Z_INDEX = 1, POSITION = {position},", StringComparison.Ordinal));

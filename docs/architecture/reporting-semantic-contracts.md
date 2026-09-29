@@ -96,18 +96,27 @@ reject the newly allowed combination. Regenerate output with a supporting render
 compatibility alone does not establish rendering support. Marks other than POINT/TEXT and supported RULE, secondary axes,
 stacking remain rejected for transposed aspect ratios.
 
-Single-axis RULE layers require exactly one quantitative field or DATUM binding on X or Y, IDENTITY or EM/BAND/DATA NUDGE along the bound axis,
+Single-axis RULE layers require exactly one quantitative field or DATUM binding on X or Y, IDENTITY, JITTER or EM/BAND/DATA NUDGE along the bound axis,
 and no conditions or other encodings. Y rules are vertical; X rules are horizontal.
 Constants participate in global and independent facet domains. SVG labels and titles, terminal
 output, and accessible fallback retain the semantic axis and value. Field-backed rules select one
 representative row per distinct numeric threshold, in first-seen order. SVG and terminal select after
 facet filtering; fallback selects across the chart. Null/gap rows do not draw rules. The shared
 `PlotPlanResolver.ReferenceRuleData` owns selection; raw plan rows remain intact. Conditional
-and jittered rules remain rejected in this composition. All nudges must have zero
+rules remain rejected in this composition. All nudges and jitter must have zero
 amplitude on the unbound axis. The resolver uses the point/text displacement contract; SVG consumes
 the perpendicular offset for both the rule and label while preserving its plot-spanning extent.
 Raw values, domains, terminal/fallback content and rule deduplication remain unchanged. Contract
 versions remain unchanged.
+
+Single-axis rule JITTER uses the same stable-key hash and fitted viewport metric as segment jitter.
+Only the bound axis can have a non-zero amplitude. Every source key must exist and be unique and
+non-null, including rows with null thresholds. Reference selection stays first-seen per distinct
+numeric threshold within each facet; a constant rule selects its first source row per facet.
+That selected row supplies the physical offset. Per-key offsets survive row reorder and layer
+rename, but changing the first row for a duplicate threshold can change its displayed displacement.
+Seed changes alter offsets; scale reversal does not. Labels consume the rule's perpendicular offset
+and the line continues to span the plot. Null thresholds remain absent from geometry and fallback.
 
 DATA rule nudges map the bound threshold plus its displacement on the original scale, using shared
 plot sizing including legend space. Null/gap thresholds are skipped; positive logarithmic anchors
@@ -141,7 +150,7 @@ source row. Reversal does not flip it; relayout rescales the same hashes. Keys m
 unique/non-null across all source rows, including incomplete segments. Row reorder and layer rename
 preserve offsets; seed changes do not. Existing hash identity includes chart ID, mark, Z index and
 channel sequence. Missing endpoints still skip rendering and fallback. Single-axis reference rules
-continue to reject JITTER. ChartSpec v2 and PlotPlan v3 retain their existing wire shapes.
+accept JITTER only along the bound axis. ChartSpec v2 and PlotPlan v3 retain their existing wire shapes.
 
 Error bars on these points retain `ErrorLow`/`ErrorHigh` in the semantic Y domain.
 Their endpoints participate in global and independent facet domains before viewport fitting.

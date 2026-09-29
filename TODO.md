@@ -399,7 +399,13 @@ semantics and backend evidence before its rejection can be lifted.
   range orientations, diagonal/zero-length segments, logarithmic/reversed axes, facets and resize.
   Key/seed stability, invalid keys/amplitudes, missing endpoints, constant bindings, round trips,
   lineage, LSP key rename, terminal/fallback, PDF and deterministic plan/SVG fixtures are covered.
-  Single-axis reference rules still reject JITTER; no wire fields changed.
+  No wire fields changed.
+- [x] **Bound-axis JITTER on transposed single-axis RULE layers.** Constant and field thresholds
+  retain plot-spanning extent while labels share their seeded displacement. First-seen selection
+  per threshold/facet supplies the key; reordering duplicate thresholds can select a different key.
+  Stable-key/seed checks, invalid inputs, nulls, facets, resize, reversal/log scales, authoring and
+  contract round trips, lineage, LSP rename, terminal/fallback, PDF and deterministic plan/SVG
+  fixtures are covered by `TransposedAspectRuleJitterTests`. Wire versions are unchanged.
 - [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/supported RULE,
   stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.

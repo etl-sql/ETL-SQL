@@ -166,7 +166,22 @@ while the line keeps spanning the plot. Positive X moves up and positive Y moves
 of scale reversal. EM uses 12 pixels per unit; BAND uses the fitted plot height for X and width for Y,
 excluding axis margins and before renderer-specific legend layout. Facets and resizing recompute BAND
 displacement. Threshold values, domains, terminal text, and accessible values remain unchanged.
-JITTER is not supported on these rules.
+Reference rules also accept `JITTER` along their bound axis. The unbound amplitude must be zero;
+amplitudes range from zero to one. X uses fitted plot height and Y uses fitted plot width, excluding
+fixed axis margins and before legend layout. The same seeded displacement moves the rule and label,
+while the line retains its full plot span. Reversal does not flip displacement; facets and resizing
+rescale it. Raw thresholds, domains and terminal/accessible values remain unchanged.
+
+The source must supply a unique, non-null stable key for every row, including null thresholds.
+Repeated thresholds still draw one rule per facet using the first source row's key. A constant rule
+uses the first row in each facet. Reordering rows preserves each key's offset, but reordering duplicate
+thresholds can change which offset is shown. Use a deterministic source order when that matters.
+
+For example, jitter a Y threshold by up to three percent of the fitted plot width:
+
+```sql
+POSITION = JITTER(X = 0, Y = 0.03, KEY = Id, SEED = 42)
+```
 
 For example, add this position to the Y threshold layer above to move it right by three pixels:
 
@@ -220,7 +235,7 @@ rows or renaming the layer preserves displacement by key; changing SEED changes 
 does not flip jitter, and facets and resizing scale the same seeded offsets to their fitted viewports.
 The hash identity includes the chart, mark, Z index and channel sequence; separate layer shapes need
 not share offsets. Raw intervals, domains, terminal output and accessible values remain unchanged.
-Single-axis reference rules still reject JITTER.
+Single-axis reference rules restrict JITTER to their bound axis and retain first-row threshold selection.
 
 For example, spread segments by up to two percent of plot height and three percent of plot width:
 

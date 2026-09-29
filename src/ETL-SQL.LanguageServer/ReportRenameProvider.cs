@@ -96,6 +96,8 @@ public sealed class ReportRenameProvider(DocumentStateStore store) : IRenameHand
         var fields = chart.Encodings.Concat(chart.Layers.SelectMany(item => item.Encodings))
             .Where(encoding => encoding.Source.Kind == AdvancedChartBindingSourceKind.Field)
             .Select(encoding => encoding.Source.Field!)
+            .Concat(chart.Layers.Where(item => item.Position.Kind == AdvancedChartPositionKind.Jitter)
+                .Select(item => item.Position.KeyField).OfType<string>())
             .Concat(chart.Layers.SelectMany(item => item.Conditions.SelectMany(condition => condition.Predicate.GetSourceColumns())))
             .Concat(new[] { chart.Facet?.RowField, chart.Facet?.ColumnField, chart.Facet?.WrapField }.Where(item => item is not null).Cast<string>())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);

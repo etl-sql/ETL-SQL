@@ -203,6 +203,9 @@ public sealed class ReportRenameProviderTests
     [InlineData(false, "estimates =", 3, "EM")]
     [InlineData(true, "Estimate (", 2, "BAND")]
     [InlineData(true, "Estimate (", 2, "DATA")]
+    [InlineData(false, "estimates =", 3, "JITTER")]
+    [InlineData(true, "Estimate (", 2, "JITTER")]
+    [InlineData(true, "Id, SEED", 1, "JITTER")]
     public async Task TransposedAspectRule_RenamesScaleAndField(bool field, string token, int expectedEdits, string unit)
     {
         var script = """
@@ -230,7 +233,8 @@ public sealed class ReportRenameProviderTests
             );
             """;
         if (field) script = script.Replace("DATUM(5)", "Estimate", System.StringComparison.Ordinal);
-        if (unit != "IDENTITY") script = script.Replace("Z_INDEX = 1,", $"Z_INDEX = 1, POSITION = NUDGE(X = 0, Y = 0.03, UNIT = {unit}),", System.StringComparison.Ordinal);
+        if (unit == "JITTER") script = script.Replace("Z_INDEX = 1,", "Z_INDEX = 1, POSITION = JITTER(X = 0, Y = 0.03, KEY = Id, SEED = 42),", System.StringComparison.Ordinal);
+        else if (unit != "IDENTITY") script = script.Replace("Z_INDEX = 1,", $"Z_INDEX = 1, POSITION = NUDGE(X = 0, Y = 0.03, UNIT = {unit}),", System.StringComparison.Ordinal);
         Assert.Empty(new Parser(new Lexer(script).Tokenize(), script).Parse().Diagnostics);
         var (provider, uri) = Provider(script);
         var result = await provider.Handle(new RenameParams
