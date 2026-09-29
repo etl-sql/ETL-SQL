@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ETL_SQL.Analysis.Services;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Analysis.Lineage;
@@ -222,8 +223,20 @@ public static class ScriptDagBuilder
         IReadOnlyList<FlowExit> incoming)
     {
         var branchExits = new List<FlowExit>();
-        var conditionId = AddNode("IF", "conditional", conditional.Line, graph, incoming);
+        // Keyed like every other container, so a labelled IF is a card the canvas can select and drop into.
+        var key = graph.KeyFor(conditional);
+        var conditionId = AddNode("IF", "conditional", conditional.Line, graph, incoming, key);
         branchExits.AddRange(AppendBody(conditional.IfBody, graph, [new FlowExit(conditionId, "TRUE")]));
+
+        // A labelled IF's ELSE is a canvas scope with its own name, so it is drawn as a stage of its
+        // own: something to drop a task onto, which an empty branch drawn as a bare edge never is.
+        if (key is not null && PipelineTaskAuthoringService.OwnedElse(conditional) is { } owned)
+        {
+            var elseId = AddNode("ELSE", "conditional", owned.Line, graph,
+                [new FlowExit(conditionId, "ELSE")], PipelineTaskAuthoringService.ElseScope(key));
+            branchExits.AddRange(AppendSequence(owned.Statements, graph, [new FlowExit(elseId)]));
+            return branchExits;
+        }
 
         var falseExit = new FlowExit(conditionId, "FALSE");
         foreach (var elseIf in conditional.ElseIfClauses ?? [])

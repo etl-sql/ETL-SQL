@@ -106,6 +106,123 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
         Assert.Empty(session.PageErrors);
     }
 
+    /// <summary>
+    /// An IF built on the canvas is given an ELSE there, and a task is put in each branch — the SSIS
+    /// "precedence on true / on false" shape, written as the ETL-SQL an author would type.
+    ///
+    /// <para>On the real host, because the sandbox draws a canned map: the first defect this found was
+    /// that a labelled IF reached the real map without its key, so its card was not a canvas task at
+    /// all and nothing could be dropped into it.</para>
+    /// </summary>
+    [Fact]
+    public async Task AnIfIsGivenAnElseAndEachBranchATask()
+    {
+        using var workspace = new StudioTempWorkspace();
+        var file = Path.Combine(workspace.Root, "branching.etlsql");
+        await File.WriteAllTextAsync(file, Seed);
+
+        await using var host = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            workspace.Root, file, 0, false, "branch-token",
+            StudioMode: true, InstanceId: Guid.NewGuid().ToString("D")));
+        await host.StartAsync();
+
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=branch-token");
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
+            new PageWaitForFunctionOptions { Timeout = 20_000 });
+        await page.Locator("[data-projection='split']").ClickAsync();
+
+        await AddTaskAsync(page, "if", "orders_ready", new Dictionary<string, string>
+        {
+            ["condition"] = "(SELECT COUNT(*) FROM sample_data.Users) > 0",
+        });
+
+        // Selecting the IF is only possible when the map keyed its card.
+        await SelectTaskAsync(page, "orders_ready");
+        await page.Locator("[data-task-add-else]").ClickAsync();
+        var elseCard = page.Locator("[data-task-key='orders_ready:else']");
+        await elseCard.WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
+
+        await AddExecutionTaskAsync(page, "load_primary", "SELECT 1 AS loaded;");
+        await NestAsync(page, "load_primary", "orders_ready");
+
+        await AddExecutionTaskAsync(page, "load_fallback", "SELECT 0 AS loaded;");
+        await page.Locator("[data-task-key='load_fallback']").DragToAsync(elseCard);
+        await WaitForBranchesAsync(page, "orders_ready", ["load_primary"], ["load_fallback"]);
+
+        // An ELSE that holds work is not removed out from under it: the refusal is said, not swallowed.
+        await SelectTaskAsync(page, "orders_ready");
+        var before = await ScriptAsync(page);
+        await page.Locator("[data-task-remove-else]").ClickAsync();
+        await page.Locator(".etlsql-feedback-toast", new PageLocatorOptions { HasTextString = "load_fallback" })
+            .WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
+        Assert.Equal(before, await ScriptAsync(page));
+
+        // Saved and reopened, the branches are still two cards with a task each.
+        await page.Locator("[data-action='save']").ClickAsync();
+        await page.WaitForFunctionAsync("() => window.__STUDIO__.state.documents[0].isDirty === false");
+        var saved = await File.ReadAllTextAsync(file);
+        AssertBranches(saved, "orders_ready", ["load_primary"], ["load_fallback"]);
+
+        await page.ReloadAsync();
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
+            new PageWaitForFunctionOptions { Timeout = 20_000 });
+        await page.Locator("[data-projection='split']").ClickAsync();
+        await page.Locator("[data-task-key='orders_ready:else']").WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
+
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static Task<string> ScriptAsync(IPage page) =>
+        page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()");
+
+    /// <summary>
+    /// Waits for each branch to hold exactly the named tasks, read by the canonical parser — the same
+    /// thing the engine will run, rather than a guess from where the words fall in the text.
+    /// </summary>
+    private static async Task WaitForBranchesAsync(IPage page, string ifLabel, string[] inIf, string[] inElse)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (true)
+        {
+            var script = await ScriptAsync(page);
+            try
+            {
+                AssertBranches(script, ifLabel, inIf, inElse);
+                return;
+            }
+            catch (Exception) when (DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(250);
+            }
+            catch (Exception exception)
+            {
+                var toasts = await page.Locator(".etlsql-feedback-toast").AllInnerTextsAsync();
+                throw new Xunit.Sdk.XunitException(
+                    $"The branches of '{ifLabel}' never held what was dropped on them. "
+                    + $"Feedback said: {(toasts.Count == 0 ? "(nothing)" : string.Join(" | ", toasts))}"
+                    + $"{Environment.NewLine}{exception.Message}", exception);
+            }
+        }
+    }
+
+    private static void AssertBranches(string script, string ifLabel, string[] inIf, string[] inElse)
+    {
+        var statements = new ETL_SQL.Core.Parser.Parser(new ETL_SQL.Core.Parser.Lexer(script).Tokenize(), script).Parse().Statements;
+        var index = statements.ToList().FindIndex(statement =>
+            statement is ETL_SQL.Core.SectionLabelStatement label && label.LabelName == ifLabel);
+        Assert.True(index >= 0 && index + 1 < statements.Count, $"No '{ifLabel}' in:{Environment.NewLine}{script}");
+        var branch = Assert.IsType<ETL_SQL.Core.IfStatement>(statements[index + 1]);
+
+        static string[] Labels(ETL_SQL.Core.Statement? body) =>
+            (body as ETL_SQL.Core.BlockStatement)?.Statements
+                .OfType<ETL_SQL.Core.SectionLabelStatement>().Select(label => label.LabelName).ToArray() ?? [];
+
+        Assert.Equal(inIf, Labels(branch.IfBody));
+        Assert.Equal(inElse, Labels(branch.ElseBody));
+    }
+
     // ── Journey helpers ──────────────────────────────────────────────────────
 
     /// <summary>Appends a statement in the code pane, the way an author types one.</summary>

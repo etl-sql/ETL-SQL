@@ -631,6 +631,8 @@ public static class WorkstationEditorApp
                     : ETL_SQL.Analysis.Services.PipelineEditResult.Refused(script, $"Unknown edge condition '{request.Edge}'."),
                 "disconnect" => pipelineTasks.Disconnect(script, request.After ?? string.Empty, request.Id ?? string.Empty),
                 "remove" => pipelineTasks.Remove(script, request.Id ?? string.Empty),
+                "add-else" => pipelineTasks.AddElse(script, request.Id ?? string.Empty),
+                "remove-else" => pipelineTasks.RemoveElse(script, request.Id ?? string.Empty),
                 "read" => ETL_SQL.Analysis.Services.PipelineEditResult.Ok(script),
                 _ => ETL_SQL.Analysis.Services.PipelineEditResult.Refused(script, $"Unknown pipeline task operation '{request.Op}'."),
             };
@@ -660,6 +662,8 @@ public static class WorkstationEditorApp
                         container = task.Container,
                         variable = task.Variable,
                         collection = task.Collection,
+                        // An IF with an ELSE the canvas can drop into, addressed as `<id>:else`.
+                        hasElse = task.HasElse,
                     })
                     .ToList(),
             }, JsonOptions);

@@ -209,6 +209,8 @@ public class DesignerController : ControllerBase
                     : PipelineEditResult.Refused(script, $"Unknown edge condition '{req.Edge}'."),
                 "disconnect" => _pipelineTasks.Disconnect(script, req.After ?? string.Empty, req.Id ?? string.Empty),
                 "remove" => _pipelineTasks.Remove(script, req.Id ?? string.Empty),
+                "add-else" => _pipelineTasks.AddElse(script, req.Id ?? string.Empty),
+                "remove-else" => _pipelineTasks.RemoveElse(script, req.Id ?? string.Empty),
                 "read" => PipelineEditResult.Ok(script),
                 _ => PipelineEditResult.Refused(script, $"Unknown pipeline task operation '{req.Op}'."),
             };
@@ -230,7 +232,8 @@ public class DesignerController : ControllerBase
                         task.Container,
                         task.Variable,
                         task.Collection,
-                        task.EndLine))
+                        task.EndLine,
+                        task.HasElse))
                     .ToList()));
         }
         finally

@@ -128,6 +128,10 @@ export function createStudioPipelineView(hostContext) {
                 if (result?.applied)
                     hostContext.state.selectedTaskId = null;
             },
+            // The ELSE is written into the IF's own bytes, and its tasks are then dropped on the
+            // ELSE card like any other container. Removing one refuses while it still holds work.
+            onAddElse: async ({ id }) => { await hostContext.canonicalPipelineMutation('Add ELSE', { op: 'add-else', id }); },
+            onRemoveElse: async ({ id }) => { await hostContext.canonicalPipelineMutation('Remove ELSE', { op: 'remove-else', id }); },
             onRunTo: ({ id }) => runToPipelineTask(doc, id),
             onOpenLine: line => {
                 if (!line)

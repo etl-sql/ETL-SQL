@@ -33,7 +33,8 @@ public sealed record PipelineTask(
     string? Container = null,
     string? Variable = null,
     string? Collection = null,
-    int EndLine = 0);
+    int EndLine = 0,
+    bool HasElse = false);
 
 /// <summary>
 /// When a task runs relative to the one it waits for.
@@ -148,12 +149,12 @@ public enum PipelineTaskKind
     Transaction,
 
     /// <summary>
-    /// <c>IF &lt;condition&gt; BEGIN … END</c> — a container whose children run only when the
-    /// condition holds.
+    /// <c>IF &lt;condition&gt; BEGIN … END [ELSE BEGIN … END]</c> — a container whose children run
+    /// only when the condition holds, and optionally a second branch that runs when it does not.
     ///
-    /// <para>Only the <c>IF</c> body is a canvas scope. A hand-written <c>ELSE</c> is left alone and
-    /// its statements stay ordinary read-only projection stages, because a second body under one
-    /// label would give two different scopes the same identity.</para>
+    /// <para>The IF body is addressed by the label and the ELSE body by
+    /// <see cref="PipelineTaskAuthoringService.ElseScope"/>, so each branch has its own identity. An
+    /// <c>ELSE IF</c> chain is left to the script: its statements stay read-only projection stages.</para>
     /// </summary>
     If,
 
@@ -336,6 +337,46 @@ public sealed partial class PipelineTaskAuthoringService
         && (char.IsLetter(id[0]) || id[0] == '_')
         && id.All(c => char.IsLetterOrDigit(c) || c == '_');
 
+    /// <summary>What names an IF's ELSE branch: the IF's label with this suffix.</summary>
+    public const string ElseSuffix = ":else";
+
+    /// <summary>
+    /// The name of an IF's ELSE branch, used wherever a container is named — as <c>Into</c>, as a
+    /// nesting target, and as the <c>Container</c> of the tasks inside it.
+    ///
+    /// <para>A task label cannot contain a colon, so this can never collide with a task, and it gives
+    /// the second body under one label the identity a drop needs to say which branch it landed in.
+    /// It names a branch, never a task: removing or renaming by this name finds nothing.</para>
+    /// </summary>
+    public static string ElseScope(string ifId) => ifId + ElseSuffix;
+
+    /// <summary>The task that owns a container name, and whether the name is its ELSE branch.</summary>
+    private static (string Owner, bool Else) SplitScope(string scope) =>
+        scope.EndsWith(ElseSuffix, StringComparison.OrdinalIgnoreCase)
+            ? (scope[..^ElseSuffix.Length], true)
+            : (scope, false);
+
+    /// <summary>The task a container name belongs to — the IF itself for its ELSE branch.</summary>
+    private static PipelineTask? FindContainer(IReadOnlyList<PipelineTask> tasks, string? scope) =>
+        scope is null ? null : Find(tasks, SplitScope(scope).Owner);
+
+    /// <summary>
+    /// Resolves a container name to the task that holds it and which of its bodies is meant, or the
+    /// reason it cannot hold anything.
+    /// </summary>
+    private static (PipelineTask? Container, bool Else, string? Error) ResolveContainer(IReadOnlyList<PipelineTask> tasks, string scope)
+    {
+        var (owner, isElse) = SplitScope(scope);
+        var container = Find(tasks, owner);
+        if (container is null) return (null, false, $"No task called '{owner}'.");
+        if (!container.Kind.IsContainer()) return (null, false, $"'{container.Id}' does not hold other tasks.");
+        if (isElse && container.Kind != PipelineTaskKind.If)
+            return (null, false, $"'{container.Id}' is not an IF, so it has no ELSE.");
+        if (isElse && !container.HasElse)
+            return (null, false, $"'{container.Id}' has no ELSE yet. Add one to it first.");
+        return (container, isElse, null);
+    }
+
     /// <summary>The tasks a script declares, in script order.</summary>
     public IReadOnlyList<PipelineTask> Read(string? script)
     {
@@ -371,15 +412,13 @@ public sealed partial class PipelineTaskAuthoringService
             // Dropped onto a container rather than beside a task. The statement is written straight
             // into the block, so the gesture is one edit and one undo, and there is no moment where
             // the script holds it at the wrong level.
-            var container = Find(tasks, draft.Into);
+            var (container, intoElse, notAContainer) = ResolveContainer(tasks, draft.Into);
             if (container is null)
-                return PipelineEditResult.Refused(source, $"No task called '{draft.Into}' to add inside.");
-            if (!container.Kind.IsContainer())
-                return PipelineEditResult.Refused(source, $"'{container.Id}' does not hold other tasks.");
+                return PipelineEditResult.Refused(source, notAContainer!);
             if (draft.Kind.NeedsALoop() && !container.Kind.IsLoop() && !InALoop(tasks, container))
                 return PipelineEditResult.Refused(source, OnlyInALoop(draft.Kind, container.Id));
-            if (ChildInsertionPoint(source, container) is not { } point)
-                return PipelineEditResult.Refused(source, $"Could not find where inside '{container.Id}' to put '{draft.Id}'.");
+            if (ChildInsertionPoint(source, container, intoElse) is not { } point)
+                return PipelineEditResult.Refused(source, $"Could not find where inside '{draft.Into}' to put '{draft.Id}'.");
 
             insertAt = point;
             text = Reindent(text, LabelIndent(source, container.StartOffset) + "    ", lineEnding);
@@ -750,7 +789,7 @@ public sealed partial class PipelineTaskAuthoringService
         if (containerId is null)
         {
             if (task.Container is null) return PipelineEditResult.Ok(source);
-            var parent = Find(tasks, task.Container);
+            var parent = FindContainer(tasks, task.Container);
             if (parent is null) return PipelineEditResult.Refused(source, $"Could not find what '{task.Id}' is inside.");
 
             // Moving out lands the task beside its container. That is still inside a loop when the
@@ -763,23 +802,21 @@ public sealed partial class PipelineTaskAuthoringService
         }
         else
         {
-            var container = Find(tasks, containerId);
-            if (container is null) return PipelineEditResult.Refused(source, $"No task called '{containerId}'.");
-            if (!container.Kind.IsContainer())
-                return PipelineEditResult.Refused(source, $"'{container.Id}' does not hold other tasks.");
+            var (container, intoElse, notAContainer) = ResolveContainer(tasks, containerId);
+            if (container is null) return PipelineEditResult.Refused(source, notAContainer!);
             if (string.Equals(container.Id, task.Id, StringComparison.OrdinalIgnoreCase))
                 return PipelineEditResult.Refused(source, "A container cannot hold itself.");
             if (Encloses(tasks, task.Id, container.Id))
                 return PipelineEditResult.Refused(source, $"'{container.Id}' is already inside '{task.Id}'.");
-            if (string.Equals(task.Container, container.Id, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(task.Container, containerId, StringComparison.OrdinalIgnoreCase))
                 return PipelineEditResult.Ok(source);
             if (container.Kind == PipelineTaskKind.Parallel && ConcurrentWithADeclaredEdge(tasks, task, container.Id) is { } clash)
                 return PipelineEditResult.Refused(source, clash);
             if (task.Kind.NeedsALoop() && !container.Kind.IsLoop() && !InALoop(tasks, container))
                 return PipelineEditResult.Refused(source, OnlyInALoop(task.Kind, container.Id));
 
-            if (ChildInsertionPoint(source, container) is not { } point)
-                return PipelineEditResult.Refused(source, $"Could not find where inside '{container.Id}' to put '{task.Id}'.");
+            if (ChildInsertionPoint(source, container, intoElse) is not { } point)
+                return PipelineEditResult.Refused(source, $"Could not find where inside '{containerId}' to put '{task.Id}'.");
 
             insertAt = point;
             indent = LabelIndent(source, container.StartOffset) + "    ";
@@ -814,18 +851,23 @@ public sealed partial class PipelineTaskAuthoringService
         $"'{left.Id}' is {Where(left)} and '{right.Id}' is {Where(right)}, "
         + $"so they cannot be {what} against each other. Move one so they sit in the same block.";
 
-    private static string Where(PipelineTask task) =>
-        task.Container is null ? "at the top level" : $"inside '{task.Container}'";
+    private static string Where(PipelineTask task) => task.Container switch
+    {
+        null => "at the top level",
+        var scope when SplitScope(scope).Else => $"in the ELSE of '{SplitScope(scope).Owner}'",
+        var scope => $"inside '{scope}'",
+    };
 
     /// <summary>True when <paramref name="outerId"/> holds <paramref name="innerId"/>, at any depth.</summary>
     private static bool Encloses(IReadOnlyList<PipelineTask> tasks, string outerId, string innerId)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var current = Find(tasks, innerId)?.Container;
-        while (current is not null && seen.Add(current))
+        // A container name may be an IF's ELSE branch, which belongs to the IF itself.
+        var current = FindContainer(tasks, Find(tasks, innerId)?.Container);
+        while (current is not null && seen.Add(current.Id))
         {
-            if (string.Equals(current, outerId, StringComparison.OrdinalIgnoreCase)) return true;
-            current = Find(tasks, current)?.Container;
+            if (string.Equals(current.Id, outerId, StringComparison.OrdinalIgnoreCase)) return true;
+            current = FindContainer(tasks, current.Container);
         }
 
         return false;
@@ -867,21 +909,11 @@ public sealed partial class PipelineTaskAuthoringService
     /// pushed-down SQL contains <c>BEGIN</c>, <c>END</c>, or the word <c>COMMIT</c> cannot be
     /// mistaken for the container's own closing token.</para>
     /// </summary>
-    private static int? ChildInsertionPoint(string script, PipelineTask container)
+    /// <param name="intoElse">For an IF: the end of its ELSE body rather than its IF body.</param>
+    private static int? ChildInsertionPoint(string script, PipelineTask container, bool intoElse = false)
     {
+        if (ContainerTokens(script, container) is not { } tokens) return null;
         var start = container.InnerStart;
-        var end = container.InnerEnd;
-        if (start < 0 || end <= start || end > script.Length) return null;
-
-        List<Token> tokens;
-        try
-        {
-            tokens = new Lexer(script[start..end]).Tokenize();
-        }
-        catch
-        {
-            return null;
-        }
 
         // A transaction scope ends its child region at the COMMIT, not at the block's END: anything
         // written after the commit is outside the atomic unit the author asked for.
@@ -891,14 +923,174 @@ public sealed partial class PipelineTaskAuthoringService
             return commit < 0 ? null : StartOfLine(script, start + tokens[commit].Offset);
         }
 
-        var depth = 0;
-        for (var i = 0; i < tokens.Count; i++)
+        if (intoElse)
         {
-            if (IsBlockOpener(tokens, i)) depth++;
-            else if (IsBlockCloser(tokens, i) && --depth == 0) return StartOfLine(script, start + tokens[i].Offset);
+            return IfBranches(tokens) is { ElseClose: >= 0 } branches
+                ? StartOfLine(script, start + tokens[branches.ElseClose].Offset)
+                : null;
         }
 
-        return null;
+        var opener = FirstBlockOpener(tokens);
+        var closer = opener < 0 ? -1 : MatchingCloser(tokens, opener);
+        return closer < 0 ? null : StartOfLine(script, start + tokens[closer].Offset);
+    }
+
+    /// <summary>A container's own statement, lexed on its own so offsets are relative to <c>InnerStart</c>.</summary>
+    private static List<Token>? ContainerTokens(string script, PipelineTask container)
+    {
+        var start = container.InnerStart;
+        var end = container.InnerEnd;
+        if (start < 0 || end <= start || end > script.Length) return null;
+
+        try
+        {
+            return new Lexer(script[start..end]).Tokenize();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static int FirstBlockOpener(List<Token> tokens)
+    {
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            if (IsBlockOpener(tokens, i)) return i;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// The <c>END</c> that closes the block opened at <paramref name="opener"/>, or -1.
+    ///
+    /// <para>A <c>CASE … END</c> expression also ends in <c>END</c>. Counted as a block closer, one in
+    /// the body would end the block early and put a new task in the middle of the statement.</para>
+    /// </summary>
+    private static int MatchingCloser(List<Token> tokens, int opener)
+    {
+        var depth = 0;
+        var cases = 0;
+        for (var i = opener; i < tokens.Count; i++)
+        {
+            if (tokens[i].Type == TokenType.CASE) cases++;
+            else if (IsBlockOpener(tokens, i)) depth++;
+            else if (IsBlockCloser(tokens, i))
+            {
+                if (cases > 0) cases--;
+                else if (--depth == 0) return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Where an IF's two bodies close, as token indexes. <c>ElseClose</c> is -1 when there is no ELSE
+    /// body the canvas can own; <c>HasElseKeyword</c> says whether any ELSE follows at all, which is
+    /// what decides whether another one can be added.
+    /// </summary>
+    private readonly record struct IfBranchTokens(int IfClose, bool HasElseKeyword, int ElseClose);
+
+    private static IfBranchTokens? IfBranches(List<Token> tokens)
+    {
+        var ifOpen = FirstBlockOpener(tokens);
+        if (ifOpen < 0) return null;
+        var ifClose = MatchingCloser(tokens, ifOpen);
+        if (ifClose < 0) return null;
+
+        var next = ifClose + 1;
+        if (next >= tokens.Count || tokens[next].Type != TokenType.ELSE)
+            return new IfBranchTokens(ifClose, false, -1);
+
+        // ELSE IF is a chain, and ELSE without BEGIN is a single statement: neither is a body the
+        // canvas can name, so both are reported as "has an ELSE" without one to drop into.
+        var elseOpen = next + 1;
+        if (elseOpen >= tokens.Count || !IsBlockOpener(tokens, elseOpen))
+            return new IfBranchTokens(ifClose, true, -1);
+
+        return new IfBranchTokens(ifClose, true, MatchingCloser(tokens, elseOpen));
+    }
+
+    /// <summary>
+    /// Gives an IF an empty <c>ELSE BEGIN … END</c>, written straight after its IF body.
+    ///
+    /// <para>An insertion into the author's bytes, not a rewrite of the IF: the condition, the body,
+    /// and everything else in the file come through unchanged, and <see cref="RemoveElse"/> takes
+    /// back out exactly what this put in.</para>
+    /// </summary>
+    public PipelineEditResult AddElse(string? script, string id)
+    {
+        var source = script ?? string.Empty;
+        if (!TryParse(source, out var ast, out var parseError))
+            return PipelineEditResult.Refused(source, parseError);
+
+        var task = Find(ReadTasks(source, ast), id);
+        if (task is null) return PipelineEditResult.Refused(source, $"No task called '{id}'.");
+        if (task.Kind != PipelineTaskKind.If)
+            return PipelineEditResult.Refused(source, $"'{task.Id}' is not an IF, so it cannot have an ELSE.");
+
+        if (ContainerTokens(source, task) is not { } tokens || IfBranches(tokens) is not { } branches)
+            return PipelineEditResult.Refused(source, $"Could not find where the IF body of '{task.Id}' ends.");
+        if (branches.HasElseKeyword)
+            return PipelineEditResult.Refused(source, $"'{task.Id}' already has an ELSE.");
+
+        var lineEnding = DetectLineEnding(source);
+        var indent = LeadingWhitespace(source, task.InnerStart);
+        var at = task.InnerStart + tokens[branches.IfClose].EndOffset;
+        var text = $"{lineEnding}{indent}ELSE{lineEnding}{indent}BEGIN{lineEnding}{indent}END";
+
+        return Commit(source, Splice(source, at, at, text));
+    }
+
+    /// <summary>
+    /// Takes an empty ELSE off an IF.
+    ///
+    /// <para>Only an empty one. Removing a branch that holds work would delete that work as a side
+    /// effect of a structural edit, so the author moves it out first — and a branch holding nothing
+    /// but a comment is not empty either, because the comment is theirs.</para>
+    /// </summary>
+    public PipelineEditResult RemoveElse(string? script, string id)
+    {
+        var source = script ?? string.Empty;
+        if (!TryParse(source, out var ast, out var parseError))
+            return PipelineEditResult.Refused(source, parseError);
+
+        var tasks = ReadTasks(source, ast);
+        var task = Find(tasks, id);
+        if (task is null) return PipelineEditResult.Refused(source, $"No task called '{id}'.");
+        if (task.Kind != PipelineTaskKind.If || !task.HasElse)
+            return PipelineEditResult.Refused(source, $"'{task.Id}' has no ELSE to remove.");
+
+        if (ContainerTokens(source, task) is not { } tokens || IfBranches(tokens) is not { ElseClose: >= 0 } branches)
+            return PipelineEditResult.Refused(source, $"Could not find the ELSE of '{task.Id}'.");
+
+        var inside = tasks.Where(child => string.Equals(child.Container, ElseScope(task.Id), StringComparison.OrdinalIgnoreCase)).ToList();
+        if (inside.Count > 0)
+        {
+            return PipelineEditResult.Refused(source,
+                $"The ELSE of '{task.Id}' still holds {string.Join(", ", inside.Select(child => $"'{child.Id}'"))}. "
+                + "Move them out before removing it.");
+        }
+
+        var bodyStart = task.InnerStart + tokens[branches.IfClose + 2].EndOffset;
+        var bodyEnd = task.InnerStart + tokens[branches.ElseClose].Offset;
+        if (!string.IsNullOrWhiteSpace(source[bodyStart..bodyEnd]))
+            return PipelineEditResult.Refused(source, $"The ELSE of '{task.Id}' is not empty. Clear it in the script first.");
+
+        var from = task.InnerStart + tokens[branches.IfClose].EndOffset;
+        var to = task.InnerStart + tokens[branches.ElseClose].EndOffset;
+        return Commit(source, Splice(source, from, to, string.Empty));
+    }
+
+    /// <summary>The spaces and tabs a line starts with.</summary>
+    private static string LeadingWhitespace(string script, int offset)
+    {
+        var start = StartOfLine(script, offset);
+        var end = start;
+        while (end < script.Length && script[end] is ' ' or '\t') end++;
+        return script[start..end];
     }
 
     /// <summary>The first token of this type sitting directly in the outermost block, or -1.</summary>
@@ -1582,6 +1774,7 @@ public sealed partial class PipelineTaskAuthoringService
             }
 
             var loop = kind == PipelineTaskKind.Foreach ? LoopHeader(script, inner) : (null, null);
+            var elseBody = OwnedElse(inner);
 
             tasks.Add(new PipelineTask(
                 label.LabelName,
@@ -1600,12 +1793,25 @@ public sealed partial class PipelineTaskAuthoringService
                 container,
                 loop.Item1,
                 loop.Item2,
-                LastLine(script, label.Line, start, end)));
+                LastLine(script, label.Line, start, end),
+                HasElse: elseBody is not null));
 
             if (kind.IsContainer() && ChildStatements(inner) is { } children)
                 ReadInto(script, children, label.LabelName, tasks);
+            if (elseBody is not null)
+                ReadInto(script, elseBody.Statements, ElseScope(label.LabelName), tasks);
         }
     }
+
+    /// <summary>
+    /// An IF's ELSE body, when it is one the canvas can name: a <c>BEGIN … END</c> block, with no
+    /// <c>ELSE IF</c> chain before it. A chain has more branches than one name each can address, so
+    /// it stays the author's and its statements stay read-only stages.
+    /// </summary>
+    internal static BlockStatement? OwnedElse(Statement statement) =>
+        statement is IfStatement { ElseBody: BlockStatement body } branch && (branch.ElseIfClauses?.Count ?? 0) == 0
+            ? body
+            : null;
 
     /// <summary>
     /// The last line a task occupies, counted from the line its label sits on.
@@ -1634,9 +1840,7 @@ public sealed partial class PipelineTaskAuthoringService
         WhileStatement loop when loop.Body is BlockStatement block => block.Statements,
         TryCatchStatement scope when scope.TryBody is BlockStatement block => block.Statements,
 
-        // The IF body only. An ELSE is the author's, and its statements stay ordinary read-only
-        // stages: adopting them would put two scopes under one label, and the canvas would have no
-        // way to say which of them a dragged task was dropped into.
+        // The IF body. Its ELSE is read separately, under its own name — see OwnedElse.
         IfStatement branch when branch.IfBody is BlockStatement block => block.Statements,
         _ => null,
     };
@@ -1872,7 +2076,7 @@ public sealed partial class PipelineTaskAuthoringService
     private static bool InALoop(IReadOnlyList<PipelineTask> tasks, PipelineTask sibling)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        for (var container = Find(tasks, sibling.Container); container is not null; container = Find(tasks, container.Container))
+        for (var container = FindContainer(tasks, sibling.Container); container is not null; container = FindContainer(tasks, container.Container))
         {
             if (container.Kind.IsLoop()) return true;
             if (!seen.Add(container.Id)) return false; // A cycle cannot happen in a parsed script; not looping forever if it does.

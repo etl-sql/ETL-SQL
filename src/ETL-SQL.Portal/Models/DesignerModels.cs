@@ -217,11 +217,12 @@ public record PipelineTaskResponse(bool Applied, string Script, string? Error, L
 /// The last line the task occupies. With <c>Line</c> it is the span the editor reveals and
 /// highlights after an add, so the author sees the statement the canvas just wrote for them.
 /// </param>
+/// <param name="HasElse">An IF with an ELSE the canvas can drop into, addressed as <c>&lt;id&gt;:else</c>.</param>
 public record PipelineTaskDto(
     string Id, string Kind, string Connection, string Body, int Line,
     List<PipelineDependencyDto> DependsOn, bool Guarded = false,
     string? Container = null, string? Variable = null, string? Collection = null,
-    int EndLine = 0);
+    int EndLine = 0, bool HasElse = false);
 
 /// <param name="Condition">always | onsuccess | onfailure | oncompletion | expression.</param>
 public record PipelineDependencyDto(string Id, string Condition, string? Expression = null);

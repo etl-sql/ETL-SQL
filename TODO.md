@@ -95,7 +95,14 @@ rights just to learn.
 
 **Authoring limits**
 
-- [ ] An `IF` created on the pipeline canvas cannot be given an `ELSE` there.
+- [x] An `IF` created on the pipeline canvas cannot be given an `ELSE` there. Add/Remove ELSE on
+  the IF; the branch is addressed as `<label>:else` and drawn as its own drop target. `ELSE IF`
+  chains remain script-only.
+- [ ] Closing the Studio browser window never stops a CLI-launched host: `--idle-timeout-minutes`
+  defaults to 0, and `StudioHostLifecycleService` treats 0 as "never", so the host keeps its port
+  and locks `src/ETL-SQL.App/bin` until **Exit Studio** or `etlsql studio stop`.
+- [ ] `Studio_AWizardWrite_OffersAnUndoThatPutsTheScriptBack` fails when run alone: the first
+  `.etlsql-feedback-action` is not "Undo".
 - [ ] The task editor can rename most task kinds but not edit their other fields.
 - [ ] `PARALLEL` branches are drawn without swimlanes.
 - [ ] Rebuild the pipeline canvas as a teaching surface — the largest single piece. The current

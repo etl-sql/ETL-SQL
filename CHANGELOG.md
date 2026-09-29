@@ -14,6 +14,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- An IF on the Studio pipeline canvas can now be given an ELSE. Select the IF and choose **Add
+  ELSE**; the branch appears as its own card, and tasks dropped on it are written inside the
+  `ELSE BEGIN … END`. The ELSE is inserted into the script's existing text, so **Remove ELSE** on
+  an empty branch restores the file byte for byte. A branch that still holds tasks is not removed.
+  `ELSE IF` chains stay script-only.
+
 - The browser sources are linted. `eslint.config.mjs` at the repository root points `eslint:recommended` at the canonical shared assets and the Portal's own modules — the same sources the type gate covers — and `node scripts/lint-browser.mjs` gates them from pre-push and CI against `browser-lint-baseline.txt`, on the same shrink-only ratchet as the type baseline. A file ESLint cannot parse is never baselined.
 
 ### Changed
@@ -141,6 +147,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   JavaScript shrinks by 27,271 bytes. Stateful designer and Studio closures remain unchanged.
 
 ### Fixed
+
+- The Studio pipeline map now shows its connectors. Every DAG edge was being drawn off screen, and
+  the map zoomed out until steps became unreadable pills. Connectors now carry arrowheads, and the
+  map opens at a readable zoom on the first step.
+
+- A labelled IF on the pipeline map is now a canvas task. Its card was missing its label, so it
+  could not be selected or have tasks dropped into it. A `CASE … END` inside a pipeline block no
+  longer ends the block early when the canvas inserts a task.
 
 - SMTP explicitly rejects a missing execution context before message or attachment processing.
 

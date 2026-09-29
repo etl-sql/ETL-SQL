@@ -406,6 +406,8 @@ export interface PipelineTaskLike {
     body?: string;
     line?: number;
     container?: string;
+    /** An IF with an ELSE the canvas can drop into, addressed as `<id>:else`. */
+    hasElse?: boolean;
     dependsOn?: Array<string | { id?: any; condition?: string; expression?: string | null }>;
     [key: string]: any;
 }
@@ -453,6 +455,8 @@ export interface AttachPipelineTaskEditingOptions {
     onMove?: (change: { id: any; after: any }) => Promise<void>;
     onNest?: (change: { id: any; container: any }) => Promise<void>;
     onRemove?: (change: { id: any }) => Promise<void>;
+    onAddElse?: (change: { id: any }) => Promise<void>;
+    onRemoveElse?: (change: { id: any }) => Promise<void>;
     onRunTo?: ((change: { id: any }) => Promise<void>) | null;
     onOpenLine?: (line: number) => void;
     scope?: PipelineTaskScope | null;
@@ -470,7 +474,7 @@ export interface PipelineTaskEditingHandle {
  * @param {HTMLElement} host   Element that receives the toolbar and inspector markup.
  * @param {HTMLElement} canvas Element containing the rendered DAG cards.
  * @param {Object} [options]
- * @param {Array<{id: *, kind?: string, connection?: string, body?: string, line?: number}>} [options.tasks]
+ * @param {Array<{id: *, kind?: string, connection?: string, body?: string, line?: number, hasElse?: boolean}>} [options.tasks]
  *   As the host reported them.
  * @param {*} [options.selectedId] Task to show as selected, or null.
  * @param {(id: *) => void} [options.onSelect]
@@ -487,6 +491,8 @@ export interface PipelineTaskEditingHandle {
  * @param {(change: {id: *, container: *}) => Promise<void>} [options.onNest]
  *   `container` null means "move out".
  * @param {(change: {id: *}) => Promise<void>} [options.onRemove]
+ * @param {(change: {id: *}) => Promise<void>} [options.onAddElse] Gives an IF an empty ELSE.
+ * @param {(change: {id: *}) => Promise<void>} [options.onRemoveElse] Takes an empty ELSE off an IF.
  * @param {((change: {id: *}) => Promise<void>)|null} [options.onRunTo]
  *   Executes the pipeline through this task.
  * @param {(line: number) => void} [options.onOpenLine] Reveals the task in the script.
@@ -509,6 +515,8 @@ export function attachPipelineTaskEditing(
         onMove = async () => {},
         onNest = async () => {},
         onRemove = async () => {},
+        onAddElse = async () => {},
+        onRemoveElse = async () => {},
         onRunTo = null,
         onOpenLine = () => {},
         scope = null,
@@ -598,6 +606,12 @@ export function attachPipelineTaskEditing(
         const unnest = inspector.querySelector('[data-task-unnest]');
         if (unnest) on(unnest, 'click', () => onNest({ id: selected.id, container: null }));
 
+        const addElse = inspector.querySelector('[data-task-add-else]');
+        if (addElse) on(addElse, 'click', () => onAddElse({ id: selected.id }));
+
+        const removeElse = inspector.querySelector('[data-task-remove-else]');
+        if (removeElse) on(removeElse, 'click', () => onRemoveElse({ id: selected.id }));
+
         for (const chip of inspector.querySelectorAll('[data-task-disconnect]')) {
             on(chip, 'click', () => onDisconnect({ from: asHtml(chip).dataset.taskDisconnect, to: selected.id }));
         }
@@ -647,7 +661,50 @@ export function attachPipelineTaskEditing(
         .filter(task => isContainerKind(task.kind))
         .map(task => String(task.id).toLowerCase()));
 
-    const cards = [...canvas.querySelectorAll('[data-task-key]')];
+    // An IF's ELSE is a card of its own, keyed `<id>:else`: somewhere to drop a task, never a task
+    // itself. It cannot be dragged, connected, or deleted - those belong to the IF that owns it.
+    const branches = new Map(tasks
+        .filter(task => task.kind === 'if' && task.hasElse)
+        .map(task => [elseScope(task.id).toLowerCase(), task.id]));
+
+    const allKeyed = [...canvas.querySelectorAll('[data-task-key]')];
+    const branchCards = allKeyed.filter(card => branches.has(String(asHtml(card).dataset.taskKey).toLowerCase()));
+    const cards = allKeyed.filter(card => !branchCards.includes(card));
+
+    for (const card of branchCards) {
+        const scope = asHtml(card).dataset.taskKey;
+        const owner = branches.get(String(scope).toLowerCase());
+        card.classList.add('is-branch-task', 'is-container-task');
+        card.classList.toggle('is-selected-task', sameId(owner, selectedId));
+        asHtml(card).title = `Runs when the condition of ${owner} is false. Drop a task here to put it in the ELSE.`;
+        // Its dots are where lines meet it, not connector handles: a branch is not something to wait on.
+        for (const port of card.querySelectorAll('.card-port-left, .card-port-right')) {
+            port.classList.add('is-anchor-port');
+            asHtml(port).style.background = '';
+        }
+        on(card, 'click', () => onSelect(owner));
+        on(card, 'dragover', (event: DragEvent) => {
+            if (!dragging || draggingKind === 'connect') return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = draggingKind === 'palette' ? 'copy' : 'move';
+            card.classList.add('is-drop-target');
+        });
+        on(card, 'dragleave', () => card.classList.remove('is-drop-target'));
+        on(card, 'drop', (event: DragEvent) => {
+            event.preventDefault();
+            event.stopPropagation();
+            card.classList.remove('is-drop-target');
+            if (draggingKind === 'palette') {
+                const kind = (event.dataTransfer?.getData(PALETTE_DRAG_TYPE) || dragging) as PipelineTaskKind;
+                if (kind) void onAdd({ kind, into: scope, after: null });
+                return;
+            }
+            const moved = event.dataTransfer?.getData('text/plain') || dragging;
+            if (draggingKind === 'move' && moved) void onNest({ id: moved, container: scope });
+        });
+    }
+
     for (const card of cards) {
         const id = asHtml(card).dataset.taskKey;
         card.classList.add('is-editable-task');
@@ -820,6 +877,16 @@ export function attachPipelineTaskEditing(
     };
 }
 
+/** The name of an IF's ELSE branch. Mirrors `PipelineTaskAuthoringService.ElseScope`. */
+export function elseScope(ifId: any): string {
+    return `${String(ifId ?? '')}:else`;
+}
+
+/** Where a task sits, in the words the author reads: an ELSE branch is named for its IF. */
+function scopeName(container: string): string {
+    return /:else$/i.test(container) ? `the ELSE of ${container.slice(0, -':else'.length)}` : container;
+}
+
 function sameId(left: any, right: any): boolean {
     return String(left ?? '').toLowerCase() === String(right ?? '').toLowerCase();
 }
@@ -856,7 +923,7 @@ function inspectorMarkup(task: PipelineTaskLike | null, runnable: boolean): stri
                 : [{ strong: taskKindLabel(task.kind) }];
 
     if (task.container) {
-        detail.push(' · inside ', { code: task.container });
+        detail.push(' · in ', { code: scopeName(task.container) });
     }
 
     return `
@@ -870,7 +937,12 @@ function inspectorMarkup(task: PipelineTaskLike | null, runnable: boolean): stri
             <button type="button" class="etlsql-studio-btn is-primary" data-task-edit>Edit</button>
             <button type="button" class="etlsql-studio-btn" data-task-first>Run first</button>
             ${task.container ? `<button type="button" class="etlsql-studio-btn"
-                data-task-unnest>Move out of ${escapeHtml(task.container)}</button>` : ''}
+                data-task-unnest>Move out of ${escapeHtml(scopeName(task.container))}</button>` : ''}
+            ${task.kind === 'if' ? (task.hasElse
+                ? `<button type="button" class="etlsql-studio-btn" data-task-remove-else
+                    title="Takes the empty ELSE off this IF. Move any tasks out of it first.">Remove ELSE</button>`
+                : `<button type="button" class="etlsql-studio-btn" data-task-add-else
+                    title="Adds a branch that runs when the condition is false.">Add ELSE</button>`) : ''}
             <button type="button" class="etlsql-studio-btn" data-task-reveal>Show in script</button>
             ${runnable ? `<button type="button" class="etlsql-studio-btn" data-task-run-to
                 title="Run this pipeline from the top through ${escapeHtml(task.id)}, so its variables and
@@ -1080,12 +1152,17 @@ function containerNote(task: PipelineTaskLike): string {
     }
 
     if (task.kind === 'if') {
-        return noteMarkup([
-            'Everything dropped in here runs only when the condition is true. An ',
-            { code: 'ELSE' },
-            ' branch is written in the script rather than on the canvas: the canvas tracks one block '
-            + 'per label, so it would have no way to say which of two you dropped into.',
-        ], 'info');
+        return noteMarkup(task.hasElse
+            ? [
+                'Tasks dropped on the IF run when the condition is true; tasks dropped on its ',
+                { code: 'ELSE' },
+                ' card run when it is false. Exactly one of the two branches runs.',
+            ]
+            : [
+                'Everything dropped in here runs only when the condition is true. Add an ',
+                { code: 'ELSE' },
+                ' for work that should run when it is false.',
+            ], 'info');
     }
 
     return noteMarkup([
