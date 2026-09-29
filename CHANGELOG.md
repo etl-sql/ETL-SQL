@@ -64,6 +64,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - The browser sources are linted. `eslint.config.mjs` at the repository root points `eslint:recommended` at the canonical shared assets and the Portal's own modules — the same sources the type gate covers — and `node scripts/lint-browser.mjs` gates them from pre-push and CI against `browser-lint-baseline.txt`, on the same shrink-only ratchet as the type baseline. A file ESLint cannot parse is never baselined.
 
 ### Changed
+- ReportPlayer and the VS Code extension no longer ship ETL-SQL Studio's browser modules, which
+  neither loads. ReportPlayer receives the report runtime only; the extension receives the report
+  designer and connection wizard, computed from their imports by `scripts/sync-assets.js`, which
+  also removes stale copies and fails its `-Check` if one reappears. Studio ships in the Portal and
+  the Workstation editor, the two hosts that mount it.
+
 - Designer, script workbench, Studio, and guided authoring now compose focused TypeScript
   controllers for canvas editing, properties, execution, document navigation, governance, and
   authoring dialogs. Existing host entry points remain stable. Designer HTML escaping now handles
