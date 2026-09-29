@@ -141,6 +141,35 @@ rights just to learn.
   page with live page fields; `ReportTextTemplate` resolves page, date, title, parameter and
   `{Column}` tokens; the Studio step writes bands, footer images, and data/parameter tokens.
 
+**Dashboard authoring audit — the Power BI side of the vision (2026-09-29)**
+
+Checked the Report-SQL reference, the Studio authoring modules, the designer inspector, and the
+certified dashboard journey. Report-SQL can express every capability below; the gaps are in what
+Studio lets a beginner build without typing syntax, and in what is proven end to end. Already
+covered and certified: a named dataset, chart builder (KPI, trend, category, table), a slicer that
+filters the page through a parameter, formatting that survives save and reload, themes, bookmarks,
+containers, and clause-level patching that keeps hand-written clauses on a designer edit.
+
+- [ ] **P1 — Chart-to-chart interactions.** Power BI's default is "click a bar, the other visuals
+  filter". The inspector sets the receive side (`INTERACTIONS (ON_SELECT = …)`), but nothing sets
+  the send side, `EMIT_FILTER (TARGETS = …)`: no per-visual "Edit interactions" view. The dashboard
+  journey certifies slicer filtering only; add a step that clicks a chart mark and asserts the other
+  visuals filter or highlight.
+- [ ] **P1 — Drill-down and drill-through.** The only control is a free-text *On Click* box that
+  expects typed `DRILL_DOWN(Target = …, Key = …)` syntax, and `ROW_DETAIL` (a detail visual bound to
+  the clicked row) has no UI at all. Guide both: pick the target visual or page, bind the key columns,
+  and show the clause it writes.
+- [ ] **P2 — Tooltips.** No UI for `TOOLTIP (FIELDS (col FORMAT …))` or for a container shown as a
+  tooltip page. Only the static `TOOLTIP = 'text'` form is reachable without typing.
+- [ ] **P2 — Analytics overlays.** Goal, average, trend, reference line and band, and forecast are
+  one raw `OVERLAYS (…)` textarea in the format inspector. Offer them as choices, the way
+  conditional formatting already is.
+- [ ] **P2 — Mobile layout.** The grammar has a mobile page layout (`STRUCTURE`, `MAP`,
+  `BREAKPOINT`) and Studio has nothing for it.
+- [ ] **Decision — the semantic model.** Report-SQL has no measures or relationships; a dashboard's
+  numbers come from SQL datasets. Decide whether that is the deliberate ETL-SQL answer to Power BI's
+  model (then add a guided "calculated column" and "measure" helper that writes the dataset SQL) or a
+  language gap to design. Record the decision either way; the ER view today is read-only.
 **Fresh-eyes review — learning path and primary-editor readiness (2026-09-07)**
 
 Reviewed the canonical Studio modules, both host adapters, and Portal authorization; drove the shared
