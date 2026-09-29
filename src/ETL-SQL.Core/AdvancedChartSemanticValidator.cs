@@ -752,17 +752,28 @@ public static class AdvancedChartSemanticValidator
         else if (!ContinuousPositionalScale(chart, AdvancedChartChannel.X) || !ContinuousPositionalScale(chart, AdvancedChartChannel.Y))
             Add(results, node, "ASPECT_RATIO requires continuous quantitative primary X and Y scales.");
         if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian && chart.Layers.Any(layer =>
-            layer.Mark is not (AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Text or AdvancedChartMarkKind.Rule or AdvancedChartMarkKind.Rect) ||
+            layer.Mark is not (AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Text or AdvancedChartMarkKind.Rule or AdvancedChartMarkKind.Rect or AdvancedChartMarkKind.Line) ||
             layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or { Kind: AdvancedChartPositionKind.Jitter } or
             { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data }) ||
             EffectiveEncodings(chart, layer).Any(encoding => encoding.Stack != AdvancedChartStackMode.None ||
                 encoding.Channel == AdvancedChartChannel.Y2)))
-            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers, TEXT layers, supported RECT layers and RULE layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
+            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers, TEXT layers, supported LINE/RECT layers and RULE layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
         if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian)
-            foreach (var layer in chart.Layers.Where(layer => layer.Mark is AdvancedChartMarkKind.Rule or AdvancedChartMarkKind.Rect))
+            foreach (var layer in chart.Layers.Where(layer => layer.Mark is AdvancedChartMarkKind.Rule or AdvancedChartMarkKind.Rect or AdvancedChartMarkKind.Line))
             {
                 var encodings = EffectiveEncodings(chart, layer);
                 var channels = encodings.Select(encoding => encoding.Channel).ToHashSet();
+                if (layer.Mark == AdvancedChartMarkKind.Line)
+                {
+                    var interpolation = layer.Styles.FirstOrDefault(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase));
+                    if (!channels.SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.Y]) ||
+                        layer.Position.Kind != AdvancedChartPositionKind.Identity || layer.Conditions.Length > 0 ||
+                        !string.Equals(layer.NullHandling, "GAP", StringComparison.OrdinalIgnoreCase) ||
+                        interpolation is null || !string.Equals(LiteralText(interpolation.Value)?.Trim(), "LINEAR", StringComparison.OrdinalIgnoreCase) ||
+                        encodings.Any(encoding => encoding.DataKind != AdvancedChartDataKind.Quantitative || encoding.Source.Kind is not (AdvancedChartBindingSourceKind.Field or AdvancedChartBindingSourceKind.Datum)))
+                        Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO LINE requires exactly quantitative field/DATUM X/Y bindings, IDENTITY, NULL_HANDLING = GAP, STYLE INTERPOLATION = LINEAR, and no CONDITIONS.");
+                    continue;
+                }
                 if (layer.Mark == AdvancedChartMarkKind.Rect)
                 {
                     if (!channels.SetEquals([AdvancedChartChannel.XStart, AdvancedChartChannel.XEnd, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd]) ||

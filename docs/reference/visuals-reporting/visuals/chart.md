@@ -85,7 +85,7 @@ CREATE VISUAL name AS CUSTOM (
 
 ## Mappings
 
-- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` and `TEXT` layers with `IDENTITY`, `JITTER`, or `NUDGE(..., UNIT = EM|BAND|DATA)`, without stacking or secondary axes. RULE layers and RECT layers with both endpoint pairs are also supported under the restrictions below. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
+- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` and `TEXT` layers with `IDENTITY`, `JITTER`, or `NUDGE(..., UNIT = EM|BAND|DATA)`, without stacking or secondary axes. LINE layers, RULE layers and RECT layers with both endpoint pairs are also supported under the restrictions below. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
 - **SCALES** — Optionally declares named `LINEAR`, `LOGARITHMIC`, `TIME`, `BAND`, `POINT`, `ORDINAL`, or `IDENTITY` scales. Encoding `SCALE` references must name a declared scale; omission requests deterministic inference from the required `TYPE`, channel, mark, and coordinate.
 - **RANGE** — Adds a dependency-free sRGB sequential or diverging output range to a quantitative `COLOR` scale. Colors use portable `#RRGGBB`; values clamp at the domain, nulls use `NULL_COLOR`, and a diverging midpoint must lie inside the resolved domain.
 - **Scale axis controls** — `MIN`/`MAX` set the domain, `INCLUDE_ZERO` expands a quantitative domain to zero, `REVERSE` flips its display direction, `MAJOR_TICK_COUNT` or `TICK_INTERVAL` controls major ticks, `MINOR_TICKS` adds midpoint ticks, `TIME_UNIT` truncates/bins temporal scales by calendar unit (`AUTO`, `DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`), `TICK_FORMAT` applies a custom date/time or numeric format pattern, and `LABEL_ROTATION`/`LABEL_SKIP` control crowded tick labels. `OUTER_PADDING = 0..1` adds space before the first and after the last category on `BAND` scales only.
@@ -311,6 +311,37 @@ CREATE VISUAL Measurement AS CUSTOM (
         STYLE (LABEL = '<target>', COLOR = '#112233')
       )
     )
+  )
+);
+```
+
+## Lines on transposed fixed-aspect charts
+
+LINE supports exactly quantitative field or DATUM X/Y bindings with IDENTITY placement,
+explicit NULL_HANDLING = GAP and explicit STYLE (INTERPOLATION = 'LINEAR'). Extra encodings,
+row-level conditions, nudges, jitter, stacking and secondary axes are not supported for this form.
+Use a literal STYLE color for each line; unrelated POINT color groups do not split it.
+
+Vertices follow source row order within each facet, including descending or repeated X values.
+A missing X or Y breaks the path. Coincident rows remain distinct. Semantic Y maps horizontally
+and X vertically through linear/logarithmic and reversed scales. Facets and resizing retain the
+physical aspect ratio. Symbols and optional data labels report semantic Y. Terminal output and
+accessible fallback preserve semantic values; they do not reproduce physical distances.
+
+```sql
+CREATE VISUAL Route AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    LAYERS (route = LINE (
+      INHERIT_ENCODINGS = OFF,
+      NULL_HANDLING = GAP,
+      ENCODINGS (
+        X = Distance (TYPE = QUANTITATIVE),
+        Y = Estimate (TYPE = QUANTITATIVE)
+      ),
+      STYLE (INTERPOLATION = 'LINEAR', COLOR = '#112233')
+    ))
   )
 );
 ```

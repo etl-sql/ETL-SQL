@@ -27,6 +27,37 @@ public sealed class ReportRenameProviderTests
         );
         """;
 
+    [Theory]
+    [InlineData("distances =", 2)]
+    [InlineData("estimates =", 2)]
+    [InlineData("Distance (", 1)]
+    [InlineData("Estimate (", 1)]
+    public async Task TransposedAspectLine_RenamesScalesAndFields(string token, int expectedEdits)
+    {
+        var script = """
+            CREATE VISUAL Route AS CUSTOM (SOURCE = #prepared, CHART (
+              COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+              SCALES (distances = LINEAR (CHANNEL = X), estimates = LINEAR (CHANNEL = Y)),
+              LAYERS (route = LINE (
+                NULL_HANDLING = GAP,
+                ENCODINGS (X = Distance (TYPE = QUANTITATIVE, SCALE = distances),
+                           Y = Estimate (TYPE = QUANTITATIVE, SCALE = estimates)),
+                STYLE (INTERPOLATION = 'LINEAR')
+              ))
+            ));
+            """;
+        var (provider, uri) = Provider(script);
+        var result = await provider.Handle(new RenameParams
+        {
+            TextDocument = new TextDocumentIdentifier(uri),
+            Position = PositionOf(script, token),
+            NewName = "renamed"
+        }, CancellationToken.None);
+        var edits = Assert.IsAssignableFrom<IEnumerable<TextEdit>>(result!.Changes![uri]).ToList();
+        Assert.Equal(expectedEdits, edits.Count);
+        Assert.All(edits, edit => Assert.Equal("renamed", edit.NewText));
+    }
+
     [Fact]
     public async Task RenameScale_UpdatesDeclarationAndEncodingReferenceOnly()
     {

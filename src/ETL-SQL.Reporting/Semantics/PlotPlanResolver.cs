@@ -575,7 +575,7 @@ public sealed class PlotPlanResolver
             }
 
             // COMPAT_BREAK: 0.20 — isolated single-axis rules must not inherit another layer's color groups.
-            var isolatedGeometry = layer.Mark is (MarkKind.Rule or MarkKind.Rect) && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null };
+            var isolatedGeometry = layer.Mark is (MarkKind.Rule or MarkKind.Rect or MarkKind.Line) && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null };
             var colorBinding = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color)
                 ?? (isolatedGeometry ? null : spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color));
             var explicitSeries = layer.Style.FirstOrDefault(token => token.Name == "series")?.Value;

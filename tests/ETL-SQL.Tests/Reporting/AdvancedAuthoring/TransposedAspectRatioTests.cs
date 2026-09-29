@@ -88,7 +88,7 @@ public sealed class TransposedAspectRatioTests
     public void ContractBackstop_RejectsUnsupportedTransposedMarks()
     {
         var (spec, _) = Lower(Script);
-        var invalid = spec with { Layers = [spec.Layers[0] with { Mark = MarkKind.Line }] };
+        var invalid = spec with { Layers = [spec.Layers[0] with { Mark = MarkKind.Area }] };
         Assert.Contains("supports POINT layers", Assert.Throws<InvalidDataException>(invalid.Validate).Message);
     }
 

@@ -376,7 +376,7 @@ internal sealed class PlotPlanSvgRenderer
                     if (layer.Stack != StackMode.None && overlayType is null)
                         RenderStackedLine(builder, plan, layer, lineLayers, categories.Length, area, xScale, lineScale, color, showLabels, seriesLabelPlacements);
                     else
-                        RenderLine(builder, plan, layer, categories.Length, area, xScale, lineScale, color, showLabels, overlayLabels, smartLabels, seriesLabelPlacements);
+                        RenderLine(builder, plan, layer, categories.Length, area, xScale, lineScale, color, showLabels, overlayLabels, smartLabels, seriesLabelPlacements, transposedPointAxes);
                     break;
                 case MarkKind.Area:
                     var areaScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale;
@@ -1460,7 +1460,7 @@ internal sealed class PlotPlanSvgRenderer
     private static void RenderLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
         in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? scale, string color, bool showLabels,
         ICollection<OverlayLabel> overlayLabels, ICollection<SmartLabel> smartLabels,
-        ICollection<SeriesLabelPlacement> seriesLabelPlacements)
+        ICollection<SeriesLabelPlacement> seriesLabelPlacements, bool transposedAspect)
     {
         if (scale is null || layer.Data.IsDefaultOrEmpty) return;
         var lineStyle = LayerStyle(layer, "lineStyle");
@@ -1604,6 +1604,7 @@ internal sealed class PlotPlanSvgRenderer
                 segmentPoints!.Add(((x, y), datum));
             else
                 segment!.Add((x, y));
+            var labelValue = transposedAspect ? PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null())!.Value : value.Value;
             var symbolColor = EncodingText(datum, ConditionalEncodingChannel.Color) is { } condColor
                 ? SafePaint(condColor, color) : color;
             var symbolSizeStr = Style(plan, "SYMBOL_SIZE") ?? LayerStyle(layer, "SYMBOL_SIZE");
@@ -1614,11 +1615,11 @@ internal sealed class PlotPlanSvgRenderer
                 (!isOverlay || !plan.Layers.Any(candidate => candidate.Mark == MarkKind.Point && LayerStyle(candidate, "overlayType") is null)))
                 RenderPointSymbol(builder, isOverlay ? null : PointShape(plan, layer, datum),
                     x, y, symbolRadius, symbolColor, isOverlay ? "plot-overlay-point" : "plot-line-symbol",
-                    datum.RowIndex, FormatDataLabel(value.Value, DataFormat(plan)),
+                    datum.RowIndex, FormatDataLabel(labelValue, DataFormat(plan)),
                     isOverlay ? " stroke='white' stroke-width='1.5'" : PointStrokeAttributes(layer));
             if (showLabels && (!seriesLabelsEnabled || index != seriesLabelTargetIndex))
                 smartLabels.Add(new SmartLabel(datum.RowIndex, x, y,
-                    FormatDataLabel(value.Value, DataFormat(plan)),
+                    FormatDataLabel(labelValue, DataFormat(plan)),
                     SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444"),
                     120 + layer.ZIndex,
                     FontSize(Style(plan, "DATA_LABELS:FONT_SIZE"))));

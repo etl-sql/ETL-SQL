@@ -140,7 +140,8 @@ internal static class PlotPlanTerminalRenderer
         var continuousLayers = activeLayers.Where(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area or MarkKind.Point).ToList();
         var ruleLayers = activeLayers.Where(item => item.Layer.Mark is MarkKind.Rule or MarkKind.Tick).ToList();
 
-        if (rectLayers.Count > 0 && continuousLayers.Any(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area))
+        if (rectLayers.Count > 0 && continuousLayers.Any(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area) &&
+            plan.Coordinate is not { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
         {
             content.Add(RenderCompositeBarLine(plan, rectLayers, continuousLayers, ruleLayers, width));
         }

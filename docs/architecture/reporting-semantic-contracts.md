@@ -82,7 +82,7 @@ update the fixtures and compatibility expectations together.
 
 ## Transposed physical aspect ratios
 
-Continuous primary-axis `POINT` and `TEXT` compositions, with supported RULE/RECT layers, accept `ASPECT_RATIO` with
+Continuous primary-axis `POINT` and `TEXT` compositions, with supported LINE/RULE/RECT layers, accept `ASPECT_RATIO` with
 `TRANSPOSED_CARTESIAN`. The ratio is physical semantic Y-unit size divided by X-unit size;
 logarithmic spans use decades. The resolver fits the viewport using
 `height / width = xSpan / (aspectRatio * ySpan)`, including facet panels and relayout.
@@ -94,7 +94,7 @@ This increment retains ChartSpec v2 and PlotPlan v3: it adds no serialized field
 and existing valid specifications retain their plan and SVG fingerprints. The terminal row-selection
 correction described below changes output for previously omitted series. Older ChartSpec validators
 reject the newly allowed combination. Regenerate output with a supporting renderer; serialization
-compatibility alone does not establish rendering support. Marks other than POINT/TEXT and supported RULE/RECT, secondary axes,
+compatibility alone does not establish rendering support. Marks other than POINT/TEXT and supported LINE/RULE/RECT, secondary axes,
 stacking remain rejected for transposed aspect ratios.
 
 Single-axis RULE layers require exactly one quantitative field or DATUM binding on X or Y, IDENTITY, JITTER or EM/BAND/DATA NUDGE along the bound axis,
@@ -152,6 +152,15 @@ unique/non-null across all source rows, including incomplete segments. Row reord
 preserve offsets; seed changes do not. Existing hash identity includes chart ID, mark, Z index and
 channel sequence. Missing endpoints still skip rendering and fallback. Single-axis reference rules
 accept JITTER only along the bound axis. ChartSpec v2 and PlotPlan v3 retain their existing wire shapes.
+
+LINE accepts exactly quantitative field/DATUM X/Y bindings, IDENTITY placement, explicit
+NULL_HANDLING = GAP and explicit LINEAR interpolation. No additional encodings or conditions
+are accepted. The physical-axis adapter preserves source row order and splits paths at missing
+coordinates. Coincident rows remain distinct. Native symbols and data labels read semantic Y
+after the adapter exchanges channels. Terminal and accessible output keep semantic coordinates.
+Independent facets, reversed/log scales and relayout use the same point geometry. Isolated lines
+ignore other layers' color groups. Mixed LINE/RECT terminal charts render the line and rectangle
+ranges separately, retaining both rectangle intervals. ChartSpec v2 and PlotPlan v3 are unchanged.
 
 RECT accepts exactly four quantitative field/DATUM endpoints (X_START/X_END/Y_START/Y_END) with
 IDENTITY, JITTER or EM/BAND/DATA NUDGE placement and no conditions or additional encodings. The physical-axis adapter exchanges

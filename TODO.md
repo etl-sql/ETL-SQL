@@ -489,7 +489,13 @@ semantics and backend evidence before its rejection can be lifted.
   intervals remain unchanged. Reorder/rename/resize, facets, reversed/log axes, nulls, invalid keys
   and amplitudes, lineage, authoring/contract round trips, LSP rename, PDF and deterministic
   plan/SVG tests cover the combination. Wire versions are unchanged.
-- [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/supported RULE/RECT,
+- [x] **Straight LINE layers on continuous transposed aspect charts.** Exact quantitative
+  field/DATUM X/Y bindings, IDENTITY, explicit GAP handling and LINEAR interpolation. Source
+  order, coincident rows and missing-coordinate breaks are preserved through reversed/log axes,
+  facets and resize. Symbols/labels retain semantic Y. Mixed POINT/RECT compositions, terminal,
+  fallback, authoring/contracts, lineage, LSP rename, PDF and deterministic fixtures are covered
+  by TransposedAspectLineTests. No wire version changes.
+- [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/supported LINE/RULE/RECT,
   stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**
