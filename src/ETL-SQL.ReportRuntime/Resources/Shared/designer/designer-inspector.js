@@ -9,7 +9,7 @@
  * Selected visual and report property editors.
  */
 import { VTYPES, controlTarget, datasetValue, queryElement, queryElements } from './designer-context.js';
-import { filterSourceOn, parametersRead, readClickAction, readEmitTargets, readRowDetail, selectionKey, splitNames, writeClickAction, writeRowDetail } from './designer-interactions.js';
+import { filterSourceOn, filterSourceOnHover, hoverContextColumn, parametersRead, readClickAction, readEmitTargets, readRowDetail, readTooltip, selectionKey, splitNames, writeClickAction, writeRowDetail, writeTooltip } from './designer-interactions.js';
 import { esc } from './designer-util.js';
 import { renderFormattingSectionHtml, renderVisualFormatInspectorHtml, toHexColor } from './visual-format-inspector.js';
 import { CHART_AGGREGATES, VISUAL_ROLES, aggregateExpression } from './visual-preview.js';
@@ -32,6 +32,24 @@ export function createDesignerInspector(context) {
         { value: 'SET_PARAMETER', label: 'Set a parameter' },
         { value: 'CUSTOM', label: 'Custom action' },
     ];
+    const TOOLTIP_KINDS = [
+        { value: 'NONE', label: 'The default tooltip' },
+        { value: 'TEXT', label: 'Text' },
+        { value: 'FIELDS', label: 'Fields from the hovered row' },
+        { value: 'VISUALS', label: 'Other visuals, in a popover' },
+        { value: 'CONTAINER', label: 'A container, in a popover' },
+        { value: 'CUSTOM', label: 'As written in the script' },
+    ];
+    /** Suggestions for a field's FORMAT, which follows the DATA_LABELS convention. */
+    const TOOLTIP_FORMATS = [
+        { value: 'C0', label: 'Currency, whole' },
+        { value: 'C2', label: 'Currency, cents' },
+        { value: 'N0', label: 'Number, whole' },
+        { value: 'N2', label: 'Number, 2 decimals' },
+        { value: 'P0', label: 'Percent, whole' },
+        { value: 'P1', label: 'Percent, 1 decimal' },
+        { value: 'yyyy-MM-dd', label: 'Date' },
+    ];
     /** Visuals with no rows of their own: they neither send nor receive a selection. */
     const NON_DATA_TYPES = new Set(['CONTAINER', 'BUTTON', 'TEXT', 'IMAGE']);
     /** Visuals the dialect refuses ACTIONS on. */
@@ -48,6 +66,8 @@ export function createDesignerInspector(context) {
      * only while it still writes the clause the script holds, so an edit made in the script wins.
      */
     const rowDetailDrafts = new Map();
+    /** A tooltip being set up that does not write a clause yet (no field or visual chosen), by visual id. */
+    const tooltipDrafts = new Map();
     /**
      * Columns this visual can key a selection on: what it maps, what its dataset declares, and what
      * the host can see in its own data sample.
@@ -505,6 +525,40 @@ export function createDesignerInspector(context) {
                     return '';
             }
         })();
+        // What hovering a data point shows (TOOLTIP). Visuals with no rows have nothing to hover.
+        const acceptsTooltip = !NON_DATA_TYPES.has(String(v.type || '').toUpperCase());
+        const writtenTooltip = readTooltip(v.options?.tooltip);
+        const tooltipDraft = tooltipDrafts.get(v.id);
+        const tooltip = tooltipDraft && (writtenTooltip.kind === 'NONE' || writeTooltip(tooltipDraft) === v.options?.tooltip)
+            ? tooltipDraft
+            : writtenTooltip;
+        const hoverColumn = hoverContextColumn(v.mappings);
+        const containerNames = context.curVis()
+            .filter(other => String(other.type || '').toUpperCase() === 'CONTAINER')
+            .map(other => String(other.name));
+        const popoverVisuals = tooltip.kind === 'VISUALS'
+            ? tooltip.visuals
+                .map(name => context.curVis().find(other => String(other.name).toLowerCase() === name.toLowerCase()))
+                .filter((other) => Boolean(other))
+            : [];
+        // Popover visuals that do not read @hover_value yet, and can be made to.
+        const hoverUnread = hoverColumn && /^[A-Za-z_][A-Za-z0-9_]*$/.test(hoverColumn)
+            ? popoverVisuals.filter(other => !parametersRead(other.options?.inline_source).has('@hover_value')
+                && Boolean(filterSourceOnHover(other.options?.inline_source, hoverColumn)))
+            : [];
+        const tooltipNote = (() => {
+            switch (tooltip.kind) {
+                case 'TEXT': return 'Shown as written whenever a data point is hovered.';
+                case 'FIELDS': return 'Read from the hovered row, so it needs no extra query. Field names are columns of this visual’s source.';
+                case 'VISUALS':
+                case 'CONTAINER':
+                    return hoverColumn
+                        ? `Opens a popover on hover or click. Its visuals receive the hovered ${hoverColumn} as @hover_value, and each one’s query decides what that filters.`
+                        : 'A popover needs this visual to map X, LABEL, NAME, REGION, or Y: that column’s hovered value is what the popover’s visuals receive as @hover_value. The report will not build until one is mapped.';
+                case 'CUSTOM': return 'This tooltip is left exactly as written. Edit it in the script, or choose another kind to replace it.';
+                default: return '';
+            }
+        })();
         // A table's drill-through (ROW_DETAIL).
         const rowDetailDraft = rowDetailDrafts.get(v.id);
         const rowDetail = v.type !== 'TABLE'
@@ -844,6 +898,57 @@ export function createDesignerInspector(context) {
                     </div>
                 </details>
 
+                ${acceptsTooltip ? `<details class="etlsql-format-group">
+                    <summary>Tooltip</summary>
+                    <div class="etlsql-format-group-body" data-tooltip-editor>
+                        <label class="etlsql-dsgn-label">Hovering a data point shows
+                            <select id="pp-tooltip-kind" class="form-control">
+                                ${TOOLTIP_KINDS.filter(kind => kind.value !== 'CUSTOM' || tooltip.kind === 'CUSTOM')
+            .map(kind => `<option value="${kind.value}"${tooltip.kind === kind.value ? ' selected' : ''}>${esc(kind.label)}</option>`).join('')}
+                            </select>
+                        </label>
+                        ${tooltip.kind === 'TEXT' ? `
+                        <label class="etlsql-dsgn-label">Text
+                            <input type="text" id="pp-tooltip-text" class="form-control" value="${esc(tooltip.text)}" placeholder="Revenue for the month">
+                        </label>` : ''}
+                        ${tooltip.kind === 'FIELDS' || tooltip.kind === 'VISUALS' ? `
+                        <label class="etlsql-dsgn-label">Heading
+                            <input type="text" id="pp-tooltip-heading" class="form-control" value="${esc(tooltip.heading)}" placeholder="Optional, markdown">
+                        </label>` : ''}
+                        ${tooltip.kind === 'FIELDS' ? `
+                        <div class="etlsql-dsgn-cascade-parents" data-tooltip-fields>
+                            ${tooltip.fields.map((field, index) => `
+                                <div class="etlsql-dsgn-cascade-parent">
+                                    <input type="text" class="form-control" data-tooltip-field="${index}" spellcheck="false"
+                                        list="dsgn-match-cols-${esc(v.id)}" value="${esc(field.name)}" placeholder="column" aria-label="Field ${index + 1}">
+                                    <input type="text" class="form-control" data-tooltip-format="${index}" spellcheck="false"
+                                        list="dsgn-tooltip-formats" value="${esc(field.format)}" placeholder="format" aria-label="Field ${index + 1} format">
+                                    <button type="button" class="etlsql-dsgn-cascade-drop" data-tooltip-remove="${index}" aria-label="Remove field">×</button>
+                                </div>`).join('')}
+                            <button type="button" class="btn btn-sm" id="pp-tooltip-add-field">+ Field</button>
+                        </div>
+                        <datalist id="dsgn-tooltip-formats">${TOOLTIP_FORMATS.map(format => `<option value="${format.value}">${esc(format.label)}</option>`).join('')}</datalist>` : ''}
+                        ${tooltip.kind === 'VISUALS' ? `
+                        <fieldset class="etlsql-dsgn-emit-targets" data-tooltip-visuals>
+                            <legend class="etlsql-dsgn-label">Visuals in the popover</legend>
+                            ${[...otherVisualNames, ...tooltip.visuals.filter(name => !otherVisualNames.some(other => other.toLowerCase() === name.toLowerCase()))]
+            .map(name => `<label class="etlsql-dsgn-check">
+                                    <input type="checkbox" data-tooltip-visual="${esc(name)}"${tooltip.visuals.some(item => item.toLowerCase() === name.toLowerCase()) ? ' checked' : ''}>
+                                    ${esc(name)}
+                                </label>`).join('') || '<p class="etlsql-dsgn-interaction-note">No other visuals on this page yet.</p>'}
+                        </fieldset>
+                        ${hoverUnread.map(other => `<button type="button" class="btn btn-sm" data-hover-filter="${esc(other.name)}">Show ${esc(other.name)} for the hovered ${esc(hoverColumn || '')}</button>`).join('')}` : ''}
+                        ${tooltip.kind === 'CONTAINER' ? `
+                        <label class="etlsql-dsgn-label">Container
+                            <select id="pp-tooltip-container" class="form-control">
+                                ${preservingOptions(containerNames, tooltip.name, containerNames.length ? '— container —' : 'No containers on this page')}
+                            </select>
+                        </label>` : ''}
+                        ${tooltip.kind === 'CUSTOM' ? `<pre class="etlsql-dsgn-readonly-clause">${esc(tooltip.text)}</pre>` : ''}
+                        ${tooltipNote ? `<p class="etlsql-dsgn-interaction-note" data-tooltip-note>${esc(tooltipNote)}</p>` : ''}
+                    </div>
+                </details>` : ''}
+
                 ${v.type === 'TABLE' ? `<details class="etlsql-format-group">
                     <summary>Row detail</summary>
                     <div class="etlsql-format-group-body">
@@ -1127,6 +1232,95 @@ export function createDesignerInspector(context) {
                     v.options.emit_filter = ticked.join(', ');
                 else
                     delete v.options.emit_filter;
+                renderProps();
+                context.syncScriptFromGridDebounced();
+            });
+        });
+        // ── Tooltip ───────────────────────────────────────────────────────────
+        const commitTooltip = (next) => {
+            if (!v.options)
+                v.options = {};
+            const text = writeTooltip(next);
+            if (text)
+                v.options.tooltip = text;
+            else
+                delete v.options.tooltip;
+            const unfinished = next.kind === 'FIELDS' && next.fields.some(field => !field.name.trim());
+            if (next.kind !== 'NONE' && (!text || unfinished))
+                tooltipDrafts.set(v.id, next);
+            else
+                tooltipDrafts.delete(v.id);
+            renderProps();
+            context.syncScriptFromGridDebounced();
+        };
+        const editTooltip = (kind, change) => {
+            if (tooltip.kind !== kind)
+                return;
+            const next = structuredClone(tooltip);
+            change(next);
+            commitTooltip(next);
+        };
+        on('#pp-tooltip-kind', e => {
+            const kind = controlTarget(e).value;
+            // A field list starts from what the visual already plots, so it shows something at once.
+            const plotted = ['X', 'Y', 'VALUE', 'CATEGORY']
+                .map(role => String(v.mappings?.[role] || '').trim())
+                .filter(column => /^[A-Za-z_][A-Za-z0-9_]*$/.test(column));
+            const blank = {
+                NONE: { kind: 'NONE' },
+                TEXT: { kind: 'TEXT', text: '' },
+                FIELDS: { kind: 'FIELDS', heading: '', fields: [...new Set(plotted)].map(name => ({ name, format: '' })) },
+                VISUALS: { kind: 'VISUALS', heading: '', visuals: [] },
+                CONTAINER: { kind: 'CONTAINER', name: containerNames[0] || '' },
+                CUSTOM: tooltip,
+            };
+            commitTooltip(blank[kind]);
+        });
+        on('#pp-tooltip-text', e => editTooltip('TEXT', next => { next.text = controlTarget(e).value; }));
+        on('#pp-tooltip-heading', e => {
+            const heading = controlTarget(e).value;
+            if (tooltip.kind === 'FIELDS')
+                editTooltip('FIELDS', next => { next.heading = heading; });
+            else
+                editTooltip('VISUALS', next => { next.heading = heading; });
+        });
+        on('#pp-tooltip-container', e => editTooltip('CONTAINER', next => { next.name = controlTarget(e).value; }));
+        queryElement(context.propsPanel, '#pp-tooltip-add-field')?.addEventListener('click', () => editTooltip('FIELDS', next => { next.fields.push({ name: '', format: '' }); }));
+        queryElements(context.propsPanel, '[data-tooltip-remove]').forEach(button => {
+            button.addEventListener('click', () => editTooltip('FIELDS', next => {
+                next.fields.splice(Number(datasetValue(button, 'tooltipRemove')), 1);
+            }));
+        });
+        queryElements(context.propsPanel, '[data-tooltip-field], [data-tooltip-format]').forEach(input => {
+            input.addEventListener('change', () => editTooltip('FIELDS', next => {
+                const field = datasetValue(input, 'tooltipField');
+                const entry = next.fields[Number(field ?? datasetValue(input, 'tooltipFormat'))];
+                if (!entry)
+                    return;
+                if (field != null)
+                    entry.name = input.value.trim();
+                else
+                    entry.format = input.value.trim();
+            }));
+        });
+        queryElements(context.propsPanel, '[data-tooltip-visual]').forEach(box => {
+            box.addEventListener('change', () => editTooltip('VISUALS', next => {
+                next.visuals = Array.from(queryElements(context.propsPanel, '[data-tooltip-visual]'))
+                    .filter(item => item.checked)
+                    .map(item => datasetValue(item, 'tooltipVisual'))
+                    .filter(Boolean);
+            }));
+        });
+        // Writes `WHERE <hovered column> = @hover_value` into a popover visual's own source.
+        queryElements(context.propsPanel, '[data-hover-filter]').forEach(button => {
+            button.addEventListener('click', () => {
+                const target = popoverVisuals.find(other => other.name === datasetValue(button, 'hoverFilter'));
+                const next = target && hoverColumn ? filterSourceOnHover(target.options?.inline_source, hoverColumn) : null;
+                if (!target || !next)
+                    return;
+                if (!target.options)
+                    target.options = {};
+                target.options.inline_source = next;
                 renderProps();
                 context.syncScriptFromGridDebounced();
             });

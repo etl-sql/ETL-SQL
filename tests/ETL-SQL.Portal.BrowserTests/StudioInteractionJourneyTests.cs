@@ -146,6 +146,99 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task AFieldTooltipShowsTheHoveredRowFormatted()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var studio = session.Page;
+        var reportId = await OpenStudioAsync(studio);
+
+        await SelectVisualAsync(studio, "ByRegion", "Tooltip");
+        await studio.SelectOptionAsync("#pp-tooltip-kind", "FIELDS");
+        // A field list starts from what the chart plots.
+        await WaitForScriptAsync(studio, "CREATE VISUAL ByRegion", "TOOLTIP (FIELDS (Region, Revenue))");
+        await studio.Locator("[data-tooltip-format='1']").FillAsync("N0");
+        await studio.Locator("[data-tooltip-format='1']").BlurAsync();
+        await studio.Locator("#pp-tooltip-heading").FillAsync("Region mix");
+        await studio.Locator("#pp-tooltip-heading").BlurAsync();
+        await WaitForScriptAsync(studio, "CREATE VISUAL ByRegion", "TOOLTIP ('Region mix', FIELDS (Region, Revenue FORMAT 'N0'))");
+
+        await SaveAsync(studio, reportId);
+
+        var report = await RunReportAsync(studio, reportId);
+        var mark = report.Locator("[data-visual-name='ByRegion'] [data-row-index]").First;
+        var region = await RegionOfMarkAsync(mark);
+        await mark.HoverAsync(new() { Force = true });
+        var tooltip = report.Locator(".report-chart-tooltip");
+        await Expect(tooltip).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await Expect(tooltip).ToContainTextAsync("Region mix");
+        await Expect(tooltip).ToContainTextAsync(region);
+        // North sums to 250 across its two sales; the N0 format shows it whole.
+        await Expect(tooltip).ToContainTextAsync(ExpectedRevenue[region]);
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
+    public async Task APopoverShowsTheRowsForTheClickedPoint()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var studio = session.Page;
+        var reportId = await OpenStudioAsync(studio);
+
+        await SelectVisualAsync(studio, "RegionDrill", "Tooltip");
+        await studio.SelectOptionAsync("#pp-tooltip-kind", "VISUALS");
+        await studio.Locator("[data-tooltip-visual='Detail']").CheckAsync();
+        await WaitForScriptAsync(studio, "CREATE VISUAL RegionDrill", "TOOLTIP (VISUALS (Detail))");
+        await Expect(studio.Locator("[data-tooltip-note]")).ToContainTextAsync("hovered Region as @hover_value");
+        // Detail reads #sales whole, so the inspector offers to narrow it to the hovered region.
+        await studio.Locator("[data-hover-filter='Detail']").ClickAsync();
+        await WaitForScriptAsync(studio, "CREATE VISUAL Detail", "WHERE Region = @hover_value");
+
+        await SaveAsync(studio, reportId);
+
+        var report = await RunReportAsync(studio, reportId);
+        var mark = report.Locator("[data-visual-name='RegionDrill'] [data-row-index]").First;
+        var region = await RegionOfMarkAsync(mark);
+        await mark.ClickAsync(new() { Force = true });
+        var popover = report.Locator(".report-chart-tooltip.report-chart-detail-pinned");
+        await Expect(popover).ToBeVisibleAsync(new() { Timeout = 15_000 });
+        await Expect(report.Locator(".report-chart-tooltip-loading")).ToHaveCountAsync(0, new() { Timeout = 15_000 });
+        await Expect(popover.Locator("tbody tr").First).ToBeVisibleAsync(new() { Timeout = 15_000 });
+
+        var regions = await popover.EvaluateAsync<string[]>(
+            """
+            surface => {
+                const table = surface.querySelector('table');
+                const headers = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim().toLowerCase());
+                const index = headers.findIndex(text => text.startsWith('region'));
+                return [...table.querySelectorAll('tbody tr')]
+                    .filter(tr => tr.querySelector(':scope > td'))
+                    .map(tr => tr.children[index]?.textContent.trim() ?? '');
+            }
+            """);
+        Assert.NotEmpty(regions);
+        Assert.All(regions, value => Assert.Equal(region, value));
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static readonly Dictionary<string, string> ExpectedRevenue = new()
+    {
+        ["North"] = "250",
+        ["South"] = "140",
+        ["West"] = "240",
+    };
+
+    private static Task<string> RegionOfMarkAsync(ILocator mark) =>
+        mark.EvaluateAsync<string>(
+            """
+            mark => {
+                const card = mark.closest('[data-visual-name]');
+                const data = card._visualData || card.closest('.visual-card')?._visualData;
+                const index = (data.columns || []).findIndex(c => c.toLowerCase() === 'region');
+                return String(data.rows[Number(mark.dataset.rowIndex)][index]);
+            }
+            """);
+
     // ── Studio ───────────────────────────────────────────────────────────────
 
     private async Task<int> OpenStudioAsync(IPage page)

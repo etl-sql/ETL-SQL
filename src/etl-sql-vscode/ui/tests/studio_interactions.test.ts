@@ -104,6 +104,46 @@ describe('Studio interaction clauses', () => {
         expect(m.filterSourceOn(source, 'Region')).toBeNull();
     });
 
+    test.each([
+        "TOOLTIP = 'Revenue for the month'",
+        "TOOLTIP = 'It''s the month'",
+        'TOOLTIP = Box',
+        "TOOLTIP ('**Month detail**', VISUALS (Detail, Trend))",
+        'TOOLTIP (VISUALS (Detail))',
+        "TOOLTIP (FIELDS (Region, Revenue FORMAT 'C0', Share FORMAT 'P1'))",
+        "TOOLTIP ('**Mix**', FIELDS (Region))",
+    ])('a tooltip the inspector can edit writes back exactly what the designer reads: %s', clause => {
+        const tooltip = m.readTooltip(clause);
+        expect(tooltip.kind).not.toBe('CUSTOM');
+        expect(m.writeTooltip(tooltip)).toBe(clause);
+    });
+
+    test('a tooltip text keeps its apostrophe', () => {
+        expect(m.readTooltip("TOOLTIP = 'It''s the month'")).toEqual({ kind: 'TEXT', text: "It's the month" });
+    });
+
+    test.each([
+        "TOOLTIP = 'Revenue: ' + CAST(@total AS VARCHAR)",
+        "TOOLTIP ('x', VISUALS (Detail), FIELDS (Region))",
+        'TOOLTIP (FIELDS (UPPER(Region)))',
+    ])('a tooltip the inspector cannot write back is left as written: %s', clause => {
+        expect(m.readTooltip(clause)).toEqual({ kind: 'CUSTOM', text: clause });
+    });
+
+    test('an unfinished tooltip writes nothing, and unfinished fields are left out', () => {
+        expect(m.writeTooltip({ kind: 'TEXT', text: '  ' })).toBeNull();
+        expect(m.writeTooltip({ kind: 'VISUALS', heading: 'x', visuals: [] })).toBeNull();
+        expect(m.writeTooltip({ kind: 'FIELDS', heading: '', fields: [{ name: 'Region', format: '' }, { name: '', format: 'C0' }] }))
+            .toBe('TOOLTIP (FIELDS (Region))');
+    });
+
+    test('a popover takes its hovered value from the first context mapping, as the build does', () => {
+        expect(m.hoverContextColumn({ Y: 'Revenue', X: 'Month' })).toBe('Month');
+        expect(m.hoverContextColumn({ LABEL: 'Name' })).toBe('Name');
+        expect(m.hoverContextColumn({ VALUE: 'Total' })).toBeNull();
+        expect(m.filterSourceOnHover('#sales', 'Month')).toBe('(SELECT * FROM #sales WHERE Month = @hover_value)');
+    });
+
     test('an unfinished match is not written into the clause', () => {
         expect(m.writeRowDetail({
             supported: true,

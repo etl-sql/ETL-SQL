@@ -106,13 +106,98 @@ export function parametersRead(source) {
  * author: appending a WHERE to it would change what it means.
  */
 export function filterSourceOn(source, column) {
+    return filterSourceWhere(source, `@${column} = 'All' OR ${column} = @${column}`);
+}
+/**
+ * The source rewritten to keep only the rows for the hovered point. A popover's visuals receive the
+ * owner's hovered value as `@hover_value`; this is the documented way to read it.
+ */
+export function filterSourceOnHover(source, column) {
+    return filterSourceWhere(source, `${column} = @hover_value`);
+}
+function filterSourceWhere(source, condition) {
     const text = String(source || '').trim();
-    const condition = `@${column} = 'All' OR ${column} = @${column}`;
     if (new RegExp(`^[#&]?${NAME}$`).test(text))
         return `(SELECT * FROM ${text} WHERE ${condition})`;
     const inner = /^\(\s*(SELECT\b[^()]*)\)$/i.exec(text)?.[1];
     if (inner && !/\b(WHERE|GROUP|HAVING|ORDER|UNION|JOIN|LIMIT|TOP|INTO)\b/i.test(inner.replace(/'(?:[^']|'')*'/g, "''")))
         return `(${inner.trimEnd()} WHERE ${condition})`;
+    return null;
+}
+const unquote = (literal) => literal.slice(1, -1).replace(/''/g, "'");
+const quote = (text) => `'${text.replace(/'/g, "''")}'`;
+const LITERAL = "'(?:[^']|'')*'";
+/** A tooltip clause read into the shape the inspector edits, or `CUSTOM` when it cannot be written back. */
+export function readTooltip(clause) {
+    const text = String(clause || '').trim();
+    if (!text)
+        return { kind: 'NONE' };
+    const plain = new RegExp(`^TOOLTIP\\s*=\\s*(${LITERAL})$`, 'i').exec(text);
+    if (plain)
+        return { kind: 'TEXT', text: unquote(plain[1]) };
+    const container = new RegExp(`^TOOLTIP\\s*=?\\s*(${NAME})$`, 'i').exec(text);
+    if (container)
+        return { kind: 'CONTAINER', name: container[1] };
+    const body = /^TOOLTIP\s*\(([\s\S]*)\)$/i.exec(text)?.[1];
+    if (body == null)
+        return { kind: 'CUSTOM', text };
+    const block = new RegExp(`^\\s*(?:(${LITERAL})\\s*,\\s*)?(VISUALS|FIELDS)\\s*\\(([^()]*)\\)\\s*$`, 'i').exec(body);
+    if (!block)
+        return { kind: 'CUSTOM', text };
+    const heading = block[1] ? unquote(block[1]) : '';
+    if (block[2].toUpperCase() === 'VISUALS') {
+        const visuals = readNames(block[3]);
+        return visuals ? { kind: 'VISUALS', heading, visuals } : { kind: 'CUSTOM', text };
+    }
+    const fields = [];
+    for (const entry of block[3].split(/,(?=(?:[^']*'[^']*')*[^']*$)/)) {
+        const field = new RegExp(`^\\s*(${NAME})(?:\\s+FORMAT\\s*=?\\s*(${LITERAL}))?\\s*$`, 'i').exec(entry);
+        if (!field)
+            return { kind: 'CUSTOM', text };
+        fields.push({ name: field[1], format: field[2] ? unquote(field[2]) : '' });
+    }
+    return { kind: 'FIELDS', heading, fields };
+}
+/**
+ * The clause for a tooltip, in the shape the designer reads back, or null when there is nothing
+ * complete to write. An unfinished field row is left out rather than written as a blank name.
+ */
+export function writeTooltip(tooltip) {
+    switch (tooltip.kind) {
+        case 'TEXT':
+            return tooltip.text.trim() ? `TOOLTIP = ${quote(tooltip.text)}` : null;
+        case 'CONTAINER':
+            return new RegExp(`^${NAME}$`).test(tooltip.name) ? `TOOLTIP = ${tooltip.name}` : null;
+        case 'FIELDS': {
+            const fields = tooltip.fields.filter(field => new RegExp(`^${NAME}$`).test(field.name.trim()));
+            if (!fields.length)
+                return null;
+            const list = fields.map(field => field.format.trim()
+                ? `${field.name.trim()} FORMAT ${quote(field.format.trim())}`
+                : field.name.trim()).join(', ');
+            return `TOOLTIP (${tooltip.heading.trim() ? `${quote(tooltip.heading)}, ` : ''}FIELDS (${list}))`;
+        }
+        case 'VISUALS':
+            return tooltip.visuals.length
+                ? `TOOLTIP (${tooltip.heading.trim() ? `${quote(tooltip.heading)}, ` : ''}VISUALS (${tooltip.visuals.join(', ')}))`
+                : null;
+        case 'CUSTOM':
+            return tooltip.text.trim() || null;
+        default:
+            return null;
+    }
+}
+/**
+ * The mapping whose hovered value a popover's visuals receive as `@hover_value`, in the order the
+ * build resolves it (DetailSurfaceRowContext.ContextRoles). Null when the visual maps none, which
+ * the build refuses for a popover.
+ */
+export function hoverContextColumn(mappings) {
+    for (const role of ['X', 'LABEL', 'NAME', 'REGION', 'Y']) {
+        const column = String(mappings?.[role] || '').trim();
+        if (column)
+            return column;
+    }
     return null;
 }
 export function readRowDetail(clause) {

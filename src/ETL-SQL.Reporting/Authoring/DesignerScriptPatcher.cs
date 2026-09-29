@@ -344,7 +344,7 @@ public sealed class DesignerScriptPatcher
         // time at the top level, and the result did not parse — which the guard at the end of Patch
         // then turned into "the edit silently did nothing".
         const int statementLevel = 1;
-        foreach (var clause in new[] { "TITLE", "SUBTITLE", "SOURCE", "MODE", "TEMPLATE", "CHART", "DEFAULT", "MAPPINGS", "OPTIONS", "STYLE", "FORMATTING", "OVERLAYS", "ACTIONS", "INTERACTIONS", "EMIT_FILTER", "ROW_DETAIL", "CASCADE", "FALLBACK", "LAYOUT", "PRINT_LAYOUT" })
+        foreach (var clause in new[] { "TITLE", "SUBTITLE", "SOURCE", "MODE", "TEMPLATE", "CHART", "DEFAULT", "MAPPINGS", "OPTIONS", "STYLE", "FORMATTING", "OVERLAYS", "ACTIONS", "INTERACTIONS", "EMIT_FILTER", "ROW_DETAIL", "TOOLTIP", "CASCADE", "FALLBACK", "LAYOUT", "PRINT_LAYOUT" })
         {
             // If the desired state does not specify a CHART clause, keep existing CHART trivia intact
             if (clause == "CHART" && FindClause(original, clause, statementLevel) is not null && FindClause(desired, clause, statementLevel) is null)

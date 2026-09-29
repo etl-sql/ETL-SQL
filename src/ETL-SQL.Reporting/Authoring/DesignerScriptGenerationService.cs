@@ -289,6 +289,9 @@ public sealed class DesignerScriptGenerationService
                 AppendLine(sb, $"    EMIT_FILTER (TARGETS = ({string.Join(", ", targets)})),", nl);
         }
 
+        if (visual.Options.TryGetValue("tooltip", out var tooltip) && !string.IsNullOrWhiteSpace(tooltip))
+            AppendLine(sb, $"    {tooltip.Trim().TrimEnd(',')},", nl);
+
         if (visual.Options.TryGetValue("row_detail", out var rowDetail) && !string.IsNullOrWhiteSpace(rowDetail))
             AppendLine(sb, $"    {rowDetail.Trim().TrimEnd(',')},", nl);
 
@@ -641,6 +644,7 @@ public sealed class DesignerScriptGenerationService
         || string.Equals(key, "emit_filter", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "EMIT_FILTER:TARGETS", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "row_detail", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(key, "tooltip", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "text_default", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "print_layout", StringComparison.OrdinalIgnoreCase)
         || string.Equals(key, "advanced_chart", StringComparison.OrdinalIgnoreCase)

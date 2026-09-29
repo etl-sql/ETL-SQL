@@ -104,7 +104,8 @@ rights just to learn.
 - [ ] `Studio_TabName_DoubleClickRenamesAndEscapeCancels` times out waiting for the rename input in
   most runs, alone or in the suite. Seen since 2026-09-28, before the Studio pipeline work.
 - [ ] `Studio_AWizardWrite_OffersAnUndoThatPutsTheScriptBack` fails when run alone: the first
-  `.etlsql-feedback-action` is not "Undo".
+  `.etlsql-feedback-action` is not "Undo" (it is "Show what changed"). Failed in every suite run on
+  2026-09-29 too, so it looks deterministic, not flaky.
 - [x] The task editor can rename most task kinds but not edit their other fields. Every kind now
   reports the fields found as exact spans (`PipelineTask.Fields`) and the editor offers those;
   a field written as an expression or variable is named and left to the script.
@@ -173,8 +174,13 @@ containers, and clause-level patching that keeps hand-written clauses on a desig
   that uses one, and preview refuses an undeclared one with the line to add. Proof: the dashboard
   journey now runs its report from the viewer, and
   `Preview_RefusesAnUndeclaredSharedConnectionAndNamesTheFix`.
-- [ ] **P2 — Tooltips.** No UI for `TOOLTIP (FIELDS (col FORMAT …))` or for a container shown as a
-  tooltip page. Only the static `TOOLTIP = 'text'` form is reachable without typing.
+- [x] **P2 — Tooltips.** Done 2026-09-29. The inspector's *Tooltip* group writes text, a field list
+  from the hovered row, or a popover of visuals or a container, and writes `WHERE col = @hover_value`
+  into a popover visual on request. Before this there was no tooltip UI at all. Proof:
+  `StudioInteractionJourneyTests.AFieldTooltipShowsTheHoveredRowFormatted` and
+  `APopoverShowsTheRowsForTheClickedPoint`.
+  - [ ] Follow-up: `visual.md` documents `(['md',] [FIELDS (…)] [, VISUALS (…)])`, but the parser
+    reads `VISUALS` before `FIELDS`, so the documented order does not parse. Fix one or the other.
 - [ ] **P2 — Analytics overlays.** Goal, average, trend, reference line and band, and forecast are
   one raw `OVERLAYS (…)` textarea in the format inspector. Offer them as choices, the way
   conditional formatting already is.

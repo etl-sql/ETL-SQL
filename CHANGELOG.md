@@ -14,6 +14,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Tooltips are authored from Studio's inspector: static text, a formatted field list from the
+  hovered row (`TOOLTIP (FIELDS (Region, Revenue FORMAT 'C0'))`), or a popover of other visuals or a
+  container. A popover visual receives the hovered value as `@hover_value`, and **Show Detail for the
+  hovered Region** writes the filter that reads it into that visual's query. A tooltip the editor
+  cannot write back exactly is left as written.
+
 - Cross-filtering, drill-down, and drill-through are authored from Studio's inspector.
   **Cross-filtering** links a visual, and **A selection here reaches** ticks which visuals a
   selection may reach (`EMIT_FILTER`). A selection arrives as a parameter named after the clicked

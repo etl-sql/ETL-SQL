@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Formatting;
 using ETL_SQL.Core.Parser;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 
@@ -316,6 +317,13 @@ public sealed class DesignerScriptParsingService
         {
             options["emit_filter"] = string.Join(", ", emitTargets
                 .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+        }
+        // What hovering a data point shows. Carried as the whole clause, which is what the inspector
+        // writes; the designer used to drop it from its model and leave it only because nothing
+        // patched it.
+        if (v.Tooltip != null)
+        {
+            options["tooltip"] = AstSerializer.FormatTooltipClause(v.Tooltip);
         }
         // A table's drill-through detail: the visual shown under a clicked row, and the parameters the
         // row's values are bound to. Carried as the clause, which is what the inspector writes.

@@ -2011,6 +2011,16 @@ public static class AstSerializer
         return $"{CreationVerb(s.Mode)} STYLE {s.Name} AS ({FormatStyleAssignments(s.Styles, s.Palette)});";
     }
 
+    /// <summary>
+    /// A visual's whole <c>TOOLTIP</c> clause, in the shape authors write it: text and container
+    /// forms keep their <c>=</c>, so a designer that carries this text does not rewrite the author's
+    /// clause on every unrelated edit.
+    /// </summary>
+    public static string FormatTooltipClause(TooltipDefinition tooltip) =>
+        tooltip.ContainerRef != null && tooltip.PlainText == null
+            ? $"TOOLTIP = {tooltip.ContainerRef}"
+            : $"TOOLTIP {FormatTooltip(tooltip)}";
+
     private static string FormatTooltip(TooltipDefinition tooltip)
     {
         if (tooltip.PlainText != null)

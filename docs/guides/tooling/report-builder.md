@@ -74,6 +74,11 @@ Configures selected visual details:
   - A selection arrives as a parameter named after the clicked column, for example `@Region`. A linked visual only narrows if its own query reads that parameter. When it doesn't, the panel says so, and **Filter this visual on @Region** writes `WHERE @Region = 'All' OR Region = @Region` into its source and declares `@Region` with `'All'` as its resting value.
   - **When a data point is clicked** writes `ACTIONS (ON_CLICK = ...)`: show details in another visual (`DRILL_DOWN`), drill into the next level (`DRILL_IN`), go to a page (`NAVIGATE_PAGE`), set a parameter (`SET_PARAMETER`), or a custom action. A drill-down sets `@<key>` for each key column, so the panel offers to make the target read it. A linked visual's click selects instead of running its action; a drill-down stays on its right-click menu.
   - `ON_CHANGE` (e.g. `SET_PARAMETER(@var, value)`) for input controls.
+- **Tooltip** writes the visual's `TOOLTIP` clause:
+  - **Text:** `TOOLTIP = 'text'`.
+  - **Fields from the hovered row:** `TOOLTIP ('heading', FIELDS (Region, Revenue FORMAT 'C0'))`. It starts from the columns the visual plots, and each field takes a DATA_LABELS-style format.
+  - **Other visuals, in a popover:** `TOOLTIP (VISUALS (Detail))`, or **a container**: `TOOLTIP = Box`. A popover's visuals receive the hovered X (or LABEL, NAME, REGION, Y) value as `@hover_value`, so the build needs one of those mapped. **Show Detail for the hovered Region** writes `WHERE Region = @hover_value` into a popover visual's own source.
+  - A tooltip the panel cannot write back exactly is shown read-only and left as written.
 - **Row detail** (tables only) writes `ROW_DETAIL (TARGET = ..., BINDINGS (@column = Column), LIMIT = n)`. Each row gets an expand button that shows the target's rows where the named column equals this row's value. The target usually sets `VISIBLE = OFF` so it appears only under rows.
 - **Grid Position:** Fine-tune numeric `Col`, `Row`, `Width` (`W`), and `Height` (`H`).
 
