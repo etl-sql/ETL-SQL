@@ -226,6 +226,104 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
         Assert.Empty(session.PageErrors);
     }
 
+    /// <summary>
+    /// Each branch of a PARALLEL is its own row on the map, inside a band that says it runs in
+    /// parallel, and the step after the block comes after all of them.
+    ///
+    /// <para>Before, stages were placed by depth alone: a two-step branch and a one-step branch shared
+    /// rows, and nothing on the map said which steps ran side by side.</para>
+    /// </summary>
+    [Fact]
+    public async Task ParallelBranchesAreDrawnAsLanes()
+    {
+        using var workspace = new StudioTempWorkspace();
+        var file = Path.Combine(workspace.Root, "lanes.etlsql");
+        await File.WriteAllTextAsync(file, Seed + """
+
+            load_fanout:
+            PARALLEL BEGIN
+                load_primary:
+                EXECUTE sample_data BEGIN
+                    SELECT 1 AS loaded;
+                END;
+
+                BEGIN
+                    stage_audit:
+                    EXECUTE sample_data BEGIN
+                        SELECT 2 AS staged;
+                    END;
+
+                    load_audit:
+                    EXECUTE sample_data BEGIN
+                        SELECT 3 AS loaded;
+                    END;
+                END;
+            END;
+
+            after_load:
+            EXECUTE sample_data BEGIN
+                SELECT 4 AS done;
+            END;
+            """);
+
+        await using var host = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            workspace.Root, file, 0, false, "lane-token",
+            StudioMode: true, InstanceId: Guid.NewGuid().ToString("D")));
+        await host.StartAsync();
+
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=lane-token");
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
+            new PageWaitForFunctionOptions { Timeout = 20_000 });
+        await page.Locator("[data-projection='split']").ClickAsync();
+        await page.Locator("[data-task-key='after_load']").WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
+        await page.WaitForFunctionAsync("() => document.querySelectorAll('[data-dag-lane]').length === 2", null,
+            new PageWaitForFunctionOptions { Timeout = 15_000 });
+
+        var measured = await page.EvaluateAsync<System.Text.Json.JsonElement>("""
+            () => {
+              const box = key => document.querySelector(`[data-task-key="${key}"]`).getBoundingClientRect();
+              const block = document.querySelector('[data-task-key="load_fanout"]').dataset.dagNode;
+              const band = lane => document.querySelector(`[data-dag-lane="${block}:${lane}"]`);
+              const plain = r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom });
+              return {
+                primary: plain(box('load_primary')),
+                stage: plain(box('stage_audit')),
+                audit: plain(box('load_audit')),
+                after: plain(box('after_load')),
+                band0: plain(band(0).getBoundingClientRect()),
+                band1: plain(band(1).getBoundingClientRect()),
+                label0: band(0).textContent,
+                label1: band(1).textContent,
+              };
+            }
+            """);
+
+        double Get(string box, string edge) => measured.GetProperty(box).GetProperty(edge).GetDouble();
+        double Centre(string box) => (Get(box, "top") + Get(box, "bottom")) / 2;
+        bool Inside(string inner, string outer) =>
+            Get(inner, "left") >= Get(outer, "left") && Get(inner, "right") <= Get(outer, "right")
+            && Get(inner, "top") >= Get(outer, "top") && Get(inner, "bottom") <= Get(outer, "bottom");
+
+        // The two-step branch is one row, and it is not the one-step branch's row.
+        Assert.InRange(Centre("audit") - Centre("stage"), -1, 1);
+        Assert.True(Get("band0", "bottom") <= Get("band1", "top") || Get("band1", "bottom") <= Get("band0", "top"),
+            "The two branch bands overlap.");
+
+        // Each band wraps its own branch and not the other one.
+        Assert.True(Inside("primary", "band0"), "Branch 1's step is outside its band.");
+        Assert.True(Inside("stage", "band1") && Inside("audit", "band1"), "Branch 2's steps are outside their band.");
+        Assert.False(Inside("primary", "band1"));
+        Assert.Contains("Branch 1", measured.GetProperty("label0").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Branch 2", measured.GetProperty("label1").GetString(), StringComparison.Ordinal);
+
+        // The join comes after both branches.
+        Assert.True(Get("after", "left") > Math.Max(Get("band0", "right"), Get("band1", "right")),
+            "The step after the PARALLEL is not after its branches.");
+        Assert.Empty(session.PageErrors);
+    }
+
     private static Task<string> ScriptAsync(IPage page) =>
         page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()");
 

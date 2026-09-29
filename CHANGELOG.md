@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- The Studio pipeline map draws each branch of a `PARALLEL` as its own lane: one row per branch,
+  inside a band labelled "Branch N · runs in parallel", with the step after the block placed after
+  all of them. A nested `PARALLEL` gets as many rows as its own branches.
+
 - Editing a pipeline task on the Studio canvas now changes its fields, not just its label: file
   paths, assertion conditions and messages, mail recipients, sender, subject, body and connection,
   IF and WHILE conditions, FOR bounds and step, THROW messages, and WAITFOR delays. Each field is

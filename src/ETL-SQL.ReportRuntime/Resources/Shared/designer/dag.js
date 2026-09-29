@@ -95,6 +95,75 @@ export function _computeLayout(nodes, edges) {
     }
     return pos;
 }
+/** Rows between the centres of two lanes, in graph units: a card, its band's label, and a gap. */
+export const LANE_ROW = 110;
+/** Where a PARALLEL stage is, which branch of it a stage is in, and how many branches it has. */
+function laneOf(node) {
+    const block = node.meta?.laneOf;
+    return typeof block === 'string' && block ? { block, lane: Number(node.meta?.lane) || 0 } : null;
+}
+function laneCount(node) {
+    return Number(node.meta?.lanes) || 0;
+}
+/**
+ * Puts every branch of a PARALLEL on its own row, in a left-to-right map.
+ *
+ * The layered layout places a stage by depth alone, so a three-step branch and a one-step branch
+ * share rows and nothing says which steps run side by side. Here each branch keeps one row from its
+ * first stage to its last, the rows are stacked around the block that starts them, and a branch that
+ * holds a PARALLEL of its own is as tall as that block's rows. The flow axis is left alone: order
+ * along the row is still the script's.
+ */
+export function _laneRows(nodes, positions) {
+    const members = new Map();
+    for (const node of nodes) {
+        const lane = laneOf(node);
+        if (!lane)
+            continue;
+        const lanes = members.get(lane.block) ?? [];
+        (lanes[lane.lane] ??= []).push(node);
+        members.set(lane.block, lanes);
+    }
+    if (!members.size)
+        return positions;
+    const byId = new Map(nodes.map(node => [node.id, node]));
+    const rowsMemo = new Map();
+    const rowsOf = (blockId) => {
+        if (rowsMemo.has(blockId))
+            return rowsMemo.get(blockId);
+        const lanes = members.get(blockId) ?? [];
+        const total = Math.max(laneCount(byId.get(blockId) ?? { id: blockId }), lanes.length, 1);
+        let rows = 0;
+        for (let lane = 0; lane < total; lane++)
+            rows += laneRowsOf(blockId, lane);
+        rowsMemo.set(blockId, rows);
+        return rows;
+    };
+    const laneRowsOf = (blockId, lane) => Math.max(1, ...(members.get(blockId)?.[lane] ?? []).filter(node => members.has(node.id)).map(node => rowsOf(node.id)));
+    const placed = { ...positions };
+    const place = (blockId) => {
+        const centre = placed[blockId]?.y ?? 0;
+        const lanes = members.get(blockId) ?? [];
+        let top = centre - ((rowsOf(blockId) - 1) * LANE_ROW) / 2;
+        for (let lane = 0; lane < lanes.length; lane++) {
+            const rows = laneRowsOf(blockId, lane);
+            const row = top + ((rows - 1) * LANE_ROW) / 2;
+            for (const node of lanes[lane] ?? []) {
+                if (placed[node.id])
+                    placed[node.id] = { x: placed[node.id].x, y: row };
+                if (members.has(node.id))
+                    place(node.id);
+            }
+            top += rows * LANE_ROW;
+        }
+    };
+    // Outermost blocks first: a nested block is placed by its own branch, and then places its own.
+    for (const blockId of members.keys()) {
+        if (!laneOf(byId.get(blockId) ?? { id: blockId }))
+            place(blockId);
+    }
+    return placed;
+}
 /**
  * Union of a node's ancestors and descendants over directed edges — the lineage
  * path that flows through it. Drives focus mode: everything else is dimmed.
@@ -169,10 +238,11 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         const projected = _computeLayout(layoutNodes, layoutEdges);
         if (options.orientation !== 'horizontal')
             return projected;
-        return Object.fromEntries(Object.entries(projected).map(([id, point]) => [id, {
+        const flowing = Object.fromEntries(Object.entries(projected).map(([id, point]) => [id, {
                 x: point.y,
                 y: point.x * 0.55,
             }]));
+        return _laneRows(layoutNodes, flowing);
     };
     let positions = computePositions(graphNodes, graphEdges);
     let searchMatches = [];
@@ -221,6 +291,11 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     // edge was drawn 10000 units up and to the left - present in the DOM, off screen on every map.
     svg.setAttribute('viewBox', '-10000 -10000 20000 20000');
     viewport.appendChild(svg);
+    // Behind everything else: a band per branch of a PARALLEL, so steps that run side by side read as
+    // side by side rather than as a scatter of cards that happen to share a column.
+    const laneLayer = document.createElement('div');
+    laneLayer.className = 'etlsql-dag-lane-layer';
+    viewport.insertBefore(laneLayer, svg);
     const badgeLayer = document.createElement('div');
     badgeLayer.className = 'etlsql-dag-badge-container';
     viewport.appendChild(badgeLayer);
@@ -275,7 +350,9 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         updateViewport();
     }, { passive: false });
     canvas.addEventListener('mousedown', e => {
-        if (e.target !== canvas && e.target !== viewport && e.target !== svg)
+        // A lane band is background: grabbing one pans the map like grabbing empty canvas.
+        const onLane = e.target instanceof Element && Boolean(e.target.closest('.etlsql-dag-lane-layer'));
+        if (e.target !== canvas && e.target !== viewport && e.target !== svg && !onLane)
             return;
         isPanning = true;
         panStartX = e.clientX - panX;
@@ -341,6 +418,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         cardLayer.replaceChildren();
         for (const node of nodesToRender)
             renderCard(node);
+        drawLanes(nodesToRender);
         updateFocusBadge();
         updateViewport();
         options.onNodeClick?.(focusedNode, focusedNode ? (nodeById[focusedNode]?.meta ?? null) : null);
@@ -430,6 +508,59 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         card.addEventListener('dblclick', e => { e.stopPropagation(); showNodeDetails(node); });
         cardLayer.appendChild(card);
         applyCardState(card, node);
+    }
+    /**
+     * One band per branch of each PARALLEL, spanning that branch's cards, labelled with its number.
+     * Measured from the cards just rendered, so a band is as tall as the cards in it really are.
+     */
+    function drawLanes(rendered) {
+        laneLayer.replaceChildren();
+        if (options.orientation !== 'horizontal')
+            return;
+        const lanes = new Map();
+        for (const node of rendered) {
+            const lane = laneOf(node);
+            if (!lane)
+                continue;
+            const key = `${lane.block}:${lane.lane}`;
+            lanes.set(key, [...(lanes.get(key) ?? []), node]);
+        }
+        // A branch that holds a PARALLEL of its own holds that block's branches too, so its band
+        // wraps them as well as the block's card.
+        const withNested = (members) => members.flatMap(node => [
+            node,
+            ...[...lanes.entries()]
+                .filter(([key]) => key.startsWith(`${node.id}:`))
+                .flatMap(([, nested]) => withNested(nested)),
+        ]);
+        const pad = 14;
+        const labelRoom = 18;
+        for (const [key, direct] of lanes) {
+            const members = withNested(direct);
+            const boxes = members.map(node => {
+                const card = document.getElementById(`node__${node.id}`);
+                const p = positions[node.id] ?? { x: 0, y: 0 };
+                return { left: p.x - cardWidth / 2, right: p.x + cardWidth / 2, top: p.y, bottom: p.y + (card?.offsetHeight || 40) };
+            });
+            const [blockId, laneText] = key.split(/:(?=\d+$)/);
+            const lane = Number(laneText);
+            const block = nodeById[blockId];
+            const blockName = block?.meta?.key || block?.label || 'this PARALLEL';
+            const band = document.createElement('div');
+            band.className = 'etlsql-dag-lane';
+            band.dataset.dagLane = key;
+            band.style.left = `${Math.min(...boxes.map(box => box.left)) - pad}px`;
+            band.style.top = `${Math.min(...boxes.map(box => box.top)) - pad - labelRoom}px`;
+            band.style.width = `${Math.max(...boxes.map(box => box.right)) - Math.min(...boxes.map(box => box.left)) + pad * 2}px`;
+            band.style.height = `${Math.max(...boxes.map(box => box.bottom)) - Math.min(...boxes.map(box => box.top)) + pad * 2 + labelRoom}px`;
+            band.title = `Branch ${lane + 1} of ${blockName}. It runs at the same time as the other branches; `
+                + 'the step after the block waits for all of them.';
+            const label = document.createElement('span');
+            label.className = 'etlsql-dag-lane-label';
+            label.textContent = `Branch ${lane + 1} · runs in parallel`;
+            band.appendChild(label);
+            laneLayer.appendChild(band);
+        }
     }
     function startNodeDrag(e, nodeId, card) {
         e.preventDefault();

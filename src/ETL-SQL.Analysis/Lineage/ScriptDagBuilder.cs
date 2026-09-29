@@ -16,7 +16,15 @@ namespace ETL_SQL.Analysis.Lineage;
 /// script by the author, so a node that has one is addressable: the pipeline canvas tracks selection
 /// and editing by this key rather than by id.</para>
 /// </param>
-public sealed record ScriptDagNode(string Id, string Label, string Type, int Line, string? Key = null);
+/// <param name="LaneOf">
+/// The id of the innermost <c>PARALLEL</c> this stage is a branch of, or null. With
+/// <paramref name="Lane"/> it is what lets the map draw each branch as its own row.
+/// </param>
+/// <param name="Lane">Which branch of <paramref name="LaneOf"/>, from zero, in script order.</param>
+/// <param name="Lanes">On a <c>PARALLEL</c> stage: how many branches it has. Zero on every other stage.</param>
+public sealed record ScriptDagNode(
+    string Id, string Label, string Type, int Line, string? Key = null,
+    string? LaneOf = null, int Lane = 0, int Lanes = 0);
 
 /// <summary>A directed edge between two flow nodes.</summary>
 public sealed record ScriptDagEdge(string Source, string Target, string? Label = null);
@@ -279,11 +287,23 @@ public static class ScriptDagBuilder
                 continue;
 
             branchNumber++;
+            var firstInBranch = graph.Nodes.Count;
             exits.AddRange(AppendStatement(
                 branch,
                 graph,
                 [new FlowExit(parallelId, $"BRANCH {branchNumber}")]));
+
+            // Every stage the branch added is in this lane — except those a nested PARALLEL already
+            // claimed, which are lanes of that block. The nested block itself is claimed here.
+            for (var i = firstInBranch; i < graph.Nodes.Count; i++)
+            {
+                if (graph.Nodes[i].LaneOf is null)
+                    graph.Nodes[i] = graph.Nodes[i] with { LaneOf = parallelId, Lane = branchNumber - 1 };
+            }
         }
+
+        var block = graph.Nodes.FindIndex(node => node.Id == parallelId);
+        graph.Nodes[block] = graph.Nodes[block] with { Lanes = branchNumber };
 
         return exits.Count > 0 ? exits : [new FlowExit(parallelId)];
     }

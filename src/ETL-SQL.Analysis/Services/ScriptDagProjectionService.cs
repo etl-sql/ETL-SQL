@@ -48,7 +48,16 @@ public sealed class ScriptDagProjectionService : IScriptDagProjection
                 // `key` is the section label, when the statement has one. It is what the canvas
                 // tracks a node by across a re-projection: ids are positional and shift under any
                 // hand edit above them, so selection keyed by id follows the wrong box.
-                dag.Nodes.Select(n => new ScriptDagNodeDto(n.Id, n.Label, n.Type, new { line = n.Line, key = n.Key })).ToList(),
+                // `laneOf`/`lane` place a stage in a branch of a PARALLEL, and `lanes` says how many
+                // branches a PARALLEL has, so the map can draw each branch as its own row.
+                dag.Nodes.Select(n => new ScriptDagNodeDto(n.Id, n.Label, n.Type, new
+                {
+                    line = n.Line,
+                    key = n.Key,
+                    laneOf = n.LaneOf,
+                    lane = n.Lane,
+                    lanes = n.Lanes,
+                })).ToList(),
                 edges.Select(e => new ScriptDagEdgeDto(e.Source, e.Target, e.Label)).ToList()));
         }
         catch (Exception ex)
