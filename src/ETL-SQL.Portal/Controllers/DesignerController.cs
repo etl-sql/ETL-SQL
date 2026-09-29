@@ -107,10 +107,14 @@ public class DesignerController : ControllerBase
     [RequireStudioCapability(StudioCapabilities.ScriptPreview)]
     public async Task<IActionResult> SessionMetadata([FromQuery] string? documentUri, CancellationToken cancellationToken)
     {
-        var connections = _connectionCatalog is null
+        var usable = _connectionCatalog is null
             ? []
-            : await _connectionCatalog.ListUsableAliasesAsync(
+            : await _connectionCatalog.ListUsableConnectionsAsync(
                 PortalDesignerSchemaService.BuildIdentity(User), cancellationToken);
+        var connections = usable.Select(entry => entry.Alias).ToList();
+        // Every Portal alias is a catalog entry. Studio declares the ones a report uses, because a
+        // script that reads an undeclared alias previews here and fails for everyone who runs it.
+        var sharedConnections = usable.Select(entry => new { alias = entry.Alias, connectorType = entry.ConnectorType }).ToList();
 
         var tempTables = new List<object>();
         if (_metadata is not null && !string.IsNullOrWhiteSpace(documentUri))
@@ -125,7 +129,7 @@ public class DesignerController : ControllerBase
             }
         }
 
-        return Ok(new { connections, variables = Array.Empty<object>(), tempTables });
+        return Ok(new { connections, sharedConnections, variables = Array.Empty<object>(), tempTables });
     }
 
     // ── POST /api/script/dag and /api/designer/dag ───────────────────────────

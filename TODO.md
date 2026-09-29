@@ -166,6 +166,13 @@ containers, and clause-level patching that keeps hand-written clauses on a desig
     Decide whether a click should do both.
   - [ ] Follow-up: a multi-select (Ctrl+click) sends `North,South`, which the written
     `Region = @Region` filter cannot match.
+- [x] **P1 — Reports built on a shared connection failed for readers.** Found and fixed 2026-09-29.
+  Studio wrote `FROM alias.Table` without declaring the catalog connection; preview declared it
+  quietly, so the report previewed and then failed with `Unknown source` for every reader, schedule,
+  and subscription. Studio now writes `CREATE CONNECTION alias AS TYPE('SHARED:alias');` on any write
+  that uses one, and preview refuses an undeclared one with the line to add. Proof: the dashboard
+  journey now runs its report from the viewer, and
+  `Preview_RefusesAnUndeclaredSharedConnectionAndNamesTheFix`.
 - [ ] **P2 — Tooltips.** No UI for `TOOLTIP (FIELDS (col FORMAT …))` or for a container shown as a
   tooltip page. Only the static `TOOLTIP = 'text'` form is reachable without typing.
 - [ ] **P2 — Analytics overlays.** Goal, average, trend, reference line and band, and forecast are

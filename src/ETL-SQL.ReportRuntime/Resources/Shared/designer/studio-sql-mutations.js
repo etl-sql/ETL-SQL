@@ -8,7 +8,7 @@
  *
  * Canonical Report-SQL mutations initiated by Studio controls.
  */
-export function createStudioSqlMutationService({ state, getActiveDocument, activeDocumentContext, designerApiJson, routes, renderVisualStage, renderWorkflow, renderTabs, offerUndo, feedback }) {
+export function createStudioSqlMutationService({ state, getActiveDocument, activeDocumentContext, designerApiJson, routes, renderVisualStage, renderWorkflow, renderTabs, offerUndo, declareConnections = script => script, feedback }) {
     function filterContract(field, filter) {
         return {
             id: filter.id || field,
@@ -84,6 +84,7 @@ export function createStudioSqlMutationService({ state, getActiveDocument, activ
             const patched = await designerApiJson(routes.patch, { script, designState });
             if (typeof patched.script !== 'string')
                 throw new Error('The canonical patcher returned no script.');
+            patched.script = declareConnections(patched.script);
             // Verify document hasn't been edited while in-flight before applying
             const currentScript = getActiveDocument() === document && state.editorInstance
                 ? state.editorInstance.getValue()
@@ -151,6 +152,7 @@ export function createStudioSqlMutationService({ state, getActiveDocument, activ
                 throw new Error(result.error || 'The edit was refused.');
             if (typeof result.script !== 'string')
                 throw new Error('The host returned no script.');
+            result.script = declareConnections(result.script);
             if (result.script === script)
                 return result;
             // Verify document hasn't been edited while in-flight before applying

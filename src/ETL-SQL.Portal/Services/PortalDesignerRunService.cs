@@ -153,9 +153,15 @@ public sealed class PortalDesignerRunService(
         builder.AppendLine($"SET OPERATOR_MEMORY_GRANT = {OperatorGrantMb};");
         builder.AppendLine($"SET MAX_SESSION_SIZE = {SessionCeilingBytes};");
 
-        if (!string.IsNullOrWhiteSpace(connectionRef))
+        var alias = string.IsNullOrWhiteSpace(connectionRef)
+            ? null
+            : PortalDesignerSchemaService.NormalizeConnectionRef(connectionRef);
+        // Studio now writes the declaration into the script itself, and declaring it twice is an
+        // error ("already exists"), so the run only supplies one the script leaves out.
+        var declaredByScript = alias is not null && statements.OfType<CreateConnectionStatement>()
+            .Any(statement => string.Equals(statement.ConnectionName.Trim('[', ']'), alias, StringComparison.OrdinalIgnoreCase));
+        if (alias is not null && !declaredByScript)
         {
-            var alias = PortalDesignerSchemaService.NormalizeConnectionRef(connectionRef);
             var definition = await catalog.ResolveAsync(alias, identity, cancellationToken);
             builder.Append("CREATE CONNECTION ")
                 .Append(QuoteIdentifier(alias))

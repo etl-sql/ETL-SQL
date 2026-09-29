@@ -184,6 +184,12 @@ export function createStudioDataPanel(hostContext) {
         };
         loadConnectionAliases().then(renderConnections).catch(() => renderConnections([]));
     }
+    /**
+     * The catalog connections this host shares, with their connector types, as last read. Studio
+     * declares the ones a script uses whenever it writes the script.
+     */
+    let sharedConnections = [];
+    const sharedConnectionList = () => sharedConnections;
     // Connection aliases come from different places per host: the desktop reads the workspace's
     // registered connections, the Portal exposes only ACL-filtered aliases via session metadata.
     // Session metadata exists on both, so it is the fallback rather than a second guess.
@@ -212,7 +218,11 @@ export function createStudioDataPanel(hostContext) {
         const sessionResponse = await hostContext.authFetch(hostContext.apiBase + STUDIO_ROUTES.sessionMetadata);
         if (!sessionResponse.ok)
             return [];
-        return (await sessionResponse.json()).connections || [];
+        const metadata = await sessionResponse.json();
+        sharedConnections = (metadata.sharedConnections || [])
+            .filter((item) => item?.alias && item?.connectorType)
+            .map((item) => ({ alias: String(item.alias), connectorType: String(item.connectorType) }));
+        return metadata.connections || [];
     }
     function renderVisualLibrary() {
         hostContext.sidebarTitle.textContent = 'Visual Components';
@@ -228,5 +238,5 @@ export function createStudioDataPanel(hostContext) {
         const search = queryElement(hostContext.sidebarContent, '[data-visual-search]');
         search?.addEventListener('input', () => { const query = search.value.trim().toUpperCase(); queryElements(hostContext.sidebarContent, '[data-visual-name]').forEach(button => button.hidden = Boolean(query) && !button.dataset.visualName.includes(query)); });
     }
-    return { synchronizeCodeToCanvas, renderDataWorkflow, loadConnectionAliases, renderVisualLibrary };
+    return { synchronizeCodeToCanvas, renderDataWorkflow, loadConnectionAliases, sharedConnectionList, renderVisualLibrary };
 }

@@ -205,6 +205,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- A Portal report built in Studio from a shared connection now runs for its readers. Studio's
+  wizards wrote `FROM sales_db.Sales` without declaring the connection. Preview declared it quietly,
+  so the report previewed and then failed with `Unknown source` when anyone ran it, and on every
+  schedule and subscription. Studio now writes `CREATE CONNECTION sales_db AS MSSQL('SHARED:sales_db');`
+  the first time a report uses a shared connection. Preview no longer adds it: a script that reads an
+  undeclared shared connection is refused, with the line to add. Reports saved earlier need that
+  line; preview names it.
+
 - Formatting a report no longer deletes a visual's `INTERACTIONS`, `EMIT_FILTER`, or `ROW_DETAIL`
   clause. The formatter omitted all three, so a format pass silently removed cross-filter wiring and
   drill-through while the report still built.

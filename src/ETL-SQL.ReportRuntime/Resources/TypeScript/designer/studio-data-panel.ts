@@ -9,6 +9,7 @@ import { _escapeHtml, _feedback, _readErrorText, _studioIcon, errorMessage, quer
 
 import type { StudioDesignState, StudioDom, StudioDomElement, StudioDynamic, StudioRuntimeContext, StudioRuntimeDocument, StudioRuntimeState } from './studio-context.js';
 import { STUDIO_ROUTES, STUDIO_WORKSPACE_ROUTES } from './studio-contracts.js';
+import type { SharedConnection } from './studio-shared-connections.js';
 import type { SnapshotLike } from './studio-data.js';
 import { columnName as _columnName, columnType as _columnType, snapshotColumns as _snapshotColumns, requestSourceSample } from './studio-data.js';
 import { STUDIO_VISUAL_GROUPS } from './visual-preview.js';
@@ -185,6 +186,13 @@ export function createStudioDataPanel(hostContext: StudioDataPanelContext) {
         loadConnectionAliases().then(renderConnections).catch(() => renderConnections([]));
     }
 
+    /**
+     * The catalog connections this host shares, with their connector types, as last read. Studio
+     * declares the ones a script uses whenever it writes the script.
+     */
+    let sharedConnections: SharedConnection[] = [];
+    const sharedConnectionList = (): readonly SharedConnection[] => sharedConnections;
+
     // Connection aliases come from different places per host: the desktop reads the workspace's
     // registered connections, the Portal exposes only ACL-filtered aliases via session metadata.
     // Session metadata exists on both, so it is the fallback rather than a second guess.
@@ -210,7 +218,11 @@ export function createStudioDataPanel(hostContext: StudioDataPanelContext) {
         }
         const sessionResponse = await hostContext.authFetch(hostContext.apiBase + STUDIO_ROUTES.sessionMetadata);
         if (!sessionResponse.ok) return [];
-        return (await sessionResponse.json()).connections || [];
+        const metadata = await sessionResponse.json();
+        sharedConnections = (metadata.sharedConnections || [])
+            .filter((item: StudioDynamic) => item?.alias && item?.connectorType)
+            .map((item: StudioDynamic) => ({ alias: String(item.alias), connectorType: String(item.connectorType) }));
+        return metadata.connections || [];
     }
 
     function renderVisualLibrary() {
@@ -227,5 +239,5 @@ export function createStudioDataPanel(hostContext: StudioDataPanelContext) {
         const search = queryElement(hostContext.sidebarContent, '[data-visual-search]'); search?.addEventListener('input', () => { const query = search.value.trim().toUpperCase(); queryElements(hostContext.sidebarContent, '[data-visual-name]').forEach(button => button.hidden = Boolean(query) && !button.dataset.visualName.includes(query)); });
     }
 
-    return { synchronizeCodeToCanvas, renderDataWorkflow, loadConnectionAliases, renderVisualLibrary };
+    return { synchronizeCodeToCanvas, renderDataWorkflow, loadConnectionAliases, sharedConnectionList, renderVisualLibrary };
 }

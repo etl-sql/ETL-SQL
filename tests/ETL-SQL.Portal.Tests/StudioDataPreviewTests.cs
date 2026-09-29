@@ -137,9 +137,8 @@ public sealed class StudioDataPreviewTests
         Assert.Contains("byte preview limit", response.Message, StringComparison.OrdinalIgnoreCase);
     }
     /// <summary>
-    /// A report that names a catalog alias previewed and exported as "Unknown source" while the same
-    /// script ran fine from the same editor, because the run path declares the shared connection and
-    /// the preview path did not. These are the aliases the preview now has to declare.
+    /// The shared aliases a script reads without declaring. Preview refuses such a script and names
+    /// the declarations to add, because no reader's run, schedule, or subscription declares them.
     /// </summary>
     [Fact]
     public void PreviewPreamble_NamesTheSharedAliasesAScriptDoesNotDeclareItself()

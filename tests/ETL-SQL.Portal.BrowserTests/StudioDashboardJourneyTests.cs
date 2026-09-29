@@ -129,9 +129,61 @@ public sealed class StudioDashboardJourneyTests(StudioAuthoringFixture fixture)
         foreach (var visual in new[] { "revenue_to_date", "revenue_over_time", "revenue_by_region" })
             Assert.Contains($"CREATE VISUAL {visual}", reloaded, StringComparison.OrdinalIgnoreCase);
 
+        // The shared connection the dataset reads is declared in the script. Without the declaration
+        // the report previewed here and failed with "Unknown source" for everyone who ran it.
+        Assert.Contains($"CREATE CONNECTION {alias} AS MOCKDB('SHARED:{alias}');", reloaded, StringComparison.OrdinalIgnoreCase);
+
         StudioCertification.Certify(
             new CertifiedArtifact("Power BI-like dashboard", StudioHost.Portal, $"report-{reportId}.rptsql", reloaded),
             reloaded);
+
+        // And it runs the way a reader runs it: from the report viewer, not from Studio's preview.
+        await page.GotoAsync($"/index.html#report-{reportId}");
+        var execute = page.Locator("#execBtn");
+        var refresh = page.Locator("#refreshBtn");
+        await Assertions.Expect(execute.Or(refresh).First).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        if (await execute.IsVisibleAsync()) await execute.ClickAsync();
+        else await refresh.ClickAsync();
+        var report = page.FrameLocator("#reportFrame iframe");
+        await Assertions.Expect(report.Locator("[data-visual-name='revenue_by_region'] [data-row-index]").First)
+            .ToBeVisibleAsync(new() { Timeout = 60_000 });
+        Assert.Empty(session.PageErrors);
+    }
+
+    /// <summary>
+    /// Preview runs what a reader runs. A script that reads a shared connection without declaring it
+    /// is refused, and the refusal names the line to add, instead of previewing and then failing for
+    /// everyone else with "Unknown source".
+    /// </summary>
+    [Fact]
+    public async Task Preview_RefusesAnUndeclaredSharedConnectionAndNamesTheFix()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await fixture.SignInAsync(page);
+        var alias = $"undeclared_{Guid.NewGuid():N}";
+        await CreateSharedConnectionAsync(page, alias);
+
+        var response = await page.EvaluateAsync<JsonElement>(
+            """
+            async alias => {
+                const { auth } = await import('/js/api.js');
+                const post = script => fetch('/api/designer/preview', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${auth.getToken()}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ script })
+                });
+                const read = `SELECT Region INTO #s FROM ${alias}.Sales;`;
+                const undeclared = await post(read);
+                const declared = await post(`CREATE CONNECTION ${alias} AS MOCKDB('SHARED:${alias}');\n${read}`);
+                return { status: undeclared.status, body: await undeclared.json(), declaredStatus: declared.status };
+            }
+            """, alias);
+
+        Assert.Equal(400, response.GetProperty("status").GetInt32());
+        Assert.Contains($"CREATE CONNECTION {alias} AS MOCKDB('SHARED:{alias}');",
+            response.GetProperty("body").GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.Equal(200, response.GetProperty("declaredStatus").GetInt32());
         Assert.Empty(session.PageErrors);
     }
 

@@ -106,6 +106,13 @@ CREATE CONNECTION staging_orders AS FLATFILE(
 CREATE CONNECTION dw AS MSSQL('SHARED:corp_sales_dw');
 ```
 
+A report has to declare every shared connection it reads. On the Portal, Studio's wizards offer
+the catalog's connections and write this line themselves the first time a report uses one. The
+catalog still checks the running user's access when the report runs, so the line grants nothing.
+Preview refuses a script that reads a shared connection without declaring it and names the line to
+add. Without it the report would preview and then fail with `Unknown source` for every reader,
+schedule, and subscription.
+
 ---
 
 ## References

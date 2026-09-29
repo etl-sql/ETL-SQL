@@ -50,13 +50,12 @@ public sealed class PortalDesignerPreviewService(
         if (identity is null)
             throw new UnauthorizedAccessException("The current portal user could not be resolved for execution.");
 
+        // Preview runs exactly what a reader would run, so an undeclared shared connection fails here
+        // too, with the line that fixes it, instead of previewing and then failing for everyone else.
+        await RefuseUndeclaredSharedConnectionsAsync(scriptText, identity, cancellationToken);
+
         // Bound the preview: cap operator memory and let the linked timeout stop a runaway build.
-        // The shared connections the script names are declared ahead of it, the same way
-        // PortalDesignerRunService declares the one an ad hoc run uses. Without this, a report
-        // naming a catalog alias - which is how a Portal report names a connection - previewed and
-        // exported as "Unknown source", while the very same script ran fine from the same editor.
-        var preamble = await BuildSharedConnectionPreambleAsync(scriptText, identity, cancellationToken);
-        var script = $"SET OPERATOR_MEMORY_GRANT = {OperatorGrantMb};\n" + preamble + scriptText;
+        var script = $"SET OPERATOR_MEMORY_GRANT = {OperatorGrantMb};\n" + scriptText;
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(TimeoutSeconds));
@@ -101,23 +100,41 @@ public sealed class PortalDesignerPreviewService(
     }
 
     /// <summary>
-    /// Declares the shared catalog connections a script references but does not declare itself.
+    /// Refuses a script that reads a shared catalog connection without declaring it.
+    ///
+    /// <para>This used to declare the alias ahead of the script instead. The preview then worked
+    /// while the saved report failed with "Unknown source" for every reader, schedule, and
+    /// subscription, because none of those paths adds a declaration. Preview now fails the same way
+    /// a run would, and names the line that fixes both.</para>
     ///
     /// <para>Resolved one alias at a time through <see cref="IConnectionCatalogProvider"/> under the
-    /// caller's own identity, so an alias the caller may not use is refused here rather than quietly
-    /// borrowed. An alias the catalog does not know is left alone: it may be declared further down
-    /// the script, and inventing a declaration for it would turn a clear error into a confusing
-    /// one.</para>
+    /// caller's own identity. An alias the catalog does not know, or will not give this caller, is
+    /// left to the engine's own error.</para>
     /// </summary>
-    private async Task<string> BuildSharedConnectionPreambleAsync(
+    private async Task RefuseUndeclaredSharedConnectionsAsync(
+        string scriptText,
+        ExecutionIdentity identity,
+        CancellationToken cancellationToken)
+    {
+        var declarations = await MissingSharedDeclarationsAsync(scriptText, identity, cancellationToken);
+        if (declarations.Count == 0) return;
+        throw new InvalidOperationException(
+            (declarations.Count == 1
+                ? "This report reads a shared connection it does not declare, so it would fail for everyone who runs it. Add this line to the script:"
+                : "This report reads shared connections it does not declare, so it would fail for everyone who runs it. Add these lines to the script:")
+            + "\n" + string.Join("\n", declarations));
+    }
+
+    /// <summary>The <c>CREATE CONNECTION … ('SHARED:…')</c> lines a script needs and lacks.</summary>
+    private async Task<IReadOnlyList<string>> MissingSharedDeclarationsAsync(
         string scriptText,
         ExecutionIdentity identity,
         CancellationToken cancellationToken)
     {
         var referenced = ReferencedSharedAliases(scriptText);
-        if (referenced.Count == 0) return string.Empty;
+        var lines = new List<string>();
+        if (referenced.Count == 0) return lines;
 
-        var builder = new System.Text.StringBuilder();
         foreach (var alias in referenced)
         {
             var normalized = PortalDesignerSchemaService.NormalizeConnectionRef(alias);
@@ -131,16 +148,12 @@ public sealed class PortalDesignerPreviewService(
                 continue;
             }
 
-            builder.Append("CREATE CONNECTION [")
-                .Append(normalized.Replace("]", "]]", StringComparison.Ordinal))
-                .Append("] AS ")
-                .Append(definition.ConnectorType)
-                .Append("('SHARED:")
-                .Append(normalized.Replace("'", "''", StringComparison.Ordinal))
-                .AppendLine("');");
+            // The shape Studio writes (studio-shared-connections.ts), so the fix reads the same.
+            lines.Add($"CREATE CONNECTION {normalized} AS {definition.ConnectorType.ToUpperInvariant()}"
+                + $"('SHARED:{normalized.Replace("'", "''", StringComparison.Ordinal)}');");
         }
 
-        return builder.ToString();
+        return lines;
     }
 
     /// <summary>

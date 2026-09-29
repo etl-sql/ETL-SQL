@@ -33,6 +33,7 @@ import { createStudioOutline } from './studio-outline.js';
 import { createStudioPipelineView } from './studio-pipeline-view.js';
 import { createStudioReportWorkflow } from './studio-report-workflow.js';
 import { createStudioRunSession } from './studio-run-session.js';
+import { declareSharedConnections } from './studio-shared-connections.js';
 import { createStudioSqlMutationService } from './studio-sql-mutations.js';
 import { createStudioContextStore, createStudioState, type StudioDocument, type StudioStateOptions } from './studio-state.js';
 import { createStudioSyntaxBridge } from './studio-syntax-bridge.js';
@@ -263,7 +264,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         get updateSnapshotPackage() { return updateSnapshotPackage; },
     });
 
-    const { synchronizeCodeToCanvas, renderDataWorkflow, loadConnectionAliases, renderVisualLibrary } = createStudioDataPanel({
+    const { synchronizeCodeToCanvas, renderDataWorkflow, loadConnectionAliases, sharedConnectionList, renderVisualLibrary } = createStudioDataPanel({
         get activeDocumentContext() { return activeDocumentContext; },
         get apiBase() { return apiBase; },
         get authFetch() { return authFetch; },
@@ -541,6 +542,7 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
         renderWorkflow: renderReportWorkflowChrome,
         renderTabs,
         offerUndo,
+        declareConnections: (script: string) => declareSharedConnections(script, sharedConnectionList()),
         feedback: _feedback
     } as unknown as Parameters<typeof createStudioSqlMutationService>[0]);
 
@@ -585,7 +587,10 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
             // Ranged rather than whole-document, for the same reason the canonical mutations are:
             // the author sees which lines the wizard added, keeps their caret, and gets the Undo
             // offer that only a single reversible transaction can honestly make.
-            setScriptText: (text: string, label = 'That edit') => {
+            setScriptText: (written: string, label = 'That edit') => {
+                // A wizard that read a catalog alias also declares it, in the same transaction, so
+                // the report runs for readers and schedules and not only in this preview.
+                const text = declareSharedConnections(written, sharedConnectionList());
                 const doc = getActiveDoc();
                 const before = state.editorInstance?.getValue?.();
                 const changed = state.editorInstance?.replaceAll?.(text) ?? state.editorInstance?.setValue?.(text);
@@ -923,6 +928,10 @@ export async function createStudioWorkbench(container: HTMLElement, opts: Studio
     state.resultsPanel.setApplyFix?.(fix => applyDiagnosticQuickFix(fix as any));
 
     await mountScriptEditor();
+
+    // The Portal's shared connections, read once up front: any write can need their declarations,
+    // including one from a surface that never listed connections itself. Desktop hosts have none.
+    if (!hasWorkspaceHost) loadConnectionAliases().catch(() => { /* a later read fills it */ });
 
     renderTabs();
     renderSidebarContent('explorer');

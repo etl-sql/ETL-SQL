@@ -130,6 +130,15 @@ public sealed class PortalConnectionCatalogService(
     /// </summary>
     public async Task<IReadOnlyList<string>> ListUsableAliasesAsync(
         ExecutionIdentity? identity,
+        CancellationToken cancellationToken = default) =>
+        (await ListUsableConnectionsAsync(identity, cancellationToken)).Select(entry => entry.Alias).ToList();
+
+    /// <summary>
+    /// The usable aliases with their connector types: what Studio needs to write the
+    /// <c>CREATE CONNECTION alias AS TYPE('SHARED:alias')</c> a report must carry to run for anyone.
+    /// </summary>
+    public async Task<IReadOnlyList<(string Alias, string ConnectorType)>> ListUsableConnectionsAsync(
+        ExecutionIdentity? identity,
         CancellationToken cancellationToken = default)
     {
         var entries = await db.PortalSharedConnections
@@ -146,7 +155,9 @@ public sealed class PortalConnectionCatalogService(
                 .ToListAsync(cancellationToken)
             : [];
 
-        return entries.Where(entry => CanUse(entry, identity, groupIds)).Select(entry => entry.Alias).ToList();
+        return entries.Where(entry => CanUse(entry, identity, groupIds))
+            .Select(entry => (entry.Alias, entry.ConnectorType))
+            .ToList();
     }
 
     private static bool CanUse(PortalSharedConnection entity, ExecutionIdentity? identity, IReadOnlyCollection<int> groupIds)

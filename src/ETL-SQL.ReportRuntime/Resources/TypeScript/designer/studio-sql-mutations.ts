@@ -138,6 +138,8 @@ export interface StudioSqlMutationServiceInputs {
     renderWorkflow: (document: StudioDocumentLike, designState?: DesignerStateLike) => void;
     renderTabs: () => void;
     offerUndo?: (label: string, payload: { document: StudioDocumentLike; before: string; after: string }) => void;
+    /** Adds the shared-connection declarations a written script needs; see studio-shared-connections. */
+    declareConnections?: (script: string) => string;
     feedback: StudioMutationFeedbackLike;
 }
 
@@ -151,6 +153,7 @@ export function createStudioSqlMutationService({
     renderWorkflow,
     renderTabs,
     offerUndo,
+    declareConnections = script => script,
     feedback
 }: StudioSqlMutationServiceInputs) {
     function filterContract(field: string, filter: FilterSourceLike): FilterContractSpec {
@@ -226,6 +229,7 @@ export function createStudioSqlMutationService({
             const mutationResult = await mutate(designState);
             const patched = await designerApiJson(routes.patch, { script, designState });
             if (typeof patched.script !== 'string') throw new Error('The canonical patcher returned no script.');
+            patched.script = declareConnections(patched.script);
 
             // Verify document hasn't been edited while in-flight before applying
             const currentScript = getActiveDocument() === document && state.editorInstance
@@ -298,6 +302,7 @@ export function createStudioSqlMutationService({
             const result = await designerApiJson(route, { script, ...operation });
             if (!result.applied) throw new Error(result.error || 'The edit was refused.');
             if (typeof result.script !== 'string') throw new Error('The host returned no script.');
+            result.script = declareConnections(result.script);
             if (result.script === script) return result;
 
             // Verify document hasn't been edited while in-flight before applying
