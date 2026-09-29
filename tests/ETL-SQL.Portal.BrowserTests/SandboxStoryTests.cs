@@ -967,16 +967,21 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.Contains("IF", await page.Locator("[data-dag-node='quality_branch']").InnerTextAsync());
         Assert.Contains("ASSERT", await page.Locator("[data-dag-node='quality_gate']").InnerTextAsync());
 
+        // The map runs left to right and does not shrink below a readable zoom to fit its full width,
+        // so the author pans along it. It must still sit within the pane vertically and open on its
+        // first stage; readability itself is Studio_PipelineMap_ConnectorsAreReadableAtTheZoomItOpensAt.
         var canvasBox = await page.Locator(".etlsql-dag-canvas").BoundingBoxAsync();
         Assert.NotNull(canvasBox);
         for (var i = 0; i < await dagNodes.CountAsync(); i++)
         {
             var nodeBox = await dagNodes.Nth(i).BoundingBoxAsync();
             Assert.NotNull(nodeBox);
-            Assert.True(nodeBox!.X >= canvasBox!.X - 1 && nodeBox.Y >= canvasBox.Y - 1);
-            Assert.True(nodeBox.X + nodeBox.Width <= canvasBox.X + canvasBox.Width + 1);
+            Assert.True(nodeBox!.Y >= canvasBox!.Y - 1);
             Assert.True(nodeBox.Y + nodeBox.Height <= canvasBox.Y + canvasBox.Height + 1);
         }
+
+        var firstBox = await page.Locator("[data-dag-node='staging_db']").BoundingBoxAsync();
+        Assert.True(firstBox!.X >= canvasBox!.X - 1 && firstBox.X + firstBox.Width <= canvasBox.X + canvasBox.Width + 1);
 
         var trueEdge = page.Locator("[data-dag-source='quality_branch'][data-dag-target='#ready_sales'][data-dag-label='TRUE']");
         var elseEdge = page.Locator("[data-dag-source='quality_branch'][data-dag-target='#quarantine_sales'][data-dag-label='ELSE']");
@@ -1036,6 +1041,84 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.False(
             string.IsNullOrWhiteSpace(geometry),
             $"The {label} edge is in the document but carries no path data, so nothing was drawn.");
+    }
+
+    /// <summary>
+    /// The pipeline map reads as a flow: step, arrow, step — at the zoom it opens at.
+    ///
+    /// <para>The test above proves every edge has path data. That was true while the map fitted a
+    /// seven-stage pipeline into the pane at 0.305 zoom: cards 79 × 11 px, 13 px between them, and a
+    /// 0.55 px grey stroke with no arrowhead. Every edge existed; a reader saw a row of unconnected
+    /// pills. So this measures what reaches the screen: legible cards, a gap a connector can be seen
+    /// in, a stroke that does not thin out with zoom, and a head that says which way it runs.</para>
+    ///
+    /// <para>Fixing that exposed the older defect underneath: the SVG layer is placed at -10000px by
+    /// CSS and the paths were never offset to match, so no connector on any map had ever been on
+    /// screen. Hence <c>spansGap</c> — the line must land between the two cards it joins.</para>
+    /// </summary>
+    [Fact]
+    public async Task Studio_PipelineMap_ConnectorsAreReadableAtTheZoomItOpensAt()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await WaitForStudioAsync(page);
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
+        await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Engine projection')");
+        await page.WaitForFunctionAsync("() => document.querySelectorAll('.etlsql-dag-svg path[data-dag-source]').length >= 7");
+
+        var measured = await page.EvaluateAsync<JsonElement>("""
+            () => {
+              const canvas = document.querySelector('[data-dag-canvas] .etlsql-dag-canvas').getBoundingClientRect();
+              const box = id => document.querySelector(`[data-dag-node="${CSS.escape(id)}"]`).getBoundingClientRect();
+              const edges = [...document.querySelectorAll('.etlsql-dag-svg path[data-dag-source]')].map(path => {
+                const from = box(path.dataset.dagSource);
+                const to = box(path.dataset.dagTarget);
+                const marker = (path.getAttribute('marker-end') || '').match(/url\(#(.+)\)/)?.[1];
+                const line = path.getBoundingClientRect();
+                return {
+                  name: `${path.dataset.dagSource} -> ${path.dataset.dagTarget}`,
+                  gap: to.left - from.right,
+                  // Where the stroke actually lands. For a long time every path had data and none
+                  // was on screen: the SVG layer was offset by CSS and the paths were not.
+                  spansGap: line.left <= from.right + 8 && line.right >= to.left - 8
+                    && line.top >= Math.min(from.top, to.top) - 8 && line.bottom <= Math.max(from.bottom, to.bottom) + 8,
+                  vectorEffect: getComputedStyle(path).vectorEffect,
+                  strokeWidth: Number(path.getAttribute('stroke-width')),
+                  hasHead: Boolean(marker && document.getElementById(marker)),
+                };
+              });
+              const header = document.querySelector('[data-dag-node="staging_db"] .etlsql-dag-card-header').getBoundingClientRect();
+              const first = box('staging_db');
+              return {
+                headerHeight: header.height,
+                firstVisible: first.left >= canvas.left - 1 && first.right <= canvas.right + 1,
+                edges,
+              };
+            }
+            """);
+
+        Assert.True(measured.GetProperty("headerHeight").GetDouble() >= 24,
+            $"Card headers render {measured.GetProperty("headerHeight").GetDouble():0.#} px tall; their text cannot be read.");
+        Assert.True(measured.GetProperty("firstVisible").GetBoolean(),
+            "The first step of the pipeline is off screen, so the flow has no visible start.");
+
+        foreach (var edge in measured.GetProperty("edges").EnumerateArray())
+        {
+            var name = edge.GetProperty("name").GetString();
+            Assert.True(edge.GetProperty("gap").GetDouble() >= 48,
+                $"{name}: {edge.GetProperty("gap").GetDouble():0.#} px between the cards leaves no room to see the connector.");
+            Assert.True(edge.GetProperty("spansGap").GetBoolean(),
+                $"{name}: the connector is drawn, but not between the two cards it joins.");
+            Assert.Equal("non-scaling-stroke", edge.GetProperty("vectorEffect").GetString());
+            Assert.True(edge.GetProperty("strokeWidth").GetDouble() >= 1.5, $"{name}: connector stroke is too thin.");
+            Assert.True(edge.GetProperty("hasHead").GetBoolean(), $"{name}: connector has no arrowhead, so its direction is unreadable.");
+        }
+
+        Assert.Empty(session.PageErrors);
+        Assert.Empty(session.ConsoleErrors);
     }
 
 

@@ -61,6 +61,10 @@ export function createStudioPipelineView(hostContext: StudioPipelineViewContext)
         hostContext.state.dagInstance = renderDag(dagCanvas, { nodes: nodes as unknown as Parameters<typeof renderDag>[1]['nodes'], edges: edges as unknown as Parameters<typeof renderDag>[1]['edges'] }, {
             theme: document.body.classList.contains('theme-dark') ? 'vscode' : 'portal',
             orientation: 'horizontal',
+            // Steps sit 300 units apart; a 200-unit card leaves a 100-unit gutter for the connector,
+            // and the zoom floor keeps both readable rather than fitting the whole pipeline as a strip.
+            cardWidth: 200,
+            minFitZoom: 0.85,
             onNodeClick: (_nodeId, meta: any) => {
                 const line = Number(meta?.line ?? meta?.Line);
                 if (!line || Number.isNaN(line)) return;

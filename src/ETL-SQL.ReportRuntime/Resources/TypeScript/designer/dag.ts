@@ -53,6 +53,13 @@ export interface DagGraphInput {
 export interface DagRenderOptions {
     theme?: string;
     orientation?: string;
+    /** Card width in graph units. Narrower cards leave a wider gutter for the connector between steps. */
+    cardWidth?: number;
+    /**
+     * The smallest zoom Reset may choose. Below it, the map opens at this zoom on its first stage and
+     * the author pans for the rest: a flow shrunk to fit is a row of unreadable pills with no lines.
+     */
+    minFitZoom?: number;
     onNodeClick?: (nodeId: string | null, nodeMeta: DagNodeMeta | null) => void;
 }
 
@@ -223,7 +230,7 @@ export function _edgeStyle(label?: string | null): DagEdgeStyle {
     if (text === 'ON FAILURE') return { kind: 'failure', color: '#f85149', dash: '6 4' };
     if (text === 'ON COMPLETION') return { kind: 'completion', color: '#58a6ff', dash: '2 3' };
     if (text.startsWith('WHEN ')) return { kind: 'expression', color: '#d29922', dash: '10 3 2 3' };
-    return { kind: null, color: '#64748b', dash: null };
+    return { kind: null, color: '#8b949e', dash: null };
 }
 
 export function renderDag(container: HTMLElement, { nodes, edges }: DagGraphInput, options: DagRenderOptions = {}): DagHandle {
@@ -244,6 +251,9 @@ export function renderDag(container: HTMLElement, { nodes, edges }: DagGraphInpu
     let panY = 0;
     let zoom = graphNodes.length > 40 ? 0.45 : 0.75;
     let disposed = false;
+    const cardWidth = options.cardWidth ?? 260;
+    // Marker ids are document-global, and more than one map can be on the page at once.
+    const markerPrefix = `etlsql-dag-head-${Math.random().toString(36).slice(2, 10)}`;
     const computePositions = (layoutNodes: DagNodeLike[], layoutEdges: DagEdgeLike[]): Record<string, DagPosition> => {
         const projected = _computeLayout(layoutNodes, layoutEdges);
         if (options.orientation !== 'horizontal') return projected;
@@ -303,6 +313,10 @@ export function renderDag(container: HTMLElement, { nodes, edges }: DagGraphInpu
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg') as SVGSVGElement;
     svg.setAttribute('class', 'etlsql-dag-svg');
+    // The CSS places this 20000px layer at -10000px so lines can run anywhere around the cards; the
+    // viewBox puts its origin back on the viewport's, where `centerOf` measures. Without it every
+    // edge was drawn 10000 units up and to the left - present in the DOM, off screen on every map.
+    svg.setAttribute('viewBox', '-10000 -10000 20000 20000');
     viewport.appendChild(svg);
 
     const badgeLayer = document.createElement('div');
@@ -432,9 +446,9 @@ export function renderDag(container: HTMLElement, { nodes, edges }: DagGraphInpu
         const card = document.createElement('div');
         card.id = `node__${node.id}`;
         card.className = 'etlsql-dag-card';
-        card.style.left = `${p.x - 130}px`;
+        card.style.left = `${p.x - cardWidth / 2}px`;
         card.style.top = `${p.y}px`;
-        card.style.width = '260px';
+        card.style.width = `${cardWidth}px`;
         card.style.border = `1px solid ${_nodeColor(node.type || 'table')}`;
         card.dataset.nodeId = node.id;
         card.dataset.dagNode = node.id;
@@ -529,7 +543,7 @@ export function renderDag(container: HTMLElement, { nodes, edges }: DagGraphInpu
                 x: original.x + (me.clientX - startX) / zoom,
                 y: original.y + (me.clientY - startY) / zoom,
             };
-            card.style.left = `${positions[nodeId].x - 130}px`;
+            card.style.left = `${positions[nodeId].x - cardWidth / 2}px`;
             card.style.top = `${positions[nodeId].y}px`;
             drawConnections();
         };
@@ -705,7 +719,12 @@ export function renderDag(container: HTMLElement, { nodes, edges }: DagGraphInpu
         const path = drawLink(
             a.x, a.y, b.x, b.y,
             inPath ? style.color : 'rgba(71,85,105,0.08)',
-            inPath ? 1.8 : 0.8);
+            inPath ? 2 : 1);
+        // A connector is read at whatever zoom the map is at, so its stroke is measured in screen
+        // pixels rather than graph units - scaled with the map it thinned to half a pixel. The head
+        // is what says "this runs, then that": without it a line between two steps has no direction.
+        path.setAttribute('vector-effect', 'non-scaling-stroke');
+        if (inPath) path.setAttribute('marker-end', `url(#${arrowHead(style.color)})`);
         // The dash is not decoration. Colour alone would leave the difference between "only if this
         // succeeded" and "only if this failed" invisible to a red/green colour-blind reader, and to
         // anyone printing the map, so every conditional edge also has its own stroke pattern and
@@ -716,6 +735,32 @@ export function renderDag(container: HTMLElement, { nodes, edges }: DagGraphInpu
         if (edge.label) path.dataset.dagLabel = edge.label;
         if (style.kind) path.dataset.dagEdgeKind = style.kind;
         if (edge.label && inPath) drawEdgeBadge(a.x, a.y, b.x, b.y, edge.label, false, false, style.color);
+    }
+
+    /** The id of an arrowhead in this colour, created on first use. `drawConnections` clears the SVG, defs included. */
+    function arrowHead(color: string): string {
+        const id = `${markerPrefix}-${color.replace(/[^a-z0-9]/gi, '')}`;
+        if (svg.querySelector(`#${id}`)) return id;
+        let defs = svg.querySelector('defs');
+        if (!defs) {
+            defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            svg.prepend(defs);
+        }
+        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+        marker.id = id;
+        marker.setAttribute('viewBox', '0 0 10 10');
+        marker.setAttribute('refX', '9');
+        marker.setAttribute('refY', '5');
+        marker.setAttribute('markerWidth', '12');
+        marker.setAttribute('markerHeight', '12');
+        marker.setAttribute('markerUnits', 'userSpaceOnUse');
+        marker.setAttribute('orient', 'auto');
+        const head = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        head.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+        head.setAttribute('fill', color);
+        marker.appendChild(head);
+        defs.appendChild(marker);
+        return id;
     }
 
     function drawColumnEdges(rect: DOMRect): void {
@@ -792,16 +837,22 @@ export function renderDag(container: HTMLElement, { nodes, edges }: DagGraphInpu
         const points = visible.map(node => positions[node.id]).filter(Boolean);
         if (!points.length) return;
 
-        const minX = Math.min(...points.map(point => point.x)) - 150;
-        const maxX = Math.max(...points.map(point => point.x)) + 150;
+        const minX = Math.min(...points.map(point => point.x)) - (cardWidth / 2 + 20);
+        const maxX = Math.max(...points.map(point => point.x)) + (cardWidth / 2 + 20);
         const minY = Math.min(...points.map(point => point.y)) - 45;
         const maxY = Math.max(...points.map(point => point.y)) + 110;
         const graphWidth = Math.max(300, maxX - minX);
         const graphHeight = Math.max(155, maxY - minY);
-        zoom = Math.max(0.2, Math.min(1.1,
+        const fitted = Math.min(1.1,
             (canvas.clientWidth - 48) / graphWidth,
-            (canvas.clientHeight - 40) / graphHeight));
-        panX = -((minX + maxX) / 2) * zoom;
+            (canvas.clientHeight - 40) / graphHeight);
+        const floor = options.minFitZoom ?? 0.2;
+        zoom = Math.max(floor, fitted);
+        // Too big to fit legibly: open on the first stage, where the flow starts, and let the author
+        // pan along it - the way a long SSIS package opens at its first task rather than shrunk to a strip.
+        panX = fitted < floor
+            ? 24 - canvas.clientWidth / 2 - minX * zoom
+            : -((minX + maxX) / 2) * zoom;
         panY = canvas.clientHeight * 0.1 - ((minY + maxY) / 2) * zoom;
         updateViewport();
     }
