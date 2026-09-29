@@ -318,7 +318,7 @@ CREATE VISUAL Measurement AS CUSTOM (
 ## Rectangles on transposed fixed-aspect charts
 
 RECT supports exactly four quantitative field or DATUM bindings: `X_START`, `X_END`,
-`Y_START` and `Y_END`. Use IDENTITY placement without conditions, stacking, secondary axes
+`Y_START` and `Y_END`. Use IDENTITY or `NUDGE(..., UNIT = EM)` placement without conditions, stacking, secondary axes
 or additional encodings. Each row defines a rectangle between its paired corners. Semantic Y
 maps horizontally and X vertically, including reversed/logarithmic scales, independent facets
 and resizing. Every endpoint contributes to its scale domain.
@@ -330,6 +330,12 @@ original order in SVG titles, optional data labels, terminal output and accessib
 A missing endpoint draws no rectangle and is reported as a gap. Coincident rows remain distinct.
 These isolated rectangles do not inherit color groups from another layer. Use STYLE for a fixed color.
 
+EM nudges translate the entire rectangle: positive X moves upward and positive Y moves right,
+with one em equal to 12 SVG units. Reversed axes do not reverse this display displacement.
+Dimensions, domains and reported endpoint values stay unchanged through facets and resizing.
+For example, add `POSITION = NUDGE(X = -0.5, Y = 1, UNIT = EM)` to move down 6 units
+and right 12 units. BAND/DATA nudges and JITTER remain unsupported on these rectangles.
+
 ```sql
 CREATE VISUAL Regions AS CUSTOM (
   SOURCE = #prepared,
@@ -337,6 +343,7 @@ CREATE VISUAL Regions AS CUSTOM (
     COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
     LAYERS (regions = RECT (
       INHERIT_ENCODINGS = OFF,
+      POSITION = NUDGE(X = -0.5, Y = 1, UNIT = EM),
       ENCODINGS (
         X_START = StartX (TYPE = QUANTITATIVE),
         X_END = EndX (TYPE = QUANTITATIVE),

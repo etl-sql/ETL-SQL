@@ -435,6 +435,10 @@ semantics and backend evidence before its rejection can be lifted.
   or conditions. Geometry oracles, domain/null checks, round trips, lineage, LSP rename, PDF and
   deterministic fixtures live in `TransposedAspectRangeRectTests`; wire versions are unchanged.
   The terminal row-selection regression and its compatibility note cover previously omitted groups.
+- [x] **EM nudges on four-endpoint transposed aspect RECT layers.** The complete rectangle
+  translates in physical units without changing dimensions, domains or raw intervals. Reversed/log
+  axes, independent facets, resize, authoring/contract round trips, LSP rename and PDF are covered
+  by the rectangle tests. BAND/DATA nudges and JITTER remain rejected. Wire versions are unchanged.
 - [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/supported RULE/RECT,
   stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.

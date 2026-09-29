@@ -154,7 +154,7 @@ channel sequence. Missing endpoints still skip rendering and fallback. Single-ax
 accept JITTER only along the bound axis. ChartSpec v2 and PlotPlan v3 retain their existing wire shapes.
 
 RECT accepts exactly four quantitative field/DATUM endpoints (X_START/X_END/Y_START/Y_END) with
-IDENTITY placement and no conditions or additional encodings. The physical-axis adapter exchanges
+IDENTITY or EM NUDGE placement and no conditions or additional encodings. The physical-axis adapter exchanges
 both endpoint pairs locally; authoritative plan channels stay semantic. Each endpoint contributes
 to global and independent facet domains. SVG uses the minimum mapped corner and absolute mapped
 span on each physical axis, without minimum bar dimensions. Zero-area and subpixel rectangles
@@ -163,7 +163,9 @@ therefore preserve their physical extent. Isolated rectangles ignore unrelated l
 The shared `CartesianRangeDescription` preserves both intervals and endpoint order in SVG titles,
 optional labels, terminal rows and accessible fallback. Incomplete rows draw no rectangle and are
 reported as gaps. Complete coincident rows remain distinct. The resolved extent is `None` because
-these rectangles have no value baseline. Native/static SVG share the geometry; terminal output
+these rectangles have no value baseline. EM nudges apply the shared physical offset `(Y * 12, -X * 12)`
+to both corners; dimensions, domains and interval text are unchanged. BAND/DATA nudges and JITTER
+remain rejected. Native/static SVG share the geometry; terminal output
 preserves values rather than physical distance. ChartSpec v2 and PlotPlan v3 require no new fields.
 Unfaceted terminal output now selects rows from every layer, fixing omission of rows outside the
 first color group; that existing-behavior correction is recorded in `BREAKING_CHANGES.md`.

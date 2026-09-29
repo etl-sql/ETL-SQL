@@ -275,6 +275,10 @@ public sealed class ReportRenameProviderTests
     [InlineData("estimates =", 4, true, "IDENTITY", true)]
     [InlineData("StartX (", 1, true, "IDENTITY", true)]
     [InlineData("LowerBound (", 1, true, "IDENTITY", true)]
+    [InlineData("distances =", 4, true, "EM", true)]
+    [InlineData("estimates =", 4, true, "EM", true)]
+    [InlineData("StartX (", 1, true, "EM", true)]
+    [InlineData("LowerBound (", 1, true, "EM", true)]
     public async Task TransposedRangeGeometry_RenamesScaleAndEndpoint(string token, int count, bool diagonal, string unit, bool rectangle)
     {
         var script = """
