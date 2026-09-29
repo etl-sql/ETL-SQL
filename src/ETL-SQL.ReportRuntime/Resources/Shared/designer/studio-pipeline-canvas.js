@@ -121,6 +121,12 @@ const pipelineTaskGroups = Object.freeze([
                 glyph: '\u2713',
                 hint: 'Assert a condition and stop the run with a message when it fails.',
             }),
+            Object.freeze({
+                id: 'expectschema',
+                label: 'Expect schema',
+                glyph: '\u2637',
+                hint: 'Stop the run, or warn, when a staged table is missing a column or has the wrong type.',
+            }),
         ]),
     }),
     Object.freeze({
@@ -139,6 +145,19 @@ const pipelineTaskGroups = Object.freeze([
                 label: 'Upsert rows',
                 glyph: '\u21C5',
                 hint: 'Update the rows that already exist, by key, and insert the ones that do not.',
+            }),
+        ]),
+    }),
+    Object.freeze({
+        id: 'cleanup',
+        label: 'Clean up',
+        hint: 'Free what the run no longer needs.',
+        kinds: Object.freeze([
+            Object.freeze({
+                id: 'droptemp',
+                label: 'Drop #temp',
+                glyph: '✕',
+                hint: 'Free a staged #temp table once nothing later needs it. Large runs stay inside their memory budget.',
             }),
         ]),
     }),

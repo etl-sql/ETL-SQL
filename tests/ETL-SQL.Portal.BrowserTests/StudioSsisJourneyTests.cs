@@ -488,7 +488,67 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
             script, StringComparison.Ordinal);
         Assert.Contains("with_counts:\nSELECT l.*, r.Users\nINTO #with_counts\nFROM #clean_users AS l\nLEFT JOIN #name_counts AS r\n    ON l.UserNameUpper = r.UserNameUpper;",
             script, StringComparison.Ordinal);
+
+        // ── Check and tidy ───────────────────────────────────────────────────
+        await page.Locator("[data-task-kind='expectschema']").ClickAsync();
+        await page.Locator("[data-task-id]").FillAsync("counts_have_shape");
+        await page.Locator("[data-task-field='source']").FillAsync("#name_counts");
+        await page.Locator("[data-task-field='schema']").FillAsync("UserNameUpper VARCHAR, Users INT");
+        await page.Locator("[data-task-field='warnonly']").CheckAsync();
+        await CommitTaskAsync(page, "counts_have_shape");
+
+        await page.Locator("[data-task-kind='droptemp']").ClickAsync();
+        await page.Locator("[data-task-id]").FillAsync("free_staging");
+        await page.Locator("[data-task-field='source']").FillAsync("#staged_users");
+        await CommitTaskAsync(page, "free_staging");
+
+        script = (await ScriptAsync(page)).Replace("\r\n", "\n", StringComparison.Ordinal);
+        Assert.Contains("counts_have_shape:\nEXPECT SCHEMA #name_counts (\n    UserNameUpper VARCHAR,\n    Users INT\n) ON DRIFT WARN;",
+            script, StringComparison.Ordinal);
+        Assert.Contains("free_staging:\nDROP TABLE #staged_users;", script, StringComparison.Ordinal);
+
+        // ── The map reads as a pipeline ──────────────────────────────────────
+        // A step is called what its author named it, with the statement underneath.
+        var card = page.Locator("[data-task-key='clean_users']");
+        await card.WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
+        Assert.Equal("clean_users", (await card.Locator(".etlsql-dag-card-title").InnerTextAsync()).Trim());
+        Assert.Contains("#clean_users", await card.Locator(".etlsql-dag-card-statement").InnerTextAsync(), StringComparison.Ordinal);
+
+        // The staged table is drawn where it flows: into the step that reads it, and into the drop.
+        var readId = await page.Locator("[data-task-key='read_users']").GetAttributeAsync("data-dag-node");
+        var cleanId = await card.GetAttributeAsync("data-dag-node");
+        var dropId = await page.Locator("[data-task-key='free_staging']").GetAttributeAsync("data-dag-node");
+        await AssertEdgeDrawnAsync(page.Locator(
+            $"[data-dag-source='{readId}'][data-dag-target='{cleanId}'][data-dag-label='#staged_users'][data-dag-edge-kind='data']"),
+            "#staged_users into clean_users");
+        var longLine = page.Locator(
+            $"[data-dag-source='{readId}'][data-dag-target='{dropId}'][data-dag-label='#staged_users'][data-dag-edge-kind='data']");
+        await AssertEdgeDrawnAsync(longLine, "#staged_users into free_staging");
+
+        // A hand-over to the next step is a straight line; one that skips steps arcs under the row,
+        // rather than running behind every card between and sitting on their lines.
+        Assert.Equal("0", await page.Locator($"[data-dag-source='{readId}'][data-dag-target='{cleanId}'][data-dag-edge-kind='data']")
+            .GetAttributeAsync("data-dag-bow"));
+        Assert.True(int.Parse(await longLine.GetAttributeAsync("data-dag-bow") ?? "0", System.Globalization.CultureInfo.InvariantCulture) > 0,
+            "The long data line is drawn straight through the steps it skips.");
+        Assert.Contains("DROP TABLE #staged_users",
+            await page.Locator("[data-task-key='free_staging'] .etlsql-dag-card-statement").InnerTextAsync(), StringComparison.Ordinal);
         Assert.Empty(session.PageErrors);
+    }
+
+    /// <summary>Waits for an edge to be in the document with path data, without waiting for visibility.</summary>
+    private static async Task AssertEdgeDrawnAsync(ILocator edge, string label)
+    {
+        try
+        {
+            await edge.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Attached, Timeout = 15_000 });
+        }
+        catch (TimeoutException exception)
+        {
+            throw new Xunit.Sdk.XunitException($"The {label} line was never drawn.", exception);
+        }
+
+        Assert.False(string.IsNullOrWhiteSpace(await edge.GetAttributeAsync("d")), $"The {label} line has no path data.");
     }
 
     private static Task<string> ScriptAsync(IPage page) =>

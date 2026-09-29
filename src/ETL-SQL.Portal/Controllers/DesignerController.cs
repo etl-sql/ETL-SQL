@@ -199,7 +199,9 @@ public class DesignerController : ControllerBase
                 req.Right,
                 req.JoinType,
                 req.Measures,
-                req.Derived);
+                req.Derived,
+                req.Schema,
+                req.WarnOnly);
 
             // What the draft would write, from the same renderer an add uses. Nothing is written: the
             // script comes back as it was sent, and the statement travels beside it.

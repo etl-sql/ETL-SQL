@@ -218,6 +218,10 @@ export function _edgeStyle(label) {
         return { kind: 'completion', color: '#58a6ff', dash: '2 3' };
     if (text.startsWith('WHEN '))
         return { kind: 'expression', color: '#d29922', dash: '10 3 2 3' };
+    // A #temp handed from the step that wrote it to one that reads it. Its own colour and dash, so data
+    // is never mistaken for an order condition — and the badge carries the table's name.
+    if (text.startsWith('#'))
+        return { kind: 'data', color: '#2dd4bf', dash: '5 3' };
     return { kind: null, color: '#8b949e', dash: null };
 }
 export function renderDag(container, { nodes, edges }, options = {}) {
@@ -447,7 +451,11 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         const header = document.createElement('div');
         header.className = 'etlsql-dag-card-header';
         const title = document.createElement('span');
-        title.textContent = node.label ?? node.id;
+        title.className = 'etlsql-dag-card-title';
+        // A labelled step is called what its author called it; the statement it is goes underneath.
+        // "read_users" says what the step is for, and "SELECT INTO #staged_users" how.
+        const named = typeof node.meta?.key === 'string' && node.meta.key.length > 0;
+        title.textContent = named ? String(node.meta.key) : (node.label ?? node.id);
         title.style.overflow = 'hidden';
         title.style.textOverflow = 'ellipsis';
         title.style.whiteSpace = 'nowrap';
@@ -456,6 +464,13 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         kind.style.color = _nodeColor(node.type || 'table');
         header.append(title, kind);
         card.appendChild(header);
+        if (named && node.label) {
+            const statement = document.createElement('div');
+            statement.className = 'etlsql-dag-card-statement';
+            statement.textContent = node.label;
+            statement.title = node.label;
+            card.appendChild(statement);
+        }
         const rows = node.meta?.mappings?.length
             ? node.meta.mappings.map(m => ({ id: `${node.id}__map__${m.role}`, label: `${m.role}: ${m.column}`, column: cleanColumn(m.column) }))
             : (node.meta?.columns ?? []).map(c => ({ id: `${node.id}__col__${c}`, label: c, column: c }));
@@ -752,7 +767,13 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         const b = centerOf(toPort, rect);
         const inPath = !focusSet || (focusSet.has(edge.source) && focusSet.has(edge.target));
         const style = _edgeStyle(edge.label);
-        const path = drawLink(a.x, a.y, b.x, b.y, inPath ? style.color : 'rgba(71,85,105,0.08)', inPath ? 2 : 1);
+        // Data that skips steps is drawn as an arc under the row. Drawn straight, it ran behind every
+        // card in between, sat on top of the order lines there, and put its badge between two steps
+        // it has nothing to do with.
+        const bow = style.kind === 'data' && options.orientation === 'horizontal' && b.x - a.x > cardWidth
+            ? Math.min(160, 50 + (b.x - a.x) * 0.08)
+            : 0;
+        const path = drawLink(a.x, a.y, b.x, b.y, inPath ? style.color : 'rgba(71,85,105,0.08)', inPath ? 2 : 1, false, bow);
         // A connector is read at whatever zoom the map is at, so its stroke is measured in screen
         // pixels rather than graph units - scaled with the map it thinned to half a pixel. The head
         // is what says "this runs, then that": without it a line between two steps has no direction.
@@ -771,8 +792,11 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             path.dataset.dagLabel = edge.label;
         if (style.kind)
             path.dataset.dagEdgeKind = style.kind;
+        if (style.kind === 'data')
+            path.dataset.dagBow = String(Math.round(bow));
+        // A cubic with both control points `bow` below the line peaks at three quarters of it.
         if (edge.label && inPath)
-            drawEdgeBadge(a.x, a.y, b.x, b.y, edge.label, false, false, style.color);
+            drawEdgeBadge(a.x, a.y + bow * 0.75, b.x, b.y + bow * 0.75, edge.label, false, false, style.color);
     }
     /** The id of an arrowhead in this colour, created on first use. `drawConnections` clears the SVG, defs included. */
     function arrowHead(color) {
@@ -828,10 +852,10 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             }
         }
     }
-    function drawLink(x1, y1, x2, y2, color, width, dashed = false) {
+    function drawLink(x1, y1, x2, y2, color, width, dashed = false, bow = 0) {
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        const dx = Math.abs(x2 - x1) * 0.45;
-        path.setAttribute('d', `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
+        const dx = Math.abs(x2 - x1) * (bow ? 0.2 : 0.45);
+        path.setAttribute('d', `M ${x1} ${y1} C ${x1 + dx} ${y1 + bow}, ${x2 - dx} ${y2 + bow}, ${x2} ${y2}`);
         path.setAttribute('stroke', color);
         path.setAttribute('stroke-width', String(width));
         path.setAttribute('fill', 'none');

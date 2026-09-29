@@ -206,6 +206,15 @@ public enum PipelineTaskKind
 
     /// <summary><c>SELECT groups, measures INTO #next FROM #prev GROUP BY groups</c>.</summary>
     Summarise,
+
+    /// <summary>
+    /// <c>EXPECT SCHEMA #temp (column TYPE [NOT NULL], …) [ON DRIFT WARN]</c> — fails the run, or
+    /// warns, when a staged table is missing a column or has the wrong type.
+    /// </summary>
+    ExpectSchema,
+
+    /// <summary><c>DROP TABLE #temp</c> — frees a staged table once nothing later needs it.</summary>
+    DropTemp,
 }
 
 /// <summary>How a kind behaves, for the handful of places that have to ask.</summary>
@@ -332,7 +341,9 @@ public sealed record PipelineTaskDraft(
     string? Right = null,
     string? JoinType = null,
     string? Measures = null,
-    string? Derived = null);
+    string? Derived = null,
+    string? Schema = null,
+    bool WarnOnly = false);
 
 /// <summary>
 /// The field edits a host received, by the names <see cref="PipelineTask.Fields"/> reports.
@@ -653,8 +664,52 @@ public sealed partial class PipelineTaskAuthoringService
             "A summary needs what it measures, such as SUM(Total) AS TotalSales.",
         PipelineTaskKind.Summarise when UnusableExpression(draft.Measures!) is { } badMeasure => badMeasure,
 
+        // ── Checking and tidying ─────────────────────────────────────────────
+        PipelineTaskKind.ExpectSchema or PipelineTaskKind.DropTemp when string.IsNullOrWhiteSpace(draft.Source) =>
+            draft.Kind == PipelineTaskKind.ExpectSchema
+                ? "A schema check needs the #temp table it checks."
+                : "Dropping needs the #temp table it frees.",
+        PipelineTaskKind.ExpectSchema or PipelineTaskKind.DropTemp when !IsValidTaskId(TempName(draft.Source)) =>
+            $"'{draft.Source!.Trim()}' is not a usable #temp table name.",
+        PipelineTaskKind.ExpectSchema when SchemaEntries(draft.Schema).Count == 0 =>
+            "A schema check needs the columns it expects, such as UserID INT NOT NULL.",
+        PipelineTaskKind.ExpectSchema when SchemaEntries(draft.Schema).FirstOrDefault(entry => !SchemaEntry().IsMatch(entry)) is { } badEntry =>
+            $"'{badEntry}' is not a column and type. Write it as a name and a type, such as UserName VARCHAR or UserID INT NOT NULL.",
+
         _ => null,
     };
+
+    /// <summary>
+    /// One expected column: a name, a type with an optional size, and optionally NOT NULL. Anything else
+    /// is refused rather than written, because each entry goes into the statement as typed.
+    /// </summary>
+    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*\s+[A-Za-z][A-Za-z0-9_]*(\(\s*\d+\s*(,\s*\d+\s*)?\))?(\s+NOT\s+NULL)?$", RegexOptions.IgnoreCase)]
+    private static partial Regex SchemaEntry();
+
+    /// <summary>
+    /// A schema spec split into its entries. Commas inside a type's size — <c>DECIMAL(10,2)</c> — belong
+    /// to the type, so the split only happens outside brackets.
+    /// </summary>
+    private static List<string> SchemaEntries(string? spec)
+    {
+        var entries = new List<string>();
+        var text = spec ?? string.Empty;
+        var depth = 0;
+        var start = 0;
+        for (var i = 0; i <= text.Length; i++)
+        {
+            if (i < text.Length && text[i] == '(') depth++;
+            else if (i < text.Length && text[i] == ')') depth--;
+            else if (i == text.Length || (text[i] == ',' && depth == 0))
+            {
+                var entry = string.Join(' ', text[start..i].Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+                if (entry.Length > 0) entries.Add(entry);
+                start = i + 1;
+            }
+        }
+
+        return entries;
+    }
 
     /// <summary>The JOIN a join step writes, or null for one it does not.</summary>
     private static string? JoinKeyword(string? type) => (type ?? "INNER").Trim().ToUpperInvariant() switch
@@ -2532,6 +2587,8 @@ public sealed partial class PipelineTaskAuthoringService
         SelectStatement { IntoTable: not null } => PipelineTaskKind.Reshape,
         InsertStatement => PipelineTaskKind.Load,
         MergeStatement => PipelineTaskKind.Upsert,
+        ExpectSchemaStatement => PipelineTaskKind.ExpectSchema,
+        DropTableStatement drop when drop.TargetTable.TableName.StartsWith('#') => PipelineTaskKind.DropTemp,
         // A TRY/CATCH that opens a transaction is a scope; one that does not is the author's own
         // error handling, and the canvas has nothing to say about it.
         TryCatchStatement scope when OpensATransaction(scope) => PipelineTaskKind.Transaction,
@@ -2803,6 +2860,16 @@ public sealed partial class PipelineTaskAuthoringService
             + $"FROM #{TempName(draft.Source)}"
             + (ColumnNames(draft.Columns) is { Count: > 0 } groups ? $"{lineEnding}GROUP BY {string.Join(", ", groups)}" : string.Empty)
             + ";",
+
+        // ── Checking and tidying ─────────────────────────────────────────────
+        PipelineTaskKind.ExpectSchema =>
+            $"{draft.Id}:{lineEnding}"
+            + $"EXPECT SCHEMA #{TempName(draft.Source)} ({lineEnding}"
+            + string.Join($",{lineEnding}", SchemaEntries(draft.Schema).Select(entry => $"    {entry}"))
+            + $"{lineEnding}){(draft.WarnOnly ? " ON DRIFT WARN" : string.Empty)};",
+
+        PipelineTaskKind.DropTemp =>
+            $"{draft.Id}:{lineEnding}DROP TABLE #{TempName(draft.Source)};",
 
         _ => throw new ArgumentOutOfRangeException(nameof(draft), draft.Kind, "Unknown pipeline task kind."),
     };

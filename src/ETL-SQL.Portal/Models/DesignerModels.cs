@@ -204,7 +204,9 @@ public record PipelineTaskRequest(
     string? Right = null,
     string? JoinType = null,
     string? Measures = null,
-    string? Derived = null);
+    string? Derived = null,
+    string? Schema = null,
+    bool WarnOnly = false);
 
 /// <summary>
 /// The result of a pipeline edit. <c>Applied</c> false with an <c>Error</c> is an ordinary answer —

@@ -2644,6 +2644,17 @@ body.vscode-dark .cm-diagnostic-source {
     z-index: 5;
 }
 
+/* Under a labelled step's name: the statement it is, so the card teaches the syntax as well. */
+.etlsql-dag-card-statement {
+    padding: 3px 12px 6px;
+    font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
+    font-size: 10px;
+    color: var(--portal-text-soft, #8b949e);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 /* A band per branch of a PARALLEL, behind the lines and the cards. It takes the pointer only so its
    title can explain itself; grabbing it pans the map like empty canvas. */
 .etlsql-dag-lane-layer {
@@ -6995,6 +7006,16 @@ body.vscode-dark .etlsql-cw-missing-hint {
     font-family: var(--portal-font-mono, "Cascadia Code", Consolas, monospace);
     font-size: 0.75rem;
     text-transform: none;
+}
+
+.etlsql-studio-pipeline-fields label.etlsql-studio-task-toggle {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    color: var(--portal-text, #f0f6fc);
+    font-size: 0.75rem;
+    text-transform: none;
+    letter-spacing: 0;
 }
 
 /* A table's columns to tick, under the field they fill. Ticking writes the comma list the field holds. */

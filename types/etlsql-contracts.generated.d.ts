@@ -43,7 +43,9 @@ type PipelineTaskKind =
     | 'upsert'
     | 'reshape'
     | 'join'
-    | 'summarise';
+    | 'summarise'
+    | 'expectschema'
+    | 'droptemp';
 
 /** PipelineEdgeCondition, as it crosses the wire. Matched case-insensitively on the way in. */
 type PipelineEdgeCondition =

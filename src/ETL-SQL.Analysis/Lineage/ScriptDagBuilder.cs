@@ -22,9 +22,12 @@ namespace ETL_SQL.Analysis.Lineage;
 /// </param>
 /// <param name="Lane">Which branch of <paramref name="LaneOf"/>, from zero, in script order.</param>
 /// <param name="Lanes">On a <c>PARALLEL</c> stage: how many branches it has. Zero on every other stage.</param>
+/// <param name="Writes">The <c>#temp</c> table this stage creates, or null.</param>
+/// <param name="Reads">The <c>#temp</c> tables this stage reads, or null when it reads none.</param>
 public sealed record ScriptDagNode(
     string Id, string Label, string Type, int Line, string? Key = null,
-    string? LaneOf = null, int Lane = 0, int Lanes = 0);
+    string? LaneOf = null, int Lane = 0, int Lanes = 0,
+    string? Writes = null, IReadOnlyList<string>? Reads = null);
 
 /// <summary>A directed edge between two flow nodes.</summary>
 public sealed record ScriptDagEdge(string Source, string Target, string? Label = null);
@@ -90,7 +93,64 @@ public static class ScriptDagBuilder
         var graph = MapLabels(script.Statements);
         graph.Collapsed = collapsed ?? new Dictionary<int, int>();
         AppendSequence(script.Statements, graph, []);
+        AddDataLines(graph);
         return new ScriptDag(graph.Nodes, graph.Edges);
+    }
+
+    /// <summary>
+    /// Shows where staged data goes: from the stage that last wrote a <c>#temp</c> to each stage that
+    /// reads it.
+    ///
+    /// <para>The order lines say what runs after what, which is not the same as what feeds what — a
+    /// load three steps down still reads the table the first step staged. Where the two coincide, the
+    /// existing line takes the table's name; where they do not, the data gets a line of its own. A line
+    /// that already says something else (a branch, a condition) keeps saying it.</para>
+    ///
+    /// <para>Only <c>#temp</c> tables: a connection's table is where data comes from or goes, not a
+    /// hand-over between two steps of this script.</para>
+    /// </summary>
+    private static void AddDataLines(FlowGraph graph)
+    {
+        var lastWriter = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in graph.Nodes.ToList())
+        {
+            foreach (var table in node.Reads ?? [])
+            {
+                if (!lastWriter.TryGetValue(table, out var writer) || writer == node.Id) continue;
+
+                var existing = graph.Edges.FindIndex(edge => edge.Source == writer && edge.Target == node.Id);
+                if (existing < 0)
+                    graph.Edges.Add(new ScriptDagEdge(writer, node.Id, table));
+                else if (graph.Edges[existing].Label is null)
+                    graph.Edges[existing] = graph.Edges[existing] with { Label = table };
+                else if (graph.Edges[existing].Label!.StartsWith('#'))
+                    graph.Edges[existing] = graph.Edges[existing] with { Label = $"{graph.Edges[existing].Label}, {table}" };
+            }
+
+            if (node.Writes is { } written) lastWriter[written] = node.Id;
+        }
+    }
+
+    /// <summary>The #temp a statement creates, or null.</summary>
+    private static string? TempWritten(Statement statement) =>
+        statement.GetCreatedTable() is { } created && created.StartsWith('#') ? created : null;
+
+    /// <summary>The #temp tables a statement reads, in the order it names them.</summary>
+    private static IReadOnlyList<string>? TempsRead(Statement statement)
+    {
+        IEnumerable<string> named = statement switch
+        {
+            ExpectSchemaStatement expect => [expect.Target],
+            DropTableStatement drop => [drop.TargetTable.TableName],
+            _ => statement.GetSourceTables(),
+        };
+
+        var written = TempWritten(statement);
+        var reads = named
+            .Where(name => name.StartsWith('#') && !string.Equals(name, written, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return reads.Count > 0 ? reads : null;
     }
 
     /// <summary>The statement at this offset, anywhere inside <paramref name="statement"/>.</summary>
@@ -194,7 +254,9 @@ public static class ScriptDagBuilder
             && StatementAt(statement, innerOffset) is { } task)
         {
             var (taskLabel, taskType) = Classify(task);
-            return [new FlowExit(AddNode(taskLabel, taskType, statement.Line, graph, incoming, graph.KeyFor(statement)))];
+            var wrappedId = AddNode(taskLabel, taskType, statement.Line, graph, incoming, graph.KeyFor(statement));
+            RecordData(graph, wrappedId, task);
+            return [new FlowExit(wrappedId)];
         }
 
         if (statement is BlockStatement block)
@@ -359,7 +421,19 @@ public static class ScriptDagBuilder
     {
         var (label, type) = Classify(statement);
         var key = graph.KeyFor(statement);
-        return AddNode(label, type, statement.Line, graph, incoming, key);
+        var id = AddNode(label, type, statement.Line, graph, incoming, key);
+        RecordData(graph, id, statement);
+        return id;
+    }
+
+    /// <summary>Notes which #temp tables a stage writes and reads, for <see cref="AddDataLines"/>.</summary>
+    private static void RecordData(FlowGraph graph, string id, Statement statement)
+    {
+        var writes = TempWritten(statement);
+        var reads = TempsRead(statement);
+        if (writes is null && reads is null) return;
+        var index = graph.Nodes.FindIndex(node => node.Id == id);
+        graph.Nodes[index] = graph.Nodes[index] with { Writes = writes, Reads = reads };
     }
 
     private static string AddNode(
@@ -407,6 +481,7 @@ public static class ScriptDagBuilder
         AssertTableStatement s => ($"ASSERT TABLE {s.ActualTable}", "validation"),
         AssertJobStatement s => ($"ASSERT JOB {s.JobName}", "validation"),
         ExpectSchemaStatement s => ($"EXPECT SCHEMA {s.Target}", "validation"),
+        DropTableStatement s => ($"DROP TABLE {s.TargetTable.TableName}", "statement"),
         ValidateBundleStatement s => ($"VALIDATE BUNDLE {s.BundleName}", "validation"),
         ValidatePortalReportStatement => ("VALIDATE PORTAL REPORT", "validation"),
         ExecuteStatement s => ($"CALL {s.ProcedureName}", "procedure"),

@@ -124,6 +124,15 @@ export function createStudioAuthoringPipeline(hostContext) {
             { name: 'measures', label: 'Measure', placeholder: 'SUM(Total) AS TotalSales, COUNT(*) AS Orders', mono: true, hint: 'SUM, COUNT, AVG, MIN or MAX of a column, and the name it gets: SUM(Total) AS TotalSales.' },
             { name: 'target', label: 'Into', placeholder: '#sales_by_region', mono: true },
         ],
+        // ── Checking and tidying ─────────────────────────────────────────────
+        expectschema: [
+            { name: 'source', label: 'Check table', placeholder: '#staged_users', mono: true, picker: 'temp' },
+            { name: 'schema', label: 'Expect columns', placeholder: 'UserID INT NOT NULL, UserName VARCHAR', mono: true, hint: 'A name and a type for each, separated by commas. Add NOT NULL where empty values are not allowed. Extra columns are fine.' },
+            { name: 'warnonly', label: 'Warn and carry on instead of stopping', placeholder: '', optional: true, picker: 'toggle' },
+        ],
+        droptemp: [
+            { name: 'source', label: 'Free table', placeholder: '#staged_users', mono: true, picker: 'temp', hint: 'Every step that reads it has to come before this one.' },
+        ],
         load: [
             { name: 'source', label: 'Rows from', placeholder: '#staged_users', mono: true, picker: 'temp', hint: 'The #temp table an earlier step staged.' },
             { name: 'table', label: 'Insert into table', placeholder: 'UsersArchive', mono: true, picker: 'table' },
@@ -155,6 +164,11 @@ export function createStudioAuthoringPipeline(hostContext) {
             + 'table is kept; from the other, only the columns you bring across.',
         summarise: 'Each group becomes one row. Every column you group by is kept, and each measure is '
             + 'calculated over the rows in that group.',
+        expectschema: 'Checks the table before anything downstream relies on it. A source that changed shape '
+            + 'stops the run here, naming the missing or mistyped columns, instead of failing later on a '
+            + 'confusing error.',
+        droptemp: 'A #temp table holds its rows until the run ends. Dropping one early frees that memory, '
+            + 'which matters when a pipeline stages large tables.',
         upsert: 'This is a MERGE. The engine holds every matching row while it runs, so at large scale filter '
             + 'the #temp table first, or split the load into batches.',
     };
@@ -239,6 +253,8 @@ export function createStudioAuthoringPipeline(hostContext) {
         for (const field of fields) {
             if (field.picker === 'choice' && !draft[field.name])
                 draft[field.name] = field.choices?.[0] ?? '';
+            if (field.picker === 'toggle')
+                draft[field.name] = String(offered[field.name] ?? '').toLowerCase() === 'true';
         }
         let workbench = null;
         // The connection's tables, read once per connection chosen, for the table and column pickers.
@@ -276,7 +292,11 @@ export function createStudioAuthoringPipeline(hostContext) {
         }, api => {
             const readFields = (host) => {
                 for (const field of fields) {
-                    draft[field.name] = asInput(host.querySelector(`[data-task-field="${field.name}"]`))?.value ?? draft[field.name];
+                    const input = host.querySelector(`[data-task-field="${field.name}"]`);
+                    if (!input)
+                        continue;
+                    // A toggle is sent as a boolean, the way the host's draft declares it.
+                    draft[field.name] = field.picker === 'toggle' ? input.checked : input.value;
                 }
             };
             const save = () => {
@@ -430,6 +450,12 @@ export function createStudioAuthoringPipeline(hostContext) {
             /** One field: a text box, with the connection's tables or a table's columns to pick from. */
             function fieldMarkup(field) {
                 const value = String(draft[field.name] || '');
+                if (field.picker === 'toggle') {
+                    return `<label class="etlsql-studio-task-toggle">
+                            <input type="checkbox" data-task-field="${escapeHtml(field.name)}" ${draft[field.name] === true ? 'checked' : ''}>
+                            ${escapeHtml(field.label)}
+                        </label>`;
+                }
                 if (field.picker === 'choice') {
                     return `<label>${escapeHtml(field.label)}
                             <select data-task-field="${escapeHtml(field.name)}">${(field.choices ?? []).map(choice => `<option${choice === value.toUpperCase() ? ' selected' : ''}>${escapeHtml(choice)}</option>`).join('')}</select>

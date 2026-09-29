@@ -101,6 +101,8 @@ rights just to learn.
 - [x] Closing the Studio browser window never stops a CLI-launched host: `--idle-timeout-minutes`
   defaulted to 0 ("never"), so the host kept its port and locked `src/ETL-SQL.App/bin`. Now defaults
   to 2 minutes with no browser connected; an explicit 0 is always passed through and still means never.
+- [ ] `Studio_TabName_DoubleClickRenamesAndEscapeCancels` times out waiting for the rename input in
+  most runs, alone or in the suite. Seen since 2026-09-28, before the Studio pipeline work.
 - [ ] `Studio_AWizardWrite_OffersAnUndoThatPutsTheScriptBack` fails when run alone: the first
   `.etlsql-feedback-action` is not "Undo".
 - [x] The task editor can rename most task kinds but not edit their other fields. Every kind now
@@ -109,7 +111,7 @@ rights just to learn.
 - [x] `PARALLEL` branches are drawn without swimlanes. Each stage now carries `laneOf`/`lane` (and a
   PARALLEL its `lanes`); `_laneRows` gives every branch its own row and the map draws a labelled band
   per branch. Nested blocks take as many rows as their own branches.
-- [ ] Rebuild the pipeline canvas as a teaching surface — the largest single piece. The current
+- [x] Rebuild the pipeline canvas as a teaching surface — the largest single piece. The current
   `PIPELINE_TASK_GROUPS` starts with Execution, Validation, and control flow; Execution asks for a
   remote SQL body. Guide Extract → Stage → Transform → Validate → Load → Cleanup instead, with
   focused helpers for ETL-SQL-owned statements. Explain connection data, `#temp` tables, and named
@@ -122,7 +124,9 @@ rights just to learn.
     same-named keys) and Summarise, all `SELECT … INTO #next FROM #prev`; #temp tables and their columns
     are offered from the host's scope service. A pipeline built only from palette steps is executed in
     PipelineTransformTaskTests and checked by its own ASSERT steps.
-  - [ ] Slice 3: validate/cleanup steps, readable card names, #temp-labelled data edges, first-use notes.
+  - [x] Slice 3 (2026-09-29): Expect schema and Drop #temp steps; a labelled card is titled with its
+    label over its statement; a #temp handed between steps is drawn as a data line carrying its name,
+    arcing under the row when it skips steps; first-use notes on every data step.
 - [ ] The dataset wizard reads a connection's schema without asking the host to analyse the script
   first, so on the desktop host a just-declared connection reads as "not registered for this
   document". The pipeline task dialog had the same race and now analyses before reading.

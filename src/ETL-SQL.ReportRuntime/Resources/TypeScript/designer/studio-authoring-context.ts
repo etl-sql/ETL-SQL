@@ -126,7 +126,7 @@ export interface PipelineTaskField {
      * and `columns` offers the chosen table's columns as checkboxes, written as a comma list. Typing
      * still works — a table the schema read could not see is still a table.
      */
-    picker?: 'table' | 'columns' | 'temp' | 'choice';
+    picker?: 'table' | 'columns' | 'temp' | 'choice' | 'toggle';
     /**
      * For a `columns` picker: whose columns to offer. `table` is the connection table in the `table`
      * field; `source` and `right` are the #temp tables named in those fields.

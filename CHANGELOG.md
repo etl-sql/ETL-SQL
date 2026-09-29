@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- The Studio pipeline map reads as a pipeline. A labelled step's card is titled with its label, with
+  the statement underneath (`read_users` over `SELECT INTO #staged_users`). Where a `#temp` table is
+  handed from the step that wrote it to a step that reads it, the line carries its name in its own
+  colour; when the reader is further down, the line arcs under the row instead of running behind
+  the steps in between. New palette steps: **Expect schema** (`EXPECT SCHEMA #t (col TYPE [NOT
+  NULL], …) [ON DRIFT WARN]`) under Validate, and **Drop #temp** (`DROP TABLE #t`) under Clean up.
+
 - The Studio pipeline palette has a Transform group. **Filter & pick columns** keeps the columns you
   tick, adds calculated ones (`UPPER(UserName) AS UserNameUpper`), and filters rows; **Join** brings
   chosen columns across from a second `#temp` table, INNER or LEFT, matched on same-named keys; and

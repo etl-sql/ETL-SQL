@@ -614,7 +614,9 @@ public static class WorkstationEditorApp
                 request.Right,
                 request.JoinType,
                 request.Measures,
-                request.Derived);
+                request.Derived,
+                request.Schema,
+                request.WarnOnly);
 
             // What the draft would write, from the same renderer an add uses. Nothing is written.
             if (string.Equals(request.Op, "preview", StringComparison.OrdinalIgnoreCase))
@@ -1336,7 +1338,9 @@ public sealed record PipelineTaskAuthoringRequest(
     string? Right = null,
     string? JoinType = null,
     string? Measures = null,
-    string? Derived = null);
+    string? Derived = null,
+    string? Schema = null,
+    bool WarnOnly = false);
 public sealed record PipelineScopeAuthoringRequest(string? Script, string? Id, int? Line = null);
 
 public sealed record DataModelAuthoringRequest(string? Script, string? DocumentUri = null);

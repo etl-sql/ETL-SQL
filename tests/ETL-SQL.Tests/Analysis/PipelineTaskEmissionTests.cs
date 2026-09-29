@@ -216,6 +216,17 @@ public class PipelineTaskEmissionTests
             new PipelineTaskDraft("count_orders", PipelineTaskKind.Summarise,
                 Source: "#orders", Columns: "Ok", Measures: "COUNT(*) AS Orders", Target: "#order_counts")
         },
+
+        // ── Checking and tidying ─────────────────────────────────────────────
+        {
+            PipelineTaskKind.ExpectSchema,
+            new PipelineTaskDraft("orders_have_shape", PipelineTaskKind.ExpectSchema,
+                Source: "#orders", Schema: "Ok INT")
+        },
+        {
+            PipelineTaskKind.DropTemp,
+            new PipelineTaskDraft("free_labels", PipelineTaskKind.DropTemp, Source: "#labels")
+        },
     };
 
     /// <summary>

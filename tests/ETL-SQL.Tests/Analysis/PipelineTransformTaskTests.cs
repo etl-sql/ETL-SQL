@@ -205,6 +205,9 @@ public class PipelineTransformTaskTests
             new PipelineTaskDraft("every_row_counted", PipelineTaskKind.Validation,
                 Condition: "(SELECT COUNT(*) FROM #with_counts WHERE Users IS NULL) = 0",
                 Message: "A row found no count."),
+            new PipelineTaskDraft("counts_have_shape", PipelineTaskKind.ExpectSchema,
+                Source: "#name_counts", Schema: "UserNameUpper VARCHAR, Users INT"),
+            new PipelineTaskDraft("free_staging", PipelineTaskKind.DropTemp, Source: "#staged_users"),
         })
         {
             var added = _tasks.Add(script, draft);
