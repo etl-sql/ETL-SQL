@@ -34,7 +34,8 @@ public sealed record PipelineTask(
     string? Variable = null,
     string? Collection = null,
     int EndLine = 0,
-    bool HasElse = false);
+    bool HasElse = false,
+    IReadOnlyDictionary<string, string>? Fields = null);
 
 /// <summary>
 /// When a task runs relative to the one it waits for.
@@ -295,6 +296,33 @@ public sealed record PipelineTaskDraft(
     string? Delay = null,
     bool Until = false,
     string? Into = null);
+
+/// <summary>
+/// The field edits a host received, by the names <see cref="PipelineTask.Fields"/> reports.
+///
+/// <para>Shared by every host so that none of them can forget a field: a host that passed four of
+/// these through and dropped the fifth would apply an edit the author only partly made.</para>
+/// </summary>
+public static class PipelineTaskFieldEdits
+{
+    public static IReadOnlyDictionary<string, string?> From(
+        string? source, string? target, string? condition, string? message, string? recipient,
+        string? sender, string? subject, string? start, string? end, string? step, string? delay) =>
+        new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["source"] = source,
+            ["target"] = target,
+            ["condition"] = condition,
+            ["message"] = message,
+            ["recipient"] = recipient,
+            ["sender"] = sender,
+            ["subject"] = subject,
+            ["start"] = start,
+            ["end"] = end,
+            ["step"] = step,
+            ["delay"] = delay,
+        };
+}
 
 /// <summary>
 /// The outcome of an edit. A refusal carries the reason rather than handing back the original script
@@ -625,6 +653,12 @@ public sealed partial class PipelineTaskAuthoringService
     /// Relabels a task, repoints its connection, or replaces its body. Null leaves that part alone,
     /// and each part is written over its own token run, so changing a label does not reflow a body.
     /// </summary>
+    /// <param name="fields">
+    /// Any other field of the task, by the name <see cref="PipelineTask.Fields"/> reports it under —
+    /// <c>source</c>, <c>condition</c>, <c>message</c>, … A null value leaves that field alone. A name
+    /// the task does not report is refused rather than ignored: it is not written in a form this can
+    /// rewrite without losing something, and a form that dropped it would look like it had worked.
+    /// </param>
     public PipelineEditResult Update(
         string? script,
         string id,
@@ -632,7 +666,8 @@ public sealed partial class PipelineTaskAuthoringService
         string? connection = null,
         string? body = null,
         string? variable = null,
-        string? collection = null)
+        string? collection = null,
+        IReadOnlyDictionary<string, string?>? fields = null)
     {
         var source = script ?? string.Empty;
         if (!TryParse(source, out var ast, out var parseError))
@@ -677,11 +712,28 @@ public sealed partial class PipelineTaskAuthoringService
             var bare = Commit(source, WriteStatusDeclaration(unwrapped, task, guarded: false, lineEnding));
             if (!bare.Applied) return PipelineEditResult.Refused(source, bare.Error!);
 
-            var renamed = Update(bare.Script, id, newId, connection, body, variable, collection);
+            var renamed = Update(bare.Script, id, newId, connection, body, variable, collection, fields);
             return renamed.Applied
                 ? renamed
                 : PipelineEditResult.Refused(source, renamed.Error ?? "The rename could not be applied.");
         }
+
+        // Every kind but these two has its fields found as spans in its own statement. The two keep
+        // the paths they had: an execution task's body is a block, and a loop's header is read by
+        // LoopHeaderSpans, and both were rewriting in place before the other kinds could.
+        var requested = (fields ?? new Dictionary<string, string?>())
+            .Where(pair => pair.Value is not null)
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        if (task.Kind is not (PipelineTaskKind.Execution or PipelineTaskKind.Foreach))
+        {
+            if (connection is not null) requested["connection"] = connection;
+            if (body is not null) requested["body"] = body;
+            if (variable is not null) requested["variable"] = variable;
+            if (collection is not null) requested["collection"] = collection;
+            return UpdateFields(source, task, newId, requested);
+        }
+        if (requested.Count > 0)
+            return PipelineEditResult.Refused(source, NotEditableHere(task, requested.Keys.First()));
 
         // A loop's header is its own thing: the variable and the collection sit between FOREACH and
         // the BEGIN that opens the body, and neither is one of the three runs a leaf task has.
@@ -753,6 +805,274 @@ public sealed partial class PipelineTaskAuthoringService
             return committed;
 
         return Normalize(source, Repoint(committed.Script, task.Id, newId));
+    }
+
+    // ── Fields ───────────────────────────────────────────────────────────────
+
+    /// <summary>How a field is written: a string literal, an expression, a name, or a variable.</summary>
+    private enum FieldForm { Literal, Expression, Name, Variable }
+
+    /// <summary>
+    /// One editable field: where its text is, how it is written, and what it holds now.
+    /// <c>RemoveStart</c> is where a removal starts, for an optional clause whose keyword goes with it.
+    /// </summary>
+    private readonly record struct FieldSpan(int Start, int End, FieldForm Form, string Value, int RemoveStart);
+
+    private static string NotEditableHere(PipelineTask task, string name) =>
+        $"The {name} of '{task.Id}' is not written in a form this editor can rewrite without losing "
+        + "something. Edit it in the script.";
+
+    /// <summary>
+    /// What the editor may offer: every field found as a span, and a FOR loop's STEP as empty when
+    /// there is none yet but somewhere to write one.
+    /// </summary>
+    private static IReadOnlyDictionary<string, string> OfferedFields(string script, PipelineTask task)
+    {
+        var fields = FieldSpans(script, task, out var stepAnchor)
+            .ToDictionary(pair => pair.Key, pair => pair.Value.Value, StringComparer.Ordinal);
+        if (stepAnchor >= 0) fields["step"] = string.Empty;
+        return fields;
+    }
+
+    private static IReadOnlyDictionary<string, string> LoopFields(PipelineTask loop)
+    {
+        var fields = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (loop.Variable is { } variable) fields["variable"] = variable;
+        if (loop.Collection is { } collection) fields["collection"] = collection;
+        return fields;
+    }
+
+    /// <summary>
+    /// Rewrites the named fields of a task, and its label when <paramref name="newId"/> says so, each
+    /// over its own span. Nothing is regenerated: the statement keeps every token no field names.
+    /// </summary>
+    private PipelineEditResult UpdateFields(string source, PipelineTask task, string? newId, IReadOnlyDictionary<string, string?> requested)
+    {
+        var spans = FieldSpans(source, task, out var stepAnchor);
+        var edits = new List<(int Start, int End, string Text)>();
+        if (newId is not null) edits.Add((task.StartOffset, task.StartOffset + task.Id.Length, newId));
+
+        foreach (var (name, requestedValue) in requested)
+        {
+            var value = requestedValue ?? string.Empty;
+            var blank = string.IsNullOrWhiteSpace(value);
+
+            if (!spans.TryGetValue(name, out var span))
+            {
+                // A FOR loop's STEP is optional, so an absent one is somewhere to add a clause.
+                if (name == "step" && task.Kind == PipelineTaskKind.For && stepAnchor >= 0)
+                {
+                    if (blank) continue;
+                    if (UnusableFieldExpression("step", value) is { } badStep) return PipelineEditResult.Refused(source, badStep);
+                    edits.Add((stepAnchor, stepAnchor, " STEP " + value.Trim()));
+                    continue;
+                }
+
+                return PipelineEditResult.Refused(source, NotEditableHere(task, name));
+            }
+
+            if (blank)
+            {
+                if (name == "step")
+                {
+                    edits.Add((span.RemoveStart, span.End, string.Empty));
+                    continue;
+                }
+
+                return PipelineEditResult.Refused(source, $"The {name} of '{task.Id}' cannot be empty.");
+            }
+
+            switch (span.Form)
+            {
+                case FieldForm.Literal:
+                    edits.Add((span.Start, span.End, Literal(value)));
+                    break;
+                case FieldForm.Expression:
+                    if (UnusableFieldExpression(name, value) is { } bad) return PipelineEditResult.Refused(source, bad);
+                    edits.Add((span.Start, span.End, value.Trim()));
+                    break;
+                case FieldForm.Name:
+                    if (!IsValidTaskId(value.Trim())) return PipelineEditResult.Refused(source, $"'{value}' is not a usable {name} name.");
+                    edits.Add((span.Start, span.End, value.Trim()));
+                    break;
+                case FieldForm.Variable:
+                    if (!IsValidTaskId(value.Trim().TrimStart('@'))) return PipelineEditResult.Refused(source, $"'{value}' is not a usable variable.");
+                    edits.Add((span.Start, span.End, "@" + value.Trim().TrimStart('@')));
+                    break;
+            }
+        }
+
+        if (edits.Count == 0) return PipelineEditResult.Ok(source);
+
+        // Applied back to front so an earlier replacement cannot shift a later offset.
+        var patched = source;
+        foreach (var edit in edits.OrderByDescending(edit => edit.Start))
+            patched = Splice(patched, edit.Start, edit.End, edit.Text);
+
+        var committed = Commit(source, patched);
+        if (!committed.Applied || newId is null || string.Equals(newId, task.Id, StringComparison.OrdinalIgnoreCase))
+            return committed;
+
+        return Normalize(source, Repoint(committed.Script, task.Id, newId));
+    }
+
+    /// <summary>
+    /// The reason an expression cannot be written into a field, or null. A terminator or a comment
+    /// opener would not stay inside the statement it was typed into.
+    /// </summary>
+    private static string? UnusableFieldExpression(string name, string expression) =>
+        expression.Contains(';', StringComparison.Ordinal) ? $"The {name} cannot contain ';'."
+        : expression.Contains("--", StringComparison.Ordinal) || expression.Contains("/*", StringComparison.Ordinal)
+            ? $"The {name} cannot contain a comment."
+        : null;
+
+    /// <summary>
+    /// The fields of a task's statement that can be rewritten in place, found as exact token spans.
+    ///
+    /// <para>Conservative by construction. A literal field counts only when it is one string literal
+    /// standing alone in its clause — not the first of a list, not part of an expression — because
+    /// only then does replacing that token change the field and nothing else. An expression field
+    /// runs to the keyword that ends its clause, at bracket depth zero, so a subquery is part of it.</para>
+    /// </summary>
+    /// <param name="stepAnchor">For a FOR loop with no STEP: where one would be written. Otherwise -1.</param>
+    private static Dictionary<string, FieldSpan> FieldSpans(string script, PipelineTask task, out int stepAnchor)
+    {
+        stepAnchor = -1;
+        var fields = new Dictionary<string, FieldSpan>(StringComparer.Ordinal);
+        if (ContainerTokens(script, task) is not { } tokens || tokens.Count == 0) return fields;
+
+        var origin = task.InnerStart;
+        var count = tokens.Count;
+        while (count > 0 && tokens[count - 1].Type is TokenType.SEMICOLON or TokenType.EOF) count--;
+
+        bool IsKeyword(int i) => tokens[i].Type < TokenType.IDENTIFIER;
+
+        // A literal that is the whole value of its clause: a keyword or nothing before it, and a
+        // keyword or the end of the statement after it.
+        bool LiteralAt(int i) =>
+            i > 0 && i < count
+            && tokens[i].Type == TokenType.STRING_LITERAL
+            && IsKeyword(i - 1)
+            && (i + 1 >= count || IsKeyword(i + 1));
+
+        void Add(string name, int first, int last, FieldForm form, int removeStart = -1)
+        {
+            if (first < 0 || last < first || last >= count) return;
+            var start = origin + tokens[first].Offset;
+            var end = origin + tokens[last].EndOffset;
+            var text = script[start..end];
+            var value = form == FieldForm.Literal ? Unquote(text) : text.Trim();
+            fields[name] = new FieldSpan(start, end, form, value, removeStart < 0 ? start : removeStart);
+        }
+
+        // The first index at or after `from`, below `until`, at bracket depth zero, where `match` holds.
+        int AtDepthZero(int from, int until, Func<Token, bool> match)
+        {
+            var depth = 0;
+            for (var i = from; i < until; i++)
+            {
+                if (depth == 0 && match(tokens[i])) return i;
+                if (tokens[i].Type is TokenType.LPAREN or TokenType.CASE) depth++;
+                else if (tokens[i].Type is TokenType.RPAREN or TokenType.END && depth > 0) depth--;
+            }
+
+            return -1;
+        }
+
+        switch (task.Kind)
+        {
+            case var kind when kind.HasSource():
+                {
+                    // The verb is keywords; the source is the first thing after it.
+                    var source = 0;
+                    while (source < count && IsKeyword(source)) source++;
+                    if (LiteralAt(source)) Add("source", source, source, FieldForm.Literal);
+                    if (kind.HasTarget())
+                    {
+                        var to = AtDepthZero(source, count, token => token.Type == TokenType.TO);
+                        if (to > 0 && LiteralAt(to + 1)) Add("target", to + 1, to + 1, FieldForm.Literal);
+                    }
+
+                    break;
+                }
+
+            case PipelineTaskKind.Validation:
+                {
+                    var comma = AtDepthZero(1, count, token => token.Type == TokenType.COMMA);
+                    Add("condition", 1, (comma < 0 ? count : comma) - 1, FieldForm.Expression);
+                    if (comma > 0 && comma + 2 == count && tokens[comma + 1].Type == TokenType.STRING_LITERAL)
+                        Add("message", comma + 1, comma + 1, FieldForm.Literal);
+                    break;
+                }
+
+            case PipelineTaskKind.Notification:
+                {
+                    var clauses = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["TO"] = "recipient",
+                        ["FROM"] = "sender",
+                        ["SUBJECT"] = "subject",
+                        ["BODY"] = "body",
+                    };
+                    for (var i = 0; i < count; i++)
+                    {
+                        if (clauses.TryGetValue(tokens[i].Value, out var name) && !fields.ContainsKey(name) && LiteralAt(i + 1))
+                            Add(name, i + 1, i + 1, FieldForm.Literal);
+                        if (tokens[i].Type == TokenType.AT && i + 1 < count && tokens[i + 1].Type == TokenType.IDENTIFIER
+                            && (i + 2 >= count || IsKeyword(i + 2)))
+                            Add("connection", i + 1, i + 1, FieldForm.Name);
+                    }
+
+                    break;
+                }
+
+            case PipelineTaskKind.If or PipelineTaskKind.While:
+                {
+                    var opener = FirstBlockOpener(tokens);
+                    if (opener > 1) Add("condition", 1, opener - 1, FieldForm.Expression);
+                    break;
+                }
+
+            case PipelineTaskKind.For:
+                {
+                    var opener = FirstBlockOpener(tokens);
+                    if (opener < 0 || count < 2 || tokens[1].Type != TokenType.VARIABLE) break;
+                    Add("variable", 1, 1, FieldForm.Variable);
+
+                    var equals = AtDepthZero(2, opener, token => token.Type == TokenType.EQUALS);
+                    var to = equals < 0 ? -1 : AtDepthZero(equals + 1, opener, token => token.Type == TokenType.TO);
+                    if (to < 0) break;
+                    var step = AtDepthZero(to + 1, opener, token => token.Type == TokenType.STEP);
+
+                    Add("start", equals + 1, to - 1, FieldForm.Expression);
+                    var endLast = (step < 0 ? opener : step) - 1;
+                    Add("end", to + 1, endLast, FieldForm.Expression);
+                    if (step > 0)
+                        Add("step", step + 1, opener - 1, FieldForm.Expression, origin + tokens[endLast].EndOffset);
+                    else if (endLast > to)
+                        stepAnchor = origin + tokens[endLast].EndOffset;
+                    break;
+                }
+
+            case PipelineTaskKind.Throw:
+                if (count == 2 && LiteralAt(1)) Add("message", 1, 1, FieldForm.Literal);
+                break;
+
+            case PipelineTaskKind.WaitFor:
+                if (count == 3 && LiteralAt(2)) Add("delay", 2, 2, FieldForm.Literal);
+                break;
+        }
+
+        return fields;
+    }
+
+    /// <summary>The text of a single-quoted literal, with its doubled quotes undone.</summary>
+    private static string Unquote(string literal)
+    {
+        var text = literal.StartsWith("N'", StringComparison.OrdinalIgnoreCase) ? literal[1..] : literal;
+        return text.Length >= 2 && text[0] == '\'' && text[^1] == '\''
+            ? text[1..^1].Replace("''", "'", StringComparison.Ordinal)
+            : text;
     }
 
     // ── Containers ───────────────────────────────────────────────────────────
@@ -1776,7 +2096,7 @@ public sealed partial class PipelineTaskAuthoringService
             var loop = kind == PipelineTaskKind.Foreach ? LoopHeader(script, inner) : (null, null);
             var elseBody = OwnedElse(inner);
 
-            tasks.Add(new PipelineTask(
+            var read = new PipelineTask(
                 label.LabelName,
                 kind,
                 string.Empty,
@@ -1794,7 +2114,11 @@ public sealed partial class PipelineTaskAuthoringService
                 loop.Item1,
                 loop.Item2,
                 LastLine(script, label.Line, start, end),
-                HasElse: elseBody is not null));
+                HasElse: elseBody is not null);
+
+            // The fields the editor may offer are the ones found as exact spans in this statement,
+            // with the values they hold now. A field not in here is edited in the script.
+            tasks.Add(read with { Fields = kind == PipelineTaskKind.Foreach ? LoopFields(read) : OfferedFields(script, read) });
 
             if (kind.IsContainer() && ChildStatements(inner) is { } children)
                 ReadInto(script, children, label.LabelName, tasks);

@@ -618,7 +618,10 @@ public static class WorkstationEditorApp
                         script, $"This host does not know a task kind called '{request.Kind}'."),
                 "update" => pipelineTasks.Update(
                     script, request.Id ?? string.Empty, request.NewId, request.Connection, request.Body,
-                    request.Variable, request.Collection),
+                    request.Variable, request.Collection,
+                    ETL_SQL.Analysis.Services.PipelineTaskFieldEdits.From(request.Source, request.Target, request.Condition,
+                        request.Message, request.Recipient, request.Sender, request.Subject, request.Start, request.End,
+                        request.Step, request.Delay)),
                 "move" => pipelineTasks.Move(script, request.Id ?? string.Empty, request.After),
                 "nest" => pipelineTasks.Nest(script, request.Id ?? string.Empty, request.After),
                 // An edge condition that the host does not recognise is refused rather than quietly
@@ -664,6 +667,8 @@ public static class WorkstationEditorApp
                         collection = task.Collection,
                         // An IF with an ELSE the canvas can drop into, addressed as `<id>:else`.
                         hasElse = task.HasElse,
+                        // What the editor may offer, and what each holds now.
+                        fields = task.Fields,
                     })
                     .ToList(),
             }, JsonOptions);

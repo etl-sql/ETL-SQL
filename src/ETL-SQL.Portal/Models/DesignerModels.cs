@@ -218,11 +218,15 @@ public record PipelineTaskResponse(bool Applied, string Script, string? Error, L
 /// highlights after an add, so the author sees the statement the canvas just wrote for them.
 /// </param>
 /// <param name="HasElse">An IF with an ELSE the canvas can drop into, addressed as <c>&lt;id&gt;:else</c>.</param>
+/// <param name="Fields">
+/// The fields the editor may offer for this task, with their current values. A field of the kind that
+/// is not here is written in a form the host cannot rewrite in place, and is edited in the script.
+/// </param>
 public record PipelineTaskDto(
     string Id, string Kind, string Connection, string Body, int Line,
     List<PipelineDependencyDto> DependsOn, bool Guarded = false,
     string? Container = null, string? Variable = null, string? Collection = null,
-    int EndLine = 0, bool HasElse = false);
+    int EndLine = 0, bool HasElse = false, IReadOnlyDictionary<string, string>? Fields = null);
 
 /// <param name="Condition">always | onsuccess | onfailure | oncompletion | expression.</param>
 public record PipelineDependencyDto(string Id, string Condition, string? Expression = null);

@@ -14,6 +14,13 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Editing a pipeline task on the Studio canvas now changes its fields, not just its label: file
+  paths, assertion conditions and messages, mail recipients, sender, subject, body and connection,
+  IF and WHILE conditions, FOR bounds and step, THROW messages, and WAITFOR delays. Each field is
+  rewritten in place in the script, so options added by hand are kept. A field written as an
+  expression or variable, such as a path built from `@dir`, is named in the editor and left for
+  the script.
+
 - An IF on the Studio pipeline canvas can now be given an ELSE. Select the IF and choose **Add
   ELSE**; the branch appears as its own card, and tasks dropped on it are written inside the
   `ELSE BEGIN … END`. The ELSE is inserted into the script's existing text, so **Remove ELSE** on

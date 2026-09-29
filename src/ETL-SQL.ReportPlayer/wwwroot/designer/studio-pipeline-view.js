@@ -105,9 +105,12 @@ export function createStudioPipelineView(hostContext) {
                 const intent = await hostContext.openPipelineTaskEditor({ task, connections });
                 if (!intent)
                     return;
+                // Every field the editor returned, and only those: it sends what changed, and the
+                // host rewrites each one over its own span in the statement.
+                const changed = { ...intent };
+                delete changed.kind;
                 const result = (await hostContext.canonicalPipelineMutation('Update task', {
-                    op: 'update', id: task.id, newId: intent.id, connection: intent.connection, body: intent.body,
-                    variable: intent.variable, collection: intent.collection,
+                    ...changed, op: 'update', id: task.id, newId: intent.id,
                 }));
                 if (result?.applied)
                     hostContext.state.selectedTaskId = intent.id;

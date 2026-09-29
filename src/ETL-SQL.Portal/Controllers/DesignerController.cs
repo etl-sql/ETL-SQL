@@ -197,7 +197,9 @@ public class DesignerController : ControllerBase
                         req.Until,
                         req.Into))
                     : PipelineEditResult.Refused(script, $"This host does not know a task kind called '{req.Kind}'."),
-                "update" => _pipelineTasks.Update(script, req.Id ?? string.Empty, req.NewId, req.Connection, req.Body, req.Variable, req.Collection),
+                "update" => _pipelineTasks.Update(script, req.Id ?? string.Empty, req.NewId, req.Connection, req.Body, req.Variable, req.Collection,
+                    PipelineTaskFieldEdits.From(req.Source, req.Target, req.Condition, req.Message, req.Recipient, req.Sender,
+                        req.Subject, req.Start, req.End, req.Step, req.Delay)),
                 "move" => _pipelineTasks.Move(script, req.Id ?? string.Empty, req.After),
                 // `after` names the container to move into; null moves the task back out of the one
                 // it is in, which is why this is a separate operation from a reorder.
@@ -233,7 +235,8 @@ public class DesignerController : ControllerBase
                         task.Variable,
                         task.Collection,
                         task.EndLine,
-                        task.HasElse))
+                        task.HasElse,
+                        task.Fields))
                     .ToList()));
         }
         finally

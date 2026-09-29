@@ -174,6 +174,58 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
         Assert.Empty(session.PageErrors);
     }
 
+    /// <summary>
+    /// Editing an existing task changes its fields, not only its label, and changes nothing else.
+    ///
+    /// <para>The editor used to offer the label alone for every kind but execution and FOREACH: a
+    /// validation's condition and message could only be changed by finding them in the script.</para>
+    /// </summary>
+    [Fact]
+    public async Task ATasksFieldsAreEditedInPlace()
+    {
+        using var workspace = new StudioTempWorkspace();
+        var file = Path.Combine(workspace.Root, "editing.etlsql");
+        await File.WriteAllTextAsync(file, Seed);
+
+        await using var host = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
+            workspace.Root, file, 0, false, "edit-token",
+            StudioMode: true, InstanceId: Guid.NewGuid().ToString("D")));
+        await host.StartAsync();
+
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        await page.GotoAsync($"{WorkstationEditorApp.GetListeningUrl(host)}/studio?token=edit-token");
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
+            new PageWaitForFunctionOptions { Timeout = 20_000 });
+        await page.Locator("[data-projection='split']").ClickAsync();
+
+        await AddTaskAsync(page, "validation", "users_arrived", new Dictionary<string, string>
+        {
+            ["condition"] = "(SELECT COUNT(*) FROM sample_data.Users) > 0",
+            ["message"] = "No users.",
+        });
+        var before = await ScriptAsync(page);
+
+        await SelectTaskAsync(page, "users_arrived");
+        await page.Locator("[data-task-edit]").ClickAsync();
+        var message = page.Locator("[data-task-field='message']");
+        await message.WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
+        Assert.Equal("No users.", await message.InputValueAsync());
+        Assert.Equal("(SELECT COUNT(*) FROM sample_data.Users) > 0",
+            await page.Locator("[data-task-field='condition']").InputValueAsync());
+
+        await message.FillAsync("The user feed arrived empty.");
+        await page.Locator("[data-dialog-action='save']").ClickAsync();
+        await page.WaitForFunctionAsync(
+            "() => window.__STUDIO__.state.editorInstance.getValue().includes('The user feed arrived empty.')",
+            null, new PageWaitForFunctionOptions { Timeout = 15_000 });
+
+        Assert.Equal(
+            before.Replace("'No users.'", "'The user feed arrived empty.'", StringComparison.Ordinal),
+            await ScriptAsync(page));
+        Assert.Empty(session.PageErrors);
+    }
+
     private static Task<string> ScriptAsync(IPage page) =>
         page.EvaluateAsync<string>("() => window.__STUDIO__.state.editorInstance.getValue()");
 

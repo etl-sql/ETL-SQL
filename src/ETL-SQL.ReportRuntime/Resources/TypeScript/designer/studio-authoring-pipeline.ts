@@ -122,10 +122,6 @@ const PIPELINE_TASK_FIELDS: Record<string, PipelineTaskField[]> = {
         break: [],
         continue: [],
     };
-const PIPELINE_EDITABLE_FIELDS: Record<string, PipelineTaskField[]> = {
-        foreach: PIPELINE_TASK_FIELDS.foreach,
-    };
-
     const PIPELINE_KINDS_NEEDING_CONNECTION = new Set(['execution', 'notification']);
 
     /**
@@ -174,7 +170,13 @@ const PIPELINE_EDITABLE_FIELDS: Record<string, PipelineTaskField[]> = {
         const editing = Boolean(task);
         const taskKind = String(task?.kind || kind || 'execution').toLowerCase();
         const aliases = (connections || []).map((connection: any) => connection?.name).filter(Boolean);
-        const needsConnection = PIPELINE_KINDS_NEEDING_CONNECTION.has(taskKind);
+
+        // What an edit may touch is what the host found as an exact span in the statement, with the
+        // value it holds now. A field it did not report is written in a form it cannot rewrite
+        // without losing something — a path built from a variable — so it is named, not offered.
+        const offered: Record<string, string> = editing ? (task?.fields ?? {}) : {};
+        const needsConnection = PIPELINE_KINDS_NEEDING_CONNECTION.has(taskKind)
+            && (!editing || taskKind === 'execution' || 'connection' in offered);
 
         // A task that runs against a connection cannot be written before one is declared, and a
         // free-text alias would let the author name one the script does not declare — which previews
@@ -196,26 +198,21 @@ const PIPELINE_EDITABLE_FIELDS: Record<string, PipelineTaskField[]> = {
             return openPipelineTaskEditor({ kind, task, connections: [{ name: created }], suggestedId });
         }
 
-        // What this dialog may ask about depends on whether it is writing a statement or rewriting
-        // one. The host edits an existing task by replacing named token runs inside it, and today it
-        // can locate those runs for an execution task's connection and body and for a loop's header.
-        // Every other field would be collected here, sent, and silently ignored — a form that eats
-        // what the author typed and reports success, which is the failure shape this whole surface
-        // is being rebuilt to stop. So an edit offers the label alone and says where the rest lives.
-        const fields = editing
-            ? (PIPELINE_EDITABLE_FIELDS[taskKind] ?? [])
-            : (PIPELINE_TASK_FIELDS[taskKind] ?? []);
-        const partiallyEditable = editing
-            && (PIPELINE_TASK_FIELDS[taskKind] ?? []).length > fields.length;
+        // The host rewrites an existing task one span at a time. A field sent that it could not find
+        // would be refused, so the dialog asks only about what it reported — and names the rest,
+        // rather than showing a box whose contents would never reach the script.
+        const kindFields = PIPELINE_TASK_FIELDS[taskKind] ?? [];
+        const fields = editing ? kindFields.filter(field => field.name in offered) : kindFields;
+        const withheld = editing ? kindFields.filter(field => !(field.name in offered)) : [];
+        const currentConnection = taskKind === 'execution' ? task?.connection : offered.connection;
         const draft: Record<string, any> = {
             id: task?.id || suggestedId,
-            connection: aliases.includes(task?.connection) ? task.connection : aliases[0] || '',
+            connection: aliases.includes(currentConnection) ? currentConnection : aliases[0] || '',
             body: task?.body || '',
             error: null,
         };
-        // Prefilled from the task when there is one, so Apply on an existing loop repoints it rather
-        // than clearing the header it was opened to show.
-        for (const field of fields) draft[field.name] = String(task?.[field.name] ?? '');
+        // Prefilled with what the statement holds now, so Apply without a change writes nothing.
+        for (const field of fields) draft[field.name] = String(offered[field.name] ?? '');
 
         let workbench: any = null;
         return hostContext.studioDialog(
@@ -253,9 +250,13 @@ const PIPELINE_EDITABLE_FIELDS: Record<string, PipelineTaskField[]> = {
                     }
 
                     const intent: Record<string, any> = { id, kind: taskKind };
-                    if (needsConnection) intent.connection = draft.connection;
+                    if (needsConnection && (!editing || draft.connection !== currentConnection)) intent.connection = draft.connection;
                     if (taskKind === 'execution') intent.body = draft.body;
-                    for (const field of fields) intent[field.name] = draft[field.name];
+                    // An edit sends only what changed. Rewriting an untouched field would replace the
+                    // author's spelling of it — N'…', a spacing — with this dialog's.
+                    for (const field of fields) {
+                        if (!editing || draft[field.name] !== String(offered[field.name] ?? '')) intent[field.name] = draft[field.name];
+                    }
                     return api.close(intent);
                 };
 
@@ -263,12 +264,13 @@ const PIPELINE_EDITABLE_FIELDS: Record<string, PipelineTaskField[]> = {
                     lede: `This task becomes a labelled statement in the script. The label is what the canvas `
                         + `tracks it by, so it survives a hand edit.`,
                     body: (draft.error ? guidedNoteMarkup(draft.error, 'error') : '')
-                        + (partiallyEditable ? guidedNoteMarkup([
-                            'Renaming is what this dialog can do to a ',
-                            { strong: taskKindLabel(taskKind).toLowerCase() },
-                            ' task. The rest of the statement is edited in the script — '
-                            + 'Show in script opens it at the right line — because rewriting it from these '
-                            + 'fields would drop any option you added there by hand.',
+                        + (withheld.length ? guidedNoteMarkup([
+                            withheld.map(field => field.label).join(', '),
+                            withheld.length === 1 ? ' is' : ' are',
+                            ' written in the script in a form this dialog cannot rewrite without losing '
+                            + 'something — an expression, or a variable. Edit ',
+                            withheld.length === 1 ? 'it' : 'them',
+                            ' there: Show in script opens the right line.',
                         ], 'info') : '')
                         + `<div class="etlsql-studio-pipeline-fields">
                             <label>Label

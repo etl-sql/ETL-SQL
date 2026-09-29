@@ -103,7 +103,9 @@ rights just to learn.
   to 2 minutes with no browser connected; an explicit 0 is always passed through and still means never.
 - [ ] `Studio_AWizardWrite_OffersAnUndoThatPutsTheScriptBack` fails when run alone: the first
   `.etlsql-feedback-action` is not "Undo".
-- [ ] The task editor can rename most task kinds but not edit their other fields.
+- [x] The task editor can rename most task kinds but not edit their other fields. Every kind now
+  reports the fields found as exact spans (`PipelineTask.Fields`) and the editor offers those;
+  a field written as an expression or variable is named and left to the script.
 - [ ] `PARALLEL` branches are drawn without swimlanes.
 - [ ] Rebuild the pipeline canvas as a teaching surface — the largest single piece. The current
   `PIPELINE_TASK_GROUPS` starts with Execution, Validation, and control flow; Execution asks for a
