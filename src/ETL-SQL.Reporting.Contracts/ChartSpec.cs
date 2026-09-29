@@ -425,10 +425,11 @@ public sealed record ChartSpec(
                         channels.SetEquals([FieldChannel.XStart, FieldChannel.XEnd, FieldChannel.YStart, FieldChannel.YEnd]);
                     if (ranged)
                     {
-                        if (layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) || !layer.Conditions.IsDefaultOrEmpty ||
+                        if (layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or { Kind: PositionAdjustmentKind.Jitter } or
+                            { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data }) || !layer.Conditions.IsDefaultOrEmpty ||
                             bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative ||
                                 binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)))
-                            throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO RULE segments require quantitative field/DATUM bindings, IDENTITY, and no CONDITIONS.");
+                            throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO RULE segments require quantitative field/DATUM bindings, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
                         continue;
                     }
                     if (layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or

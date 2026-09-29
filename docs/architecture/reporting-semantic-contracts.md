@@ -115,14 +115,33 @@ and targets are required. No unbound anchor is required. Single-axis rules do no
 layer's color series; this correction is recorded in `BREAKING_CHANGES.md`.
 
 Ranged RULE accepts X + Y_START/Y_END, Y + X_START/X_END, or both endpoint pairs for diagonal segments, with quantitative field/DATUM bindings
-and IDENTITY only. The SVG adapter transposes both endpoint channels, while the authoritative plan
+and IDENTITY, JITTER or EM/BAND/DATA NUDGE. Both endpoints and the label consume the same physical offsets;
+for EM/BAND, positive X moves up and positive Y moves right. EM uses 12 pixels per unit; BAND uses the fitted
+viewport minus fixed axis margins, including facets and relayout. Raw intervals and domains remain
+unchanged. The SVG adapter transposes both endpoint channels, while the authoritative plan
 retains semantic channels. Complete source rows remain distinct; missing anchors/endpoints are
 skipped. Shared interval descriptions preserve fixed coordinates and both endpoints in SVG titles,
 terminal text and accessible fallback. Endpoint order is preserved. Both endpoints participate in
 global/facet domains before aspect fitting. Diagonal segments join the paired start coordinates
 to the paired end coordinates; no primary X/Y anchor is required. All four endpoint values remain
 visible in terminal/fallback even for zero-length segments. Missing any endpoint skips the row.
-No wire fields or versions change.
+DATA displacement uses the authored start: X_START or fixed X, and Y_START or fixed Y. The resolver
+maps that anchor plus the nudge on the original scales and translates both endpoints by the resulting
+physical displacement. It preserves the screen-space segment vector, including descending and
+zero-length segments; endpoint values are not independently shifted. Reversed/logarithmic scales,
+side-legend space, independent facets and relayout use the shared DATA plot sizing contract.
+Incomplete rows receive zero offsets and remain absent from rendered/fallback segments. Logarithmic
+anchors and shifted anchor targets must be positive. Raw intervals, domains, terminal and accessible
+output remain unchanged. No wire fields or versions change.
+
+Segment JITTER uses the same seeded stable-key displacement as POINT/TEXT. Semantic X scales by
+the fitted viewport height minus 100 pixels and semantic Y by its width minus 80 pixels; each facet
+uses its own fitted viewport. Both endpoints and the label consume one physical displacement per
+source row. Reversal does not flip it; relayout rescales the same hashes. Keys must exist and be
+unique/non-null across all source rows, including incomplete segments. Row reorder and layer rename
+preserve offsets; seed changes do not. Existing hash identity includes chart ID, mark, Z index and
+channel sequence. Missing endpoints still skip rendering and fallback. Single-axis reference rules
+continue to reject JITTER. ChartSpec v2 and PlotPlan v3 retain their existing wire shapes.
 
 Error bars on these points retain `ErrorLow`/`ErrorHigh` in the semantic Y domain.
 Their endpoints participate in global and independent facet domains before viewport fitting.

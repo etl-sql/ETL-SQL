@@ -1631,11 +1631,21 @@ public sealed class PlotPlanResolver
     }
 
     private static (decimal X, decimal Y) ResolveTransposedDataNudge(PositionAdjustmentSpec position, ResolvedDatum datum,
-        ResolvedScale xScale, ResolvedScale yScale, PlotBounds area, string layerId, bool singleAxisRule)
+        ResolvedScale xScale, ResolvedScale yScale, PlotBounds area, string layerId, bool isRule)
     {
         var x = Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
         var y = Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
-        if (singleAxisRule)
+        if (isRule && IsRangeRule(datum))
+        {
+            // Translate the complete segment by its authored start point's displacement.
+            // The end point retains its screen-space distance from the start, including on log axes.
+            x = Number(Channel(datum, FieldChannel.XStart) ?? Channel(datum, FieldChannel.X) ?? ChartValue.Null());
+            y = Number(Channel(datum, FieldChannel.YStart) ?? Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
+            var endX = Number(Channel(datum, FieldChannel.XEnd) ?? Channel(datum, FieldChannel.X) ?? ChartValue.Null());
+            var endY = Number(Channel(datum, FieldChannel.YEnd) ?? Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
+            if (datum.IsGap || !x.HasValue || !y.HasValue || !endX.HasValue || !endY.HasValue) return (0m, 0m);
+        }
+        else if (isRule)
         {
             // Missing thresholds draw no rule; only the bound scale participates in displacement.
             if (datum.IsGap) return (0m, 0m);

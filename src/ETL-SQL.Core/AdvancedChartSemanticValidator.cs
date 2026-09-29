@@ -768,10 +768,11 @@ public static class AdvancedChartSemanticValidator
                     channels.SetEquals([AdvancedChartChannel.XStart, AdvancedChartChannel.XEnd, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd]);
                 if (ranged)
                 {
-                    if (layer.Position.Kind != AdvancedChartPositionKind.Identity || layer.Conditions.Length > 0 ||
+                    if (layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or { Kind: AdvancedChartPositionKind.Jitter } or
+                        { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data }) || layer.Conditions.Length > 0 ||
                         encodings.Any(encoding => encoding.DataKind != AdvancedChartDataKind.Quantitative ||
                             encoding.Source.Kind is not (AdvancedChartBindingSourceKind.Field or AdvancedChartBindingSourceKind.Datum)))
-                        Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO RULE segments require quantitative field/DATUM bindings, IDENTITY, and no CONDITIONS.");
+                        Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO RULE segments require quantitative field/DATUM bindings, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
                     continue;
                 }
                 if (layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or

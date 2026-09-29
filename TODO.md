@@ -376,6 +376,23 @@ semantics and backend evidence before its rejection can be lifted.
   descending and zero-length segments retain order and values. `TransposedAspectDiagonalRuleTests`
   covers facets, reversal, logarithmic mapping, resize, contracts, authoring, lineage and PDF;
   LSP covers endpoint/scale rename and deterministic goldens preserve existing output.
+- [x] **EM/BAND nudges on transposed ranged and diagonal RULE segments.** Both endpoints and
+  labels translate together using physical semantic-axis offsets. Facets, resize, logarithmic and
+  reversed scales preserve raw intervals and domains. Range/diagonal tests cover geometry, missing
+  endpoints, round trips, lineage, terminal/fallback, PDF and deterministic plan/SVG fixtures;
+  LSP covers scale/endpoint rename; no wire fields changed.
+- [x] **DATA nudges on transposed ranged and diagonal RULE segments.** The authored start
+  determines a physical translation of the whole segment and label, preserving its drawn vector
+  on logarithmic/reversed axes. Shared plot sizing handles side legends, independent facets and
+  resize. Incomplete rows skip displacement; non-positive logarithmic anchors/targets fail.
+  Geometry oracles, constant endpoints, round trips, lineage, LSP rename, terminal/fallback, PDF,
+  and deterministic plan/SVG fixtures cover the composition. No wire fields changed.
+- [x] **Deterministic JITTER on transposed ranged and diagonal RULE segments.** Seeded
+  stable-key displacement translates both endpoints and labels together. Geometry checks cover both
+  range orientations, diagonal/zero-length segments, logarithmic/reversed axes, facets and resize.
+  Key/seed stability, invalid keys/amplitudes, missing endpoints, constant bindings, round trips,
+  lineage, LSP key rename, terminal/fallback, PDF and deterministic plan/SVG fixtures are covered.
+  Single-axis reference rules still reject JITTER; no wire fields changed.
 - [ ] **Remaining physical aspect combinations.** Transposed marks other than POINT/TEXT/supported RULE,
   stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.

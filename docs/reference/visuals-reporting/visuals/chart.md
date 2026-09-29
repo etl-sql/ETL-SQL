@@ -194,14 +194,55 @@ layer therefore does not duplicate reference rules or their accessible values.
 A ranged RULE accepts exactly `X`, `Y_START`, `Y_END`; exactly `Y`, `X_START`, `X_END`;
 or all four endpoint channels `X_START`, `X_END`, `Y_START`, `Y_END` for a diagonal segment.
 All bindings must be quantitative fields or `DATUM` constants. Use `IDENTITY` placement
-(the default), without conditions or additional encodings. A semantic Y interval becomes horizontal;
+(the default), `JITTER`, or `NUDGE` with `UNIT = EM`, `BAND`, or `DATA`, without conditions or additional encodings. A semantic Y interval becomes horizontal;
 a semantic X interval becomes vertical. Endpoints expand global and independent facet domains.
 One segment is retained per source row, including coincident segments. Rows with a missing anchor
 or endpoint draw no segment and contribute no interval to terminal or accessible output.
 Endpoint order is preserved, including descending intervals. Terminal and accessible descriptions
 include every raw endpoint and any fixed coordinate. A diagonal joins `(X_START, Y_START)` to
 `(X_END, Y_END)` after transposition. Coincident endpoints retain a zero-length segment and its
-accessible values. Nudges and jitter are not supported on ranged rules in this composition.
+accessible values. EM/BAND nudges translate both endpoints and the label together: positive X moves
+up and positive Y moves right, independently of scale reversal. EM uses 12 pixels per unit; BAND
+uses the fitted plot height for X and width for Y, excluding fixed axis margins and before legend
+layout. Facets and resizing recompute BAND displacement. Raw endpoints and domains stay unchanged.
+DATA nudges use the authored start as the anchor: the fixed coordinate plus range start for a
+ranged rule, or `(X_START, Y_START)` for a diagonal. The anchor moves to where its X/Y values plus
+the nudge map on the original scales. Both endpoints and the label translate by that same physical
+displacement, preserving the drawn segment's length and direction even on logarithmic axes.
+This displacement follows scale reversal and accounts for side legends, facets and resizing.
+The end values are not independently nudged in data space. Start values and shifted targets must
+be positive on logarithmic axes; incomplete rows are skipped before displacement is evaluated.
+JITTER applies one seeded displacement to each complete source segment and its label. X amplitude
+is a fraction of fitted plot height; Y amplitude is a fraction of fitted plot width, excluding fixed
+axis margins and before legend layout. Amplitudes must be between zero and one. The KEY field must
+exist and be unique and non-null across the entire source, including incomplete rows. Reordering
+rows or renaming the layer preserves displacement by key; changing SEED changes it. Scale reversal
+does not flip jitter, and facets and resizing scale the same seeded offsets to their fitted viewports.
+The hash identity includes the chart, mark, Z index and channel sequence; separate layer shapes need
+not share offsets. Raw intervals, domains, terminal output and accessible values remain unchanged.
+Single-axis reference rules still reject JITTER.
+
+For example, spread segments by up to two percent of plot height and three percent of plot width:
+
+```sql
+POSITION = JITTER(X = 0.02, Y = 0.03, KEY = StableId, SEED = 42)
+```
+
+The source must supply a stable, unique `StableId` for each row.
+
+Add this position to a ranged or diagonal RULE layer to move the segment up 0.24 pixels and left
+0.36 pixels:
+
+```sql
+POSITION = NUDGE(X = 0.02, Y = -0.03, UNIT = EM)
+```
+
+Use `UNIT = BAND` with the same amplitudes for two percent of fitted plot height and three percent
+of fitted plot width. To move the start to X - 0.5 and Y + 0.5 on the original scales:
+
+```sql
+POSITION = NUDGE(X = -0.5, Y = 0.5, UNIT = DATA)
+```
 
 ```sql
 CREATE VISUAL Measurement AS CUSTOM (

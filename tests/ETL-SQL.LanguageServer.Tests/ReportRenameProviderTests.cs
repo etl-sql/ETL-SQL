@@ -245,11 +245,29 @@ public sealed class ReportRenameProviderTests
     }
 
     [Theory]
-    [InlineData("estimates =", 4, false)]
-    [InlineData("LowerBound (", 1, false)]
-    [InlineData("distances =", 4, true)]
-    [InlineData("StartX (", 1, true)]
-    public async Task TransposedRangeRule_RenamesScaleAndEndpoint(string token, int count, bool diagonal)
+    [InlineData("estimates =", 4, false, "IDENTITY")]
+    [InlineData("estimates =", 4, false, "EM")]
+    [InlineData("estimates =", 4, false, "BAND")]
+    [InlineData("estimates =", 4, false, "JITTER")]
+    [InlineData("estimates =", 4, false, "DATA")]
+    [InlineData("LowerBound (", 1, false, "IDENTITY")]
+    [InlineData("LowerBound (", 1, false, "EM")]
+    [InlineData("LowerBound (", 1, false, "BAND")]
+    [InlineData("LowerBound (", 1, false, "JITTER")]
+    [InlineData("LowerBound (", 1, false, "DATA")]
+    [InlineData("distances =", 4, true, "IDENTITY")]
+    [InlineData("distances =", 4, true, "EM")]
+    [InlineData("distances =", 4, true, "BAND")]
+    [InlineData("distances =", 4, true, "JITTER")]
+    [InlineData("distances =", 4, true, "DATA")]
+    [InlineData("StartX (", 1, true, "IDENTITY")]
+    [InlineData("StartX (", 1, true, "EM")]
+    [InlineData("StartX (", 1, true, "BAND")]
+    [InlineData("StartX (", 1, true, "JITTER")]
+    [InlineData("StartX (", 1, true, "DATA")]
+    [InlineData("Distance, SEED", 3, false, "JITTER")]
+    [InlineData("Distance, SEED", 2, true, "JITTER")]
+    public async Task TransposedRangeRule_RenamesScaleAndEndpoint(string token, int count, bool diagonal, string unit)
     {
         var script = """
             CREATE VISUAL Measurement AS CUSTOM (
@@ -275,6 +293,8 @@ public sealed class ReportRenameProviderTests
               )
             );
             """;
+        if (unit == "JITTER") script = script.Replace("Z_INDEX = 1,", "Z_INDEX = 1, POSITION = JITTER(X = 0.02, Y = 0.03, KEY = Distance, SEED = 42),", System.StringComparison.Ordinal);
+        else if (unit != "IDENTITY") script = script.Replace("Z_INDEX = 1,", $"Z_INDEX = 1, POSITION = NUDGE(X = 0.02, Y = -0.03, UNIT = {unit}),", System.StringComparison.Ordinal);
         if (diagonal) script = script.Replace("ENCODINGS (X = Distance (TYPE = QUANTITATIVE, SCALE = distances), Y_START", "ENCODINGS (X_START = StartX (TYPE = QUANTITATIVE, SCALE = distances), X_END = EndX (TYPE = QUANTITATIVE, SCALE = distances), Y_START", System.StringComparison.Ordinal);
         Assert.Empty(new Parser(new Lexer(script).Tokenize(), script).Parse().Diagnostics);
         var (provider, uri) = Provider(script);

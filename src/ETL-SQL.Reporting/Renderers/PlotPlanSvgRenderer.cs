@@ -3291,10 +3291,10 @@ internal sealed class PlotPlanSvgRenderer
                     var startY = PlotPlanResolver.Number(Channel(datum, FieldChannel.YStart) ?? Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
                     var endY = PlotPlanResolver.Number(Channel(datum, FieldChannel.YEnd) ?? Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
                     if (!startX.HasValue || !endX.HasValue || !startY.HasValue || !endY.HasValue) continue;
-                    var ax = MapX(startX.Value, xScale, area);
-                    var bx = MapX(endX.Value, xScale, area);
-                    var ay = MapY(startY.Value, yScale, area.Height);
-                    var by = MapY(endY.Value, yScale, area.Height);
+                    var ax = MapX(startX.Value, xScale, area) + datum.DisplayOffsetX;
+                    var bx = MapX(endX.Value, xScale, area) + datum.DisplayOffsetX;
+                    var ay = MapY(startY.Value, yScale, area.Height) + datum.DisplayOffsetY;
+                    var by = MapY(endY.Value, yScale, area.Height) + datum.DisplayOffsetY;
                     var description = PlotPlanResolver.RangeRuleDescription(datum, transposed: true);
                     builder.AppendLine($"<line class='plot-range-rule' data-layer-id='{Esc(layer.Id)}' data-row-index='{datum.RowIndex}' x1='{N(ax)}' y1='{N(ay)}' x2='{N(bx)}' y2='{N(by)}' stroke='{Esc(color)}' stroke-width='{Esc(strokeWidth)}'{dashAttributes}><title>{Esc(label ?? layer.Id)}: {Esc(description ?? "")}</title></line>");
                     if (!string.IsNullOrWhiteSpace(label))
