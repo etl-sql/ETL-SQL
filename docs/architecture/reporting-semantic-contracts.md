@@ -154,7 +154,7 @@ channel sequence. Missing endpoints still skip rendering and fallback. Single-ax
 accept JITTER only along the bound axis. ChartSpec v2 and PlotPlan v3 retain their existing wire shapes.
 
 RECT accepts exactly four quantitative field/DATUM endpoints (X_START/X_END/Y_START/Y_END) with
-IDENTITY or EM/BAND NUDGE placement and no conditions or additional encodings. The physical-axis adapter exchanges
+IDENTITY or EM/BAND/DATA NUDGE placement and no conditions or additional encodings. The physical-axis adapter exchanges
 both endpoint pairs locally; authoritative plan channels stay semantic. Each endpoint contributes
 to global and independent facet domains. SVG uses the minimum mapped corner and absolute mapped
 span on each physical axis, without minimum bar dimensions. Zero-area and subpixel rectangles
@@ -166,8 +166,11 @@ reported as gaps. Complete coincident rows remain distinct. The resolved extent 
 these rectangles have no value baseline. EM nudges apply the shared physical offset `(Y * 12, -X * 12)`
 to both corners; dimensions, domains and interval text are unchanged. BAND nudges apply
 `(Y * (viewport.Width - 80), -X * (viewport.Height - 100))` using each fitted viewport
-before legend layout. Direction stays physical under reversed scales. DATA nudges and JITTER
-remain rejected. Native/static SVG share the geometry; terminal output
+before legend layout. Direction stays physical under reversed scales. DATA nudges map the authored
+X_START/Y_START corner and its shifted value through the original per-panel scales and the
+plot area after legend layout. Their difference translates both corners, preserving screen dimensions
+even on log axes and descending intervals. Incomplete rectangles skip placement; nonpositive
+logarithmic anchor targets fail. Domain values and fallback text stay unchanged. JITTER remains rejected. Native/static SVG share the geometry; terminal output
 preserves values rather than physical distance. ChartSpec v2 and PlotPlan v3 require no new fields.
 Unfaceted terminal output now selects rows from every layer, fixing omission of rows outside the
 first color group; that existing-behavior correction is recorded in `BREAKING_CHANGES.md`.

@@ -178,12 +178,16 @@ public sealed class TransposedAspectRangeRectTests
     [InlineData("UpperBound", "IDENTITY")]
     [InlineData("StartX", "EM")]
     [InlineData("StartX", "BAND")]
+    [InlineData("StartX", "DATA")]
     [InlineData("EndX", "EM")]
     [InlineData("EndX", "BAND")]
+    [InlineData("EndX", "DATA")]
     [InlineData("LowerBound", "EM")]
     [InlineData("LowerBound", "BAND")]
+    [InlineData("LowerBound", "DATA")]
     [InlineData("UpperBound", "EM")]
     [InlineData("UpperBound", "BAND")]
+    [InlineData("UpperBound", "DATA")]
     public void MissingEndpoint_SkipsRectangleAndReportsGap(string field, string unit)
     {
         var (spec, data) = Lower(WithNudge(Script, unit));
@@ -228,7 +232,6 @@ public sealed class TransposedAspectRangeRectTests
     }
 
     [Theory]
-    [InlineData("POSITION = NUDGE(X = 0, Y = 1, UNIT = DATA),")]
     [InlineData("POSITION = JITTER(X = 0.1, Y = 0, KEY = Distance, SEED = 3),")]
     [InlineData("CONDITIONS (COLOR WHEN Estimate > 0 THEN '#112233'),")]
     public void UnsupportedPresentation_HasPositionedDiagnostic(string option)
@@ -259,6 +262,7 @@ public sealed class TransposedAspectRangeRectTests
     [InlineData("IDENTITY")]
     [InlineData("EM")]
     [InlineData("BAND")]
+    [InlineData("DATA")]
     public void Labels_KeepBothSemanticIntervalsAfterTransposition(string unit)
     {
         var (spec, data) = Lower(WithNudge(Script, unit));
@@ -307,6 +311,7 @@ public sealed class TransposedAspectRangeRectTests
     [InlineData("IDENTITY")]
     [InlineData("EM")]
     [InlineData("BAND")]
+    [InlineData("DATA")]
     public async Task ConstantsAuthoringContractsAndPdf_PreserveBothIntervals(string unit)
     {
         var sql = Script.Replace("StartX (", "DATUM(2) (", StringComparison.Ordinal).Replace("EndX (", "DATUM(8) (", StringComparison.Ordinal)
@@ -325,7 +330,7 @@ public sealed class TransposedAspectRangeRectTests
         var (spec, data) = Lower(sql);
         spec = spec with { Layers = [spec.Layers[1]] };
         Assert.Equal(ChartContractSerializer.Serialize(spec), ChartContractSerializer.Serialize(ChartContractSerializer.DeserializeChartSpec(ChartContractSerializer.Serialize(spec))));
-        var invalid = spec with { Layers = [spec.Layers[0] with { Position = new PositionAdjustmentSpec(PositionAdjustmentKind.Nudge, 0m, 1m, Unit: PositionAdjustmentUnit.Data) }] };
+        var invalid = spec with { Layers = [spec.Layers[0] with { Position = new PositionAdjustmentSpec(PositionAdjustmentKind.Jitter, 0m, 1m, StableKeyField: "Distance") }] };
         Assert.Contains("ASPECT_RATIO RECT", Assert.Throws<InvalidDataException>(invalid.Validate).Message);
         var plan = new PlotPlanResolver().Resolve(spec, data);
         Assert.Equal(3, Elements(XDocument.Parse(new SvgChartRenderer().Render(plan)), "plot-range-rect").Length);
@@ -360,6 +365,7 @@ public sealed class TransposedAspectRangeRectTests
     [InlineData("IDENTITY")]
     [InlineData("EM")]
     [InlineData("BAND")]
+    [InlineData("DATA")]
     public void PlanAndSvg_MatchDeterministicGoldens(string unit)
     {
         var (spec, data) = Lower(WithNudge(Script, unit));
@@ -367,13 +373,147 @@ public sealed class TransposedAspectRangeRectTests
         static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value.Replace("\r\n", "\n", StringComparison.Ordinal))));
         var planHash = Hash(ChartContractSerializer.Serialize(plan));
         var svgHash = Hash(new SvgChartRenderer().Render(plan));
-        var expectedPlan = unit == "BAND" ? "CAFB28630BE4C369FCD266692D322C22188AFB9CC958A8A5FF11E1F0EA163DFD" : unit == "EM" ? "4D6087141ED98D175AF37B17C2EA3EB66692613F3119A847F38C3E00775C46F0" : "68932913300EC5E4D82BF299FEE4EB30A55D1F9F18A504CC628AAC5F592CA179";
-        var expectedSvg = unit == "BAND" ? "BC5F33CDBD6BD27A592B502D1DBAA67B1DE47420CAB7D735907A6FD591407D36" : unit == "EM" ? "A9428FA05DDDCF16B8B44F5B8E094AFEE5AEB2033AB0E84FF689D0B81BECCC33" : "38260F65E0EB9522CE44EFCD41400E855EB3D6509BB4153FC04D7B165DEAECFD";
+        var expectedPlan = unit == "DATA" ? "48E0239DFBACB044F2936704CD437D1838DAA1A4DF522C6E4462E422F30E3789" : unit == "BAND" ? "CAFB28630BE4C369FCD266692D322C22188AFB9CC958A8A5FF11E1F0EA163DFD" : unit == "EM" ? "4D6087141ED98D175AF37B17C2EA3EB66692613F3119A847F38C3E00775C46F0" : "68932913300EC5E4D82BF299FEE4EB30A55D1F9F18A504CC628AAC5F592CA179";
+        var expectedSvg = unit == "DATA" ? "8711F674079A91D3C913393C987C9E586FDD1056BB3699BFDFE442230C486575" : unit == "BAND" ? "BC5F33CDBD6BD27A592B502D1DBAA67B1DE47420CAB7D735907A6FD591407D36" : unit == "EM" ? "A9428FA05DDDCF16B8B44F5B8E094AFEE5AEB2033AB0E84FF689D0B81BECCC33" : "38260F65E0EB9522CE44EFCD41400E855EB3D6509BB4153FC04D7B165DEAECFD";
         Assert.True(planHash == expectedPlan && svgHash == expectedSvg, $"Plan: {planHash}; SVG: {svgHash}");
     }
 
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    public void DataNudge_UsesAuthoredStartCornerAndPreservesDimensions(bool reverse, bool logarithmic, bool facets)
+    {
+        var sql = Script;
+        if (reverse) sql = sql.Replace("MIN = 0,", "REVERSE = ON, MIN = 0,", StringComparison.Ordinal);
+        if (logarithmic) sql = sql.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal).Replace("MIN = 0,", "INCLUDE_ZERO = OFF, MIN = 1,", StringComparison.Ordinal);
+        if (facets) sql = sql.Replace("SCALES (", "FACET (WRAP = Cohort, COLUMNS = 2), RESOLVE (X = INDEPENDENT, Y = INDEPENDENT), SCALES (", StringComparison.Ordinal);
+        var (baselineSpec, data) = Lower(sql);
+        var (spec, _) = Lower(WithNudge(sql, "DATA"));
+        var theme = spec.Theme with { Tokens = [.. spec.Theme.Tokens, new StyleToken("LEGEND_POSITION", "LEFT")] };
+        spec = spec with { Theme = theme };
+        baselineSpec = baselineSpec with { Theme = theme };
+        var resolver = new PlotPlanResolver();
+        var original = resolver.Resolve(spec, data);
+        foreach (var bounds in new[] { original.Bounds, new PlotBounds(0m, 0m, 1000m, 700m) })
+        {
+            var plan = resolver.Relayout(spec, data, original, bounds);
+            var baseline = resolver.Resolve(baselineSpec, data, bounds);
+            Assert.Equal(ChartContractSerializer.Serialize(plan), ChartContractSerializer.Serialize(plan with { Scales = baseline.Scales, Facets = baseline.Facets, Fallback = baseline.Fallback }));
+            var starts = new List<XElement[]>();
+            foreach (var shifted in new[] { false, true })
+            {
+                // Independent POINT oracle: map the authored start and nudged start on the original scales.
+                var oracle = baseline with
+                {
+                    Layers = baseline.Layers.Select(layer => layer.Mark != MarkKind.Rect ? layer : layer with
+                    {
+                        Mark = MarkKind.Point,
+                        Data = layer.Data.Select(datum => datum with
+                        {
+                            Channels = datum.Channels
+                            .Where(channel => channel.Channel is FieldChannel.XStart or FieldChannel.YStart)
+                            .Select(channel => channel with
+                            {
+                                Channel = channel.Channel == FieldChannel.XStart ? FieldChannel.X : FieldChannel.Y,
+                                Value = ChartValue.From(PlotPlanResolver.Number(channel.Value)!.Value +
+                                    (shifted ? channel.Channel == FieldChannel.XStart ? -.5m : .5m : 0m))
+                            }).ToImmutableArray()
+                        }).ToImmutableArray()
+                    }).ToImmutableArray()
+                };
+                starts.Add(Elements(XDocument.Parse(new SvgChartRenderer().Render(oracle)), "plot-point").Where(element => element.Ancestors().Any(parent => (string?)parent.Attribute("data-layer") == "regions")).ToArray());
+            }
+            var actual = Elements(XDocument.Parse(new SvgChartRenderer().Render(plan)), "plot-range-rect");
+            var expected = Elements(XDocument.Parse(new SvgChartRenderer().Render(baseline)), "plot-range-rect");
+            Assert.Equal(3, actual.Length);
+            for (var row = 0; row < actual.Length; row++)
+            {
+                foreach (var axis in new[] { "x", "y" })
+                {
+                    var displacement = Read(starts[1][row], "c" + axis) - Read(starts[0][row], "c" + axis);
+                    Assert.InRange(Read(actual[row], axis) - Read(expected[row], axis) - displacement, -.003m, .003m);
+                }
+                Assert.Equal(Read(expected[row], "width"), Read(actual[row], "width"));
+                Assert.Equal(Read(expected[row], "height"), Read(actual[row], "height"));
+                Assert.Equal(expected[row].Value, actual[row].Value);
+            }
+            Assert.Equal(ChartContractSerializer.Serialize(resolver.Resolve(spec, data, bounds)), ChartContractSerializer.Serialize(plan));
+            Assert.Equal(TerminalSnapshotHarness.CaptureSnapshot(PlotPlanTerminalRenderer.Render(baseline), 140).NormalizedText,
+                TerminalSnapshotHarness.CaptureSnapshot(PlotPlanTerminalRenderer.Render(plan), 140).NormalizedText);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void DataNudge_LogarithmicTargetMustBePositive(bool xAxis)
+    {
+        var (spec, data) = Lower(WithNudge(Script.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal)
+            .Replace("MIN = 0,", "INCLUDE_ZERO = OFF, MIN = 1,", StringComparison.Ordinal), "DATA"));
+        spec = spec with
+        {
+            Layers = spec.Layers.Select(layer => layer.Mark != MarkKind.Rect ? layer : layer with
+            { Position = new PositionAdjustmentSpec(PositionAdjustmentKind.Nudge, xAxis ? -2m : 0m, xAxis ? 0m : -1m, Unit: PositionAdjustmentUnit.Data) }).ToImmutableArray()
+        };
+        Assert.Contains($"moves {(xAxis ? "X" : "Y")} outside the positive logarithmic domain",
+            Assert.Throws<InvalidOperationException>(() => new PlotPlanResolver().Resolve(spec, data)).Message);
+    }
+
+    [Fact]
+    public void DataNudge_DoesNotAddTheAmountToTheOppositeEndpoint()
+    {
+        var (spec, data) = Lower(WithNudge(Script.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal)
+            .Replace("MIN = 0,", "INCLUDE_ZERO = OFF, MIN = 0.1,", StringComparison.Ordinal), "DATA"));
+        data = data with
+        {
+            Columns = data.Columns.Select(column => column.Name == "EndX" ? column with
+            { Values = column.Values.SetItem(0, ChartValue.From(.1m)), DisplayValues = [] } : column).ToImmutableArray()
+        };
+        // StartX moves from 2 to 1.5. Adding -0.5 to EndX would be invalid on a log scale.
+        var resolver = new PlotPlanResolver();
+        var plan = resolver.Resolve(spec, data);
+        var baseline = resolver.Resolve(spec with { Layers = spec.Layers.Select(layer => layer with { Position = null }).ToImmutableArray() }, data);
+        var actual = Elements(XDocument.Parse(new SvgChartRenderer().Render(plan)), "plot-range-rect");
+        var expected = Elements(XDocument.Parse(new SvgChartRenderer().Render(baseline)), "plot-range-rect");
+        Assert.Equal(3, actual.Length);
+        Assert.Equal(Read(expected[0], "height"), Read(actual[0], "height"));
+        Assert.Equal(expected[0].Value, actual[0].Value);
+    }
+
+    [Theory]
+    [InlineData("StartX")]
+    [InlineData("EndX")]
+    [InlineData("LowerBound")]
+    [InlineData("UpperBound")]
+    public void DataNudge_IncompleteRectangleSkipsInvalidLogarithmicTarget(string field)
+    {
+        var sql = WithNudge(Script.Replace("LINEAR (CHANNEL", "LOGARITHMIC (CHANNEL", StringComparison.Ordinal)
+            .Replace("MIN = 0,", "INCLUDE_ZERO = OFF, MIN = 1,", StringComparison.Ordinal), "DATA")
+            .Replace("X = -0.5, Y = 0.5", "X = -100, Y = -100", StringComparison.Ordinal);
+        var (spec, data) = Lower(sql);
+        data = data with
+        {
+            Columns = data.Columns.Select(column => column.Name == field ? column with
+            { Values = [ChartValue.Null(), ChartValue.Null(), ChartValue.Null()], DisplayValues = [] } : column).ToImmutableArray()
+        };
+        var plan = new PlotPlanResolver().Resolve(spec, data);
+        Assert.Empty(Elements(XDocument.Parse(new SvgChartRenderer().Render(plan)), "plot-range-rect"));
+        Assert.All(plan.Layers.Single(layer => layer.Mark == MarkKind.Rect).Data, datum =>
+        {
+            Assert.Equal(0m, datum.DisplayOffsetX);
+            Assert.Equal(0m, datum.DisplayOffsetY);
+        });
+    }
+
     private static string WithNudge(string sql, string unit) => unit == "IDENTITY" ? sql : sql.Replace("Z_INDEX = 1,",
-        unit == "BAND" ? "Z_INDEX = 1, POSITION = NUDGE(X = 0.02, Y = -0.03, UNIT = BAND),"
+        unit == "DATA" ? "Z_INDEX = 1, POSITION = NUDGE(X = -0.5, Y = 0.5, UNIT = DATA),"
+        : unit == "BAND" ? "Z_INDEX = 1, POSITION = NUDGE(X = 0.02, Y = -0.03, UNIT = BAND),"
         : "Z_INDEX = 1, POSITION = NUDGE(X = -0.5, Y = 1, UNIT = EM),", StringComparison.Ordinal);
 
     private static XElement[] Elements(XDocument document, string name) => document.Descendants().Where(element => (string?)element.Attribute("class") == name).ToArray();

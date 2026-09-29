@@ -1615,7 +1615,7 @@ public sealed class PlotPlanResolver
                             : transposedPlacementViewport is not null && position.Unit == PositionAdjustmentUnit.Band
                             ? (X: position.Y * (viewport!.Width - 80m), Y: -position.X * (viewport.Height - 100m))
                             : transposedPlacementViewport is not null && position.Unit == PositionAdjustmentUnit.Data
-                            ? ResolveTransposedDataNudge(position, datum, xScale!, yScale!, DataArea(viewport!), layer.Id, layer.Mark == MarkKind.Rule)
+                            ? ResolveTransposedDataNudge(position, datum, xScale!, yScale!, DataArea(viewport!), layer.Id, layer.Mark)
                             : ResolveNudge(position, datum, xScale, yScale, datumBounds, xBand, yBand, layer.Id);
                         offsetX += nudge.X;
                         offsetY += nudge.Y;
@@ -1640,13 +1640,13 @@ public sealed class PlotPlanResolver
     }
 
     private static (decimal X, decimal Y) ResolveTransposedDataNudge(PositionAdjustmentSpec position, ResolvedDatum datum,
-        ResolvedScale xScale, ResolvedScale yScale, PlotBounds area, string layerId, bool isRule)
+        ResolvedScale xScale, ResolvedScale yScale, PlotBounds area, string layerId, MarkKind mark)
     {
         var x = Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
         var y = Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
-        if (isRule && IsRangeRule(datum))
+        if (mark is (MarkKind.Rule or MarkKind.Rect) && IsRangeRule(datum))
         {
-            // Translate the complete segment by its authored start point's displacement.
+            // Translate the complete range geometry by its authored start point's displacement.
             // The end point retains its screen-space distance from the start, including on log axes.
             x = Number(Channel(datum, FieldChannel.XStart) ?? Channel(datum, FieldChannel.X) ?? ChartValue.Null());
             y = Number(Channel(datum, FieldChannel.YStart) ?? Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
@@ -1654,7 +1654,7 @@ public sealed class PlotPlanResolver
             var endY = Number(Channel(datum, FieldChannel.YEnd) ?? Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
             if (datum.IsGap || !x.HasValue || !y.HasValue || !endX.HasValue || !endY.HasValue) return (0m, 0m);
         }
-        else if (isRule)
+        else if (mark == MarkKind.Rule)
         {
             // Missing thresholds draw no rule; only the bound scale participates in displacement.
             if (datum.IsGap) return (0m, 0m);

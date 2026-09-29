@@ -766,10 +766,10 @@ public static class AdvancedChartSemanticValidator
                 if (layer.Mark == AdvancedChartMarkKind.Rect)
                 {
                     if (!channels.SetEquals([AdvancedChartChannel.XStart, AdvancedChartChannel.XEnd, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd]) ||
-                        layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band }) || layer.Conditions.Length > 0 ||
+                        layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data }) || layer.Conditions.Length > 0 ||
                         encodings.Any(encoding => encoding.DataKind != AdvancedChartDataKind.Quantitative ||
                             encoding.Source.Kind is not (AdvancedChartBindingSourceKind.Field or AdvancedChartBindingSourceKind.Datum)))
-                        Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO RECT requires exactly four quantitative field/DATUM X_START/X_END/Y_START/Y_END bindings, IDENTITY or NUDGE UNIT EM/BAND, and no CONDITIONS.");
+                        Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO RECT requires exactly four quantitative field/DATUM X_START/X_END/Y_START/Y_END bindings, IDENTITY or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
                     continue;
                 }
                 var ranged = channels.SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd]) ||
