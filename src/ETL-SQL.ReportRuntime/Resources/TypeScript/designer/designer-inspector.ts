@@ -5,7 +5,7 @@
  * Selected visual and report property editors.
  */
 
-import { VTYPES, controlTarget, datasetValue, queryElement, queryElements } from './designer-context.js';
+import { VTYPES, controlTarget, datasetValue, inspectorGroupKey, queryElement, queryElements } from './designer-context.js';
 
 import type { CascadeMode, CascadeParent, CascadeState, DesignerDom, DesignerEvent, DesignerFormControl, DesignerOptions, DesignerState, DesignerVisual, UnsupportedCascade } from './designer-context.js';
 import type { ClickAction, ClickActionKind, RowDetailState, Tooltip, TooltipKind } from './designer-interactions.js';
@@ -186,7 +186,7 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
 
     function restoreInspectorGroups() {
         for (const details of queryElements<HTMLDetailsElement>(context.propsPanel, '.etlsql-format-group')) {
-            const heading = String(queryElement(details, 'summary')?.textContent || '').trim();
+            const heading = inspectorGroupKey(details);
             if (!heading) continue;
             // A group the markup opens by default stays open and is recorded, so closing it sticks.
             if (details.open) context.openInspectorGroups.add(heading);
@@ -194,7 +194,22 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
         }
     }
 
+    /**
+     * Records which groups are open right now, from the DOM. The `toggle` listener does this too,
+     * but `toggle` is dispatched as a later task, so a rebuild that follows the click in the same
+     * turn (open a group, then pick from it) ran before the event and closed the group again.
+     */
+    function rememberInspectorGroups() {
+        for (const details of queryElements<HTMLDetailsElement>(context.propsPanel, '.etlsql-format-group')) {
+            const heading = inspectorGroupKey(details);
+            if (!heading) continue;
+            if (details.open) context.openInspectorGroups.add(heading);
+            else context.openInspectorGroups.delete(heading);
+        }
+    }
+
     function renderProps() {
+        rememberInspectorGroups();
         renderPropsBody();
         restoreInspectorGroups();
     }

@@ -6,6 +6,7 @@
  * HTML builders and value parsers for the visual formatting inspector.
  */
 
+import { renderOverlayEditorHtml } from './designer-overlays.js';
 import { esc } from './designer-util.js';
 
 export function toHexColor(val: unknown, fallback: string): string {
@@ -151,7 +152,6 @@ export function renderVisualFormatInspectorHtml(v: FormattableVisual, columns?: 
     const namedColors = Object.entries(v.options || {})
         .filter(([key]) => key.toUpperCase().startsWith('COLOR:'))
         .map(([key, color]) => ({ name: key.slice('COLOR:'.length), color: color as string }));
-    const overlays = (v.options?.overlays as string) || '';
     const isChart = FORMAT_INSPECTOR_CHARTS.has(v.type as string);
     const isCartesian = FORMAT_INSPECTOR_CARTESIAN.has(v.type as string);
     const isPieOrDonut = ['PIE', 'DONUT'].includes(v.type as string);
@@ -614,11 +614,10 @@ export function renderVisualFormatInspectorHtml(v: FormattableVisual, columns?: 
                     <label class="etlsql-dsgn-label">Outer padding
                         <div class="etlsql-dsgn-slider-row"><input type="range" id="pp-format-outer-padding" min="0" max="1" step="0.05" value="${esc((v.options?.OUTER_PADDING as string) || '0')}"><output id="pp-format-outer-padding-value">${esc((v.options?.OUTER_PADDING as string) || '0')}</output></div>
                     </label>` : ''}
-                    <label class="etlsql-dsgn-label">Overlays
-                        <textarea id="pp-format-overlays" class="form-control etlsql-code-editor" rows="3" placeholder="OVERLAYS (GOAL(100) AS DASHED)">${esc(overlays)}</textarea>
-                    </label>
                 </div>
             </details>` : ''}
+
+            ${renderOverlayEditorHtml({ id: String(v.id ?? ''), type: v.type, options: v.options as Record<string, string> | undefined }, [...(columns || [])])}
 
             ${isChart ? `<details class="etlsql-format-group">
                 <summary>Series palette <span>${palette.length || 'Theme'}</span></summary>

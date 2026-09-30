@@ -2472,6 +2472,15 @@ body.vscode-dark .cm-diagnostic-source {
 }
 .etlsql-dsgn-hint { color: var(--portal-text-soft, #8b949e); font-size: 0.6875rem; }
 
+/* One analytics overlay per card: its kind, its values, and how it is drawn. */
+.etlsql-dsgn-overlay {
+    border: 1px solid var(--portal-border, #30363d);
+    border-radius: 6px;
+    padding: 6px 8px;
+    margin-bottom: 8px;
+}
+.etlsql-dsgn-overlay-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; font-size: 0.75rem; }
+
 /* Studio's visual-format rail. The thin cyan rule is the one deliberate signature: it reads as a
    live connection from controls to source, while the rest stays quiet enough for a dense IDE pane. */
 .etlsql-format-inspector {

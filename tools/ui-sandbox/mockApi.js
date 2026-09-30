@@ -1208,9 +1208,10 @@ function mockVisualStatement(visual) {
   return 'CREATE VISUAL ' + name + ' AS ' + visual.type + ' (\n' + clauses.join(',\n') + '\n);';
 }
 
-// `inline_source` and `print_layout` are carried as their own clauses, not as OPTIONS entries.
+// These are carried as their own clauses, not as OPTIONS entries.
+const MOCK_CLAUSE_KEYS = new Set(['inline_source', 'print_layout', 'overlays', 'row_detail', 'emit_filter']);
 function mockOptionsClause(options, formatting) {
-  const entries = Object.entries(options ?? {}).filter(([key]) => key !== 'inline_source' && key !== 'print_layout');
+  const entries = Object.entries(options ?? {}).filter(([key]) => !MOCK_CLAUSE_KEYS.has(key));
   const body = entries.map(([key, value]) => key + ' = ' + mockOptionValue(value));
   for (const [axis, values] of [['X', formatting?.xAxis], ['Y', formatting?.yAxis]]) {
     const axisEntries = Object.entries(values ?? {}).filter(([, value]) => String(value || '').trim());
@@ -1317,6 +1318,11 @@ function mockRewriteVisualClauses(statement, visual) {
   out = mockReplaceClause(out, 'INTERACTIONS', mockPrefixedClause(visual.options, 'interaction:', 'INTERACTIONS'));
   out = mockReplaceClause(out, 'CASCADE', String(visual.options?.cascade || '').trim());
   out = mockReplaceClause(out, 'PRINT_LAYOUT', visual.options?.print_layout || '');
+  // The inspector's verbatim clauses, as the real parsing service carries them.
+  out = mockReplaceClause(out, 'OVERLAYS', String(visual.options?.overlays || '').trim());
+  out = mockReplaceClause(out, 'ROW_DETAIL', String(visual.options?.row_detail || '').trim());
+  const emitTargets = String(visual.options?.emit_filter || '').trim();
+  out = mockReplaceClause(out, 'EMIT_FILTER', emitTargets ? `EMIT_FILTER (TARGETS = (${emitTargets}))` : '');
   return out;
 }
 
@@ -1682,6 +1688,12 @@ function mockParseVisuals(script) {
     if (printLayout) options.print_layout = printLayout.text;
     const cascadeClause = mockFindClause(body, 'CASCADE');
     if (cascadeClause) options.cascade = cascadeClause.text;
+    const overlaysClause = mockFindClause(body, 'OVERLAYS');
+    if (overlaysClause) options.overlays = overlaysClause.text;
+    const rowDetailClause = mockFindClause(body, 'ROW_DETAIL');
+    if (rowDetailClause) options.row_detail = rowDetailClause.text;
+    const emitTargets = /\bEMIT_FILTER\s*\(\s*TARGETS\s*=\s*\(([^()]*)\)\s*\)/i.exec(body)?.[1];
+    if (emitTargets) options.emit_filter = emitTargets.split(',').map(name => name.trim()).filter(Boolean).join(', ');
     for (const [keyword, prefix] of [['ACTIONS', 'action:'], ['INTERACTIONS', 'interaction:']]) {
       const clause = mockFindClause(body, keyword);
       if (!clause) continue;

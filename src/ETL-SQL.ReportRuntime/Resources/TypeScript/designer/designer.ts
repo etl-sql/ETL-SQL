@@ -8,7 +8,7 @@
  */
 
 import type { DesignerDom, DesignerFormControl, DesignerHandle, DesignerOptions, DesignerSnapshotPackage, DesignerState, DesignerVisual } from './designer-context.js';
-import { closestElement, controlTarget, datasetValue, eventElement, feedback, queryElement, queryElements, VCATEGORIES, VTYPES } from './designer-context.js';
+import { closestElement, controlTarget, datasetValue, eventElement, feedback, inspectorGroupKey, queryElement, queryElements, VCATEGORIES, VTYPES } from './designer-context.js';
 export type { CascadeMode, CascadeParent, CascadeState, CompleteVisualFormatting, DesignerApiError, DesignerApplyResult, DesignerBookmark, DesignerCommitResponse, DesignerCreatedReport, DesignerDataset, DesignerDom, DesignerEvent, DesignerFormControl, DesignerGenerateResponse, DesignerHandle, DesignerLeaseResponse, DesignerOptions, DesignerPage, DesignerParseResponse, DesignerRow, DesignerSaveResponse, DesignerSnapshotDataset, DesignerSnapshotPackage, DesignerState, DesignerVisual, DesignerWorkbenchHandle, EditorViewBridge, UnsupportedCascade } from './designer-context.js';
 
 /// <reference path="../../../../../types/etlsql-contracts.generated.d.ts" />
@@ -571,7 +571,7 @@ export function createDesigner(container: HTMLElement, opts: DesignerOptions = {
     propsPanel.addEventListener('toggle', event => {
         const details = eventElement(event) as HTMLDetailsElement;
         if (!/** @type {Element} */ (details).matches?.('.etlsql-format-group')) return;
-        const heading = String(queryElement(details, 'summary')?.textContent || '').trim();
+        const heading = inspectorGroupKey(details);
         if (!heading) return;
         if (details.open) openInspectorGroups.add(heading);
         else openInspectorGroups.delete(heading);

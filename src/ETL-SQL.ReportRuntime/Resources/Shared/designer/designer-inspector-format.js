@@ -9,6 +9,7 @@
  * Visual formatting inspector controls and search.
  */
 import { checkedTarget, controlTarget, datasetValue, queryElement, queryElements } from './designer-context.js';
+import { bindOverlayEditor } from './designer-overlays.js';
 import { parseNumericOpacity, parseNumericRadius, toHexColor, visualFormatting } from './visual-format-inspector.js';
 export function createDesignerFormatting(context) {
     function bindInspectorSearch(panel) {
@@ -299,15 +300,7 @@ export function createDesignerFormatting(context) {
                     output.value = controlTarget(event).value;
                 sync();
             });
-        queryElement(panel, '#pp-format-overlays')?.addEventListener('change', event => {
-            v.options ||= {};
-            const value = controlTarget(event).value.trim();
-            if (value)
-                v.options.overlays = value;
-            else
-                delete v.options.overlays;
-            sync();
-        });
+        bindOverlayEditor(panel, v, sync, rerender);
         queryElements(panel, '[data-axis]').forEach(input => input.addEventListener('change', () => {
             const axis = input.dataset.axis === 'x' ? formatting.xAxis : formatting.yAxis;
             const key = datasetValue(input, 'axisKey');

@@ -2276,6 +2276,10 @@ public static class AstSerializer
         return $"WHEN {rule.Condition.ToSql()} THEN {string.Join(", ", parts)}";
     }
 
+    /// <summary>A visual's whole <c>OVERLAYS (...)</c> clause, as the formatter writes it.</summary>
+    public static string FormatOverlaysClause(IEnumerable<VisualOverlay> overlays) =>
+        $"OVERLAYS ({string.Join(", ", overlays.Select(FormatOverlay))})";
+
     private static string FormatOverlay(VisualOverlay overlay)
     {
         if (overlay.OverlayType == OverlayType.ReferenceLine)
@@ -2317,7 +2321,10 @@ public static class AstSerializer
                 props.Add($"TYPE = {overlay.AnnotationPointType}");
             }
             if (!string.IsNullOrWhiteSpace(overlay.Label)) props.Add($"LABEL = {Quote(overlay.Label)}");
-            if (!string.IsNullOrWhiteSpace(overlay.Symbol)) props.Add($"SYMBOL = {Quote(overlay.Symbol)}");
+            // 'pin' is what the parser supplies when SYMBOL is absent, so writing it would add a
+            // clause to every author's annotation on the next format or designer edit.
+            if (!string.IsNullOrWhiteSpace(overlay.Symbol) && !overlay.Symbol.Equals("pin", StringComparison.OrdinalIgnoreCase))
+                props.Add($"SYMBOL = {Quote(overlay.Symbol)}");
             return $"ANNOTATIONS (POINT ({string.Join(", ", props)}))";
         }
 

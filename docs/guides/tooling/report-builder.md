@@ -79,6 +79,12 @@ Configures selected visual details:
   - **Fields from the hovered row:** `TOOLTIP ('heading', FIELDS (Region, Revenue FORMAT 'C0'))`. It starts from the columns the visual plots, and each field takes a DATA_LABELS-style format.
   - **Other visuals, in a popover:** `TOOLTIP (VISUALS (Detail))`, or **a container**: `TOOLTIP = Box`. A popover's visuals receive the hovered X (or LABEL, NAME, REGION, Y) value as `@hover_value`, so the build needs one of those mapped. **Show Detail for the hovered Region** writes `WHERE Region = @hover_value` into a popover visual's own source.
   - A tooltip the panel cannot write back exactly is shown read-only and left as written.
+- **Analytics** (charts) edits the visual's `OVERLAYS`, one card per overlay. **Add** offers only what the chart's build accepts:
+  - goal, average, reference line and band, trend line (linear, exponential, logarithmic, power, polynomial) and moving average on BAR, HBAR, LINE, COMBO, SCATTER, BUBBLE and CANDLESTICK;
+  - forecast on LINE and COMBO;
+  - running total and percent of total on LINE, BAR and HBAR.
+
+  Each card sets the overlay's values, line style, colour and label. A card missing a required value (a goal with no target, a band whose low is not below its high) is not written until it is complete. Forecasts and table calculations plot columns your query computes. An overlay the editor cannot write back exactly, such as an annotation point, keeps its own card, read-only and unchanged.
 - **Row detail** (tables only) writes `ROW_DETAIL (TARGET = ..., BINDINGS (@column = Column), LIMIT = n)`. Each row gets an expand button that shows the target's rows where the named column equals this row's value. The target usually sets `VISIBLE = OFF` so it appears only under rows.
 - **Grid Position:** Fine-tune numeric `Col`, `Row`, `Width` (`W`), and `Height` (`H`).
 

@@ -139,6 +139,21 @@ export function queryElements<T extends Element = HTMLElement>(root: ParentNode,
     return root.querySelectorAll<T>(selector);
 }
 
+/**
+ * The name an inspector group is remembered by: its summary's own text, without the count its
+ * `<span>` carries. Keyed on the whole text, a group closed itself whenever its count changed,
+ * because "Analytics 1" is not the group the author opened as "Analytics".
+ */
+export function inspectorGroupKey(details: Element): string {
+    const summary = details.querySelector('summary');
+    if (!summary) return '';
+    return Array.from(summary.childNodes)
+        .filter(node => node.nodeType === 3)
+        .map(node => node.textContent || '')
+        .join('')
+        .trim();
+}
+
 export function controlTarget(event: Event): DesignerFormControl {
     return event.target as DesignerFormControl;
 }

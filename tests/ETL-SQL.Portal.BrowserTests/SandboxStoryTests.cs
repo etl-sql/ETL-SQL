@@ -1753,7 +1753,8 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await page.WaitForTimeoutAsync(300);
         await inspector.Locator("summary", new() { HasText = "Series palette" }).ClickAsync();
         await page.Locator("[data-palette-add]").ClickAsync();
-        await inspector.Locator("summary", new() { HasText = "Series palette" }).ClickAsync();
+        // The group stays open although its count changed. It used to close here, because an open
+        // group was remembered by its whole heading, count included, and this step clicked it again.
         await page.Locator("[data-named-color-add]").ClickAsync();
         await inspector.Locator("summary", new() { HasText = "Marks & labels" }).ClickAsync();
         await page.Locator("#pp-format-data-labels").CheckAsync();
@@ -1765,8 +1766,16 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         await page.Locator("#pp-format-series-gap").DispatchEventAsync("input");
         await page.Locator("#pp-format-outer-padding").FillAsync("0.4");
         await page.Locator("#pp-format-outer-padding").DispatchEventAsync("input");
-        await page.Locator("#pp-format-overlays").FillAsync("OVERLAYS (GOAL(100000) AS DASHED LABEL 'Target')");
-        await page.Locator("#pp-format-overlays").DispatchEventAsync("change");
+        // Overlays used to be a textarea, and this step typed a clause that did not parse
+        // (LABEL outside WITH). Nothing checked it. They are chosen from controls now.
+        await inspector.Locator("summary", new() { HasText = "Analytics" }).ClickAsync();
+        // Picked in the same turn as the click that opened the group: the rebuild this triggers
+        // must keep the group open although the browser has not dispatched `toggle` yet.
+        await page.Locator("#pp-overlay-add").SelectOptionAsync("GOAL");
+        await page.Locator("[data-overlay-row='0'] [data-overlay-field='value']").FillAsync("100000");
+        await page.Locator("[data-overlay-row='0'] [data-overlay-field='value']").DispatchEventAsync("change");
+        await page.Locator("[data-overlay-row='0'] [data-overlay-field='label']").FillAsync("Target");
+        await page.Locator("[data-overlay-row='0'] [data-overlay-field='label']").DispatchEventAsync("change");
         await inspector.Locator("summary", new() { HasText = "Conditional formatting" }).ClickAsync();
         await page.Locator("[data-rule-add]").ClickAsync();
 
@@ -1797,6 +1806,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.Contains("STACKED = '100PCT'", activeScript, StringComparison.Ordinal);
         Assert.Contains("SERIES_GAP = 0.25", activeScript, StringComparison.Ordinal);
         Assert.Contains("OUTER_PADDING = 0.4", activeScript, StringComparison.Ordinal);
+        Assert.Contains("OVERLAYS (GOAL(100000) AS DASHED WITH (LABEL = 'Target'))", activeScript, StringComparison.Ordinal);
         Assert.Contains("X_AXIS (LABEL = 'Region'", activeScript, StringComparison.Ordinal);
         Assert.Contains("LABEL_ROTATION = 45", activeScript, StringComparison.Ordinal);
         Assert.Contains("LABEL_SKIP = 1", activeScript, StringComparison.Ordinal);
@@ -1809,7 +1819,6 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.Contains("MAX = 500000", activeScript, StringComparison.Ordinal);
         Assert.Contains("COLOR:Series1 = '#2563eb'", activeScript, StringComparison.Ordinal);
         Assert.Contains("STYLE (PALETTE = ('#58a6ff', '#2ea043', '#d29922', '#dc2626'))", activeScript, StringComparison.Ordinal);
-        Assert.Contains("OVERLAYS (GOAL(100000) AS DASHED LABEL", activeScript, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("FORMATTING (WHEN", activeScript, StringComparison.Ordinal);
         Assert.Empty(session.PageErrors);
         Assert.Empty(session.ConsoleErrors);

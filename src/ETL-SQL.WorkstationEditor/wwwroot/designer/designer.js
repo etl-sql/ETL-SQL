@@ -16,7 +16,7 @@
  * Stateful controllers own editing, rendering, persistence, and inspector behavior.
  * Hosts receive the same ES modules through sync-assets.js.
  */
-import { closestElement, controlTarget, datasetValue, eventElement, feedback, queryElement, queryElements, VCATEGORIES, VTYPES } from './designer-context.js';
+import { closestElement, controlTarget, datasetValue, eventElement, feedback, inspectorGroupKey, queryElement, queryElements, VCATEGORIES, VTYPES } from './designer-context.js';
 /// <reference path="../../../../../types/etlsql-contracts.generated.d.ts" />
 /// <reference path="../../../../../types/browser-globals.d.ts" />
 import { DATA_PREP_RECIPES } from './data-prep-recipes.js';
@@ -559,7 +559,7 @@ export function createDesigner(container, opts = {}) {
         const details = eventElement(event);
         if (!(details).matches?.('.etlsql-format-group'))
             return;
-        const heading = String(queryElement(details, 'summary')?.textContent || '').trim();
+        const heading = inspectorGroupKey(details);
         if (!heading)
             return;
         if (details.open)

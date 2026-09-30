@@ -14,6 +14,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Analytics overlays are chosen from controls in Studio's format inspector instead of typed into a
+  text box. Goals, averages, reference lines and bands, trend lines, moving averages, forecasts,
+  running totals, and percent of total each get a card with their values, line style, colour, and
+  label. Only the overlays a chart's build accepts are offered, and a card is written once it is
+  complete. An overlay the editor cannot write back exactly keeps its own read-only card.
+
 - Tooltips are authored from Studio's inspector: static text, a formatted field list from the
   hovered row (`TOOLTIP (FIELDS (Region, Revenue FORMAT 'C0'))`), or a popover of other visuals or a
   container. A popover visual receives the hovered value as `@hover_value`, and **Show Detail for the
@@ -210,6 +216,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   JavaScript shrinks by 27,271 bytes. Stateful designer and Studio closures remain unchanged.
 
 ### Fixed
+
+- Editing a chart in Studio's designer no longer corrupts its annotation points. The designer kept
+  its own copy of the overlay formatter, which wrote `ANNOTATIONS (POINT (…))` back as
+  `ANNOTATIONPOINT AS DASHED WITH (…)`, a clause that does not parse. It now uses the dialect's
+  formatter, which also no longer writes the default `SYMBOL = 'pin'` into an author's annotation.
+
+- A Studio inspector section no longer closes itself when the count in its heading changes (adding
+  a palette colour, an overlay, or a mapping).
 
 - A Portal report built in Studio from a shared connection now runs for its readers. Studio's
   wizards wrote `FROM sales_db.Sales` without declaring the connection. Preview declared it quietly,

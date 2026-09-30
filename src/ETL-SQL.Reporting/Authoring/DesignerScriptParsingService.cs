@@ -305,7 +305,7 @@ public sealed class DesignerScriptParsingService
         }
         if (v.Overlays.Count > 0)
         {
-            options["overlays"] = "OVERLAYS (" + string.Join(", ", v.Overlays.Select(FormatOverlay)) + ")";
+            options["overlays"] = AstSerializer.FormatOverlaysClause(v.Overlays);
         }
         if (v.Cascade != null)
         {
@@ -558,54 +558,6 @@ public sealed class DesignerScriptParsingService
     private static string NormalizeDatasetName(string name) =>
         DesignerScriptGenerationService.NormalizeDatasetName(name);
 
-    private static string FormatOverlay(VisualOverlay overlay)
-    {
-        var parameter = overlay.Parameter?.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (overlay.OverlayType == OverlayType.ReferenceLine)
-        {
-            var props = new List<string>
-            {
-                $"VALUE = {parameter ?? "0"}"
-            };
-            if (!string.IsNullOrWhiteSpace(overlay.Label)) props.Add($"LABEL = '{Escape(overlay.Label)}'");
-            props.Add($"STYLE = {overlay.LineStyle.ToString().ToUpperInvariant()}");
-            if (!string.IsNullOrWhiteSpace(overlay.Color)) props.Add($"COLOR = '{Escape(overlay.Color)}'");
-            return $"REFERENCE_LINE ({string.Join(", ", props)})";
-        }
-
-        if (overlay.OverlayType == OverlayType.ReferenceBand)
-        {
-            var props = new List<string>
-            {
-                $"LOW = {overlay.BandLow?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "0"}",
-                $"HIGH = {overlay.BandHigh?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "0"}"
-            };
-            if (!string.IsNullOrWhiteSpace(overlay.Color)) props.Add($"COLOR = '{Escape(overlay.Color)}'");
-            if (!string.IsNullOrWhiteSpace(overlay.Label)) props.Add($"LABEL = '{Escape(overlay.Label)}'");
-            return $"REFERENCE_BAND ({string.Join(", ", props)})";
-        }
-
-        var type = overlay.OverlayType switch
-        {
-            OverlayType.Goal => $"GOAL({parameter ?? "0"})",
-            OverlayType.MovingAvg => $"MOVING_AVG({parameter ?? "1"})",
-            OverlayType.Polynomial => $"POLYNOMIAL({parameter ?? "2"})",
-            OverlayType.Forecast => $"FORECAST({overlay.ForecastField ?? string.Empty})",
-            OverlayType.RunningTotal => $"RUNNING_TOTAL({overlay.TableCalculationField ?? string.Empty})",
-            OverlayType.PercentOfTotal => $"PERCENT_OF_TOTAL({overlay.TableCalculationField ?? string.Empty})",
-            _ => overlay.OverlayType.ToString().ToUpperInvariant()
-        };
-        var details = new List<string>();
-        if (!string.IsNullOrWhiteSpace(overlay.ConfidenceLowField)) details.Add($"CONFIDENCE_LOW = {overlay.ConfidenceLowField}");
-        if (!string.IsNullOrWhiteSpace(overlay.ConfidenceHighField)) details.Add($"CONFIDENCE_HIGH = {overlay.ConfidenceHighField}");
-        if (!string.IsNullOrWhiteSpace(overlay.AnomalyField)) details.Add($"ANOMALY = {overlay.AnomalyField}");
-        if (!string.IsNullOrWhiteSpace(overlay.Color)) details.Add($"COLOR = '{Escape(overlay.Color)}'");
-        if (!string.IsNullOrWhiteSpace(overlay.Label)) details.Add($"LABEL = '{Escape(overlay.Label)}'");
-        return $"{type} AS {overlay.LineStyle.ToString().ToUpperInvariant()}"
-            + (details.Count == 0 ? string.Empty : $" WITH ({string.Join(", ", details)})");
-    }
-
-    private static string Escape(string value) => value.Replace("'", "''", StringComparison.Ordinal);
 
     private static string NormalizeOptionValue(string value) => value.ToUpperInvariant() switch
     {

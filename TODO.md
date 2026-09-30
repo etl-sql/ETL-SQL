@@ -181,9 +181,13 @@ containers, and clause-level patching that keeps hand-written clauses on a desig
   `APopoverShowsTheRowsForTheClickedPoint`.
   - [ ] Follow-up: `visual.md` documents `(['md',] [FIELDS (…)] [, VISUALS (…)])`, but the parser
     reads `VISUALS` before `FIELDS`, so the documented order does not parse. Fix one or the other.
-- [ ] **P2 — Analytics overlays.** Goal, average, trend, reference line and band, and forecast are
-  one raw `OVERLAYS (…)` textarea in the format inspector. Offer them as choices, the way
-  conditional formatting already is.
+- [x] **P2 — Analytics overlays.** Done 2026-09-29. The format inspector's *Analytics* group has one
+  card per overlay, offers only what the chart's build accepts, and keeps entries it cannot write
+  (annotation points) read-only. Found along the way: the designer's own overlay formatter
+  corrupted annotation points into unparseable text, and inspector groups closed when their heading
+  count changed. Proof: `StudioInteractionJourneyTests.AGoalAndABandAreDrawnWhereTheirValuesSay`
+  checks the goal line is drawn at its value.
+  - [ ] Follow-up: annotation points (`ANNOTATIONS (POINT (…))`) have no guided card yet.
 - [ ] **P2 — Mobile layout.** The grammar has a mobile page layout (`STRUCTURE`, `MAP`,
   `BREAKPOINT`) and Studio has nothing for it.
 - [x] **Decision — the semantic model.** Decided 2026-09-29: deliberate. Modelling happens in the query that builds the dataset or the #temp table, which the author owns and can read; no measures or relationships are added to the language. Guided helpers that write that SQL remain welcome.

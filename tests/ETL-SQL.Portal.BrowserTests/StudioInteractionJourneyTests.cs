@@ -221,6 +221,63 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task AGoalAndABandAreDrawnWhereTheirValuesSay()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var studio = session.Page;
+        var reportId = await OpenStudioAsync(studio);
+
+        await SelectVisualAsync(studio, "ByRegion", "Analytics");
+        await studio.SelectOptionAsync("#pp-overlay-add", "GOAL");
+        var goal = studio.Locator("[data-overlay-row='0']");
+        // A goal with no target is not written: the build would refuse it.
+        await Expect(goal).ToContainTextAsync("Not in the script yet");
+        await FillOverlayAsync(goal, "value", "200");
+        await FillOverlayAsync(studio.Locator("[data-overlay-row='0']"), "label", "Target");
+        await WaitForScriptAsync(studio, "CREATE VISUAL ByRegion", "OVERLAYS (GOAL(200) AS DASHED WITH (LABEL = 'Target'))");
+
+        await studio.SelectOptionAsync("#pp-overlay-add", "REFERENCE_BAND");
+        await FillOverlayAsync(studio.Locator("[data-overlay-row='1']"), "low", "50");
+        await FillOverlayAsync(studio.Locator("[data-overlay-row='1']"), "high", "150");
+        await WaitForScriptAsync(studio, "CREATE VISUAL ByRegion",
+            "OVERLAYS (GOAL(200) AS DASHED WITH (LABEL = 'Target'), REFERENCE_BAND (LOW = 50, HIGH = 150))");
+
+        await SaveAsync(studio, reportId);
+
+        var report = await RunReportAsync(studio, reportId);
+        var chart = report.Locator("[data-visual-name='ByRegion']");
+        await Expect(chart.Locator("g.plot-overlay[data-overlay-type='Goal']")).ToHaveCountAsync(1);
+        await Expect(chart.Locator("g.plot-overlay[data-overlay-type='ReferenceBand']")).ToHaveCountAsync(1);
+        await Expect(chart.Locator(".plot-overlay-label", new() { HasText = "Target" })).ToHaveCountAsync(1);
+
+        // The goal is drawn at 200: above South's bar (140) and below the top of North's (250).
+        var placement = await chart.EvaluateAsync<JsonElement>(
+            """
+            card => {
+                const data = card._visualData || card.closest('.visual-card')?._visualData;
+                const region = (data.columns || []).findIndex(c => c.toLowerCase() === 'region');
+                const top = name => {
+                    const index = data.rows.findIndex(row => String(row[region]) === name);
+                    return Number(card.querySelector(`[data-row-index='${index}']`).getAttribute('y'));
+                };
+                const goal = Number(card.querySelector("g.plot-overlay[data-overlay-type='Goal'] line").getAttribute('y1'));
+                return { goal, north: top('North'), south: top('South') };
+            }
+            """);
+        var goalY = placement.GetProperty("goal").GetDouble();
+        Assert.True(placement.GetProperty("north").GetDouble() < goalY, $"North (250) should reach above the goal line: {placement}");
+        Assert.True(placement.GetProperty("south").GetDouble() > goalY, $"South (140) should stay below the goal line: {placement}");
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static async Task FillOverlayAsync(ILocator row, string field, string value)
+    {
+        var input = row.Locator($"[data-overlay-field='{field}']");
+        await input.FillAsync(value);
+        await input.BlurAsync();
+    }
+
     private static readonly Dictionary<string, string> ExpectedRevenue = new()
     {
         ["North"] = "250",

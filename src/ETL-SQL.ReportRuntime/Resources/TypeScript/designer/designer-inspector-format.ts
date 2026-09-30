@@ -8,6 +8,7 @@
 import { checkedTarget, controlTarget, datasetValue, queryElement, queryElements } from './designer-context.js';
 
 import type { CompleteVisualFormatting, DesignerDom, DesignerFormControl, DesignerVisual } from './designer-context.js';
+import { bindOverlayEditor } from './designer-overlays.js';
 import type { FormattableVisual } from './visual-format-inspector.js';
 import { parseNumericOpacity, parseNumericRadius, toHexColor, visualFormatting } from './visual-format-inspector.js';
 
@@ -293,13 +294,7 @@ export function createDesignerFormatting(context: DesignerFormattingContext) {
             if (output) output.value = controlTarget(event).value;
             sync();
         });
-        queryElement<DesignerFormControl>(panel, '#pp-format-overlays')?.addEventListener('change', event => {
-            v.options ||= {};
-            const value = controlTarget(event).value.trim();
-            if (value) v.options.overlays = value;
-            else delete v.options.overlays;
-            sync();
-        });
+        bindOverlayEditor(panel, v, sync, rerender);
         queryElements<HTMLInputElement>(panel, '[data-axis]').forEach(input => input.addEventListener('change', () => {
             const axis = input.dataset.axis === 'x' ? formatting.xAxis : formatting.yAxis;
             const key = datasetValue(input, 'axisKey');
