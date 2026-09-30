@@ -363,6 +363,58 @@ CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = SalesTrend));
         }
     }
 
+    /// <summary>
+    /// line.md documents COLOR on a POINT and COORD takes any number. The parser refused COLOR and a
+    /// negative coordinate, and the formatter never wrote COLOR back.
+    /// </summary>
+    [Fact]
+    public async Task Chart_AnnotationColorAndNegativeCoordinate_ParseRoundTripAndRender()
+    {
+        const string visualText = """
+            CREATE VISUAL SalesTrend AS LINE (
+                SOURCE = #data,
+                MAPPINGS (X = Month, Y = Revenue),
+                ANNOTATIONS (
+                    POINT (SERIES = 'Revenue', TYPE = COORD(-1.5, -20), LABEL = 'Dip', COLOR = '#dc2626')
+                )
+            );
+            """;
+        var first = Parse(visualText).Statements.OfType<CreateVisualStatement>().Single();
+        var formatted = ETL_SQL.Core.Formatting.AstSerializer.Format(first);
+        var second = Parse(formatted.TrimEnd(';', '\r', '\n', ' ') + ";").Statements.OfType<CreateVisualStatement>().Single();
+        foreach (var point in new[] { first.Overlays.Single(), second.Overlays.Single() })
+        {
+            Assert.Equal(OverlayType.AnnotationPoint, point.OverlayType);
+            Assert.Equal((-1.5, -20.0), (point.CoordX, point.CoordY));
+            Assert.Equal("#dc2626", point.Color);
+        }
+
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"annotation_color_{Guid.NewGuid()}.rptsql");
+        File.WriteAllText(scriptPath, """
+            SELECT 'Jan' AS Month, 10.0 AS Revenue INTO #data;
+            INSERT INTO #data VALUES ('Feb', 80.0);
+            CREATE VISUAL SalesTrend AS LINE (
+                SOURCE = #data,
+                MAPPINGS (X = Month, Y = Revenue),
+                ANNOTATIONS (POINT (SERIES = 'Revenue', TYPE = MAX, LABEL = 'Peak', COLOR = '#dc2626'))
+            );
+            CREATE PAGE P AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = SalesTrend));
+            """);
+        try
+        {
+            var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+            var visual = (await service.GetManifestAsync()).Visuals.Single(v => v.Name == "SalesTrend");
+            Assert.Null(visual.Error);
+            var svg = new SvgChartRenderer().Render(visual);
+            var annotation = svg[svg.IndexOf("class='plot-annotation-point'", StringComparison.Ordinal)..];
+            Assert.Contains("#dc2626", annotation[..Math.Min(annotation.Length, 600)], StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+        }
+    }
+
     [Fact]
     public async Task CustomChart_AnnotationsAndNullHandling_ParsesAndRenders()
     {

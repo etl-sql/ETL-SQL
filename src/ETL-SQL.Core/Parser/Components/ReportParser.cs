@@ -5422,6 +5422,7 @@ public class ReportParser : ParserComponent
         string? coordXString = null;
         string? label = null;
         string? symbol = "pin";
+        string? color = null;
 
         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
         {
@@ -5438,17 +5439,12 @@ public class ReportParser : ParserComponent
                         if (_parser.Previous.Type != TokenType.COORD) Advance();
                         pointType = "COORD";
                         Consume(TokenType.LPAREN, "Expected '(' after COORD");
-                        var xToken = _parser.Current;
-                        if (xToken.Type == TokenType.STRING_LITERAL)
-                        {
+                        if (_parser.Current.Type == TokenType.STRING_LITERAL)
                             coordXString = Advance().Value;
-                        }
                         else
-                        {
-                            coordX = double.Parse(Advance().Value, CultureInfo.InvariantCulture);
-                        }
+                            coordX = ParseFiniteOverlayNumber("x", "COORD");
                         Consume(TokenType.COMMA, "Expected ',' between x and y in COORD(x, y)");
-                        coordY = double.Parse(Advance().Value, CultureInfo.InvariantCulture);
+                        coordY = ParseFiniteOverlayNumber("y", "COORD");
                         Consume(TokenType.RPAREN, "Expected ')' to close COORD");
                     }
                     else
@@ -5461,6 +5457,9 @@ public class ReportParser : ParserComponent
                     break;
                 case "SYMBOL":
                     symbol = ConsumeReportOptionValue().ToLowerInvariant();
+                    break;
+                case "COLOR":
+                    color = ConsumeReportOptionValue();
                     break;
                 default:
                     throw new SyntaxException($"Unexpected option '{key}' in POINT", _parser.Previous.Line, _parser.Previous.Column);
@@ -5478,7 +5477,8 @@ public class ReportParser : ParserComponent
             CoordY = coordY,
             CoordXString = coordXString,
             Label = label,
-            Symbol = symbol
+            Symbol = symbol,
+            Color = color
         };
     }
 

@@ -358,6 +358,50 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         Assert.Empty(session.PageErrors);
     }
 
+    [Fact]
+    public async Task AnAnnotationMarksTheLowestBar()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var studio = session.Page;
+        var reportId = await OpenStudioAsync(studio);
+
+        await SelectVisualAsync(studio, "ByRegion", "Analytics");
+        await studio.SelectOptionAsync("#pp-overlay-add", "ANNOTATION");
+        var row = studio.Locator("[data-overlay-row='0']");
+        await row.Locator("[data-overlay-field='target']").SelectOptionAsync("MIN");
+        await studio.Locator("[data-overlay-row='0'] [data-overlay-field='symbol']").SelectOptionAsync("circle");
+        await FillOverlayAsync(studio.Locator("[data-overlay-row='0']"), "color", "#dc2626");
+        await FillOverlayAsync(studio.Locator("[data-overlay-row='0']"), "label", "Lowest");
+        await WaitForScriptAsync(studio, "CREATE VISUAL ByRegion",
+            "OVERLAYS (ANNOTATIONS (POINT (TYPE = MIN, LABEL = 'Lowest', SYMBOL = 'circle', COLOR = '#dc2626')))");
+
+        await SaveAsync(studio, reportId);
+
+        var report = await RunReportAsync(studio, reportId);
+        var chart = report.Locator("[data-visual-name='ByRegion']");
+        var mark = chart.Locator("g.plot-annotation-point[data-annotation-symbol='circle'] circle");
+        await Expect(mark).ToHaveCountAsync(1);
+        await Expect(mark).ToHaveAttributeAsync("fill", "#dc2626");
+        await Expect(chart.Locator("g.plot-annotation-point", new() { HasText = "Lowest" })).ToHaveCountAsync(1);
+
+        // South (140) is the lowest bar, so the circle sits over it.
+        var placement = await chart.EvaluateAsync<JsonElement>(
+            """
+            card => {
+                const data = card._visualData || card.closest('.visual-card')?._visualData;
+                const region = (data.columns || []).findIndex(c => c.toLowerCase() === 'region');
+                const index = data.rows.findIndex(row => String(row[region]) === 'South');
+                const bar = card.querySelector(`[data-row-index='${index}']`);
+                const cx = Number(card.querySelector("g.plot-annotation-point circle").getAttribute('cx'));
+                return { cx, left: Number(bar.getAttribute('x')), right: Number(bar.getAttribute('x')) + Number(bar.getAttribute('width')) };
+            }
+            """);
+        var cx = placement.GetProperty("cx").GetDouble();
+        Assert.True(cx >= placement.GetProperty("left").GetDouble() && cx <= placement.GetProperty("right").GetDouble(),
+            $"The circle should sit over South's bar: {placement}");
+        Assert.Empty(session.PageErrors);
+    }
+
     private static async Task FillOverlayAsync(ILocator row, string field, string value)
     {
         var input = row.Locator($"[data-overlay-field='{field}']");

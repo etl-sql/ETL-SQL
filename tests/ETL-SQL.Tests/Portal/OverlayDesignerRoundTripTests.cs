@@ -42,6 +42,10 @@ public sealed class OverlayDesignerRoundTripTests
         "OVERLAYS (FORECAST(Forecast) AS DASHED WITH (CONFIDENCE_LOW = Low, CONFIDENCE_HIGH = High))",
         "OVERLAYS (RUNNING_TOTAL(RunningRevenue) AS SOLID)",
         "OVERLAYS (ANNOTATIONS (POINT (TYPE = MAX, LABEL = 'Peak')))",
+        // The same shapes studio_overlays.test.ts writes from the annotation card.
+        "OVERLAYS (ANNOTATIONS (POINT (SERIES = 'Revenue', TYPE = MIN, LABEL = 'Low', SYMBOL = 'arrow', COLOR = '#dc2626')))",
+        "OVERLAYS (ANNOTATIONS (POINT (TYPE = COORD('Mar', 120), LABEL = 'Launch', SYMBOL = 'circle')))",
+        "OVERLAYS (ANNOTATIONS (POINT (SERIES = 'trend', TYPE = COORD(-1.5, -20))))",
     };
 
     [Theory]

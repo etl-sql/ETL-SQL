@@ -6,7 +6,7 @@
  * and table calculations, one row per entry of a visual's OVERLAYS clause.
  *
  * Each entry is read on its own. One the editor can write back exactly becomes an editable row; any
- * other entry (an annotation point, say) stays as its own text and is written back untouched, so a
+ * other entry (an ANNOTATIONS group of several points, say) stays as its own text and is written back untouched, so a
  * guided edit to one overlay never rewrites a neighbour it did not understand.
  */
 
@@ -28,7 +28,17 @@ export type OverlayEntry =
     | { kind: 'REFERENCE_BAND'; low: string; high: string; color: string; label: string }
     | ({ kind: 'FORECAST'; field: string; low: string; high: string; anomaly: string } & Styled)
     | ({ kind: 'RUNNING_TOTAL' | 'PERCENT_OF_TOTAL'; field: string } & Styled)
+    | {
+        kind: 'ANNOTATION'; series: string; target: AnnotationTarget;
+        /** COORD's x: a category written as text, or a number on a numeric axis. */
+        x: string; xIsText: boolean; y: string; symbol: AnnotationSymbol; color: string; label: string;
+    }
     | { kind: 'RAW'; text: string };
+
+export type AnnotationTarget = 'MAX' | 'MIN' | 'COORD';
+export type AnnotationSymbol = 'pin' | 'arrow' | 'circle';
+const ANNOTATION_TARGETS: Array<[AnnotationTarget, string]> = [['MAX', 'Highest value'], ['MIN', 'Lowest value'], ['COORD', 'A point I choose']];
+const ANNOTATION_SYMBOLS: AnnotationSymbol[] = ['pin', 'arrow', 'circle'];
 
 export type OverlayKind = Exclude<OverlayEntry['kind'], 'RAW'>;
 
@@ -55,6 +65,7 @@ export const OVERLAY_CATALOG: Array<{ kind: OverlayKind; label: string; types: s
     { kind: 'FORECAST', label: 'Forecast', types: ['LINE', 'COMBO'] },
     { kind: 'RUNNING_TOTAL', label: 'Running total', types: ['LINE', 'BAR', 'HBAR', 'HORIZONTALBAR'] },
     { kind: 'PERCENT_OF_TOTAL', label: 'Percent of total', types: ['LINE', 'BAR', 'HBAR', 'HORIZONTALBAR'] },
+    { kind: 'ANNOTATION', label: 'Annotation point', types: CARTESIAN },
 ];
 
 export function overlaysFor(type: string | null | undefined) {
@@ -102,8 +113,34 @@ const isNumber = (value: string, signed: boolean): boolean =>
     (signed ? /^[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/ : /^\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/).test(value.trim())
     && Number.isFinite(Number(value));
 
+const COORD_NUMBER = String.raw`[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?`;
+
+/** One annotation point in the formatter's shape, or null when it is not one the card can write back exactly. */
+function readAnnotation(text: string): OverlayEntry | null {
+    const group = /^ANNOTATIONS\s*\(([\s\S]*)\)$/i.exec(text);
+    const points = group ? splitTopLevel(group[1]) : [text];
+    if (points.length !== 1) return null;
+    const body = /^POINT\s*\(([\s\S]*)\)$/i.exec(points[0])?.[1];
+    if (body == null) return null;
+    const pairs = readPairs(body);
+    if (!pairs || [...pairs.keys()].some(key => !['SERIES', 'TYPE', 'LABEL', 'SYMBOL', 'COLOR'].includes(key))) return null;
+    const series = readLiteral(pairs.get('SERIES'));
+    const label = readLiteral(pairs.get('LABEL'));
+    const color = readLiteral(pairs.get('COLOR'));
+    const symbol = (readLiteral(pairs.get('SYMBOL')) || 'pin').toLowerCase() as AnnotationSymbol;
+    if (series == null || label == null || color == null || !ANNOTATION_SYMBOLS.includes(symbol)) return null;
+    const type = pairs.get('TYPE') || '';
+    if (/^(MAX|MIN)$/i.test(type))
+        return { kind: 'ANNOTATION', series, target: type.toUpperCase() as AnnotationTarget, x: '', xIsText: false, y: '', symbol, color, label };
+    const coord = new RegExp(String.raw`^COORD\s*\(\s*(${LITERAL}|${COORD_NUMBER})\s*,\s*(${COORD_NUMBER})\s*\)$`, 'i').exec(type);
+    if (!coord) return null;
+    const xIsText = coord[1].startsWith("'");
+    return { kind: 'ANNOTATION', series, target: 'COORD', x: xIsText ? unquote(coord[1]) : coord[1], xIsText, y: coord[2], symbol, color, label };
+}
+
 function readEntry(text: string): OverlayEntry {
     const raw: OverlayEntry = { kind: 'RAW', text };
+    if (/^(ANNOTATIONS|POINT)\b/i.test(text)) return readAnnotation(text) ?? raw;
 
     const referenceLine = /^REFERENCE_LINE\s*\(([\s\S]*)\)$/i.exec(text);
     if (referenceLine) {
@@ -229,6 +266,20 @@ export function writeEntry(entry: OverlayEntry): string | null {
         case 'RUNNING_TOTAL':
         case 'PERCENT_OF_TOTAL':
             return NAME.test(entry.field.trim()) ? `${entry.kind}(${entry.field.trim()}) AS ${entry.style}${withClause(decorations(entry))}` : null;
+        case 'ANNOTATION': {
+            // The formatter's order: SERIES, TYPE, LABEL, SYMBOL (left out when 'pin', the default), COLOR.
+            const parts: string[] = [];
+            if (entry.series.trim()) parts.push(`SERIES = ${quote(entry.series.trim())}`);
+            if (entry.target === 'COORD') {
+                const x = entry.x.trim();
+                if (!x || (!entry.xIsText && !isNumber(x, true)) || !isNumber(entry.y, true)) return null;
+                parts.push(`TYPE = COORD(${entry.xIsText ? quote(x) : Number(x)}, ${Number(entry.y)})`);
+            } else parts.push(`TYPE = ${entry.target}`);
+            if (entry.label.trim()) parts.push(`LABEL = ${quote(entry.label.trim())}`);
+            if (entry.symbol !== 'pin') parts.push(`SYMBOL = ${quote(entry.symbol)}`);
+            if (entry.color.trim()) parts.push(`COLOR = ${quote(entry.color.trim())}`);
+            return `ANNOTATIONS (POINT (${parts.join(', ')}))`;
+        }
     }
 }
 
@@ -250,6 +301,7 @@ export function blankOverlay(kind: OverlayKind): OverlayEntry {
         case 'FORECAST': return { kind, field: '', low: '', high: '', anomaly: '', ...styled };
         case 'RUNNING_TOTAL':
         case 'PERCENT_OF_TOTAL': return { kind, field: '', ...styled, style: 'SOLID' };
+        case 'ANNOTATION': return { kind, series: '', target: 'MAX', x: '', xIsText: false, y: '', symbol: 'pin', color: '', label: '' };
     }
 }
 
@@ -263,6 +315,7 @@ const OVERLAY_NOTES: Partial<Record<OverlayEntry['kind'], string>> = {
     FORECAST: 'Plots a column your query computes. Confidence low and high go together.',
     RUNNING_TOTAL: 'Plots a column your query computes, for example SUM(Revenue) OVER (ORDER BY Month) AS RunningRevenue.',
     PERCENT_OF_TOTAL: 'Plots a column your query computes, for example Revenue / SUM(Revenue) OVER () AS RevenueShare.',
+    ANNOTATION: 'Marks a series\u2019 highest or lowest point, or a point you place, with a symbol and a label. A blank series means the first one.',
     RAW: 'Left exactly as written. Edit it in the script, or remove it here.',
 };
 
@@ -325,8 +378,19 @@ export function renderOverlayEditorHtml(v: OverlayVisual, columns: string[]): st
                 + field(index, 'anomaly', 'Anomaly flag', entry.anomaly, 'optional', true); break;
             case 'RUNNING_TOTAL':
             case 'PERCENT_OF_TOTAL': body = field(index, 'field', 'Computed column', entry.field, 'RunningRevenue', true); break;
+            case 'ANNOTATION': body = field(index, 'series', 'Series', entry.series, 'first series', true) + `
+                <label class="etlsql-dsgn-label">Mark
+                    <select class="form-control" data-overlay-field="target" data-overlay-index="${index}">
+                        ${ANNOTATION_TARGETS.map(([value, text]) => `<option value="${value}"${value === entry.target ? ' selected' : ''}>${text}</option>`).join('')}
+                    </select>
+                </label>${entry.target === 'COORD' ? field(index, 'x', 'At x', entry.x, 'Mar') + field(index, 'y', 'At y', entry.y, '120') : ''}
+                <label class="etlsql-dsgn-label">Symbol
+                    <select class="form-control" data-overlay-field="symbol" data-overlay-index="${index}">
+                        ${ANNOTATION_SYMBOLS.map(item => `<option value="${item}"${item === entry.symbol ? ' selected' : ''}>${item.charAt(0).toUpperCase() + item.slice(1)}</option>`).join('')}
+                    </select>
+                </label>`; break;
         }
-        const decorated = entry.kind === 'RAW' ? '' : (entry.kind === 'REFERENCE_BAND' ? '' : styleSelect(index, entry.style))
+        const decorated = entry.kind === 'RAW' ? '' : (entry.kind === 'REFERENCE_BAND' || entry.kind === 'ANNOTATION' ? '' : styleSelect(index, entry.style))
             + field(index, 'color', 'Colour', entry.color, '#dc2626')
             + field(index, 'label', 'Label', entry.label, 'optional');
         const incomplete = writeEntry(entry) === null;
@@ -384,6 +448,8 @@ export function bindOverlayEditor(panel: ParentNode, v: OverlayVisual, sync: () 
         const key = datasetValue(control, 'overlayField');
         if (!entry || !(key in entry)) return;
         entry[key] = control.value.trim();
+        // A category is written as text; a number stays a number on a numeric axis.
+        if (key === 'x') entry.xIsText = !isNumber(control.value, true);
         commit();
     }));
 }

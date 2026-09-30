@@ -213,7 +213,12 @@ containers, and clause-level patching that keeps hand-written clauses on a desig
   corrupted annotation points into unparseable text, and inspector groups closed when their heading
   count changed. Proof: `StudioInteractionJourneyTests.AGoalAndABandAreDrawnWhereTheirValuesSay`
   checks the goal line is drawn at its value.
-  - [ ] Follow-up: annotation points (`ANNOTATIONS (POINT (…))`) have no guided card yet.
+  - [x] Follow-up: annotation points (`ANNOTATIONS (POINT (…))`) have no guided card yet. Done
+    2026-09-30: an *Annotation point* card marks a series' highest or lowest value, or a chosen
+    `COORD(x, y)`, with a symbol, colour, and label. A category x stays text and a numeric one stays a
+    number. A group of several points, or one without `TYPE`, stays read-only. Found on the way: the
+    parser refused the documented `COLOR` and any negative coordinate, and the formatter dropped
+    `COLOR`. Proof: `StudioInteractionJourneyTests.AnAnnotationMarksTheLowestBar`.
 - [x] **P2 — Mobile layout.** Deferred 2026-09-29 and moved to `ROADMAP.md` ("Studio Authoring for
   Mobile Page Layouts", Later). The `MOBILE_LAYOUT` clause works when written by hand; there is not
   enough demand yet to build Studio controls for it.

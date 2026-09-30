@@ -25,15 +25,32 @@ describe('Studio analytics overlays', () => {
         'OVERLAYS (FORECAST(Forecast) AS DASHED WITH (CONFIDENCE_LOW = Low, CONFIDENCE_HIGH = High))',
         'OVERLAYS (RUNNING_TOTAL(RunningRevenue) AS SOLID)',
         "OVERLAYS (GOAL(100) AS DASHED, ANNOTATIONS (POINT (TYPE = MAX, LABEL = 'Peak')))",
+        "OVERLAYS (ANNOTATIONS (POINT (SERIES = 'Revenue', TYPE = MIN, LABEL = 'Low', SYMBOL = 'arrow', COLOR = '#dc2626')))",
+        "OVERLAYS (ANNOTATIONS (POINT (TYPE = COORD('Mar', 120), LABEL = 'Launch', SYMBOL = 'circle')))",
+        "OVERLAYS (ANNOTATIONS (POINT (SERIES = 'trend', TYPE = COORD(-1.5, -20))))",
     ])('the formatter shape reads into rows and writes back exactly: %s', clause => {
         expect(m.writeOverlays(m.readOverlays(clause))).toBe(clause);
     });
 
     test('an entry the editor cannot write is kept as written, beside the ones it can', () => {
-        const rows = m.readOverlays("OVERLAYS (ANNOTATIONS (POINT (TYPE = MAX, LABEL = 'Peak')), AVERAGE AS DASHED)");
+        // Two points in one ANNOTATIONS group are not one card's worth.
+        const group = "ANNOTATIONS (POINT (TYPE = MAX), POINT (TYPE = MIN))";
+        const rows = m.readOverlays(`OVERLAYS (${group}, AVERAGE AS DASHED)`);
         expect(rows.map((row: any) => row.kind)).toEqual(['RAW', 'AVERAGE']);
         rows[1].style = 'SOLID';
-        expect(m.writeOverlays(rows)).toBe("OVERLAYS (ANNOTATIONS (POINT (TYPE = MAX, LABEL = 'Peak')), AVERAGE AS SOLID)");
+        expect(m.writeOverlays(rows)).toBe(`OVERLAYS (${group}, AVERAGE AS SOLID)`);
+    });
+
+    test('an annotation point reads into a card, and a category x stays text', () => {
+        const [point] = m.readOverlays("OVERLAYS (ANNOTATIONS (POINT (TYPE = COORD('3', 120), LABEL = 'Q3')))");
+        expect(point).toMatchObject({ kind: 'ANNOTATION', target: 'COORD', x: '3', xIsText: true, y: '120', symbol: 'pin' });
+        // Written back as the category '3', not the number 3.
+        expect(m.writeEntry(point)).toBe("ANNOTATIONS (POINT (TYPE = COORD('3', 120), LABEL = 'Q3'))");
+        expect(m.writeEntry({ ...point, xIsText: false })).toBe("ANNOTATIONS (POINT (TYPE = COORD(3, 120), LABEL = 'Q3'))");
+    });
+
+    test('a point without a TYPE is kept as written, since the card would add one', () => {
+        expect(m.readOverlays("OVERLAYS (ANNOTATIONS (POINT (LABEL = 'Peak')))")[0].kind).toBe('RAW');
     });
 
     test('a label with an apostrophe or a comma stays one value', () => {
@@ -47,6 +64,9 @@ describe('Studio analytics overlays', () => {
         expect(m.writeEntry({ ...m.blankOverlay('REFERENCE_BAND'), low: '20', high: '10' })).toBeNull();
         // The build refuses one confidence bound without the other.
         expect(m.writeEntry({ ...m.blankOverlay('FORECAST'), field: 'Forecast', low: 'Low' })).toBeNull();
+        // A chosen point needs both coordinates.
+        expect(m.writeEntry({ ...m.blankOverlay('ANNOTATION'), target: 'COORD', x: 'Mar' })).toBeNull();
+        expect(m.writeEntry(m.blankOverlay('ANNOTATION'))).toBe('ANNOTATIONS (POINT (TYPE = MAX))');
         expect(m.writeOverlays([blankGoal])).toBeNull();
         expect(m.writeOverlays([blankGoal, m.blankOverlay('AVERAGE')])).toBe('OVERLAYS (AVERAGE AS DASHED)');
     });

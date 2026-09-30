@@ -2325,6 +2325,7 @@ public static class AstSerializer
             // clause to every author's annotation on the next format or designer edit.
             if (!string.IsNullOrWhiteSpace(overlay.Symbol) && !overlay.Symbol.Equals("pin", StringComparison.OrdinalIgnoreCase))
                 props.Add($"SYMBOL = {Quote(overlay.Symbol)}");
+            if (!string.IsNullOrWhiteSpace(overlay.Color)) props.Add($"COLOR = {Quote(overlay.Color)}");
             return $"ANNOTATIONS (POINT ({string.Join(", ", props)}))";
         }
 
