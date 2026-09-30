@@ -3664,45 +3664,60 @@ public class ReportParser : ParserComponent
                 Match(TokenType.COMMA);
             }
 
-            if (_parser.Current.Value.Equals("VISUALS", StringComparison.OrdinalIgnoreCase))
-            {
-                Advance();
-                Consume(TokenType.LPAREN, "Expected '(' after VISUALS in TOOLTIP");
-                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
-                {
-                    visuals.Add(ConsumeIdentifier("Expected visual name in TOOLTIP VISUALS").Value);
-                    Match(TokenType.COMMA);
-                }
-                Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP VISUALS");
-            }
-
-            // FIELDS = (FieldA FORMAT 'C0', FieldB) — the declarative middle tier. Field names are
-            // column aliases from the visual's SOURCE; FORMAT follows the DATA_LABELS convention.
+            // VISUALS (...) and FIELDS (...) follow in either order, separated by commas; each at most once.
             List<TooltipField>? fields = null;
-            if (_parser.Current.Value.Equals("FIELDS", StringComparison.OrdinalIgnoreCase))
+            var sawVisuals = false;
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
-                Advance();
-                Match(TokenType.EQUALS);
-                Consume(TokenType.LPAREN, "Expected '(' after FIELDS in TOOLTIP");
-                fields = new List<TooltipField>();
-                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                if (_parser.Current.Value.Equals("VISUALS", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Column aliases routinely collide with keywords (SHARE, VALUE, TOTAL), so any
-                    // word that is not punctuation is accepted as a field name here.
-                    var fieldName = ConsumeAdvancedWord("Expected a field name in TOOLTIP FIELDS");
-                    string? format = null;
-                    if (Match(TokenType.FORMAT) || IsCurrentValue("FORMAT"))
+                    if (sawVisuals)
+                        throw new SyntaxException("TOOLTIP VISUALS is given twice", _parser.Current.Line, _parser.Current.Column);
+                    sawVisuals = true;
+                    Advance();
+                    Consume(TokenType.LPAREN, "Expected '(' after VISUALS in TOOLTIP");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
                     {
-                        if (_parser.Previous.Type != TokenType.FORMAT) Advance();
-                        Match(TokenType.EQUALS);
-                        format = ConsumeIdentifierOrString("Expected a format string after FORMAT").Value;
+                        visuals.Add(ConsumeIdentifier("Expected visual name in TOOLTIP VISUALS").Value);
+                        Match(TokenType.COMMA);
                     }
-                    fields.Add(new TooltipField(fieldName, format));
-                    if (!Match(TokenType.COMMA)) break;
+                    Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP VISUALS");
                 }
-                Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP FIELDS");
-                if (fields.Count == 0)
-                    throw new SyntaxException("TOOLTIP FIELDS requires at least one field", _parser.Previous.Line, _parser.Previous.Column);
+                // FIELDS = (FieldA FORMAT 'C0', FieldB) — the declarative middle tier. Field names are
+                // column aliases from the visual's SOURCE; FORMAT follows the DATA_LABELS convention.
+                else if (_parser.Current.Value.Equals("FIELDS", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (fields is not null)
+                        throw new SyntaxException("TOOLTIP FIELDS is given twice", _parser.Current.Line, _parser.Current.Column);
+                    Advance();
+                    Match(TokenType.EQUALS);
+                    Consume(TokenType.LPAREN, "Expected '(' after FIELDS in TOOLTIP");
+                    fields = new List<TooltipField>();
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        // Column aliases routinely collide with keywords (SHARE, VALUE, TOTAL), so any
+                        // word that is not punctuation is accepted as a field name here.
+                        var fieldName = ConsumeAdvancedWord("Expected a field name in TOOLTIP FIELDS");
+                        string? format = null;
+                        if (Match(TokenType.FORMAT) || IsCurrentValue("FORMAT"))
+                        {
+                            if (_parser.Previous.Type != TokenType.FORMAT) Advance();
+                            Match(TokenType.EQUALS);
+                            format = ConsumeIdentifierOrString("Expected a format string after FORMAT").Value;
+                        }
+                        fields.Add(new TooltipField(fieldName, format));
+                        if (!Match(TokenType.COMMA)) break;
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP FIELDS");
+                    if (fields.Count == 0)
+                        throw new SyntaxException("TOOLTIP FIELDS requires at least one field", _parser.Previous.Line, _parser.Previous.Column);
+                }
+                else
+                {
+                    throw new SyntaxException("Expected VISUALS or FIELDS in TOOLTIP", _parser.Current.Line, _parser.Current.Column);
+                }
+                // The comma is optional: before v0.20.0 VISUALS (...) FIELDS (...) was written without one.
+                Match(TokenType.COMMA);
             }
 
             Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP inline block");

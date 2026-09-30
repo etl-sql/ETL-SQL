@@ -202,8 +202,11 @@ containers, and clause-level patching that keeps hand-written clauses on a desig
   into a popover visual on request. Before this there was no tooltip UI at all. Proof:
   `StudioInteractionJourneyTests.AFieldTooltipShowsTheHoveredRowFormatted` and
   `APopoverShowsTheRowsForTheClickedPoint`.
-  - [ ] Follow-up: `visual.md` documents `(['md',] [FIELDS (…)] [, VISUALS (…)])`, but the parser
-    reads `VISUALS` before `FIELDS`, so the documented order does not parse. Fix one or the other.
+  - [x] Follow-up: `visual.md` documents `(['md',] [FIELDS (…)] [, VISUALS (…)])`, but the parser
+    reads `VISUALS` before `FIELDS`, so the documented order does not parse. Fixed 2026-09-30 in the
+    parser: the two parts come in either order, comma-separated (optional, so the old form still
+    parses), each at most once. The formatter wrote `VISUALS (…), FIELDS (…)`, which the parser could
+    not read back, so a format pass broke any tooltip with both. Proof: `DetailSurfaceSyntaxTests`.
 - [x] **P2 — Analytics overlays.** Done 2026-09-29. The format inspector's *Analytics* group has one
   card per overlay, offers only what the chart's build accepts, and keeps entries it cannot write
   (annotation points) read-only. Found along the way: the designer's own overlay formatter

@@ -139,6 +139,37 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Equal(DetailSurfaceKind.Persistent, visual.Tooltip.Kind);
         }
 
+        // ── Fields and visuals together ───────────────────────────────────────
+
+        /// <summary>
+        /// visual.md documents FIELDS before VISUALS, and the formatter writes VISUALS, FIELDS with a
+        /// comma. The parser used to accept only VISUALS FIELDS with no comma, so neither form parsed.
+        /// </summary>
+        [Theory]
+        [InlineData("TOOLTIP ('Details', FIELDS (Revenue FORMAT 'C0'), VISUALS (DetailChart))")]
+        [InlineData("TOOLTIP ('Details', VISUALS (DetailChart), FIELDS (Revenue FORMAT 'C0'))")]
+        [InlineData("TOOLTIP (FIELDS (Revenue FORMAT 'C0'), VISUALS (DetailChart))")]
+        [InlineData("TOOLTIP ('Details', VISUALS (DetailChart) FIELDS (Revenue FORMAT 'C0'))")]
+        public void InlineForm_FieldsAndVisualsParseInEitherOrderAndRoundTrip(string clause)
+        {
+            var (first, second, _) = RoundTrip(clause);
+
+            foreach (var tooltip in new[] { first.Tooltip!, second.Tooltip! })
+            {
+                Assert.Equal(["DetailChart"], tooltip.InlineVisuals!);
+                var field = Assert.Single(tooltip.Fields!);
+                Assert.Equal(("Revenue", "C0"), (field.Name, field.Format));
+            }
+        }
+
+        [Theory]
+        [InlineData("TOOLTIP (FIELDS (Revenue), FIELDS (Month))")]
+        [InlineData("TOOLTIP (VISUALS (A), VISUALS (B))")]
+        public void InlineForm_RejectsARepeatedPart(string clause)
+        {
+            Assert.ThrowsAny<Exception>(() => Parse(Visual(clause)));
+        }
+
         // ── The real sample ────────────────────────────────────────────────────
 
         [Fact]
