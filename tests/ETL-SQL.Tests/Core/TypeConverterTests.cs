@@ -106,5 +106,31 @@ namespace ETL_SQL.Tests.Core
             Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() =>
                 TypeConverter.Cast("2026-01-02T03:04:05Z", "DATETIMEOFFSET(8)"));
         }
+
+        // A LIST arrives as text from a report control, a Ctrl+click selection, or --var, and
+        // IN @list only matches element by element when the value is a real list.
+        [Theory]
+        [InlineData("North,South", new[] { "North", "South" })]
+        [InlineData(" North , South ", new[] { "North", "South" })]
+        [InlineData("North", new[] { "North" })]
+        [InlineData("[\"North\",\"South, East\"]", new[] { "North", "South, East" })]
+        [InlineData("[]", new string[0])]
+        [InlineData("", new string[0])]
+        public void ListCastSplitsTextIntoItems(string value, string[] expected)
+        {
+            var result = Assert.IsType<List<object?>>(TypeConverter.Cast(value, "LIST"));
+            Assert.Equal(expected, result.Select(item => item?.ToString()).ToArray());
+        }
+
+        [Fact]
+        public void ListCastKeepsJsonNumbersNumericAndListsAsTheyAre()
+        {
+            var numbers = Assert.IsType<List<object?>>(TypeConverter.Cast("[1, 2.5]", "LIST"));
+            Assert.Equal(new object?[] { 1m, 2.5m }, numbers);
+
+            var list = new List<object?> { "North" };
+            Assert.Same(list, TypeConverter.Cast(list, "LIST"));
+            Assert.Equal(new object?[] { 7m }, Assert.IsType<List<object?>>(TypeConverter.Cast(7m, "LIST")));
+        }
     }
 }

@@ -7311,7 +7311,10 @@ function applyPageCrossFilter(container, filterValue, filterColumn, sourceVisual
             groups[k] = [];
         groups[k].push(s.value);
     });
-    Object.keys(groups).forEach(k => { batch[k] = groups[k].join(','); });
+    // COMPAT_BREAK: 0.20 — posted as a JSON array, previously comma-joined text.
+    // A JSON array keeps a value that contains a comma whole; the host gives a LIST parameter
+    // every value and any other parameter the value itself when only one is selected.
+    Object.keys(groups).forEach(k => { batch[k] = JSON.stringify(groups[k]); });
     state.lastBatch = batch;
     postParameters(batch, true, null, sourceVisualName).then(m => { if (m)
         renderManifest(m); });

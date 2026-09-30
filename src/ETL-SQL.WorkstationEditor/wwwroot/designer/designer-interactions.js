@@ -100,13 +100,35 @@ export function parametersRead(source) {
     return names;
 }
 /**
+ * The condition that keeps the rows a selection or drill-down picked. `@column` is a LIST, so a
+ * Ctrl+click on several points matches all of them; `'All'` is its resting value, so the
+ * unfiltered report still shows everything.
+ */
+export function listFilterCondition(column) {
+    return `'All' IN @${column} OR ${column} IN @${column}`;
+}
+/** The single-value condition Studio wrote before v0.20.0; it cannot match a Ctrl+click on several points. */
+function singleFilterCondition(column) {
+    return `@${column} = 'All' OR ${column} = @${column}`;
+}
+/**
  * The source rewritten to keep only the rows matching `@column`, or null when the source is not a
- * shape this can edit safely. `'All'` is the parameter's resting value, so the unfiltered report
- * still shows everything. A source that already filters, groups, joins, or nests is left for the
- * author: appending a WHERE to it would change what it means.
+ * shape this can edit safely. A source that already filters, groups, joins, or nests is left for
+ * the author: appending a WHERE to it would change what it means.
  */
 export function filterSourceOn(source, column) {
-    return filterSourceWhere(source, `@${column} = 'All' OR ${column} = @${column}`);
+    return filterSourceWhere(source, listFilterCondition(column));
+}
+/**
+ * The source with Studio's earlier single-value filter on `@column` replaced by the list form, or
+ * null when the source does not contain that exact condition. Only Studio's own text is rewritten,
+ * never a hand-written comparison.
+ */
+export function filterSourceOnSeveral(source, column) {
+    const text = String(source || '');
+    const single = singleFilterCondition(column);
+    const at = text.indexOf(single);
+    return at < 0 ? null : text.slice(0, at) + listFilterCondition(column) + text.slice(at + single.length);
 }
 /**
  * The source rewritten to keep only the rows for the hovered point. A popover's visuals receive the

@@ -178,8 +178,15 @@ containers, and clause-level patching that keeps hand-written clauses on a desig
     Found on the way: a parameter posted while the Portal session was rebuilding was dropped,
     and the reader got the report back unchanged (`DashboardService.SetParametersAsync` checked for
     an evaluator outside its lock). Proof: `DashboardParameterRebuildRaceTests`.
-  - [ ] Follow-up: a multi-select (Ctrl+click) sends `North,South`, which the written
-    `Region = @Region` filter cannot match.
+  - [x] Follow-up: a multi-select (Ctrl+click) sends `North,South`, which the written
+    `Region = @Region` filter cannot match. Done 2026-09-30 (user chose LIST + IN): Studio now declares
+    `@Region LIST = 'All'` and writes `'All' IN @Region OR Region IN @Region`, and offers to upgrade
+    the single-value filter it wrote before. A selection is posted as a JSON array. Root cause was
+    wider: `LIST` had no converter, so text never became items, and the documented MULTISELECT
+    pattern (`IN @selected_regions`) matched no rows on the first pick (COMPAT_BREAK 0.20). Proof:
+    `ReportListParameterTests`, `StudioInteractionJourneyTests.ACtrlClickOnTwoBarsShowsBothRegions`.
+    - [ ] Follow-up: a DRILL_DOWN or SET_PARAMETER click posts plain text, so a clicked value that
+      contains a comma is split when the parameter is a LIST. Post those as JSON arrays too.
 - [x] **P1 — Reports built on a shared connection failed for readers.** Found and fixed 2026-09-29.
   Studio wrote `FROM alias.Table` without declaring the catalog connection; preview declared it
   quietly, so the report previewed and then failed with `Unknown source` for every reader, schedule,

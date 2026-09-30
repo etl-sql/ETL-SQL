@@ -33,7 +33,7 @@ namespace ETL_SQL.Reporting.Builders
                     var variableName = pair.Key.StartsWith('@') ? pair.Key : '@' + pair.Key;
                     if (!ctx.VarContext.ContainsVariable(variableName)) continue;
                     expressionBackups[variableName] = ctx.VarContext.GetVariable(variableName);
-                    ctx.VarContext.SetVariable(variableName, pair.Value);
+                    ctx.VarContext.SetVariable(variableName, ReportParameterBinding.Selection(ctx, variableName, pair.Value));
                 }
 
                 var titleExpr = vStmt.TitleDefinition?.Text ?? vStmt.Title;
@@ -838,7 +838,7 @@ namespace ETL_SQL.Reporting.Builders
                             if (InteractionVariableApplies(queryStmt, kvp.Key) && ctx.VarContext.ContainsVariable(kvp.Key))
                             {
                                 backup[kvp.Key] = ctx.VarContext.GetVariable(kvp.Key);
-                                ctx.VarContext.SetVariable(kvp.Key, kvp.Value);
+                                ctx.VarContext.SetVariable(kvp.Key, ReportParameterBinding.Selection(ctx, kvp.Key, kvp.Value));
                             }
                         }
                         // Only compute HighlightRows when at least one interaction variable was
@@ -869,7 +869,7 @@ namespace ETL_SQL.Reporting.Builders
                             if (InteractionVariableApplies(queryStmt, kvp.Key) && ctx.VarContext.ContainsVariable(kvp.Key))
                             {
                                 backup[kvp.Key] = ctx.VarContext.GetVariable(kvp.Key);
-                                ctx.VarContext.SetVariable(kvp.Key, kvp.Value);
+                                ctx.VarContext.SetVariable(kvp.Key, ReportParameterBinding.Selection(ctx, kvp.Key, kvp.Value));
                             }
                         }
                         await ExecuteAndPopulateRowsAsync(queryStmt, vStmt, vm.Rows, vm.RowStyles, vm);

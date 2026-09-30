@@ -44,10 +44,10 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
             var filterOn = page.Locator("[data-filter-on='Region']");
             await Expect(page.Locator("[data-unread-key='Region']")).ToContainTextAsync("arrives as @Region");
             await filterOn.ClickAsync();
-            await WaitForScriptAsync(page, $"CREATE VISUAL {table}", "WHERE @Region = 'All' OR Region = @Region");
+            await WaitForScriptAsync(page, $"CREATE VISUAL {table}", "WHERE 'All' IN @Region OR Region IN @Region");
             await Expect(filterOn).ToHaveCountAsync(0);
         }
-        await WaitForScriptAsync(page, "DECLARE @Region", "'All'");
+        await WaitForScriptAsync(page, "DECLARE @Region", "LIST = 'All'");
 
         // Only one of them is on the chart's list.
         await SelectVisualAsync(page, "ByRegion");
@@ -71,6 +71,51 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
     }
 
     [Fact]
+    public async Task ACtrlClickOnTwoBarsShowsBothRegions()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        // Detail starts with the single-value filter Studio wrote before selections could hold
+        // several values.
+        var reportId = await OpenStudioAsync(page, script =>
+        {
+            const string plain = "CREATE VISUAL Detail AS TABLE (\n  SOURCE = #sales\n)";
+            script = script.ReplaceLineEndings("\n");
+            Assert.Contains(plain, script, StringComparison.Ordinal);
+            return "DECLARE @Region VARCHAR(20) = 'All';\n" + script.Replace(plain,
+                "CREATE VISUAL Detail AS TABLE (\n  SOURCE = (SELECT * FROM #sales WHERE @Region = 'All' OR Region = @Region)\n)",
+                StringComparison.Ordinal);
+        });
+
+        await SelectVisualAsync(page, "ByRegion");
+        await page.SelectOptionAsync("#pp-interaction-on-select", "HIGHLIGHT");
+        await WaitForScriptAsync(page, "CREATE VISUAL ByRegion", "INTERACTIONS (ON_SELECT = HIGHLIGHT)");
+
+        await SelectVisualAsync(page, "Detail");
+        await page.SelectOptionAsync("#pp-interaction-on-select", "FILTER");
+        await WaitForScriptAsync(page, "CREATE VISUAL Detail", "INTERACTIONS (ON_SELECT = FILTER)");
+        await Expect(page.Locator("[data-single-pick='Region']")).ToContainTextAsync("one selected Region at a time");
+        await page.Locator("[data-filter-several='Region']").ClickAsync();
+        await WaitForScriptAsync(page, "CREATE VISUAL Detail", "WHERE 'All' IN @Region OR Region IN @Region");
+        await WaitForScriptAsync(page, "DECLARE @Region", "LIST = 'All'");
+        await Expect(page.Locator("[data-single-pick]")).ToHaveCountAsync(0);
+
+        await SaveAsync(page, reportId);
+
+        var report = await RunReportAsync(page, reportId);
+        var marks = report.Locator("[data-visual-name='ByRegion'] [data-row-index]");
+        var first = await ClickChartMarkAsync(report, "ByRegion");
+        await WaitForRegionsAsync(report, "Detail", regions => regions.SetEquals([first]),
+            $"Detail should show only {first} after the first click");
+        var second = await RegionOfMarkAsync(marks.Nth(1));
+        await marks.Nth(1).ClickAsync(new() { Modifiers = [KeyboardModifier.Control], Force = true });
+
+        await WaitForRegionsAsync(report, "Detail", regions => regions.SetEquals([first, second]),
+            $"Detail should show {first} and {second} after the Ctrl+click");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task ADrillDownShowsTheClickedRegionInItsTarget()
     {
         await using var session = await fixture.NewSessionAsync();
@@ -87,8 +132,8 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         // the button does it.
         await Expect(page.Locator("[data-click-note]")).ToContainTextAsync("Orders must read @Region");
         await page.Locator("[data-drill-read='Region']").ClickAsync();
-        await WaitForScriptAsync(page, "CREATE VISUAL Orders", "WHERE @Region = 'All' OR Region = @Region");
-        await WaitForScriptAsync(page, "DECLARE @Region", "'All'");
+        await WaitForScriptAsync(page, "CREATE VISUAL Orders", "WHERE 'All' IN @Region OR Region IN @Region");
+        await WaitForScriptAsync(page, "DECLARE @Region", "LIST = 'All'");
 
         await SaveAsync(page, reportId);
 
@@ -116,8 +161,8 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
         await page.Locator("#pp-click-keys").FillAsync("Region");
         await page.Locator("#pp-click-keys").BlurAsync();
         await page.Locator("[data-drill-read='Region']").ClickAsync();
-        await WaitForScriptAsync(page, "CREATE VISUAL Orders", "WHERE @Region = 'All' OR Region = @Region");
-        await WaitForScriptAsync(page, "DECLARE @Region", "'All'");
+        await WaitForScriptAsync(page, "CREATE VISUAL Orders", "WHERE 'All' IN @Region OR Region IN @Region");
+        await WaitForScriptAsync(page, "DECLARE @Region", "LIST = 'All'");
         await page.SelectOptionAsync("#pp-click-kind", "SET_PARAMETER");
         await page.SelectOptionAsync("#pp-click-parameter", "@Region");
         await page.Locator("#pp-click-column").FillAsync("Region");
@@ -340,10 +385,10 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
 
     // ── Studio ───────────────────────────────────────────────────────────────
 
-    private async Task<int> OpenStudioAsync(IPage page)
+    private async Task<int> OpenStudioAsync(IPage page, Func<string, string>? editScript = null)
     {
         await fixture.SignInAsync(page);
-        var reportId = await CreateReportAsync(page);
+        var reportId = await CreateReportAsync(page, editScript);
         await page.GotoAsync($"/studio.html?reportId={reportId}");
         await page.WaitForFunctionAsync(
             "() => (window.__STUDIO__?.state?.designerInstance?.getState()?.pages || []).some(p => (p.visuals || []).length > 0)",
@@ -507,23 +552,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
 
     // ── Setup ────────────────────────────────────────────────────────────────
 
-    private async Task<int> CreateReportAsync(IPage page)
-    {
-        var folderId = await CreateWritableFolderAsync();
-        var report = await page.EvaluateAsync<JsonElement>(
-            """
-            async request => {
-                const { studioApi } = await import('/js/api.js');
-                return studioApi.createReport(request);
-            }
-            """,
-            new
-            {
-                folderId,
-                name = $"Interaction Journey {Guid.NewGuid():N}",
-                // Nothing reads a parameter yet: each test has the inspector write what its
-                // interaction needs, so the script it starts from is the one an author would have.
-                scriptText = $"""
+    private const string StartingScript = """
                     CREATE TABLE #sales (SaleID INT, Region VARCHAR(20), Total DECIMAL(10,2));
                     INSERT INTO #sales VALUES (1, 'North', 100), (2, 'North', 150), (3, 'South', 80),
                       (4, 'South', 60), (5, 'West', 200), (6, 'West', 40);
@@ -556,7 +585,26 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
                         MAP ('A' = ByRegion, 'B' = RegionDrill, 'C' = Detail, 'D' = Other, 'E' = Orders, 'F' = Totals)
                       )
                     );
-                    """
+                    """;
+
+
+    private async Task<int> CreateReportAsync(IPage page, Func<string, string>? editScript)
+    {
+        var folderId = await CreateWritableFolderAsync();
+        var report = await page.EvaluateAsync<JsonElement>(
+            """
+            async request => {
+                const { studioApi } = await import('/js/api.js');
+                return studioApi.createReport(request);
+            }
+            """,
+            new
+            {
+                folderId,
+                name = $"Interaction Journey {Guid.NewGuid():N}",
+                // Nothing reads a parameter yet: each test has the inspector write what its
+                // interaction needs, so the script it starts from is the one an author would have.
+                scriptText = editScript is null ? StartingScript : editScript(StartingScript)
             });
         return report.GetProperty("id").GetInt32();
     }

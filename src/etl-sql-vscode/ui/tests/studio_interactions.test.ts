@@ -86,12 +86,26 @@ describe('Studio interaction clauses', () => {
             .toEqual(['@region']);
     });
 
+    // @Region is a LIST, so a Ctrl+click on several points matches every one of them.
     test.each([
-        ['#sales', "(SELECT * FROM #sales WHERE @Region = 'All' OR Region = @Region)"],
-        ['&sales', "(SELECT * FROM &sales WHERE @Region = 'All' OR Region = @Region)"],
-        ['(SELECT SaleID, Region FROM #sales)', "(SELECT SaleID, Region FROM #sales WHERE @Region = 'All' OR Region = @Region)"],
+        ['#sales', "(SELECT * FROM #sales WHERE 'All' IN @Region OR Region IN @Region)"],
+        ['&sales', "(SELECT * FROM &sales WHERE 'All' IN @Region OR Region IN @Region)"],
+        ['(SELECT SaleID, Region FROM #sales)', "(SELECT SaleID, Region FROM #sales WHERE 'All' IN @Region OR Region IN @Region)"],
     ])('a source it can edit safely is filtered on the parameter: %s', (source, expected) => {
         expect(m.filterSourceOn(source, 'Region')).toBe(expected);
+    });
+
+    test('the single-value filter Studio wrote earlier is upgraded to match several values', () => {
+        expect(m.filterSourceOnSeveral("(SELECT * FROM #sales WHERE @Region = 'All' OR Region = @Region)", 'Region'))
+            .toBe("(SELECT * FROM #sales WHERE 'All' IN @Region OR Region IN @Region)");
+    });
+
+    test.each([
+        "(SELECT * FROM #sales WHERE Region = @Region)",
+        "(SELECT * FROM #sales WHERE 'All' IN @Region OR Region IN @Region)",
+        '#sales',
+    ])('a hand-written or already-upgraded filter is left alone: %s', source => {
+        expect(m.filterSourceOnSeveral(source, 'Region')).toBeNull();
     });
 
     test.each([

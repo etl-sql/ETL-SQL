@@ -243,7 +243,8 @@ describe('resolved interaction contract', () => {
             w.__IS_WEB__ = true;
             w.fetch = (url: string, init: any) => {
                 posted.push({ url, body: JSON.parse(init.body) });
-                return Promise.resolve({ ok: true, json: () => Promise.resolve({ visuals: [], pages: [] }) });
+                // A host answers a selection with an interaction manifest, which keeps the selection.
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ visuals: [], pages: [], isInteraction: true }) });
             };
         });
         const page = win.document.createElement('div');
@@ -260,8 +261,13 @@ describe('resolved interaction contract', () => {
 
         expect(posted.length).toBe(1);
         // 'North', keyed on Region — not '500', the value that sits in columns[0].
-        expect(posted[0].body.params).toEqual([{ name: '@Region', value: 'North' }]);
+        expect(posted[0].body.params).toEqual([{ name: '@Region', value: '["North"]' }]);
         expect(posted[0].body.isInteraction).toBe(true);
+
+        // Ctrl+click adds to the selection; a JSON array keeps each value whole.
+        card.querySelector('[data-row-index="1"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true, ctrlKey: true }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(posted[1].body.params).toEqual([{ name: '@Region', value: '["North","South"]' }]);
     });
 
     it('does not cross-filter when the resolved key names no column in this visual', async () => {

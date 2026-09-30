@@ -53,7 +53,7 @@ CREATE VISUAL VisualName AS MULTISELECT (
 
 ## Actions
 
-- **ON_CHANGE = SET_PARAMETER(@variable, value)** — Passes the current array of selected values as a JSON list to @variable.
+- **ON_CHANGE = SET_PARAMETER(@variable, value)** — Passes the current array of selected values as a JSON list to @variable. Give @variable the `LIST` type so `IN @variable` matches each selected value.
 
 ## Examples
 

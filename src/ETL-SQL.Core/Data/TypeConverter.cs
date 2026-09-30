@@ -74,6 +74,8 @@ public static class TypeConverter
             try { return Convert.FromBase64String(s); } catch { return s; }
         },
         ["MINMAX"] = v => ConvertToMinMax(v),
+        // COMPAT_BREAK: 0.20 — text assigned to a LIST is split into items instead of staying one value.
+        ["LIST"] = v => ConvertToList(v),
         ["BLOB"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
         ["LOB"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
         ["UNIQUEIDENTIFIER"] = v => v is Guid g ? g : Guid.Parse(v.ToString() ?? Guid.Empty.ToString()),
@@ -156,4 +158,47 @@ public static class TypeConverter
 
         return new MinMaxValue(value, value);
     }
+
+    /// <summary>
+    /// A LIST written as text: a JSON array (what report controls send, and the only form whose
+    /// items may contain commas), otherwise comma-separated items. A list stays as it is; any
+    /// other value becomes a one-item list.
+    /// </summary>
+    private static List<object?> ConvertToList(object value)
+    {
+        if (value is List<object?> list) return list;
+        if (value is IEnumerable items and not string)
+            return items.Cast<object?>().ToList();
+
+        var text = value as string;
+        if (text is null) return [value];
+        text = text.Trim();
+        if (text.Length == 0) return [];
+
+        if (text.StartsWith('['))
+        {
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(text);
+                if (document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    return document.RootElement.EnumerateArray().Select(JsonItem).ToList();
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // Not JSON after all: read it as comma-separated text.
+            }
+        }
+
+        return text.Split(',').Select(item => (object?)item.Trim()).ToList();
+    }
+
+    private static object? JsonItem(System.Text.Json.JsonElement item) => item.ValueKind switch
+    {
+        System.Text.Json.JsonValueKind.String => item.GetString(),
+        System.Text.Json.JsonValueKind.Number => item.GetDecimal(),
+        System.Text.Json.JsonValueKind.True => true,
+        System.Text.Json.JsonValueKind.False => false,
+        System.Text.Json.JsonValueKind.Null => null,
+        _ => item.GetRawText()
+    };
 }

@@ -258,7 +258,7 @@ namespace ETL_SQL.Reporting
 
         private static void ApplyParameter(IExecutionContext context, string name, string value)
         {
-            if (context.VarContext.ContainsVariable(name)) context.VarContext.SetVariable(name, value);
+            if (context.VarContext.ContainsVariable(name)) context.VarContext.SetVariable(name, ReportParameterBinding.Value(context, name, value));
             else context.VarContext.DeclareVariable(name, value, new VariableMetadata { IsInput = true });
         }
 

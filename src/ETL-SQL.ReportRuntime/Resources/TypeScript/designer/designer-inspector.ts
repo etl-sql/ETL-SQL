@@ -9,7 +9,7 @@ import { VTYPES, controlTarget, datasetValue, inspectorGroupKey, queryElement, q
 
 import type { CascadeMode, CascadeParent, CascadeState, DesignerDom, DesignerEvent, DesignerFormControl, DesignerOptions, DesignerState, DesignerVisual, UnsupportedCascade } from './designer-context.js';
 import type { ClickAction, ClickActionKind, RowDetailState, Tooltip, TooltipKind } from './designer-interactions.js';
-import { filterSourceOn, filterSourceOnHover, hoverContextColumn, parametersRead, readClickAction, readEmitTargets, readRowDetail, readTooltip, selectionKey, splitNames, writeClickAction, writeRowDetail, writeTooltip } from './designer-interactions.js';
+import { filterSourceOn, filterSourceOnHover, filterSourceOnSeveral, listFilterCondition, hoverContextColumn, parametersRead, readClickAction, readEmitTargets, readRowDetail, readTooltip, selectionKey, splitNames, writeClickAction, writeRowDetail, writeTooltip } from './designer-interactions.js';
 import { esc } from './designer-util.js';
 import type { FormattableVisual } from './visual-format-inspector.js';
 import { renderFormattingSectionHtml, renderVisualFormatInspectorHtml, toHexColor } from './visual-format-inspector.js';
@@ -537,6 +537,8 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
         }
         const reads = parametersRead(v.options?.inline_source);
         const unreadKeys = [...incoming.keys()].filter(key => !reads.has(`@${key}`.toLowerCase()));
+        // Keys this visual filters on with Studio's earlier single-value condition.
+        const singlePickKeys = [...incoming.keys()].filter(key => filterSourceOnSeveral(v.options?.inline_source, key));
         const acceptsClickActions = !DISPLAY_ONLY_TYPES.has(String(v.type || '').toUpperCase());
         const writtenClick = readClickAction(v.options?.['action:ON_CLICK']);
         const clickAction = writtenClick.kind === 'NONE' ? (clickDrafts.get(v.id) ?? writtenClick) : writtenClick;
@@ -893,8 +895,13 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
                         ${unreadKeys.map(key => `
                         <div class="etlsql-dsgn-unread-key" data-unread-key="${esc(key)}">
                             <p class="etlsql-dsgn-interaction-note">A selection on ${esc((incoming.get(key) || []).join(', '))} arrives as @${esc(key)}, and this visual’s query does not read it, so the selection cannot narrow it.
-                            ${filterSourceOn(v.options?.inline_source, key) ? '' : ` Add <code>WHERE @${esc(key)} = 'All' OR ${esc(key)} = @${esc(key)}</code> to its query.`}</p>
+                            ${filterSourceOn(v.options?.inline_source, key) ? '' : ` Add <code>WHERE ${esc(listFilterCondition(key))}</code> to its query and declare <code>@${esc(key)} LIST = 'All'</code>.`}</p>
                             ${filterSourceOn(v.options?.inline_source, key) ? `<button type="button" class="btn btn-sm" data-filter-on="${esc(key)}">Filter this visual on @${esc(key)}</button>` : ''}
+                        </div>`).join('')}
+                        ${singlePickKeys.map(key => `
+                        <div class="etlsql-dsgn-unread-key" data-single-pick="${esc(key)}">
+                            <p class="etlsql-dsgn-interaction-note">This visual matches one selected ${esc(key)} at a time, so a Ctrl+click on several points narrows it to nothing.</p>
+                            <button type="button" class="btn btn-sm" data-filter-several="${esc(key)}">Match several ${esc(key)} values</button>
                         </div>`).join('')}
                         ${sendsSelection ? `
                         <fieldset class="etlsql-dsgn-emit-targets" data-emit-targets>
@@ -1223,24 +1230,43 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
         on('#pp-action-on-click', e => commitClick({ kind: 'CUSTOM', text: controlTarget(e).value }));
 
         // ── Make a query read the parameter a selection or a drill-down sets ──
-        // Writes the documented pattern into the visual's own source and declares the parameter
-        // with 'All' as its resting value, so the unfiltered report still shows every row.
+        // Writes the documented pattern into the visual's own source and declares the parameter as a
+        // LIST with 'All' as its resting value: the unfiltered report still shows every row, and a
+        // Ctrl+click on several points matches each of them.
+        const declareListParameter = (column: string): void => {
+            const name = `@${column}`;
+            const parameters = context.state.parameters ?? (context.state.parameters = []);
+            const existing = parameters.find(parameter => String(parameter.name).toLowerCase() === name.toLowerCase());
+            if (!existing) {
+                parameters.push({
+                    name, dataType: 'LIST', initialValue: "'All'",
+                    isInput: false, isOutput: false, isRequired: false, isSensitive: false, isBlockScoped: false,
+                });
+            } else if (String(existing.dataType).toUpperCase() !== 'LIST' && String(existing.initialValue).trim() === "'All'") {
+                // Studio's earlier single-value declaration; a hand-written one is the author's.
+                existing.dataType = 'LIST';
+            }
+        };
         const readParameterIn = (target: DesignerVisual, column: string): void => {
             const next = filterSourceOn(target.options?.inline_source, column);
             if (!next) return;
             if (!target.options) target.options = {};
             target.options.inline_source = next;
-            const name = `@${column}`;
-            const parameters = context.state.parameters ?? (context.state.parameters = []);
-            if (!parameters.some(parameter => String(parameter.name).toLowerCase() === name.toLowerCase())) {
-                parameters.push({
-                    name, dataType: 'VARCHAR', initialValue: "'All'",
-                    isInput: false, isOutput: false, isRequired: false, isSensitive: false, isBlockScoped: false,
-                });
-            }
+            declareListParameter(column);
             renderProps();
             context.syncScriptFromGridDebounced();
         };
+        queryElements<HTMLElement>(context.propsPanel, '[data-filter-several]').forEach(button => {
+            button.addEventListener('click', () => {
+                const column = datasetValue(button, 'filterSeveral');
+                const next = filterSourceOnSeveral(v.options?.inline_source, column);
+                if (!next || !v.options) return;
+                v.options.inline_source = next;
+                declareListParameter(column);
+                renderProps();
+                context.syncScriptFromGridDebounced();
+            });
+        });
         queryElements<HTMLElement>(context.propsPanel, '[data-filter-on]').forEach(button => {
             button.addEventListener('click', () => readParameterIn(v, datasetValue(button, 'filterOn')));
         });

@@ -13,7 +13,7 @@ Types:
 - **JSON** — JSON value
 - **XML** — XML fragment
 - **MARKDOWN** — Markdown text
-- **LIST** — comma-separated or array list
+- **LIST** — list of items; text becomes items, from a JSON array (`'["East, Coast", "West"]'`) or else comma-separated (`'East, West'`)
 - **PATH** — file system path (validated and resolved via ResolvePath)
 - **MINMAX** — numeric range pair (low, high)
 - **SENSITIVE** — string masked in logs

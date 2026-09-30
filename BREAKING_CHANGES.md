@@ -17,6 +17,20 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.20.0 — TypeSystem: A LIST given as text holds its items
+- **What changed**: Text assigned to a `LIST` (a declaration's value, `--var`, or a value a report reader posts) is now split into items: a JSON array, otherwise comma-separated. Previously it stayed one text value, so `IN @list` compared the whole text and `FOREACH` ran once. A MULTISELECT bound to a LIST therefore matched no rows as soon as the reader picked anything.
+- **Who is affected**: Scripts that assign text to a `LIST` and rely on it staying whole, such as `DECLARE @L LIST = 'a,b'` compared with `= @L`.
+- **Migration**: Declare the variable as `VARCHAR` when the text must stay whole. Write a JSON array (`'["East, Coast"]'`) for an item that contains a comma.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Runtime: A page selection is posted as a JSON array
+- **What changed**: A chart or table selection now reaches the host as a JSON array of the selected values (`["North","South"]`) instead of comma-joined text. A LIST parameter receives every value; any other parameter receives the value itself when one is selected.
+- **Who is affected**: Custom hosts that read the report runtime's interaction batch.
+- **Migration**: Decode the value as a JSON array.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.20.0 — Runtime: Formatting keeps a visual's interaction clauses
 - **What changed**: Formatting a `CREATE VISUAL` now writes its `INTERACTIONS`, `EMIT_FILTER`, and `ROW_DETAIL` clauses. Previously the formatter omitted all three, so a format pass deleted cross-filter wiring and drill-through, and an `EMIT_FILTER` could come back as an unparseable `EMIT_FILTER:TARGETS` option.
 - **Who is affected**: Anyone comparing formatter output for visuals that use these clauses.
