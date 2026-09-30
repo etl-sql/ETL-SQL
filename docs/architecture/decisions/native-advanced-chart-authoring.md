@@ -159,9 +159,10 @@ Conditions may set only the portable presentation channels `COLOR`, `OPACITY`, `
 `TEXT`. They do not add, remove, aggregate, calculate, join, rank, or reorder rows. Predicates may use
 source columns, literals, report parameters, comparison operators, `AND`, `OR`, `NOT`, `IS NULL`, and
 parentheses. Function calls, subqueries, aggregates, windows, and arithmetic are rejected by the
-Analysis tier. A single straight Cartesian `LINE` or zero-baseline `AREA` supports source-owned COLOR/OPACITY conditions
-with quantitative unstacked X/Y, linear scales, IDENTITY and explicit GAP handling. Other connected
-forms, including ribbons, remain rejected. The [connected-mark contract](connected-mark-conditions.md)
+Analysis tier. A single straight Cartesian `LINE`, zero-baseline `AREA`, or AREA ribbon supports
+source-owned COLOR/OPACITY conditions with quantitative unstacked X/Y (X/Y_START/Y_END for ribbons),
+linear scales, IDENTITY and explicit GAP handling. Other connected
+forms remain rejected. The [connected-mark contract](connected-mark-conditions.md)
 defines segment ownership and tracks the remaining combinations.
 
 ### 3.3 One- and two-dimensional facets
@@ -304,7 +305,7 @@ definitions, window clauses, or renderer-native escape hatches.
   layers resolved server-side.
 - Arbitrary repeat, concatenation, or nested dashboard layout inside one visual. Phase 7 composition
   is the explicit row/column facet grid; page/container layout composes independent visuals.
-- Connected-mark condition combinations beyond the supported single-layer straight Cartesian LINE/zero-baseline AREA
+- Connected-mark condition combinations beyond the supported single-layer straight Cartesian LINE/zero-baseline AREA/ribbon
   forms; see the [connected-mark contract](connected-mark-conditions.md).
 
 ## 10. Acceptance evidence

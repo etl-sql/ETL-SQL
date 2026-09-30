@@ -1226,11 +1226,13 @@ internal sealed class PlotPlanSvgRenderer
                 var destination = layer.Data[connection.DestinationIndex];
                 var x0 = MapX(PlotPlanResolver.Number(Channel(source, FieldChannel.X)!)!.Value, xScale!, area);
                 var x1 = MapX(PlotPlanResolver.Number(Channel(destination, FieldChannel.X)!)!.Value, xScale!, area);
-                var y0 = MapY(PlotPlanResolver.Number(Channel(source, FieldChannel.Y)!)!.Value, scale, area.Height);
-                var y1 = MapY(PlotPlanResolver.Number(Channel(destination, FieldChannel.Y)!)!.Value, scale, area.Height);
+                var y0 = MapY(PlotPlanResolver.Number(Channel(source, layer.AreaRibbon ? FieldChannel.YEnd : FieldChannel.Y)!)!.Value, scale, area.Height);
+                var y1 = MapY(PlotPlanResolver.Number(Channel(destination, layer.AreaRibbon ? FieldChannel.YEnd : FieldChannel.Y)!)!.Value, scale, area.Height);
+                var lower0 = layer.AreaRibbon ? MapY(PlotPlanResolver.Number(Channel(source, FieldChannel.YStart)!)!.Value, scale, area.Height) : baseline;
+                var lower1 = layer.AreaRibbon ? MapY(PlotPlanResolver.Number(Channel(destination, FieldChannel.YStart)!)!.Value, scale, area.Height) : baseline;
                 var paint = EncodingText(source, ConditionalEncodingChannel.Color) is { } candidate ? SafePaint(candidate, color) : color;
                 var opacity = Math.Clamp(EncodingNumber(source, ConditionalEncodingChannel.Opacity) ?? 1m, 0m, 1m);
-                builder.AppendLine($"<path class='plot-conditional-area' data-source-index='{connection.SourceIndex}' data-destination-index='{connection.DestinationIndex}' d='M {N(x0)} {N(y0)} L {N(x1)} {N(y1)} L {N(x1)} {N(baseline)} L {N(x0)} {N(baseline)} Z' fill='{Esc(paint)}' opacity='{N(opacity)}' stroke='none'><title>{Esc(ConnectedMarkResolver.Describe(connection))}</title></path>");
+                builder.AppendLine($"<path class='plot-conditional-area' data-source-index='{connection.SourceIndex}' data-destination-index='{connection.DestinationIndex}' d='M {N(x0)} {N(y0)} L {N(x1)} {N(y1)} L {N(x1)} {N(lower1)} L {N(x0)} {N(lower0)} Z' fill='{Esc(paint)}' opacity='{N(opacity)}' stroke='none'><title>{Esc(ConnectedMarkResolver.Describe(connection))}</title></path>");
             }
             return;
         }

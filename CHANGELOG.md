@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Single-layer Cartesian AREA ribbons support source-owned COLOR/OPACITY conditions on adjacent
+  X/Y_START/Y_END cross-sections. Both bounds define the domain and remain visible in terminal
+  and accessible output; missing bounds break the run and crossing bounds retain their authored order.
+
 - Single-layer Cartesian AREA charts support source-owned COLOR/OPACITY strips with an explicit
   zero baseline, quantitative X/Y, linear scales, GAP handling and LINEAR interpolation. The Y
   domain includes zero; SVG, terminal and accessible output preserve the same connection ownership.

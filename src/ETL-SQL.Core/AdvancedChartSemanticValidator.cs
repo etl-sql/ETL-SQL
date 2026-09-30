@@ -692,14 +692,16 @@ public static class AdvancedChartSemanticValidator
     private static void ValidateConditions(List<Diagnostic> results, AdvancedChartDefinition chart, AdvancedChartLayer layer, AstNode layerNode)
     {
         var bindings = EffectiveEncodings(chart, layer);
+        var ribbon = layer.Mark == AdvancedChartMarkKind.Area && bindings.Select(binding => binding.Channel).ToHashSet()
+            .SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd]);
         var connectedLine = layer.Mark is (AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area) && chart.Layers.Length == 1 &&
-            (layer.Mark != AdvancedChartMarkKind.Area || string.Equals(layer.AreaBaseline, "ZERO", StringComparison.OrdinalIgnoreCase)) &&
+            (layer.Mark != AdvancedChartMarkKind.Area || (ribbon ? layer.AreaBaseline is null : string.Equals(layer.AreaBaseline, "ZERO", StringComparison.OrdinalIgnoreCase))) &&
             chart.Coordinate.Kind == AdvancedChartCoordinateKind.Cartesian && chart.Facet is null &&
             layer.Position.Kind == AdvancedChartPositionKind.Identity &&
             string.Equals(layer.NullHandling, "GAP", StringComparison.OrdinalIgnoreCase) &&
             layer.Styles.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(LiteralText(style.Value)?.Trim(), "LINEAR", StringComparison.OrdinalIgnoreCase)) &&
-            bindings.Select(binding => binding.Channel).ToHashSet().SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.Y]) &&
+            (ribbon || bindings.Select(binding => binding.Channel).ToHashSet().SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.Y])) &&
             bindings.All(binding => binding.DataKind == AdvancedChartDataKind.Quantitative && binding.Stack == AdvancedChartStackMode.None &&
                 binding.Source.Kind is AdvancedChartBindingSourceKind.Field or AdvancedChartBindingSourceKind.Datum) &&
             chart.Scales.All(scale => scale.Kind == AdvancedChartScaleKind.Linear);
@@ -708,7 +710,7 @@ public static class AdvancedChartSemanticValidator
             var node = Anchor(condition, layerNode);
             if (layer.Mark is AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area &&
                 (!connectedLine || condition.Channel is not (AdvancedChartConditionChannel.Color or AdvancedChartConditionChannel.Opacity)))
-                Add(results, node, $"Layer '{layer.Name}' cannot use these CONDITIONS on connected {layer.Mark.ToString().ToUpperInvariant()} marks. Connected CONDITIONS require one Cartesian LINE or AREA layer, quantitative unstacked X/Y, linear scales, IDENTITY, NULL_HANDLING = GAP, INTERPOLATION = LINEAR, no facets, and COLOR/OPACITY only; AREA also requires AREA_BASELINE = ZERO.");
+                Add(results, node, $"Layer '{layer.Name}' cannot use these CONDITIONS on connected {layer.Mark.ToString().ToUpperInvariant()} marks. Connected CONDITIONS require one Cartesian LINE or AREA layer, quantitative unstacked X/Y, linear scales, IDENTITY, NULL_HANDLING = GAP, INTERPOLATION = LINEAR, no facets, and COLOR/OPACITY only; AREA requires AREA_BASELINE = ZERO or X/Y_START/Y_END with no baseline.");
             if (!IsSupportedPredicate(condition.Predicate))
                 Add(results, node, $"Layer '{layer.Name}' condition predicate supports only fields, parameters, literals, comparisons, AND/OR/NOT, and IS NULL.");
             if (!IsConstant(condition.WhenTrue))

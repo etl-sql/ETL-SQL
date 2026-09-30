@@ -77,6 +77,9 @@ internal static class PlotPlanTerminalRenderer
 
     private static IRenderable RenderFacet(PlotPlan plan, HashSet<int> rows, int width)
     {
+        if (plan.Layers.Length == 1 && plan.Layers[0].AreaRibbon)
+            return new Rows(plan.Layers[0].Data.Where(datum => rows.Contains(datum.RowIndex)).Select(datum =>
+                (IRenderable)new Text($"Row {datum.RowIndex + 1}: {ConnectedMarkResolver.RibbonDescription(datum)}")));
         var content = new List<IRenderable>();
         var activeLayers = plan.Layers.Where(item => item.Mark != MarkKind.Arc)
             .Select(layer =>

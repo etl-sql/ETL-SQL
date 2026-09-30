@@ -68,7 +68,7 @@ public sealed class PlotPlanResolver
         var layers = ResolveLayers(spec, data, columns, categories, series, formatter).ToImmutableArray();
         var radial = spec.Coordinate.Kind == CoordinateKind.Polar && layers.Any(layer => layer.Stack != StackMode.None);
         layers = radial ? RadialStackResolver.Resolve(spec, layers.Select((layer, index) => layer with { ZIndex = index }).ToImmutableArray()) : ResolveStacking(layers);
-        var scaleSpec = spec.Layers.Any(layer => layer.Mark == MarkKind.Area && !layer.Conditions.IsDefaultOrEmpty)
+        var scaleSpec = spec.Layers.Any(layer => layer.Mark == MarkKind.Area && !layer.Conditions.IsDefaultOrEmpty && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Y))
             ? spec with { Scales = spec.Scales.Select(scale => scale.Channel == FieldChannel.Y ? scale with { IncludeZero = true } : scale).ToImmutableArray() }
             : spec;
         var scales = ResolveScales(scaleSpec, columns, categories, layers, formatter).ToImmutableArray();
@@ -614,7 +614,15 @@ public sealed class PlotPlanResolver
                 var seriesKey = explicitSeries ?? (spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Stack != StackMode.None) ? layer.Id : series.FirstOrDefault()?.Key);
                 yield return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, seriesKey,
                     ResolveLayerData(layer, spec, data, columns, categories, formatter, _ => true))
-                { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
+                {
+                    Style = layer.Style,
+                    Stack = LayerStack(layer, spec),
+                    BandSize = layer.BandSize,
+                    TickThickness = layer.TickThickness,
+                    TickOrientation = layer.TickOrientation,
+                    Position = layer.Position,
+                    AreaRibbon = layer.Mark == MarkKind.Area && !layer.Conditions.IsDefaultOrEmpty && layer.Bindings.Any(binding => binding.Channel == FieldChannel.YStart)
+                };
             }
         }
     }
@@ -1206,6 +1214,9 @@ public sealed class PlotPlanResolver
             .Where(value => value is not null).Sum(value => Math.Max(0m, Number(value!.Value) ?? 0m));
         var items = sourceLayers.SelectMany((layer, layerIndex) => layer.Data.Select((datum, index) =>
         {
+            if (layer.AreaRibbon)
+                return new SemanticFallbackItem($"Row {datum.RowIndex + 1}", ConnectedMarkResolver.RibbonDescription(datum), index)
+                { Group = layer.Id, Detail = "ribbon interval" };
             if (layer.Mark == MarkKind.Rect && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
             {
                 var range = datum.IsGap ? null : CartesianRangeDescription(datum);

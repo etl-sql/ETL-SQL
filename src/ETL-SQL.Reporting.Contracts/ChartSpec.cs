@@ -722,16 +722,18 @@ public sealed record ChartSpec(
             if (!layer.Style.IsDefault) ChartContractValidation.RequireUnique(layer.Style.Select(token => token.Name), $"style token in layer '{layer.Id}'");
             if (!layer.Conditions.IsDefaultOrEmpty && layer.Mark is MarkKind.Line or MarkKind.Area)
             {
+                var ribbon = layer.Mark == MarkKind.Area && layer.Bindings.Select(binding => binding.Channel).ToHashSet()
+                    .SetEquals([FieldChannel.X, FieldChannel.YStart, FieldChannel.YEnd]);
                 if (layer.Mark is not (MarkKind.Line or MarkKind.Area) || Layers.Length != 1 || Coordinate.Kind != CoordinateKind.Cartesian || Facet is not null ||
                     layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) ||
                     !layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("GAP", StringComparison.OrdinalIgnoreCase)) ||
                     !layer.Style.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("LINEAR", StringComparison.OrdinalIgnoreCase)) ||
-                    !layer.Bindings.Select(binding => binding.Channel).ToHashSet().SetEquals([FieldChannel.X, FieldChannel.Y]) ||
+                    (!ribbon && !layer.Bindings.Select(binding => binding.Channel).ToHashSet().SetEquals([FieldChannel.X, FieldChannel.Y])) ||
                     layer.Bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative || binding.Stack != StackMode.None || binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)) ||
                     Scales.Any(scale => scale.Kind != ScaleKind.Linear) || NullHandling.Default != NullValuePolicy.Gap ||
-                    layer.Mark == MarkKind.Area && !layer.Style.Any(style => style.Name.Equals("areaBaseline", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase)) ||
+                    layer.Mark == MarkKind.Area && (ribbon ? layer.Style.Any(style => style.Name.Equals("areaBaseline", StringComparison.OrdinalIgnoreCase)) : !layer.Style.Any(style => style.Name.Equals("areaBaseline", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase))) ||
                     layer.Conditions.Any(condition => condition.Channel is not (ConditionalEncodingChannel.Color or ConditionalEncodingChannel.Opacity)))
-                    throw new InvalidDataException($"Connected layer '{layer.Id}' CONDITIONS require one Cartesian LINE or AREA layer, quantitative unstacked X/Y, linear scales, IDENTITY, GAP, LINEAR interpolation, no facets, and COLOR/OPACITY only; AREA also requires AREA_BASELINE = ZERO.");
+                    throw new InvalidDataException($"Connected layer '{layer.Id}' CONDITIONS require one Cartesian LINE or AREA layer, quantitative unstacked X/Y, linear scales, IDENTITY, GAP, LINEAR interpolation, no facets, and COLOR/OPACITY only; AREA requires AREA_BASELINE = ZERO or X/Y_START/Y_END with no baseline.");
             }
             if (!layer.Conditions.IsDefault)
                 foreach (var condition in layer.Conditions)

@@ -552,14 +552,14 @@ semantics and backend evidence before its rejection can be lifted.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**
   [Implementation contract](docs/architecture/decisions/connected-mark-conditions.md): the source
   row owns each outgoing connection; AREA uses adjacent cross-section strips. Typed resolved
-  connections and guarded wire versions are implemented for the LINE and zero-baseline AREA forms below. Ribbons, multiple
+  connections and guarded wire versions are implemented for the LINE, zero-baseline AREA and ribbon forms below. Multiple
   layers/series, facets, other null policies, interpolation and coordinate forms remain rejected.
   Existing segment-style behavior remains unchanged.
 - [x] **Source-owned COLOR/OPACITY on straight Cartesian LINE.** One layer with quantitative
   unstacked X/Y, linear scales, IDENTITY, explicit GAP and LINEAR interpolation. ChartSpec v3 and
   PlotPlan v5 reject downgrades; raw values, source order and gaps are preserved. Connections agree
   across SVG, terminal and fallback. ConnectedLinePlanTests covers authoring/designer round trips,
-    lineage, relayout, PDF, invalid forms and deterministic goldens; LSP covers predicate/binding rename.
+  lineage, relayout, PDF, invalid forms and deterministic goldens; LSP covers predicate/binding rename.
 
 - [x] **Source-owned COLOR/OPACITY on zero-baseline Cartesian AREA.** One layer with quantitative
   unstacked X/Y, linear scales, IDENTITY, explicit GAP, LINEAR interpolation and AREA_BASELINE = ZERO.
@@ -567,6 +567,13 @@ semantics and backend evidence before its rejection can be lifted.
   reversal, resize, gaps, authoring/designer/contracts, lineage, LSP rename, PDF, downgrade rejection
   and deterministic plan/SVG evidence are covered by ConnectedAreaPlanTests. Existing LINE goldens
   and prior chart wire shapes remain unchanged.
+
+- [x] **Source-owned COLOR/OPACITY on Cartesian AREA ribbons.** One layer with quantitative
+  X/Y_START/Y_END, no baseline, linear scales, IDENTITY, GAP and LINEAR interpolation. Both bounds
+  define the Y domain and retain authored order, including crossings. Adjacent strips, missing
+  bounds, empty data, reversed axes, nonuniform X, resize, round trips, lineage, LSP rename, PDF,
+  terminal/fallback intervals, guarded compatibility and deterministic goldens are covered by
+  ConnectedRibbonTests. Existing LINE/AREA output remains unchanged.
 
 Add one complete combination at a time — grammar, immutable contracts, resolution, validation,
 authoring help, and every applicable backend — then update the capability matrix before starting the

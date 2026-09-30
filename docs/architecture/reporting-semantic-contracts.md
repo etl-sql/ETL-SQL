@@ -70,7 +70,10 @@ must not alter the semantic fields represented by `PlotSemanticProjection`.
 
 Connected LINE/AREA output has a guarded PlotPlan v5 envelope. Its initial contract requires one
 unstacked Cartesian LINE or AREA layer with linear X/Y scales, IDENTITY, GAP handling and LINEAR
-interpolation. AREA requires explicit AREA_BASELINE = ZERO and includes zero in its Y domain.
+interpolation. AREA with Y requires explicit AREA_BASELINE = ZERO and includes zero in its Y domain.
+AREA ribbons bind X/Y_START/Y_END without a baseline. The optional AreaRibbon flag on resolved
+layers preserves that distinction, including empty datasets; it is omitted for existing plans.
+Ribbon domains include both bounds, and terminal/fallback output lists both authored endpoints.
 Each `ResolvedMarkConnection` identifies adjacent array indices and source row
 identities; its COLOR/OPACITY values must match the source datum. Validation requires every eligible
 adjacent pair exactly once and rejects downgraded envelopes. SVG, terminal and fallback output

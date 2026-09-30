@@ -115,6 +115,8 @@ public sealed record ResolvedMarkLayer(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public ImmutableArray<ResolvedMarkConnection> Connections { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool AreaRibbon { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public ImmutableArray<StyleToken> Style { get; init; }
 
     /// <summary>Axis carrying this layer's value extent, or <see cref="MarkExtentAxis.None"/> when
@@ -285,6 +287,9 @@ public sealed record PlotPlan(
     public void Validate()
     {
         var connected = Layers.Any(layer => !layer.Connections.IsDefault);
+        if (Layers.Any(layer => layer.AreaRibbon && (layer.Mark != MarkKind.Area || layer.Connections.IsDefault ||
+            layer.Style.Any(token => token.Name.Equals("areaBaseline", StringComparison.OrdinalIgnoreCase)))))
+            throw new InvalidDataException("Connected ribbons require AREA connections and no baseline.");
         var radial = Layers.Any(layer => layer.Mark == MarkKind.Arc && layer.Stack != StackMode.None);
         ChartContractValidation.RequireVersion(Schema, Version, connected ? ChartContractVersions.ConnectedPlotPlanSchema : radial ? ChartContractVersions.RadialPlotPlanSchema : ChartContractVersions.PlotPlanSchema,
             connected ? ChartContractVersions.ConnectedPlotPlanVersion : radial ? ChartContractVersions.RadialPlotPlanVersion : ChartContractVersions.PlotPlanCurrent, nameof(PlotPlan));
@@ -294,7 +299,7 @@ public sealed record PlotPlan(
                 !Facets.IsDefaultOrEmpty || Layers[0].Stack != StackMode.None)
                 throw new InvalidDataException("Connected condition plans require one unstacked Cartesian LINE or AREA layer without facets.");
             var layer = Layers[0];
-            if (layer.Mark == MarkKind.Area &&
+            if (layer.Mark == MarkKind.Area && !layer.AreaRibbon &&
                 (!layer.Style.Any(token => token.Name.Equals("areaBaseline", StringComparison.OrdinalIgnoreCase) && token.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase)) ||
                  !Scales.Any(scale => scale.Channel == FieldChannel.Y && scale.IncludesZero &&
                      scale.Domain.Any(value => value.Decimal is <= 0m || value.Integer is <= 0L || value.FloatingPoint is <= 0d) &&
@@ -307,7 +312,7 @@ public sealed record PlotPlan(
                 !Scales.Any(scale => scale.Channel == FieldChannel.Y && scale.Kind == ScaleKind.Linear))
                 throw new InvalidDataException("Connected condition plans require linear X/Y scales, IDENTITY, GAP handling and LINEAR interpolation.");
             foreach (var datum in layer.Data.Where(datum => !datum.IsGap))
-                foreach (var channel in new[] { FieldChannel.X, FieldChannel.Y })
+                foreach (var channel in layer.AreaRibbon ? new[] { FieldChannel.X, FieldChannel.YStart, FieldChannel.YEnd } : new[] { FieldChannel.X, FieldChannel.Y })
                     if (datum.Channels.FirstOrDefault(value => value.Channel == channel)?.Value.Kind is not
                         (ChartValueKind.Integer or ChartValueKind.Decimal or ChartValueKind.FloatingPoint))
                         throw new InvalidDataException("Connected condition endpoints require numeric X and Y coordinates.");

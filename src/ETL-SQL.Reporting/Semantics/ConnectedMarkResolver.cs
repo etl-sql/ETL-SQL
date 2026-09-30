@@ -6,6 +6,12 @@ namespace ETL_SQL.Reporting.Semantics.Runtime;
 
 internal static class ConnectedMarkResolver
 {
+    internal static string RibbonDescription(ResolvedDatum datum)
+    {
+        string Value(FieldChannel channel) => PlotPlanResolver.Display(datum.Channels.FirstOrDefault(value => value.Channel == channel)?.Value ?? ChartValue.Null());
+        return datum.IsGap ? "gap" : $"X {Value(FieldChannel.X)}; Y {Value(FieldChannel.YStart)} to {Value(FieldChannel.YEnd)}";
+    }
+
     internal static PlotPlan Attach(PlotPlan plan)
     {
         var layers = plan.Layers.Select(layer => layer with { Connections = ResolveGapConnections(layer) }).ToImmutableArray();
