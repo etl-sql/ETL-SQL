@@ -85,10 +85,12 @@ public sealed class ReportRenameProviderTests
         Assert.Equal("renamed", Assert.Single(edits).NewText);
     }
 
-    [Fact]
-    public async Task ConnectedLine_RenamesBindingAndConditionTogether()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConnectedMarks_RenameBindingAndConditionTogether(bool area)
     {
-        const string script = """
+        var script = """
             CREATE VISUAL Route AS CUSTOM (SOURCE = #prepared, CHART (
               COORDINATE (TYPE = CARTESIAN),
               LAYERS (route = LINE (NULL_HANDLING = GAP,
@@ -97,6 +99,7 @@ public sealed class ReportRenameProviderTests
                 CONDITIONS (COLOR WHEN Distance < 2 THEN '#ff0000' ELSE '#0000ff')))
             ));
             """;
+        if (area) script = script.Replace("LINE (NULL_HANDLING", "AREA (AREA_BASELINE = ZERO, NULL_HANDLING", StringComparison.Ordinal);
         var (provider, uri) = Provider(script);
         var result = await provider.Handle(new RenameParams
         {

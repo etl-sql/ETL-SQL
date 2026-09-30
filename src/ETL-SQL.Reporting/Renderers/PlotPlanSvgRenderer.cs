@@ -1217,6 +1217,23 @@ internal sealed class PlotPlanSvgRenderer
         in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? scale, string color)
     {
         if (scale is null || layer.Data.IsDefaultOrEmpty) return;
+        if (!layer.Connections.IsDefault)
+        {
+            var baseline = MapY(0m, scale, area.Height);
+            foreach (var connection in layer.Connections)
+            {
+                var source = layer.Data[connection.SourceIndex];
+                var destination = layer.Data[connection.DestinationIndex];
+                var x0 = MapX(PlotPlanResolver.Number(Channel(source, FieldChannel.X)!)!.Value, xScale!, area);
+                var x1 = MapX(PlotPlanResolver.Number(Channel(destination, FieldChannel.X)!)!.Value, xScale!, area);
+                var y0 = MapY(PlotPlanResolver.Number(Channel(source, FieldChannel.Y)!)!.Value, scale, area.Height);
+                var y1 = MapY(PlotPlanResolver.Number(Channel(destination, FieldChannel.Y)!)!.Value, scale, area.Height);
+                var paint = EncodingText(source, ConditionalEncodingChannel.Color) is { } candidate ? SafePaint(candidate, color) : color;
+                var opacity = Math.Clamp(EncodingNumber(source, ConditionalEncodingChannel.Opacity) ?? 1m, 0m, 1m);
+                builder.AppendLine($"<path class='plot-conditional-area' data-source-index='{connection.SourceIndex}' data-destination-index='{connection.DestinationIndex}' d='M {N(x0)} {N(y0)} L {N(x1)} {N(y1)} L {N(x1)} {N(baseline)} L {N(x0)} {N(baseline)} Z' fill='{Esc(paint)}' opacity='{N(opacity)}' stroke='none'><title>{Esc(ConnectedMarkResolver.Describe(connection))}</title></path>");
+            }
+            return;
+        }
         var isConfidence = layer.Data.Any(datum => Channel(datum, FieldChannel.ConfidenceLow) is not null || Channel(datum, FieldChannel.ConfidenceHigh) is not null);
         var ribbon = isConfidence || layer.Data.Any(datum => Channel(datum, FieldChannel.YStart) is not null || Channel(datum, FieldChannel.YEnd) is not null);
         if (ribbon)

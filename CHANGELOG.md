@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Single-layer Cartesian AREA charts support source-owned COLOR/OPACITY strips with an explicit
+  zero baseline, quantitative X/Y, linear scales, GAP handling and LINEAR interpolation. The Y
+  domain includes zero; SVG, terminal and accessible output preserve the same connection ownership.
+
 - Single-layer Cartesian LINE charts support source-owned COLOR/OPACITY conditions with quantitative
   X/Y, linear scales, GAP handling and LINEAR interpolation. SVG, terminal and accessible output
   share resolved connections; the form uses guarded ChartSpec v3 and PlotPlan v5 envelopes.

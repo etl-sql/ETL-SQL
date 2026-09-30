@@ -357,8 +357,8 @@ public sealed record ChartSpec(
         ScaleResolutionSpec? scaleResolution = null,
         FacetSpec? facet = null,
         InteractionSpec? interactions = null) => new(
-            layers.Any(layer => layer.Mark == MarkKind.Line && !layer.Conditions.IsDefaultOrEmpty) ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
-            layers.Any(layer => layer.Mark == MarkKind.Line && !layer.Conditions.IsDefaultOrEmpty) ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent,
+            layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty) ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
+            layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty) ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent,
             id,
             title,
             dataReference,
@@ -376,7 +376,7 @@ public sealed record ChartSpec(
 
     public void Validate()
     {
-        var connected = Layers.Any(layer => layer.Mark == MarkKind.Line && !layer.Conditions.IsDefaultOrEmpty);
+        var connected = Layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty);
         ChartContractValidation.RequireVersion(Schema, Version, connected ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
             connected ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent, nameof(ChartSpec));
         ChartContractValidation.RequireName(Id, nameof(Id));
@@ -722,15 +722,16 @@ public sealed record ChartSpec(
             if (!layer.Style.IsDefault) ChartContractValidation.RequireUnique(layer.Style.Select(token => token.Name), $"style token in layer '{layer.Id}'");
             if (!layer.Conditions.IsDefaultOrEmpty && layer.Mark is MarkKind.Line or MarkKind.Area)
             {
-                if (layer.Mark != MarkKind.Line || Layers.Length != 1 || Coordinate.Kind != CoordinateKind.Cartesian || Facet is not null ||
+                if (layer.Mark is not (MarkKind.Line or MarkKind.Area) || Layers.Length != 1 || Coordinate.Kind != CoordinateKind.Cartesian || Facet is not null ||
                     layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) ||
                     !layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("GAP", StringComparison.OrdinalIgnoreCase)) ||
                     !layer.Style.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("LINEAR", StringComparison.OrdinalIgnoreCase)) ||
                     !layer.Bindings.Select(binding => binding.Channel).ToHashSet().SetEquals([FieldChannel.X, FieldChannel.Y]) ||
                     layer.Bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative || binding.Stack != StackMode.None || binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)) ||
                     Scales.Any(scale => scale.Kind != ScaleKind.Linear) || NullHandling.Default != NullValuePolicy.Gap ||
+                    layer.Mark == MarkKind.Area && !layer.Style.Any(style => style.Name.Equals("areaBaseline", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase)) ||
                     layer.Conditions.Any(condition => condition.Channel is not (ConditionalEncodingChannel.Color or ConditionalEncodingChannel.Opacity)))
-                    throw new InvalidDataException($"Connected layer '{layer.Id}' CONDITIONS require one Cartesian LINE layer, quantitative unstacked X/Y, linear scales, IDENTITY, GAP, LINEAR interpolation, no facets, and COLOR/OPACITY only.");
+                    throw new InvalidDataException($"Connected layer '{layer.Id}' CONDITIONS require one Cartesian LINE or AREA layer, quantitative unstacked X/Y, linear scales, IDENTITY, GAP, LINEAR interpolation, no facets, and COLOR/OPACITY only; AREA also requires AREA_BASELINE = ZERO.");
             }
             if (!layer.Conditions.IsDefault)
                 foreach (var condition in layer.Conditions)

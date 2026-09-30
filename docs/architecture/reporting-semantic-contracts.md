@@ -68,9 +68,10 @@ must not alter the semantic fields represented by `PlotSemanticProjection`.
 
 ## Serialization and compatibility
 
-Connected LINE output has a guarded PlotPlan v5 envelope. Its initial contract requires one
-unstacked Cartesian LINE layer with linear X/Y scales, IDENTITY, GAP handling and LINEAR
-interpolation. Each `ResolvedMarkConnection` identifies adjacent array indices and source row
+Connected LINE/AREA output has a guarded PlotPlan v5 envelope. Its initial contract requires one
+unstacked Cartesian LINE or AREA layer with linear X/Y scales, IDENTITY, GAP handling and LINEAR
+interpolation. AREA requires explicit AREA_BASELINE = ZERO and includes zero in its Y domain.
+Each `ResolvedMarkConnection` identifies adjacent array indices and source row
 identities; its COLOR/OPACITY values must match the source datum. Validation requires every eligible
 adjacent pair exactly once and rejects downgraded envelopes. SVG, terminal and fallback output
 consume the same connections. This authoring form uses a guarded ChartSpec v3 envelope; existing

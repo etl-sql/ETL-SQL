@@ -1,18 +1,20 @@
 # Connected mark condition semantics
 
-Status: partially implemented. The single-layer straight Cartesian LINE form accepts COLOR/OPACITY
-conditions. AREA and the remaining combinations are still rejected. TODO item 7 remains open.
+Status: partially implemented. Single-layer straight Cartesian LINE and zero-baseline AREA accept COLOR/OPACITY
+conditions. Ribbons and the remaining combinations are still rejected. TODO item 7 remains open.
 
 The internal `ConnectedMarkResolver.ResolveGapConnections` now resolves adjacency and source-owned
 COLOR/OPACITY for an already partitioned layer with GAP handling. Its tests cover ownership, missing
 source styles, gaps, coincident rows, transparent connections and isolated layers.
 `ResolvedMarkConnection` lives in Reporting.Contracts and validates adjacency, endpoint identity,
 gap exclusion and exact source-owned presentation. `ConnectedMarkResolver.Attach` produces a
-guarded PlotPlan v5 with explicit connections for one unstacked Cartesian LINE layer, linear X/Y
+guarded PlotPlan v5 with explicit connections for one unstacked Cartesian LINE or AREA layer, linear X/Y
 scales, IDENTITY, GAP handling and LINEAR interpolation. SVG and terminal consume those connections;
 fallback descriptions preserve source ownership. `ConnectedLinePlanTests` covers serialization,
 geometry, descriptions, missing connections and rejected downgrades. Authoring validation and
-lowering use guarded ChartSpec v3 for this LINE form. AREA rendering remains open.
+lowering use guarded ChartSpec v3. AREA additionally requires explicit AREA_BASELINE = ZERO; the
+resolver includes zero in the Y domain and SVG fills adjacent strips without interior strokes.
+ConnectedAreaPlanTests covers signed/reversed geometry, gaps, relayout, authoring, PDF and goldens.
 
 ## Segment ownership
 

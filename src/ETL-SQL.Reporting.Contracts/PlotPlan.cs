@@ -290,10 +290,16 @@ public sealed record PlotPlan(
             connected ? ChartContractVersions.ConnectedPlotPlanVersion : radial ? ChartContractVersions.RadialPlotPlanVersion : ChartContractVersions.PlotPlanCurrent, nameof(PlotPlan));
         if (connected)
         {
-            if (Layers.Length != 1 || Layers[0].Mark != MarkKind.Line || Coordinate?.Kind != CoordinateKind.Cartesian ||
+            if (Layers.Length != 1 || Layers[0].Mark is not (MarkKind.Line or MarkKind.Area) || Coordinate?.Kind != CoordinateKind.Cartesian ||
                 !Facets.IsDefaultOrEmpty || Layers[0].Stack != StackMode.None)
-                throw new InvalidDataException("Connected condition plans require one unstacked Cartesian LINE layer without facets.");
+                throw new InvalidDataException("Connected condition plans require one unstacked Cartesian LINE or AREA layer without facets.");
             var layer = Layers[0];
+            if (layer.Mark == MarkKind.Area &&
+                (!layer.Style.Any(token => token.Name.Equals("areaBaseline", StringComparison.OrdinalIgnoreCase) && token.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase)) ||
+                 !Scales.Any(scale => scale.Channel == FieldChannel.Y && scale.IncludesZero &&
+                     scale.Domain.Any(value => value.Decimal is <= 0m || value.Integer is <= 0L || value.FloatingPoint is <= 0d) &&
+                     scale.Domain.Any(value => value.Decimal is >= 0m || value.Integer is >= 0L || value.FloatingPoint is >= 0d))))
+                throw new InvalidDataException("Conditional AREA strips require an explicit zero baseline included in the Y domain.");
             if (layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) ||
                 !layer.Style.Any(token => token.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) && token.Value.Equals("LINEAR", StringComparison.OrdinalIgnoreCase)) ||
                 !layer.Style.Any(token => token.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && token.Value.Equals("GAP", StringComparison.OrdinalIgnoreCase)) ||

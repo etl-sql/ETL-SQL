@@ -68,7 +68,10 @@ public sealed class PlotPlanResolver
         var layers = ResolveLayers(spec, data, columns, categories, series, formatter).ToImmutableArray();
         var radial = spec.Coordinate.Kind == CoordinateKind.Polar && layers.Any(layer => layer.Stack != StackMode.None);
         layers = radial ? RadialStackResolver.Resolve(spec, layers.Select((layer, index) => layer with { ZIndex = index }).ToImmutableArray()) : ResolveStacking(layers);
-        var scales = ResolveScales(spec, columns, categories, layers, formatter).ToImmutableArray();
+        var scaleSpec = spec.Layers.Any(layer => layer.Mark == MarkKind.Area && !layer.Conditions.IsDefaultOrEmpty)
+            ? spec with { Scales = spec.Scales.Select(scale => scale.Channel == FieldChannel.Y ? scale with { IncludeZero = true } : scale).ToImmutableArray() }
+            : spec;
+        var scales = ResolveScales(scaleSpec, columns, categories, layers, formatter).ToImmutableArray();
         if (radial)
         {
             var maximum = layers.SelectMany(layer => layer.Data).Select(datum => datum.RadialInterval?.Maximum ?? 1m).DefaultIfEmpty(1m).Max();
@@ -198,7 +201,7 @@ public sealed class PlotPlanResolver
         };
         if (layers.Any(layer => layer.Mark == MarkKind.Arc && layer.Stack != StackMode.None))
             plan = plan with { Schema = ChartContractVersions.RadialPlotPlanSchema, Version = ChartContractVersions.RadialPlotPlanVersion };
-        if (spec.Layers.Any(layer => layer.Mark == MarkKind.Line && !layer.Conditions.IsDefaultOrEmpty))
+        if (spec.Layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty))
             plan = ConnectedMarkResolver.Attach(plan);
         plan.Validate();
         return plan;
