@@ -43,6 +43,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<ReportShareLink> ReportShareLinks => Set<ReportShareLink>();
     public DbSet<ReportEmbedToken> ReportEmbedTokens => Set<ReportEmbedToken>();
     public DbSet<SavedReportView> SavedReportViews => Set<SavedReportView>();
+    public DbSet<StudioRecoveryDraft> StudioRecoveryDrafts => Set<StudioRecoveryDraft>();
     public DbSet<ReportAlert> ReportAlerts => Set<ReportAlert>();
     public DbSet<AlertNotification> AlertNotifications => Set<AlertNotification>();
     public DbSet<ServiceAccount> ServiceAccounts => Set<ServiceAccount>();
@@ -307,6 +308,15 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Name).HasMaxLength(200);
             e.HasOne(x => x.Report).WithMany(r => r.EmbedTokens).HasForeignKey(x => x.ReportId);
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
+        });
+
+        builder.Entity<StudioRecoveryDraft>(e =>
+        {
+            // One draft per author per report: a newer save replaces it.
+            e.HasIndex(x => new { x.UserId, x.ReportId }).IsUnique();
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Report).WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.BaseSourceRevision).HasMaxLength(200);
         });
 
         builder.Entity<SavedReportView>(e =>

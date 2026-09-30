@@ -395,6 +395,25 @@ public class ReportEmbedToken
     public DateTime? RevokedAt { get; set; }
 }
 
+/// <summary>
+/// One author's unsaved Studio edits to one report, kept by the host so they survive a browser
+/// crash, a dropped connection, or an expired sign-in. Private to its author: another user's draft
+/// is indistinguishable from none. It records the version the edits started from, so recovering
+/// it over a report that has moved on is shown as a conflict rather than applied blindly.
+/// </summary>
+public class StudioRecoveryDraft
+{
+    public int Id { get; set; }
+    public int ReportId { get; set; }
+    public Report Report { get; set; } = null!;
+    public int UserId { get; set; }
+    public PortalUser User { get; set; } = null!;
+    public string Content { get; set; } = "";
+    public long? BaseVersion { get; set; }
+    public string? BaseSourceRevision { get; set; }
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+
 public class SavedReportView
 {
     public int Id { get; set; }

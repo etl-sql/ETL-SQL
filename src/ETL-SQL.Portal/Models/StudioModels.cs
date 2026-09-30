@@ -3,7 +3,20 @@ namespace ETL_SQL.Portal.Models;
 public sealed record StudioSessionDto(
     string Mode,
     IReadOnlyList<string> Capabilities,
-    bool SourceControlEnabled);
+    bool SourceControlEnabled,
+    bool DraftRecovery);
+
+/// <summary>An author's unsaved edits to one report, and the version they started from.</summary>
+public sealed record StudioRecoveryDraftDto(
+    string Content,
+    long? BaseVersion,
+    string? BaseSourceRevision,
+    DateTime UpdatedAt);
+
+public sealed record SaveStudioRecoveryDraftRequest(
+    string? Content,
+    long? BaseVersion,
+    string? BaseSourceRevision);
 
 public sealed record StudioReportDto(
     int Id,

@@ -58,7 +58,8 @@ public sealed partial class StudioController(
         return Ok(new StudioSessionDto(
             studioAuthorization.Mode.ToString(),
             studioAuthorization.EffectiveCapabilities(User),
-            studioAuthorization.Mode == StudioDeploymentMode.SourceControlled && sourceControl.IsEnabled));
+            studioAuthorization.Mode == StudioDeploymentMode.SourceControlled && sourceControl.IsEnabled,
+            portalConfig.Studio.DraftRecovery));
     }
 
     [HttpGet("reports")]

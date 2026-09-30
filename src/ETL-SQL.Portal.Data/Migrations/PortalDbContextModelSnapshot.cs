@@ -2639,6 +2639,42 @@ namespace ETL_SQL.Portal.Data.Migrations
                     b.ToTable("StewardshipSettings");
                 });
 
+            modelBuilder.Entity("ETL_SQL.Portal.Data.StudioRecoveryDraft", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("BaseSourceRevision")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("BaseVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ReportId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportId");
+
+                    b.HasIndex("UserId", "ReportId")
+                        .IsUnique();
+
+                    b.ToTable("StudioRecoveryDrafts");
+                });
+
             modelBuilder.Entity("ETL_SQL.Portal.Data.Subscription", b =>
                 {
                     b.Property<int>("Id")
@@ -3301,6 +3337,25 @@ namespace ETL_SQL.Portal.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Finding");
+                });
+
+            modelBuilder.Entity("ETL_SQL.Portal.Data.StudioRecoveryDraft", b =>
+                {
+                    b.HasOne("ETL_SQL.Portal.Data.Report", "Report")
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ETL_SQL.Portal.Data.PortalUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Report");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.Subscription", b =>

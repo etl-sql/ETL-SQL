@@ -3,57 +3,53 @@ using System;
 using ETL_SQL.Portal.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace ETLSQL.Portal.Migrations.Postgres.Migrations
+namespace ETLSQL.Portal.Data.Migrations
 {
     [DbContext(typeof(PortalDbContext))]
-    partial class PortalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930181708_AddStudioRecoveryDrafts")]
+    partial class AddStudioRecoveryDrafts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.9")
-                .HasAnnotation("Relational:MaxIdentifierLength", 63);
-
-            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
 
             modelBuilder.Entity("ETL_SQL.Portal.Data.AdminServiceRun", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Attempts")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("NodeName")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Outcome")
                         .IsRequired()
                         .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ServiceName")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("StartedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -66,25 +62,23 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("AlertId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("NotificationName")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("OrchestratorAlias")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -98,51 +92,49 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ActorId")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ActorType")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasDefaultValue("User");
 
                     b.Property<string>("CorrelationId")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("EffectiveScopes")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ResourceId")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ResourceType")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("StudioCapability")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("Timestamp")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -159,84 +151,82 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Action")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ActorId")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ActorType")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasDefaultValue("User");
 
                     b.Property<int>("Attempts")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("AuditLogId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("CorrelationId")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("DeliveredAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("EffectiveScopes")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("EventId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("LastError")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LockedUntil")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("NextAttemptAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("OccurredAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("PayloadJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ResourceId")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ResourceType")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("StudioCapability")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -256,73 +246,71 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("AccessLevel")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("AtRestKeyVersion")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ColumnSchema")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("CreatedBy")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("EncryptionMode")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("FolderId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("FolderPath")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastRefresh")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("OwningReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ParquetFilePath")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("RefreshInterval")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("RowCount")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("SourceQuery")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Ttl")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -340,18 +328,16 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("DatasetId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -366,21 +352,19 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("DatasetId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -396,32 +380,30 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("OwnerId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("ParentId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Path")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -437,18 +419,16 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("FolderId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -463,65 +443,63 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("CorrelationId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("ExecutedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("GatewayId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("OperationId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Owner")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Priority")
                         .IsRequired()
                         .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Resolution")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ResourceId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -535,42 +513,40 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Actor")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("CaseId")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("EventType")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("EvidenceReference")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Note")
                         .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Resolution")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -585,44 +561,44 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<string>("EnrollmentId")
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("ConsumedUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("CreatedUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("ExpiresUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("GatewayId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TokenHash")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("WorkloadPublicKeyThumbprint")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("EnrollmentId");
 
@@ -638,36 +614,34 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("AdGroup")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Description")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("PrincipalKey")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Provider")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -685,20 +659,18 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Capability")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -712,46 +684,44 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("CanaryGroup")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ClientCertificateThumbprint")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("EnrollmentId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Environment")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("LastSeenAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("MachineId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("RegisteredAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("Revoked")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset?>("RevokedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("RevokedReason")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Tenant")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -767,58 +737,56 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Author")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("CanaryGroup")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("CanaryPercentage")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Environment")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("ExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("IssuedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("PolicyHash")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("PolicyVersion")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("PublishedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Reviewer")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("RolloutState")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("SignedEnvelopeJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("SupersededVersion")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Tenant")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -833,65 +801,65 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
             modelBuilder.Entity("ETL_SQL.Portal.Data.PortalExecutionJob", b =>
                 {
                     b.Property<string>("Id")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ActorId")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ActorType")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
+                        .HasColumnType("TEXT")
                         .HasDefaultValue("User");
 
                     b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("CorrelationId")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<double>("CpuTimeSeconds")
-                        .HasColumnType("double precision");
+                        .HasColumnType("REAL");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("EffectiveScopes")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Error")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Kind")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ManifestPath")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("PeakMemoryBytes")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("RowsProcessed")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -908,21 +876,19 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("NormalizedName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -937,42 +903,40 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("Disabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("EncryptedValue")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -986,66 +950,64 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Alias")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ConnectorType")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("Disabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("EnvironmentScope")
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastUsedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastVerifiedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("OptionsJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("OwnerUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("SensitiveFieldsCsv")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Target")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -1059,98 +1021,96 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("AccessFailedCount")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("EmailConfirmed")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ExternalIssuer")
                         .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ExternalSubject")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("FirstName")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("LastName")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("LockoutEnabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset?>("LockoutEnd")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("MiddleInitial")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("MustChangePassword")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("NormalizedUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("PasswordHash")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("PhoneNumber")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("PhoneNumberConfirmed")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("PrincipalKey")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Provider")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("SecurityStamp")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("TwoFactorEnabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("UserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -1178,27 +1138,25 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Token")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -1216,101 +1174,99 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Category")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Certification")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Contact")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("CreatedBy")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Description")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Domain")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("EditSessionExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("EditSessionUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("EditSessionUserName")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("FolderId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("LastRefreshCompletedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<long?>("LastRefreshDurationMs")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("LastRefreshError")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastRefreshStartedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("LastRefreshStatus")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastViewedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("MetadataJson")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Owner")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("PublishedScriptHash")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("ScriptLastModified")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ScriptPath")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Steward")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Tags")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -1325,40 +1281,38 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("DecidedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("DecidedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("DecisionReason")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Reason")
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("RequesterUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1377,24 +1331,22 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("GroupId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -1417,71 +1369,69 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("DisplayName")
                         .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("LastCheckedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastEvaluatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastNotifiedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("LastState")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastTriggeredAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Operator")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("OptionsJson")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("OwnerId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Recipient")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("SmtpAlias")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<decimal>("Threshold")
-                        .HasColumnType("numeric");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("VisualName")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1499,33 +1449,31 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("CreatedBy")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Token")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1544,18 +1492,16 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -1571,31 +1517,29 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("JobName")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastRefreshedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("OrchestratorAlias")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1611,71 +1555,69 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("ApprovedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ApprovedByUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("AuthorUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("AuthorUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("BaseScriptHash")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("DecidedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("EditSessionExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("EditSessionUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("EditSessionUserName")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("PublishedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ScriptHash")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ScriptText")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("SubmittedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -1688,34 +1630,32 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("DecidedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("DecidedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("DecidedByUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Decision")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("DraftId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Reason")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ScriptHash")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1728,33 +1668,31 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("CreatedBy")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Token")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1773,31 +1711,29 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("BuiltAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("BuiltBy")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool?>("HashMatched")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ManifestPath")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ParametersJson")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ScriptHashAtRunTime")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1810,40 +1746,38 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("FiltersJson")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("IsDefault")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ParametersJson")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ScriptHash")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("StateJson")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -1859,80 +1793,80 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<string>("Id")
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ClientId")
                         .IsRequired()
                         .HasMaxLength(35)
-                        .HasColumnType("character varying(35)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Description")
                         .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("IsEnabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("NormalizedName")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("OwnerUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("RoleNames")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Scopes")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("SecretHash")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("SecurityStamp")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("StudioCapabilities")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -1951,23 +1885,21 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Permission")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("SharedConnectionId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1985,28 +1917,26 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ConsumerUser")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("LastUsedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("SharedConnectionId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("UseCount")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2022,56 +1952,54 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("AuthorityId")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ClientId")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ClientSecretReference")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("Enabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Issuer")
                         .IsRequired()
                         .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("LoginDomain")
                         .IsRequired()
                         .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("PortalHost")
                         .IsRequired()
                         .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2093,42 +2021,42 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<string>("TenantId")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ActiveRelease")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("DeletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("FenceEpoch")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("MaxConcurrentJobs")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("MaxReportSessions")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("MaxStorageMb")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("State")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("TenantId");
 
@@ -2141,95 +2069,95 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<string>("OperationId")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("AuthorizationExpiresUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("AuthorizationReference")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("FailureCode")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Phase")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("PlatformOperator")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("StartedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TargetClientId")
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TargetClientSecretReference")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TargetIssuer")
                         .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TargetLoginDomain")
                         .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("TargetMaxConcurrentJobs")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("TargetMaxReportSessions")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("TargetMaxStorageMb")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("TargetPortalHost")
                         .HasMaxLength(253)
-                        .HasColumnType("character varying(253)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TargetRelease")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("OperationId");
 
@@ -2245,39 +2173,37 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("LogicalId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ScopedId")
                         .IsRequired()
                         .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2296,40 +2222,38 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("AssetKey")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("AssetVersion")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("AssignedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("AssignedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Badge")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Reason")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2343,35 +2267,33 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("AssetKey")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Note")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("ReviewedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("ReviewedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ReviewedVersion")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2385,51 +2307,49 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("AssetKey")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("character varying(512)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("AssetVersion")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("FirstSeenUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("LastSeenUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("ResolvedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("RuleKey")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("SuppressedUntilUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2445,44 +2365,42 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("AssetVersion")
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("CategoryValue")
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("DecidedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("DecidedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("DecidedByUserName")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Decision")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("FindingId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Reason")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -2497,57 +2415,55 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Aliases")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("DataType")
                         .IsRequired()
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("Disabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Formula")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Steward")
                         .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Term")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2561,44 +2477,42 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Color")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("Disabled")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("ExpiryDays")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Label")
                         .IsRequired()
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2612,48 +2526,46 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("AssetsScanned")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Error")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("FindingsOpened")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("FindingsReopened")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("FindingsResolved")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("StartedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("StartedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Trigger")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -2666,63 +2578,61 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("DeductGlossary")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("DeductMetadata")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("DeductProtectedData")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("DeductStaleness")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("EnableGlossaryCheck")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("EnableMetadataCheck")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("EnableProtectedDataCheck")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("EnableStalenessCheck")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("PolicyLevel")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Scope")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("StaleAfterDays")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("TargetScore")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("Version")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2736,29 +2646,27 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("BaseSourceRevision")
                         .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("TEXT");
 
                     b.Property<long?>("BaseVersion")
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Content")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2774,63 +2682,61 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("AtTime")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("DeliverOnRefresh")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("FailCount")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("Format")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("LastSentAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastTriggeredAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("NextRunAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ParametersJson")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Recipients")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("ReportId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Schedule")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ScriptPath")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("SmtpAlias")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2845,41 +2751,39 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("DeliveryId")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Detail")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Outcome")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("RecipientKey")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Recipients")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("SubscriptionId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("TriggerKey")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -2894,15 +2798,15 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
             modelBuilder.Entity("ETL_SQL.Portal.Data.UserGroup", b =>
                 {
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("GroupId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("UserId", "GroupId");
 
@@ -2918,30 +2822,28 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("BindingId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TenantId")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("TokenIdHash")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UsedAt")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -2957,18 +2859,16 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ClaimType")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ClaimValue")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("RoleId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -2981,18 +2881,16 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("ClaimType")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ClaimValue")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -3004,16 +2902,16 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<int>", b =>
                 {
                     b.Property<string>("LoginProvider")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ProviderKey")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ProviderDisplayName")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("LoginProvider", "ProviderKey");
 
@@ -3025,10 +2923,10 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<int>", b =>
                 {
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("RoleId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("UserId", "RoleId");
 
@@ -3040,16 +2938,16 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<int>", b =>
                 {
                     b.Property<int>("UserId")
-                        .HasColumnType("integer");
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("LoginProvider")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Value")
-                        .HasColumnType("text");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("UserId", "LoginProvider", "Name");
 

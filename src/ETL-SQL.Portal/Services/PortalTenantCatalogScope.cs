@@ -38,6 +38,9 @@ public sealed class PortalTenantCatalogScope(
     public IQueryable<SavedReportView> SavedReportViews => db.SavedReportViews.Where(view =>
         Reports.Any(report => report.Id == view.ReportId));
 
+    public IQueryable<StudioRecoveryDraft> StudioRecoveryDrafts => db.StudioRecoveryDrafts.Where(draft =>
+        Reports.Any(report => report.Id == draft.ReportId));
+
     public IQueryable<ReportAlert> ReportAlerts => db.ReportAlerts.Where(alert =>
         Reports.Any(report => report.Id == alert.ReportId));
 

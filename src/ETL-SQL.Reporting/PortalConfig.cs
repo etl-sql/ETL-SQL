@@ -150,6 +150,16 @@ public class PortalStudioConfig
     /// </summary>
     public bool RequireApprovalToPublish { get; set; } = false;
 
+    /// <summary>
+    /// When true (the default), Studio keeps each author's unsaved edits on the Portal, private to
+    /// them, so a browser crash, dropped connection, or expired sign-in loses nothing. Scripts are
+    /// never kept in browser storage. Turn off where unsaved script text must not be stored at all.
+    /// </summary>
+    public bool DraftRecovery { get; set; } = true;
+
+    /// <summary>Days an untouched recovery draft is kept before it is discarded.</summary>
+    public int DraftRetentionDays { get; set; } = 7;
+
     public StudioDeploymentMode Mode { get; set; } = StudioDeploymentMode.CatalogOnly;
     public Dictionary<string, List<string>> RoleCapabilities { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }

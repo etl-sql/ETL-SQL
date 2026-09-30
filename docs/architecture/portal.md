@@ -48,6 +48,7 @@ PortalUser ──< UserGroup >── Group ──< FolderAcl >── Folder ─�
                                                                          ├──< ReportShareLink
                                                                          ├──< ReportEmbedToken
                                                                          ├──< SavedReportView
+                                                                         ├──< StudioRecoveryDraft ──> PortalUser (private unsaved Studio edits)
                                                                          ├──< ReportAlert
                                                                          └──< ReportJobLink
 Dataset ──< DatasetAcl
