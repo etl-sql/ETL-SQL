@@ -3,6 +3,11 @@
 Status: implementation contract; not shipped. `LINE` and `AREA` still reject row-level
 conditions. TODO item 7 remains open until the implementation and evidence below are complete.
 
+The internal `ConnectedMarkResolver.ResolveGapConnections` now resolves adjacency and source-owned
+COLOR/OPACITY for an already partitioned layer with GAP handling. Its tests cover ownership, missing
+source styles, gaps, coincident rows, transparent connections and isolated layers. It is not yet
+wired into `PlotPlan`; the wire envelope, geometry consumers and authoring acceptance remain open.
+
 ## Segment ownership
 
 A row owns the outgoing connection to the next eligible row in its resolved layer and facet.
