@@ -22,6 +22,9 @@ internal static class PlotPlanTerminalRenderer
         width = Math.Clamp(width, 40, 120);
         var facets = ResolveFacets(plan);
         var content = new List<IRenderable> { new Markup($"[grey]{Markup.Escape(plan.AccessibleSummary)}[/]") };
+        foreach (var layer in plan.Layers.Where(layer => !layer.Connections.IsDefault))
+            foreach (var connection in layer.Connections)
+                content.Add(new Text(ConnectedMarkResolver.Describe(connection)));
         if (facets.Count == 1)
         {
             content.Add(RenderFacet(plan, facets[0].Rows, width));

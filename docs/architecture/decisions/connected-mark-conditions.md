@@ -5,11 +5,14 @@ conditions. TODO item 7 remains open until the implementation and evidence below
 
 The internal `ConnectedMarkResolver.ResolveGapConnections` now resolves adjacency and source-owned
 COLOR/OPACITY for an already partitioned layer with GAP handling. Its tests cover ownership, missing
-source styles, gaps, coincident rows, transparent connections and isolated layers. It is not yet
-wired into `PlotPlan`; the wire envelope, geometry consumers and authoring acceptance remain open.
+source styles, gaps, coincident rows, transparent connections and isolated layers.
 `ResolvedMarkConnection` lives in Reporting.Contracts and validates adjacency, endpoint identity,
-gap exclusion and exact source-owned presentation. Standalone serialization and tampered-endpoint
-tests cover this record; they do not establish compatibility of a future PlotPlan envelope.
+gap exclusion and exact source-owned presentation. `ConnectedMarkResolver.Attach` produces a
+guarded PlotPlan v5 with explicit connections for one unstacked Cartesian LINE layer, linear X/Y
+scales, IDENTITY, GAP handling and LINEAR interpolation. SVG and terminal consume those connections;
+fallback descriptions preserve source ownership. `ConnectedLinePlanTests` covers serialization,
+geometry, descriptions, missing connections and rejected downgrades. Authoring validation and
+lowering are not yet enabled, and AREA rendering remains open.
 
 ## Segment ownership
 
@@ -65,9 +68,9 @@ behavior for existing plans unless a separately documented compatibility change 
 
 Guard plans carrying the new semantics with a versioned envelope that older readers reject.
 The current radial v4 envelope permits only stacked polar ARC layers, so it cannot silently be
-repurposed for connected Cartesian marks. Existing plans must retain their wire shape and golden
-output. Choose the new version with the actual contract implementation, and test both accepted
-and rejected envelopes. ChartSpec validation must guard new intent as well as PlotPlan output.
+repurposed for connected Cartesian marks. Connected plans use v5. Existing plans retain their wire
+shape and golden output. Test both accepted and rejected envelopes. ChartSpec validation must
+guard new intent as well as PlotPlan output before authoring is enabled.
 
 ## Implementation order and evidence
 

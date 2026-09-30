@@ -1457,12 +1457,52 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
+    private static void RenderConnectedLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
+        in CartesianPlotArea area, ResolvedScale xScale, ResolvedScale yScale, string color,
+        bool showLabels, ICollection<SmartLabel> labels)
+    {
+        var points = layer.Data.Select(datum => (
+            X: PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null()),
+            Y: PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null()))).ToArray();
+        foreach (var connection in layer.Connections)
+        {
+            var source = points[connection.SourceIndex];
+            var destination = points[connection.DestinationIndex];
+            var stroke = connection.Encodings.FirstOrDefault(encoding => encoding.Channel == ConditionalEncodingChannel.Color)?.Value;
+            var opacity = connection.Encodings.FirstOrDefault(encoding => encoding.Channel == ConditionalEncodingChannel.Opacity)?.Value;
+            var paint = stroke is null ? color : SafePaint(PlotPlanResolver.Display(stroke), color);
+            var alpha = Math.Clamp(opacity is null ? 1m : PlotPlanResolver.Number(opacity) ?? 1m, 0m, 1m);
+            builder.AppendLine($"<path class='plot-conditional-connection' data-source-index='{connection.SourceIndex}' data-destination-index='{connection.DestinationIndex}' d='M {N(MapX(source.X!.Value, xScale, area))} {N(MapY(source.Y!.Value, yScale, area.Height))} L {N(MapX(destination.X!.Value, xScale, area))} {N(MapY(destination.Y!.Value, yScale, area.Height))}' fill='none' stroke='{Esc(paint)}' stroke-width='{LineWidth(layer, "2")}' opacity='{N(alpha)}'><title>{Esc(ConnectedMarkResolver.Describe(connection))}</title></path>");
+        }
+        for (var index = 0; index < layer.Data.Length; index++)
+        {
+            var datum = layer.Data[index];
+            if (datum.IsGap || points[index].X is not { } xValue || points[index].Y is not { } yValue) continue;
+            var x = MapX(xValue, xScale, area);
+            var y = MapY(yValue, yScale, area.Height);
+            var paint = EncodingText(datum, ConditionalEncodingChannel.Color) is { } candidate ? SafePaint(candidate, color) : color;
+            var alpha = Math.Clamp(EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? 1m, 0m, 1m);
+            if (IsEnabledByDefault(plan.Style, "SYMBOLS"))
+                RenderPointSymbol(builder, PointShape(plan, layer, datum), x, y, 3m, paint,
+                    "plot-line-symbol", datum.RowIndex, FormatDataLabel(yValue, DataFormat(plan)), $" opacity='{N(alpha)}'");
+            if (showLabels)
+                labels.Add(new SmartLabel(datum.RowIndex, x, y, FormatDataLabel(yValue, DataFormat(plan)),
+                    SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444"), 120 + layer.ZIndex,
+                    FontSize(Style(plan, "DATA_LABELS:FONT_SIZE"))));
+        }
+    }
+
     private static void RenderLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
         in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? scale, string color, bool showLabels,
         ICollection<OverlayLabel> overlayLabels, ICollection<SmartLabel> smartLabels,
         ICollection<SeriesLabelPlacement> seriesLabelPlacements, bool transposedAspect)
     {
         if (scale is null || layer.Data.IsDefaultOrEmpty) return;
+        if (!layer.Connections.IsDefault)
+        {
+            RenderConnectedLine(builder, plan, layer, area, xScale!, scale, color, showLabels, smartLabels);
+            return;
+        }
         var lineStyle = LayerStyle(layer, "lineStyle");
         var dashAttributes = LineStyleAttributes(lineStyle);
         var isOverlay = LayerStyle(layer, "overlayType") is not null;

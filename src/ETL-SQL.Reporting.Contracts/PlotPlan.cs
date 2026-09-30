@@ -113,6 +113,8 @@ public sealed record ResolvedMarkLayer(
     ImmutableArray<ResolvedDatum> Data)
 {
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ImmutableArray<ResolvedMarkConnection> Connections { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public ImmutableArray<StyleToken> Style { get; init; }
 
     /// <summary>Axis carrying this layer's value extent, or <see cref="MarkExtentAxis.None"/> when
@@ -282,9 +284,33 @@ public sealed record PlotPlan(
 
     public void Validate()
     {
+        var connected = Layers.Any(layer => !layer.Connections.IsDefault);
         var radial = Layers.Any(layer => layer.Mark == MarkKind.Arc && layer.Stack != StackMode.None);
-        ChartContractValidation.RequireVersion(Schema, Version, radial ? ChartContractVersions.RadialPlotPlanSchema : ChartContractVersions.PlotPlanSchema,
-            radial ? ChartContractVersions.RadialPlotPlanVersion : ChartContractVersions.PlotPlanCurrent, nameof(PlotPlan));
+        ChartContractValidation.RequireVersion(Schema, Version, connected ? ChartContractVersions.ConnectedPlotPlanSchema : radial ? ChartContractVersions.RadialPlotPlanSchema : ChartContractVersions.PlotPlanSchema,
+            connected ? ChartContractVersions.ConnectedPlotPlanVersion : radial ? ChartContractVersions.RadialPlotPlanVersion : ChartContractVersions.PlotPlanCurrent, nameof(PlotPlan));
+        if (connected)
+        {
+            if (Layers.Length != 1 || Layers[0].Mark != MarkKind.Line || Coordinate?.Kind != CoordinateKind.Cartesian ||
+                !Facets.IsDefaultOrEmpty || Layers[0].Stack != StackMode.None)
+                throw new InvalidDataException("Connected condition plans require one unstacked Cartesian LINE layer without facets.");
+            var layer = Layers[0];
+            if (layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) ||
+                !layer.Style.Any(token => token.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) && token.Value.Equals("LINEAR", StringComparison.OrdinalIgnoreCase)) ||
+                !layer.Style.Any(token => token.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && token.Value.Equals("GAP", StringComparison.OrdinalIgnoreCase)) ||
+                !Scales.Any(scale => scale.Channel == FieldChannel.X && scale.Kind == ScaleKind.Linear) ||
+                !Scales.Any(scale => scale.Channel == FieldChannel.Y && scale.Kind == ScaleKind.Linear))
+                throw new InvalidDataException("Connected condition plans require linear X/Y scales, IDENTITY, GAP handling and LINEAR interpolation.");
+            foreach (var datum in layer.Data.Where(datum => !datum.IsGap))
+                foreach (var channel in new[] { FieldChannel.X, FieldChannel.Y })
+                    if (datum.Channels.FirstOrDefault(value => value.Channel == channel)?.Value.Kind is not
+                        (ChartValueKind.Integer or ChartValueKind.Decimal or ChartValueKind.FloatingPoint))
+                        throw new InvalidDataException("Connected condition endpoints require numeric X and Y coordinates.");
+            var expected = Enumerable.Range(0, Math.Max(0, layer.Data.Length - 1))
+                .Where(index => !layer.Data[index].IsGap && !layer.Data[index + 1].IsGap).ToArray();
+            if (!layer.Connections.Select(connection => connection.SourceIndex).SequenceEqual(expected))
+                throw new InvalidDataException("Connections must cover each adjacent non-gap pair exactly once in row order.");
+            foreach (var connection in layer.Connections) connection.Validate(layer);
+        }
         if (radial && (Coordinate?.Kind != CoordinateKind.Polar || Layers.Any(layer => layer.Mark != MarkKind.Arc || layer.Stack == StackMode.None)))
             throw new InvalidDataException("Radial plans require only stacked polar ARC layers.");
         foreach (var layer in Layers)

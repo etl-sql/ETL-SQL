@@ -68,6 +68,14 @@ must not alter the semantic fields represented by `PlotSemanticProjection`.
 
 ## Serialization and compatibility
 
+Connected LINE output has a guarded PlotPlan v5 envelope. Its initial contract requires one
+unstacked Cartesian LINE layer with linear X/Y scales, IDENTITY, GAP handling and LINEAR
+interpolation. Each `ResolvedMarkConnection` identifies adjacent array indices and source row
+identities; its COLOR/OPACITY values must match the source datum. Validation requires every eligible
+adjacent pair exactly once and rejects downgraded envelopes. SVG, terminal and fallback output
+consume the same connections. Authoring acceptance is still pending; see the
+[connected-mark implementation contract](decisions/connected-mark-conditions.md).
+
 `ChartContractSerializer` is the only supported JSON serializer for the three contracts. It:
 
 - uses camel-case property and enum names;
