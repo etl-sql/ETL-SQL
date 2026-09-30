@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace ETL_SQL.Portal.Services;
+namespace ETL_SQL.Reporting.Authoring;
 
 /// <summary>
 /// What a recovery draft may hold. A draft is unsaved text, so it has had none of the checks a save

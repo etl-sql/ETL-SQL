@@ -2,6 +2,7 @@ using ETL_SQL.Portal.Data;
 using ETL_SQL.Portal.Filters;
 using ETL_SQL.Portal.Models;
 using ETL_SQL.Portal.Services;
+using ETL_SQL.Reporting.Authoring;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 

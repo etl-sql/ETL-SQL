@@ -50,6 +50,7 @@ public static class WorkstationEditorApp
         builder.Services.AddEtlSqlEngine(configuration);
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(new WorkstationWorkspace(options.WorkspaceRoot, options.ReadOnly));
+        builder.Services.AddSingleton<WorkstationDraftStore>();
         builder.Services.AddSingleton<WorkstationAnalysisService>();
         builder.Services.AddSingleton<ScriptDagProjectionService>();
         builder.Services.AddSingleton<IMetadataManager, MetadataManager>();
@@ -384,6 +385,54 @@ public static class WorkstationEditorApp
             catch (InvalidOperationException)
             {
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        // Recovery drafts: unsaved edits kept under the OS user's app data, never in the browser.
+        app.MapGet("/api/drafts", async (string path, WorkstationDraftStore drafts, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                var draft = await drafts.ReadAsync(path, cancellationToken);
+                return draft is null ? Results.NotFound() : Results.Json(draft, JsonOptions);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        app.MapPut("/api/drafts", async (SaveDraftRequest request, WorkstationWorkspace workspace, WorkstationDraftStore drafts, CancellationToken cancellationToken) =>
+        {
+            if (workspace.ReadOnly) return Results.StatusCode(StatusCodes.Status403Forbidden);
+            try
+            {
+                var kept = await drafts.WriteAsync(request.Path ?? string.Empty,
+                    new WorkstationDraft(request.Content ?? string.Empty, request.BaseSourceRevision, DateTime.UtcNow), cancellationToken);
+                return kept
+                    ? Results.NoContent()
+                    : Results.UnprocessableEntity(new
+                    {
+                        error = "The draft holds a plaintext credential, so it was not kept. Encrypt the credential or use a SECRET: reference.",
+                        code = "PLAINTEXT_SECRET"
+                    });
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        app.MapDelete("/api/drafts", (string path, WorkstationDraftStore drafts) =>
+        {
+            try
+            {
+                drafts.Delete(path);
+                return Results.NoContent();
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or ArgumentException)
             {
@@ -1296,6 +1345,7 @@ public static class WorkstationEditorApp
 }
 
 public sealed record SaveFileRequest(string? Path, string? Content, string? BaseRevision = null);
+public sealed record SaveDraftRequest(string? Path, string? Content, string? BaseSourceRevision = null);
 public sealed record RenameFileRequest(string? Path, string? Name);
 public sealed record CreateWorkspaceFolderRequest(string? Path);
 public sealed record RenameWorkspaceEntryRequest(string? Path, string? Name, bool IsDirectory);
