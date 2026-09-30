@@ -214,6 +214,34 @@ matrix before selecting the next combination.
 terminal, and accessibility conformance; invalid-combination diagnostics; and unchanged payload,
 render-time, and bundle budgets.
 
+### Presentation & Workspaces — Studio Authoring for Mobile Page Layouts
+
+**Status:** Exploring
+**Horizon:** Later
+**Authoritative design:** [Page reference — `MOBILE_LAYOUT`](docs/reference/visuals-reporting/report/page.md)
+
+The dialect already supports a separate small-screen layout per page:
+`MOBILE_LAYOUT (STRUCTURE = ..., MAP (...), BREAKPOINT = <px>)` is parsed, compiled into the
+manifest, and applied by the browser runtime below the breakpoint. Studio has no controls for it.
+An author has to write the clause by hand and cannot see the result without resizing a browser.
+
+**Why later:** Deferred on 2026-09-29 after the v0.20.0 dashboard audit. Analytics consumers work on
+desktops, and deliberate mobile use of dashboards is rare. The script form covers the occasional
+need, so a guided editor is not worth building ahead of demand.
+
+**Boundaries:** Authoring only. No change to the `MOBILE_LAYOUT` grammar, the runtime breakpoint
+behaviour, or native mobile applications. A hand-written clause must keep surviving designer edits
+unchanged, as it does today.
+
+**Dependencies:** The Studio page layout editor and the lossless designer patcher.
+
+**Delivery slices:** (1) A mobile preview of the page at the declared breakpoint. (2) A guided editor
+for the mobile grid that writes `STRUCTURE`/`MAP` from the desktop page's visuals. (3) Breakpoint
+control and a warning for visuals the mobile layout leaves out.
+
+**Acceptance evidence:** Designer round trips for pages with and without `MOBILE_LAYOUT`, and a
+browser journey that authors a mobile layout and checks the rendered page at a narrow viewport.
+
 ### Presentation & Workspaces — ETL-SQL Studio (Report Studio, Script Editor, and Pipeline Studio)
 
 **Status:** Incremental  

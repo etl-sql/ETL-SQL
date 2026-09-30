@@ -188,8 +188,9 @@ containers, and clause-level patching that keeps hand-written clauses on a desig
   count changed. Proof: `StudioInteractionJourneyTests.AGoalAndABandAreDrawnWhereTheirValuesSay`
   checks the goal line is drawn at its value.
   - [ ] Follow-up: annotation points (`ANNOTATIONS (POINT (…))`) have no guided card yet.
-- [ ] **P2 — Mobile layout.** The grammar has a mobile page layout (`STRUCTURE`, `MAP`,
-  `BREAKPOINT`) and Studio has nothing for it.
+- [x] **P2 — Mobile layout.** Deferred 2026-09-29 and moved to `ROADMAP.md` ("Studio Authoring for
+  Mobile Page Layouts", Later). The `MOBILE_LAYOUT` clause works when written by hand; there is not
+  enough demand yet to build Studio controls for it.
 - [x] **Decision — the semantic model.** Decided 2026-09-29: deliberate. Modelling happens in the query that builds the dataset or the #temp table, which the author owns and can read; no measures or relationships are added to the language. Guided helpers that write that SQL remain welcome.
 
 **Fresh-eyes review — learning path and primary-editor readiness (2026-09-07)**
