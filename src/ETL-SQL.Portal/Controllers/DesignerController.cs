@@ -1080,7 +1080,7 @@ public class DesignerController : ControllerBase
         var folderPermissions = HttpContext.RequestServices.GetRequiredService<FolderPermissionService>();
         var catalogScope = HttpContext.RequestServices.GetRequiredService<PortalTenantCatalogScope>();
 
-        var report = await catalogScope.Reports.Include(r => r.Folder)
+        var report = await catalogScope.Documents.Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == req.ReportId && !r.IsDeleted, cancellationToken);
         if (report is null) return NotFound(new { error = "Report not found." });
         if (!(await folderPermissions.GetEffectiveReportPermissionAsync(report, User))
@@ -1096,7 +1096,7 @@ public class DesignerController : ControllerBase
         // Lease columns are deliberately updated outside the Report concurrency token. A renewal is
         // collaboration metadata, not report content, and must not make this editor's next If-Match
         // save conflict with itself. The predicate makes acquisition/renewal atomic across nodes.
-        var updated = await catalogScope.Reports
+        var updated = await catalogScope.Documents
             .Where(r => r.Id == req.ReportId && !r.IsDeleted &&
                 (mayForce || r.EditSessionUserId == userId || r.EditSessionExpiresAtUtc == null || r.EditSessionExpiresAtUtc <= now))
             .ExecuteUpdateAsync(setters => setters
@@ -1105,7 +1105,7 @@ public class DesignerController : ControllerBase
                 .SetProperty(r => r.EditSessionExpiresAtUtc, expiresAt), cancellationToken);
         if (updated == 0)
         {
-            var holder = await catalogScope.Reports.AsNoTracking()
+            var holder = await catalogScope.Documents.AsNoTracking()
                 .Where(r => r.Id == req.ReportId)
                 .Select(r => new { r.EditSessionUserName, r.EditSessionExpiresAtUtc })
                 .SingleAsync(cancellationToken);
@@ -1136,11 +1136,11 @@ public class DesignerController : ControllerBase
         var db = HttpContext.RequestServices.GetRequiredService<ETL_SQL.Portal.Data.PortalDbContext>();
         var catalogScope = HttpContext.RequestServices.GetRequiredService<PortalTenantCatalogScope>();
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var report = await catalogScope.Reports.AsNoTracking().FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken);
+        var report = await catalogScope.Documents.AsNoTracking().FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken);
         if (report is null)
             return NoContent();
 
-        await catalogScope.Reports.Where(r => r.Id == reportId && r.EditSessionUserId == userId)
+        await catalogScope.Documents.Where(r => r.Id == reportId && r.EditSessionUserId == userId)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(r => r.EditSessionUserId, (int?)null)
                 .SetProperty(r => r.EditSessionUserName, (string?)null)

@@ -280,6 +280,16 @@ fixes or certify a production host.
   pipeline/query creation and direct authors to Workstation Editor or VS Code. The disabled UX
   is implemented; governed `.etlsql` catalog storage, authoring, save/reopen, and execution are not.
   Complete the Portal journey under ordinary author capabilities before closing this item.
+  Decided 2026-09-30 ([Portal ETL documents](docs/architecture/decisions/portal-etl-documents.md)): a
+  pipeline is the catalog document with `Kind = Pipeline`; it runs through the Orchestrator.
+  - [x] Slice 1 (2026-09-30): storage and authoring. Create from Home or New, save, reopen, lease,
+    drafts; `CatalogScope.Reports` is reports only, so every reader surface refuses a pipeline, and
+    `Documents` serves the authoring paths. Proof: `CatalogPipelineDocumentTests`,
+    `StudioPortalPipelineJourneyTests`.
+  - [ ] Slice 2: run the saved version through the Orchestrator, follow status and log, cancel.
+  - [ ] Slice 3: schedule handoff.
+  - [ ] Configuration export and promotion read `Reports`, so pipelines do not travel yet.
+  - [ ] Certify the journey under an ordinary author (Publisher role, folder grant), not the admin.
 - [ ] **P1 — Certify private drafting and publishing separately.** In-memory seeded practice and an
   explicit Publish action exist; API tests reject publishing without ReportPublish. Local draft
   persistence still depends on the unresolved storage policy/isolation item above. Verify a learner

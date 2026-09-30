@@ -396,6 +396,7 @@ export async function createStudioWorkbench(container, opts = {}) {
         document.body.classList.remove('theme-dark');
     }
     const catalogMode = Boolean(opts.onOpenDocument);
+    const pipelinesBlocked = catalogMode && !opts.catalogPipelines;
     const host = createStudioHostAdapter(opts);
     const { authFetch, apiBase, hasWorkspaceHost, hasGitHost } = host;
     const state = createStudioState(opts);
@@ -718,18 +719,18 @@ export async function createStudioWorkbench(container, opts = {}) {
                     <small>Physical page designer</small>
                 </div>
             </button>
-            <button type="button" class="etlsql-tab-new-item ${catalogMode ? 'disabled' : ''}" data-new-type="etl" ${catalogMode ? 'aria-disabled="true" title="Catalog pipeline authoring is coming soon. Use Workstation Editor."' : ''}>
+            <button type="button" class="etlsql-tab-new-item ${pipelinesBlocked ? 'disabled' : ''}" data-new-type="etl" ${pipelinesBlocked ? 'aria-disabled="true" title="This catalog keeps reports only. Use Workstation Editor."' : ''}>
                 <span style="color:var(--portal-success,#2ea043);">${_studioIcon('catalog', 16)}</span>
                 <div>
-                    <strong>New ETL Pipeline (.etlsql)${catalogMode ? ' (Workstation only)' : ''}</strong>
-                    <small>${catalogMode ? 'Catalog support coming soon' : 'Data Movement & DAG Flow'}</small>
+                    <strong>New ETL Pipeline (.etlsql)${pipelinesBlocked ? ' (Workstation only)' : ''}</strong>
+                    <small>${pipelinesBlocked ? 'This catalog keeps reports only' : 'Data Movement & DAG Flow'}</small>
                 </div>
             </button>
-            <button type="button" class="etlsql-tab-new-item ${catalogMode ? 'disabled' : ''}" data-new-type="sql" ${catalogMode ? 'aria-disabled="true" title="Catalog query authoring is coming soon. Use Workstation Editor."' : ''}>
+            <button type="button" class="etlsql-tab-new-item ${pipelinesBlocked ? 'disabled' : ''}" data-new-type="sql" ${pipelinesBlocked ? 'aria-disabled="true" title="This catalog keeps reports only. Use Workstation Editor."' : ''}>
                 <span style="color:#a371f7;">${_studioIcon('code', 16)}</span>
                 <div>
-                    <strong>New Script (.etlsql)${catalogMode ? ' (Workstation only)' : ''}</strong>
-                    <small>${catalogMode ? 'Catalog support coming soon' : 'Raw SQL Query'}</small>
+                    <strong>New Script (.etlsql)${pipelinesBlocked ? ' (Workstation only)' : ''}</strong>
+                    <small>${pipelinesBlocked ? 'This catalog keeps reports only' : 'Raw SQL Query'}</small>
                 </div>
             </button>
         `;
@@ -738,7 +739,7 @@ export async function createStudioWorkbench(container, opts = {}) {
                 ev.stopPropagation();
                 if (btn.getAttribute('aria-disabled') === 'true') {
                     closeNewTabMenu();
-                    _feedback.notify('Portal catalog currently supports Report-SQL (.rptsql) documents. Use the Workstation Editor or VS Code extension for ETL pipeline (.etlsql) authoring.', { title: 'Catalog Support Coming Soon', tone: 'info' });
+                    _feedback.notify('This catalog keeps Report-SQL (.rptsql) documents only. Use the Workstation Editor or VS Code extension for ETL pipeline (.etlsql) authoring.', { title: 'Reports Only', tone: 'info' });
                     return;
                 }
                 const type = btn.dataset.newType;

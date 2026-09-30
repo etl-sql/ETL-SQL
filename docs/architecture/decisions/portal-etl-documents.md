@@ -64,7 +64,7 @@ Recommended, reusing what exists:
 | Action | Requires |
 | --- | --- |
 | See and open a pipeline | `Read` on its folder, `ScriptRead` capability |
-| Create one | `Manage` on the folder (as for a report), `ScriptSave` |
+| Create one | `Manage` on the folder and `ReportPublish`, as for a report |
 | Edit and save | `Author` on the folder or pipeline, `ScriptSave`, the edit lease |
 | Run or schedule (D2 A) | `Execute` on the pipeline **and** the Orchestrator's own run grant for the job |
 

@@ -8,7 +8,7 @@
  *
  * Studio shell, home screen, projection, activity navigation, and modal focus.
  */
-import { _documentKindLabel, _escapeHtml, _feedback, _fileIcon, _studioIcon, asHtml, queryElement, queryElements } from './studio-context.js';
+import { _documentKindLabel, _escapeHtml, _feedback, _fileIcon, _studioIcon, asHtml, catalogExtension, queryElement, queryElements } from './studio-context.js';
 export function createStudioNavigation(hostContext) {
     function mountShell() {
         hostContext.container.innerHTML = `
@@ -285,9 +285,11 @@ export function createStudioNavigation(hostContext) {
         hostContext.resizer.style.display = 'none';
         hostContext.homeStage.style.display = 'flex';
         const catalogMode = Boolean(hostContext.opts.onOpenDocument);
+        // A catalog that keeps pipelines offers them like any other document.
+        const pipelinesBlocked = catalogMode && !hostContext.opts.catalogPipelines;
         const files = catalogMode
             ? hostContext.state.catalogReports.map((report) => {
-                const filename = /\.rptsql$/i.test(report.name || '') ? (report.name || '') : `${report.name || ''}.rptsql`;
+                const filename = `${report.name || ''}${catalogExtension(report)}`;
                 return { ...report, path: `${report.folderPath || ''}/${filename}`.replace(/^\//, '') };
             })
             : hostContext.state.workspaceFiles || [];
@@ -328,18 +330,18 @@ export function createStudioNavigation(hostContext) {
                                 <span>Physical pages with parameters, groups, detail rows, totals, headers, footers, breaks, preview, and export.</span>
                             </div>
                         </button>
-                        <button type="button" class="etlsql-home-action-card secondary ${catalogMode ? 'etlsql-home-card-disabled' : ''}" data-create-from-home="etl" ${catalogMode ? 'aria-disabled="true" title="Catalog pipeline authoring is coming soon. Open in Workstation Editor for .etlsql pipelines."' : ''}>
+                        <button type="button" class="etlsql-home-action-card secondary ${pipelinesBlocked ? 'etlsql-home-card-disabled' : ''}" data-create-from-home="etl" ${pipelinesBlocked ? 'aria-disabled="true" title="This catalog keeps reports only. Open in Workstation Editor for .etlsql pipelines."' : ''}>
                             <span class="etlsql-home-card-icon">${_studioIcon('catalog', 24)}</span>
                             <div class="etlsql-home-card-info">
-                                <strong>Blank pipeline (.etlsql)${catalogMode ? ' <span class="etlsql-card-type-pill" style="font-size:9px; vertical-align:middle; margin-left:6px; opacity:0.85;">Workstation only</span>' : ''}</strong>
-                                <span>${catalogMode ? 'Catalog pipeline authoring is coming soon. Use the Workstation Editor or VS Code extension for ETL pipeline development.' : 'Multi-step data movement: stage into #temp tables, transform, validate, and load. Opens with the pipeline canvas.'}</span>
+                                <strong>Blank pipeline (.etlsql)${pipelinesBlocked ? ' <span class="etlsql-card-type-pill" style="font-size:9px; vertical-align:middle; margin-left:6px; opacity:0.85;">Workstation only</span>' : ''}</strong>
+                                <span>${pipelinesBlocked ? 'This catalog keeps reports only. Use the Workstation Editor or VS Code extension for ETL pipeline development.' : 'Multi-step data movement: stage into #temp tables, transform, validate, and load. Opens with the pipeline canvas.'}</span>
                             </div>
                         </button>
-                        <button type="button" class="etlsql-home-action-card tertiary ${catalogMode ? 'etlsql-home-card-disabled' : ''}" data-create-from-home="sql" ${catalogMode ? 'aria-disabled="true" title="Catalog query authoring is coming soon. Open in Workstation Editor for .etlsql scripts."' : ''}>
+                        <button type="button" class="etlsql-home-action-card tertiary ${pipelinesBlocked ? 'etlsql-home-card-disabled' : ''}" data-create-from-home="sql" ${pipelinesBlocked ? 'aria-disabled="true" title="This catalog keeps reports only. Open in Workstation Editor for .etlsql scripts."' : ''}>
                             <span class="etlsql-home-card-icon">${_studioIcon('code', 24)}</span>
                             <div class="etlsql-home-card-info">
-                                <strong>Blank query (.etlsql)${catalogMode ? ' <span class="etlsql-card-type-pill" style="font-size:9px; vertical-align:middle; margin-left:6px; opacity:0.85;">Workstation only</span>' : ''}</strong>
-                                <span>${catalogMode ? 'Catalog query authoring is coming soon. Use the Workstation Editor or VS Code extension for ETL script authoring.' : 'Same file type as a pipeline, opened straight into the script editor with no canvas.'}</span>
+                                <strong>Blank query (.etlsql)${pipelinesBlocked ? ' <span class="etlsql-card-type-pill" style="font-size:9px; vertical-align:middle; margin-left:6px; opacity:0.85;">Workstation only</span>' : ''}</strong>
+                                <span>${pipelinesBlocked ? 'This catalog keeps reports only. Use the Workstation Editor or VS Code extension for ETL script authoring.' : 'Same file type as a pipeline, opened straight into the script editor with no canvas.'}</span>
                             </div>
                         </button>
                     </div>
@@ -347,8 +349,8 @@ export function createStudioNavigation(hostContext) {
 
                 <section class="etlsql-studio-home-recent">
                     <div class="etlsql-studio-recent-header">
-                        <h2>${catalogMode ? 'Catalog Reports' : 'Workspace Files'}</h2>
-                        <span class="etlsql-recent-count">${files.length} available ${catalogMode ? 'report' : 'script'}${files.length === 1 ? '' : 's'}</span>
+                        <h2>${catalogMode ? 'Catalog Documents' : 'Workspace Files'}</h2>
+                        <span class="etlsql-recent-count">${files.length} available ${catalogMode ? 'document' : 'script'}${files.length === 1 ? '' : 's'}</span>
                     </div>
                     ${files.length === 0 ? `
                         <div style="padding:24px; text-align:center; color:var(--portal-text-soft,#8b949e); background:var(--portal-surface,#161b22); border:1px dashed var(--portal-border,#30363d); border-radius:8px;">
@@ -398,7 +400,7 @@ export function createStudioNavigation(hostContext) {
         queryElements(hostContext.homeStage, '[data-create-from-home]').forEach(b => {
             b.addEventListener('click', () => {
                 if (b.getAttribute('aria-disabled') === 'true') {
-                    _feedback.notify('Portal catalog currently supports Report-SQL (.rptsql) documents. Use the Workstation Editor or VS Code extension for ETL pipeline (.etlsql) authoring.', { title: 'Catalog Support Coming Soon', tone: 'info' });
+                    _feedback.notify('This catalog keeps Report-SQL (.rptsql) documents only. Use the Workstation Editor or VS Code extension for ETL pipeline (.etlsql) authoring.', { title: 'Reports Only', tone: 'info' });
                     return;
                 }
                 hostContext.createNewFile(b.dataset.createFromHome, { seed: b.hasAttribute('data-seed-sample') });

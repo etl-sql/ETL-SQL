@@ -5,7 +5,7 @@
  * Document switching, opening, creation, and catalog publication.
  */
 
-import { _escapeHtml, _feedback, errorMessage, getStoredProjectionPreference, queryElement } from './studio-context.js';
+import { _escapeHtml, _feedback, catalogExtension, errorMessage, getStoredProjectionPreference, queryElement } from './studio-context.js';
 import type { LeaseDocument } from './studio-lifecycle.js';
 
 import type { StudioDesignState, StudioDomElement, StudioDynamic, StudioOptions, StudioRuntimeContext, StudioRuntimeDocument, StudioRuntimeState } from './studio-context.js';
@@ -169,7 +169,7 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
         await switchDoc(hostContext.state.activeDocId);
     }
 
-    async function promptForCatalogReport(): Promise<{ name: string; folderId: any } | null> {
+    async function promptForCatalogReport(noun = 'report'): Promise<{ name: string; folderId: any } | null> {
         if (!hostContext.state.catalogFolders.length) {
             // A dead end with no explanation is the worst first impression the Portal can give, so
             // say what is missing and who can grant it.
@@ -184,8 +184,8 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
         return new Promise<{ name: string; folderId: any } | null>(resolve => {
             const titleId = 'etlsql-catalog-create-title';
             hostContext.modalBox.innerHTML = `
-                <h2 id="${titleId}">Create catalog report</h2>
-                <label>Report name<input type="text" data-catalog-report-name value="Untitled report" autocomplete="off"></label>
+                <h2 id="${titleId}">Create catalog ${_escapeHtml(noun)}</h2>
+                <label>${_escapeHtml(noun.charAt(0).toUpperCase() + noun.slice(1))} name<input type="text" data-catalog-report-name value="Untitled ${_escapeHtml(noun)}" autocomplete="off"></label>
                 <label>Folder<select data-catalog-report-folder>${hostContext.state.catalogFolders.map((folder: StudioDynamic) => `<option value="${_escapeHtml(folder.id)}">${_escapeHtml(folder.path || folder.name)}</option>`).join('')}</select></label>
                 <div class="etlsql-studio-modal-actions">
                     <button type="button" class="etlsql-studio-btn" data-catalog-create-cancel>Cancel</button>
@@ -246,20 +246,24 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
         const folderPath = folder ? (folder.path || folder.name) : '';
 
         try {
-            const workflow = (doc.reportWorkflow || (doc.path?.endsWith('.paginated.rptsql') ? 'paginated' : 'dashboard')) as 'dashboard' | 'paginated';
+            const pipeline = (doc.path || '').toLowerCase().endsWith('.etlsql');
+            const workflow = pipeline
+                ? null
+                : (doc.reportWorkflow || (doc.path?.endsWith('.paginated.rptsql') ? 'paginated' : 'dashboard')) as 'dashboard' | 'paginated';
             const created = await hostContext.opts.onCreateDocument({
                 ...request,
-                type: 'report',
+                type: pipeline ? 'pipeline' : 'report',
+                kind: pipeline ? 'Pipeline' : 'Report',
                 workflow,
                 scriptText: hostContext.withLineEnding(doc.content, doc.lineEnding || '\n')
             });
-            created.reportWorkflow = workflow;
+            if (workflow) created.reportWorkflow = workflow;
             hostContext.state.catalogReports.push(created);
             doc.reportId = created.id;
             doc.version = created.version ?? 1;
             doc.sourceRevision = created.sourceRevision ?? null;
             doc.name = created.name;
-            doc.path = `${folderPath}/${created.name}.rptsql`.replace(/^\//, '');
+            doc.path = `${folderPath}/${created.name}${catalogExtension(created)}`.replace(/^\//, '');
             doc.isDirty = false;
             hostContext.leaseLifecycle.removeDraft(doc as any);
             if (hostContext.opts.onRenewDocument) {
@@ -279,8 +283,21 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
         const reportWorkflow = type === 'paginated' ? 'paginated' : type === 'dashboard' || type === 'report' ? 'dashboard' : null;
         const isReportType = Boolean(reportWorkflow);
         if (hostContext.opts.onCreateDocument && !seed) {
-            if (!isReportType) {
-                _feedback.notify('Portal catalog currently supports Report-SQL (.rptsql) documents.', { title: 'Create Document', tone: 'warning' });
+            if (!isReportType && !hostContext.opts.catalogPipelines) {
+                _feedback.notify('This catalog keeps Report-SQL (.rptsql) documents only.', { title: 'Create Document', tone: 'warning' });
+                return;
+            }
+            if (!isReportType && hostContext.hasCapability('ReportPublish') && hostContext.hasCapability('ScriptSave')) {
+                // A pipeline or query goes into the catalog as soon as it is named, as a report does.
+                const request = await promptForCatalogReport(type === 'etl' ? 'pipeline' : 'query');
+                if (!request) return;
+                try {
+                    const created = await hostContext.opts.onCreateDocument({ ...request, type: 'pipeline', kind: 'Pipeline', workflow: null, scriptText: '' });
+                    hostContext.state.catalogReports.push(created);
+                    await openCatalogReport(created, type === 'etl' ? 'split' : 'code');
+                } catch (error) {
+                    _feedback.notify(errorMessage(error) || 'The pipeline could not be created.', { title: 'Create Pipeline Failed', tone: 'error' });
+                }
                 return;
             }
             if (!hostContext.hasCapability('ReportPublish')) {
@@ -405,8 +422,8 @@ export function createStudioDocumentSession(hostContext: StudioDocumentSessionCo
                 ...opened,
                 id: opened.id || `catalog-${report.id}`,
                 reportId: report.id,
-                path: opened.path || `${report.folderPath || ''}/${report.name}.rptsql`.replace(/^\//, ''),
-                name: opened.name || `${report.name}.rptsql`,
+                path: opened.path || `${report.folderPath || ''}/${report.name}${catalogExtension(report)}`.replace(/^\//, ''),
+                name: opened.name || `${report.name}${catalogExtension(report)}`,
                 content: opened.content || '',
                 isDirty: false,
                 projection: effectiveProj

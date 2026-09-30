@@ -67,7 +67,7 @@ public sealed partial class StudioController(
         StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
     public async Task<ActionResult<IReadOnlyList<StudioReportDto>>> GetReports(CancellationToken ct)
     {
-        var reports = await CatalogScope.Reports
+        var reports = await CatalogScope.Documents
             .AsNoTracking()
             .Include(report => report.Folder)
             .Where(report => !report.IsDeleted)
@@ -114,6 +114,9 @@ public sealed partial class StudioController(
         var name = request.Name?.Trim() ?? string.Empty;
         if (name.Length is < 1 or > 160)
             return BadRequest(new { error = "Report name must be between 1 and 160 characters." });
+        var kind = CatalogDocumentKind.Report;
+        if (!string.IsNullOrWhiteSpace(request.Kind) && !Enum.TryParse(request.Kind, ignoreCase: true, out kind))
+            return BadRequest(new { error = "Kind must be Report or Pipeline." });
         if (request.ScriptText is null || request.ScriptText.Length > Math.Max(1, portalConfig.DesignerLimits.MaxScriptCharacters))
             return BadRequest(new { error = $"Script text exceeds the {portalConfig.DesignerLimits.MaxScriptCharacters} character limit." });
 
@@ -122,12 +125,14 @@ public sealed partial class StudioController(
             return NotFound(new { error = "Folder not found." });
         if (!await folderPermissions.HasPermissionAsync(folder.Id, FolderPermission.Manage, User))
             return Forbid();
-        if (await CatalogScope.Reports.AnyAsync(report =>
+        // Names are unique across kinds in a folder, so a pipeline and a report never read the same.
+        if (await CatalogScope.Documents.AnyAsync(report =>
                 report.FolderId == folder.Id && !report.IsDeleted && report.Name == name, ct))
-            return Conflict(new { error = $"A report named '{name}' already exists in {folder.Path}." });
+            return Conflict(new { error = $"A document named '{name}' already exists in {folder.Path}." });
 
         sourceControl.ValidateScriptTextForCommit(request.ScriptText);
-        var scriptKey = $"studio/{folder.Id}/{Slugify(name)}-{Guid.NewGuid():N}.rptsql";
+        var extension = kind == CatalogDocumentKind.Pipeline ? ".etlsql" : ".rptsql";
+        var scriptKey = $"studio/{folder.Id}/{Slugify(name)}-{Guid.NewGuid():N}{extension}";
         if (!PortalPathGuard.TryResolveScript(
                 portalConfig, _tenantScope.TenantId, scriptKey, out var resolvedScriptPath))
             return StatusCode(StatusCodes.Status503ServiceUnavailable,
@@ -139,6 +144,7 @@ public sealed partial class StudioController(
             TenantId = _tenantScope.TenantId,
             FolderId = folder.Id,
             Folder = folder,
+            Kind = kind,
             Name = name,
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             ScriptPath = resolvedScriptPath,
@@ -158,7 +164,7 @@ public sealed partial class StudioController(
             db.Reports.Add(report);
             await db.SaveChangesAsync(ct);
             audit.Stage(CurrentUserId, "CREATE_STUDIO_REPORT", "Report", report.Id.ToString(),
-                $"{folder.Path}/{name}; mode={studioAuthorization.Mode}");
+                $"{folder.Path}/{name}; kind={kind}; mode={studioAuthorization.Mode}");
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
         }
@@ -179,7 +185,8 @@ public sealed partial class StudioController(
         report.Name,
         report.Description,
         report.UpdatedAt,
-        report.Version);
+        report.Version,
+        report.Kind.ToString());
 
     private static string Slugify(string value)
     {

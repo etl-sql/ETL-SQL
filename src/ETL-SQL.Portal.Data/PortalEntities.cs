@@ -294,10 +294,22 @@ public class FolderAcl
 
 // ── Reports ───────────────────────────────────────────────────────────────────
 
+/// <summary>
+/// What a catalog document is. A report is viewed by readers; a pipeline is authored in Studio and
+/// run through the Orchestrator. Both share folders, ACLs, leases, versions, and drafts. See
+/// docs/architecture/decisions/portal-etl-documents.md.
+/// </summary>
+public enum CatalogDocumentKind
+{
+    Report,
+    Pipeline
+}
+
 public class Report : IVersionedEntity
 {
     public int Id { get; set; }
     public string TenantId { get; set; } = "portal-host";
+    public CatalogDocumentKind Kind { get; set; } = CatalogDocumentKind.Report;
     public int FolderId { get; set; }
     public Folder Folder { get; set; } = null!;
     public string Name { get; set; } = "";

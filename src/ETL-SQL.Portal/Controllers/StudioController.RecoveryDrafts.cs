@@ -87,7 +87,7 @@ public sealed partial class StudioController
     /// <summary>The report, when it exists in this tenant and the caller may author it.</summary>
     private async Task<Report?> AuthoredReportAsync(int reportId, CancellationToken ct)
     {
-        var report = await CatalogScope.Reports.FirstOrDefaultAsync(item => item.Id == reportId && !item.IsDeleted, ct);
+        var report = await CatalogScope.Documents.FirstOrDefaultAsync(item => item.Id == reportId && !item.IsDeleted, ct);
         if (report is null) return null;
         var permission = await folderPermissions.GetEffectiveReportPermissionAsync(report, User);
         return permission.AtLeast(FolderPermission.Author) ? report : null;

@@ -155,7 +155,7 @@ public sealed class StudioPersistenceTests(StudioSurfaceFixture fixture)
 
         await page.GotoAsync("/studio.html");
         await WaitForStudioAsync(page);
-        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Catalog Reports" })).ToBeVisibleAsync();
+        await Expect(page.GetByRole(AriaRole.Heading, new() { Name = "Catalog Documents" })).ToBeVisibleAsync();
         await Expect(page.GetByText(reportName + ".rptsql", new() { Exact = true })).ToBeVisibleAsync();
         // Hold the opening workflow parse until the tab has closed. A late opening continuation
         // must not hide Home or repaint the editor for a document that no longer exists.

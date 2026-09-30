@@ -217,12 +217,21 @@ export interface StudioDesignState extends Omit<KnownProperties<StudioDynamic>, 
     [key: string]: any;
 }
 
+/** The file extension a catalog document opens with: pipelines are ETL-SQL, everything else Report-SQL. */
+export function catalogExtension(document: { kind?: unknown; name?: unknown } | null | undefined): string {
+    const name = String(document?.name || '');
+    if (/\.(etlsql|rptsql)$/i.test(name)) return '';
+    return String(document?.kind || '').toLowerCase() === 'pipeline' ? '.etlsql' : '.rptsql';
+}
+
 export interface StudioOptions extends StudioStateOptions {
     initialSnapshot?: any;
     previewUrl?: string;
     onSave?: (content: string, path: string, document?: any) => Promise<any> | any;
     onExit?: (options: { force: boolean; activeRuns: number; dirtyDocuments: number }) => Promise<boolean> | boolean;
     onOpenDocument?: (report: any) => Promise<any> | any;
+    /** The catalog keeps pipelines and queries (.etlsql) as well as reports. */
+    catalogPipelines?: boolean;
     onCreateDocument?: (request: Record<string, any>) => Promise<any> | any;
     onCloseDocument?: (document: any, options: { keepalive: boolean }) => any;
     onRenameDocument?: (document: any, name: string) => Promise<any> | any;

@@ -15,7 +15,15 @@ public sealed class PortalTenantCatalogScope(
 
     public IQueryable<Folder> Folders => db.Folders.Where(folder => folder.TenantId == TenantId);
 
-    public IQueryable<Report> Reports => db.Reports.Where(report => report.TenantId == TenantId);
+    /// <summary>Every catalog document in the tenant, reports and pipelines alike: the authoring paths.</summary>
+    public IQueryable<Report> Documents => db.Reports.Where(report => report.TenantId == TenantId);
+
+    /// <summary>
+    /// Report documents only. Every surface that exists for readers (the viewer, subscriptions, alerts,
+    /// share links, snapshots) goes through this, so a pipeline is refused there without each one
+    /// having to remember to check.
+    /// </summary>
+    public IQueryable<Report> Reports => Documents.Where(report => report.Kind == CatalogDocumentKind.Report);
 
     public IQueryable<FolderAcl> FolderAcls => db.FolderAcls.Where(acl =>
         Folders.Any(folder => folder.Id == acl.FolderId));
@@ -39,7 +47,7 @@ public sealed class PortalTenantCatalogScope(
         Reports.Any(report => report.Id == view.ReportId));
 
     public IQueryable<StudioRecoveryDraft> StudioRecoveryDrafts => db.StudioRecoveryDrafts.Where(draft =>
-        Reports.Any(report => report.Id == draft.ReportId));
+        Documents.Any(report => report.Id == draft.ReportId));
 
     public IQueryable<ReportAlert> ReportAlerts => db.ReportAlerts.Where(alert =>
         Reports.Any(report => report.Id == alert.ReportId));

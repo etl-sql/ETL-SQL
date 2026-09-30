@@ -93,7 +93,9 @@ async function acquireLease(reportId) {
 
 async function openCatalogDocument(report) {
   const script = await readJson(`/api/reports/${report.id}/script-content`);
-  const filename = /\.rptsql$/i.test(report.name) ? report.name : `${report.name}.rptsql`;
+  // A pipeline is an ETL-SQL document; everything else in the catalog is Report-SQL.
+  const extension = String(report.kind || '').toLowerCase() === 'pipeline' ? '.etlsql' : '.rptsql';
+  const filename = /\.(rptsql|etlsql)$/i.test(report.name) ? report.name : `${report.name}${extension}`;
   let lease = { acquired: false };
   let canSave = false;
   let readOnlyReason = capabilities.has('ScriptSave')
@@ -141,11 +143,13 @@ const studio = await createStudioWorkbench(container, {
   authFetch,
   apiBase: '',
   onOpenDocument: openCatalogDocument,
+  catalogPipelines: true,
   onCreateDocument: request => studioApi.createReport({
     folderId: Number(request.folderId),
     name: request.name,
     scriptText: request.scriptText,
-    description: null
+    description: null,
+    kind: request.kind || 'Report'
   }),
   onRenewDocument: doc => acquireLease(doc.reportId),
   ...(studioSession.draftRecovery ? {

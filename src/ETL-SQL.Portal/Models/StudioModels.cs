@@ -25,7 +25,8 @@ public sealed record StudioReportDto(
     string Name,
     string? Description,
     DateTime UpdatedAt,
-    long Version);
+    long Version,
+    string Kind = "Report");
 
 public sealed record StudioFolderDto(int Id, string Path, string Name);
 
@@ -33,4 +34,5 @@ public sealed record CreateStudioReportRequest(
     int FolderId,
     string Name,
     string ScriptText,
-    string? Description = null);
+    string? Description = null,
+    string? Kind = null);

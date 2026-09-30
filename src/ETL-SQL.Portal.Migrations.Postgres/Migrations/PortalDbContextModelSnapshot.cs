@@ -1256,6 +1256,13 @@ namespace ETLSQL.Portal.Migrations.Postgres.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Report");
+
                     b.Property<DateTime?>("LastRefreshCompletedAt")
                         .HasColumnType("timestamp with time zone");
 

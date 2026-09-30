@@ -182,6 +182,9 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         {
             e.Property(x => x.Version).IsConcurrencyToken();
             e.Property(x => x.TenantId).HasMaxLength(128);
+            // Stored as text so the table reads plainly; every existing row is a report.
+            e.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20)
+                .HasDefaultValue(CatalogDocumentKind.Report).HasSentinel(CatalogDocumentKind.Report);
             e.HasIndex(x => new { x.TenantId, x.FolderId });
             e.HasMany(x => x.Snapshots).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
             e.HasMany(x => x.Subscriptions).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);

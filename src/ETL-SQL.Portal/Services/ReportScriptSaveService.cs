@@ -32,7 +32,8 @@ public sealed class ReportScriptSaveService(
     AuditService audit,
     PortalTenantCatalogScope? catalogScope = null)
 {
-    private IQueryable<Report> Reports => catalogScope?.Reports ?? db.Reports;
+    // Saving is an authoring path: it serves pipelines as well as reports.
+    private IQueryable<Report> Reports => catalogScope?.Documents ?? db.Reports;
 
     public async Task<ReportScriptSaveResult> SaveAsync(
         int id,

@@ -19,6 +19,13 @@
 // loads studio.js loads feedback.js first, including the inlined offline snapshot, so a missing
 // module is a wiring bug and should read as one.
 export const _feedback = globalThis.ETLSQLFeedback;
+/** The file extension a catalog document opens with: pipelines are ETL-SQL, everything else Report-SQL. */
+export function catalogExtension(document) {
+    const name = String(document?.name || '');
+    if (/\.(etlsql|rptsql)$/i.test(name))
+        return '';
+    return String(document?.kind || '').toLowerCase() === 'pipeline' ? '.etlsql' : '.rptsql';
+}
 /** Query helpers preserve direct DOM access while allowing each call site to choose its element type. */
 export function queryElement(root, selector) {
     return root.querySelector(selector);

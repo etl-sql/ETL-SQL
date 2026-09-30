@@ -1705,7 +1705,7 @@ public class ReportsController : ControllerBase
     [RequireStudioCapability(StudioCapabilities.ScriptRead, StudioDeploymentMode.CatalogOnly, StudioDeploymentMode.SourceControlled)]
     public async Task<IActionResult> GetScriptContent(int id)
     {
-        var report = await catalogScope.Reports.Include(r => r.Folder)
+        var report = await catalogScope.Documents.Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
@@ -1755,7 +1755,7 @@ public class ReportsController : ControllerBase
                 .HasCapability(User, StudioCapabilities.SourcePush))
             return Forbid();
 
-        var report = await catalogScope.Reports.Include(r => r.Folder)
+        var report = await catalogScope.Documents.Include(r => r.Folder)
             .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted, cancellationToken);
         if (report is null) return NotFound();
 
