@@ -198,6 +198,8 @@ public sealed class PlotPlanResolver
         };
         if (layers.Any(layer => layer.Mark == MarkKind.Arc && layer.Stack != StackMode.None))
             plan = plan with { Schema = ChartContractVersions.RadialPlotPlanSchema, Version = ChartContractVersions.RadialPlotPlanVersion };
+        if (spec.Layers.Any(layer => layer.Mark == MarkKind.Line && !layer.Conditions.IsDefaultOrEmpty))
+            plan = ConnectedMarkResolver.Attach(plan);
         plan.Validate();
         return plan;
     }

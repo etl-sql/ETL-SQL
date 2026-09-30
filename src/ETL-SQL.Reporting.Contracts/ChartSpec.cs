@@ -357,8 +357,8 @@ public sealed record ChartSpec(
         ScaleResolutionSpec? scaleResolution = null,
         FacetSpec? facet = null,
         InteractionSpec? interactions = null) => new(
-            ChartContractVersions.ChartSpecSchema,
-            ChartContractVersions.ChartSpecCurrent,
+            layers.Any(layer => layer.Mark == MarkKind.Line && !layer.Conditions.IsDefaultOrEmpty) ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
+            layers.Any(layer => layer.Mark == MarkKind.Line && !layer.Conditions.IsDefaultOrEmpty) ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent,
             id,
             title,
             dataReference,
@@ -376,7 +376,9 @@ public sealed record ChartSpec(
 
     public void Validate()
     {
-        ChartContractValidation.RequireVersion(Schema, Version, ChartContractVersions.ChartSpecSchema, ChartContractVersions.ChartSpecCurrent, nameof(ChartSpec));
+        var connected = Layers.Any(layer => layer.Mark == MarkKind.Line && !layer.Conditions.IsDefaultOrEmpty);
+        ChartContractValidation.RequireVersion(Schema, Version, connected ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
+            connected ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent, nameof(ChartSpec));
         ChartContractValidation.RequireName(Id, nameof(Id));
         ChartContractValidation.RequireName(DataReference, nameof(DataReference));
         ChartContractValidation.RequireUnique(Layers.Select(layer => layer.Id), "layer id");
@@ -719,7 +721,17 @@ public sealed record ChartSpec(
             }
             if (!layer.Style.IsDefault) ChartContractValidation.RequireUnique(layer.Style.Select(token => token.Name), $"style token in layer '{layer.Id}'");
             if (!layer.Conditions.IsDefaultOrEmpty && layer.Mark is MarkKind.Line or MarkKind.Area)
-                throw new InvalidDataException($"Connected layer '{layer.Id}' cannot use row-level conditional encodings.");
+            {
+                if (layer.Mark != MarkKind.Line || Layers.Length != 1 || Coordinate.Kind != CoordinateKind.Cartesian || Facet is not null ||
+                    layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) ||
+                    !layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("GAP", StringComparison.OrdinalIgnoreCase)) ||
+                    !layer.Style.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("LINEAR", StringComparison.OrdinalIgnoreCase)) ||
+                    !layer.Bindings.Select(binding => binding.Channel).ToHashSet().SetEquals([FieldChannel.X, FieldChannel.Y]) ||
+                    layer.Bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative || binding.Stack != StackMode.None || binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)) ||
+                    Scales.Any(scale => scale.Kind != ScaleKind.Linear) || NullHandling.Default != NullValuePolicy.Gap ||
+                    layer.Conditions.Any(condition => condition.Channel is not (ConditionalEncodingChannel.Color or ConditionalEncodingChannel.Opacity)))
+                    throw new InvalidDataException($"Connected layer '{layer.Id}' CONDITIONS require one Cartesian LINE layer, quantitative unstacked X/Y, linear scales, IDENTITY, GAP, LINEAR interpolation, no facets, and COLOR/OPACITY only.");
+            }
             if (!layer.Conditions.IsDefault)
                 foreach (var condition in layer.Conditions)
                 {

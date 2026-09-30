@@ -94,7 +94,7 @@ CREATE VISUAL name AS CUSTOM (
 - **SHAPE** — On `POINT` layers, accepts `CIRCLE`, `SQUARE`, `TRIANGLE`, `DIAMOND`, `CROSS`, or `STAR`. Bind a nominal/ordinal field containing those names, use `DATUM`/`VALUE` for one constant shape, or set the same vocabulary through a `SHAPE` condition. Values are case-insensitive. Unsupported runtime field values fall back to `CIRCLE`; invalid authored constants are rejected.
 - **Binding sources** — A bare field reads a source column; `DATUM(literal-or-parameter)` supplies a typed data-domain constant that may use a scale; `VALUE(literal-or-parameter)` supplies a visual-range value and cannot use a scale or positional channel. Expressions, functions, aggregates, column references inside wrappers, null positional constants, and secret parameters are rejected.
 - **STYLE** — Applies renderer-neutral literal style tokens to one layer. `POINT` layers accept `SYMBOL_STROKE_COLOR = '#RRGGBB'` and a non-negative `SYMBOL_STROKE_WIDTH = n`; a color without a width uses `1` pixel, while a width without a color draws no stroke. `LINE` layers accept `LINE_WIDTH = n` from `0.1` through `10` pixels. `LINE` and `AREA` layers also accept `INTERPOLATION = 'LINEAR'|'SMOOTH'|'STEP_BEFORE'|'STEP_AFTER'`, which selects how the layer connects its points, and `LINE_DASH = 'SOLID'|'DASHED'|'DOTTED'`, which sets its stroke pattern. Both are rejected on other marks. `THICKNESS` remains specific to `TICK` marks and measures a fraction of one em.
-- **CONDITIONS** — Applies presentation-only values per row. Predicates accept fields, report parameters, literals, comparisons, `AND`, `OR`, `NOT`, and `IS [NOT] NULL`. Connected `LINE` and `AREA` marks reject row-level conditions; use separate staged series or layers.
+- **CONDITIONS** — Applies presentation-only values per row. Predicates accept fields, report parameters, literals, comparisons, `AND`, `OR`, `NOT`, and `IS [NOT] NULL`. A single Cartesian LINE layer supports COLOR/OPACITY conditions with quantitative unstacked X/Y, linear scales, IDENTITY, explicit GAP handling and LINEAR interpolation. Facets and other connected forms, including AREA, remain unsupported.
 
 ## Options
 
@@ -708,6 +708,28 @@ CREATE VISUAL TrendWithAnnotations AS CUSTOM (
   )
 );
 ```
+
+## Conditional line segments
+
+Each source row owns the color and opacity of its outgoing segment. For red, blue and green rows,
+the first segment is red and the second is blue. The last row has no outgoing segment; its symbol
+keeps its own presentation. Null X/Y values break the line. Conditions preserve row order, raw
+values and scale domains. Missing conditional values use normal layer/series presentation; a
+destination row never supplies the incoming segment's style. Zero opacity keeps the connection in
+terminal and accessible descriptions.
+
+```sql
+CREATE VISUAL Route AS CUSTOM (SOURCE = #prepared, CHART (
+  COORDINATE (TYPE = CARTESIAN),
+  LAYERS (route = LINE (NULL_HANDLING = GAP,
+    ENCODINGS (X = Distance (TYPE = QUANTITATIVE), Y = Estimate (TYPE = QUANTITATIVE)),
+    STYLE (INTERPOLATION = 'LINEAR'),
+    CONDITIONS (COLOR WHEN Distance < 2 THEN '#ff0000' ELSE '#0000ff',
+      OPACITY WHEN Estimate < 0 THEN 0.4 ELSE 1)))
+));
+```
+
+This form uses ChartSpec v3 and PlotPlan v5. Other charts retain their existing contract versions.
 
 ## References
 

@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Single-layer Cartesian LINE charts support source-owned COLOR/OPACITY conditions with quantitative
+  X/Y, linear scales, GAP handling and LINEAR interpolation. SVG, terminal and accessible output
+  share resolved connections; the form uses guarded ChartSpec v3 and PlotPlan v5 envelopes.
+
 - Polar ARC charts support ZERO/NORMALIZE radial stacks with equal category sectors, non-negative
   radius contributions, and shared SVG, terminal, accessibility and PDF semantics. Radial plans
   use a v4 envelope; existing chart plans retain v3.

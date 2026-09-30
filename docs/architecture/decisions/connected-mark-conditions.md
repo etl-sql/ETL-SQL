@@ -1,7 +1,7 @@
 # Connected mark condition semantics
 
-Status: implementation contract; not shipped. `LINE` and `AREA` still reject row-level
-conditions. TODO item 7 remains open until the implementation and evidence below are complete.
+Status: partially implemented. The single-layer straight Cartesian LINE form accepts COLOR/OPACITY
+conditions. AREA and the remaining combinations are still rejected. TODO item 7 remains open.
 
 The internal `ConnectedMarkResolver.ResolveGapConnections` now resolves adjacency and source-owned
 COLOR/OPACITY for an already partitioned layer with GAP handling. Its tests cover ownership, missing
@@ -12,7 +12,7 @@ guarded PlotPlan v5 with explicit connections for one unstacked Cartesian LINE l
 scales, IDENTITY, GAP handling and LINEAR interpolation. SVG and terminal consume those connections;
 fallback descriptions preserve source ownership. `ConnectedLinePlanTests` covers serialization,
 geometry, descriptions, missing connections and rejected downgrades. Authoring validation and
-lowering are not yet enabled, and AREA rendering remains open.
+lowering use guarded ChartSpec v3 for this LINE form. AREA rendering remains open.
 
 ## Segment ownership
 

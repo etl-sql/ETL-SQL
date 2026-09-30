@@ -86,6 +86,30 @@ public sealed class ReportRenameProviderTests
     }
 
     [Fact]
+    public async Task ConnectedLine_RenamesBindingAndConditionTogether()
+    {
+        const string script = """
+            CREATE VISUAL Route AS CUSTOM (SOURCE = #prepared, CHART (
+              COORDINATE (TYPE = CARTESIAN),
+              LAYERS (route = LINE (NULL_HANDLING = GAP,
+                ENCODINGS (X = Distance (TYPE = QUANTITATIVE), Y = Estimate (TYPE = QUANTITATIVE)),
+                STYLE (INTERPOLATION = 'LINEAR'),
+                CONDITIONS (COLOR WHEN Distance < 2 THEN '#ff0000' ELSE '#0000ff')))
+            ));
+            """;
+        var (provider, uri) = Provider(script);
+        var result = await provider.Handle(new RenameParams
+        {
+            TextDocument = new TextDocumentIdentifier(uri),
+            Position = PositionOf(script, "Distance ("),
+            NewName = "renamed"
+        }, CancellationToken.None);
+        var edits = Assert.IsAssignableFrom<IEnumerable<TextEdit>>(result!.Changes![uri]).ToList();
+        Assert.Equal(2, edits.Count);
+        Assert.All(edits, edit => Assert.Equal("renamed", edit.NewText));
+    }
+
+    [Fact]
     public async Task RenameScale_UpdatesDeclarationAndEncodingReferenceOnly()
     {
         var (provider, uri) = Provider();

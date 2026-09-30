@@ -73,7 +73,8 @@ unstacked Cartesian LINE layer with linear X/Y scales, IDENTITY, GAP handling an
 interpolation. Each `ResolvedMarkConnection` identifies adjacent array indices and source row
 identities; its COLOR/OPACITY values must match the source datum. Validation requires every eligible
 adjacent pair exactly once and rejects downgraded envelopes. SVG, terminal and fallback output
-consume the same connections. Authoring acceptance is still pending; see the
+consume the same connections. This authoring form uses a guarded ChartSpec v3 envelope; existing
+charts retain their prior versions. See the
 [connected-mark implementation contract](decisions/connected-mark-conditions.md).
 
 `ChartContractSerializer` is the only supported JSON serializer for the three contracts. It:

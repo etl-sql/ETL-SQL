@@ -528,8 +528,14 @@ semantics and backend evidence before its rejection can be lifted.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**
   [Implementation contract](docs/architecture/decisions/connected-mark-conditions.md): the source
   row owns each outgoing connection; AREA uses adjacent cross-section strips. Typed resolved
-  connections, guarded wire versions and backend evidence are still required. Current validation
-  continues to reject these conditions; existing segment-style behavior must remain unchanged.
+  connections and guarded wire versions are implemented for the LINE form below. AREA, multiple
+  layers/series, facets, other null policies, interpolation and coordinate forms remain rejected.
+  Existing segment-style behavior remains unchanged.
+- [x] **Source-owned COLOR/OPACITY on straight Cartesian LINE.** One layer with quantitative
+  unstacked X/Y, linear scales, IDENTITY, explicit GAP and LINEAR interpolation. ChartSpec v3 and
+  PlotPlan v5 reject downgrades; raw values, source order and gaps are preserved. Connections agree
+  across SVG, terminal and fallback. ConnectedLinePlanTests covers authoring/designer round trips,
+  lineage, relayout, PDF, invalid forms and deterministic goldens; LSP covers predicate/binding rename.
 
 Add one complete combination at a time — grammar, immutable contracts, resolution, validation,
 authoring help, and every applicable backend — then update the capability matrix before starting the

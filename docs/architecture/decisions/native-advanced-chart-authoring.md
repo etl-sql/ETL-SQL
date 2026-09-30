@@ -159,9 +159,10 @@ Conditions may set only the portable presentation channels `COLOR`, `OPACITY`, `
 `TEXT`. They do not add, remove, aggregate, calculate, join, rank, or reorder rows. Predicates may use
 source columns, literals, report parameters, comparison operators, `AND`, `OR`, `NOT`, `IS NULL`, and
 parentheses. Function calls, subqueries, aggregates, windows, and arithmetic are rejected by the
-Analysis tier. Connected `LINE` and `AREA` marks cannot use row-varying presentation conditions in
-this slice because a segment spans multiple rows; authors can prepare a series column in SQL and use a
-`COLOR` encoding instead.
+Analysis tier. A single straight Cartesian `LINE` now supports source-owned COLOR/OPACITY conditions
+with quantitative unstacked X/Y, linear scales, IDENTITY and explicit GAP handling. Other connected
+forms, including AREA, remain rejected. The [connected-mark contract](connected-mark-conditions.md)
+defines segment ownership and tracks the remaining combinations.
 
 ### 3.3 One- and two-dimensional facets
 
@@ -303,7 +304,8 @@ definitions, window clauses, or renderer-native escape hatches.
   layers resolved server-side.
 - Arbitrary repeat, concatenation, or nested dashboard layout inside one visual. Phase 7 composition
   is the explicit row/column facet grid; page/container layout composes independent visuals.
-- Row-varying conditions on connected marks until portable segment semantics are accepted.
+- Connected-mark condition combinations beyond the supported single-layer straight Cartesian LINE
+  form; see the [connected-mark contract](connected-mark-conditions.md).
 
 ## 10. Acceptance evidence
 

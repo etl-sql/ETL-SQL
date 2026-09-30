@@ -4,6 +4,8 @@ public static class ChartContractVersions
 {
     public const int ChartSpecCurrent = 2;
     public const int ChartDataCurrent = 1;
+    public const int ConnectedChartSpecVersion = 3;
+    public const string ConnectedChartSpecSchema = "https://etl-sql.org/schemas/reporting/chart-spec/v3";
     public const int ConnectedPlotPlanVersion = 5;
     public const string ConnectedPlotPlanSchema = "https://etl-sql.org/schemas/reporting/plot-plan/v5";
     // COMPAT_BREAK: 0.19 — PlotPlan v3 removes the redundant per-datum tooltip string.

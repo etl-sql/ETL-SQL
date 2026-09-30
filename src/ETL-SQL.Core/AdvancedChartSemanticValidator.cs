@@ -261,7 +261,7 @@ public static class AdvancedChartSemanticValidator
                 ValidateEncoding(results, chart, layer, encoding, layerNode, declared, inferred);
 
             ValidateLayerShape(results, chart, layer, effective, layerNode);
-            ValidateConditions(results, layer, layerNode);
+            ValidateConditions(results, chart, layer, layerNode);
         }
     }
 
@@ -689,13 +689,25 @@ public static class AdvancedChartSemanticValidator
             Add(results, layerNode, message);
     }
 
-    private static void ValidateConditions(List<Diagnostic> results, AdvancedChartLayer layer, AstNode layerNode)
+    private static void ValidateConditions(List<Diagnostic> results, AdvancedChartDefinition chart, AdvancedChartLayer layer, AstNode layerNode)
     {
+        var bindings = EffectiveEncodings(chart, layer);
+        var connectedLine = layer.Mark == AdvancedChartMarkKind.Line && chart.Layers.Length == 1 &&
+            chart.Coordinate.Kind == AdvancedChartCoordinateKind.Cartesian && chart.Facet is null &&
+            layer.Position.Kind == AdvancedChartPositionKind.Identity &&
+            string.Equals(layer.NullHandling, "GAP", StringComparison.OrdinalIgnoreCase) &&
+            layer.Styles.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(LiteralText(style.Value)?.Trim(), "LINEAR", StringComparison.OrdinalIgnoreCase)) &&
+            bindings.Select(binding => binding.Channel).ToHashSet().SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.Y]) &&
+            bindings.All(binding => binding.DataKind == AdvancedChartDataKind.Quantitative && binding.Stack == AdvancedChartStackMode.None &&
+                binding.Source.Kind is AdvancedChartBindingSourceKind.Field or AdvancedChartBindingSourceKind.Datum) &&
+            chart.Scales.All(scale => scale.Kind == AdvancedChartScaleKind.Linear);
         foreach (var condition in layer.Conditions)
         {
             var node = Anchor(condition, layerNode);
-            if (layer.Mark is AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area)
-                Add(results, node, $"Layer '{layer.Name}' cannot use row-level CONDITIONS on connected {layer.Mark.ToString().ToUpperInvariant()} marks; stage separate series or layers in ETL-SQL.");
+            if (layer.Mark is AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area &&
+                (!connectedLine || condition.Channel is not (AdvancedChartConditionChannel.Color or AdvancedChartConditionChannel.Opacity)))
+                Add(results, node, $"Layer '{layer.Name}' cannot use these CONDITIONS on connected {layer.Mark.ToString().ToUpperInvariant()} marks. Connected CONDITIONS require one Cartesian LINE layer, quantitative unstacked X/Y, linear scales, IDENTITY, NULL_HANDLING = GAP, INTERPOLATION = LINEAR, no facets, and COLOR/OPACITY only.");
             if (!IsSupportedPredicate(condition.Predicate))
                 Add(results, node, $"Layer '{layer.Name}' condition predicate supports only fields, parameters, literals, comparisons, AND/OR/NOT, and IS NULL.");
             if (!IsConstant(condition.WhenTrue))
