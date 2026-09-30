@@ -225,6 +225,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Studio's dataset wizard lists the tables of a connection declared moments earlier. On the desktop
+  host it read the schema before the host had analysed the script, reported "No connection named …
+  is registered for this document", and stayed on that error until reopened.
+
 - Renaming a Studio tab straight after cancelling a rename no longer throws the new name away. The
   tab bar put focus back on the tab a frame after redrawing, which took it from the new rename box;
   losing focus saves and closes that box.

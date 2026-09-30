@@ -8,7 +8,7 @@
 import type { StudioAuthoringOptions } from './studio-authoring-context.js';
 
 
-import { asButton, asHtml, asInput, declaredConnectionNames } from './studio-authoring-context.js';
+import { asButton, asHtml, asInput, declaredConnectionNames, readConnectionSchema } from './studio-authoring-context.js';
 
 import type { StudioAuthoringDialogApi, StudioAuthoringDialogElements, StudioAuthoringEditorTransport, StudioAuthoringFeedback, StudioAuthoringRequestOptions, StudioAuthoringShell } from './studio-authoring-context.js';
 import {
@@ -528,14 +528,14 @@ export function createStudioAuthoringData(hostContext: StudioAuthoringDataContex
                 wizard.error = null;
                 paint();
                 try {
-                    const schema = await hostContext.request(hostContext.routes.schema, {
-                        method: 'GET',
-                        query: { connection: alias, documentUri: doc.path || 'studio' },
-                        fallbackError: `The schema for ${alias} could not be read.`,
-                    });
-                    wizard.tables = schema.tables || [];
+                    const schema = await readConnectionSchema(hostContext, hostContext.shell.getScriptText(),
+                        doc.path || 'studio', alias, `The schema for ${alias} could not be read.`);
+                    // The author may have picked another connection while this one was being read.
+                    if (wizard.connection !== alias) return;
+                    wizard.tables = schema?.tables || [];
                     wizard.tablesFailed = false;
                 } catch (error: any) {
+                    if (wizard.connection !== alias) return;
                     // An empty list here is not the same claim as "this connection has no tables",
                     // but the step read it as one: the catch set tables to [], which is exactly what
                     // the zero-tables branch tests, so a failed schema read rendered as a confident

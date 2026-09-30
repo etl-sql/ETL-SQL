@@ -44,6 +44,23 @@ export function declaredConnectionNames(scriptText) {
         names.push(match[1]);
     return names;
 }
+/**
+ * Reads a connection's tables, after asking the host to analyse the script as it stands.
+ *
+ * A host learns a document's connections by analysing its script, and the editor asks it to on a
+ * debounce. A surface that reads a schema as soon as the author picks a connection can get there
+ * first, and is told a connection written moments ago is "not registered for this document". So the
+ * analysis is awaited here rather than left to the debounce. A failed analysis is not a reason to
+ * skip the read: the schema read reports the real problem better.
+ */
+export async function readConnectionSchema(options, script, documentUri, connection, fallbackError) {
+    await options.request(options.routes.analyze, { body: { script, documentUri } }).catch(() => undefined);
+    return options.request(options.routes.schema, {
+        method: 'GET',
+        query: { connection, documentUri },
+        fallbackError,
+    });
+}
 /** Parameter data types the guided step offers; the script accepts any type the parser knows. */
 export const STUDIO_PARAMETER_TYPES = ['VARCHAR', 'INT', 'DECIMAL', 'DATE', 'DATETIME', 'BOOLEAN'];
 /** Aggregates a TABLE's GRAND_TOTAL accepts. */

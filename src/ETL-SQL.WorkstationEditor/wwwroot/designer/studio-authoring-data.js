@@ -14,7 +14,7 @@
  *
  * Data selection, samples, dataset registry, and data wizard.
  */
-import { asButton, asHtml, asInput, declaredConnectionNames } from './studio-authoring-context.js';
+import { asButton, asHtml, asInput, declaredConnectionNames, readConnectionSchema } from './studio-authoring-context.js';
 import { escapeHtml, noteMarkup as guidedNoteMarkup, sampleGridMarkup as sampleRowsMarkup, sqlPreviewMarkup } from './studio-authoring-ui.js';
 import { columnName, columnType, snapshotColumns, updateSnapshotPackage as writeSnapshotPackage } from './studio-data.js';
 import { createQueryWorkbench } from './studio-query-workbench.js';
@@ -464,15 +464,16 @@ export function createStudioAuthoringData(hostContext) {
                 wizard.error = null;
                 paint();
                 try {
-                    const schema = await hostContext.request(hostContext.routes.schema, {
-                        method: 'GET',
-                        query: { connection: alias, documentUri: doc.path || 'studio' },
-                        fallbackError: `The schema for ${alias} could not be read.`,
-                    });
-                    wizard.tables = schema.tables || [];
+                    const schema = await readConnectionSchema(hostContext, hostContext.shell.getScriptText(), doc.path || 'studio', alias, `The schema for ${alias} could not be read.`);
+                    // The author may have picked another connection while this one was being read.
+                    if (wizard.connection !== alias)
+                        return;
+                    wizard.tables = schema?.tables || [];
                     wizard.tablesFailed = false;
                 }
                 catch (error) {
+                    if (wizard.connection !== alias)
+                        return;
                     // An empty list here is not the same claim as "this connection has no tables",
                     // but the step read it as one: the catch set tables to [], which is exactly what
                     // the zero-tables branch tests, so a failed schema read rendered as a confident

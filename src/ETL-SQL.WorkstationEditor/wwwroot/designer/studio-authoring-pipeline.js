@@ -14,7 +14,7 @@
  *
  * Pipeline task editing and run-plan confirmation.
  */
-import { asInput, asSelect } from './studio-authoring-context.js';
+import { asInput, asSelect, readConnectionSchema } from './studio-authoring-context.js';
 import { escapeHtml, noteMarkup as guidedNoteMarkup, mutationExplanationMarkup } from './studio-authoring-ui.js';
 import { taskKindLabel } from './studio-pipeline-canvas.js';
 import { createQueryWorkbench } from './studio-query-workbench.js';
@@ -541,18 +541,7 @@ export function createStudioAuthoringPipeline(hostContext) {
                 schema = { connection, tables: null, failed: null };
                 const documentUri = hostContext.getActiveDocument()?.path || 'studio';
                 try {
-                    // A host learns a document's connections by analysing its script. The editor
-                    // does that on a debounce, so a dialog opened soon after the connection was
-                    // written asked about one the host had not registered yet, and was told it
-                    // did not exist. The Data rail's connection list does the same first.
-                    await hostContext.request(hostContext.routes.analyze, {
-                        body: { script: hostContext.shell.getScriptText(), documentUri },
-                    }).catch(() => undefined);
-                    const read = await hostContext.request(hostContext.routes.schema, {
-                        method: 'GET',
-                        query: { connection, documentUri },
-                        fallbackError: `The tables of ${connection} could not be read.`,
-                    });
+                    const read = await readConnectionSchema(hostContext, hostContext.shell.getScriptText(), documentUri, connection, `The tables of ${connection} could not be read.`);
                     if (schema?.connection !== connection)
                         return;
                     schema = { connection, tables: read?.tables ?? [], failed: null };

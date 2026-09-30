@@ -135,9 +135,11 @@ rights just to learn.
   - [x] Slice 3 (2026-09-29): Expect schema and Drop #temp steps; a labelled card is titled with its
     label over its statement; a #temp handed between steps is drawn as a data line carrying its name,
     arcing under the row when it skips steps; first-use notes on every data step.
-- [ ] The dataset wizard reads a connection's schema without asking the host to analyse the script
+- [x] The dataset wizard reads a connection's schema without asking the host to analyse the script
   first, so on the desktop host a just-declared connection reads as "not registered for this
-  document". The pipeline task dialog had the same race and now analyses before reading.
+  document". Fixed 2026-09-30: the wizard and the pipeline task dialog share `readConnectionSchema`,
+  which awaits the analysis before reading. Proof: `StudioDesktopDatasetWizardTests` slows the host's
+  analysis to 2 s; it failed with the TODO's exact message before the fix.
 
 **Remaining paginated authoring work**
 
