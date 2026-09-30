@@ -185,8 +185,11 @@ containers, and clause-level patching that keeps hand-written clauses on a desig
     wider: `LIST` had no converter, so text never became items, and the documented MULTISELECT
     pattern (`IN @selected_regions`) matched no rows on the first pick (COMPAT_BREAK 0.20). Proof:
     `ReportListParameterTests`, `StudioInteractionJourneyTests.ACtrlClickOnTwoBarsShowsBothRegions`.
-    - [ ] Follow-up: a DRILL_DOWN or SET_PARAMETER click posts plain text, so a clicked value that
-      contains a comma is split when the parameter is a LIST. Post those as JSON arrays too.
+    - [x] Follow-up: a DRILL_DOWN or SET_PARAMETER click posts plain text, so a clicked value that
+      contains a comma is split when the parameter is a LIST. Done 2026-09-30: the manifest lists its
+      LIST parameters (`listParameters`) and a click posts to them as a one-item JSON array. Found on
+      the way: the manifest reported a LIST's value as `System.Collections.Generic.List...`, which
+      drill-back and bookmarks posted back as garbage; it now reads as a JSON array.
 - [x] **P1 — Reports built on a shared connection failed for readers.** Found and fixed 2026-09-29.
   Studio wrote `FROM alias.Table` without declaring the catalog connection; preview declared it
   quietly, so the report previewed and then failed with `Unknown source` for every reader, schedule,

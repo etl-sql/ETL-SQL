@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 
@@ -19,6 +20,24 @@ namespace ETL_SQL.Reporting
             && string.Equals(metadata.DataType, "LIST", StringComparison.OrdinalIgnoreCase)
                 ? TypeConverter.Cast(posted, "LIST")
                 : posted;
+
+        /// <summary>
+        /// A variable's value as the report reports it and a reader posts it back: a list is a JSON
+        /// array, which <see cref="Value"/> reads into the same items.
+        /// </summary>
+        public static string Text(object? value) => value switch
+        {
+            null => "",
+            string text => text,
+            System.Collections.IEnumerable items => System.Text.Json.JsonSerializer.Serialize(
+                items.Cast<object?>().Select(item => item switch
+                {
+                    null => null,
+                    string or decimal or double or float or int or long or bool => item,
+                    _ => (object?)item.ToString()
+                })),
+            _ => value.ToString() ?? ""
+        };
 
         /// <summary>
         /// A page selection (click or Ctrl+click) arrives as a JSON array of the selected values, so a

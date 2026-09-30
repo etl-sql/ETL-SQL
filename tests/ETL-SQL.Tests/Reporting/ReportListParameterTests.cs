@@ -82,6 +82,34 @@ public sealed class ReportListParameterTests
         }
     }
 
+    /// <summary>
+    /// The runtime posts <c>manifest.parameters</c> back (drill-back, bookmarks, the parameter panel),
+    /// so a LIST must read as a value the binding accepts, not as a CLR type name.
+    /// </summary>
+    [Fact]
+    public async Task AListParameterIsReportedAsAJsonArrayAndRoundTrips()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"list_param_{Guid.NewGuid():N}.rptsql");
+        File.WriteAllText(scriptPath, Script);
+        try
+        {
+            var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+            var initial = await service.GetManifestAsync();
+            Assert.Equal("[\"North\",\"South\",\"West\",\"East, Coast\"]", initial.Parameters["@selected_regions"]);
+            Assert.Contains("@selected_regions", initial.ListParameters, StringComparer.OrdinalIgnoreCase);
+
+            var narrowed = await service.SetParametersAsync([("@selected_regions", "[\"East, Coast\"]")]);
+            Assert.Equal("[\"East, Coast\"]", narrowed.Parameters["@selected_regions"]);
+
+            var restored = await service.SetParametersAsync([("@selected_regions", initial.Parameters["@selected_regions"])]);
+            Assert.Equal(4, restored.Visuals.Single(visual => visual.Name == "Orders").Rows.Count);
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+        }
+    }
+
     [Fact]
     public async Task ARebuildKeepsThePostedList()
     {

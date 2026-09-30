@@ -501,6 +501,17 @@ export function isActivePagePaginated() {
     const page = getActivePage();
     return !!page && (page.dataset.pageMode || '').toUpperCase() === 'PAGINATED';
 }
+/**
+ * The text a click action posts for one clicked value. A LIST parameter reads text as
+ * comma-separated items, so the value goes as a one-item JSON array to stay whole.
+ */
+function clickedValue(parameter, value) {
+    const name = parameter.startsWith('@') ? parameter : '@' + parameter;
+    const lists = (getLastManifest()?.listParameters || []);
+    return lists.some(list => list.toLowerCase() === name.toLowerCase())
+        ? JSON.stringify([String(value ?? '')])
+        : String(value ?? '');
+}
 export function executeAction(action, rowData, columns, visualName, visualCtx) {
     if (action.type === 'DRILL_IN') {
         const hierarchy = action.hierarchy || [];
@@ -522,7 +533,7 @@ export function executeAction(action, rowData, columns, visualName, visualCtx) {
             const colIdx = columns.findIndex(c => c.toLowerCase() === key.toLowerCase());
             const value = colIdx >= 0 ? rowData[colIdx] : null;
             if (value != null)
-                params['@' + key] = String(value);
+                params['@' + key] = clickedValue(key, value);
         }
         if (Object.keys(params).length === 0)
             return;
@@ -555,7 +566,7 @@ export function executeAction(action, rowData, columns, visualName, visualCtx) {
     }
     else if (action.type === 'SET_PARAMETER') {
         const value = resolveActionValue(action, rowData, columns);
-        const params = { [action.parameterName]: String(value ?? '') };
+        const params = { [action.parameterName]: clickedValue(action.parameterName, value) };
         if (vscode) {
             vscode.postMessage({ type: 'refreshReport', parameters: params });
         }

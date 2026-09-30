@@ -148,6 +148,13 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("parameterMetadata")]
         public Dictionary<string, ParameterMetadataManifest> ParameterMetadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// Variables declared as LIST. A click action posts one clicked value to them as a one-item
+        /// JSON array, so a value containing a comma is not split into two.
+        /// </summary>
+        [JsonPropertyName("listParameters")]
+        public List<string> ListParameters { get; set; } = [];
+
         [JsonPropertyName("customThemes")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<ThemeManifest>? CustomThemes { get; set; }

@@ -236,6 +236,38 @@ function offsetKeyVisual(overrides: Record<string, unknown> = {}): Record<string
     };
 }
 
+describe('click actions and LIST parameters', () => {
+    it.each([
+        [['@Region'], '["East, Coast"]'],
+        [[], 'East, Coast'],
+    ])('posts a clicked value whole (LIST parameters %j)', async (listParameters, expected) => {
+        const posted: any[] = [];
+        const win = makeDOM(w => {
+            w.__IS_WEB__ = true;
+            w.__MANIFEST__ = { ...EMPTY_MANIFEST, parameters: { '@Region': 'All' }, listParameters };
+            w.fetch = (url: string, init: any = {}) => {
+                if (init.body) posted.push(JSON.parse(init.body));
+                return Promise.resolve({ ok: true, json: () => Promise.resolve({ ...EMPTY_MANIFEST }) });
+            };
+        });
+        win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const card = win.document.createElement('div');
+        win.document.body.appendChild(card);
+        win.__reportRuntime__.renderNativeSvg(card, offsetKeyVisual({
+            rows: [['500', 'East, Coast'], ['300', 'West']],
+            interaction: { key: 'Region', select: 'NONE' },
+            actions: [{ type: 'SET_PARAMETER', trigger: 'ON_CLICK', parameterName: '@Region', valueSource: 'COLUMN', valueColumn: 'Region' }],
+        }), { visuals: [] });
+        card.querySelector('[data-row-index="0"]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const sent = posted.flatMap(body => body.params || []).find((param: any) => param.name === '@Region');
+        expect(sent?.value).toBe(expected);
+    });
+});
+
 describe('resolved interaction contract', () => {
     it('cross-filters on the resolved key, not on the first column', async () => {
         const posted: any[] = [];

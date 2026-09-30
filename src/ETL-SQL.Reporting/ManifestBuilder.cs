@@ -59,7 +59,7 @@ namespace ETL_SQL.Reporting
             {
                 Source = scriptSource,
                 BuiltAt = DateTime.UtcNow,
-                IsInteraction = (interactionValues != null && interactionValues.Count > 0) || (_ctx.ReportContext.BaselineParameters.Count > 0 && _ctx.VarContext.Variables.Any(v => _ctx.ReportContext.BaselineParameters.TryGetValue(v.Key, out var baseVal) && String.Compare(v.Value?.ToString() ?? "", baseVal ?? "", true) != 0)),
+                IsInteraction = (interactionValues != null && interactionValues.Count > 0) || (_ctx.ReportContext.BaselineParameters.Count > 0 && _ctx.VarContext.Variables.Any(v => _ctx.ReportContext.BaselineParameters.TryGetValue(v.Key, out var baseVal) && String.Compare(ReportParameterBinding.Text(v.Value), baseVal ?? "", true) != 0)),
                 Title = _ctx.ReportContext.ReportTitle,
                 TitleIsMarkdown = _ctx.ReportContext.ReportTitleIsMarkdown,
                 Description = _ctx.ReportContext.ReportDescription,
@@ -380,8 +380,10 @@ namespace ETL_SQL.Reporting
                 var variablesWithMetadata = vctx.GetVariablesWithMetadata();
                 foreach (var kvp in variablesWithMetadata)
                 {
-                    var valStr = kvp.Value.Value?.ToString() ?? "";
+                    var valStr = ReportParameterBinding.Text(kvp.Value.Value);
                     manifest.Parameters[kvp.Key] = valStr;
+                    if (string.Equals(kvp.Value.Metadata.DataType, "LIST", StringComparison.OrdinalIgnoreCase))
+                        manifest.ListParameters.Add(kvp.Key);
 
                     // Phase 3: Capture metadata for INPUT variables
                     if (kvp.Value.Metadata.IsInput)
@@ -400,7 +402,7 @@ namespace ETL_SQL.Reporting
                 foreach (var kvp in vctx.Variables)
                 {
                     if (!manifest.Parameters.ContainsKey(kvp.Key))
-                        manifest.Parameters[kvp.Key] = kvp.Value?.ToString() ?? "";
+                        manifest.Parameters[kvp.Key] = ReportParameterBinding.Text(kvp.Value);
                 }
             }
 
