@@ -369,13 +369,13 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         // 1. Mount the custom-html fixture
         await page.SelectOptionAsync("#fixtureSel", "custom-html");
-        await page.WaitForTimeoutAsync(300);
 
-        // 2. Visual card on canvas must be rendered with HTML preview
+        // 2. Visual card on canvas must be rendered with HTML preview. Waited for rather than counted
+        // after a fixed 300 ms: a slow remount still showed the previous fixture's three cards.
         var card = page.Locator(".etlsql-dsgn-visual-card");
-        Assert.Equal(1, await card.CountAsync());
+        await Assertions.Expect(card).ToHaveCountAsync(1, new() { Timeout = 15_000 });
         var htmlPreview = card.Locator(".etlsql-html-visual-preview");
-        Assert.Equal(1, await htmlPreview.CountAsync());
+        await Assertions.Expect(htmlPreview).ToHaveCountAsync(1, new() { Timeout = 15_000 });
         Assert.Contains("CPU: CpuPercent", await htmlPreview.EvaluateAsync<string>(
             "element => element.shadowRoot?.textContent || ''"));
 
@@ -2527,9 +2527,13 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
             "() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()");
 
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.addVisualToCanvas('BAR')");
-        var undo = page.Locator(".etlsql-feedback-action").First;
+        // The offer leads with "Show what changed" (the script-learning panel), so Undo is found by
+        // its name. This took the first action and read it as Undo, and failed every run once the
+        // learning action was added in front of it.
+        var undo = page.Locator(".etlsql-feedback-action", new() { HasText = "Undo" });
         await undo.WaitForAsync();
-        Assert.Equal("Undo", (await undo.TextContentAsync() ?? "").Trim());
+        Assert.Equal(1, await undo.CountAsync());
+        Assert.Equal(1, await page.Locator(".etlsql-feedback-action", new() { HasText = "Show what changed" }).CountAsync());
 
         var written = await page.EvaluateAsync<string>(
             "() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()");

@@ -315,8 +315,17 @@ function renderFixtures() {
   $fixtureLabel.style.display = list.length > 1 ? 'flex' : 'none';
 }
 
+// Mounts run one at a time. A story's mount is async, and choosing a fixture while the default one
+// was still mounting started a second mount beside it: the first could finish afterwards and write
+// its visuals into the stage the second had just cleared, so the stage showed the wrong fixture.
+let mountQueue = Promise.resolve();
+function mount() {
+  mountQueue = mountQueue.then(mountNow, mountNow);
+  return mountQueue;
+}
+
 // Mount the current story into the stage
-async function mount() {
+async function mountNow() {
   if (currentInstance) {
     try { currentInstance.dispose?.(); } catch { /* ignore */ }
     currentInstance = null;

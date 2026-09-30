@@ -101,11 +101,18 @@ rights just to learn.
 - [x] Closing the Studio browser window never stops a CLI-launched host: `--idle-timeout-minutes`
   defaulted to 0 ("never"), so the host kept its port and locked `src/ETL-SQL.App/bin`. Now defaults
   to 2 minutes with no browser connected; an explicit 0 is always passed through and still means never.
-- [ ] `Studio_TabName_DoubleClickRenamesAndEscapeCancels` times out waiting for the rename input in
-  most runs, alone or in the suite. Seen since 2026-09-28, before the Studio pipeline work.
-- [ ] `Studio_AWizardWrite_OffersAnUndoThatPutsTheScriptBack` fails when run alone: the first
-  `.etlsql-feedback-action` is not "Undo" (it is "Show what changed"). Failed in every suite run on
-  2026-09-29 too, so it looks deterministic, not flaky.
+- [x] `Studio_TabName_DoubleClickRenamesAndEscapeCancels` timed out in most runs. Fixed 2026-09-29, a
+  product bug: `renderTabs` refocused the tab a frame later and took focus from a second rename's new
+  input, whose blur committed and removed it. It now refocuses only when the rebuild lost focus.
+  Without the fix the test fails 2 runs in 3; with it, every run passes.
+- [x] `Studio_AWizardWrite_OffersAnUndoThatPutsTheScriptBack` failed every run. Fixed 2026-09-29, a
+  stale test: the toast gained "Show what changed" ahead of Undo in `933830f0d`, and the test took the
+  first action. It now finds Undo by name.
+- [x] `Designer_ConstrainedHtmlVisual_RendersHtmlComponentControlsAndPreview` failed now and then
+  with 3 cards instead of 1. Fixed 2026-09-29 in the ui-sandbox harness: switching fixture while the
+  default one was still mounting ran two mounts at once, and the older one wrote into the stage last.
+  Mounts are now queued, and the test waits for the card instead of sleeping 300 ms. The full Studio
+  and sandbox suites (166 tests) then passed twice in a row.
 - [x] The task editor can rename most task kinds but not edit their other fields. Every kind now
   reports the fields found as exact spans (`PipelineTask.Fields`) and the editor offers those;
   a field written as an expression or variable is named and left to the script.

@@ -109,7 +109,11 @@ export function createStudioDocumentTabs(hostContext: StudioDocumentTabsContext)
             const activeTab = queryElement(hostContext.tabsContainer, '.etlsql-studio-tab.active') as HTMLElement | null;
             if (activeTab) {
                 activeTab.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
-                if (hadFocus) {
+                // Only put back focus the rebuild lost. This runs a frame later, and by then the
+                // author may have focused something new, such as the input of a second rename:
+                // taking focus from it blurred it, and blur commits and removes the input.
+                const current = document.activeElement;
+                if (hadFocus && (!current || current === document.body || !current.isConnected)) {
                     activeTab.focus();
                 }
             }

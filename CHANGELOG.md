@@ -221,6 +221,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Renaming a Studio tab straight after cancelling a rename no longer throws the new name away. The
+  tab bar put focus back on the tab a frame after redrawing, which took it from the new rename box;
+  losing focus saves and closes that box.
+
 - Editing a chart in Studio's designer no longer corrupts its annotation points. The designer kept
   its own copy of the overlay formatter, which wrote `ANNOTATIONS (POINT (…))` back as
   `ANNOTATIONPOINT AS DASHED WITH (…)`, a clause that does not parse. It now uses the dialect's
