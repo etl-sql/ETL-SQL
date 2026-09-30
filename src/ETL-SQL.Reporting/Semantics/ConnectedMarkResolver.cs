@@ -4,14 +4,6 @@ using System.Linq;
 
 namespace ETL_SQL.Reporting.Semantics.Runtime;
 
-// Kept internal until the versioned PlotPlan envelope and all consumers carry connections.
-internal sealed record ResolvedMarkConnection(
-    int SourceIndex,
-    int DestinationIndex,
-    int SourceRowIndex,
-    int DestinationRowIndex,
-    ImmutableArray<ResolvedEncodingValue> Encodings);
-
 internal static class ConnectedMarkResolver
 {
     // Input is one already partitioned layer/facet with resolved coordinates and GAP handling.

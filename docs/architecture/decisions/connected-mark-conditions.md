@@ -7,6 +7,9 @@ The internal `ConnectedMarkResolver.ResolveGapConnections` now resolves adjacenc
 COLOR/OPACITY for an already partitioned layer with GAP handling. Its tests cover ownership, missing
 source styles, gaps, coincident rows, transparent connections and isolated layers. It is not yet
 wired into `PlotPlan`; the wire envelope, geometry consumers and authoring acceptance remain open.
+`ResolvedMarkConnection` lives in Reporting.Contracts and validates adjacency, endpoint identity,
+gap exclusion and exact source-owned presentation. Standalone serialization and tampered-endpoint
+tests cover this record; they do not establish compatibility of a future PlotPlan envelope.
 
 ## Segment ownership
 
