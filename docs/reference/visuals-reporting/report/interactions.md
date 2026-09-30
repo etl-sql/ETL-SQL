@@ -17,6 +17,9 @@ INTERACTIONS (
 - **`HIGHLIGHT`**: Keep the full visual and ghost non-matching data.
 - **`NONE`**: Ignore cross-visual selections.
 
+On a chart or table with `HIGHLIGHT` or `FILTER`, a left click selects. Its `ON_CLICK` actions
+move to the right-click menu; see [ACTIONS](actions.md).
+
 ## Examples
 
 ```sql

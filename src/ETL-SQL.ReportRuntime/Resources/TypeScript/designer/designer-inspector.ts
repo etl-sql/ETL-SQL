@@ -79,6 +79,8 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
 
     /** Visuals with no rows of their own: they neither send nor receive a selection. */
     const NON_DATA_TYPES = new Set(['CONTAINER', 'BUTTON', 'TEXT', 'IMAGE']);
+    /** Where a click action lives once the visual's left click selects. */
+    const LINKED_CLICK_NOTE = ' This visual is linked, so a left click selects; this action is on its right-click menu.';
     /** Visuals the dialect refuses ACTIONS on. */
     const DISPLAY_ONLY_TYPES = new Set(['TEXT', 'CARD', 'IMAGE', 'CONTAINER']);
 
@@ -564,16 +566,17 @@ export function createDesignerInspector(context: DesignerInspectorContext) {
                     if (undeclaredKeys.length)
                         note += ` Declare ${undeclaredKeys.map(key => `@${key}`).join(', ')} first; nothing reads an undeclared parameter.`;
                     if (sendsSelection)
-                        note += ' This visual is linked, so a left click selects; the drill-down is on its right-click menu.';
+                        note += LINKED_CLICK_NOTE;
                     return note;
                 }
                 case 'DRILL_IN':
-                    return 'A click replaces this visual\u2019s rows with the next level down, keeping the clicked value. Each level must be a column of its source.';
+                    return 'A click replaces this visual\u2019s rows with the next level down, keeping the clicked value. Each level must be a column of its source.'
+                        + (sendsSelection ? LINKED_CLICK_NOTE : '');
                 case 'NAVIGATE_PAGE':
-                    return sendsSelection ? 'This visual is linked, so a click selects instead of changing page.' : '';
+                    return sendsSelection ? LINKED_CLICK_NOTE.trim() : '';
                 case 'SET_PARAMETER':
                     return `A click sets ${clickAction.parameter || 'the parameter'} to the clicked row's ${clickAction.column || 'value'}, and every visual that reads it re-runs.`
-                        + (sendsSelection ? ' This visual is linked, so a click selects instead.' : '');
+                        + (sendsSelection ? LINKED_CLICK_NOTE : '');
                 case 'CUSTOM':
                     return 'Written exactly as typed. Use the script to combine several actions.';
                 default:

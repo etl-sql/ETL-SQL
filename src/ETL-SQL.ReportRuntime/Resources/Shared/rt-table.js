@@ -535,7 +535,8 @@ export function renderTable(container, visual, manifest) {
         const filtered = getFilteredRows();
         const start = pageSize > 0 ? state.page * pageSize : 0;
         const rowData = idx >= 0 ? (pageSize > 0 ? filtered : allRows)[start + idx] : null;
-        showCtxMenu(e.clientX, e.clientY, visual, rowData);
+        // A linked table's left click selects, so its ON_CLICK actions move to this menu.
+        showCtxMenu(e.clientX, e.clientY, visual, rowData, crossFilter ? clickActions : []);
     });
     rebuildBody();
     container.appendChild(wrapper);

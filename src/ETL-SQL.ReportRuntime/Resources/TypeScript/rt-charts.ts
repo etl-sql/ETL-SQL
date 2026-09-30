@@ -346,10 +346,13 @@ export function renderNativeSvg(container: HTMLElement, visual: ChartVisual, man
             clickActions.forEach(action => executeAction(action, row, visual.columns || [], visual.name, visual));
         }
     });
+    // A linked chart's left click selects, so its ON_CLICK actions move to this menu.
+    const menuClickActions = crossFilter ? clickActions : [];
     wrapper.addEventListener('contextmenu', event => {
-        if (!(visual.actions || []).some(action => action.type === 'DRILL_DOWN')) return;
+        const drills = (visual.actions || []).some(action => action.type === 'DRILL_DOWN');
+        if (!drills && !(menuClickActions.length && activeRow)) return;
         event.preventDefault();
-        showCtxMenu(event.clientX, event.clientY, visual, activeRow);
+        showCtxMenu(event.clientX, event.clientY, visual, activeRow, menuClickActions);
     });
 }
 

@@ -2110,11 +2110,14 @@ function renderNativeSvg(container, visual, manifest, pageTheme) {
             clickActions.forEach(action => executeAction(action, row, visual.columns || [], visual.name, visual));
         }
     });
+    // A linked chart's left click selects, so its ON_CLICK actions move to this menu.
+    const menuClickActions = crossFilter ? clickActions : [];
     wrapper.addEventListener('contextmenu', event => {
-        if (!(visual.actions || []).some(action => action.type === 'DRILL_DOWN'))
+        const drills = (visual.actions || []).some(action => action.type === 'DRILL_DOWN');
+        if (!drills && !(menuClickActions.length && activeRow))
             return;
         event.preventDefault();
-        showCtxMenu(event.clientX, event.clientY, visual, activeRow);
+        showCtxMenu(event.clientX, event.clientY, visual, activeRow, menuClickActions);
     });
 }
 /** @returns {boolean} whether an ON/TRUE/1 toggle is set on the visual. */
@@ -3120,7 +3123,8 @@ function renderTable(container, visual, manifest) {
         const filtered = getFilteredRows();
         const start = pageSize > 0 ? state.page * pageSize : 0;
         const rowData = idx >= 0 ? (pageSize > 0 ? filtered : allRows)[start + idx] : null;
-        showCtxMenu(e.clientX, e.clientY, visual, rowData);
+        // A linked table's left click selects, so its ON_CLICK actions move to this menu.
+        showCtxMenu(e.clientX, e.clientY, visual, rowData, crossFilter ? clickActions : []);
     });
     rebuildBody();
     container.appendChild(wrapper);
@@ -7432,9 +7436,21 @@ function hideDrillBackButton() {
     if (btn)
         btn.style.display = 'none';
 }
-// Lightweight singleton context menu for DRILL_DOWN and Export
+/** How a click action is named on the right-click menu. Returned HTML is escaped. */
+function clickActionLabel(action) {
+    switch (action.type) {
+        case 'DRILL_IN': return '<span>&#x21A7;</span> Drill in';
+        case 'NAVIGATE_PAGE': return `<span>&#x2192;</span> Go to page <b>${escHtml(action.targetPage || '')}</b>`;
+        case 'SET_PARAMETER': return `<span>&#x2699;</span> Set <b>${escHtml(action.parameterName || 'parameter')}</b>`;
+        case 'OPEN_URL': return '<span>&#x2197;</span> Open link';
+        default: return `<span>&#x25B8;</span> ${escHtml(String(action.type || 'Action').replace(/_/g, ' ').toLowerCase())}`;
+    }
+}
+// Lightweight singleton context menu for DRILL_DOWN and Export.
+// `clickActions` are the ON_CLICK actions of a visual whose left click selects instead: the menu
+// is the only place they can run, so they are offered for the row under the pointer.
 let _ctxMenu = null;
-function showCtxMenu(x, y, visual, rowData) {
+function showCtxMenu(x, y, visual, rowData, clickActions = []) {
     hideCtxMenu();
     const menu = document.createElement('div');
     menu.className = 'report-ctx-menu';
@@ -7442,6 +7458,21 @@ function showCtxMenu(x, y, visual, rowData) {
     menu.style.top = y + 'px';
     const drillDowns = (visual.actions || []).filter(a => a.type === 'DRILL_DOWN');
     const drillReports = (visual.actions || []).filter(a => a.type === 'DRILL_REPORT');
+    // Drill-downs and drill-reports are already listed; a click action with no row has nothing to act on.
+    const rowActions = rowData
+        ? clickActions.filter(a => a.type !== 'DRILL_DOWN' && a.type !== 'DRILL_REPORT')
+        : [];
+    rowActions.forEach(action => {
+        const item = document.createElement('div');
+        item.className = 'ctx-item';
+        item.dataset.clickAction = String(action.type || '');
+        item.innerHTML = clickActionLabel(action);
+        item.addEventListener('click', () => {
+            executeAction(action, rowData || [], visual.columns || [], visual.name, visual);
+            hideCtxMenu();
+        });
+        menu.appendChild(item);
+    });
     drillDowns.forEach(action => {
         const item = document.createElement('div');
         item.className = 'ctx-item';
@@ -7466,7 +7497,7 @@ function showCtxMenu(x, y, visual, rowData) {
         });
         menu.appendChild(item);
     });
-    if (drillDowns.length > 0 || drillReports.length > 0) {
+    if (rowActions.length > 0 || drillDowns.length > 0 || drillReports.length > 0) {
         const sep = document.createElement('div');
         sep.className = 'ctx-sep';
         menu.appendChild(sep);

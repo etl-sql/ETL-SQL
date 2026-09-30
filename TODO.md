@@ -171,9 +171,13 @@ containers, and clause-level patching that keeps hand-written clauses on a desig
   `DRILL_DOWN`/`DRILL_IN`/`NAVIGATE_PAGE`/`SET_PARAMETER` from pickers (anything else stays custom
   text), and tables get a *Row detail* editor. Proof: the drill-down and row-detail journeys in
   `StudioInteractionJourneyTests`.
-  - [ ] Follow-up: a linked chart's left click selects, so its `ON_CLICK` action never runs
-    (`rt-charts.ts`); only `DRILL_DOWN` survives, on the right-click menu. The inspector says so.
-    Decide whether a click should do both.
+  - [x] Follow-up: a linked chart's left click selects, so its `ON_CLICK` action never ran. Decided
+    and done 2026-09-30: the left click stays the selection, and the ON_CLICK actions of a linked
+    chart or table are offered on the right-click menu of the clicked point or row, as in Power BI.
+    Proof: `StudioInteractionJourneyTests.ALinkedChartsClickActionRunsFromItsRightClickMenu`.
+    Found on the way: a parameter posted while the Portal session was rebuilding was dropped,
+    and the reader got the report back unchanged (`DashboardService.SetParametersAsync` checked for
+    an evaluator outside its lock). Proof: `DashboardParameterRebuildRaceTests`.
   - [ ] Follow-up: a multi-select (Ctrl+click) sends `North,South`, which the written
     `Region = @Region` filter cannot match.
 - [x] **P1 — Reports built on a shared connection failed for readers.** Found and fixed 2026-09-29.

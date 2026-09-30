@@ -102,6 +102,48 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
     }
 
     [Fact]
+    public async Task ALinkedChartsClickActionRunsFromItsRightClickMenu()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var reportId = await OpenStudioAsync(page);
+
+        // The drill-down helper declares @Region and makes Orders read it; the click then becomes
+        // a SET_PARAMETER, which has no such helper.
+        await SelectVisualAsync(page, "RegionDrill");
+        await page.SelectOptionAsync("#pp-click-kind", "DRILL_DOWN");
+        await page.SelectOptionAsync("#pp-click-target", "Orders");
+        await page.Locator("#pp-click-keys").FillAsync("Region");
+        await page.Locator("#pp-click-keys").BlurAsync();
+        await page.Locator("[data-drill-read='Region']").ClickAsync();
+        await WaitForScriptAsync(page, "CREATE VISUAL Orders", "WHERE @Region = 'All' OR Region = @Region");
+        await WaitForScriptAsync(page, "DECLARE @Region", "'All'");
+        await page.SelectOptionAsync("#pp-click-kind", "SET_PARAMETER");
+        await page.SelectOptionAsync("#pp-click-parameter", "@Region");
+        await page.Locator("#pp-click-column").FillAsync("Region");
+        await page.Locator("#pp-click-column").BlurAsync();
+        await WaitForScriptAsync(page, "CREATE VISUAL RegionDrill", "ON_CLICK = SET_PARAMETER(@Region, Region)");
+
+        // Linking the chart gives its left click to the selection.
+        await page.SelectOptionAsync("#pp-interaction-on-select", "HIGHLIGHT");
+        await WaitForScriptAsync(page, "CREATE VISUAL RegionDrill", "INTERACTIONS (ON_SELECT = HIGHLIGHT)");
+        await Expect(page.Locator("[data-click-note]")).ToContainTextAsync("on its right-click menu");
+
+        await SaveAsync(page, reportId);
+
+        var report = await RunReportAsync(page, reportId);
+        Assert.True((await RegionsShownAsync(report, "Orders")).Count > 1, "Orders should start unfiltered.");
+        var mark = report.Locator("[data-visual-name='RegionDrill'] [data-row-index]").First;
+        var region = await RegionOfMarkAsync(mark);
+        await mark.ClickAsync(new() { Button = MouseButton.Right, Force = true });
+        await report.Locator(".report-ctx-menu [data-click-action='SET_PARAMETER']").ClickAsync();
+
+        await WaitForRegionsAsync(report, "Orders", regions => regions.Count == 1 && regions.Contains(region),
+            $"Orders should show only {region} after Set @Region");
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task ARowDetailExpandsToTheRowsThatMatchIt()
     {
         await using var session = await fixture.NewSessionAsync();

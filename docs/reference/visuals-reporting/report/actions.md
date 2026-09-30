@@ -18,6 +18,10 @@ ACTIONS (
 
 Invalid trigger/object combinations are syntax errors.
 
+A chart or table that sends selections (`INTERACTIONS (ON_SELECT = ...)`) uses its left click to
+select. Its `ON_CLICK` actions then appear on the right-click menu of the clicked point or row,
+next to any `DRILL_DOWN`.
+
 ## Supported Actions
 
 ### SET_PARAMETER

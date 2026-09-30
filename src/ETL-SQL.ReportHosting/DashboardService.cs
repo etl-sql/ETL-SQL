@@ -199,10 +199,12 @@ namespace ETL_SQL.ReportHosting
                 }
             }
 
-            if (_evaluator != null && _manifest != null)
+            await _lock.WaitAsync();
+            try
             {
-                await _lock.WaitAsync();
-                try
+                // Checked under the lock: a rebuild in flight holds it with no evaluator, and a
+                // parameter change must wait for that rebuild instead of rebuilding without its value.
+                if (_evaluator != null && _manifest != null)
                 {
                     if (!isInteraction && updateList.Count == 0 && _manifest.IsInteraction)
                     {
@@ -260,9 +262,13 @@ namespace ETL_SQL.ReportHosting
                         return _manifest;
                     }
                 }
-                finally { _lock.Release(); }
             }
+            finally { _lock.Release(); }
 
+            // No live evaluator (its last rebuild failed): the rebuild is the only way the value
+            // takes effect, so it must carry it.
+            if (!isInteraction)
+                foreach (var (name, value) in updateList) _parameters[name] = value;
             var result = await RebuildAsync();
             result.IsInteraction = isInteraction;
             return result;
