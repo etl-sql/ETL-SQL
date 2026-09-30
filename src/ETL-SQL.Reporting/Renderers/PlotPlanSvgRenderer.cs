@@ -4324,8 +4324,42 @@ internal sealed class PlotPlanSvgRenderer
 
     private sealed record ArcItem(ResolvedDatum Datum, string Label, decimal Value, bool IsOther = false);
 
+    private static void RenderRadialStacks(StringBuilder builder, PlotPlan plan)
+    {
+        var side = LegendPosition(plan);
+        var left = LegendEnabled(plan) && plan.Legend.Length > 1 && side == "LEFT" ? 125m : 16m;
+        var right = LegendEnabled(plan) && plan.Legend.Length > 1 && side == "RIGHT" ? 125m : 16m;
+        var bottom = LegendEnabled(plan) && plan.Legend.Length > 1 && side == "BOTTOM" ? 34m : 16m;
+        var cx = (left + plan.Bounds.Width - right) / 2m;
+        var cy = (32m + plan.Bounds.Height - bottom) / 2m;
+        var outer = Math.Max(1m, Math.Min(plan.Bounds.Width - left - right, plan.Bounds.Height - bottom - 32m) / 2m - 8m);
+        var inner = (plan.Coordinate?.InnerRadius ?? 0m) * outer;
+        foreach (var layer in plan.Layers)
+            foreach (var datum in layer.Data)
+            {
+                if (datum.RadialInterval is not { } interval || interval.End <= interval.Start) continue;
+                var r0 = inner + (outer - inner) * interval.Start / interval.Maximum;
+                var r1 = inner + (outer - inner) * interval.End / interval.Maximum;
+                var a = (double)(interval.StartAngle - 90m) * Math.PI / 180d;
+                var b = (double)(interval.EndAngle - 90m) * Math.PI / 180d;
+                var mid = (a + b) / 2d;
+                // Two arcs also represent a full-circle sector without a coincident-endpoint ambiguity.
+                var path = $"M {Point(cx, cy, r1, a)} A {N(r1)} {N(r1)} 0 0 1 {Point(cx, cy, r1, mid)} A {N(r1)} {N(r1)} 0 0 1 {Point(cx, cy, r1, b)}";
+                path += r0 > 0m
+                    ? $" L {Point(cx, cy, r0, b)} A {N(r0)} {N(r0)} 0 0 0 {Point(cx, cy, r0, mid)} A {N(r0)} {N(r0)} 0 0 0 {Point(cx, cy, r0, a)} Z"
+                    : $" L {N(cx)} {N(cy)} Z";
+                var color = SafePaint(LayerStyle(layer, "COLOR") ?? plan.Series.FirstOrDefault(series => series.Key == layer.SeriesKey)?.Color, "#5470c6");
+                builder.AppendLine($"<path class='plot-radial-stack' data-row-index='{datum.RowIndex}' data-radius-start='{N(interval.Start)}' data-radius-end='{N(interval.End)}' d='{path}' fill='{Esc(color)}' stroke='white' stroke-width='1'><title>{Esc(RadialStackResolver.Description(datum))}</title></path>");
+            }
+    }
+
     private static void RenderArcs(StringBuilder builder, PlotPlan plan)
     {
+        if (plan.Layers.Any(item => item.Mark == MarkKind.Arc && item.Stack != StackMode.None))
+        {
+            RenderRadialStacks(builder, plan);
+            return;
+        }
         var layer = plan.Layers.First(item => item.Mark == MarkKind.Arc);
         var rawItems = layer.Data.Where(datum => !datum.IsGap).Select(datum => new ArcItem(
             datum,

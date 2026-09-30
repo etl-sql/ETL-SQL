@@ -65,8 +65,20 @@ public sealed class PlotPlanResolver
         }).OrderBy(s => s.Order).ThenBy(s => s.Key, StringComparer.Ordinal).ToImmutableArray();
         var palette = series.Select(item => new PaletteAssignment(item.Key, item.Color)).ToImmutableArray();
         var legend = series.Select(item => new LegendEntry(item.Key, item.Label, item.Order, item.Color)).ToImmutableArray();
-        var layers = ResolveStacking(ResolveLayers(spec, data, columns, categories, series, formatter).ToImmutableArray());
+        var layers = ResolveLayers(spec, data, columns, categories, series, formatter).ToImmutableArray();
+        var radial = spec.Coordinate.Kind == CoordinateKind.Polar && layers.Any(layer => layer.Stack != StackMode.None);
+        layers = radial ? RadialStackResolver.Resolve(spec, layers.Select((layer, index) => layer with { ZIndex = index }).ToImmutableArray()) : ResolveStacking(layers);
         var scales = ResolveScales(spec, columns, categories, layers, formatter).ToImmutableArray();
+        if (radial)
+        {
+            var maximum = layers.SelectMany(layer => layer.Data).Select(datum => datum.RadialInterval?.Maximum ?? 1m).DefaultIfEmpty(1m).Max();
+            scales = scales.Select(scale => scale.Channel != FieldChannel.Radius ? scale : scale with
+            {
+                Domain = [ChartValue.From(0m), ChartValue.From(maximum)],
+                IncludesZero = true,
+                Ticks = Enumerable.Range(0, 5).Select(index => new PlotTick(ChartValue.From(maximum * index / 4m), (maximum * index / 4m).ToString(CultureInfo.InvariantCulture))).ToImmutableArray()
+            }).ToImmutableArray();
+        }
         var syncAxes = spec.Theme.Tokens.Any(token =>
             token.Name.Equals("SYNC_AXES", StringComparison.OrdinalIgnoreCase) &&
             (token.Value.Equals("ON", StringComparison.OrdinalIgnoreCase) || token.Value.Equals("TRUE", StringComparison.OrdinalIgnoreCase))) ||
@@ -184,6 +196,8 @@ public sealed class PlotPlanResolver
             Interaction = independent.Interaction,
             Geography = independent.Geography
         };
+        if (layers.Any(layer => layer.Mark == MarkKind.Arc && layer.Stack != StackMode.None))
+            plan = plan with { Schema = ChartContractVersions.RadialPlotPlanSchema, Version = ChartContractVersions.RadialPlotPlanVersion };
         plan.Validate();
         return plan;
     }
@@ -290,7 +304,7 @@ public sealed class PlotPlanResolver
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<string> categories)
     {
-        if (spec.Coordinate.Kind == CoordinateKind.Polar && spec.Bindings.Any(binding => binding.Channel == FieldChannel.Theta)) return categories;
+        if (spec.Coordinate.Kind == CoordinateKind.Polar && !spec.Layers.Any(layer => layer.Bindings.Any(binding => binding.Stack != StackMode.None)) && spec.Bindings.Any(binding => binding.Channel == FieldChannel.Theta)) return categories;
         var color = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
         if (color?.SemanticKind is not DataSemanticKind.Quantitative && color?.Field is { } colorField && columns.TryGetValue(colorField, out var colorColumn))
             return colorColumn.Values.Select(ValueKey).Where(value => value is not null).Cast<string>().Distinct(StringComparer.Ordinal).ToImmutableArray();
@@ -577,7 +591,7 @@ public sealed class PlotPlanResolver
             // COMPAT_BREAK: 0.20 — isolated single-axis rules must not inherit another layer's color groups.
             var isolatedGeometry = layer.Mark is (MarkKind.Rule or MarkKind.Rect or MarkKind.Line) && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null };
             var colorBinding = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color)
-                ?? (isolatedGeometry ? null : spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color));
+                ?? (isolatedGeometry || spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Stack != StackMode.None) ? null : spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color));
             var explicitSeries = layer.Style.FirstOrDefault(token => token.Name == "series")?.Value;
             if (colorBinding?.SemanticKind is not DataSemanticKind.Quantitative && colorBinding?.Field is { } colorField && columns.TryGetValue(colorField, out var colorColumn))
             {
@@ -592,7 +606,7 @@ public sealed class PlotPlanResolver
             }
             else
             {
-                var seriesKey = explicitSeries ?? series.FirstOrDefault()?.Key;
+                var seriesKey = explicitSeries ?? (spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Stack != StackMode.None) ? layer.Id : series.FirstOrDefault()?.Key);
                 yield return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, seriesKey,
                     ResolveLayerData(layer, spec, data, columns, categories, formatter, _ => true))
                 { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
@@ -826,7 +840,7 @@ public sealed class PlotPlanResolver
         var conditionGroups = GroupConditions(layer.Conditions);
         var categoryBinding = layerBindings.FirstOrDefault(binding => binding.Channel is FieldChannel.X or FieldChannel.Theta);
         var rows = new List<ResolvedDatum>();
-        var preserveRows = layer.Style.Any(token => token.Name.Equals("preserveRows", StringComparison.OrdinalIgnoreCase)
+        var preserveRows = spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Radius && binding.Stack != StackMode.None) || layer.Style.Any(token => token.Name.Equals("preserveRows", StringComparison.OrdinalIgnoreCase)
             && token.Value.Equals("true", StringComparison.OrdinalIgnoreCase));
         if (!preserveRows && categoryBinding is not null && categoryBinding.SemanticKind != DataSemanticKind.Quantitative &&
             categoryBinding.Field is { } categoryField && columns.TryGetValue(categoryField, out var categoryColumn) && !categories.IsDefaultOrEmpty)
@@ -1176,6 +1190,11 @@ public sealed class PlotPlanResolver
     private static SemanticFallback BuildFallback(ChartSpec spec, ImmutableArray<ResolvedMarkLayer> layers,
         ImmutableArray<string> categories, ChartValueFormatter formatter)
     {
+        if (spec.Coordinate.Kind == CoordinateKind.Polar && layers.Any(layer => layer.Stack != StackMode.None))
+            return new SemanticFallback(SemanticFallbackKind.ProportionalBreakdown, spec.Title ?? spec.Id,
+                layers.SelectMany(layer => layer.Data.Select(datum => new SemanticFallbackItem(RadialStackResolver.Theta(datum) ?? "gap",
+                    RadialStackResolver.Description(datum), datum.RowIndex)
+                { Group = layer.SeriesKey ?? layer.Id, Detail = "radial stack" })).ToImmutableArray());
         var sourceLayers = layers.Where(layer => layer.Mark is not MarkKind.Rule).ToList();
         var total = sourceLayers.Where(layer => layer.Mark == MarkKind.Arc).SelectMany(layer => layer.Data)
             .Select(datum => datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Radius or FieldChannel.Y))

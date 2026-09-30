@@ -383,10 +383,12 @@ Horizon **Later**: no catalog visual or renderer retirement depends on these, so
 representative reports should choose the order. The remaining combinations are rejected by `AdvancedChartSemanticValidator`; each needs explicit
 semantics and backend evidence before its rejection can be lifted.
 
-- [ ] **Renderer-neutral polar/radial stacking.** `AdvancedChartSemanticValidator.cs:324` — *"STACK
-  requires a quantitative Cartesian/transposed Y or Y2 binding; polar/radial stacking is not yet
-  portable."* Needs a stacking model that resolves the same way for SVG, terminal, and static export
-  before the rejection can be lifted.
+- [x] **Renderer-neutral polar/radial stacking.** Polar ARC RADIUS supports ZERO/NORMALIZE
+  with categorical THETA and optional categorical COLOR. Resolved cumulative radial intervals
+  drive SVG, terminal, fallback and static export; negatives fail and gaps/zero rows are explicit.
+  Radial plans use a guarded v4 envelope; existing plans retain v3. Round trips, lineage, rename,
+  geometry, normalization and deterministic evidence live in RadialStackTests. Facets, conditions
+  and custom radius bounds remain rejected for this form.
 - [x] **Physical aspect ratios for continuous transposed POINT charts.** Core and contract
   validation agree; resolution preserves semantic Y/X unit sizes through transposition, logarithmic
   domains, facets and relayout. Native/static SVG uses physical axes; terminal/accessibility retain

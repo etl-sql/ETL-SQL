@@ -58,6 +58,33 @@ public sealed class ReportRenameProviderTests
         Assert.All(edits, edit => Assert.Equal("renamed", edit.NewText));
     }
 
+    [Theory]
+    [InlineData("Category (")]
+    [InlineData("Amount (")]
+    [InlineData("Series (")]
+    public async Task RadialStack_RenamesBindings(string token)
+    {
+        var script = """
+            CREATE VISUAL Totals AS CUSTOM (SOURCE = #prepared, CHART (
+              COORDINATE (TYPE = POLAR),
+              LAYERS (rings = ARC (ENCODINGS (
+                THETA = Category (TYPE = NOMINAL),
+                RADIUS = Amount (TYPE = QUANTITATIVE, STACK = NORMALIZE),
+                COLOR = Series (TYPE = NOMINAL)
+              )))
+            ));
+            """;
+        var (provider, uri) = Provider(script);
+        var result = await provider.Handle(new RenameParams
+        {
+            TextDocument = new TextDocumentIdentifier(uri),
+            Position = PositionOf(script, token),
+            NewName = "renamed"
+        }, CancellationToken.None);
+        var edits = Assert.IsAssignableFrom<IEnumerable<TextEdit>>(result!.Changes![uri]).ToList();
+        Assert.Equal("renamed", Assert.Single(edits).NewText);
+    }
+
     [Fact]
     public async Task RenameScale_UpdatesDeclarationAndEncodingReferenceOnly()
     {

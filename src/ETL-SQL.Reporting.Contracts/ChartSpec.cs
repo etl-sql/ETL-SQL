@@ -384,6 +384,22 @@ public sealed record ChartSpec(
 
         if (Layers.IsDefaultOrEmpty)
             throw new InvalidDataException("A ChartSpec must contain at least one mark layer.");
+        if (Coordinate.Kind == CoordinateKind.Polar && Layers.Any(layer => layer.Bindings.Any(binding => binding.Stack != StackMode.None)))
+        {
+            if (Facet is not null || Layers.Any(layer => layer.Mark != MarkKind.Arc || layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) || !layer.Conditions.IsDefaultOrEmpty))
+                throw new InvalidDataException("Radial stacking requires ARC layers, IDENTITY, no CONDITIONS, and no FACET.");
+            if ((Coordinate.EndAngle ?? (Coordinate.StartAngle ?? 0m) + 360m) - (Coordinate.StartAngle ?? 0m) is <= 0m or > 360m)
+                throw new InvalidDataException("Radial stacking requires an angular sweep greater than zero and at most 360 degrees.");
+            if (Scales.Any(scale => scale.Channel == FieldChannel.Radius && (scale.Kind != ScaleKind.Linear || scale.DomainMinimum is not null || scale.DomainMaximum is not null || scale.Reverse)))
+                throw new InvalidDataException("Radial stacking owns the zero-based linear RADIUS domain; custom bounds or reversal are not supported.");
+            foreach (var layer in Layers)
+                if (layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Theta)?.SemanticKind is not (DataSemanticKind.Nominal or DataSemanticKind.Ordinal) ||
+                    layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Radius)?.Stack is not (StackMode.Zero or StackMode.Normalize) ||
+                    layer.Bindings.Any(binding => binding.Channel is not (FieldChannel.Theta or FieldChannel.Radius or FieldChannel.Color) || binding.SourceKind == BindingSourceKind.Value || binding.Channel == FieldChannel.Color && binding.SemanticKind is not (DataSemanticKind.Nominal or DataSemanticKind.Ordinal)))
+                    throw new InvalidDataException("Radial stacking requires categorical THETA and stacked quantitative RADIUS, with optional nominal COLOR only.");
+            if (Layers.SelectMany(layer => layer.Bindings).Where(binding => binding.Stack != StackMode.None).Select(binding => binding.Stack).Distinct().Count() != 1)
+                throw new InvalidDataException("Radial stacking requires one shared STACK mode.");
+        }
         if (Coordinate.Kind == CoordinateKind.Polar && Coordinate.InnerRadius is < 0m or >= 1m)
             throw new InvalidDataException("Polar inner radius must be at least zero and less than one.");
         if (Coordinate.Kind == CoordinateKind.Geographic)
@@ -577,8 +593,9 @@ public sealed record ChartSpec(
                     throw new InvalidDataException($"Confidence channel {binding.Channel} requires primary quantitative data.");
                 if (binding.Stack != StackMode.None &&
                     (binding.SemanticKind != DataSemanticKind.Quantitative || binding.SourceKind == BindingSourceKind.Value ||
-                     binding.Channel is not (FieldChannel.Y or FieldChannel.Y2) || Coordinate.Kind == CoordinateKind.Polar))
-                    throw new InvalidDataException($"Layer '{layer.Id}' STACK requires a quantitative Cartesian/transposed Y or Y2 data-domain binding; polar/radial stacking is not yet portable.");
+                     !(Coordinate.Kind == CoordinateKind.Polar && binding.Channel == FieldChannel.Radius ||
+                       Coordinate.Kind is CoordinateKind.Cartesian or CoordinateKind.TransposedCartesian && binding.Channel is FieldChannel.Y or FieldChannel.Y2)))
+                    throw new InvalidDataException($"Layer '{layer.Id}' STACK requires a quantitative Cartesian/transposed Y/Y2 or polar RADIUS data-domain binding.");
             }
             var stackModes = layer.Bindings.Where(binding => binding.Stack != StackMode.None).Select(binding => binding.Stack).Distinct().ToArray();
             if (stackModes.Length > 1)

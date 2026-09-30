@@ -65,6 +65,8 @@ public sealed record LegendEntry(string SeriesKey, string Label, int Order, stri
 public sealed record ResolvedChannelValue(FieldChannel Channel, ChartValue Value, string? DisplayValue);
 public sealed record ResolvedEncodingValue(ConditionalEncodingChannel Channel, ChartValue Value);
 
+public sealed record ResolvedRadialInterval(decimal StartAngle, decimal EndAngle, decimal Start, decimal End, decimal Maximum);
+
 public sealed record ResolvedDatum(
     int RowIndex,
     ImmutableArray<ResolvedChannelValue> Channels,
@@ -74,6 +76,8 @@ public sealed record ResolvedDatum(
     public ImmutableArray<ResolvedEncodingValue> Encodings { get; init; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal DisplayOffsetX { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ResolvedRadialInterval? RadialInterval { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public decimal DisplayOffsetY { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -278,7 +282,23 @@ public sealed record PlotPlan(
 
     public void Validate()
     {
-        ChartContractValidation.RequireVersion(Schema, Version, ChartContractVersions.PlotPlanSchema, ChartContractVersions.PlotPlanCurrent, nameof(PlotPlan));
+        var radial = Layers.Any(layer => layer.Mark == MarkKind.Arc && layer.Stack != StackMode.None);
+        ChartContractValidation.RequireVersion(Schema, Version, radial ? ChartContractVersions.RadialPlotPlanSchema : ChartContractVersions.PlotPlanSchema,
+            radial ? ChartContractVersions.RadialPlotPlanVersion : ChartContractVersions.PlotPlanCurrent, nameof(PlotPlan));
+        if (radial && (Coordinate?.Kind != CoordinateKind.Polar || Layers.Any(layer => layer.Mark != MarkKind.Arc || layer.Stack == StackMode.None)))
+            throw new InvalidDataException("Radial plans require only stacked polar ARC layers.");
+        foreach (var layer in Layers)
+            foreach (var datum in layer.Data)
+            {
+                if (datum.RadialInterval is { } interval)
+                {
+                    if (!radial || layer.Mark != MarkKind.Arc || layer.Stack == StackMode.None || datum.IsGap || interval.Start < 0m || interval.End < interval.Start ||
+                        interval.Maximum <= 0m || interval.End > interval.Maximum || interval.EndAngle <= interval.StartAngle || interval.EndAngle - interval.StartAngle > 360m)
+                        throw new InvalidDataException("Invalid resolved radial interval.");
+                }
+                else if (radial && !datum.IsGap)
+                    throw new InvalidDataException("Stacked radial data require resolved intervals.");
+            }
         ChartContractValidation.RequireName(SpecId, nameof(SpecId));
         if (Bounds.Width <= 0 || Bounds.Height <= 0)
             throw new InvalidDataException("Plot bounds must have positive width and height.");

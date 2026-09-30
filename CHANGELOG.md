@@ -14,6 +14,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Polar ARC charts support ZERO/NORMALIZE radial stacks with equal category sectors, non-negative
+  radius contributions, and shared SVG, terminal, accessibility and PDF semantics. Radial plans
+  use a v4 envelope; existing chart plans retain v3.
+
 - Analytics overlays are chosen from controls in Studio's format inspector instead of typed into a
   text box. Goals, averages, reference lines and bands, trend lines, moving averages, forecasts,
   running totals, and percent of total each get a card with their values, line style, colour, and

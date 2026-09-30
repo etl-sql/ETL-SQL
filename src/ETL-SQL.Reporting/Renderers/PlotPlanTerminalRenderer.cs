@@ -783,6 +783,9 @@ internal static class PlotPlanTerminalRenderer
     private static IRenderable RenderArcs(PlotPlan plan,
         IReadOnlyList<(ResolvedMarkLayer Layer, List<ResolvedDatum> Data)> layers, int width)
     {
+        if (layers.Any(item => item.Layer.Stack != StackMode.None))
+            return new Rows(layers.SelectMany(item => item.Data.Select(datum => (IRenderable)new Markup(Markup.Escape(
+                (item.Layer.SeriesKey ?? item.Layer.Id) + " — " + RadialStackResolver.Description(datum))))));
         var rawComponents = layers.SelectMany(item => item.Data.Select(datum =>
         {
             var datumLabel = Label(datum);

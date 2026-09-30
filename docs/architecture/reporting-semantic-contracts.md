@@ -80,6 +80,24 @@ Golden SHA-256 fingerprints in `GrammarOfGraphicsContractTests` make an accident
 CI. An intentional compatible or breaking change must introduce an explicit version decision and
 update the fixtures and compatibility expectations together.
 
+## Radial stacking envelope
+
+ChartSpec v2 now accepts ZERO/NORMALIZE stacks on polar RADIUS with categorical THETA and
+optional categorical COLOR. ARC layers use one stack mode, IDENTITY, no conditions and no facets.
+The resolver preserves repeated source rows, groups by category, accumulates non-negative values
+in resolved layer/series order, and records a ResolvedRadialInterval on each complete datum.
+Intervals carry start/end angles in degrees, cumulative start/end values and their common maximum.
+NORMALIZE divides cumulative raw totals, avoiding cumulative rounding drift. Null coordinates
+remain gaps. Radius scale domains and ticks use the stacked extent. Negative values fail.
+
+These plans alone emit schema plot-plan/v4 and version 4. Existing plans continue emitting v3,
+and both envelopes are validated. A v3 envelope cannot contain radial intervals; stacked arcs
+require v4 and complete non-gap intervals. This prevents older readers from interpreting a radial
+stack as a pie. ChartSpec has no new fields. SVG draws annular sectors from the resolved intervals;
+full-circle sectors use two arcs. Terminal and fallback consume the same intervals. Relayout
+changes physical radii without recalculating stack values. Radial length, not sector area, carries
+the value. Unstacked polar behavior and its fingerprints are unchanged.
+
 ## Transposed physical aspect ratios
 
 Continuous primary-axis `POINT` and `TEXT` compositions, with supported LINE/RULE/RECT layers, accept `ASPECT_RATIO` with

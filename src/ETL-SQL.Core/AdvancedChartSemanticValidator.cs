@@ -319,9 +319,9 @@ public static class AdvancedChartSemanticValidator
         if (encoding.Stack != AdvancedChartStackMode.None &&
             (encoding.DataKind != AdvancedChartDataKind.Quantitative ||
              encoding.Source.Kind == AdvancedChartBindingSourceKind.Value ||
-             encoding.Channel is not (AdvancedChartChannel.Y or AdvancedChartChannel.Y2) ||
-             chart.Coordinate.Kind == AdvancedChartCoordinateKind.Polar))
-            Add(results, node, $"Layer '{layer.Name}' STACK requires a quantitative Cartesian/transposed Y or Y2 binding; polar/radial stacking is not yet portable.");
+             !(chart.Coordinate.Kind == AdvancedChartCoordinateKind.Polar && encoding.Channel == AdvancedChartChannel.Radius ||
+               chart.Coordinate.Kind is AdvancedChartCoordinateKind.Cartesian or AdvancedChartCoordinateKind.TransposedCartesian && encoding.Channel is AdvancedChartChannel.Y or AdvancedChartChannel.Y2)))
+            Add(results, node, $"Layer '{layer.Name}' STACK requires a quantitative Cartesian/transposed Y/Y2 or polar RADIUS binding.");
 
         if (encoding.Source.Kind != AdvancedChartBindingSourceKind.Field)
             ValidateConstantBinding(results, encoding, node, layer);
@@ -728,6 +728,26 @@ public static class AdvancedChartSemanticValidator
             if (!encodings.Any(encoding => encoding.Channel == AdvancedChartChannel.Theta) ||
                 !encodings.Any(encoding => encoding.Channel == AdvancedChartChannel.Radius))
                 Add(results, node, "POLAR charts require THETA and RADIUS encodings.");
+            if (encodings.Any(encoding => encoding.Stack != AdvancedChartStackMode.None))
+            {
+                if (chart.Facet is not null || chart.Layers.Any(layer => layer.Position.Kind != AdvancedChartPositionKind.Identity || layer.Conditions.Length > 0))
+                    Add(results, node, "Radial stacking requires IDENTITY, no CONDITIONS, and no FACET.");
+                if ((coordinate.EndAngle ?? (coordinate.StartAngle ?? 0m) + 360m) - (coordinate.StartAngle ?? 0m) is <= 0m or > 360m)
+                    Add(results, node, "Radial stacking requires an angular sweep greater than zero and at most 360 degrees.");
+                if (chart.Scales.Any(scale => scale.Channel == AdvancedChartChannel.Radius && (scale.Kind != AdvancedChartScaleKind.Linear || scale.Minimum is not null || scale.Maximum is not null || scale.Reverse)))
+                    Add(results, node, "Radial stacking owns the zero-based linear RADIUS domain; custom bounds or reversal are not supported.");
+                foreach (var layer in chart.Layers)
+                {
+                    var bindings = EffectiveEncodings(chart, layer);
+                    if (bindings.FirstOrDefault(binding => binding.Channel == AdvancedChartChannel.Theta)?.DataKind is not (AdvancedChartDataKind.Nominal or AdvancedChartDataKind.Ordinal) ||
+                        bindings.FirstOrDefault(binding => binding.Channel == AdvancedChartChannel.Radius)?.Stack is not (AdvancedChartStackMode.Zero or AdvancedChartStackMode.Normalize) ||
+                        bindings.Any(binding => binding.Channel is not (AdvancedChartChannel.Theta or AdvancedChartChannel.Radius or AdvancedChartChannel.Color)) ||
+                        bindings.Any(binding => binding.Source.Kind == AdvancedChartBindingSourceKind.Value || binding.Channel == AdvancedChartChannel.Color && binding.DataKind is not (AdvancedChartDataKind.Nominal or AdvancedChartDataKind.Ordinal)))
+                        Add(results, Anchor(layer, chartNode), "Radial stacking requires categorical THETA and stacked quantitative RADIUS, with optional nominal COLOR only.");
+                }
+                if (encodings.Where(encoding => encoding.Stack != AdvancedChartStackMode.None).Select(encoding => encoding.Stack).Distinct().Count() != 1)
+                    Add(results, node, "Radial stacking requires one shared STACK mode.");
+            }
             if (coordinate.InnerRadius is < 0m or >= 1m)
                 Add(results, node, "Polar INNER_RADIUS must be at least zero and less than one.");
         }

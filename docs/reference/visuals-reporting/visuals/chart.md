@@ -98,7 +98,7 @@ CREATE VISUAL name AS CUSTOM (
 
 ## Options
 
-- **Placement** — `STACK` accumulates quantitative Y/Y2 values for Cartesian and transposed Cartesian layouts; polar/radial stacking is rejected until it has portable geometry. Offset channels dodge categories, `BAND_SIZE` controls relative thickness, and `Z_INDEX` controls paint order. `JITTER` uses a stable key and deterministic hash; `NUDGE` is resolved after domains without changing raw values. For transposed fixed-aspect points and text, `NUDGE` accepts `UNIT = EM`: one em is the portable 12-pixel unit, positive X moves up, and positive Y moves right. Negative values move in the opposite direction. This presentation displacement does not follow scale reversal; the point and its error bar move together.
+- **Placement** — `STACK` accumulates quantitative Y/Y2 values for Cartesian and transposed Cartesian layouts; polar ARC layers accept STACK ZERO/NORMALIZE on RADIUS as described below. Offset channels dodge categories, `BAND_SIZE` controls relative thickness, and `Z_INDEX` controls paint order. `JITTER` uses a stable key and deterministic hash; `NUDGE` is resolved after domains without changing raw values. For transposed fixed-aspect points and text, `NUDGE` accepts `UNIT = EM`: one em is the portable 12-pixel unit, positive X moves up, and positive Y moves right. Negative values move in the opposite direction. This presentation displacement does not follow scale reversal; the point and its error bar move together.
 - **Transposed fixed-aspect offset groups** — `X_OFFSET` and `Y_OFFSET` accept nominal/ordinal groups on POINT/TEXT charts. X groups move vertically and Y groups horizontally. Group centers divide one fitted plot band into equal slots, centered around the original position; the metric excludes fixed axis margins and precedes renderer-specific legend layout. `ORDER` sets category order and `REVERSE` on the offset scale reverses its slots. Reversing a primary X/Y scale does not reverse grouping displacement. Null, unmatched, and singleton groups have zero displacement. Facets retain the shared category slots but scale displacement to each fitted viewport. EM/BAND/DATA nudges and jitter add to these offsets. Error intervals move with points, and group names remain in terminal and accessible descriptions.
 - **Transposed fixed-aspect DATA nudges** — `NUDGE(..., UNIT = DATA)` moves the anchor to where X + nudge X and Y + nudge Y would map on the original scales. This displacement follows scale reversal and logarithmic mapping, uses each facet's axes, and accounts for side-legend space. Raw values and domains do not change. Error bars translate with their point by the anchor displacement, keeping their original span; the endpoints are not independently shifted in data space. Numeric X/Y are required on every row, and a logarithmic anchor and its shifted target must both remain positive. Text consumes the same displacement before collision placement. Categorical offsets add to the DATA displacement.
 - **Transposed fixed-aspect BAND nudges** — On continuous POINT/TEXT charts, `NUDGE(..., UNIT = BAND)` treats each primary axis as one band. X is a fraction of the fitted plot height and Y is a fraction of its width, excluding fixed axis margins and before renderer-specific legend layout. Positive X moves up, positive Y moves right, and negative values reverse those directions. Displacement is independent of scale reversal and raw values. Each facet uses its fitted viewport; resizing recomputes pixel offsets. Points, intervals, and text with the same nudge remain aligned.
@@ -313,6 +313,37 @@ CREATE VISUAL Measurement AS CUSTOM (
     )
   )
 );
+```
+
+## Stacked radial bars
+
+POLAR ARC layers accept categorical THETA and a quantitative RADIUS with STACK = ZERO or
+STACK = NORMALIZE. Categories occupy equal angular sectors. Repeated category rows are retained;
+each series contributes a radial interval within that sector. COLOR may be nominal/ordinal,
+or layers may use a literal STYLE color. All layers must use the same stack mode.
+
+ZERO accumulates non-negative values from zero and uses the largest category total as the outer
+radius. NORMALIZE divides each contribution by its category total, filling each nonzero category
+to one. Radial length represents the value; sector area is not proportional to the value.
+Null coordinates are gaps, zero values retain accessible values without visible segments, and
+negative values fail. Stacking follows layer order, then resolved series order (labels sorted without case), then source rows.
+The default category order is first occurrence; THETA scale ordering and reversal are honored.
+
+INNER_RADIUS reserves a central hole. START_ANGLE/END_ANGLE select a positive clockwise sweep
+of at most 360 degrees. Radius scales must be linear with automatic zero-based bounds and no
+reversal. IDENTITY placement is required; facets and row-level conditions are not supported.
+Titles, terminal rows and accessible fallback include raw values and cumulative radial intervals.
+Existing unstacked polar charts retain their pie/donut behavior.
+
+```sql
+CREATE VISUAL Totals AS CUSTOM (SOURCE = #prepared, CHART (
+  COORDINATE (TYPE = POLAR, INNER_RADIUS = 0.2),
+  LAYERS (rings = ARC (ENCODINGS (
+    THETA = Category (TYPE = NOMINAL),
+    RADIUS = Amount (TYPE = QUANTITATIVE, STACK = NORMALIZE),
+    COLOR = Series (TYPE = NOMINAL)
+  )))
+));
 ```
 
 ## Lines on transposed fixed-aspect charts
