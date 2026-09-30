@@ -526,9 +526,10 @@ semantics and backend evidence before its rejection can be lifted.
   stacking and secondary axes remain rejected. Categorical, temporal,
   polar and geographic physical aspect semantics still need explicit contracts and backend evidence.
 - [ ] **Safe row-level conditions on connected `LINE` and `AREA` marks.**
-  `AdvancedChartSemanticValidator.cs:697` — today the author is told to stage separate series or
-  layers in ETL-SQL. The question to settle first is what a per-row condition *means* on a connected
-  mark, since the segment between two rows belongs to both.
+  [Implementation contract](docs/architecture/decisions/connected-mark-conditions.md): the source
+  row owns each outgoing connection; AREA uses adjacent cross-section strips. Typed resolved
+  connections, guarded wire versions and backend evidence are still required. Current validation
+  continues to reject these conditions; existing segment-style behavior must remain unchanged.
 
 Add one complete combination at a time — grammar, immutable contracts, resolution, validation,
 authoring help, and every applicable backend — then update the capability matrix before starting the
