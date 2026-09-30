@@ -71,6 +71,17 @@ export function createStudioSqlMutationService({ state, getActiveDocument, activ
             candidate = `${baseName}_${suffix++}`;
         return candidate;
     }
+    /**
+     * An edit that finishes after its tab was left: the tab's stored state takes it as one undo
+     * step, so its history, selection, and scroll survive. Without a stored state (a tab never
+     * shown) the tab is built from `content` when it is next shown.
+     */
+    function keepHistory(document, script) {
+        if (!document.editorState)
+            return;
+        const applied = state.editorInstance?.applyToState?.(document.editorState, script);
+        document.editorState = applied ?? null;
+    }
     function canonicalDesignerMutation(label, mutate) {
         const document = getActiveDocument();
         if (!document)
@@ -113,7 +124,7 @@ export function createStudioSqlMutationService({ state, getActiveDocument, activ
                 offerUndo?.(label, { document, before: script, after: patched.script });
             }
             else {
-                document.editorState = null;
+                keepHistory(document, patched.script);
             }
             renderTabs();
             return mutationResult;
@@ -181,7 +192,7 @@ export function createStudioSqlMutationService({ state, getActiveDocument, activ
                 offerUndo?.(label, { document, before: script, after: result.script });
             }
             else {
-                document.editorState = null;
+                keepHistory(document, result.script);
             }
             renderTabs();
             return result;

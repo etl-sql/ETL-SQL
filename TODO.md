@@ -233,11 +233,15 @@ evidence of parser, database, or deployment correctness. Findings below distingu
 behavior from source-traced gaps. Existing Alpha items above remain open; this review did not implement
 fixes or certify a production host.
 
-- [ ] **P1 — Preserve document history when a visual edit finishes in an inactive tab.** Switching
+- [x] **P1 — Preserve document history when a visual edit finishes in an inactive tab.** Switching
   tabs now saves/restores separate editor states and scroll positions. However, both canonical
   mutation paths set the inactive target's editorState to null after applying a response, discarding
   its prior undo/selection state. Apply the edit to that document's stored state and prove that
   switching back preserves undo/redo, selection, and scroll without importing another tab's text.
+  Done 2026-09-30: the edit goes into the stored state as one undo step (`applyToState`, the same
+  minimal-span change `replaceAll` makes); scroll is stored separately and was never cleared. Proof:
+  `SandboxStoryTests.Studio_AVisualEditThatLandsInAnotherTab_KeepsThatTabsHistory` holds the patch
+  until the author has switched tabs, then checks the caret, two undos, and two redos.
 - [ ] **P1 — Verify failed-file-open recovery.** The implementation refuses to create a clean empty
   tab after a failed read and offers Retry. Add behavioral tests for 403, 404, and disconnect,
   including an existing dirty buffer and a successful retry. Current entry checks only search
@@ -574,6 +578,11 @@ semantics and backend evidence before its rejection can be lifted.
   bounds, empty data, reversed axes, nonuniform X, resize, round trips, lineage, LSP rename, PDF,
   terminal/fallback intervals, guarded compatibility and deterministic goldens are covered by
   ConnectedRibbonTests. Existing LINE/AREA output remains unchanged.
+
+- [ ] Ribbon endpoints can use different Y scales. Validation (/C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Reporting.Contracts/ChartSpec.cs:726) accepts separate linear scale
+    IDs for Y_START and Y_END, but SVG rendering (/C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Reporting/Renderers/PlotPlanSvgRenderer.cs:238) uses the first Y scale for both.
+    Bounds on scales such as 0–10 and 100–200 can therefore render incorrectly without an error. Require a shared endpoint scale and ensure rendering selects that scale. Add a
+    regression with distinct scale IDs.
 
 Add one complete combination at a time — grammar, immutable contracts, resolution, validation,
 authoring help, and every applicable backend — then update the capability matrix before starting the

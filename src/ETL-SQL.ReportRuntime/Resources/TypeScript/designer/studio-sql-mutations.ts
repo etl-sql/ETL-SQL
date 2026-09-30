@@ -44,6 +44,7 @@ export interface ActiveDocumentContextLike {
 export interface StudioEditorInstanceLike {
     getValue: () => string;
     replaceAll?: (text: string) => { from: number; to: number } | null | undefined;
+    applyToState?: (state: unknown, text: string) => unknown;
     revealRange?: (from: number, to: number) => void;
     [key: string]: unknown;
 }
@@ -214,6 +215,17 @@ export function createStudioSqlMutationService({
         return candidate;
     }
 
+    /**
+     * An edit that finishes after its tab was left: the tab's stored state takes it as one undo
+     * step, so its history, selection, and scroll survive. Without a stored state (a tab never
+     * shown) the tab is built from `content` when it is next shown.
+     */
+    function keepHistory(document: StudioDocumentLike, script: string): void {
+        if (!document.editorState) return;
+        const applied = state.editorInstance?.applyToState?.(document.editorState, script);
+        document.editorState = applied ?? null;
+    }
+
     function canonicalDesignerMutation<T = unknown>(label: string, mutate: (designState: DesignerStateLike) => Promise<T> | T): Promise<T | null> {
         const document = getActiveDocument();
         if (!document) return Promise.resolve(null);
@@ -257,7 +269,7 @@ export function createStudioSqlMutationService({
                 renderWorkflow(document, applied?.designState);
                 offerUndo?.(label, { document, before: script, after: patched.script });
             } else {
-                document.editorState = null;
+                keepHistory(document, patched.script);
             }
             renderTabs();
             return mutationResult;
@@ -329,7 +341,7 @@ export function createStudioSqlMutationService({
                 renderVisualStage();
                 offerUndo?.(label, { document, before: script, after: result.script });
             } else {
-                document.editorState = null;
+                keepHistory(document, result.script);
             }
             renderTabs();
             return result;

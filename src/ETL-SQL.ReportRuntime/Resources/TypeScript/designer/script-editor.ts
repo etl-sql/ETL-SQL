@@ -63,6 +63,7 @@ export interface ScriptEditorHandle {
     getState?: () => unknown;
     setState?: (state: unknown) => void;
     createDocState?: (text: string) => unknown;
+    applyToState?: (state: unknown, text: string) => unknown;
     getScrollPosition?: () => { top: number; left: number };
     setScrollPosition?: (pos: { top?: number; left?: number }) => void;
 }
@@ -217,9 +218,33 @@ export function diagnosticSeverity(d?: ScriptEditorDiagnostic): 'error' | 'info'
  * @property {() => *} [getState]
  * @property {(state: *) => void} [setState]
  * @property {(text: string) => *} [createDocState]
+ * @property {(state: *, text: string) => *} [applyToState] A stored document state brought to `text`
+ *   as one undoable change, for a tab that is not showing.
  * @property {() => { top: number, left: number }} [getScrollPosition]
  * @property {(pos: { top?: number, left?: number }) => void} [setScrollPosition]
  */
+
+/**
+ * The one span that differs between two texts, found by trimming their common prefix and suffix.
+ * Null when they are equal.
+ */
+function changedSpan(current: string, text: string): { from: number; to: number; insert: string } | null {
+    const next = String(text ?? '');
+    if (current === next) return null;
+
+    let prefix = 0;
+    const maxPrefix = Math.min(current.length, next.length);
+    while (prefix < maxPrefix && current[prefix] === next[prefix]) prefix++;
+
+    let suffix = 0;
+    const maxSuffix = Math.min(current.length - prefix, next.length - prefix);
+    while (
+        suffix < maxSuffix
+        && current[current.length - 1 - suffix] === next[next.length - 1 - suffix]
+    ) suffix++;
+
+    return { from: prefix, to: current.length - suffix, insert: next.slice(prefix, next.length - suffix) };
+}
 
 /**
  * Mount a CodeMirror 6 rptsql editor into `container`.
@@ -796,34 +821,17 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
          * @returns {{from:number,to:number}|null} the inserted range, or null when nothing changed.
          */
         replaceAll: (text: string): ScriptEditorSpan | null => {
-            const current: string = view.state.doc.toString();
-            const next = String(text ?? '');
-            if (current === next) return null;
-
-            let prefix = 0;
-            const maxPrefix = Math.min(current.length, next.length);
-            while (prefix < maxPrefix && current[prefix] === next[prefix]) prefix++;
-
-            let suffix = 0;
-            const maxSuffix = Math.min(current.length - prefix, next.length - prefix);
-            while (
-                suffix < maxSuffix
-                && current[current.length - 1 - suffix] === next[next.length - 1 - suffix]
-            ) suffix++;
-
-            const from = prefix;
-            const to = current.length - suffix;
-            const insert = next.slice(prefix, next.length - suffix);
-
+            const change = changedSpan(view.state.doc.toString(), text);
+            if (!change) return null;
             // Keep the caret where it was; CodeMirror maps it through the change for us, and
             // clamping guards the case where the caret sat inside the replaced span.
-            const anchor = Math.min(view.state.selection.main.anchor, from);
+            const anchor = Math.min(view.state.selection.main.anchor, change.from);
             view.dispatch({
-                changes: { from, to, insert },
+                changes: change,
                 selection: { anchor },
                 scrollIntoView: false,
             });
-            return { from, to: from + insert.length };
+            return { from: change.from, to: change.from + change.insert.length };
         },
         /** Scrolls a document range into view. Optionally selects it so the author can see what changed. */
         revealRange: (from: number, to: number, select = false): ScriptEditorSpan | undefined => {
@@ -913,6 +921,16 @@ export async function createScriptEditor(container: HTMLElement, opts: ScriptEdi
         },
         createDocState: (text: string): unknown => {
             return EditorState.create({ doc: text ?? '', extensions });
+        },
+        /**
+         * A tab that is not showing keeps its state here, undo history included. An edit that
+         * lands on it goes in as a transaction, the way replaceAll does for the tab in view: the
+         * edit is one undo step, and the selection and every earlier step survive it.
+         */
+        applyToState: (stored: unknown, text: string): unknown => {
+            const state = stored as { doc: { toString(): string }; update(spec: unknown): { state: unknown } };
+            const change = changedSpan(state.doc.toString(), text);
+            return change ? state.update({ changes: change }).state : state;
         },
         getScrollPosition: (): { top: number; left: number } => ({
             top: view?.scrollDOM?.scrollTop ?? 0,

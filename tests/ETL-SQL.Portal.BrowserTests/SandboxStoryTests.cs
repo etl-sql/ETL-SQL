@@ -2547,6 +2547,73 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task Studio_AVisualEditThatLandsInAnotherTab_KeepsThatTabsHistory()
+    {
+        // The edit's patch is held until the author has moved to another tab, so it lands on a tab
+        // that is not showing. Its undo history, caret, and earlier steps must all survive that.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await WaitForStudioAsync(page);
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
+
+        var original = await page.EvaluateAsync<string>("() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()");
+        // An edit of the author's own, so the tab has history from before the canvas edit.
+        var typed = await page.EvaluateAsync<string>(
+            """
+            () => {
+                const editor = window.__STUDIO_INSTANCE__.state.editorInstance;
+                editor.replaceAll(editor.getValue() + '\n-- my note\n');
+                editor.gotoLine(2);
+                return editor.getValue();
+            }
+            """);
+        var caretLine = await page.EvaluateAsync<int>("() => window.__STUDIO_INSTANCE__.state.editorInstance.getCursorLine()");
+
+        await page.EvaluateAsync(
+            """
+            () => {
+                window.__heldPatch = false;
+                window.__STUDIO_API_DELAY__ = ({ url }) => {
+                    if (!url.endsWith('/api/designer/patch')) return 0;
+                    window.__heldPatch = true;
+                    return 1500;
+                };
+                window.__STUDIO_INSTANCE__.addVisualToCanvas('BAR');
+            }
+            """);
+        await page.WaitForFunctionAsync("() => window.__heldPatch === true");
+        var ids = await page.EvaluateAsync<string[]>("() => window.__STUDIO_INSTANCE__.state.documents.map(d => d.id)");
+        await page.Locator($".etlsql-studio-tab[data-doc-id='{ids[1]}']").DispatchEventAsync("click");
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.activeDocId === window.__STUDIO_INSTANCE__.state.documents[1].id");
+        await page.WaitForFunctionAsync(
+            "typed => window.__STUDIO_INSTANCE__.state.documents[0].content !== typed", typed,
+            new PageWaitForFunctionOptions { Timeout = 15_000 });
+        var patched = await page.EvaluateAsync<string>("() => window.__STUDIO_INSTANCE__.state.documents[0].content");
+        var otherTab = await page.EvaluateAsync<string>("() => window.__STUDIO_INSTANCE__.state.documents[1].content");
+
+        await page.Locator($".etlsql-studio-tab[data-doc-id='{ids[0]}']").DispatchEventAsync("click");
+        await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__.state.activeDocId === window.__STUDIO_INSTANCE__.state.documents[0].id");
+        string Value() => "() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()";
+
+        Assert.Equal(patched, await page.EvaluateAsync<string>(Value()));
+        Assert.Contains("-- my note", patched, StringComparison.Ordinal);
+        Assert.DoesNotContain(otherTab.Trim(), patched, StringComparison.Ordinal);
+        Assert.Equal(caretLine, await page.EvaluateAsync<int>("() => window.__STUDIO_INSTANCE__.state.editorInstance.getCursorLine()"));
+
+        // The canvas edit is one undo step, and the author's own edit is still behind it.
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.undo()");
+        Assert.Equal(typed, await page.EvaluateAsync<string>(Value()));
+        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.undo()");
+        Assert.Equal(original, await page.EvaluateAsync<string>(Value()));
+        await page.EvaluateAsync("() => { const e = window.__STUDIO_INSTANCE__.state.editorInstance; e.redo(); e.redo(); }");
+        Assert.Equal(patched, await page.EvaluateAsync<string>(Value()));
+        Assert.Empty(session.PageErrors);
+    }
+
+    [Fact]
     public async Task Studio_DismissingTheGuidedRail_LeavesARestoreActionOnTheCanvas()
     {
         await using var session = await fixture.NewSessionAsync();
