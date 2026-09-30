@@ -26,6 +26,7 @@
 | [Object-Native Artifact Storage Contract](object-native-artifact-storage.md) | **Status:** Accepted and implemented for Platform Phase 1; defines conditional commits, fencing, reconciliation, and S3/Azure provider certification. |
 | [Performance Regression Quality (v0.15.0 Phase 3) — Design](performance-regression-quality.md) | **Status:** Implemented for v0.15.0 Phase 3. |
 | [Design Strategy: First-Class Web Script Editing in the Portal](portal-editor-strategy.md) | As ETL-SQL scales into enterprise farms (multiple orchestrators/portals) and SaaS/multi-tenant |
+| [Pipelines and Queries as Portal Catalog Documents](portal-etl-documents.md) | A pipeline is a catalog document with a kind, and runs from the Portal through the Orchestrator |
 | [Row-Level Security via Injected Identity — Reference Specification](row-level-security.md) | Let report authors write row-filtering predicates keyed on **who is running the report** and **what |
 | [SME Secret Management and Administration Hardening (v0.15.0 Phase 7) - Design](sme-secret-management-administration-hardening.md) | **Status:** Draft for implementation planning. |
 | [SaaS Observability and Support Access Certification](saas-observability-certification.md) | This document serves as the adversarial certification evidence for **SaaS Domain 8: Audit, Observability, and Support Access**. It formally attests... |
