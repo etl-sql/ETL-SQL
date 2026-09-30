@@ -12,7 +12,10 @@ public sealed record WorkstationEditorOptions(
     bool OpenBrowser = false,
     bool StudioMode = false,
     string? InstanceId = null,
-    int IdleShutdownMinutes = 0)
+    int IdleShutdownMinutes = 0,
+    // Where recovery drafts are kept; the OS user's local app data when null. Tests point it at a
+    // temporary folder so they never write into the developer's profile.
+    string? DraftDirectory = null)
 {
     /// <summary>
     /// How long a Studio host waits after its last browser leaves before it stops, when the command

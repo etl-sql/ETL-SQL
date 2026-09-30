@@ -29,7 +29,7 @@ export const auth = {
 
 let _refreshing = null;
 
-async function apiFetch(url, opts = {}) {
+export async function apiFetch(url, opts = {}) {
     const token = auth.getToken();
     const headers = { ...(opts.headers || {}) };
     if (token) headers['Authorization'] = `Bearer ${token}`;

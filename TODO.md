@@ -251,7 +251,7 @@ fixes or certify a production host.
   connection. Each opens no tab, leaves the active tab and its unsaved text alone, and the toast's
   Retry then opens the file with the host's content. The sandbox story gained a
   `__STUDIO_API_RESPONSE__` hook for scripted host answers. The implementation needed no change.
-- [ ] **P1 — Recover unsaved work after disconnect, expiry, and browser restart.** Current Studio
+- [x] **P1 — Recover unsaved work after disconnect, expiry, and browser restart.** Current Studio
   buffers live in [studio-state.js](src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-state.js);
   `beforeunload` is a warning, not recovery. In
   [studio-lifecycle.js](src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-lifecycle.js), one
@@ -264,6 +264,18 @@ fixes or certify a production host.
   `CatalogOnly`, and `SourceControlled`; the Portal host supplies no `allowDraftStorage` policy.
   Draft keys use report ID or path without principal, tenant, or workspace isolation. Wire an
   explicit server policy and isolate recovery records before certifying this lifecycle.
+  Done 2026-09-30 (user chose host-side drafts): drafts live on the host, never in browser storage.
+  Portal: `StudioRecoveryDrafts`, one per author per report, tenant-scoped through the report, behind
+  `Portal:Studio:DraftRecovery` (default on) and `DraftRetentionDays` (7); plaintext credentials are
+  refused; excluded from backups. Self-installed host: the OS user's app data, keyed by the resolved
+  path. Studio saves a draft two seconds after typing stops and on page close; a renewal that fails
+  once is retried before the lease is dropped (403/404/409 are not retried); an expired access token
+  is now refreshed instead of sending the author to sign in; a draft taken from an older version says
+  so before restoring. Legacy localStorage drafts are offered once and removed. Proof:
+  `StudioRecoveryJourneyTests` (crash, token expiry, changed report), `StudioDesktopRecoveryTests`,
+  `StudioRecoveryDraftTests`, `WorkstationDraftStoreTests`, `studio_lifecycle.test.ts`.
+  Known limits: while the host is unreachable, edits since the last kept draft exist only in the tab;
+  when the refresh token has also expired the author still signs in again (drafts are on the host).
 - [ ] **P1 — Make Portal ETL documents first-class.** Catalog Home and New menus still disable
   pipeline/query creation and direct authors to Workstation Editor or VS Code. The disabled UX
   is implemented; governed `.etlsql` catalog storage, authoring, save/reopen, and execution are not.
@@ -271,6 +283,9 @@ fixes or certify a production host.
 - [ ] **P1 — Certify private drafting and publishing separately.** In-memory seeded practice and an
   explicit Publish action exist; API tests reject publishing without ReportPublish. Local draft
   persistence still depends on the unresolved storage policy/isolation item above. Verify a learner
+  **Update 2026-09-30:** a report not yet in the catalog has no draft slot (drafts are keyed by report),
+  so "Save Local Draft" now says it cannot be kept rather than claiming a browser save. Giving an
+  unpublished document a host draft is part of this item.
   without folder Manage or ReportPublish can create, edit, recover, and reopen a permitted draft,
   then verify authorized promotion into the catalog without losing the buffer.
 - [ ] **P1 — Verify Studio keyboard and assistive-technology journeys.** Shared dialogs now have

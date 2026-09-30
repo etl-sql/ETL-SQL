@@ -50,7 +50,8 @@ public static class WorkstationEditorApp
         builder.Services.AddEtlSqlEngine(configuration);
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton(new WorkstationWorkspace(options.WorkspaceRoot, options.ReadOnly));
-        builder.Services.AddSingleton<WorkstationDraftStore>();
+        builder.Services.AddSingleton(provider => new WorkstationDraftStore(
+            provider.GetRequiredService<WorkstationWorkspace>(), options.DraftDirectory));
         builder.Services.AddSingleton<WorkstationAnalysisService>();
         builder.Services.AddSingleton<ScriptDagProjectionService>();
         builder.Services.AddSingleton<IMetadataManager, MetadataManager>();

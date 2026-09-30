@@ -411,22 +411,35 @@ export async function createStudioWorkbench(container, opts = {}) {
         documentContext: documentContext,
         feedback: _feedback
     });
+    // Two seconds after typing stops, the draft goes to the host: long enough not to send every
+    // keystroke, short enough that a crash or an expired sign-in costs almost nothing.
     let draftSaveDebounce = null;
+    let warnedDraftRefused = false;
     function scheduleDraftSave(doc) {
-        if (!doc || !doc.isDirty)
+        if (!doc || !doc.isDirty || !leaseLifecycle.draftsKept)
             return;
         if (draftSaveDebounce)
             clearTimeout(draftSaveDebounce);
-        draftSaveDebounce = setTimeout(() => {
-            leaseLifecycle.saveDraft(doc);
-        }, 800);
+        draftSaveDebounce = setTimeout(async () => {
+            const result = await leaseLifecycle.saveDraft(doc);
+            if (result === 'refused' && !warnedDraftRefused) {
+                warnedDraftRefused = true;
+                _feedback.notify(`"${doc.name}" holds a plaintext credential, so its unsaved edits are not kept as a recovery draft. Encrypt the credential or use a SECRET: reference.`, { title: 'Draft Not Kept', tone: 'warning' });
+            }
+        }, 2000);
     }
-    function checkRecoverableDraft(doc) {
+    async function checkRecoverableDraft(doc) {
         if (!doc)
             return;
-        const draft = leaseLifecycle.getRecoverableDraft(doc);
+        const draft = await leaseLifecycle.getRecoverableDraft(doc);
         if (draft && draft.content && draft.content !== doc.content) {
-            _feedback.notify(`An unsaved draft for "${doc.name}" was found from a previous session.`, {
+            // A draft started from an older version than the one just opened would put back
+            // text that someone has since changed; say so rather than restoring it silently.
+            const moved = draft.baseVersion != null && doc.version != null && String(draft.baseVersion) !== String(doc.version)
+                || draft.baseSourceRevision != null && doc.sourceRevision != null && String(draft.baseSourceRevision) !== String(doc.sourceRevision);
+            _feedback.notify(moved
+                ? `Unsaved edits to "${doc.name}" from a previous session were kept, but the report has changed since. Restoring puts your edits back over the newer version; saving will then ask you to resolve the conflict.`
+                : `Unsaved edits to "${doc.name}" from a previous session were kept.`, {
                 title: 'Recover Draft',
                 tone: 'info',
                 action: {
@@ -655,7 +668,7 @@ export async function createStudioWorkbench(container, opts = {}) {
             return undefined;
         for (const doc of state.documents) {
             if (doc.isDirty)
-                leaseLifecycle.saveDraft(doc);
+                void leaseLifecycle.saveDraft(doc, { keepalive: true });
         }
         event.preventDefault();
         // Browsers show their own wording; a non-empty returnValue is what triggers the prompt.

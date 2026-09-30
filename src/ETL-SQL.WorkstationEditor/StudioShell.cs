@@ -234,6 +234,26 @@ internal static class StudioShell
         apiBase: '',
         authFetch,
         onExit: exitStudio,
+        // Recovery drafts go to the host's app-data folder, never to browser storage.
+        onLoadDraft: async document => {
+          const res = await authFetch('/api/drafts?path=' + encodeURIComponent(document.path));
+          return res.ok ? res.json() : null;
+        },
+        onSaveDraft: readOnly ? undefined : async (document, draft, options) => {
+          const res = await authFetch('/api/drafts', {
+            method: 'PUT',
+            keepalive: Boolean(options && options.keepalive),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              path: document.path,
+              content: draft.content,
+              baseSourceRevision: draft.baseSourceRevision == null ? null : String(draft.baseSourceRevision)
+            })
+          });
+          if (res.status === 422) return 'refused';
+          return res.ok ? 'kept' : 'unavailable';
+        },
+        onRemoveDraft: document => authFetch('/api/drafts?path=' + encodeURIComponent(document.path), { method: 'DELETE' }),
         onSave: async (content, filePath) => {
           if (readOnly) return;
           const res = await authFetch('/api/files', {

@@ -13,94 +13,51 @@
  * Licensed under the Apache License, Version 2.0.
  *
  * Document lease renewal, re-acquisition, and recoverable draft lifecycle for Studio hosts.
+ *
+ * Recovery drafts live on the host (the Portal database, or the self-installed host's app data),
+ * never in browser storage: a script is not left on a shared workstation, and a draft survives a
+ * crashed or cleared browser. The host decides whether drafts are kept at all; a host that keeps
+ * none simply supplies no draft callbacks.
  */
 import { detectPlaintextSecrets } from './studio-security.js';
-const DRAFT_PREFIX = 'etlsql_studio_draft:';
-function getDraftKey(doc) {
+/**
+ * Drafts that Studio kept in localStorage before v0.20.0. They are read once so an upgrade does not
+ * lose them, offered like a host draft, and removed; nothing new is written to browser storage.
+ */
+const LEGACY_DRAFT_PREFIX = 'etlsql_studio_draft:';
+function legacyDraftKey(doc) {
     if (doc.reportId != null)
-        return `${DRAFT_PREFIX}report_${doc.reportId}`;
-    return `${DRAFT_PREFIX}path_${encodeURIComponent(doc.path || String(doc.id || 'untitled'))}`;
+        return `${LEGACY_DRAFT_PREFIX}report_${doc.reportId}`;
+    return `${LEGACY_DRAFT_PREFIX}path_${encodeURIComponent(doc.path || String(doc.id || 'untitled'))}`;
 }
-export function isDraftStoragePermitted(scriptText, options) {
-    if (options?.allowDraftStorage === false)
-        return false;
-    const mode = options?.deploymentMode || '';
-    if (mode === 'Strict' || mode === 'ZeroTrust')
-        return false;
-    if (detectPlaintextSecrets(scriptText).length > 0)
-        return false;
-    return true;
-}
-export function saveDraftRecord(document, options) {
-    if (typeof localStorage === 'undefined')
-        return false;
-    const content = document.content || '';
-    if (!document.isDirty) {
-        removeDraftRecord(document);
-        return false;
-    }
-    if (!isDraftStoragePermitted(content, options)) {
-        removeDraftRecord(document);
-        return false;
-    }
+function takeLegacyDraft(doc) {
     try {
-        const key = getDraftKey(document);
-        const record = {
-            id: document.id,
-            reportId: document.reportId,
-            path: document.path || '',
-            content,
-            timestamp: Date.now(),
-            version: document.version,
-            sourceRevision: document.sourceRevision
-        };
-        localStorage.setItem(key, JSON.stringify(record));
-        return true;
+        const key = legacyDraftKey(doc);
+        const raw = localStorage.getItem(key);
+        if (!raw)
+            return null;
+        const record = JSON.parse(raw);
+        return typeof record?.content === 'string'
+            ? { content: record.content, baseVersion: record.version, baseSourceRevision: record.sourceRevision, updatedAt: record.timestamp }
+            : null;
     }
     catch {
-        return false;
+        return null;
     }
 }
-export function removeDraftRecord(document) {
-    if (typeof localStorage === 'undefined')
-        return;
+function removeLegacyDraft(doc) {
     try {
-        const key = getDraftKey(document);
-        localStorage.removeItem(key);
+        localStorage.removeItem(legacyDraftKey(doc));
     }
     catch {
         // storage unavailable or disabled
     }
 }
-export function getRecoverableDraftRecord(document, options) {
-    if (typeof localStorage === 'undefined')
-        return null;
-    try {
-        const key = getDraftKey(document);
-        const raw = localStorage.getItem(key);
-        if (!raw)
-            return null;
-        const record = JSON.parse(raw);
-        if (!record || typeof record.content !== 'string') {
-            localStorage.removeItem(key);
-            return null;
-        }
-        if (!isDraftStoragePermitted(record.content, options)) {
-            localStorage.removeItem(key);
-            return null;
-        }
-        if (record.content === (document.content || '')) {
-            localStorage.removeItem(key);
-            return null;
-        }
-        return record;
-    }
-    catch {
-        return null;
-    }
+/** A draft may leave the browser only without a plaintext credential in it. */
+export function draftMayBeKept(scriptText) {
+    return detectPlaintextSecrets(scriptText).length === 0;
 }
 export function createStudioLeaseLifecycle({ state, options, documentContext, feedback }) {
-    const deploymentMode = options.deploymentMode || state.deploymentMode || '';
     async function reacquire(document, { silent = false } = {}) {
         if (!options.onRenewDocument && !options.onReacquireDocument)
             return false;
@@ -160,13 +117,34 @@ export function createStudioLeaseLifecycle({ state, options, documentContext, fe
             }
         }
     }
+    /**
+     * A renewal that fails once is usually a blip: a dropped request, a host restarting. Dropping the
+     * lease on it would make the author reacquire for nothing, so a failure is retried after each of
+     * the delays. A refusal the host means (the lease is someone else's, or access was withdrawn)
+     * is not retried.
+     */
+    async function renewWithRetry(document) {
+        const delays = options.leaseRenewRetryDelaysMs ?? [2000, 5000];
+        for (let attempt = 0;; attempt++) {
+            try {
+                return await options.onRenewDocument(document);
+            }
+            catch (error) {
+                document.leaseRenewalFailures = (document.leaseRenewalFailures ?? 0) + 1;
+                const definitive = [403, 404, 409].includes(Number(error?.status));
+                if (definitive || attempt >= delays.length)
+                    throw error;
+                await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+            }
+        }
+    }
     const renewTimer = options.onRenewDocument ? window.setInterval(async () => {
         for (const document of state.documents) {
             if (!document.lease)
                 continue;
             if (document.lease.acquired) {
                 try {
-                    const lease = await options.onRenewDocument(document);
+                    const lease = await renewWithRetry(document);
                     if (lease) {
                         document.lease = { ...document.lease, ...lease, acquired: true };
                         document.leaseRenewalFailures = 0;
@@ -194,17 +172,58 @@ export function createStudioLeaseLifecycle({ state, options, documentContext, fe
         void reacquireAll();
     };
     const onOffline = () => {
-        feedback.notify('Network connection lost. Unsaved changes are preserved as local drafts.', { title: 'Offline Mode', tone: 'warning' });
+        feedback.notify('Network connection lost. Keep this tab open: your edits are here, and they are kept as a draft again once the connection returns.', { title: 'Offline', tone: 'warning' });
     };
     if (typeof window !== 'undefined') {
         window.addEventListener('online', onOnline);
         window.addEventListener('offline', onOffline);
     }
+    async function saveDraft(document, { keepalive = false } = {}) {
+        if (!options.onSaveDraft)
+            return 'unavailable';
+        const content = document.content || '';
+        if (!document.isDirty) {
+            removeDraft(document);
+            return 'unavailable';
+        }
+        if (!draftMayBeKept(content))
+            return 'refused';
+        try {
+            return await options.onSaveDraft(document, {
+                content,
+                baseVersion: document.version,
+                baseSourceRevision: document.sourceRevision
+            }, { keepalive });
+        }
+        catch {
+            // Unreachable host: the edits are still in this tab and are kept on the next save.
+            return 'unavailable';
+        }
+    }
+    function removeDraft(document) {
+        removeLegacyDraft(document);
+        void options.onRemoveDraft?.(document)?.catch?.(() => { });
+    }
+    async function getRecoverableDraft(document) {
+        let draft;
+        try {
+            draft = (await options.onLoadDraft?.(document)) ?? null;
+        }
+        catch {
+            draft = null;
+        }
+        draft ??= takeLegacyDraft(document);
+        if (!draft || draft.content === (document.content || '') || !draftMayBeKept(draft.content)) {
+            if (draft)
+                removeDraft(document);
+            return null;
+        }
+        return draft;
+    }
     const releaseOnPageHide = () => {
         for (const document of state.documents) {
-            if (document.isDirty) {
-                saveDraftRecord(document, { allowDraftStorage: options.allowDraftStorage, deploymentMode });
-            }
+            if (document.isDirty)
+                void saveDraft(document, { keepalive: true });
         }
         for (const document of state.documents.filter(item => item.lease?.acquired)) {
             void options.onCloseDocument?.(document, { keepalive: true });
@@ -216,15 +235,10 @@ export function createStudioLeaseLifecycle({ state, options, documentContext, fe
     return {
         reacquire,
         reacquireAll,
-        saveDraft(doc) {
-            return saveDraftRecord(doc, { allowDraftStorage: options.allowDraftStorage, deploymentMode });
-        },
-        removeDraft(doc) {
-            removeDraftRecord(doc);
-        },
-        getRecoverableDraft(doc) {
-            return getRecoverableDraftRecord(doc, { allowDraftStorage: options.allowDraftStorage, deploymentMode });
-        },
+        saveDraft,
+        removeDraft,
+        getRecoverableDraft,
+        get draftsKept() { return Boolean(options.onSaveDraft); },
         dispose() {
             for (const document of state.documents.filter(item => item.lease?.acquired)) {
                 void options.onCloseDocument?.(document, { keepalive: false });

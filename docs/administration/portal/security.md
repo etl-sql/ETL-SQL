@@ -76,6 +76,28 @@ When a user has `MustChangePassword = true`, a middleware layer (`MustChangePass
 
 All script paths submitted to `POST /api/reports` are resolved to absolute paths and validated to remain within `ScriptRootPath`. A path like `../../etc/passwd` is rejected with `400 Bad Request`.
 
+## Studio Recovery Drafts
+
+Studio keeps each author's unsaved edits on the Portal, so a crashed browser, a dropped
+connection, or an expired sign-in loses at most the last two seconds of typing. Reopening the
+report offers the edits back. Studio never keeps script text in browser storage.
+
+- A draft belongs to one author and one report. Other users, including other authors of the same
+  report, cannot read it. Drafts follow the report's tenant.
+- A draft that contains a plaintext password, key, or token is refused, so credentials never reach
+  the database outside the secret store. Encrypt the credential or use a `SECRET:` reference.
+- If the report changed since the draft was taken, Studio says so before restoring it. Saving then
+  goes through the normal version check.
+- Backups exclude drafts, so a restore cannot put unsaved edits back over saved scripts.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `Portal:Studio:DraftRecovery` | `true` | Set to `false` where unsaved script text must not be stored at all. |
+| `Portal:Studio:DraftRetentionDays` | `7` | Days an untouched draft is kept before it is discarded. |
+
+The self-installed Studio host keeps drafts in the signed-in OS user's local application data
+(`ETL-SQL/StudioDrafts`), with the same credential rule and retention.
+
 ## Account Lockout
 
 After **5 consecutive failed login attempts** an account is locked for **15 minutes** (ASP.NET Identity defaults). Lockout applies to all roles. Admins can unlock accounts by resetting the password or waiting for the lockout window to expire.

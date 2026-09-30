@@ -158,13 +158,10 @@ export function createStudioFileCommands(hostContext) {
                         return hostContext.handlePublishCatalogReport(doc);
                     }
                 }
-                const currentContent = hostContext.state.editorInstance ? hostContext.state.editorInstance.getValue() : doc.content;
-                doc.content = currentContent;
-                hostContext.leaseLifecycle.saveDraft(doc);
-                doc.isDirty = false;
-                hostContext.renderTabs();
-                _feedback.notify('Saved private draft. Draft is preserved in this browser.', { title: 'Draft Saved', tone: 'success' });
-                return true;
+                // A report the catalog has not seen has nowhere to be kept yet; saying it was saved
+                // would be how it gets lost. It stays unsaved in this tab until it is published.
+                _feedback.notify('This report is not in the catalog yet, so it cannot be kept anywhere else. Keep this tab open, or publish it to the catalog to save it.', { title: 'Not Saved', tone: 'warning' });
+                return false;
             }
             const defaultExtension = doc.path.endsWith('.etlsql') ? '.etlsql' : doc.path.endsWith('.sql') ? '.sql' : '.rptsql';
             let saveName = await _feedback.prompt('Choose the filename to save in this workspace.', { title: 'Save as', label: 'Filename', value: doc.name, required: true, confirmLabel: 'Save' });

@@ -5,7 +5,7 @@
  * the linters and the parse check can all see. Behaviour is unchanged.
  */
 
-import { auth, authApi, studioApi } from '../api.js';
+import { apiFetch, auth, authApi, studioApi } from '../api.js';
 import { applyPortalBranding, initTheme } from '../branding.js';
 import { getSessionIdentity, renderSessionIdentity } from '../session-identity.js';
 import { applyNavigationSafely } from '../portal-nav.js';
@@ -33,13 +33,13 @@ applyNavigationSafely();
 const params = new URLSearchParams(window.location.search);
 const container = document.getElementById('studioHost');
 
+// An expired access token is refreshed, as everywhere else in the Portal. Studio used to send the
+// author to sign in on the first 401, which cut a session short every time the token turned over.
+// Only when the refresh fails too does the author sign in again; their drafts are on the Portal by
+// then, and reopening the report offers them back.
 async function authFetch(url, opts = {}) {
-  const res = await fetch(url, {
-    ...opts,
-    headers: { ...(opts.headers || {}), Authorization: `Bearer ${auth.getToken()}` }
-  });
-  if (res.status === 401) { auth.redirectToLogin(); return null; }
-  return res;
+  const res = await apiFetch(url, opts);
+  return res.status === 401 ? null : res;
 }
 
 async function readJson(url, opts = {}) {
@@ -148,6 +148,32 @@ const studio = await createStudioWorkbench(container, {
     description: null
   }),
   onRenewDocument: doc => acquireLease(doc.reportId),
+  ...(studioSession.draftRecovery ? {
+    onLoadDraft: async doc => {
+      if (!doc?.reportId) return null;
+      const res = await authFetch(`/api/studio/drafts/${doc.reportId}`);
+      return res?.ok ? res.json() : null;
+    },
+    onSaveDraft: async (doc, draft, { keepalive = false } = {}) => {
+      if (!doc?.reportId) return 'unavailable';
+      const res = await authFetch(`/api/studio/drafts/${doc.reportId}`, {
+        method: 'PUT',
+        keepalive,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: draft.content,
+          baseVersion: draft.baseVersion ?? null,
+          baseSourceRevision: draft.baseSourceRevision == null ? null : String(draft.baseSourceRevision)
+        })
+      });
+      if (!res) return 'unavailable';
+      if (res.status === 422) return 'refused';
+      return res.ok ? 'kept' : 'unavailable';
+    },
+    onRemoveDraft: doc => doc?.reportId
+      ? authFetch(`/api/studio/drafts/${doc.reportId}`, { method: 'DELETE' })
+      : Promise.resolve()
+  } : {}),
   onReacquireDocument: async doc => {
     if (!doc?.reportId) return null;
     const lease = await acquireLease(doc.reportId);
