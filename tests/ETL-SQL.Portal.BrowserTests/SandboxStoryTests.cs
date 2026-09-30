@@ -2613,6 +2613,117 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.Empty(session.PageErrors);
     }
 
+    [Theory]
+    [InlineData("403", "Access denied (403)")]
+    [InlineData("404", "File not found (404)")]
+    [InlineData("disconnect", "Network error")]
+    public async Task Studio_AFileThatFailsToOpen_OpensNoTabAndLeavesDirtyWork_ThenRetryOpensIt(string failure, string message)
+    {
+        // An empty tab for a file that could not be read would save over the real file on the next
+        // Save. The failure must open nothing, disturb nothing, and offer a Retry that works.
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        const string path = "scripts/direct_connect_test.sql";
+
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
+        await page.ClickAsync("button.story-link[data-story-id='studio']");
+        await WaitForStudioAsync(page);
+        await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO_INSTANCE__?.state?.editorInstance)");
+
+        // Close the unmodified tab for the file, so opening it goes to the host.
+        var closeId = await page.EvaluateAsync<string>(
+            "path => window.__STUDIO_INSTANCE__.state.documents.find(d => d.path === path).id", path);
+        await page.Locator($".etlsql-studio-tab[data-doc-id='{closeId}'] .etlsql-tab-close").DispatchEventAsync("click");
+        // Sandbox documents start unsaved, so closing asks whether to save; this one is thrown away.
+        var dontSave = page.Locator(".etlsql-feedback-dialog button", new() { HasTextRegex = new System.Text.RegularExpressions.Regex("^No$") });
+        await dontSave.ClickAsync(new() { Timeout = 5_000 });
+        await page.WaitForFunctionAsync(
+            "path => !window.__STUDIO_INSTANCE__.state.documents.some(d => d.path === path)", path);
+
+        // Unsaved work in the tab that is showing.
+        var dirty = await page.EvaluateAsync<JsonElement>(
+            """
+            () => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const editor = studio.state.editorInstance;
+                editor.replaceAll(editor.getValue() + '\n-- unsaved work\n');
+                return { id: studio.state.activeDocId, text: editor.getValue(), tabs: studio.state.documents.length };
+            }
+            """);
+        var dirtyId = dirty.GetProperty("id").GetString()!;
+        var dirtyText = dirty.GetProperty("text").GetString()!;
+        var tabs = dirty.GetProperty("tabs").GetInt32();
+
+        await page.EvaluateAsync(
+            """
+            ([failure, path]) => {
+                window.__STUDIO_API_RESPONSE__ = ({ url }) => {
+                    if (!url.includes('/api/files?path=' + encodeURIComponent(path))) return null;
+                    if (failure === 'disconnect') return 'disconnect';
+                    return new Response('{}', { status: Number(failure), headers: { 'Content-Type': 'application/json' } });
+                };
+            }
+            """, new[] { failure, path });
+
+        await page.ClickAsync("button.etlsql-studio-rail-btn[data-activity='explorer']");
+        var scriptsToggle = page.Locator("[data-explorer-toggle='scripts']");
+        var fileRow = page.Locator($"[data-explorer-file='{path}']");
+        if (await scriptsToggle.IsVisibleAsync() && !await fileRow.IsVisibleAsync())
+            await scriptsToggle.ClickAsync();
+        await fileRow.ClickAsync();
+
+        var toast = page.Locator(".etlsql-feedback-toast", new() { HasText = "Open File Failed" });
+        await Assertions.Expect(toast).ToContainTextAsync(message);
+        await Assertions.Expect(toast).ToContainTextAsync("was not opened");
+
+        var after = await page.EvaluateAsync<JsonElement>(
+            """
+            ([id, path]) => {
+                const studio = window.__STUDIO_INSTANCE__;
+                const doc = studio.state.documents.find(d => d.id === id);
+                return {
+                    active: studio.state.activeDocId,
+                    tabs: studio.state.documents.length,
+                    opened: studio.state.documents.some(d => d.path === path),
+                    dirty: Boolean(doc.isDirty),
+                    text: studio.state.editorInstance.getValue(),
+                };
+            }
+            """, new[] { dirtyId, path });
+        Assert.Equal(dirtyId, after.GetProperty("active").GetString());
+        Assert.Equal(tabs, after.GetProperty("tabs").GetInt32());
+        Assert.False(after.GetProperty("opened").GetBoolean(), "A file that could not be read must not open as a tab.");
+        Assert.True(after.GetProperty("dirty").GetBoolean());
+        Assert.Equal(dirtyText, after.GetProperty("text").GetString());
+
+        // The host answers now; Retry opens the file with what the host holds.
+        await page.EvaluateAsync(
+            """
+            path => {
+                window.__STUDIO_API_RESPONSE__ = ({ url }) => url.includes('/api/files?path=' + encodeURIComponent(path))
+                    ? new Response(JSON.stringify({ content: '-- regional margin\n', sourceRevision: 'r1' }),
+                        { status: 200, headers: { 'Content-Type': 'application/json' } })
+                    : null;
+            }
+            """, path);
+        await toast.Locator(".etlsql-feedback-action", new() { HasText = "Retry" }).ClickAsync();
+        await page.WaitForFunctionAsync(
+            "path => window.__STUDIO_INSTANCE__.state.documents.find(d => d.path === path)?.id === window.__STUDIO_INSTANCE__.state.activeDocId",
+            path);
+        // The active id changes before switchDoc loads the text, so wait for the text itself.
+        await page.WaitForFunctionAsync(
+            "text => window.__STUDIO_INSTANCE__.state.editorInstance.getValue() === text", "-- regional margin\n",
+            new PageWaitForFunctionOptions { Timeout = 10_000 });
+
+        // The dirty tab still holds its unsaved work.
+        var kept = await page.EvaluateAsync<JsonElement>(
+            "id => { const d = window.__STUDIO_INSTANCE__.state.documents.find(x => x.id === id); return { dirty: Boolean(d.isDirty), text: d.content }; }",
+            dirtyId);
+        Assert.True(kept.GetProperty("dirty").GetBoolean());
+        Assert.Equal(dirtyText, kept.GetProperty("text").GetString());
+        Assert.Empty(session.PageErrors);
+    }
+
     [Fact]
     public async Task Studio_DismissingTheGuidedRail_LeavesARestoreActionOnTheCanvas()
     {

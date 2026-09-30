@@ -166,6 +166,11 @@ export default {
       apiRequests.push({ url: String(url), body });
       const delay = Number(window.__STUDIO_API_DELAY__?.({ url: String(url), body }) || 0);
       if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+      // Test instrumentation: answer with a scripted Response, or 'disconnect' to fail the fetch
+      // the way a browser does when the host is unreachable.
+      const scripted = window.__STUDIO_API_RESPONSE__?.({ url: String(url), body });
+      if (scripted === 'disconnect') throw new TypeError('Failed to fetch');
+      if (scripted) return scripted;
       return api(url, init);
     };
 

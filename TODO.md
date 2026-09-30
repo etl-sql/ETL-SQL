@@ -242,10 +242,15 @@ fixes or certify a production host.
   minimal-span change `replaceAll` makes); scroll is stored separately and was never cleared. Proof:
   `SandboxStoryTests.Studio_AVisualEditThatLandsInAnotherTab_KeepsThatTabsHistory` holds the patch
   until the author has switched tabs, then checks the caret, two undos, and two redos.
-- [ ] **P1 — Verify failed-file-open recovery.** The implementation refuses to create a clean empty
+- [x] **P1 — Verify failed-file-open recovery.** The implementation refuses to create a clean empty
   tab after a failed read and offers Retry. Add behavioral tests for 403, 404, and disconnect,
   including an existing dirty buffer and a successful retry. Current entry checks only search
   source text for the guard and message.
+  Done 2026-09-30: `SandboxStoryTests.Studio_AFileThatFailsToOpen_OpensNoTabAndLeavesDirtyWork_ThenRetryOpensIt`
+  opens a file from the explorer while another tab holds unsaved work, for 403, 404, and a dropped
+  connection. Each opens no tab, leaves the active tab and its unsaved text alone, and the toast's
+  Retry then opens the file with the host's content. The sandbox story gained a
+  `__STUDIO_API_RESPONSE__` hook for scripted host answers. The implementation needed no change.
 - [ ] **P1 — Recover unsaved work after disconnect, expiry, and browser restart.** Current Studio
   buffers live in [studio-state.js](src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-state.js);
   `beforeunload` is a warning, not recovery. In
