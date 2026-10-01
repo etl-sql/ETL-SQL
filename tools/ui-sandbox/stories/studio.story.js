@@ -145,6 +145,7 @@ export default {
   subtitle: 'Flagship Dual-Projection Visual & Script Workbench',
   fixtures: [
     { id: 'default', label: 'Multi-Tab Workbench (Report, ETL, Script)' },
+    { id: 'pending-save', label: 'Slow Save (type while saving)' },
   ],
   async mount(stage, fixtureId, ctx) {
     // Import canonical studio module
@@ -182,6 +183,7 @@ export default {
       apiBase: '',
       initialSnapshot: sampleSnapshot(),
       onSave: async (content, path) => {
+        if (fixtureId === 'pending-save') await new Promise(resolve => setTimeout(resolve, 3000));
         console.log(`[Studio Save] Saved ${path} (${content.length} chars)`);
       },
       onRenameDocument: async (document, name) => {

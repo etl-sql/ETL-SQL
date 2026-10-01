@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import {
     createStudioLeaseLifecycle,
-    isDraftStoragePermitted,
-    saveDraftRecord,
-    getRecoverableDraftRecord,
-    removeDraftRecord
+    draftMayBeKept
 } from '../src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio-lifecycle.js';
 
 const originalWindow = globalThis.window;
@@ -37,9 +34,20 @@ try {
     const renewed = [], released = [], notices = [];
 
     let reacquireCallCount = 0;
+    const hostDrafts = new Map();
+    const draftKey = document => document.reportId ?? document.path ?? document.id;
+    let hostKeepsDrafts = true;
     const lifecycle = createStudioLeaseLifecycle({
         state: { documents },
         options: {
+            leaseRenewRetryDelaysMs: [],
+            onSaveDraft: async (document, draft) => {
+                if (!hostKeepsDrafts) return 'refused';
+                hostDrafts.set(draftKey(document), draft);
+                return 'kept';
+            },
+            onLoadDraft: async document => hostDrafts.get(draftKey(document)) ?? null,
+            onRemoveDraft: async document => { hostDrafts.delete(draftKey(document)); },
             onRenewDocument: async d => {
                 renewed.push(d);
                 if (d === lost) throw new Error('Lease revoked');
@@ -90,55 +98,63 @@ try {
 
     // 2. Draft storage and Zero-Trust credential protection
     const dirtyDoc = { id: 'doc-edit', path: 'pipeline.etlsql', content: 'SELECT * FROM source;', isDirty: true, version: 5 };
-    assert.equal(isDraftStoragePermitted(dirtyDoc.content), true);
-    assert.equal(lifecycle.saveDraft(dirtyDoc), true);
+    assert.equal(draftMayBeKept(dirtyDoc.content), true);
+    assert.equal(await lifecycle.saveDraft(dirtyDoc), 'kept');
+    assert.equal(mockStorage.size, 0, 'new drafts must remain on the host');
 
     // When document buffer is reloaded without the draft changes (e.g. server content):
     const reloadedDoc = { id: 'doc-edit', path: 'pipeline.etlsql', content: '', isDirty: false };
-    const draft = lifecycle.getRecoverableDraft(reloadedDoc);
+    const draft = await lifecycle.getRecoverableDraft(reloadedDoc);
     assert.ok(draft);
     assert.equal(draft.content, 'SELECT * FROM source;');
-    assert.equal(draft.version, 5);
+    assert.equal(draft.baseVersion, 5);
 
     // When recovered content matches current document content, returns null and cleans storage:
     const appliedDoc = { id: 'doc-edit', path: 'pipeline.etlsql', content: 'SELECT * FROM source;', isDirty: true };
-    const recovered = lifecycle.getRecoverableDraft(appliedDoc);
+    const recovered = await lifecycle.getRecoverableDraft(appliedDoc);
     assert.equal(recovered, null);
-    assert.equal(lifecycle.getRecoverableDraft(reloadedDoc), null);
+    assert.equal(await lifecycle.getRecoverableDraft(reloadedDoc), null);
 
     // Plaintext secrets MUST NOT be persisted to localStorage
     const secretDoc = { id: 'secret-doc', path: 'secret.etlsql', content: "CREATE CONNECTION x TYPE mssql (PASSWORD = 'mySecret123');", isDirty: true };
-    assert.equal(isDraftStoragePermitted(secretDoc.content), false);
-    assert.equal(lifecycle.saveDraft(secretDoc), false);
-    assert.equal(lifecycle.getRecoverableDraft({ ...secretDoc, content: '' }), null);
+    assert.equal(draftMayBeKept(secretDoc.content), false);
+    assert.equal(await lifecycle.saveDraft(secretDoc), 'refused');
+    assert.equal(await lifecycle.getRecoverableDraft({ ...secretDoc, content: '' }), null);
 
-    // Strict / ZeroTrust deployment modes MUST NOT persist drafts
-    assert.equal(isDraftStoragePermitted('SELECT 1;', { deploymentMode: 'Strict' }), false);
-    assert.equal(isDraftStoragePermitted('SELECT 1;', { deploymentMode: 'ZeroTrust' }), false);
+    // The host owns deployment policy and can refuse draft persistence.
+    hostKeepsDrafts = false;
+    assert.equal(await lifecycle.saveDraft(dirtyDoc), 'refused');
+    assert.equal(hostDrafts.size, 0);
+    hostKeepsDrafts = true;
+
+    assert.equal(await lifecycle.saveDraft(dirtyDoc), 'kept');
 
     // Draft removal
     lifecycle.removeDraft(dirtyDoc);
-    assert.equal(lifecycle.getRecoverableDraft(reloadedDoc), null);
+    assert.equal(await lifecycle.getRecoverableDraft(reloadedDoc), null);
 
     // 3. Online/offline listeners
     listeners.get('offline')();
-    assert.ok(notices.some(n => n[1]?.title === 'Offline Mode'));
+    assert.ok(notices.some(n => n[1]?.title === 'Offline'));
 
-    const reacquireCallsBefore = reacquireCallCount;
     listeners.get('online')();
     assert.ok(notices.some(n => n[1]?.title === 'Back Online'));
+    // Wait for the online handler's asynchronous reacquisition before releasing leases.
+    await lifecycle.reacquireAll();
+    assert.equal(unopened.lease.acquired, true);
 
     // 4. pagehide saves dirty drafts
     lost.isDirty = true;
     lost.content = 'SELECT 999;';
     listeners.get('pagehide')();
-    const pagehideDraft = lifecycle.getRecoverableDraft({ reportId: 102, content: '' });
+    const pagehideDraft = await lifecycle.getRecoverableDraft({ reportId: 102, content: '' });
     assert.ok(pagehideDraft);
     assert.equal(pagehideDraft.content, 'SELECT 999;');
 
     // 5. Cleanup and dispose
     lifecycle.dispose();
-    assert.deepEqual(released, [{ document: saved, keepalive: true }, { document: lost, keepalive: true }, { document: saved, keepalive: false }, { document: lost, keepalive: false }]);
+    assert.deepEqual(released, documents.map(document => ({ document, keepalive: true }))
+        .concat(documents.map(document => ({ document, keepalive: false }))));
     assert.equal(cleared, 1);
     assert.equal(listeners.size, 0);
     for (const context of contexts.values()) {

@@ -58,7 +58,12 @@ public sealed class ReportScriptSaveService(
         if (!OptimisticConcurrency.Prepare(db, report, expectedVersion.Value))
             return new ReportScriptSaveResult(ReportScriptSaveStatus.Conflict, Current: report);
 
-        var scriptKey = PortalPathGuard.ToScriptKey(portalConfig, report.ScriptPath);
+        if (portalConfig.SharedTenancy.Enabled && catalogScope is null)
+            throw new InvalidOperationException("Shared Studio saves require a tenant-scoped catalog.");
+        // COMPAT_BREAK: 0.20.0 — scoped storage expects a key relative to the verified tenant root.
+        var scriptKey = catalogScope is null
+            ? PortalPathGuard.ToScriptKey(portalConfig, report.ScriptPath)
+            : PortalPathGuard.ToScriptKey(portalConfig, catalogScope.TenantId, report.ScriptPath);
         if (scriptKey is null)
             return new ReportScriptSaveResult(ReportScriptSaveStatus.Forbidden);
 

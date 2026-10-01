@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Context;
 using Serilog.Events;
+using Serilog.Parsing;
 
 namespace ETL_SQL.Common;
 /// <summary>
@@ -16,6 +17,9 @@ namespace ETL_SQL.Common;
 /// </summary>
 public class LoggerService : ILogger, ILoggerService, IDisposable
 {
+    private static readonly MessageTemplateParser TemplateParser = new();
+    private static readonly Serilog.Core.Logger TemplateBinder = new LoggerConfiguration().CreateLogger();
+    private static readonly Serilog.Formatting.Display.MessageTemplateTextFormatter ConsoleFormatter = new("{Message:l}");
     private Serilog.Core.Logger? _appLogger;
     private Serilog.Core.Logger? _scriptLogger;
     private Serilog.Core.Logger? _testLogger;
@@ -106,13 +110,28 @@ public class LoggerService : ILogger, ILoggerService, IDisposable
         // 1. Serilog structured write — named properties preserved in file/Seq sinks
         var safeTemplate = SecretRedactor.Redact(template) ?? string.Empty;
         var safeArgs = args.Select(RedactLogArgument).ToArray();
+        // COMPAT_BREAK: 0.20.0 — the property name protects bare secret values as well as objects.
+        var argumentIndex = 0;
+        foreach (var property in TemplateParser.Parse(safeTemplate).Tokens.OfType<PropertyToken>())
+        {
+            var index = property.TryGetPositionalValue(out var position) ? position : argumentIndex;
+            if (index < safeArgs.Length && SecretRedactor.IsSensitiveKey(property.PropertyName))
+                safeArgs[index] = SecretRedactor.Mask;
+            argumentIndex++;
+        }
         var safeException = SecretRedactor.RedactException(ex);
         _appLogger?.Write(serilogLevel, safeException, safeTemplate, safeArgs);
         _scriptLogger?.Write(serilogLevel, safeException, safeTemplate, safeArgs);
         _testLogger?.Write(serilogLevel, safeException, safeTemplate, safeArgs);
 
         // 3. Console — format template and prefix SessionId when set
-        var consoleMessage = ILogger.FormatArgs(safeTemplate, safeArgs);
+        var consoleMessage = safeTemplate;
+        if (TemplateBinder.BindMessageTemplate(safeTemplate, safeArgs, out var parsedTemplate, out var properties))
+        {
+            using var writer = new StringWriter();
+            ConsoleFormatter.Format(new LogEvent(DateTimeOffset.Now, serilogLevel, null, parsedTemplate, properties), writer);
+            consoleMessage = writer.ToString();
+        }
         if (_sessionId.Value != null) consoleMessage = $"[{_sessionId.Value}] {consoleMessage}";
         if (safeException != null) consoleMessage += $"{Environment.NewLine}Exception: {safeException.Message}";
 

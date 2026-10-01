@@ -289,7 +289,7 @@ public class ExternalJoinEngine
                             var columnIndex = batch.Schema.GetOrdinal(rightKeys[keyIndex]);
                             keyValues[keyIndex] = RowPacker.ReadBatchValue(batch, columnIndex, rowIndex);
                         }
-                        var key = new CompoundKey(keyValues);
+                        var key = CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, keyValues);
                         var blob = packer.Pack(batch, rowIndex);
                         AddBuildRow(table, key, blob, guard);
                         ColumnarBuildRows++;
@@ -546,10 +546,10 @@ public class ExternalJoinEngine
         var values = new object?[keys.Count];
         for (int i = 0; i < keys.Count; i++)
             values[i] = SpillSerializationHelper.UnwrapValue(row[keys[i]]);
-        return new CompoundKey(values);
+        return CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, values);
     }
 
-    private static CompoundKey GetHashKey(ColumnBatch batch, int rowIndex, List<string> keys)
+    private CompoundKey GetHashKey(ColumnBatch batch, int rowIndex, List<string> keys)
     {
         var values = new object?[keys.Count];
         for (var i = 0; i < keys.Count; i++)
@@ -557,7 +557,7 @@ public class ExternalJoinEngine
             var column = batch.Schema.GetOrdinal(keys[i]);
             values[i] = RowPacker.ReadBatchValue(batch, column, rowIndex);
         }
-        return new CompoundKey(values);
+        return CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, values);
     }
 
     private CompoundKey GetPartitionHashKey(Row row, List<string> keys, int depth)
@@ -565,7 +565,7 @@ public class ExternalJoinEngine
         var values = new object?[keys.Count];
         for (int i = 0; i < keys.Count; i++)
             values[i] = SpillSerializationHelper.UnwrapValue(row[keys[i]]);
-        return new CompoundKey(depth, values);
+        return CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, values, depth);
     }
 
     private Row CombineRows(Row? left, Row right)

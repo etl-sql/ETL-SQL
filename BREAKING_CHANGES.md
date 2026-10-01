@@ -17,6 +17,69 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.20.0 — Connector: Excel extraction streams the selected sheet
+- **What changed**: Excel extraction keeps one output batch in memory instead of materializing every worksheet before returning data. Cancellation is checked between reader calls and remains a cancellation exception.
+- **Who is affected**: Large Excel reads and workbooks with unreadable sheets outside the selected sheet.
+- **Migration**: No syntax change. Only the selected sheet is read; validate other sheets separately when needed.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Runtime: Provider exceptions and sensitive log properties hide raw secrets
+- **What changed**: Connector exception wrappers discard raw provider inner exceptions. Engine log templates mask arguments with sensitive property names, even when the value has no recognizable secret syntax.
+- **Who is affected**: Diagnostics inspecting provider InnerException and logging passwords or tokens as structured properties.
+- **Migration**: Diagnose failures from the sanitized connector message. Sensitive property values are intentionally unavailable in every log sink and UI callback.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Connector: REST request credentials and deadlines cover the full request
+- **What changed**: Redirects and pagination preserve credentials only on the original scheme, host, and port. The shared HTTP client no longer stores server cookies automatically. Cross-origin redirects or continuations cannot replay a request body. TIMEOUT_SECONDS covers streaming response bodies, and caller cancellation remains a cancellation exception.
+- **Who is affected**: API connections following cross-origin redirects/continuations, slow streaming responses, or cancelled requests.
+- **Migration**: Configure separate connections for endpoints requiring different credential origins and explicit Cookie headers when needed. Complete each response within TIMEOUT_SECONDS or raise the configured deadline.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Runtime: Studio save completion preserves later edits
+- **What changed**: A save only clears dirty state and removes the recovery draft if the current document still matches the submitted content. Saves for one document are serialized, and shared Portal saves use tenant-relative artifact keys.
+- **Who is affected**: Authors typing while a save is pending, submitting multiple saves, or saving catalog documents in a shared Portal deployment.
+- **Migration**: No syntax change. Later edits stay dirty until their own save succeeds.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Connector: SharePoint list extraction returns complete, nonduplicated rows
+- **What changed**: SharePoint reads all OData continuation pages and unwraps verbose d.results envelopes. SharePoint and Active Directory start an empty batch after yielding instead of copying previously returned rows. Unsupported SharePoint envelopes and unsafe or repeated continuations fail clearly.
+- **Who is affected**: Paginated or verbose SharePoint list queries and SharePoint/Active Directory reads reaching a batch boundary.
+- **Migration**: No syntax change. Remove any downstream workaround for repeated rows or missing pages. Continuations must remain on the configured SharePoint origin.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Semantic: Join keys honor the active case comparison
+- **What changed**: Hash join keys use case-insensitive equality when CASE_SENSITIVE is OFF, including external partitioning and columnar build/probe paths. Merge ordering uses the same ordinal comparison as join equality. Matches no longer disappear when a join switches from LOOP to HASH or MERGE.
+- **Who is affected**: Scripts joining string keys that differ only in case with CASE_SENSITIVE OFF.
+- **Migration**: Use CASE_SENSITIVE ON when case must distinguish keys. No syntax change is needed to receive the corrected matches.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Runtime: Scheduler evidence failures preserve execution outcomes
+- **What changed**: A failed history, metrics, or resume-metadata write is logged separately and cannot turn a successful execution into a retry or erase a non-retryable failure.
+- **Who is affected**: Scheduled jobs whose execution completes while history or metrics storage is unavailable.
+- **Migration**: No syntax change. Repair the evidence store and inspect persistence errors; the scheduler no longer replays completed work to recover logging.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Runtime: Remote UPDATE binds literals and variables correctly
+- **What changed**: UPDATE uses the provider's canonical parameter names and merges each expression's parameters without renaming an already-renamed token. Remote updates containing literals or variables now execute with their intended values.
+- **Who is affected**: Scripts that UPDATE a database connection with parameterized assignments or predicates.
+- **Migration**: No syntax change. Values are bound instead of failing with missing parameters.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Runtime: Transaction rollback covers nested and first-statement database mutations
+- **What changed**: An inner COMMIT keeps database writes pending until the outermost COMMIT. UPDATE and DELETE enlist their target before execution, so an outer ROLLBACK also undoes mutations executed as the first operation on that connection.
+- **Who is affected**: Scripts using nested transactions or starting a transaction with UPDATE or DELETE on a database connection.
+- **Migration**: No syntax change. Use the outermost COMMIT to persist writes; writes that previously escaped an outer ROLLBACK now roll back.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
 ### v0.20.0 — TypeSystem: A LIST given as text holds its items
 - **What changed**: Text assigned to a `LIST` (a declaration's value, `--var`, or a value a report reader posts) is now split into items: a JSON array, otherwise comma-separated. Previously it stayed one text value, so `IN @list` compared the whole text and `FOREACH` ran once. A MULTISELECT bound to a LIST therefore matched no rows as soon as the reader picked anything.
 - **Who is affected**: Scripts that assign text to a `LIST` and rely on it staying whole, such as `DECLARE @L LIST = 'a,b'` compared with `= @L`.

@@ -11,7 +11,6 @@ namespace ETL_SQL.Connectors.Shared
     public static partial class ConnectorExceptionWrapper
     {
         // Patterns that may reveal hostnames, credentials, or file paths in provider exception messages.
-        // The full provider exception is preserved as the inner exception for Debug-level logging.
         [GeneratedRegex(
             @"(?:Server|Data\s+Source|Host|Password|Pwd|User\s+Id|Uid|Username|Database|Initial\s+Catalog|Dsn)\s*=\s*[^\s;,""'`]+" // connection string key=value
             + @"|'[^']{1,64}'@'[^']{1,128}'"           // MySQL 'user'@'host'
@@ -28,8 +27,8 @@ namespace ETL_SQL.Connectors.Shared
         public static ExecutionException Wrap(string connectorName, Exception ex)
         {
             if (ex is ExecutionException executionException) return executionException;
-            // Sanitized message surfaces to users/logs; full provider detail is in the inner exception.
-            return new ExecutionException($"{connectorName} connector error: {SanitizeMessage(ex.Message)}", ex);
+            // COMPAT_BREAK: 0.20.0 — raw provider details must not escape through InnerException/ToString.
+            return new ExecutionException($"{connectorName} connector error: {SanitizeMessage(ex.Message)}");
         }
 
         /// <summary>

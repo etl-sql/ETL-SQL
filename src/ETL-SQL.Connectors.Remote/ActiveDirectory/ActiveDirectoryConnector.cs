@@ -339,7 +339,8 @@ namespace ETL_SQL.Connectors
                     if (table.Rows.Count >= batchSize)
                     {
                         yield return table;
-                        table = table.Clone();
+                        // COMPAT_BREAK: 0.20.0 — returned rows must not appear in later batches.
+                        table = new DataTable { Schema = table.Schema };
                     }
                 }
 

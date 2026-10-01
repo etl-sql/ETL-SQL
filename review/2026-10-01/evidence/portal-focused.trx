@@ -1,0 +1,176 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="43f65221-c0c5-4887-bf4b-ae215344f87e" name="chuck@CHUCKPC 2026-10-01 06:07:24" runUser="ChuckPC\CodexSandboxOffline" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-10-01T06:07:24.8520157-05:00" queuing="2026-10-01T06:07:24.8520160-05:00" start="2026-10-01T06:07:19.0106488-05:00" finish="2026-10-01T06:07:47.5412370-05:00" />
+  <TestSettings name="default" id="7fcf6d46-ba9e-40e5-b20a-34e9001ed243">
+    <Deployment runDeploymentRoot="chuck_CHUCKPC_2026-10-01_06_07_24" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="656026da-3d77-4ad9-8f82-7a55f0323f5b" testId="9a8740e7-e435-28d8-2fdd-d57abba3ab93" testName="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests.ADraftIsRefusedForAReportTheCallerMayNotAuthor" computerName="CHUCKPC" duration="00:00:01.2717475" startTime="2026-10-01T06:07:43.8241132-05:00" endTime="2026-10-01T06:07:45.0962202-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="656026da-3d77-4ad9-8f82-7a55f0323f5b" />
+    <UnitTestResult executionId="d274ca4f-95e6-4c43-8b65-6e34ba56bbe7" testId="4dad368c-2158-f99f-b90b-c53e63543cca" testName="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests.RefreshTokens_AreHashedAtRestAndRotateOnUse" computerName="CHUCKPC" duration="00:00:04.2710799" startTime="2026-10-01T06:07:20.5527589-05:00" endTime="2026-10-01T06:07:24.8315629-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d274ca4f-95e6-4c43-8b65-6e34ba56bbe7" />
+    <UnitTestResult executionId="71116d67-d79b-4765-b7be-32ae724c4db9" testId="1885c71b-0d61-564d-8c02-107d354bed4f" testName="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests.AnUntouchedDraftExpires" computerName="CHUCKPC" duration="00:00:01.0939014" startTime="2026-10-01T06:07:45.0963841-05:00" endTime="2026-10-01T06:07:46.1905813-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="71116d67-d79b-4765-b7be-32ae724c4db9" />
+    <UnitTestResult executionId="992e46c3-9772-4644-8b7b-e645b1abbe1d" testId="f214d45a-7b42-3642-5fcf-623290755ca9" testName="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests.Logout_InvalidatesAllIssuedTokensForCurrentUser" computerName="CHUCKPC" duration="00:00:01.4521170" startTime="2026-10-01T06:07:26.3326893-05:00" endTime="2026-10-01T06:07:27.7851063-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="992e46c3-9772-4644-8b7b-e645b1abbe1d" />
+    <UnitTestResult executionId="d1ed8c41-0b08-4d1d-befe-354b78c91428" testId="4245919d-e1d7-61ee-3c5d-d4bb85c9d980" testName="ETL_SQL.Portal.Tests.PortalTenantArtifactStorageTests.SharedStorageFailsClosedWithoutVerifiedRequestContext" computerName="CHUCKPC" duration="00:00:00.0020921" startTime="2026-10-01T06:07:40.8357519-05:00" endTime="2026-10-01T06:07:40.8379154-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d1ed8c41-0b08-4d1d-befe-354b78c91428" />
+    <UnitTestResult executionId="8c32b2b7-61c8-4035-a954-071ae15fe67a" testId="adf2a280-587b-0e89-a820-887ff8111dce" testName="ETL_SQL.Portal.Tests.SecurityHeadersTests.ApiResponse_HasRestrictiveSecurityHeaders" computerName="CHUCKPC" duration="00:00:00.0306300" startTime="2026-10-01T06:07:41.3820295-05:00" endTime="2026-10-01T06:07:41.4128745-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8c32b2b7-61c8-4035-a954-071ae15fe67a" />
+    <UnitTestResult executionId="22dfc5ce-09e7-4bb2-9f7a-c937f848b642" testId="3535073e-0d56-0876-7c61-3f3e814956e9" testName="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests.ADraftIsKeptForItsAuthorAndIsInvisibleToEveryoneElse" computerName="CHUCKPC" duration="00:00:01.2476446" startTime="2026-10-01T06:07:42.5760171-05:00" endTime="2026-10-01T06:07:43.8239390-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="22dfc5ce-09e7-4bb2-9f7a-c937f848b642" />
+    <UnitTestResult executionId="cae8a91d-ed31-4000-9ff2-46cef4374d1c" testId="9f638ad7-7361-87d6-cdea-605fa6a0a76a" testName="ETL_SQL.Portal.Tests.PortalTenantArtifactStorageTests.SharedRequestsUseVerifiedTenantAndCallerPathCannotSelectAnotherPrefix" computerName="CHUCKPC" duration="00:00:00.0104889" startTime="2026-10-01T06:07:40.8148724-05:00" endTime="2026-10-01T06:07:40.8255610-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="cae8a91d-ed31-4000-9ff2-46cef4374d1c" />
+    <UnitTestResult executionId="6f0e2208-9adb-4dcf-842a-e71e050ea280" testId="8c3505b8-8796-62c9-115a-9ed7a52914b5" testName="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests.WithRecoveryOff_NoDraftIsKeptAndTheSessionSaysSo" computerName="CHUCKPC" duration="00:00:01.1575745" startTime="2026-10-01T06:07:41.4179862-05:00" endTime="2026-10-01T06:07:42.5758499-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="6f0e2208-9adb-4dcf-842a-e71e050ea280" />
+    <UnitTestResult executionId="2061a23b-e94a-4a22-b5f0-4908d783acb9" testId="ffb290b2-e6b2-621f-4f44-1a3178f0a247" testName="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests.ADraftHoldingAPlaintextCredentialIsNotKept" computerName="CHUCKPC" duration="00:00:01.2127003" startTime="2026-10-01T06:07:46.1907560-05:00" endTime="2026-10-01T06:07:47.4038531-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="2061a23b-e94a-4a22-b5f0-4908d783acb9" />
+    <UnitTestResult executionId="85de98bc-4a51-4efc-bd78-5881d78566af" testId="c27a165a-01c5-e9b9-3e8d-5f1c17b6ae81" testName="ETL_SQL.Portal.Tests.SecurityHeadersTests.HtmlResponse_UsesCspNonceOnEveryScriptAndStyle" computerName="CHUCKPC" duration="00:00:00.5403070" startTime="2026-10-01T06:07:40.8411524-05:00" endTime="2026-10-01T06:07:41.3818516-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="85de98bc-4a51-4efc-bd78-5881d78566af" />
+    <UnitTestResult executionId="23c532d8-c9a8-4bd3-8d99-c86b899a3028" testId="9a1231fa-2b8a-bcc3-12d8-ffab1d739ae1" testName="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests.Learner_WithStudioAccessAndScriptPreview_CanRunPreviewWithoutAdminOrPublisherRole" computerName="CHUCKPC" duration="00:00:01.3715025" startTime="2026-10-01T06:07:39.4425083-05:00" endTime="2026-10-01T06:07:40.8143509-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="23c532d8-c9a8-4bd3-8d99-c86b899a3028" />
+    <UnitTestResult executionId="00c8bb48-45b9-4daa-bb7f-5b49e06e3f1e" testId="b22cc8e5-42a9-929d-3a28-e85233822894" testName="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests.UnknownCapabilityName_IsRejectedRatherThanStoredAndIgnored" computerName="CHUCKPC" duration="00:00:00.8321684" startTime="2026-10-01T06:07:34.2336135-05:00" endTime="2026-10-01T06:07:35.0661384-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="00c8bb48-45b9-4daa-bb7f-5b49e06e3f1e" />
+    <UnitTestResult executionId="aecfb938-6c0b-4036-a169-3342dfb57537" testId="1630353e-2592-e7fd-1ed4-818fb8a38bd1" testName="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests.GroupAndAclChanges_InvalidateExistingSession" computerName="CHUCKPC" duration="00:00:01.2384622" startTime="2026-10-01T06:07:31.7688698-05:00" endTime="2026-10-01T06:07:33.0076394-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="aecfb938-6c0b-4036-a169-3342dfb57537" />
+    <UnitTestResult executionId="eef83b00-ac70-4e71-899e-a2811024cc16" testId="7c23ca4e-60de-2242-5dba-1c9c9de9479e" testName="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests.PasswordChange_InvalidatesPreviousAccessAndRefreshTokens" computerName="CHUCKPC" duration="00:00:01.4894289" startTime="2026-10-01T06:07:24.8422105-05:00" endTime="2026-10-01T06:07:26.3320818-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="eef83b00-ac70-4e71-899e-a2811024cc16" />
+    <UnitTestResult executionId="8d09356b-4a58-4b72-8409-0ae69f0911c4" testId="6b725991-80d0-f955-7b25-d1273207417a" testName="ETL_SQL.Portal.Tests.SecurityHeadersTests.HtmlResponses_UseDifferentNonces" computerName="CHUCKPC" duration="00:00:00.0022768" startTime="2026-10-01T06:07:41.4130368-05:00" endTime="2026-10-01T06:07:41.4154982-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8d09356b-4a58-4b72-8409-0ae69f0911c4" />
+    <UnitTestResult executionId="f2808116-654d-403e-a63b-e0e29e9e001c" testId="9119d99c-eaab-e737-7db4-db5f507f330b" testName="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests.User_WithoutReportPublish_IsRejectedByCreateReportEndpoint" computerName="CHUCKPC" duration="00:00:01.2384715" startTime="2026-10-01T06:07:35.0663198-05:00" endTime="2026-10-01T06:07:36.3051297-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f2808116-654d-403e-a63b-e0e29e9e001c" />
+    <UnitTestResult executionId="8dd41361-b264-489c-bf66-393ebe99de98" testId="facc61f5-b297-202d-c835-a7b90074e781" testName="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests.RoleDemotion_InvalidatesIssuedAccessAndRefreshTokens" computerName="CHUCKPC" duration="00:00:01.5964650" startTime="2026-10-01T06:07:30.1716134-05:00" endTime="2026-10-01T06:07:31.7684106-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8dd41361-b264-489c-bf66-393ebe99de98" />
+    <UnitTestResult executionId="c0de0119-ed6c-454e-80e7-1458661ff75a" testId="904aedec-c14d-0789-8e11-74fc9d075f22" testName="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests.RefreshToken_ConcurrentReuse_MintsAtMostOneSuccessor" computerName="CHUCKPC" duration="00:00:02.3854558" startTime="2026-10-01T06:07:27.7853225-05:00" endTime="2026-10-01T06:07:30.1711030-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="c0de0119-ed6c-454e-80e7-1458661ff75a" />
+    <UnitTestResult executionId="90d638ab-e182-48ef-a4e8-ec914c673762" testId="bb5a30f7-3cb1-1ec1-8cfc-52f5079164c4" testName="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests.CustomRoleUser_WithStudioAccessAndScriptRead_CanAccessStudioReportsAndScriptContent" computerName="CHUCKPC" duration="00:00:01.4251297" startTime="2026-10-01T06:07:38.0167909-05:00" endTime="2026-10-01T06:07:39.4422800-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="90d638ab-e182-48ef-a4e8-ec914c673762" />
+    <UnitTestResult executionId="71c2ecd0-131d-4f1f-9b87-13a680aad162" testId="3abd6dfd-1b0f-f2f4-ed4a-b5a687490e06" testName="ETL_SQL.Portal.Tests.SecurityHeadersTests.ExternalFrameAncestor_IsExactAndOmitsLegacyFrameHeader" computerName="CHUCKPC" duration="00:00:00.0006629" startTime="2026-10-01T06:07:41.4155930-05:00" endTime="2026-10-01T06:07:41.4162943-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="71c2ecd0-131d-4f1f-9b87-13a680aad162" />
+    <UnitTestResult executionId="f96c0c03-4a89-4b59-87a6-93631cfb2acd" testId="2e75d17d-c6ba-4ce7-475f-5c32e0f6407f" testName="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests.ServiceAccountCapabilities_AreCappedByItsOwners" computerName="CHUCKPC" duration="00:00:01.2218939" startTime="2026-10-01T06:07:33.0111123-05:00" endTime="2026-10-01T06:07:34.2334048-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f96c0c03-4a89-4b59-87a6-93631cfb2acd" />
+    <UnitTestResult executionId="fff3c5d1-fb42-41c8-b4c2-c366ad246b17" testId="6178a700-1a96-b8c9-4429-d7b424f8c6e9" testName="ETL_SQL.Portal.Tests.PortalTenantArtifactStorageTests.SharedRunAuthorityPartitionsRootsScratchAndCheckpointsByServerTenant" computerName="CHUCKPC" duration="00:00:00.0097331" startTime="2026-10-01T06:07:40.8257481-05:00" endTime="2026-10-01T06:07:40.8355706-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="fff3c5d1-fb42-41c8-b4c2-c366ad246b17" />
+    <UnitTestResult executionId="56433c01-7bc8-41e8-9bdd-7b51e076f695" testId="c8e2652a-5abf-d075-e189-31fd5cdacd09" testName="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests.GroupGrant_EnablesAGatedRoute_AndRevokingItTakesTheRouteAway" computerName="CHUCKPC" duration="00:00:01.7109398" startTime="2026-10-01T06:07:36.3053232-05:00" endTime="2026-10-01T06:07:38.0165932-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="56433c01-7bc8-41e8-9bdd-7b51e076f695" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests.ADraftIsKeptForItsAuthorAndIsInvisibleToEveryoneElse" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="3535073e-0d56-0876-7c61-3f3e814956e9">
+      <Execution id="22dfc5ce-09e7-4bb2-9f7a-c937f848b642" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests" name="ADraftIsKeptForItsAuthorAndIsInvisibleToEveryoneElse" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests.PasswordChange_InvalidatesPreviousAccessAndRefreshTokens" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="7c23ca4e-60de-2242-5dba-1c9c9de9479e">
+      <Execution id="eef83b00-ac70-4e71-899e-a2811024cc16" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests" name="PasswordChange_InvalidatesPreviousAccessAndRefreshTokens" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests.RefreshTokens_AreHashedAtRestAndRotateOnUse" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="4dad368c-2158-f99f-b90b-c53e63543cca">
+      <Execution id="d274ca4f-95e6-4c43-8b65-6e34ba56bbe7" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests" name="RefreshTokens_AreHashedAtRestAndRotateOnUse" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests.Learner_WithStudioAccessAndScriptPreview_CanRunPreviewWithoutAdminOrPublisherRole" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="9a1231fa-2b8a-bcc3-12d8-ffab1d739ae1">
+      <Execution id="23c532d8-c9a8-4bd3-8d99-c86b899a3028" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests" name="Learner_WithStudioAccessAndScriptPreview_CanRunPreviewWithoutAdminOrPublisherRole" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.SecurityHeadersTests.HtmlResponses_UseDifferentNonces" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="6b725991-80d0-f955-7b25-d1273207417a">
+      <Execution id="8d09356b-4a58-4b72-8409-0ae69f0911c4" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.SecurityHeadersTests" name="HtmlResponses_UseDifferentNonces" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests.CustomRoleUser_WithStudioAccessAndScriptRead_CanAccessStudioReportsAndScriptContent" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="bb5a30f7-3cb1-1ec1-8cfc-52f5079164c4">
+      <Execution id="90d638ab-e182-48ef-a4e8-ec914c673762" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests" name="CustomRoleUser_WithStudioAccessAndScriptRead_CanAccessStudioReportsAndScriptContent" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests.GroupGrant_EnablesAGatedRoute_AndRevokingItTakesTheRouteAway" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="c8e2652a-5abf-d075-e189-31fd5cdacd09">
+      <Execution id="56433c01-7bc8-41e8-9bdd-7b51e076f695" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests" name="GroupGrant_EnablesAGatedRoute_AndRevokingItTakesTheRouteAway" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.SecurityHeadersTests.ApiResponse_HasRestrictiveSecurityHeaders" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="adf2a280-587b-0e89-a820-887ff8111dce">
+      <Execution id="8c32b2b7-61c8-4035-a954-071ae15fe67a" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.SecurityHeadersTests" name="ApiResponse_HasRestrictiveSecurityHeaders" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.PortalTenantArtifactStorageTests.SharedStorageFailsClosedWithoutVerifiedRequestContext" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="4245919d-e1d7-61ee-3c5d-d4bb85c9d980">
+      <Execution id="d1ed8c41-0b08-4d1d-befe-354b78c91428" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.PortalTenantArtifactStorageTests" name="SharedStorageFailsClosedWithoutVerifiedRequestContext" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests.User_WithoutReportPublish_IsRejectedByCreateReportEndpoint" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="9119d99c-eaab-e737-7db4-db5f507f330b">
+      <Execution id="f2808116-654d-403e-a63b-e0e29e9e001c" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests" name="User_WithoutReportPublish_IsRejectedByCreateReportEndpoint" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.PortalTenantArtifactStorageTests.SharedRequestsUseVerifiedTenantAndCallerPathCannotSelectAnotherPrefix" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="9f638ad7-7361-87d6-cdea-605fa6a0a76a">
+      <Execution id="cae8a91d-ed31-4000-9ff2-46cef4374d1c" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.PortalTenantArtifactStorageTests" name="SharedRequestsUseVerifiedTenantAndCallerPathCannotSelectAnotherPrefix" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests.Logout_InvalidatesAllIssuedTokensForCurrentUser" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="f214d45a-7b42-3642-5fcf-623290755ca9">
+      <Execution id="992e46c3-9772-4644-8b7b-e645b1abbe1d" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests" name="Logout_InvalidatesAllIssuedTokensForCurrentUser" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests.RefreshToken_ConcurrentReuse_MintsAtMostOneSuccessor" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="904aedec-c14d-0789-8e11-74fc9d075f22">
+      <Execution id="c0de0119-ed6c-454e-80e7-1458661ff75a" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests" name="RefreshToken_ConcurrentReuse_MintsAtMostOneSuccessor" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests.AnUntouchedDraftExpires" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="1885c71b-0d61-564d-8c02-107d354bed4f">
+      <Execution id="71116d67-d79b-4765-b7be-32ae724c4db9" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests" name="AnUntouchedDraftExpires" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests.WithRecoveryOff_NoDraftIsKeptAndTheSessionSaysSo" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="8c3505b8-8796-62c9-115a-9ed7a52914b5">
+      <Execution id="6f0e2208-9adb-4dcf-842a-e71e050ea280" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests" name="WithRecoveryOff_NoDraftIsKeptAndTheSessionSaysSo" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests.ADraftHoldingAPlaintextCredentialIsNotKept" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="ffb290b2-e6b2-621f-4f44-1a3178f0a247">
+      <Execution id="2061a23b-e94a-4a22-b5f0-4908d783acb9" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests" name="ADraftHoldingAPlaintextCredentialIsNotKept" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.SecurityHeadersTests.HtmlResponse_UsesCspNonceOnEveryScriptAndStyle" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="c27a165a-01c5-e9b9-3e8d-5f1c17b6ae81">
+      <Execution id="85de98bc-4a51-4efc-bd78-5881d78566af" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.SecurityHeadersTests" name="HtmlResponse_UsesCspNonceOnEveryScriptAndStyle" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests.ServiceAccountCapabilities_AreCappedByItsOwners" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="2e75d17d-c6ba-4ce7-475f-5c32e0f6407f">
+      <Execution id="f96c0c03-4a89-4b59-87a6-93631cfb2acd" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests" name="ServiceAccountCapabilities_AreCappedByItsOwners" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests.UnknownCapabilityName_IsRejectedRatherThanStoredAndIgnored" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="b22cc8e5-42a9-929d-3a28-e85233822894">
+      <Execution id="00c8bb48-45b9-4daa-bb7f-5b49e06e3f1e" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.StudioCapabilityAssignmentTests" name="UnknownCapabilityName_IsRejectedRatherThanStoredAndIgnored" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests.ADraftIsRefusedForAReportTheCallerMayNotAuthor" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="9a8740e7-e435-28d8-2fdd-d57abba3ab93">
+      <Execution id="656026da-3d77-4ad9-8f82-7a55f0323f5b" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.StudioRecoveryDraftTests" name="ADraftIsRefusedForAReportTheCallerMayNotAuthor" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests.GroupAndAclChanges_InvalidateExistingSession" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="1630353e-2592-e7fd-1ed4-818fb8a38bd1">
+      <Execution id="aecfb938-6c0b-4036-a169-3342dfb57537" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests" name="GroupAndAclChanges_InvalidateExistingSession" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.PortalTenantArtifactStorageTests.SharedRunAuthorityPartitionsRootsScratchAndCheckpointsByServerTenant" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="6178a700-1a96-b8c9-4429-d7b424f8c6e9">
+      <Execution id="fff3c5d1-fb42-41c8-b4c2-c366ad246b17" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.PortalTenantArtifactStorageTests" name="SharedRunAuthorityPartitionsRootsScratchAndCheckpointsByServerTenant" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests.RoleDemotion_InvalidatesIssuedAccessAndRefreshTokens" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="facc61f5-b297-202d-c835-a7b90074e781">
+      <Execution id="8dd41361-b264-489c-bf66-393ebe99de98" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.AuthSessionInvalidationTests" name="RoleDemotion_InvalidatesIssuedAccessAndRefreshTokens" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Portal.Tests.SecurityHeadersTests.ExternalFrameAncestor_IsExactAndOmitsLegacyFrameHeader" storage="c:\users\chuck\scratch\etl-sql\tests\etl-sql.portal.tests\bin\debug\net10.0\etl-sql.portal.tests.dll" id="3abd6dfd-1b0f-f2f4-ed4a-b5a687490e06">
+      <Execution id="71c2ecd0-131d-4f1f-9b87-13a680aad162" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Portal.Tests\bin\Debug\net10.0\ETL-SQL.Portal.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Portal.Tests.SecurityHeadersTests" name="ExternalFrameAncestor_IsExactAndOmitsLegacyFrameHeader" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="9a8740e7-e435-28d8-2fdd-d57abba3ab93" executionId="656026da-3d77-4ad9-8f82-7a55f0323f5b" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="4dad368c-2158-f99f-b90b-c53e63543cca" executionId="d274ca4f-95e6-4c43-8b65-6e34ba56bbe7" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1885c71b-0d61-564d-8c02-107d354bed4f" executionId="71116d67-d79b-4765-b7be-32ae724c4db9" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f214d45a-7b42-3642-5fcf-623290755ca9" executionId="992e46c3-9772-4644-8b7b-e645b1abbe1d" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="4245919d-e1d7-61ee-3c5d-d4bb85c9d980" executionId="d1ed8c41-0b08-4d1d-befe-354b78c91428" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="adf2a280-587b-0e89-a820-887ff8111dce" executionId="8c32b2b7-61c8-4035-a954-071ae15fe67a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3535073e-0d56-0876-7c61-3f3e814956e9" executionId="22dfc5ce-09e7-4bb2-9f7a-c937f848b642" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9f638ad7-7361-87d6-cdea-605fa6a0a76a" executionId="cae8a91d-ed31-4000-9ff2-46cef4374d1c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="8c3505b8-8796-62c9-115a-9ed7a52914b5" executionId="6f0e2208-9adb-4dcf-842a-e71e050ea280" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ffb290b2-e6b2-621f-4f44-1a3178f0a247" executionId="2061a23b-e94a-4a22-b5f0-4908d783acb9" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c27a165a-01c5-e9b9-3e8d-5f1c17b6ae81" executionId="85de98bc-4a51-4efc-bd78-5881d78566af" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9a1231fa-2b8a-bcc3-12d8-ffab1d739ae1" executionId="23c532d8-c9a8-4bd3-8d99-c86b899a3028" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b22cc8e5-42a9-929d-3a28-e85233822894" executionId="00c8bb48-45b9-4daa-bb7f-5b49e06e3f1e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1630353e-2592-e7fd-1ed4-818fb8a38bd1" executionId="aecfb938-6c0b-4036-a169-3342dfb57537" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="7c23ca4e-60de-2242-5dba-1c9c9de9479e" executionId="eef83b00-ac70-4e71-899e-a2811024cc16" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="6b725991-80d0-f955-7b25-d1273207417a" executionId="8d09356b-4a58-4b72-8409-0ae69f0911c4" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9119d99c-eaab-e737-7db4-db5f507f330b" executionId="f2808116-654d-403e-a63b-e0e29e9e001c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="facc61f5-b297-202d-c835-a7b90074e781" executionId="8dd41361-b264-489c-bf66-393ebe99de98" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="904aedec-c14d-0789-8e11-74fc9d075f22" executionId="c0de0119-ed6c-454e-80e7-1458661ff75a" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="bb5a30f7-3cb1-1ec1-8cfc-52f5079164c4" executionId="90d638ab-e182-48ef-a4e8-ec914c673762" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="3abd6dfd-1b0f-f2f4-ed4a-b5a687490e06" executionId="71c2ecd0-131d-4f1f-9b87-13a680aad162" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2e75d17d-c6ba-4ce7-475f-5c32e0f6407f" executionId="f96c0c03-4a89-4b59-87a6-93631cfb2acd" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="6178a700-1a96-b8c9-4429-d7b424f8c6e9" executionId="fff3c5d1-fb42-41c8-b4c2-c366ad246b17" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c8e2652a-5abf-d075-e189-31fd5cdacd09" executionId="56433c01-7bc8-41e8-9bdd-7b51e076f695" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="24" executed="24" passed="24" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.12)&#xD;
+[xUnit.net 00:00:00.82]   Discovering: ETL-SQL.Portal.Tests&#xD;
+[xUnit.net 00:00:00.97]   Discovered:  ETL-SQL.Portal.Tests&#xD;
+[xUnit.net 00:00:00.98]   Starting:    ETL-SQL.Portal.Tests&#xD;
+Registered temp table #a for portal-designer&#xD;
+[bfa2d94697234938a1854fb091534171] Starting execution session bfa2d94697234938a1854fb091534171&#xD;
+[7be1f275] Evaluator initialized.&#xD;
+[bfa2d94697234938a1854fb091534171] Execution completed in 39ms. Success: True&#xD;
+[xUnit.net 00:00:27.85]   Finished:    ETL-SQL.Portal.Tests&#xD;
+</StdOut>
+    </Output>
+  </ResultSummary>
+</TestRun>

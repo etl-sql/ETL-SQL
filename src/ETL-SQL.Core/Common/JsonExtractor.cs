@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -26,24 +27,26 @@ public static class JsonExtractor
     /// <summary>
     /// extracts data from a JSON stream based on a root path and flattens it into batches using streaming.
     /// </summary>
-    public static async IAsyncEnumerable<DataTable> ExtractBatchesAsync(Stream stream, string? rootPath, int batchSize = 10000, bool trimStrings = true)
+    public static async IAsyncEnumerable<DataTable> ExtractBatchesAsync(Stream stream, string? rootPath, int batchSize = 10000,
+        bool trimStrings = true, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // 1. Resolve the target element(s) via streaming if possible
-        var elements = StreamElementsInternal(stream, rootPath);
+        var elements = StreamElementsInternal(stream, rootPath, cancellationToken);
 
         // 2. Process elements into DataTables
-        await foreach (var batch in ProcessElementsAsync(elements, batchSize, trimStrings))
+        await foreach (var batch in ProcessElementsAsync(elements, batchSize, trimStrings, cancellationToken))
         {
             yield return batch;
         }
     }
 
-    private static async IAsyncEnumerable<JsonElement> StreamElementsInternal(Stream stream, string? rootPath)
+    private static async IAsyncEnumerable<JsonElement> StreamElementsInternal(Stream stream, string? rootPath,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(rootPath) || rootPath == "$")
         {
             // Root array or object streaming
-            await foreach (var element in JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(stream, DefaultOptions))
+            await foreach (var element in JsonSerializer.DeserializeAsyncEnumerable<JsonElement>(stream, DefaultOptions, cancellationToken))
             {
                 if (element.ValueKind == JsonValueKind.Array)
                 {
@@ -65,7 +68,7 @@ public static class JsonExtractor
 
         // We use a small buffer to find the target property start without loading everything.
         // If the structure is complex, we might still need to buffer the branch, but not the whole document.
-        using (var doc = await JsonDocument.ParseAsync(stream))
+        using (var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken))
         {
             JsonElement target = doc.RootElement;
             foreach (var part in pathParts)
@@ -86,13 +89,15 @@ public static class JsonExtractor
         }
     }
 
-    private static async IAsyncEnumerable<DataTable> ProcessElementsAsync(IAsyncEnumerable<JsonElement> elements, int batchSize, bool trimStrings)
+    private static async IAsyncEnumerable<DataTable> ProcessElementsAsync(IAsyncEnumerable<JsonElement> elements, int batchSize, bool trimStrings,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var currentBatch = new DataTable();
         var allColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        await foreach (var element in elements)
+        await foreach (var element in elements.WithCancellation(cancellationToken))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (element.ValueKind != JsonValueKind.Object) continue;
 
             var row = new Row();

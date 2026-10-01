@@ -1,0 +1,34 @@
+✖ editing while Save is pending must preserve the dirty flag and recovery draft (1.6002ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 78.3565
+
+✖ failing tests:
+
+test at review\2026-10-01\repro\studio-save-repro.mjs:7:1
+✖ editing while Save is pending must preserve the dirty flag and recovery draft (1.6002ms)
+  AssertionError [ERR_ASSERTION]: the newer edit was never saved and its recovery draft must survive
+  + actual - expected
+
+    {
+  +   dirty: false,
+  +   draftRemoved: true
+  -   dirty: true,
+  -   draftRemoved: false
+    }
+
+      at TestContext.<anonymous> (file:///C:/Users/chuck/scratch/ETL-SQL/review/2026-10-01/repro/studio-save-repro.mjs:29:12)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: { dirty: false, draftRemoved: true },
+    expected: { dirty: true, draftRemoved: false },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

@@ -25,6 +25,12 @@ public class TransactionManager
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        // COMPAT_BREAK: 0.20.0 — nested BEGIN retains the root transaction and its enlistments.
+        if (_trancount > 0)
+        {
+            _trancount++;
+            return;
+        }
         var snapshot = new TransactionSnapshot
         {
             Variables = new Dictionary<string, object?>(variables),
@@ -59,7 +65,7 @@ public class TransactionManager
         await Task.CompletedTask;
     }
 
-    /// <summary>Enlists a data source into the current transaction scope if it supports transactions.</summary>
+    /// <summary>Enlists a data source into the root transaction if it supports transactions.</summary>
     public Task EnlistDataSource(IDataSource ds) =>
         EnlistDataSource(ds, CancellationToken.None);
 
@@ -107,6 +113,12 @@ public class TransactionManager
     public async Task CommitTransaction(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        // COMPAT_BREAK: 0.20.0 — inner COMMIT must remain rollbackable by the outer transaction.
+        if (_trancount > 1)
+        {
+            _trancount--;
+            return;
+        }
         if (_trancount > 0)
         {
             var snapshot = _snapshots.Count > 0 ? _snapshots.Peek() : null;

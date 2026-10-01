@@ -104,9 +104,9 @@ assert.deepEqual(_edgeStyle('ON FAILURE'), { kind: 'failure', color: '#f85149', 
 assert.deepEqual(_edgeStyle('on failure'), { kind: 'failure', color: '#f85149', dash: '6 4' });
 assert.deepEqual(_edgeStyle('ON COMPLETION'), { kind: 'completion', color: '#58a6ff', dash: '2 3' });
 assert.deepEqual(_edgeStyle('WHEN @count > 100'), { kind: 'expression', color: '#d29922', dash: '10 3 2 3' });
-assert.deepEqual(_edgeStyle(''), { kind: null, color: '#64748b', dash: null });
-assert.deepEqual(_edgeStyle(null), { kind: null, color: '#64748b', dash: null });
-assert.deepEqual(_edgeStyle('UNLABELED'), { kind: null, color: '#64748b', dash: null });
+assert.deepEqual(_edgeStyle(''), { kind: null, color: '#8b949e', dash: null });
+assert.deepEqual(_edgeStyle(null), { kind: null, color: '#8b949e', dash: null });
+assert.deepEqual(_edgeStyle('UNLABELED'), { kind: null, color: '#8b949e', dash: null });
 
 // ── 5. flattenDagColumns ──────────────────────────────────────────────────────
 const tree = [

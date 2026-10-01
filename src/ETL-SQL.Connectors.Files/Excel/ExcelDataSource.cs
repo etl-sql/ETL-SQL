@@ -79,13 +79,14 @@ namespace ETL_SQL.Connectors.Excel
             ReadBatches(batchSize, CancellationToken.None);
 
         public IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
-            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize, cancellationToken), "Excel", ex => ex is not ExecutionException);
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize, cancellationToken), "Excel", ex => ex is not ExecutionException and not OperationCanceledException, cancellationToken);
 
         private async IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatchesCore(
             int batchSize,
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             var effectiveCancellationToken = EffectiveCancellationToken(cancellationToken);
+            if (batchSize <= 0) throw new ArgumentOutOfRangeException(nameof(batchSize));
             ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath)) yield break;
 
@@ -94,40 +95,31 @@ namespace ETL_SQL.Connectors.Excel
             effectiveCancellationToken.ThrowIfCancellationRequested();
             using var reader = ExcelReaderFactory.CreateReader(stream);
 
-            // Accepted exception (Rule 2): ExcelDataReader has no async read API.
-            // The full sheet is loaded into a DataSet synchronously here. Re-evaluate if
-            // ExcelDataReader ever ships an async overload or we switch libraries.
-            var result = reader.AsDataSet(new ExcelDataSetConfiguration()
-            {
-                ConfigureDataTable = (_) => new ExcelDataTableConfiguration()
-                {
-                    UseHeaderRow = false
-                }
-            });
-            effectiveCancellationToken.ThrowIfCancellationRequested();
+            // COMPAT_BREAK: 0.20.0 — read the selected sheet into bounded batches, not a workbook DataSet.
+            // ExcelDataReader has only synchronous Read/NextResult APIs; cancellation is checked between calls.
+            if (!PrepareSelectedSheet(reader, effectiveCancellationToken, out var rowCount)) yield break;
+            var range = ExcelRange.Parse(_range, rowCount, reader.FieldCount);
 
-            System.Data.DataTable? sheet = ResolveSheet(result);
-
-            if (sheet == null) yield break;
-
-            var range = ExcelRange.Parse(_range, sheet.Rows.Count, sheet.Columns.Count);
-
-            int startRow = Math.Min(range.StartRow, sheet.Rows.Count - 1);
-            int endRow = Math.Min(range.EndRow, sheet.Rows.Count - 1);
-            int startCol = Math.Min(range.StartCol, sheet.Columns.Count - 1);
-            int endCol = Math.Min(range.EndCol, sheet.Columns.Count - 1);
+            int startRow = Math.Min(range.StartRow, rowCount - 1);
+            int endRow = Math.Min(range.EndRow, rowCount - 1);
+            int startCol = Math.Min(range.StartCol, reader.FieldCount - 1);
+            int endCol = Math.Min(range.EndCol, reader.FieldCount - 1);
 
             if (startRow < 0 || startRow > endRow || startCol < 0 || startCol > endCol) yield break;
 
             var excelCols = new List<string>();
             int dataStartRow = startRow;
-
-            if (_hasHeader && startRow < sheet.Rows.Count)
+            for (int r = 0; r <= startRow; r++)
             {
-                var headerRow = sheet.Rows[startRow];
+                effectiveCancellationToken.ThrowIfCancellationRequested();
+                if (!reader.Read()) yield break;
+            }
+
+            if (_hasHeader)
+            {
                 for (int c = startCol; c <= endCol; c++)
                 {
-                    excelCols.Add(headerRow[c]?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
+                    excelCols.Add(reader.GetValue(c)?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
                 }
                 dataStartRow++;
             }
@@ -257,16 +249,17 @@ namespace ETL_SQL.Connectors.Excel
             for (int r = dataStartRow; r <= endRow; r++)
             {
                 effectiveCancellationToken.ThrowIfCancellationRequested();
-                var row = sheet.Rows[r];
+                if ((r > dataStartRow || _hasHeader) && !reader.Read()) break;
                 var etlRow = etlBatch.NewRow();
                 for (int i = 0; i < actualHeaders.Count; i++)
                 {
                     string colName = actualHeaders[i];
                     int excelColIndex = i < sourceMapping.Count ? sourceMapping[i] : -1;
-                    if (excelColIndex >= 0 && (startCol + excelColIndex) < row.ItemArray.Length)
+                    if (excelColIndex >= 0 && (startCol + excelColIndex) < reader.FieldCount)
                     {
                         int sheetColIdx = startCol + excelColIndex;
-                        etlRow[colName] = row[sheetColIdx] == DBNull.Value ? null : row[sheetColIdx];
+                        var value = reader.GetValue(sheetColIdx);
+                        etlRow[colName] = value == DBNull.Value ? null : value;
                     }
                     else
                     {
@@ -295,6 +288,45 @@ namespace ETL_SQL.Connectors.Excel
                     nullFilledMissingColumnCount,
                     affectedRowCount);
             }
+        }
+
+        private bool MoveToSelectedSheet(IExcelDataReader reader, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(_sheetName)) return true;
+            var sanitizedName = SanitizeSheetName(_sheetName);
+            do
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (string.Equals(reader.Name, _sheetName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(reader.Name, sanitizedName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            } while (reader.NextResult());
+            return false;
+        }
+
+        private bool PrepareSelectedSheet(IExcelDataReader reader, CancellationToken cancellationToken, out int rowCount)
+        {
+            rowCount = 0;
+            if (!MoveToSelectedSheet(reader, cancellationToken)) return false;
+            // AsDataSet omitted trailing empty rows. Count the populated extent without retaining
+            // cell objects, then reset so range clamping and HEADER retain those existing semantics.
+            var rowIndex = 0;
+            while (reader.Read())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                rowIndex++;
+                for (var column = 0; column < reader.FieldCount; column++)
+                {
+                    if (reader.GetValue(column) is { } value && value != DBNull.Value)
+                    {
+                        rowCount = rowIndex;
+                        break;
+                    }
+                }
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            reader.Reset();
+            return MoveToSelectedSheet(reader, cancellationToken);
         }
 
         private static void EnsureUniqueHeaders(IReadOnlyList<string> headers, string sourceDescription)
@@ -550,20 +582,12 @@ namespace ETL_SQL.Connectors.Excel
                 await using var stream = await GetSeekableStreamAsync(baseStream, effectiveCancellationToken);
                 effectiveCancellationToken.ThrowIfCancellationRequested();
                 using var reader = ExcelReaderFactory.CreateReader(stream);
-                var result = reader.AsDataSet(new ExcelDataSetConfiguration()
+                if (PrepareSelectedSheet(reader, effectiveCancellationToken, out var rowCount))
                 {
-                    ConfigureDataTable = (_) => new ExcelDataTableConfiguration() { UseHeaderRow = false }
-                });
-                effectiveCancellationToken.ThrowIfCancellationRequested();
-
-                System.Data.DataTable? sheet = ResolveSheet(result);
-
-                if (sheet != null)
-                {
-                    var range = ExcelRange.Parse(_range, sheet.Rows.Count, sheet.Columns.Count);
-                    int startCol = Math.Min(range.StartCol, sheet.Columns.Count - 1);
-                    int endCol = Math.Min(range.EndCol, sheet.Columns.Count - 1);
-                    int startRow = Math.Min(range.StartRow, sheet.Rows.Count - 1);
+                    var range = ExcelRange.Parse(_range, rowCount, reader.FieldCount);
+                    int startCol = Math.Min(range.StartCol, reader.FieldCount - 1);
+                    int endCol = Math.Min(range.EndCol, reader.FieldCount - 1);
+                    int startRow = Math.Min(range.StartRow, rowCount - 1);
 
                     if (startCol < 0 || startCol > endCol || startRow < 0) return Enumerable.Empty<string>();
 
@@ -572,17 +596,25 @@ namespace ETL_SQL.Connectors.Excel
                         return Enumerable.Range(1, Math.Max(0, endCol - startCol + 1)).Select(i => $"Column{i}");
                     }
 
-                    var headerRow = sheet.Rows[startRow];
+                    for (int row = 0; row <= startRow; row++)
+                    {
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
+                        if (!reader.Read()) return Enumerable.Empty<string>();
+                    }
                     var names = new List<string>();
                     for (int c = startCol; c <= endCol; c++)
                     {
                         effectiveCancellationToken.ThrowIfCancellationRequested();
-                        names.Add(headerRow[c]?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
+                        names.Add(reader.GetValue(c)?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
                     }
                     return names;
                 }
             }
-            catch (Exception ex) { _logger.Debug("[ExcelDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}", _filePath, ex.Message); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.Debug("[ExcelDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}",
+                    _filePath, ConnectorExceptionWrapper.Wrap("Excel", ex).Message);
+            }
             return Enumerable.Empty<string>();
         }
 
@@ -600,11 +632,20 @@ namespace ETL_SQL.Connectors.Excel
                 await using var stream = await GetSeekableStreamAsync(baseStream, effectiveCancellationToken);
                 effectiveCancellationToken.ThrowIfCancellationRequested();
                 using var reader = ExcelReaderFactory.CreateReader(stream);
-                var result = reader.AsDataSet();
-                effectiveCancellationToken.ThrowIfCancellationRequested();
-                return result.Tables.Cast<System.Data.DataTable>().Select(t => t.TableName).ToList();
+                var names = new List<string>();
+                do
+                {
+                    effectiveCancellationToken.ThrowIfCancellationRequested();
+                    names.Add(reader.Name);
+                } while (reader.NextResult());
+                return names;
             }
-            catch { return Enumerable.Empty<string>(); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.Debug("[ExcelDataSource.GetTablesAsync] Failed to read sheets: {Message}",
+                    ConnectorExceptionWrapper.Wrap("Excel", ex).Message);
+                return Enumerable.Empty<string>();
+            }
         }
 
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());

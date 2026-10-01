@@ -48,6 +48,13 @@ class Element {
   }
 
   append(...nodes) { for (const n of nodes) this.appendChild(n); }
+  insertBefore(child, reference) {
+    const index = this.children.indexOf(reference);
+    if (index < 0) throw new Error('Reference child is missing');
+    child.parentNode = this;
+    this.children.splice(index, 0, child);
+    return child;
+  }
   replaceChildren(...nodes) { this.children = []; this._text = ''; this.append(...nodes); }
   setAttribute(name, value) { this.attributes[name] = String(value); }
   addEventListener(name, fn) { (this.eventListeners[name] ??= []).push(fn); }

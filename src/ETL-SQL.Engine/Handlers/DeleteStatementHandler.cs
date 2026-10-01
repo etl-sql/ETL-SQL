@@ -27,6 +27,8 @@ public class DeleteStatementHandler(ILogger logger) : IStatementHandler
         if (context.VarContext.TryGetView(connName, out _))
             throw new ExecutionException($"View {connName} is read-only and cannot be used as a DELETE target.");
         if (!context.Connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown: {connName}");
+        // COMPAT_BREAK: 0.20.0 — enlist the target before executing the first transactional mutation.
+        connection = await context.ResolveDataSourceAsync(stmt.TargetTable);
         _logger.Debug("Connection resolved as {ConnectionType}", connection.GetType().Name);
         if (connection is IDatabaseSource sqlConn && context.IsSqlPushdown(connName))
         {
@@ -49,7 +51,7 @@ public class DeleteStatementHandler(ILogger logger) : IStatementHandler
             }
             else
             {
-                await foreach (var batch in sqlConn.ExecuteRawSql(sql, compiledWhere?.Parameters.Values))
+                await foreach (var batch in sqlConn.ExecuteRawSql(sql, compiledWhere?.Parameters.Values, context.CancellationToken))
                 {
                     if (batch.RowsAffected >= 0) context.Telemetry.RowsProcessed += batch.RowsAffected;
                 }

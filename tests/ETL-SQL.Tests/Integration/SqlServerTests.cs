@@ -99,7 +99,7 @@ namespace ETL_SQL.Tests.Integration
                 var cancelled = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () =>
                     await source.ExecuteRawSql("WAITFOR DELAY '00:00:05'; SELECT 1 AS value",
                         null, cancellation.Token).FirstAsync());
-                Assert.IsType<SqlException>(cancelled.InnerException);
+                Assert.Null(cancelled.InnerException);
             });
 
             await using (var timeout = new SqlServerDataSource(

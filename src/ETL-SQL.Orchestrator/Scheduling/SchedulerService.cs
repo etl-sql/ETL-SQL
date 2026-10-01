@@ -701,18 +701,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             attemptCpuSeconds = lastResult.CpuTimeSeconds;
                             finalStatus = "SUCCESS";
 
-                            if (historyId > 0)
-                            {
-                                await _store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: lastResult.RowsProcessed,
-                                    peakMemoryBytes: lastResult.PeakMemoryBytes, cpuTimeSeconds: lastResult.CpuTimeSeconds,
-                                    scriptHashAtRunTime: currentHash, hashMatched: hashMatched,
-                                    rowsQuarantined: lastResult.RowsQuarantined, rowsWarned: lastResult.RowsWarned,
-                                    dataQualityFailures: lastResult.DataQualityFailures);
-                                await _store.SaveJobColumnMetricsAsync(historyId, lastResult.DataQualityColumnMetrics ?? []);
-                                await _store.SaveJobDataQualityFailuresAsync(historyId, lastResult.DataQualityRuleFailures ?? []);
-                                await _store.SaveJobStatementMetricsAsync(historyId, lastResult.StatementMetrics ?? []);
-                                await PersistResumeMetadataAsync(historyId, sessionId);
-                            }
+                            // COMPAT_BREAK: 0.20.0 — an evidence outage cannot replay completed work.
+                            await PersistAttemptEvidenceAsync(job, historyId, "SUCCESS", lastResult,
+                                sessionId, currentHash, hashMatched);
 
                             break; // Done
                         }
@@ -727,31 +718,17 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             attemptCpuSeconds = lastResult.CpuTimeSeconds;
                             finalStatus = "FAILURE";
 
-                            if (historyId > 0)
-                            {
-                                await _store.LogJobEndAsync(historyId, "FAILURE", safeError,
-                                    peakMemoryBytes: lastResult.PeakMemoryBytes, cpuTimeSeconds: lastResult.CpuTimeSeconds,
-                                    scriptHashAtRunTime: currentHash, hashMatched: hashMatched,
-                                    rowsQuarantined: lastResult.RowsQuarantined, rowsWarned: lastResult.RowsWarned,
-                                    dataQualityFailures: lastResult.DataQualityFailures);
-                                await _store.SaveJobColumnMetricsAsync(historyId, lastResult.DataQualityColumnMetrics ?? []);
-                                await _store.SaveJobDataQualityFailuresAsync(historyId, lastResult.DataQualityRuleFailures ?? []);
-                                await _store.SaveJobStatementMetricsAsync(historyId, lastResult.StatementMetrics ?? []);
-                                await PersistResumeMetadataAsync(historyId, sessionId);
-                            }
+                            await PersistAttemptEvidenceAsync(job, historyId, "FAILURE", lastResult,
+                                sessionId, currentHash, hashMatched);
                         }
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Error executing job {JobName} on attempt {Attempt}.", job.Name, attempt);
-                        if (historyId > 0)
-                        {
-                            await _store.LogJobEndAsync(historyId, "FAILURE", SecretRedactor.Redact(ex.Message),
-                                scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
-                            await PersistResumeMetadataAsync(historyId, sessionId);
-                        }
                         lastResult = new ScriptExecutionResult(false, 0, SecretRedactor.Redact(ex.Message));
                         finalStatus = "FAILURE";
+                        await PersistAttemptEvidenceAsync(job, historyId, "FAILURE", lastResult,
+                            sessionId, currentHash, hashMatched);
                     }
                     finally
                     {
@@ -907,6 +884,37 @@ namespace ETL_SQL.Orchestrator.Scheduling
             if (!double.IsFinite(seconds) || seconds <= 0) return 0;
             var value = seconds * 1000d;
             return value >= long.MaxValue ? long.MaxValue : checked((long)Math.Round(value));
+        }
+
+        private async Task PersistAttemptEvidenceAsync(JobDefinition job, long historyId, string status,
+            ScriptExecutionResult result, string? sessionId, string currentHash, bool? hashMatched)
+        {
+            if (historyId <= 0) return;
+
+            async Task Persist(string evidence, Func<Task> operation)
+            {
+                try
+                {
+                    await operation();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex,
+                        "Failed to persist {Evidence} for job {JobName}, history {HistoryId}; execution outcome remains {Status}.",
+                        evidence, job.Name, historyId, status);
+                }
+            }
+
+            await Persist("completion history", () => _store.LogJobEndAsync(historyId, status,
+                SecretRedactor.Redact(result.ErrorMessage), rowsProcessed: result.RowsProcessed,
+                peakMemoryBytes: result.PeakMemoryBytes, cpuTimeSeconds: result.CpuTimeSeconds,
+                scriptHashAtRunTime: currentHash, hashMatched: hashMatched,
+                rowsQuarantined: result.RowsQuarantined, rowsWarned: result.RowsWarned,
+                dataQualityFailures: result.DataQualityFailures));
+            await Persist("column metrics", () => _store.SaveJobColumnMetricsAsync(historyId, result.DataQualityColumnMetrics ?? []));
+            await Persist("quality failures", () => _store.SaveJobDataQualityFailuresAsync(historyId, result.DataQualityRuleFailures ?? []));
+            await Persist("statement metrics", () => _store.SaveJobStatementMetricsAsync(historyId, result.StatementMetrics ?? []));
+            await Persist("resume metadata", () => PersistResumeMetadataAsync(historyId, sessionId));
         }
 
         private async Task PersistResumeMetadataAsync(long historyId, string? sessionId)

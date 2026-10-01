@@ -41,6 +41,7 @@ export interface StudioFileCommandsContext {
 
 export function createStudioFileCommands(hostContext: StudioFileCommandsContext) {
     let gitRenderRevision = 0;
+    const pendingSaves = new WeakMap<StudioRuntimeDocument, Promise<boolean>>();
 
     async function renderGitSidebar() {
         hostContext.sidebarTitle.textContent = 'Source Control';
@@ -303,25 +304,41 @@ export function createStudioFileCommands(hostContext: StudioFileCommandsContext)
 
     async function performSave(content: string, path: string) {
         const doc = hostContext.getActiveDoc();
+        const previousSave = doc ? pendingSaves.get(doc) : undefined;
+        const save = (async () => {
+            if (previousSave) await previousSave;
+            try {
+                const savedState = hostContext.opts.onSave
+                    ? await hostContext.opts.onSave(withLineEnding(content, doc?.lineEnding || '\n'), path, doc)
+                    : null;
+                if (doc) {
+                    // COMPAT_BREAK: 0.20.0 — completion owns only the content submitted by this save.
+                    const newerEdits = doc.content !== content || doc.path !== path;
+                    const current = { content: doc.content, path: doc.path, name: doc.name };
+                    if (savedState && typeof savedState === 'object') Object.assign(doc, savedState);
+                    if (newerEdits) {
+                        Object.assign(doc, current);
+                        doc.isDirty = true;
+                    } else {
+                        doc.isDirty = false;
+                        hostContext.leaseLifecycle.removeDraft(doc as any);
+                    }
+                }
+                hostContext.renderTabs();
+                _feedback.notify(`Saved ${path}${doc?.isDirty ? '; newer edits remain unsaved.' : ''}`, { title: 'File Saved', tone: 'success' });
+                return true;
+            } catch (error) {
+                if (doc) doc.isDirty = true;
+                hostContext.renderTabs();
+                _feedback.notify('Save failed: ' + errorMessage(error), { title: 'File Not Saved', tone: 'error' });
+                return false;
+            }
+        })();
+        if (doc) pendingSaves.set(doc, save);
         try {
-            const savedState = hostContext.opts.onSave
-                ? await hostContext.opts.onSave(withLineEnding(content, doc?.lineEnding || '\n'), path, doc)
-                : null;
-            if (doc && savedState && typeof savedState === 'object') {
-                Object.assign(doc, savedState);
-            }
-            if (doc) {
-                doc.isDirty = false;
-                hostContext.leaseLifecycle.removeDraft(doc as any);
-            }
-            hostContext.renderTabs();
-            _feedback.notify(`Saved ${path}`, { title: 'File Saved', tone: 'success' });
-            return true;
-        } catch (error) {
-            if (doc) doc.isDirty = true;
-            hostContext.renderTabs();
-            _feedback.notify('Save failed: ' + errorMessage(error), { title: 'File Not Saved', tone: 'error' });
-            return false;
+            return await save;
+        } finally {
+            if (doc && pendingSaves.get(doc) === save) pendingSaves.delete(doc);
         }
     }
 

@@ -35,7 +35,10 @@ namespace ETL_SQL.Connectors.Rest
         // UseProxy is disabled so an ambient system proxy cannot route around the egress controls
         // (proxy-bypass hardening), and a ConnectCallback re-validates the DNS-resolved address at
         // connect time (DNS-rebinding hardening) before pinning the socket to the validated IPs.
-        private static readonly HttpClient _httpClient = PolicyBoundHttp.CreateClient();
+        // COMPAT_BREAK: 0.20.0 — a shared automatic cookie jar crosses connection and origin boundaries.
+        // Explicit Cookie headers follow the same origin rules as other credentials; per-request CTS owns the deadline.
+        private static readonly HttpClient _httpClient = PolicyBoundHttp.CreateClient(
+            handler => handler.UseCookies = false, timeout: Timeout.InfiniteTimeSpan);
         private const int DefaultMaxRedirects = 5;
 
         private string? _cachedToken;
@@ -72,11 +75,15 @@ namespace ETL_SQL.Connectors.Rest
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
             ReadBatches(batchSize, CancellationToken.None);
 
-        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
-            ConnectorExceptionWrapper.WrapAsync(
-                ReadBatchesCore(batchSize, cancellationToken),
-                "REST",
-                ShouldWrapProviderException);
+        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            var effectiveToken = EffectiveCancellationToken(cancellationToken);
+            await foreach (var batch in ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize, effectiveToken), "REST",
+                ex => ex is OperationCanceledException ? !effectiveToken.IsCancellationRequested : ShouldWrapProviderException(ex),
+                effectiveToken))
+                yield return batch;
+        }
 
         private static string UpdateQueryParameter(string url, string key, string value)
         {
@@ -311,9 +318,10 @@ namespace ETL_SQL.Connectors.Rest
 
                 return accessToken;
             }
-            catch (Exception ex) when (ex is not ExecutionException)
+            catch (Exception ex) when (ex is not ExecutionException
+                && !(ex is OperationCanceledException && effectiveCancellationToken.IsCancellationRequested))
             {
-                throw new ExecutionException($"OAuth2 token acquisition failed: {SanitizeForDiagnostics(ex.Message)}", ex);
+                throw new ExecutionException($"OAuth2 token acquisition failed: {SanitizeForDiagnostics(ex.Message)}");
             }
             finally
             {
@@ -417,55 +425,68 @@ namespace ETL_SQL.Connectors.Rest
             if (paginationMode == "NONE")
             {
                 HttpResponseMessage? response = null;
+                CancellationTokenSource? responseTimeout = null;
                 int attempts = 0;
-                while (true)
+                try
                 {
-                    effectiveCancellationToken.ThrowIfCancellationRequested();
-                    var request = await BuildRequestAsync(cancellationToken: effectiveCancellationToken);
-                    try
+                    while (true)
                     {
-                        using var cts = CreateTimeoutCts(effectiveCancellationToken);
-                        response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseHeadersRead, cts.Token);
-
-                        if (response.IsSuccessStatusCode)
+                        effectiveCancellationToken.ThrowIfCancellationRequested();
+                        response?.Dispose();
+                        responseTimeout?.Dispose();
+                        responseTimeout = CreateTimeoutCts(effectiveCancellationToken);
+                        using var request = await BuildRequestAsync(cancellationToken: responseTimeout.Token);
+                        try
                         {
-                            break;
-                        }
+                            response = await SendWithRedirectsAsync(request, HttpCompletionOption.ResponseHeadersRead, responseTimeout.Token);
 
-                        int statusCode = (int)response.StatusCode;
-                        if (attempts < retryCount && retryStatuses.Contains(statusCode))
+                            if (response.IsSuccessStatusCode)
+                            {
+                                break;
+                            }
+
+                            int statusCode = (int)response.StatusCode;
+                            if (attempts < retryCount && retryStatuses.Contains(statusCode))
+                            {
+                                attempts++;
+                                int delayMs = CalculateRetryDelay(response, retryBackoffMs, attempts);
+                                await Task.Delay(delayMs, effectiveCancellationToken);
+                                continue;
+                            }
+
+                            var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync(responseTimeout.Token));
+                            throw new HttpRequestException($"API request failed with status {response.StatusCode}: {error}");
+                        }
+                        // A blocked redirect target (SecurityException) or redirect loop (ExecutionException)
+                        // must fail fast and keep its message — never get swallowed into the retry/HTTP wrapper.
+                        catch (Exception ex) when (ex is not HttpRequestException && ex is not SecurityException && ex is not ExecutionException
+                            && !(ex is OperationCanceledException && effectiveCancellationToken.IsCancellationRequested))
                         {
-                            attempts++;
-                            int delayMs = CalculateRetryDelay(response, retryBackoffMs, attempts);
-                            await Task.Delay(delayMs, effectiveCancellationToken);
-                            continue;
+                            if (attempts < retryCount)
+                            {
+                                attempts++;
+                                int delayMs = CalculateRetryDelay(null, retryBackoffMs, attempts);
+                                await Task.Delay(delayMs, effectiveCancellationToken);
+                                continue;
+                            }
+                            throw new HttpRequestException($"API request failed with exception: {SanitizeForDiagnostics(ex.Message)}", ex);
                         }
-
-                        var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync(effectiveCancellationToken));
-                        throw new HttpRequestException($"API request failed with status {response.StatusCode}: {error}");
                     }
-                    // A blocked redirect target (SecurityException) or redirect loop (ExecutionException)
-                    // must fail fast and keep its message — never get swallowed into the retry/HTTP wrapper.
-                    catch (Exception ex) when (ex is not HttpRequestException && ex is not SecurityException && ex is not ExecutionException)
+
+                    // COMPAT_BREAK: 0.20.0 — the request deadline includes body extraction after headers.
+                    using var stream = await response.Content.ReadAsStreamAsync(responseTimeout!.Token);
+                    await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, rootPath, batchSize)
+                        .WithCancellation(responseTimeout.Token))
                     {
-                        if (attempts < retryCount)
-                        {
-                            attempts++;
-                            int delayMs = CalculateRetryDelay(null, retryBackoffMs, attempts);
-                            await Task.Delay(delayMs, effectiveCancellationToken);
-                            continue;
-                        }
-                        throw new HttpRequestException($"API request failed with exception: {SanitizeForDiagnostics(ex.Message)}", ex);
+                        yield return batch;
                     }
+                    yield break;
                 }
-
-                using var stream = await response.Content.ReadAsStreamAsync(effectiveCancellationToken);
-                await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, rootPath, batchSize)
-                    .WithCancellation(effectiveCancellationToken))
+                finally
                 {
-                    yield return batch;
+                    response?.Dispose();
+                    responseTimeout?.Dispose();
                 }
-                yield break;
             }
 
             int pageCount = 0;
@@ -513,7 +534,7 @@ namespace ETL_SQL.Connectors.Rest
                 while (true)
                 {
                     effectiveCancellationToken.ThrowIfCancellationRequested();
-                    var request = await BuildRequestAsync(requestUrl, effectiveCancellationToken);
+                    using var request = await BuildRequestAsync(requestUrl, effectiveCancellationToken);
                     try
                     {
                         using var cts = CreateTimeoutCts(effectiveCancellationToken);
@@ -537,7 +558,8 @@ namespace ETL_SQL.Connectors.Rest
                         var error = SanitizeForDiagnostics(await response.Content.ReadAsStringAsync(effectiveCancellationToken));
                         throw new HttpRequestException($"API request failed with status {response.StatusCode}: {error}");
                     }
-                    catch (Exception ex) when (ex is not HttpRequestException && ex is not SecurityException && ex is not ExecutionException)
+                    catch (Exception ex) when (ex is not HttpRequestException && ex is not SecurityException && ex is not ExecutionException
+                        && !(ex is OperationCanceledException && effectiveCancellationToken.IsCancellationRequested))
                     {
                         if (attempts < retryCount)
                         {
@@ -1343,7 +1365,7 @@ namespace ETL_SQL.Connectors.Rest
         /// redirect responses manually up to a bounded count. Every redirect target is re-validated
         /// against the egress allowlist (<see cref="SecurityService.ValidateHost"/>) so an allowed
         /// endpoint cannot bounce the request to a blocked internal host. Authorization and other
-        /// sensitive headers are dropped on cross-host redirects so credentials never leak to a
+        /// sensitive headers are dropped on cross-origin redirects so credentials never leak to a
         /// different origin.
         /// </summary>
         private async Task<HttpResponseMessage> SendWithRedirectsAsync(
@@ -1398,10 +1420,15 @@ namespace ETL_SQL.Connectors.Rest
                 // Re-validate every hop against the egress policy before following it.
                 if (_context != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(_context, target);
 
-                // Strip credentials when the redirect crosses to a different host OR downgrades the
-                // transport (HTTPS -> HTTP). A same-host downgrade would otherwise leak the bearer
-                // token / cookies over cleartext.
+                // Credentials are bound to the full origin, including its effective port.
                 bool stripCredentials = ShouldStripCredentialsOnRedirect(current.RequestUri!, target);
+                if (stripCredentials && bodyBytes != null && (response.StatusCode is
+                    System.Net.HttpStatusCode.TemporaryRedirect or System.Net.HttpStatusCode.PermanentRedirect))
+                {
+                    response.Dispose();
+                    if (current != request) current.Dispose();
+                    throw new ExecutionException("A cross-origin redirect cannot replay request content.");
+                }
                 var next = CloneForRedirect(current, target, response.StatusCode, bodyBytes, contentType, stripCredentials);
 
                 response.Dispose();
@@ -1418,7 +1445,7 @@ namespace ETL_SQL.Connectors.Rest
                    or System.Net.HttpStatusCode.TemporaryRedirect     // 307
                    or System.Net.HttpStatusCode.PermanentRedirect;    // 308
 
-        private static HttpRequestMessage CloneForRedirect(
+        private HttpRequestMessage CloneForRedirect(
             HttpRequestMessage original, Uri target, System.Net.HttpStatusCode status,
             byte[]? bodyBytes, string? contentType, bool stripSensitiveHeaders)
         {
@@ -1459,27 +1486,28 @@ namespace ETL_SQL.Connectors.Rest
 
         /// <summary>
         /// Decides whether credential-bearing headers must be dropped when following a redirect from
-        /// <paramref name="from"/> to <paramref name="to"/>. True when the host changes (cross-origin)
-        /// or the transport is downgraded HTTPS -> HTTP (which would expose the credential over
-        /// cleartext even on the same host).
+        /// <paramref name="from"/> to <paramref name="to"/>. Credentials belong to the full origin:
+        /// scheme, host, and effective port.
         /// </summary>
         internal static bool ShouldStripCredentialsOnRedirect(Uri from, Uri to)
         {
-            bool crossHost = !string.Equals(to.Host, from.Host, StringComparison.OrdinalIgnoreCase);
-            bool schemeDowngrade =
-                string.Equals(from.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(to.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase);
-            return crossHost || schemeDowngrade;
+            // COMPAT_BREAK: 0.20.0 — a different port or scheme is a different credential origin.
+            return !string.Equals(to.Host, from.Host, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(to.Scheme, from.Scheme, StringComparison.OrdinalIgnoreCase)
+                || to.Port != from.Port;
         }
 
-        // Headers that must never be forwarded to a different origin on a cross-host redirect.
-        private static bool IsSensitiveRequestHeader(string headerName) =>
+        // Headers that must never be forwarded to a different origin.
+        private bool IsSensitiveRequestHeader(string headerName) =>
             headerName.Equals("Authorization", StringComparison.OrdinalIgnoreCase)
             || headerName.Equals("Cookie", StringComparison.OrdinalIgnoreCase)
             || headerName.Equals("Proxy-Authorization", StringComparison.OrdinalIgnoreCase)
             || headerName.Contains("KEY", StringComparison.OrdinalIgnoreCase)
             || headerName.Contains("TOKEN", StringComparison.OrdinalIgnoreCase)
-            || headerName.Contains("SECRET", StringComparison.OrdinalIgnoreCase);
+            || headerName.Contains("SECRET", StringComparison.OrdinalIgnoreCase)
+            || SecretRedactor.IsSensitiveKey(headerName)
+            || (_options != null && _options.TryGetValue("HEADER_NAME", out var apiKeyHeader)
+                && headerName.Equals(apiKeyHeader, StringComparison.OrdinalIgnoreCase));
 
         private InMemoryDataSource GetOrCreateResponseTable(string name, DataTable firstBatch, string[] correlationCols)
         {
@@ -1872,8 +1900,10 @@ namespace ETL_SQL.Connectors.Rest
 
             var targetUrl = url ?? _url;
             var request = new HttpRequestMessage(method, targetUrl);
+            var sameOrigin = !ShouldStripCredentialsOnRedirect(new Uri(_url), new Uri(targetUrl));
 
-            if (_options != null && _options.TryGetValue("AUTH_TYPE", out var authType))
+            // COMPAT_BREAK: 0.20.0 — pagination cannot reinject credentials for another origin.
+            if (sameOrigin && _options != null && _options.TryGetValue("AUTH_TYPE", out var authType))
             {
                 switch (authType.ToUpperInvariant())
                 {
@@ -1908,6 +1938,7 @@ namespace ETL_SQL.Connectors.Rest
                 foreach (var opt in _options.Where(o => o.Key.StartsWith("HEADER_", StringComparison.OrdinalIgnoreCase)))
                 {
                     var headerName = opt.Key.Substring(7).Replace("_", "-");
+                    if (!sameOrigin && IsSensitiveRequestHeader(headerName)) continue;
                     if (headerName.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
@@ -1921,6 +1952,11 @@ namespace ETL_SQL.Connectors.Rest
                 _options != null &&
                 _options.TryGetValue("BODY", out var body))
             {
+                if (!sameOrigin)
+                {
+                    request.Dispose();
+                    throw new ExecutionException("Cross-origin pagination cannot replay request content.");
+                }
                 request.Content = new StringContent(body, System.Text.Encoding.UTF8, GetBodyContentType());
             }
 

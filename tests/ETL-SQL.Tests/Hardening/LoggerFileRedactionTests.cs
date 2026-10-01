@@ -6,6 +6,38 @@ namespace ETL_SQL.Tests.Hardening;
 public class LoggerFileRedactionTests
 {
     [Theory]
+    [Trait("CompatBreak", "0.20.0")]
+    [InlineData("Authentication {Password}")]
+    [InlineData("Authentication {@Credential}")]
+    [InlineData("Authentication {$ApiKey}")]
+    [InlineData("Authentication {AccessToken}")]
+    [InlineData("Authentication {Password,20}")]
+    [InlineData("Authentication {{literal}} {Password}")]
+    public void SensitiveTemplatePropertyMasksBareValueInFileAndUi(string template)
+    {
+        string? uiMessage = null;
+        var text = Capture(logger =>
+        {
+            logger.OnMessage += (message, _, _) => uiMessage = message;
+            logger.Info(template, "synthetic-bare-secret");
+        });
+        Assert.DoesNotContain("synthetic-bare-secret", text);
+        Assert.DoesNotContain("synthetic-bare-secret", Assert.IsType<string>(uiMessage));
+        Assert.Contains("Authentication", text);
+    }
+
+    [Fact]
+    [Trait("CompatBreak", "0.20.0")]
+    public void SensitivePropertyMasksOnlyItsMatchingArguments()
+    {
+        var text = Capture(logger => logger.Info("User {User}, password {Password}, status {Status}, repeated {Password}",
+            "visible-user", "synthetic-first-secret", "visible-status", "synthetic-second-secret"));
+        Assert.DoesNotContain("synthetic", text);
+        Assert.Contains("visible-user", text);
+        Assert.Contains("visible-status", text);
+    }
+
+    [Theory]
     [InlineData("PASSWORD='synthetic first second'; safe=visible")]
     [InlineData("{\"password\":\"synthetic first second\",\"safe\":\"visible\"}")]
     [InlineData("PASSWORD='synthetic \\'first second'; safe=visible")]

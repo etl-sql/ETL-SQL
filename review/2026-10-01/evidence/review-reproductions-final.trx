@@ -1,0 +1,136 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="72476ba1-6b13-4b95-a37e-72bb42f2a78c" name="chuck@CHUCKPC 2026-10-01 07:35:04" runUser="ChuckPC\CodexSandboxOffline" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-10-01T07:35:04.3882135-05:00" queuing="2026-10-01T07:35:04.3882137-05:00" start="2026-10-01T07:35:01.0860335-05:00" finish="2026-10-01T07:35:07.8058179-05:00" />
+  <TestSettings name="default" id="4ff3cbda-f1dc-4fae-ae3c-505086665dd8">
+    <Deployment runDeploymentRoot="chuck_CHUCKPC_2026-10-01_07_35_04" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="3962123f-2f33-4b0e-a991-d0fe5081fd58" testId="cb237682-3cf2-492d-591e-ca3fe9d5abe3" testName="ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(mutation: &quot;UPDATE reviewdb.items SET amount = id;&quot;, check: &quot;SELECT amount FROM items WHERE id = 1&quot;, expected: 10)" computerName="CHUCKPC" duration="00:00:00.0624566" startTime="2026-10-01T07:35:06.2244213-05:00" endTime="2026-10-01T07:35:06.2870087-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="3962123f-2f33-4b0e-a991-d0fe5081fd58" />
+    <UnitTestResult executionId="365e6194-6aca-48e3-8f8c-293df529ce03" testId="c620333c-b7e7-2fe6-95d2-d70bc1205ca8" testName="ETL_SQL.Review.RestReproductions.PaginationLinkToAnotherHostMustNotReceiveCredentials" computerName="CHUCKPC" duration="00:00:02.2319537" startTime="2026-10-01T07:35:01.7644081-05:00" endTime="2026-10-01T07:35:04.0043067-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="365e6194-6aca-48e3-8f8c-293df529ce03" />
+    <UnitTestResult executionId="a51033a2-0369-40c2-b636-6ca5f3b222ee" testId="a6e28611-60d3-b559-ac8f-e9cd749d76d4" testName="ETL_SQL.Review.SharePointReproductions.ListReadMustFollowTheServerContinuation" computerName="CHUCKPC" duration="00:00:00.0013649" startTime="2026-10-01T07:35:07.7292364-05:00" endTime="2026-10-01T07:35:07.7306508-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a51033a2-0369-40c2-b636-6ca5f3b222ee" />
+    <UnitTestResult executionId="0f35076f-7d22-4098-af35-df0fedad54e4" testId="bdbe341d-25c8-e2df-da12-2e1d5ea865c3" testName="ETL_SQL.Review.CorrectnessReproductions.NestedCommitMustRemainRollbackableByTheOuterTransaction" computerName="CHUCKPC" duration="00:00:00.0314126" startTime="2026-10-01T07:35:06.4848549-05:00" endTime="2026-10-01T07:35:06.5163625-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0f35076f-7d22-4098-af35-df0fedad54e4" />
+    <UnitTestResult executionId="ea703f96-56eb-4f02-a9cd-7f29e36c818f" testId="f106f85d-eb8f-5c3b-9802-4d6429e31677" testName="ETL_SQL.Review.LoggingReproductions.StructuredEngineLogMustMaskArgumentsNamedPassword" computerName="CHUCKPC" duration="00:00:00.0003237" startTime="2026-10-01T07:35:07.7173613-05:00" endTime="2026-10-01T07:35:07.7177187-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="ea703f96-56eb-4f02-a9cd-7f29e36c818f" />
+    <UnitTestResult executionId="0d11c8c7-7ee4-49cb-8c12-cf58fbd014a7" testId="799ac159-4807-11aa-dbd7-de40ba01ff03" testName="ETL_SQL.Review.PortalReproductions.SharedStudioSaveMustUseTheTenantRelativeScriptKey" computerName="CHUCKPC" duration="00:00:01.1994338" startTime="2026-10-01T07:35:06.5168005-05:00" endTime="2026-10-01T07:35:07.7163538-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0d11c8c7-7ee4-49cb-8c12-cf58fbd014a7" />
+    <UnitTestResult executionId="b64e16af-5b87-4fac-ba5d-388bd3642eca" testId="b98929fe-b08d-f4cc-7865-957e8b08915a" testName="ETL_SQL.Review.LoggingReproductions.ConnectorBoundaryMustNotRetainRawProviderCredentials" computerName="CHUCKPC" duration="00:00:00.0005885" startTime="2026-10-01T07:35:07.7166450-05:00" endTime="2026-10-01T07:35:07.7172804-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b64e16af-5b87-4fac-ba5d-388bd3642eca" />
+    <UnitTestResult executionId="03449115-87b9-4cd7-b114-affb7d7662f4" testId="ed49a261-b294-5140-f336-3fa3595eb45d" testName="ETL_SQL.Review.CorrectnessReproductions.SemiAndAntiJoinMustReturnTheCorrectLeftRows(kind: &quot;SEMI&quot;, expected: 1)" computerName="CHUCKPC" duration="00:00:00.0924577" startTime="2026-10-01T07:35:06.2872048-05:00" endTime="2026-10-01T07:35:06.3797631-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="03449115-87b9-4cd7-b114-affb7d7662f4" />
+    <UnitTestResult executionId="276c7e0b-5ff6-4568-8054-c8a8250cf6e9" testId="1c425741-8df7-92f0-7047-143791850acc" testName="ETL_SQL.Review.CorrectnessReproductions.SqliteUpdateWithLiteralsMustBindItsParameters" computerName="CHUCKPC" duration="00:00:00.0502697" startTime="2026-10-01T07:35:06.4047391-05:00" endTime="2026-10-01T07:35:06.4550927-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="276c7e0b-5ff6-4568-8054-c8a8250cf6e9" />
+    <UnitTestResult executionId="e463d65a-27a5-4d91-a929-ddc31191cae5" testId="890bef7d-5aa8-8d89-3385-2aa65ca9e02c" testName="ETL_SQL.Review.CorrectnessReproductions.SemiAndAntiJoinMustReturnTheCorrectLeftRows(kind: &quot;ANTI&quot;, expected: 0)" computerName="CHUCKPC" duration="00:00:00.0244714" startTime="2026-10-01T07:35:06.3799603-05:00" endTime="2026-10-01T07:35:06.4045435-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e463d65a-27a5-4d91-a929-ddc31191cae5" />
+    <UnitTestResult executionId="78ca9cf5-5df8-42d4-bb03-04f755d641f0" testId="58c92c7f-b03f-f96c-776c-1a66f99033ad" testName="ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(mutation: &quot;DELETE FROM reviewdb.items WHERE id = 1;&quot;, check: &quot;SELECT COUNT(*) FROM items&quot;, expected: 1)" computerName="CHUCKPC" duration="00:00:00.7948361" startTime="2026-10-01T07:35:05.4290475-05:00" endTime="2026-10-01T07:35:06.2241825-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="78ca9cf5-5df8-42d4-bb03-04f755d641f0" />
+    <UnitTestResult executionId="a7e11c84-8279-403b-a844-fcf09fac5f6f" testId="324342c0-dcae-4f2f-fdf4-2059662cd2a4" testName="ETL_SQL.Review.CorrectnessReproductions.HashJoinMustAgreeWithLoopJoinUnderDefaultCaseInsensitiveComparison" computerName="CHUCKPC" duration="00:00:00.0292915" startTime="2026-10-01T07:35:06.4552533-05:00" endTime="2026-10-01T07:35:06.4846485-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a7e11c84-8279-403b-a844-fcf09fac5f6f" />
+    <UnitTestResult executionId="a1f4637c-f994-407b-8340-7f582a2d146c" testId="2f5ed02f-389f-5f00-f37e-cb6adaa0aa95" testName="ETL_SQL.Review.RestReproductions.RedirectToAnotherPortMustNotReceiveCredentials" computerName="CHUCKPC" duration="00:00:00.0211358" startTime="2026-10-01T07:35:04.2213563-05:00" endTime="2026-10-01T07:35:04.2428128-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a1f4637c-f994-407b-8340-7f582a2d146c" />
+    <UnitTestResult executionId="1422656c-0caf-47d1-8561-7de26bbec406" testId="d40daf4e-4abb-42a0-ea44-761827b56431" testName="ETL_SQL.Review.SharePointReproductions.BatchesMustNotIncludePreviouslyReturnedRows" computerName="CHUCKPC" duration="00:00:00.0036010" startTime="2026-10-01T07:35:07.7255180-05:00" endTime="2026-10-01T07:35:07.7291571-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="1422656c-0caf-47d1-8561-7de26bbec406" />
+    <UnitTestResult executionId="72b8737c-1b72-4196-86ea-a10c3ddf8258" testId="9e73264a-3741-736e-990f-c68d5a000fe4" testName="ETL_SQL.Review.RestReproductions.BodyReadMustRemainUnderTheConfiguredRequestTimeout" computerName="CHUCKPC" duration="00:00:01.0254826" startTime="2026-10-01T07:35:04.2430105-05:00" endTime="2026-10-01T07:35:05.2688353-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="72b8737c-1b72-4196-86ea-a10c3ddf8258" />
+    <UnitTestResult executionId="e57c002d-d4d2-45ce-9a91-5f920323c6f4" testId="f30f8082-2326-3afe-7b56-7e8a6ed9aaa4" testName="ETL_SQL.Review.SchedulerReproductions.HistoryFailureMustNotReplayAnAlreadySuccessfulScript" computerName="CHUCKPC" duration="00:00:00.1550902" startTime="2026-10-01T07:35:05.2728887-05:00" endTime="2026-10-01T07:35:05.4283713-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="e57c002d-d4d2-45ce-9a91-5f920323c6f4" />
+    <UnitTestResult executionId="6113410f-924c-4f50-8250-197ce835f270" testId="db0e6c37-4c6e-e22a-0703-e093be4c0125" testName="ETL_SQL.Review.RestReproductions.CancellingBeforeHeadersMustPreserveOperationCanceledException" computerName="CHUCKPC" duration="00:00:00.2094529" startTime="2026-10-01T07:35:04.0109433-05:00" endTime="2026-10-01T07:35:04.2208004-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="6113410f-924c-4f50-8250-197ce835f270" />
+    <UnitTestResult executionId="8b9e7de0-bbba-4f47-923c-c398521ad5e0" testId="0572ce61-fec7-e49c-b820-d0d155db2add" testName="ETL_SQL.Review.SharePointReproductions.VerboseODataListReadMustReturnItsResults" computerName="CHUCKPC" duration="00:00:00.0075082" startTime="2026-10-01T07:35:07.7178732-05:00" endTime="2026-10-01T07:35:07.7254297-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="8b9e7de0-bbba-4f47-923c-c398521ad5e0" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="ETL_SQL.Review.PortalReproductions.SharedStudioSaveMustUseTheTenantRelativeScriptKey" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="799ac159-4807-11aa-dbd7-de40ba01ff03">
+      <Execution id="0d11c8c7-7ee4-49cb-8c12-cf58fbd014a7" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.PortalReproductions" name="SharedStudioSaveMustUseTheTenantRelativeScriptKey" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.RestReproductions.PaginationLinkToAnotherHostMustNotReceiveCredentials" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="c620333c-b7e7-2fe6-95d2-d70bc1205ca8">
+      <Execution id="365e6194-6aca-48e3-8f8c-293df529ce03" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.RestReproductions" name="PaginationLinkToAnotherHostMustNotReceiveCredentials" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.RestReproductions.CancellingBeforeHeadersMustPreserveOperationCanceledException" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="db0e6c37-4c6e-e22a-0703-e093be4c0125">
+      <Execution id="6113410f-924c-4f50-8250-197ce835f270" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.RestReproductions" name="CancellingBeforeHeadersMustPreserveOperationCanceledException" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.SqliteUpdateWithLiteralsMustBindItsParameters" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="1c425741-8df7-92f0-7047-143791850acc">
+      <Execution id="276c7e0b-5ff6-4568-8054-c8a8250cf6e9" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="SqliteUpdateWithLiteralsMustBindItsParameters" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.RestReproductions.RedirectToAnotherPortMustNotReceiveCredentials" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="2f5ed02f-389f-5f00-f37e-cb6adaa0aa95">
+      <Execution id="a1f4637c-f994-407b-8340-7f582a2d146c" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.RestReproductions" name="RedirectToAnotherPortMustNotReceiveCredentials" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.SchedulerReproductions.HistoryFailureMustNotReplayAnAlreadySuccessfulScript" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="f30f8082-2326-3afe-7b56-7e8a6ed9aaa4">
+      <Execution id="e57c002d-d4d2-45ce-9a91-5f920323c6f4" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.SchedulerReproductions" name="HistoryFailureMustNotReplayAnAlreadySuccessfulScript" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(mutation: &quot;UPDATE reviewdb.items SET amount = id;&quot;, check: &quot;SELECT amount FROM items WHERE id = 1&quot;, expected: 10)" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="cb237682-3cf2-492d-591e-ca3fe9d5abe3">
+      <Execution id="3962123f-2f33-4b0e-a991-d0fe5081fd58" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="MutationAsTheFirstTransactionalOperationMustBeRollbackable" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.LoggingReproductions.ConnectorBoundaryMustNotRetainRawProviderCredentials" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="b98929fe-b08d-f4cc-7865-957e8b08915a">
+      <Execution id="b64e16af-5b87-4fac-ba5d-388bd3642eca" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.LoggingReproductions" name="ConnectorBoundaryMustNotRetainRawProviderCredentials" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.SharePointReproductions.BatchesMustNotIncludePreviouslyReturnedRows" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="d40daf4e-4abb-42a0-ea44-761827b56431">
+      <Execution id="1422656c-0caf-47d1-8561-7de26bbec406" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.SharePointReproductions" name="BatchesMustNotIncludePreviouslyReturnedRows" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.LoggingReproductions.StructuredEngineLogMustMaskArgumentsNamedPassword" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="f106f85d-eb8f-5c3b-9802-4d6429e31677">
+      <Execution id="ea703f96-56eb-4f02-a9cd-7f29e36c818f" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.LoggingReproductions" name="StructuredEngineLogMustMaskArgumentsNamedPassword" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.SemiAndAntiJoinMustReturnTheCorrectLeftRows(kind: &quot;ANTI&quot;, expected: 0)" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="890bef7d-5aa8-8d89-3385-2aa65ca9e02c">
+      <Execution id="e463d65a-27a5-4d91-a929-ddc31191cae5" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="SemiAndAntiJoinMustReturnTheCorrectLeftRows" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.SharePointReproductions.ListReadMustFollowTheServerContinuation" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="a6e28611-60d3-b559-ac8f-e9cd749d76d4">
+      <Execution id="a51033a2-0369-40c2-b636-6ca5f3b222ee" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.SharePointReproductions" name="ListReadMustFollowTheServerContinuation" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(mutation: &quot;DELETE FROM reviewdb.items WHERE id = 1;&quot;, check: &quot;SELECT COUNT(*) FROM items&quot;, expected: 1)" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="58c92c7f-b03f-f96c-776c-1a66f99033ad">
+      <Execution id="78ca9cf5-5df8-42d4-bb03-04f755d641f0" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="MutationAsTheFirstTransactionalOperationMustBeRollbackable" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.SharePointReproductions.VerboseODataListReadMustReturnItsResults" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="0572ce61-fec7-e49c-b820-d0d155db2add">
+      <Execution id="8b9e7de0-bbba-4f47-923c-c398521ad5e0" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.SharePointReproductions" name="VerboseODataListReadMustReturnItsResults" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.HashJoinMustAgreeWithLoopJoinUnderDefaultCaseInsensitiveComparison" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="324342c0-dcae-4f2f-fdf4-2059662cd2a4">
+      <Execution id="a7e11c84-8279-403b-a844-fcf09fac5f6f" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="HashJoinMustAgreeWithLoopJoinUnderDefaultCaseInsensitiveComparison" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.NestedCommitMustRemainRollbackableByTheOuterTransaction" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="bdbe341d-25c8-e2df-da12-2e1d5ea865c3">
+      <Execution id="0f35076f-7d22-4098-af35-df0fedad54e4" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="NestedCommitMustRemainRollbackableByTheOuterTransaction" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.RestReproductions.BodyReadMustRemainUnderTheConfiguredRequestTimeout" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="9e73264a-3741-736e-990f-c68d5a000fe4">
+      <Execution id="72b8737c-1b72-4196-86ea-a10c3ddf8258" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.RestReproductions" name="BodyReadMustRemainUnderTheConfiguredRequestTimeout" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.SemiAndAntiJoinMustReturnTheCorrectLeftRows(kind: &quot;SEMI&quot;, expected: 1)" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="ed49a261-b294-5140-f336-3fa3595eb45d">
+      <Execution id="03449115-87b9-4cd7-b114-affb7d7662f4" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="SemiAndAntiJoinMustReturnTheCorrectLeftRows" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="cb237682-3cf2-492d-591e-ca3fe9d5abe3" executionId="3962123f-2f33-4b0e-a991-d0fe5081fd58" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c620333c-b7e7-2fe6-95d2-d70bc1205ca8" executionId="365e6194-6aca-48e3-8f8c-293df529ce03" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="a6e28611-60d3-b559-ac8f-e9cd749d76d4" executionId="a51033a2-0369-40c2-b636-6ca5f3b222ee" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="bdbe341d-25c8-e2df-da12-2e1d5ea865c3" executionId="0f35076f-7d22-4098-af35-df0fedad54e4" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f106f85d-eb8f-5c3b-9802-4d6429e31677" executionId="ea703f96-56eb-4f02-a9cd-7f29e36c818f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="799ac159-4807-11aa-dbd7-de40ba01ff03" executionId="0d11c8c7-7ee4-49cb-8c12-cf58fbd014a7" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b98929fe-b08d-f4cc-7865-957e8b08915a" executionId="b64e16af-5b87-4fac-ba5d-388bd3642eca" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="ed49a261-b294-5140-f336-3fa3595eb45d" executionId="03449115-87b9-4cd7-b114-affb7d7662f4" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1c425741-8df7-92f0-7047-143791850acc" executionId="276c7e0b-5ff6-4568-8054-c8a8250cf6e9" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="890bef7d-5aa8-8d89-3385-2aa65ca9e02c" executionId="e463d65a-27a5-4d91-a929-ddc31191cae5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="58c92c7f-b03f-f96c-776c-1a66f99033ad" executionId="78ca9cf5-5df8-42d4-bb03-04f755d641f0" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="324342c0-dcae-4f2f-fdf4-2059662cd2a4" executionId="a7e11c84-8279-403b-a844-fcf09fac5f6f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2f5ed02f-389f-5f00-f37e-cb6adaa0aa95" executionId="a1f4637c-f994-407b-8340-7f582a2d146c" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d40daf4e-4abb-42a0-ea44-761827b56431" executionId="1422656c-0caf-47d1-8561-7de26bbec406" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9e73264a-3741-736e-990f-c68d5a000fe4" executionId="72b8737c-1b72-4196-86ea-a10c3ddf8258" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f30f8082-2326-3afe-7b56-7e8a6ed9aaa4" executionId="e57c002d-d4d2-45ce-9a91-5f920323c6f4" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="db0e6c37-4c6e-e22a-0703-e093be4c0125" executionId="6113410f-924c-4f50-8250-197ce835f270" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0572ce61-fec7-e49c-b820-d0d155db2add" executionId="8b9e7de0-bbba-4f47-923c-c398521ad5e0" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="18" executed="18" passed="18" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.12)&#xD;
+[xUnit.net 00:00:00.27]   Discovering: ETL-SQL.Review.Tests&#xD;
+[xUnit.net 00:00:00.30]   Discovered:  ETL-SQL.Review.Tests&#xD;
+[xUnit.net 00:00:00.31]   Starting:    ETL-SQL.Review.Tests&#xD;
+[xUnit.net 00:00:06.30]   Finished:    ETL-SQL.Review.Tests&#xD;
+</StdOut>
+    </Output>
+  </ResultSummary>
+</TestRun>

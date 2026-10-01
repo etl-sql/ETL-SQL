@@ -13,10 +13,10 @@ import {
 
 // ── 1. Palette groups & kinds inventory ──────────────────────────────────────
 assert.ok(Array.isArray(PIPELINE_TASK_GROUPS));
-assert.equal(PIPELINE_TASK_GROUPS.length, 4);
+assert.equal(PIPELINE_TASK_GROUPS.length, 10);
 
 const groupIds = PIPELINE_TASK_GROUPS.map(g => g.id);
-assert.deepEqual(groupIds, ['work', 'flow', 'files', 'directories']);
+assert.deepEqual(groupIds, ['extract', 'transform', 'validate', 'load', 'cleanup', 'flow', 'files', 'directories', 'messages', 'advanced']);
 
 for (const group of PIPELINE_TASK_GROUPS) {
     assert.ok(group.id, 'Group has id');
@@ -26,7 +26,8 @@ for (const group of PIPELINE_TASK_GROUPS) {
 }
 
 assert.ok(Array.isArray(PIPELINE_TASK_KINDS));
-assert.equal(PIPELINE_TASK_KINDS.length, 23);
+assert.equal(PIPELINE_TASK_KINDS.length, 31);
+assert.equal(new Set(PIPELINE_TASK_KINDS.map(kind => kind.id)).size, PIPELINE_TASK_KINDS.length);
 
 for (const chip of PIPELINE_TASK_KINDS) {
     assert.ok(chip.id, 'Chip has id');
@@ -39,7 +40,7 @@ for (const chip of PIPELINE_TASK_KINDS) {
 const execKind = taskKind('execution');
 assert.ok(execKind);
 assert.equal(execKind.id, 'execution');
-assert.equal(execKind.label, 'Execution');
+assert.equal(execKind.label, 'Native SQL');
 
 const execUpper = taskKind('EXECUTION');
 assert.ok(execUpper);
@@ -71,7 +72,7 @@ assert.equal(needsALoop('if'), false);
 assert.equal(needsALoop('execution'), false);
 
 // ── 5. taskKindLabel helper ──────────────────────────────────────────────────
-assert.equal(taskKindLabel('execution'), 'Execution');
+assert.equal(taskKindLabel('execution'), 'Native SQL');
 assert.equal(taskKindLabel('copyfile'), 'Copy file');
 assert.equal(taskKindLabel('parallel'), 'Parallel');
 assert.equal(taskKindLabel('non_existent'), 'Task');

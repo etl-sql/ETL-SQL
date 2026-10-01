@@ -1225,6 +1225,6 @@ public class JoinEngine
         {
             values[i] = row[keys[i]];
         }
-        return new CompoundKey(values);
+        return CompoundKey.CreateJoinKey(_context.CaseSensitiveComparison, values);
     }
 }

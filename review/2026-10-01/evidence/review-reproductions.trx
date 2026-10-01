@@ -1,0 +1,596 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="dba1ae1a-0c3d-4ce1-8611-d205a8adaf9c" name="chuck@CHUCKPC 2026-10-01 06:10:02" runUser="ChuckPC\CodexSandboxOffline" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-10-01T06:10:02.2988768-05:00" queuing="2026-10-01T06:10:02.2988769-05:00" start="2026-10-01T06:10:00.5230421-05:00" finish="2026-10-01T06:10:06.9122118-05:00" />
+  <TestSettings name="default" id="64f67c3f-ef9f-4683-a75e-c114f0e28dc1">
+    <Deployment runDeploymentRoot="chuck_CHUCKPC_2026-10-01_06_10_02" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="c18a51a0-6dd3-4582-836f-9162d9bd5ec6" testId="ed49a261-b294-5140-f336-3fa3595eb45d" testName="ETL_SQL.Review.CorrectnessReproductions.SemiAndAntiJoinMustReturnTheCorrectLeftRows(kind: &quot;SEMI&quot;, expected: 1)" computerName="CHUCKPC" duration="00:00:00.0822813" startTime="2026-10-01T06:10:01.2994205-05:00" endTime="2026-10-01T06:10:01.3820022-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="c18a51a0-6dd3-4582-836f-9162d9bd5ec6" />
+    <UnitTestResult executionId="b26c510d-642e-4b9e-b58d-c95b1adbacee" testId="58c92c7f-b03f-f96c-776c-1a66f99033ad" testName="ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(mutation: &quot;DELETE FROM reviewdb.items WHERE id = 1;&quot;, check: &quot;SELECT COUNT(*) FROM items&quot;, expected: 1)" computerName="CHUCKPC" duration="00:00:00.2719067" startTime="2026-10-01T06:10:00.9620605-05:00" endTime="2026-10-01T06:10:01.2430970-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b26c510d-642e-4b9e-b58d-c95b1adbacee">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Equal() Failure: Values differ&#xD;
+Expected: 1&#xD;
+Actual:   0</Message>
+          <StackTrace>   at ETL_SQL.Review.CorrectnessReproductions.&lt;&gt;c__DisplayClass6_0.&lt;&lt;MutationAsTheFirstTransactionalOperationMustBeRollbackable&gt;b__0&gt;d.MoveNext() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 91&#xD;
+--- End of stack trace from previous location ---&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test) in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 123&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test) in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 123&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(String mutation, String check, Int64 expected) in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 88&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="63b300fd-356b-431f-839d-712559e23d69" testId="890bef7d-5aa8-8d89-3385-2aa65ca9e02c" testName="ETL_SQL.Review.CorrectnessReproductions.SemiAndAntiJoinMustReturnTheCorrectLeftRows(kind: &quot;ANTI&quot;, expected: 0)" computerName="CHUCKPC" duration="00:00:00.0114382" startTime="2026-10-01T06:10:01.3825593-05:00" endTime="2026-10-01T06:10:01.3940796-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="63b300fd-356b-431f-839d-712559e23d69" />
+    <UnitTestResult executionId="7a0c3f57-71e7-429e-a86b-9dc3ec9e2cd0" testId="1c425741-8df7-92f0-7047-143791850acc" testName="ETL_SQL.Review.CorrectnessReproductions.SqliteUpdateWithLiteralsMustBindItsParameters" computerName="CHUCKPC" duration="00:00:00.0310355" startTime="2026-10-01T06:10:01.3942429-05:00" endTime="2026-10-01T06:10:01.4283553-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="7a0c3f57-71e7-429e-a86b-9dc3ec9e2cd0">
+      <Output>
+        <ErrorInfo>
+          <Message>ETL_SQL.Core.Common.Exceptions.ExecutionException : SQLite connector error: Must add values for the following parameters: @up0, @up1&#xD;
+---- System.InvalidOperationException : Must add values for the following parameters: @up0, @up1</Message>
+          <StackTrace>   at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+MoveNext() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\ConnectorExceptionWrapper.cs:line 71&#xD;
+   at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+MoveNext() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\ConnectorExceptionWrapper.cs:line 62&#xD;
+   at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+System.Threading.Tasks.Sources.IValueTaskSource&lt;System.Boolean&gt;.GetResult()&#xD;
+   at ETL_SQL.Engine.Handlers.UpdateStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\UpdateStatementHandler.cs:line 71&#xD;
+   at ETL_SQL.Engine.Handlers.UpdateStatementHandler.Execute(Statement statement, IExecutionContext context) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\UpdateStatementHandler.cs:line 71&#xD;
+   at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1566&#xD;
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1215&#xD;
+   at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs:line 1274&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.&lt;&gt;c.&lt;&lt;SqliteUpdateWithLiteralsMustBindItsParameters&gt;b__7_0&gt;d.MoveNext() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 100&#xD;
+--- End of stack trace from previous location ---&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test) in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 123&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test) in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 123&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.SqliteUpdateWithLiteralsMustBindItsParameters() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 98&#xD;
+--- End of stack trace from previous location ---&#xD;
+----- Inner Stack Trace -----&#xD;
+   at Microsoft.Data.Sqlite.SqliteCommand.GetStatements()+MoveNext()&#xD;
+   at Microsoft.Data.Sqlite.SqliteDataReader.NextResult()&#xD;
+   at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReader(CommandBehavior behavior)&#xD;
+   at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)&#xD;
+   at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReaderAsync(CancellationToken cancellationToken)&#xD;
+   at ETL_SQL.Connectors.Sqlite.SqliteDataSource.ExecuteRawSqlCore(String sql, IEnumerable`1 parameters, CancellationToken cancellationToken)+MoveNext() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Databases\Sqlite\SqliteDataSource.cs:line 484&#xD;
+   at ETL_SQL.Connectors.Sqlite.SqliteDataSource.ExecuteRawSqlCore(String sql, IEnumerable`1 parameters, CancellationToken cancellationToken)+MoveNext() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Databases\Sqlite\SqliteDataSource.cs:line 531&#xD;
+   at ETL_SQL.Connectors.Sqlite.SqliteDataSource.ExecuteRawSqlCore(String sql, IEnumerable`1 parameters, CancellationToken cancellationToken)+System.Threading.Tasks.Sources.IValueTaskSource&lt;System.Boolean&gt;.GetResult()&#xD;
+   at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+MoveNext() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\ConnectorExceptionWrapper.cs:line 67</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="09f1288b-6312-47b9-9517-703384f77e00" testId="9e73264a-3741-736e-990f-c68d5a000fe4" testName="ETL_SQL.Review.RestReproductions.BodyReadMustRemainUnderTheConfiguredRequestTimeout" computerName="CHUCKPC" duration="00:00:02.0053828" startTime="2026-10-01T06:10:04.7490744-05:00" endTime="2026-10-01T06:10:06.7550763-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="09f1288b-6312-47b9-9517-703384f77e00">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Same() Failure: Values are not the same instance&#xD;
+Expected: Task&lt;VoidTaskResult,&lt;Read&gt;d__2&gt; { Status = WaitingForActivation }&#xD;
+Actual:   Task { Status = RanToCompletion }</Message>
+          <StackTrace>   at ETL_SQL.Review.RestReproductions.BodyReadMustRemainUnderTheConfiguredRequestTimeout() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 81&#xD;
+   at ETL_SQL.Review.RestReproductions.BodyReadMustRemainUnderTheConfiguredRequestTimeout() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 88&#xD;
+   at ETL_SQL.Review.RestReproductions.BodyReadMustRemainUnderTheConfiguredRequestTimeout() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 88&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="06a1232b-45a6-4d5c-ba1d-dc88215d025e" testId="f106f85d-eb8f-5c3b-9802-4d6429e31677" testName="ETL_SQL.Review.LoggingReproductions.StructuredEngineLogMustMaskArgumentsNamedPassword" computerName="CHUCKPC" duration="00:00:00.0004446" startTime="2026-10-01T06:10:06.7587095-05:00" endTime="2026-10-01T06:10:06.7592523-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="06a1232b-45a6-4d5c-ba1d-dc88215d025e">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.DoesNotContain() Failure: Sub-string found&#xD;
+                                ↓ (pos 26)&#xD;
+String: ···"tication failed for synthetic-review-only"···&#xD;
+Found:  "synthetic-review-only-value"</Message>
+          <StackTrace>   at ETL_SQL.Review.LoggingReproductions.StructuredEngineLogMustMaskArgumentsNamedPassword() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\LoggingReproductions.cs:line 26&#xD;
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)&#xD;
+   at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="f888bbd2-4918-4f3e-8048-e7bca9b93f6d" testId="f30f8082-2326-3afe-7b56-7e8a6ed9aaa4" testName="ETL_SQL.Review.SchedulerReproductions.HistoryFailureMustNotReplayAnAlreadySuccessfulScript" computerName="CHUCKPC" duration="00:00:00.0586568" startTime="2026-10-01T06:10:06.7596871-05:00" endTime="2026-10-01T06:10:06.8188183-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f888bbd2-4918-4f3e-8048-e7bca9b93f6d">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Single() Failure: The collection contained 2 items&#xD;
+Collection: ["committed-row", "committed-row"]</Message>
+          <StackTrace>   at ETL_SQL.Review.SchedulerReproductions.HistoryFailureMustNotReplayAnAlreadySuccessfulScript() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\SchedulerReproductions.cs:line 66&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="f09bc614-68a7-48ce-8d0c-a45381dbf2ef" testId="324342c0-dcae-4f2f-fdf4-2059662cd2a4" testName="ETL_SQL.Review.CorrectnessReproductions.HashJoinMustAgreeWithLoopJoinUnderDefaultCaseInsensitiveComparison" computerName="CHUCKPC" duration="00:00:00.0188760" startTime="2026-10-01T06:10:01.4292259-05:00" endTime="2026-10-01T06:10:01.4483311-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f09bc614-68a7-48ce-8d0c-a45381dbf2ef">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Single() Failure: The collection was empty</Message>
+          <StackTrace>   at ETL_SQL.Review.CorrectnessReproductions.HashJoinMustAgreeWithLoopJoinUnderDefaultCaseInsensitiveComparison() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 47&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.HashJoinMustAgreeWithLoopJoinUnderDefaultCaseInsensitiveComparison() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 47&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="b36a1160-f1a3-474c-8f49-d702e85a0df5" testId="b98929fe-b08d-f4cc-7865-957e8b08915a" testName="ETL_SQL.Review.LoggingReproductions.ConnectorBoundaryMustNotRetainRawProviderCredentials" computerName="CHUCKPC" duration="00:00:00.0010598" startTime="2026-10-01T06:10:06.7570759-05:00" endTime="2026-10-01T06:10:06.7583142-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="b36a1160-f1a3-474c-8f49-d702e85a0df5">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.DoesNotContain() Failure: Sub-string found&#xD;
+                                ↓ (pos 125)&#xD;
+String: ···"Exception: Password=synthetic-review-pass"···&#xD;
+Found:  "synthetic-review-password"</Message>
+          <StackTrace>   at ETL_SQL.Review.LoggingReproductions.ConnectorBoundaryMustNotRetainRawProviderCredentials() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\LoggingReproductions.cs:line 14&#xD;
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)&#xD;
+   at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="f63aaf9b-8d7d-48e3-90a1-cb5686b53d43" testId="c620333c-b7e7-2fe6-95d2-d70bc1205ca8" testName="ETL_SQL.Review.RestReproductions.PaginationLinkToAnotherHostMustNotReceiveCredentials" computerName="CHUCKPC" duration="00:00:02.1161693" startTime="2026-10-01T06:10:02.3984655-05:00" endTime="2026-10-01T06:10:04.5165942-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="f63aaf9b-8d7d-48e3-90a1-cb5686b53d43">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Null() Failure: Value is not null&#xD;
+Expected: null&#xD;
+Actual:   "Bearer synthetic-review-token"</Message>
+          <StackTrace>   at ETL_SQL.Review.RestReproductions.PaginationLinkToAnotherHostMustNotReceiveCredentials() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 67&#xD;
+   at ETL_SQL.Review.RestReproductions.PaginationLinkToAnotherHostMustNotReceiveCredentials() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 67&#xD;
+   at ETL_SQL.Review.RestReproductions.PaginationLinkToAnotherHostMustNotReceiveCredentials() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 67&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="0974655d-7dc8-4805-b500-b9c1ca33e845" testId="0572ce61-fec7-e49c-b820-d0d155db2add" testName="ETL_SQL.Review.SharePointReproductions.VerboseODataListReadMustReturnItsResults" computerName="CHUCKPC" duration="00:00:00.0044404" startTime="2026-10-01T06:10:06.8195278-05:00" endTime="2026-10-01T06:10:06.8241376-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="0974655d-7dc8-4805-b500-b9c1ca33e845">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Single() Failure: The collection was empty</Message>
+          <StackTrace>   at ETL_SQL.Review.SharePointReproductions.VerboseODataListReadMustReturnItsResults() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\SharePointReproductions.cs:line 37&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="46be732d-8184-48b7-afb6-8870f4d4ce35" testId="cb237682-3cf2-492d-591e-ca3fe9d5abe3" testName="ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(mutation: &quot;UPDATE reviewdb.items SET amount = id;&quot;, check: &quot;SELECT amount FROM items WHERE id = 1&quot;, expected: 10)" computerName="CHUCKPC" duration="00:00:00.0476755" startTime="2026-10-01T06:10:01.2501190-05:00" endTime="2026-10-01T06:10:01.2981597-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="46be732d-8184-48b7-afb6-8870f4d4ce35">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Equal() Failure: Values differ&#xD;
+Expected: 10&#xD;
+Actual:   1</Message>
+          <StackTrace>   at ETL_SQL.Review.CorrectnessReproductions.&lt;&gt;c__DisplayClass6_0.&lt;&lt;MutationAsTheFirstTransactionalOperationMustBeRollbackable&gt;b__0&gt;d.MoveNext() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 91&#xD;
+--- End of stack trace from previous location ---&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test) in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 123&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test) in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 123&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(String mutation, String check, Int64 expected) in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 88&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="7cff4aa8-afd2-49cd-8341-1d67bd64ab49" testId="bdbe341d-25c8-e2df-da12-2e1d5ea865c3" testName="ETL_SQL.Review.CorrectnessReproductions.NestedCommitMustRemainRollbackableByTheOuterTransaction" computerName="CHUCKPC" duration="00:00:00.0308535" startTime="2026-10-01T06:10:01.4486804-05:00" endTime="2026-10-01T06:10:01.4798432-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="7cff4aa8-afd2-49cd-8341-1d67bd64ab49">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Equal() Failure: Values differ&#xD;
+Expected: 1&#xD;
+Actual:   2</Message>
+          <StackTrace>   at ETL_SQL.Review.CorrectnessReproductions.&lt;&gt;c.&lt;&lt;NestedCommitMustRemainRollbackableByTheOuterTransaction&gt;b__5_0&gt;d.MoveNext() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 79&#xD;
+--- End of stack trace from previous location ---&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test) in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 123&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test) in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 123&#xD;
+   at ETL_SQL.Review.CorrectnessReproductions.NestedCommitMustRemainRollbackableByTheOuterTransaction() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs:line 70&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="429961b6-d451-40e5-a9c6-c30fa86086bf" testId="2f5ed02f-389f-5f00-f37e-cb6adaa0aa95" testName="ETL_SQL.Review.RestReproductions.RedirectToAnotherPortMustNotReceiveCredentials" computerName="CHUCKPC" duration="00:00:00.0112446" startTime="2026-10-01T06:10:04.7369632-05:00" endTime="2026-10-01T06:10:04.7486567-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="429961b6-d451-40e5-a9c6-c30fa86086bf">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Null() Failure: Value is not null&#xD;
+Expected: null&#xD;
+Actual:   "Bearer synthetic-review-token"</Message>
+          <StackTrace>   at ETL_SQL.Review.RestReproductions.RedirectToAnotherPortMustNotReceiveCredentials() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 48&#xD;
+   at ETL_SQL.Review.RestReproductions.RedirectToAnotherPortMustNotReceiveCredentials() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 48&#xD;
+   at ETL_SQL.Review.RestReproductions.RedirectToAnotherPortMustNotReceiveCredentials() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 48&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="570a49df-6b5d-4315-ba40-96ba78346fec" testId="db0e6c37-4c6e-e22a-0703-e093be4c0125" testName="ETL_SQL.Review.RestReproductions.CancellingBeforeHeadersMustPreserveOperationCanceledException" computerName="CHUCKPC" duration="00:00:00.2160194" startTime="2026-10-01T06:10:04.5179548-05:00" endTime="2026-10-01T06:10:04.7359244-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="570a49df-6b5d-4315-ba40-96ba78346fec">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.ThrowsAny() Failure: Exception type was not compatible&#xD;
+Expected: typeof(System.OperationCanceledException)&#xD;
+Actual:   typeof(ETL_SQL.Core.Common.Exceptions.ExecutionException)&#xD;
+---- ETL_SQL.Core.Common.Exceptions.ExecutionException : REST connector error: API request failed with exception: The operation was canceled.&#xD;
+-------- System.Net.Http.HttpRequestException : API request failed with exception: The operation was canceled.&#xD;
+------------ System.Threading.Tasks.TaskCanceledException : The operation was canceled.&#xD;
+---------------- System.Threading.Tasks.TaskCanceledException : The operation was canceled.&#xD;
+-------------------- System.IO.IOException : Unable to read data from the transport connection: The I/O operation has been aborted because of either a thread exit or an application request..&#xD;
+------------------------ System.Net.Sockets.SocketException : The I/O operation has been aborted because of either a thread exit or an application request.</Message>
+          <StackTrace>   at ETL_SQL.Review.RestReproductions.CancellingBeforeHeadersMustPreserveOperationCanceledException() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 99&#xD;
+   at ETL_SQL.Review.RestReproductions.CancellingBeforeHeadersMustPreserveOperationCanceledException() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 102&#xD;
+--- End of stack trace from previous location ---&#xD;
+----- Inner Stack Trace -----&#xD;
+   at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+MoveNext() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\ConnectorExceptionWrapper.cs:line 71&#xD;
+   at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+MoveNext() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\ConnectorExceptionWrapper.cs:line 62&#xD;
+   at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+System.Threading.Tasks.Sources.IValueTaskSource&lt;System.Boolean&gt;.GetResult()&#xD;
+   at ETL_SQL.Review.RestReproductions.Read(RestDataSource source, CancellationToken ct) in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 34&#xD;
+   at ETL_SQL.Review.RestReproductions.Read(RestDataSource source, CancellationToken ct) in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs:line 34&#xD;
+----- Inner Stack Trace -----&#xD;
+   at ETL_SQL.Connectors.Rest.RestDataSource.ReadBatchesCore(Int32 batchSize, CancellationToken cancellationToken)+MoveNext() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\Rest\RestDataSource.cs:line 458&#xD;
+   at ETL_SQL.Connectors.Rest.RestDataSource.ReadBatchesCore(Int32 batchSize, CancellationToken cancellationToken)+System.Threading.Tasks.Sources.IValueTaskSource&lt;System.Boolean&gt;.GetResult()&#xD;
+   at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+MoveNext() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\ConnectorExceptionWrapper.cs:line 67&#xD;
+----- Inner Stack Trace -----&#xD;
+   at System.Net.Http.HttpClient.HandleFailure(Exception e, Boolean telemetryStarted, HttpResponseMessage response, CancellationTokenSource cts, CancellationToken cancellationToken, CancellationTokenSource pendingRequestsCts)&#xD;
+   at System.Net.Http.HttpClient.&lt;SendAsync&gt;g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)&#xD;
+   at ETL_SQL.Connectors.Rest.RestDataSource.SendWithRedirectsAsync(HttpRequestMessage request, HttpCompletionOption completion, CancellationToken ct) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\Rest\RestDataSource.cs:line 1369&#xD;
+   at ETL_SQL.Connectors.Rest.RestDataSource.ReadBatchesCore(Int32 batchSize, CancellationToken cancellationToken)+MoveNext() in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\Rest\RestDataSource.cs:line 428&#xD;
+----- Inner Stack Trace -----&#xD;
+   at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)&#xD;
+   at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)&#xD;
+   at System.Net.Http.HttpClient.&lt;SendAsync&gt;g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)&#xD;
+----- Inner Stack Trace -----&#xD;
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)&#xD;
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource&lt;System.Int32&gt;.GetResult(Int16 token)&#xD;
+   at System.Net.Http.HttpConnection.InitialFillAsync(Boolean async)&#xD;
+   at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)&#xD;
+----- Inner Stack Trace -----&#xD;
+</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="a9e12824-c61c-4d5b-9f82-0470c70eb41f" testId="a6e28611-60d3-b559-ac8f-e9cd749d76d4" testName="ETL_SQL.Review.SharePointReproductions.ListReadMustFollowTheServerContinuation" computerName="CHUCKPC" duration="00:00:00.0009032" startTime="2026-10-01T06:10:06.8319788-05:00" endTime="2026-10-01T06:10:06.8330330-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a9e12824-c61c-4d5b-9f82-0470c70eb41f">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Equal() Failure: Collections differ&#xD;
+                                                ↓ (pos 1)&#xD;
+Expected: string[]                        ["1", "2"]&#xD;
+Actual:   ListSelectIterator&lt;Row, string&gt; ["1"]</Message>
+          <StackTrace>   at ETL_SQL.Review.SharePointReproductions.ListReadMustFollowTheServerContinuation() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\SharePointReproductions.cs:line 21&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="dcdb4b93-3059-4e9c-8d98-0bf43a0feec5" testId="799ac159-4807-11aa-dbd7-de40ba01ff03" testName="ETL_SQL.Review.PortalReproductions.SharedStudioSaveMustUseTheTenantRelativeScriptKey" computerName="CHUCKPC" duration="00:00:00.9112800" startTime="2026-10-01T06:10:01.4823854-05:00" endTime="2026-10-01T06:10:02.3975705-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="dcdb4b93-3059-4e9c-8d98-0bf43a0feec5">
+      <Output>
+        <ErrorInfo>
+          <Message>System.InvalidOperationException : Unscoped artifact 'Scripts/tenant-alpha/studio/item.etlsql' exists outside dedicated tenant prefix 'tenant-alpha/'. Migrate or quarantine legacy artifacts before serving this tenant.</Message>
+          <StackTrace>   at ETL_SQL.Core.Storage.TenantScopedArtifactStorage.RejectLegacyCollisionAsync(ArtifactArea area, String logicalPath, CancellationToken ct) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\Storage\TenantScopedArtifactStorage.cs:line 174&#xD;
+   at ETL_SQL.Core.Storage.TenantScopedArtifactStorage.ExistsAsync(ArtifactArea area, String path, CancellationToken ct) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\Storage\TenantScopedArtifactStorage.cs:line 48&#xD;
+   at ETL_SQL.Portal.Services.ReportScriptSaveService.SaveAsync(Int32 id, String scriptText, Nullable`1 expectedVersion, ClaimsPrincipal user, Int32 currentUserId, String baseRevision, CancellationToken ct) in C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Portal\Services\ReportScriptSaveService.cs:line 71&#xD;
+   at ETL_SQL.Review.PortalReproductions.SharedStudioSaveMustUseTheTenantRelativeScriptKey() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\PortalReproductions.cs:line 51&#xD;
+   at ETL_SQL.Review.PortalReproductions.SharedStudioSaveMustUseTheTenantRelativeScriptKey() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\PortalReproductions.cs:line 53&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="d6424d93-5ce9-4280-ace4-876a5465103e" testId="d40daf4e-4abb-42a0-ea44-761827b56431" testName="ETL_SQL.Review.SharePointReproductions.BatchesMustNotIncludePreviouslyReturnedRows" computerName="CHUCKPC" duration="00:00:00.0069708" startTime="2026-10-01T06:10:06.8245010-05:00" endTime="2026-10-01T06:10:06.8316411-05:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="d6424d93-5ce9-4280-ace4-876a5465103e">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.Equal() Failure: Collections differ&#xD;
+                                                ↓ (pos 1)&#xD;
+Expected: string[]                        ["1", "2"]&#xD;
+Actual:   ListSelectIterator&lt;Row, string&gt; ["1", "1", "2", "1", "2"]&#xD;
+                                                ↑ (pos 1)</Message>
+          <StackTrace>   at ETL_SQL.Review.SharePointReproductions.BatchesMustNotIncludePreviouslyReturnedRows() in C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\SharePointReproductions.cs:line 29&#xD;
+--- End of stack trace from previous location ---</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="ETL_SQL.Review.PortalReproductions.SharedStudioSaveMustUseTheTenantRelativeScriptKey" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="799ac159-4807-11aa-dbd7-de40ba01ff03">
+      <Execution id="dcdb4b93-3059-4e9c-8d98-0bf43a0feec5" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.PortalReproductions" name="SharedStudioSaveMustUseTheTenantRelativeScriptKey" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.RestReproductions.PaginationLinkToAnotherHostMustNotReceiveCredentials" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="c620333c-b7e7-2fe6-95d2-d70bc1205ca8">
+      <Execution id="f63aaf9b-8d7d-48e3-90a1-cb5686b53d43" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.RestReproductions" name="PaginationLinkToAnotherHostMustNotReceiveCredentials" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.RestReproductions.CancellingBeforeHeadersMustPreserveOperationCanceledException" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="db0e6c37-4c6e-e22a-0703-e093be4c0125">
+      <Execution id="570a49df-6b5d-4315-ba40-96ba78346fec" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.RestReproductions" name="CancellingBeforeHeadersMustPreserveOperationCanceledException" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.SqliteUpdateWithLiteralsMustBindItsParameters" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="1c425741-8df7-92f0-7047-143791850acc">
+      <Execution id="7a0c3f57-71e7-429e-a86b-9dc3ec9e2cd0" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="SqliteUpdateWithLiteralsMustBindItsParameters" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.RestReproductions.RedirectToAnotherPortMustNotReceiveCredentials" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="2f5ed02f-389f-5f00-f37e-cb6adaa0aa95">
+      <Execution id="429961b6-d451-40e5-a9c6-c30fa86086bf" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.RestReproductions" name="RedirectToAnotherPortMustNotReceiveCredentials" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.SchedulerReproductions.HistoryFailureMustNotReplayAnAlreadySuccessfulScript" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="f30f8082-2326-3afe-7b56-7e8a6ed9aaa4">
+      <Execution id="f888bbd2-4918-4f3e-8048-e7bca9b93f6d" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.SchedulerReproductions" name="HistoryFailureMustNotReplayAnAlreadySuccessfulScript" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(mutation: &quot;UPDATE reviewdb.items SET amount = id;&quot;, check: &quot;SELECT amount FROM items WHERE id = 1&quot;, expected: 10)" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="cb237682-3cf2-492d-591e-ca3fe9d5abe3">
+      <Execution id="46be732d-8184-48b7-afb6-8870f4d4ce35" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="MutationAsTheFirstTransactionalOperationMustBeRollbackable" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.LoggingReproductions.ConnectorBoundaryMustNotRetainRawProviderCredentials" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="b98929fe-b08d-f4cc-7865-957e8b08915a">
+      <Execution id="b36a1160-f1a3-474c-8f49-d702e85a0df5" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.LoggingReproductions" name="ConnectorBoundaryMustNotRetainRawProviderCredentials" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.SharePointReproductions.BatchesMustNotIncludePreviouslyReturnedRows" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="d40daf4e-4abb-42a0-ea44-761827b56431">
+      <Execution id="d6424d93-5ce9-4280-ace4-876a5465103e" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.SharePointReproductions" name="BatchesMustNotIncludePreviouslyReturnedRows" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.LoggingReproductions.StructuredEngineLogMustMaskArgumentsNamedPassword" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="f106f85d-eb8f-5c3b-9802-4d6429e31677">
+      <Execution id="06a1232b-45a6-4d5c-ba1d-dc88215d025e" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.LoggingReproductions" name="StructuredEngineLogMustMaskArgumentsNamedPassword" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.SemiAndAntiJoinMustReturnTheCorrectLeftRows(kind: &quot;ANTI&quot;, expected: 0)" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="890bef7d-5aa8-8d89-3385-2aa65ca9e02c">
+      <Execution id="63b300fd-356b-431f-839d-712559e23d69" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="SemiAndAntiJoinMustReturnTheCorrectLeftRows" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.SharePointReproductions.ListReadMustFollowTheServerContinuation" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="a6e28611-60d3-b559-ac8f-e9cd749d76d4">
+      <Execution id="a9e12824-c61c-4d5b-9f82-0470c70eb41f" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.SharePointReproductions" name="ListReadMustFollowTheServerContinuation" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(mutation: &quot;DELETE FROM reviewdb.items WHERE id = 1;&quot;, check: &quot;SELECT COUNT(*) FROM items&quot;, expected: 1)" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="58c92c7f-b03f-f96c-776c-1a66f99033ad">
+      <Execution id="b26c510d-642e-4b9e-b58d-c95b1adbacee" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="MutationAsTheFirstTransactionalOperationMustBeRollbackable" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.SharePointReproductions.VerboseODataListReadMustReturnItsResults" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="0572ce61-fec7-e49c-b820-d0d155db2add">
+      <Execution id="0974655d-7dc8-4805-b500-b9c1ca33e845" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.SharePointReproductions" name="VerboseODataListReadMustReturnItsResults" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.HashJoinMustAgreeWithLoopJoinUnderDefaultCaseInsensitiveComparison" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="324342c0-dcae-4f2f-fdf4-2059662cd2a4">
+      <Execution id="f09bc614-68a7-48ce-8d0c-a45381dbf2ef" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="HashJoinMustAgreeWithLoopJoinUnderDefaultCaseInsensitiveComparison" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.NestedCommitMustRemainRollbackableByTheOuterTransaction" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="bdbe341d-25c8-e2df-da12-2e1d5ea865c3">
+      <Execution id="7cff4aa8-afd2-49cd-8341-1d67bd64ab49" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="NestedCommitMustRemainRollbackableByTheOuterTransaction" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.RestReproductions.BodyReadMustRemainUnderTheConfiguredRequestTimeout" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="9e73264a-3741-736e-990f-c68d5a000fe4">
+      <Execution id="09f1288b-6312-47b9-9517-703384f77e00" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.RestReproductions" name="BodyReadMustRemainUnderTheConfiguredRequestTimeout" />
+    </UnitTest>
+    <UnitTest name="ETL_SQL.Review.CorrectnessReproductions.SemiAndAntiJoinMustReturnTheCorrectLeftRows(kind: &quot;SEMI&quot;, expected: 1)" storage="c:\users\chuck\scratch\etl-sql\review\2026-10-01\repro\bin\debug\net10.0\etl-sql.review.tests.dll" id="ed49a261-b294-5140-f336-3fa3595eb45d">
+      <Execution id="c18a51a0-6dd3-4582-836f-9162d9bd5ec6" />
+      <TestMethod codeBase="C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\bin\Debug\net10.0\ETL-SQL.Review.Tests.dll" adapterTypeName="executor://xunit/VsTestRunner3/netcore/" className="ETL_SQL.Review.CorrectnessReproductions" name="SemiAndAntiJoinMustReturnTheCorrectLeftRows" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="ed49a261-b294-5140-f336-3fa3595eb45d" executionId="c18a51a0-6dd3-4582-836f-9162d9bd5ec6" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="58c92c7f-b03f-f96c-776c-1a66f99033ad" executionId="b26c510d-642e-4b9e-b58d-c95b1adbacee" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="890bef7d-5aa8-8d89-3385-2aa65ca9e02c" executionId="63b300fd-356b-431f-839d-712559e23d69" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1c425741-8df7-92f0-7047-143791850acc" executionId="7a0c3f57-71e7-429e-a86b-9dc3ec9e2cd0" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="9e73264a-3741-736e-990f-c68d5a000fe4" executionId="09f1288b-6312-47b9-9517-703384f77e00" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f106f85d-eb8f-5c3b-9802-4d6429e31677" executionId="06a1232b-45a6-4d5c-ba1d-dc88215d025e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="f30f8082-2326-3afe-7b56-7e8a6ed9aaa4" executionId="f888bbd2-4918-4f3e-8048-e7bca9b93f6d" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="324342c0-dcae-4f2f-fdf4-2059662cd2a4" executionId="f09bc614-68a7-48ce-8d0c-a45381dbf2ef" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="b98929fe-b08d-f4cc-7865-957e8b08915a" executionId="b36a1160-f1a3-474c-8f49-d702e85a0df5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="c620333c-b7e7-2fe6-95d2-d70bc1205ca8" executionId="f63aaf9b-8d7d-48e3-90a1-cb5686b53d43" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="0572ce61-fec7-e49c-b820-d0d155db2add" executionId="0974655d-7dc8-4805-b500-b9c1ca33e845" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="cb237682-3cf2-492d-591e-ca3fe9d5abe3" executionId="46be732d-8184-48b7-afb6-8870f4d4ce35" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="bdbe341d-25c8-e2df-da12-2e1d5ea865c3" executionId="7cff4aa8-afd2-49cd-8341-1d67bd64ab49" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="2f5ed02f-389f-5f00-f37e-cb6adaa0aa95" executionId="429961b6-d451-40e5-a9c6-c30fa86086bf" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="db0e6c37-4c6e-e22a-0703-e093be4c0125" executionId="570a49df-6b5d-4315-ba40-96ba78346fec" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="a6e28611-60d3-b559-ac8f-e9cd749d76d4" executionId="a9e12824-c61c-4d5b-9f82-0470c70eb41f" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="799ac159-4807-11aa-dbd7-de40ba01ff03" executionId="dcdb4b93-3059-4e9c-8d98-0bf43a0feec5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="d40daf4e-4abb-42a0-ea44-761827b56431" executionId="d6424d93-5ce9-4280-ace4-876a5465103e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Failed">
+    <Counters total="18" executed="18" passed="2" failed="16" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.12)&#xD;
+[xUnit.net 00:00:00.05]   Discovering: ETL-SQL.Review.Tests&#xD;
+[xUnit.net 00:00:00.08]   Discovered:  ETL-SQL.Review.Tests&#xD;
+[xUnit.net 00:00:00.09]   Starting:    ETL-SQL.Review.Tests&#xD;
+[xUnit.net 00:00:00.39]       Assert.Equal() Failure: Values differ&#xD;
+[xUnit.net 00:00:00.39]       Expected: 1&#xD;
+[xUnit.net 00:00:00.39]       Actual:   0&#xD;
+[xUnit.net 00:00:00.39]       Stack Trace:&#xD;
+[xUnit.net 00:00:00.39]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(91,0): at ETL_SQL.Review.CorrectnessReproductions.&lt;&gt;c__DisplayClass6_0.&lt;&lt;MutationAsTheFirstTransactionalOperationMustBeRollbackable&gt;b__0&gt;d.MoveNext()&#xD;
+[xUnit.net 00:00:00.39]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:00.39]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(123,0): at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test)&#xD;
+[xUnit.net 00:00:00.39]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(123,0): at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test)&#xD;
+[xUnit.net 00:00:00.39]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(88,0): at ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(String mutation, String check, Int64 expected)&#xD;
+[xUnit.net 00:00:00.39]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:00.44]       Assert.Equal() Failure: Values differ&#xD;
+[xUnit.net 00:00:00.44]       Expected: 10&#xD;
+[xUnit.net 00:00:00.44]       Actual:   1&#xD;
+[xUnit.net 00:00:00.44]       Stack Trace:&#xD;
+[xUnit.net 00:00:00.44]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(91,0): at ETL_SQL.Review.CorrectnessReproductions.&lt;&gt;c__DisplayClass6_0.&lt;&lt;MutationAsTheFirstTransactionalOperationMustBeRollbackable&gt;b__0&gt;d.MoveNext()&#xD;
+[xUnit.net 00:00:00.44]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:00.44]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(123,0): at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test)&#xD;
+[xUnit.net 00:00:00.44]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(123,0): at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test)&#xD;
+[xUnit.net 00:00:00.44]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(88,0): at ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(String mutation, String check, Int64 expected)&#xD;
+[xUnit.net 00:00:00.44]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:00.57]       ETL_SQL.Core.Common.Exceptions.ExecutionException : SQLite connector error: Must add values for the following parameters: @up0, @up1&#xD;
+[xUnit.net 00:00:00.57]       ---- System.InvalidOperationException : Must add values for the following parameters: @up0, @up1&#xD;
+[xUnit.net 00:00:00.57]       Stack Trace:&#xD;
+[xUnit.net 00:00:00.57]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\ConnectorExceptionWrapper.cs(71,0): at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+MoveNext()&#xD;
+[xUnit.net 00:00:00.57]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\ConnectorExceptionWrapper.cs(62,0): at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+MoveNext()&#xD;
+[xUnit.net 00:00:00.57]            at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+System.Threading.Tasks.Sources.IValueTaskSource&lt;System.Boolean&gt;.GetResult()&#xD;
+[xUnit.net 00:00:00.57]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\UpdateStatementHandler.cs(71,0): at ETL_SQL.Engine.Handlers.UpdateStatementHandler.Execute(Statement statement, IExecutionContext context)&#xD;
+[xUnit.net 00:00:00.57]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\UpdateStatementHandler.cs(71,0): at ETL_SQL.Engine.Handlers.UpdateStatementHandler.Execute(Statement statement, IExecutionContext context)&#xD;
+[xUnit.net 00:00:00.57]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1566,0): at ETL_SQL.Engine.Evaluator.EvaluateStatement(Statement statement, CancellationToken cancellationToken)&#xD;
+[xUnit.net 00:00:00.57]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1215,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)&#xD;
+[xUnit.net 00:00:00.57]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Evaluator.cs(1274,0): at ETL_SQL.Engine.Evaluator.Evaluate(Script script, CancellationToken cancellationToken)&#xD;
+[xUnit.net 00:00:00.57]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(100,0): at ETL_SQL.Review.CorrectnessReproductions.&lt;&gt;c.&lt;&lt;SqliteUpdateWithLiteralsMustBindItsParameters&gt;b__7_0&gt;d.MoveNext()&#xD;
+[xUnit.net 00:00:00.57]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:00.57]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(123,0): at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test)&#xD;
+[xUnit.net 00:00:00.57]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(123,0): at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test)&#xD;
+[xUnit.net 00:00:00.57]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(98,0): at ETL_SQL.Review.CorrectnessReproductions.SqliteUpdateWithLiteralsMustBindItsParameters()&#xD;
+[xUnit.net 00:00:00.57]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:00.57]         ----- Inner Stack Trace -----&#xD;
+[xUnit.net 00:00:00.57]            at Microsoft.Data.Sqlite.SqliteCommand.GetStatements()+MoveNext()&#xD;
+[xUnit.net 00:00:00.58]            at Microsoft.Data.Sqlite.SqliteDataReader.NextResult()&#xD;
+[xUnit.net 00:00:00.58]            at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReader(CommandBehavior behavior)&#xD;
+[xUnit.net 00:00:00.58]            at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)&#xD;
+[xUnit.net 00:00:00.58]            at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReaderAsync(CancellationToken cancellationToken)&#xD;
+[xUnit.net 00:00:00.58]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Databases\Sqlite\SqliteDataSource.cs(484,0): at ETL_SQL.Connectors.Sqlite.SqliteDataSource.ExecuteRawSqlCore(String sql, IEnumerable`1 parameters, CancellationToken cancellationToken)+MoveNext()&#xD;
+[xUnit.net 00:00:00.58]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Databases\Sqlite\SqliteDataSource.cs(531,0): at ETL_SQL.Connectors.Sqlite.SqliteDataSource.ExecuteRawSqlCore(String sql, IEnumerable`1 parameters, CancellationToken cancellationToken)+MoveNext()&#xD;
+[xUnit.net 00:00:00.58]            at ETL_SQL.Connectors.Sqlite.SqliteDataSource.ExecuteRawSqlCore(String sql, IEnumerable`1 parameters, CancellationToken cancellationToken)+System.Threading.Tasks.Sources.IValueTaskSource&lt;System.Boolean&gt;.GetResult()&#xD;
+[xUnit.net 00:00:00.58]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\ConnectorExceptionWrapper.cs(67,0): at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+MoveNext()&#xD;
+[xUnit.net 00:00:00.59]       Assert.Single() Failure: The collection was empty&#xD;
+[xUnit.net 00:00:00.59]       Stack Trace:&#xD;
+[xUnit.net 00:00:00.59]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(47,0): at ETL_SQL.Review.CorrectnessReproductions.HashJoinMustAgreeWithLoopJoinUnderDefaultCaseInsensitiveComparison()&#xD;
+[xUnit.net 00:00:00.59]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(47,0): at ETL_SQL.Review.CorrectnessReproductions.HashJoinMustAgreeWithLoopJoinUnderDefaultCaseInsensitiveComparison()&#xD;
+[xUnit.net 00:00:00.59]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:00.63]       Assert.Equal() Failure: Values differ&#xD;
+[xUnit.net 00:00:00.63]       Expected: 1&#xD;
+[xUnit.net 00:00:00.63]       Actual:   2&#xD;
+[xUnit.net 00:00:00.63]       Stack Trace:&#xD;
+[xUnit.net 00:00:00.63]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(79,0): at ETL_SQL.Review.CorrectnessReproductions.&lt;&gt;c.&lt;&lt;NestedCommitMustRemainRollbackableByTheOuterTransaction&gt;b__5_0&gt;d.MoveNext()&#xD;
+[xUnit.net 00:00:00.63]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:00.63]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(123,0): at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test)&#xD;
+[xUnit.net 00:00:00.63]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(123,0): at ETL_SQL.Review.CorrectnessReproductions.UsingSqlite(Func`3 test)&#xD;
+[xUnit.net 00:00:00.63]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\CorrectnessReproductions.cs(70,0): at ETL_SQL.Review.CorrectnessReproductions.NestedCommitMustRemainRollbackableByTheOuterTransaction()&#xD;
+[xUnit.net 00:00:00.63]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:01.54]       System.InvalidOperationException : Unscoped artifact 'Scripts/tenant-alpha/studio/item.etlsql' exists outside dedicated tenant prefix 'tenant-alpha/'. Migrate or quarantine legacy artifacts before serving this tenant.&#xD;
+[xUnit.net 00:00:01.54]       Stack Trace:&#xD;
+[xUnit.net 00:00:01.54]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\Storage\TenantScopedArtifactStorage.cs(174,0): at ETL_SQL.Core.Storage.TenantScopedArtifactStorage.RejectLegacyCollisionAsync(ArtifactArea area, String logicalPath, CancellationToken ct)&#xD;
+[xUnit.net 00:00:01.54]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\Storage\TenantScopedArtifactStorage.cs(48,0): at ETL_SQL.Core.Storage.TenantScopedArtifactStorage.ExistsAsync(ArtifactArea area, String path, CancellationToken ct)&#xD;
+[xUnit.net 00:00:01.54]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Portal\Services\ReportScriptSaveService.cs(71,0): at ETL_SQL.Portal.Services.ReportScriptSaveService.SaveAsync(Int32 id, String scriptText, Nullable`1 expectedVersion, ClaimsPrincipal user, Int32 currentUserId, String baseRevision, CancellationToken ct)&#xD;
+[xUnit.net 00:00:01.54]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\PortalReproductions.cs(51,0): at ETL_SQL.Review.PortalReproductions.SharedStudioSaveMustUseTheTenantRelativeScriptKey()&#xD;
+[xUnit.net 00:00:01.54]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\PortalReproductions.cs(53,0): at ETL_SQL.Review.PortalReproductions.SharedStudioSaveMustUseTheTenantRelativeScriptKey()&#xD;
+[xUnit.net 00:00:01.54]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:03.66]       Assert.Null() Failure: Value is not null&#xD;
+[xUnit.net 00:00:03.66]       Expected: null&#xD;
+[xUnit.net 00:00:03.66]       Actual:   "Bearer synthetic-review-token"&#xD;
+[xUnit.net 00:00:03.66]       Stack Trace:&#xD;
+[xUnit.net 00:00:03.66]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(67,0): at ETL_SQL.Review.RestReproductions.PaginationLinkToAnotherHostMustNotReceiveCredentials()&#xD;
+[xUnit.net 00:00:03.66]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(67,0): at ETL_SQL.Review.RestReproductions.PaginationLinkToAnotherHostMustNotReceiveCredentials()&#xD;
+[xUnit.net 00:00:03.66]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(67,0): at ETL_SQL.Review.RestReproductions.PaginationLinkToAnotherHostMustNotReceiveCredentials()&#xD;
+[xUnit.net 00:00:03.66]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:03.88]       Assert.ThrowsAny() Failure: Exception type was not compatible&#xD;
+[xUnit.net 00:00:03.88]       Expected: typeof(System.OperationCanceledException)&#xD;
+[xUnit.net 00:00:03.88]       Actual:   typeof(ETL_SQL.Core.Common.Exceptions.ExecutionException)&#xD;
+[xUnit.net 00:00:03.88]       ---- ETL_SQL.Core.Common.Exceptions.ExecutionException : REST connector error: API request failed with exception: The operation was canceled.&#xD;
+[xUnit.net 00:00:03.88]       -------- System.Net.Http.HttpRequestException : API request failed with exception: The operation was canceled.&#xD;
+[xUnit.net 00:00:03.88]       ------------ System.Threading.Tasks.TaskCanceledException : The operation was canceled.&#xD;
+[xUnit.net 00:00:03.88]       ---------------- System.Threading.Tasks.TaskCanceledException : The operation was canceled.&#xD;
+[xUnit.net 00:00:03.88]       -------------------- System.IO.IOException : Unable to read data from the transport connection: The I/O operation has been aborted because of either a thread exit or an application request..&#xD;
+[xUnit.net 00:00:03.88]       ------------------------ System.Net.Sockets.SocketException : The I/O operation has been aborted because of either a thread exit or an application request.&#xD;
+[xUnit.net 00:00:03.88]       Stack Trace:&#xD;
+[xUnit.net 00:00:03.88]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(99,0): at ETL_SQL.Review.RestReproductions.CancellingBeforeHeadersMustPreserveOperationCanceledException()&#xD;
+[xUnit.net 00:00:03.88]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(102,0): at ETL_SQL.Review.RestReproductions.CancellingBeforeHeadersMustPreserveOperationCanceledException()&#xD;
+[xUnit.net 00:00:03.88]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:03.88]         ----- Inner Stack Trace -----&#xD;
+[xUnit.net 00:00:03.88]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\ConnectorExceptionWrapper.cs(71,0): at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+MoveNext()&#xD;
+[xUnit.net 00:00:03.88]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\ConnectorExceptionWrapper.cs(62,0): at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+MoveNext()&#xD;
+[xUnit.net 00:00:03.88]            at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+System.Threading.Tasks.Sources.IValueTaskSource&lt;System.Boolean&gt;.GetResult()&#xD;
+[xUnit.net 00:00:03.88]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(34,0): at ETL_SQL.Review.RestReproductions.Read(RestDataSource source, CancellationToken ct)&#xD;
+[xUnit.net 00:00:03.88]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(34,0): at ETL_SQL.Review.RestReproductions.Read(RestDataSource source, CancellationToken ct)&#xD;
+[xUnit.net 00:00:03.88]         ----- Inner Stack Trace -----&#xD;
+[xUnit.net 00:00:03.88]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\Rest\RestDataSource.cs(458,0): at ETL_SQL.Connectors.Rest.RestDataSource.ReadBatchesCore(Int32 batchSize, CancellationToken cancellationToken)+MoveNext()&#xD;
+[xUnit.net 00:00:03.88]            at ETL_SQL.Connectors.Rest.RestDataSource.ReadBatchesCore(Int32 batchSize, CancellationToken cancellationToken)+System.Threading.Tasks.Sources.IValueTaskSource&lt;System.Boolean&gt;.GetResult()&#xD;
+[xUnit.net 00:00:03.88]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors.Common\ConnectorExceptionWrapper.cs(67,0): at ETL_SQL.Connectors.Shared.ConnectorExceptionWrapper.WrapAsync[T](IAsyncEnumerable`1 source, String connectorName, Func`2 shouldWrap, CancellationToken cancellationToken)+MoveNext()&#xD;
+[xUnit.net 00:00:03.88]         ----- Inner Stack Trace -----&#xD;
+[xUnit.net 00:00:03.88]            at System.Net.Http.HttpClient.HandleFailure(Exception e, Boolean telemetryStarted, HttpResponseMessage response, CancellationTokenSource cts, CancellationToken cancellationToken, CancellationTokenSource pendingRequestsCts)&#xD;
+[xUnit.net 00:00:03.88]            at System.Net.Http.HttpClient.&lt;SendAsync&gt;g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)&#xD;
+[xUnit.net 00:00:03.88]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\Rest\RestDataSource.cs(1369,0): at ETL_SQL.Connectors.Rest.RestDataSource.SendWithRedirectsAsync(HttpRequestMessage request, HttpCompletionOption completion, CancellationToken ct)&#xD;
+[xUnit.net 00:00:03.88]         C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\Rest\RestDataSource.cs(428,0): at ETL_SQL.Connectors.Rest.RestDataSource.ReadBatchesCore(Int32 batchSize, CancellationToken cancellationToken)+MoveNext()&#xD;
+[xUnit.net 00:00:03.88]         ----- Inner Stack Trace -----&#xD;
+[xUnit.net 00:00:03.88]            at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)&#xD;
+[xUnit.net 00:00:03.88]            at System.Net.Http.HttpConnectionPool.SendWithVersionDetectionAndRetryAsync(HttpRequestMessage request, Boolean async, Boolean doRequestAuth, CancellationToken cancellationToken)&#xD;
+[xUnit.net 00:00:03.88]            at System.Net.Http.HttpClient.&lt;SendAsync&gt;g__Core|83_0(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationTokenSource cts, Boolean disposeCts, CancellationTokenSource pendingRequestsCts, CancellationToken originalCancellationToken)&#xD;
+[xUnit.net 00:00:03.88]         ----- Inner Stack Trace -----&#xD;
+[xUnit.net 00:00:03.88]            at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)&#xD;
+[xUnit.net 00:00:03.88]            at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.System.Threading.Tasks.Sources.IValueTaskSource&lt;System.Int32&gt;.GetResult(Int16 token)&#xD;
+[xUnit.net 00:00:03.88]            at System.Net.Http.HttpConnection.InitialFillAsync(Boolean async)&#xD;
+[xUnit.net 00:00:03.88]            at System.Net.Http.HttpConnection.SendAsync(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)&#xD;
+[xUnit.net 00:00:03.88]         ----- Inner Stack Trace -----&#xD;
+[xUnit.net 00:00:03.88]         &#xD;
+[xUnit.net 00:00:03.89]       Assert.Null() Failure: Value is not null&#xD;
+[xUnit.net 00:00:03.89]       Expected: null&#xD;
+[xUnit.net 00:00:03.89]       Actual:   "Bearer synthetic-review-token"&#xD;
+[xUnit.net 00:00:03.89]       Stack Trace:&#xD;
+[xUnit.net 00:00:03.89]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(48,0): at ETL_SQL.Review.RestReproductions.RedirectToAnotherPortMustNotReceiveCredentials()&#xD;
+[xUnit.net 00:00:03.89]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(48,0): at ETL_SQL.Review.RestReproductions.RedirectToAnotherPortMustNotReceiveCredentials()&#xD;
+[xUnit.net 00:00:03.89]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(48,0): at ETL_SQL.Review.RestReproductions.RedirectToAnotherPortMustNotReceiveCredentials()&#xD;
+[xUnit.net 00:00:03.89]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:05.90]       Assert.Same() Failure: Values are not the same instance&#xD;
+[xUnit.net 00:00:05.90]       Expected: Task&lt;VoidTaskResult,&lt;Read&gt;d__2&gt; { Status = WaitingForActivation }&#xD;
+[xUnit.net 00:00:05.90]       Actual:   Task { Status = RanToCompletion }&#xD;
+[xUnit.net 00:00:05.90]       Stack Trace:&#xD;
+[xUnit.net 00:00:05.90]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(81,0): at ETL_SQL.Review.RestReproductions.BodyReadMustRemainUnderTheConfiguredRequestTimeout()&#xD;
+[xUnit.net 00:00:05.90]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(88,0): at ETL_SQL.Review.RestReproductions.BodyReadMustRemainUnderTheConfiguredRequestTimeout()&#xD;
+[xUnit.net 00:00:05.90]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\RestReproductions.cs(88,0): at ETL_SQL.Review.RestReproductions.BodyReadMustRemainUnderTheConfiguredRequestTimeout()&#xD;
+[xUnit.net 00:00:05.90]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:05.90]       Assert.DoesNotContain() Failure: Sub-string found&#xD;
+[xUnit.net 00:00:05.90]                                       ↓ (pos 125)&#xD;
+[xUnit.net 00:00:05.90]       String: ···"Exception: Password=synthetic-review-pass"···&#xD;
+[xUnit.net 00:00:05.90]       Found:  "synthetic-review-password"&#xD;
+[xUnit.net 00:00:05.90]       Stack Trace:&#xD;
+[xUnit.net 00:00:05.90]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\LoggingReproductions.cs(14,0): at ETL_SQL.Review.LoggingReproductions.ConnectorBoundaryMustNotRetainRawProviderCredentials()&#xD;
+[xUnit.net 00:00:05.90]            at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)&#xD;
+[xUnit.net 00:00:05.90]            at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)&#xD;
+[xUnit.net 00:00:05.91]       Assert.DoesNotContain() Failure: Sub-string found&#xD;
+[xUnit.net 00:00:05.91]                                       ↓ (pos 26)&#xD;
+[xUnit.net 00:00:05.91]       String: ···"tication failed for synthetic-review-only"···&#xD;
+[xUnit.net 00:00:05.91]       Found:  "synthetic-review-only-value"&#xD;
+[xUnit.net 00:00:05.91]       Stack Trace:&#xD;
+[xUnit.net 00:00:05.91]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\LoggingReproductions.cs(26,0): at ETL_SQL.Review.LoggingReproductions.StructuredEngineLogMustMaskArgumentsNamedPassword()&#xD;
+[xUnit.net 00:00:05.91]            at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)&#xD;
+[xUnit.net 00:00:05.91]            at System.Reflection.RuntimeMethodInfo.Invoke(Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)&#xD;
+[xUnit.net 00:00:05.97]       Assert.Single() Failure: The collection contained 2 items&#xD;
+[xUnit.net 00:00:05.97]       Collection: ["committed-row", "committed-row"]&#xD;
+[xUnit.net 00:00:05.97]       Stack Trace:&#xD;
+[xUnit.net 00:00:05.97]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\SchedulerReproductions.cs(66,0): at ETL_SQL.Review.SchedulerReproductions.HistoryFailureMustNotReplayAnAlreadySuccessfulScript()&#xD;
+[xUnit.net 00:00:05.97]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:05.97]       Assert.Single() Failure: The collection was empty&#xD;
+[xUnit.net 00:00:05.97]       Stack Trace:&#xD;
+[xUnit.net 00:00:05.97]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\SharePointReproductions.cs(37,0): at ETL_SQL.Review.SharePointReproductions.VerboseODataListReadMustReturnItsResults()&#xD;
+[xUnit.net 00:00:05.97]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:05.98]       Assert.Equal() Failure: Collections differ&#xD;
+[xUnit.net 00:00:05.98]                                                       ↓ (pos 1)&#xD;
+[xUnit.net 00:00:05.98]       Expected: string[]                        ["1", "2"]&#xD;
+[xUnit.net 00:00:05.98]       Actual:   ListSelectIterator&lt;Row, string&gt; ["1", "1", "2", "1", "2"]&#xD;
+[xUnit.net 00:00:05.98]                                                       ↑ (pos 1)&#xD;
+[xUnit.net 00:00:05.98]       Stack Trace:&#xD;
+[xUnit.net 00:00:05.98]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\SharePointReproductions.cs(29,0): at ETL_SQL.Review.SharePointReproductions.BatchesMustNotIncludePreviouslyReturnedRows()&#xD;
+[xUnit.net 00:00:05.98]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:05.98]       Assert.Equal() Failure: Collections differ&#xD;
+[xUnit.net 00:00:05.98]                                                       ↓ (pos 1)&#xD;
+[xUnit.net 00:00:05.98]       Expected: string[]                        ["1", "2"]&#xD;
+[xUnit.net 00:00:05.98]       Actual:   ListSelectIterator&lt;Row, string&gt; ["1"]&#xD;
+[xUnit.net 00:00:05.98]       Stack Trace:&#xD;
+[xUnit.net 00:00:05.98]         C:\Users\chuck\scratch\ETL-SQL\review\2026-10-01\repro\SharePointReproductions.cs(21,0): at ETL_SQL.Review.SharePointReproductions.ListReadMustFollowTheServerContinuation()&#xD;
+[xUnit.net 00:00:05.98]         --- End of stack trace from previous location ---&#xD;
+[xUnit.net 00:00:05.98]   Finished:    ETL-SQL.Review.Tests&#xD;
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:01.2446871-05:00">
+        <Text>[xUnit.net 00:00:00.39]     ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(mutation: "DELETE FROM reviewdb.items WHERE id = 1;", check: "SELECT COUNT(*) FROM items", expected: 1) [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:01.2985407-05:00">
+        <Text>[xUnit.net 00:00:00.44]     ETL_SQL.Review.CorrectnessReproductions.MutationAsTheFirstTransactionalOperationMustBeRollbackable(mutation: "UPDATE reviewdb.items SET amount = id;", check: "SELECT amount FROM items WHERE id = 1", expected: 10) [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:01.4287691-05:00">
+        <Text>[xUnit.net 00:00:00.57]     ETL_SQL.Review.CorrectnessReproductions.SqliteUpdateWithLiteralsMustBindItsParameters [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:01.4486422-05:00">
+        <Text>[xUnit.net 00:00:00.59]     ETL_SQL.Review.CorrectnessReproductions.HashJoinMustAgreeWithLoopJoinUnderDefaultCaseInsensitiveComparison [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:01.4801381-05:00">
+        <Text>[xUnit.net 00:00:00.63]     ETL_SQL.Review.CorrectnessReproductions.NestedCommitMustRemainRollbackableByTheOuterTransaction [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:02.3978865-05:00">
+        <Text>[xUnit.net 00:00:01.54]     ETL_SQL.Review.PortalReproductions.SharedStudioSaveMustUseTheTenantRelativeScriptKey [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:04.5169199-05:00">
+        <Text>[xUnit.net 00:00:03.66]     ETL_SQL.Review.RestReproductions.PaginationLinkToAnotherHostMustNotReceiveCredentials [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:04.7361696-05:00">
+        <Text>[xUnit.net 00:00:03.88]     ETL_SQL.Review.RestReproductions.CancellingBeforeHeadersMustPreserveOperationCanceledException [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:04.7488479-05:00">
+        <Text>[xUnit.net 00:00:03.89]     ETL_SQL.Review.RestReproductions.RedirectToAnotherPortMustNotReceiveCredentials [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:06.7553181-05:00">
+        <Text>[xUnit.net 00:00:05.90]     ETL_SQL.Review.RestReproductions.BodyReadMustRemainUnderTheConfiguredRequestTimeout [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:06.7584785-05:00">
+        <Text>[xUnit.net 00:00:05.90]     ETL_SQL.Review.LoggingReproductions.ConnectorBoundaryMustNotRetainRawProviderCredentials [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:06.7593939-05:00">
+        <Text>[xUnit.net 00:00:05.91]     ETL_SQL.Review.LoggingReproductions.StructuredEngineLogMustMaskArgumentsNamedPassword [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:06.8190661-05:00">
+        <Text>[xUnit.net 00:00:05.96]     ETL_SQL.Review.SchedulerReproductions.HistoryFailureMustNotReplayAnAlreadySuccessfulScript [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:06.8243334-05:00">
+        <Text>[xUnit.net 00:00:05.97]     ETL_SQL.Review.SharePointReproductions.VerboseODataListReadMustReturnItsResults [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:06.8317859-05:00">
+        <Text>[xUnit.net 00:00:05.98]     ETL_SQL.Review.SharePointReproductions.BatchesMustNotIncludePreviouslyReturnedRows [FAIL]</Text>
+      </RunInfo>
+      <RunInfo computerName="CHUCKPC" outcome="Error" timestamp="2026-10-01T06:10:06.8331316-05:00">
+        <Text>[xUnit.net 00:00:05.98]     ETL_SQL.Review.SharePointReproductions.ListReadMustFollowTheServerContinuation [FAIL]</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>

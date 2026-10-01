@@ -14,6 +14,8 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
     private readonly object?[] _values;
     private readonly int _setIndex;
     private readonly int _hashCode;
+    private readonly bool _caseInsensitive;
+    private readonly bool _isJoinKey;
 
     public int Length => _values.Length;
     public object? this[int index] => _values[index];
@@ -47,9 +49,17 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
 
     public CompoundKey(params object?[] values) : this(0, values) { }
 
-    public CompoundKey(int setIndex, params object?[] values)
+    public CompoundKey(int setIndex, params object?[] values) : this(setIndex, true, false, values) { }
+
+    /// <summary>Creates a join key using the active string comparison setting.</summary>
+    public static CompoundKey CreateJoinKey(bool caseSensitive, object?[] values, int setIndex = 0) =>
+        new(setIndex, caseSensitive, true, values);
+
+    private CompoundKey(int setIndex, bool caseSensitive, bool isJoinKey, object?[] values)
     {
         _setIndex = setIndex;
+        _caseInsensitive = !caseSensitive;
+        _isJoinKey = isJoinKey;
         if (values == null || values.Length == 0)
         {
             _values = Array.Empty<object?>();
@@ -63,8 +73,12 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
         for (int i = 0; i < values.Length; i++)
         {
             var normalized = NormalizeValue(values[i]);
+            // COMPAT_BREAK: 0.20.0 — join equality and hashing honor case-insensitive comparison.
             _values[i] = normalized;
-            hash.Add(normalized);
+            if (_caseInsensitive && normalized is string text)
+                hash.Add(text, StringComparer.OrdinalIgnoreCase);
+            else
+                hash.Add(normalized);
         }
         _hashCode = hash.ToHashCode();
     }
@@ -73,10 +87,15 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
     {
         if (_hashCode != other._hashCode) return false;
         if (_setIndex != other._setIndex) return false;
+        if (_caseInsensitive != other._caseInsensitive) return false;
         if (_values.Length != other._values.Length) return false;
         for (int i = 0; i < _values.Length; i++)
         {
-            if (!object.Equals(_values[i], other._values[i])) return false;
+            if (_caseInsensitive && _values[i] is string left && other._values[i] is string right)
+            {
+                if (!StringComparer.OrdinalIgnoreCase.Equals(left, right)) return false;
+            }
+            else if (!object.Equals(_values[i], other._values[i])) return false;
         }
         return true;
     }
@@ -144,8 +163,6 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
         return val;
     }
 
-    // Values are now normalized in the constructor, so we can use object.Equals directly.
-
     public int CompareTo(CompoundKey other)
     {
         int setCmp = _setIndex.CompareTo(other._setIndex);
@@ -154,7 +171,10 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
         int len = Math.Min(_values.Length, other._values.Length);
         for (int i = 0; i < len; i++)
         {
-            int cmp = CompareValues(_values[i], other._values[i]);
+            // COMPAT_BREAK: 0.20.0 — merge ordering must use the same comparison as hash equality.
+            int cmp = _isJoinKey && other._isJoinKey && _values[i] is string left && other._values[i] is string right
+                ? string.Compare(left, right, _caseInsensitive ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)
+                : CompareValues(_values[i], other._values[i]);
             if (cmp != 0) return cmp;
         }
         return _values.Length.CompareTo(other._values.Length);

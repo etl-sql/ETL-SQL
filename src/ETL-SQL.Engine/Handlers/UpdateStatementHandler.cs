@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
@@ -13,7 +14,7 @@ namespace ETL_SQL.Engine.Handlers;
 /// <summary>
 /// Handles the execution of UPDATE statements, supporting both remote SQL pushdown and in-memory updates with OUTPUT clause support.
 /// </summary>
-public class UpdateStatementHandler(ILogger logger) : IStatementHandler
+public partial class UpdateStatementHandler(ILogger logger) : IStatementHandler
 {
     private readonly ILogger _logger = logger;
     public Type SupportedStatementType => typeof(UpdateStatement);
@@ -28,6 +29,8 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
         if (context.VarContext.TryGetView(connName, out _))
             throw new ExecutionException($"View {connName} is read-only and cannot be used as an UPDATE target.");
         if (!context.Connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown connection: {connName}");
+        // COMPAT_BREAK: 0.20.0 — enlist the target before executing the first transactional mutation.
+        connection = await context.ResolveDataSourceAsync(stmt.TargetTable);
         _logger.Debug("Connection resolved as {ConnectionType}", connection.GetType().Name);
 
         var dataQualityStatusAssignment = GetDataQualityStatusAssignment(stmt);
@@ -44,14 +47,19 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
             string CompileAndMerge(Expression e)
             {
                 var compiled = context.CompileExpression(e, sqlConn.Dialect);
-                string sqlPart = compiled.Sql;
-                foreach (var p in compiled.Parameters.OrderByDescending(x => x.Key.Length))
+                var names = new Dictionary<string, string>();
+                foreach (var p in compiled.Parameters)
                 {
-                    string newName = $"@up{paramIdx++}";
-                    sqlPart = sqlPart.Replace(p.Key, newName);
+                    // COMPAT_BREAK: 0.20.0 — provider binding and SQL use the same canonical names.
+                    string newName = $"@p{paramIdx++}";
+                    names[p.Key] = newName;
                     allParams[newName] = p.Value;
                 }
-                return sqlPart;
+                // Replace tokens once so a renamed @p0 cannot be renamed again as @p1.
+                // Quoted values and identifiers are not parameter tokens.
+                return ParameterTokens().Replace(compiled.Sql, match =>
+                    match.Groups["parameter"].Success && names.TryGetValue(match.Value, out var name)
+                        ? name : match.Value);
             }
 
             var assignments = stmt.Assignments.Select(a => $"{a.ColumnName} = {CompileAndMerge(a.Value)}").ToList();
@@ -68,7 +76,7 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
             }
             else
             {
-                await foreach (var batch in sqlConn.ExecuteRawSql(sql, allParams.Values))
+                await foreach (var batch in sqlConn.ExecuteRawSql(sql, allParams.Values, context.CancellationToken))
                 {
                     if (batch.RowsAffected >= 0) context.Telemetry.RowsProcessed += batch.RowsAffected;
                 }
@@ -171,6 +179,9 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
             if (context.IsVerbose) _logger.WriteLine($"Finished updating {updatedCount} rows in {connName}");
         }
     }
+
+    [GeneratedRegex("""'(?:''|[^'])*'|"(?:""|[^"])*"|\[(?:\]\]|[^\]])*\]|`(?:``|[^`])*`|(?<parameter>(?<![\w@])@p\d+\b)""", RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex ParameterTokens();
 
     private static Assignment? GetDataQualityStatusAssignment(UpdateStatement stmt) =>
         stmt.Assignments.FirstOrDefault(a =>

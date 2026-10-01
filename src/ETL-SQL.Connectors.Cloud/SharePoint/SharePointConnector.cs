@@ -5,8 +5,10 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
@@ -200,7 +202,7 @@ namespace ETL_SQL.Connectors
             return Uri.TryCreate(connectionString, UriKind.Absolute, out var uri) ? uri.Host : null;
         }
 
-        private async Task AuthenticateAsync()
+        private async Task AuthenticateAsync(CancellationToken cancellationToken = default)
         {
             if (_authMode != "ENTRA_ID") return;
             if (_cachedToken != null && DateTime.UtcNow < _tokenExpiry)
@@ -236,18 +238,18 @@ namespace ETL_SQL.Connectors
             if (_context != null)
                 ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(_context, tokenUri);
 
-            var req = new HttpRequestMessage(HttpMethod.Post, tokenUri)
+            using var req = new HttpRequestMessage(HttpMethod.Post, tokenUri)
             {
                 Content = new FormUrlEncodedContent(dict)
             };
 
-            var res = await tokenClient.SendAsync(req);
+            using var res = await tokenClient.SendAsync(req, cancellationToken);
             if (!res.IsSuccessStatusCode)
             {
                 throw new ExecutionException($"Failed to acquire OAuth token from Entra ID. Status: {res.StatusCode}");
             }
 
-            var json = await res.Content.ReadAsStringAsync();
+            var json = await res.Content.ReadAsStringAsync(cancellationToken);
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
@@ -493,71 +495,94 @@ namespace ETL_SQL.Connectors
 
         // ── IDataSource Implementation ────────────────────────────────────────────
 
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
+            ReadBatches(batchSize, _context?.CancellationToken ?? CancellationToken.None);
+
+        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize, CancellationToken cancellationToken) =>
+            ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize, cancellationToken), "SharePoint",
+                ex => ex is not ExecutionException && ex is not OperationCanceledException, cancellationToken);
+
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
         {
-            await AuthenticateAsync();
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(batchSize);
+            await AuthenticateAsync(cancellationToken);
             string list = string.IsNullOrEmpty(_listName) ? throw new ExecutionException("LIST_NAME option must be configured to query SharePoint lists.") : _listName;
 
-            string requestUrl = $"{_siteUrl.TrimEnd('/')}/_api/web/lists/GetByTitle('{Uri.EscapeDataString(list)}')/items";
-            _httpClient.DefaultRequestHeaders.Accept.Clear();
-            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
-            var response = await _httpClient.GetAsync(requestUrl);
-            if (!response.IsSuccessStatusCode)
+            var siteUri = new Uri(_siteUrl);
+            Uri? requestUri = new($"{_siteUrl.TrimEnd('/')}/_api/web/lists/GetByTitle('{Uri.EscapeDataString(list)}')/items");
+            var visited = new HashSet<string>(StringComparer.Ordinal);
+            var table = new DataTable();
+            while (requestUri != null)
             {
-                throw new ExecutionException($"Failed to query SharePoint List '{list}': {response.StatusCode}");
-            }
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!requestUri.Scheme.Equals(siteUri.Scheme, StringComparison.OrdinalIgnoreCase)
+                    || !requestUri.Host.Equals(siteUri.Host, StringComparison.OrdinalIgnoreCase)
+                    || requestUri.Port != siteUri.Port)
+                    throw new ExecutionException("SharePoint list continuation must remain on the configured site origin.");
+                if (!visited.Add(requestUri.AbsoluteUri))
+                    throw new ExecutionException("SharePoint list continuation repeated an already-read page.");
+                if (_context != null) ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(_context, requestUri);
 
-            var json = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
+                using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+                request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                using var response = await _httpClient.SendAsync(request, cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                    throw new ExecutionException($"Failed to query SharePoint List '{list}': {response.StatusCode}");
 
-            JsonElement valueProp;
-            if (doc.RootElement.TryGetProperty("value", out valueProp) || doc.RootElement.TryGetProperty("d", out valueProp))
-            {
-                if (valueProp.ValueKind == JsonValueKind.Array)
+                var json = await response.Content.ReadAsStringAsync(cancellationToken);
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                var envelope = root.TryGetProperty("d", out var d) ? d : root;
+                // COMPAT_BREAK: 0.20.0 — verbose OData results are rows, not an empty list.
+                var rows = envelope.ValueKind == JsonValueKind.Array ? envelope
+                    : envelope.TryGetProperty("results", out var results) ? results
+                    : envelope.TryGetProperty("value", out var value) ? value
+                    : throw new ExecutionException("Unsupported SharePoint list response: expected an OData result array.");
+                if (rows.ValueKind != JsonValueKind.Array)
+                    throw new ExecutionException("Unsupported SharePoint list response: expected an OData result array.");
+
+                foreach (var rowObj in rows.EnumerateArray())
                 {
-                    var table = new DataTable();
-                    var rows = valueProp.EnumerateArray().ToList();
-
-                    if (rows.Count > 0)
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (table.Schema.ColumnNames.Count == 0)
+                        table.SetColumns(rowObj.EnumerateObject().Select(p => p.Name));
+                    var newRow = table.NewRow();
+                    foreach (var prop in rowObj.EnumerateObject())
                     {
-                        // Infer schema columns from first row
-                        var first = rows[0];
-                        var columns = first.EnumerateObject().Select(p => p.Name).ToList();
-                        table.SetColumns(columns);
-
-                        foreach (var rowObj in rows)
+                        newRow[prop.Name] = prop.Value.ValueKind switch
                         {
-                            var newRow = table.NewRow();
-                            foreach (var prop in rowObj.EnumerateObject())
-                            {
-                                string val = prop.Value.ValueKind switch
-                                {
-                                    JsonValueKind.String => prop.Value.GetString() ?? "",
-                                    JsonValueKind.Number => prop.Value.GetRawText(),
-                                    JsonValueKind.True => "True",
-                                    JsonValueKind.False => "False",
-                                    JsonValueKind.Null => "",
-                                    _ => prop.Value.GetRawText()
-                                };
-                                newRow[prop.Name] = val;
-                            }
-                            await table.AddRowAsync(newRow);
-
-                            if (table.Rows.Count >= batchSize)
-                            {
-                                yield return table;
-                                table = table.Clone();
-                            }
-                        }
+                            JsonValueKind.String => prop.Value.GetString() ?? "",
+                            JsonValueKind.Number => prop.Value.GetRawText(),
+                            JsonValueKind.True => "True",
+                            JsonValueKind.False => "False",
+                            JsonValueKind.Null => "",
+                            _ => prop.Value.GetRawText()
+                        };
                     }
-
-                    if (table.Rows.Count > 0)
+                    await table.AddRowAsync(newRow);
+                    if (table.Rows.Count >= batchSize)
                     {
                         yield return table;
+                        // COMPAT_BREAK: 0.20.0 — returned rows must not appear in later batches.
+                        table = new DataTable { Schema = table.Schema };
                     }
                 }
+
+                // COMPAT_BREAK: 0.20.0 — a list extraction includes every continuation page.
+                var next = root.TryGetProperty("@odata.nextLink", out var modern) ? modern
+                    : root.TryGetProperty("odata.nextLink", out var minimal) ? minimal
+                    : envelope.ValueKind == JsonValueKind.Object && envelope.TryGetProperty("__next", out var verbose) ? verbose
+                    : default;
+                if (next.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null
+                    || next.ValueKind == JsonValueKind.String && string.IsNullOrEmpty(next.GetString()))
+                    requestUri = null;
+                else if (next.ValueKind == JsonValueKind.String && Uri.TryCreate(requestUri, next.GetString(), out var nextUri))
+                    requestUri = nextUri;
+                else
+                    throw new ExecutionException("Invalid SharePoint list continuation URL.");
             }
+            if (table.Rows.Count > 0) yield return table;
         }
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)

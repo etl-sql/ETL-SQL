@@ -278,9 +278,10 @@ namespace ETL_SQL.Tests.Integration.Connectors
         // Cross host → strip regardless of scheme.
         [InlineData("https://api.example.com/a", "https://evil.example.com/b", true)]
         [InlineData("https://api.example.com/a", "http://evil.example.com/b", true)]
-        // Host comparison is case-insensitive; an HTTP → HTTPS upgrade on the same host keeps credentials.
+        // Host comparison is case-insensitive; a scheme or port change crosses the origin boundary.
         [InlineData("https://API.Example.com/a", "https://api.example.com/b", false)]
-        [InlineData("http://api.example.com/a", "https://api.example.com/b", false)]
+        [InlineData("http://api.example.com/a", "https://api.example.com/b", true)]
+        [InlineData("https://api.example.com/a", "https://api.example.com:8443/b", true)]
         public void ShouldStripCredentialsOnRedirect_CrossHostOrSchemeDowngrade(string from, string to, bool expected)
         {
             Assert.Equal(expected, RestDataSource.ShouldStripCredentialsOnRedirect(new Uri(from), new Uri(to)));
