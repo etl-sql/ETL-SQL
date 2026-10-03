@@ -948,8 +948,10 @@ field for scripts, parameters, connector targets, resource/object names, row sam
 authorization decision, and no execution policy consumes the ledger. Scheduled sandbox attempts now
 append rows/CPU/memory/spill-I/O evidence; the CLI completion envelope carries process peak-memory and
 CPU across the OCI boundary. A metering outage is logged after execution and cannot alter its result.
-Gateway traffic, storage sampling, and connector-class producers remain required before Shared SaaS
-can claim complete metering support.
+Gateway and artifact-operation producers also append counts-only events with their connector
+classes. These paths do not certify physical-runtime measurements, interrupted attempts or
+delivery/replay behavior. The [SaaS backlog](../../ROADMAP.md#saas-operations--shared-lifecycle-metering-and-hosted-launch-evidence)
+tracks the remaining metering and hosted evidence.
 
 ## 15. Availability, Upgrade, and Recovery
 

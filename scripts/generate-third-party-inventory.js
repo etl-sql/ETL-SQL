@@ -170,7 +170,9 @@ function classifyProject(filePath) {
 
 function parsePackageReferences() {
   const centralVersions = parseDirectoryPackageVersions();
-  const projects = walk(repoRoot, file => file.endsWith('.csproj'));
+  // Build/evidence trees can contain copied projects; inventory the source owners only.
+  const projects = ['review', 'src', 'tests', 'tools'].flatMap(dir =>
+    walk(path.join(repoRoot, dir), file => file.endsWith('.csproj')));
   const packages = new Map();
 
   for (const project of projects) {

@@ -593,8 +593,11 @@ Managed Dedicated and Shared SaaS profile lanes have passed their topology-speci
 and more of the operational closure has landed than this entry previously claimed: the Gateway,
 storage and scheduler metering producers all write to the tenant ledger with their connector class,
 and queued admission is reconciled after scheduler-process loss by
-`SandboxAdmissionReconciliationService`. What genuinely remains is sandbox metering, certified Shared
-lifecycle transitions, and physical runtime and hosting evidence bound to production claims.
+`SandboxAdmissionReconciliationService`. What remains is sandbox measurement and failure/recovery
+evidence, certified Shared lifecycle transitions, and physical runtime and hosting evidence bound to
+production claims. Scheduled sandbox attempts already carry
+CPU, process peak-memory and spill-I/O counters through the CLI completion envelope into the
+Scheduler ledger event. That existing wiring is the baseline for SA01–SA05.
 
 **Why launch gate:** Contract and deterministic-adapter evidence proves product invariants, but it
 does not prove an untested hardened runtime, cloud service, HA topology, or production region. Those
@@ -623,8 +626,8 @@ instances when another topology is selected.
 
 | ID | Chunk and finish line | Depends on | Size |
 | :--- | :--- | :--- | :--- |
-| SA01 | **Decide sandbox measurement semantics.** Define attempt/event identity, terminal statuses, CPU/peak-memory/I/O units and unavailable-counter behavior using the existing counts-only ledger schema. No billing prices or authorization changes. | — | D |
-| SA02 | **Meter one completed sandbox attempt.** Wire verified tenant/workload identity and runtime counters to the ledger for one supported runtime; success/failure/cancellation records contain only approved measurements. | SA01 | M |
+| SA01 | **Review and pin sandbox measurement semantics.** Map the existing Scheduler event and completion envelope to attempt identity, terminal statuses, CPU/process-peak-memory/spill-I/O units and unavailable-counter behavior; identify gaps and estimate their fixes. No billing prices or authorization changes. | — | D |
+| SA02 | **Completed-attempt sandbox metering evidence.** Exercise the existing wiring on one declared runtime for success, failure and cancellation. Verify tenant/history identity, approved counters and the agreed unavailable-counter behavior; correct only identified gaps. Do not add a duplicate producer/event. | SA01 | M |
 | SA03 | **Meter interrupted attempts.** Record worker loss or termination with an explicit incomplete/ambiguous outcome; recovery never invents counters or attributes a stale attempt to a new run. | SA02 | M |
 | SA30 | **Decide metering delivery failure/retry policy.** Specify observable ledger-outage behavior, retry ownership, retention and delivery identity; estimate implementation using the existing ledger. Preserve execution admission, authority and reported workload outcome. No retry implementation. | SA01 | D |
 | SA04 | **Metering delivery failure/retry.** Implement the accepted policy for one ledger-outage/recovery fixture; verify observable failures and idempotent retries without altering execution admission, authority or reported workload outcome. | SA02, SA30 | M |

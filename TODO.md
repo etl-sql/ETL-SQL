@@ -65,5 +65,7 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
   output capture and unrelated theory enumeration as measurement dependencies. The corrected
   fixture passes repeated development runs. A clean Standard candidate/control/control/candidate
   comparison passed all 260 correctness/memory checks, but sort GC pause and short cleanup timing
-  still fail regression comparisons. Resolve those findings and complete clean Smoke calibration
-  and final-candidate comparison before closing this item. No baseline has been replaced.
+  still fail regression comparisons. Phase probes also found verification/forced-GC contamination
+  in resource totals; a smaller fixture did not reduce GC pause. Resolve those findings and complete
+  clean Smoke calibration and final-candidate comparison before closing this item. No baseline has
+  been replaced.
