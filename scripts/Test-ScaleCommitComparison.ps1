@@ -140,6 +140,9 @@ Copy-Item -LiteralPath (Join-Path $ScriptRoot 'Test-ScaleCertification.ps1') -De
 foreach ($helper in @('ScaleCertification.Helpers.ps1', 'Release.Helpers.ps1')) {
     Copy-Item -LiteralPath (Join-Path $ScriptRoot $helper) -Destination (Join-Path $absoluteOutDir $helper) -Force
 }
+. (Join-Path $absoluteOutDir 'ScaleCertification.Helpers.ps1')
+$fixtureCopy = Join-Path $absoluteOutDir ('fixture-' + [guid]::NewGuid().ToString('N'))
+Copy-ScaleCertificationFixture -RepositoryRoot $RepoRoot -Destination $fixtureCopy
 
 $runs = @()
 $startedAt = Get-Date
@@ -155,7 +158,7 @@ try {
         Invoke-Git @('switch', '--quiet', '--detach', $sha) | Out-Null
 
         & pwsh -NoProfile -File $runnerCopy -RepositoryRoot $RepoRoot -Tier $Tier -Scenario $Scenario `
-            -Samples 1 -RowCountScale $RowCountScale -OutDir $runOut
+            -FixtureRoot $fixtureCopy -Samples 1 -RowCountScale $RowCountScale -OutDir $runOut
         if ($LASTEXITCODE -ne 0) { throw "$label sample $armSample failed with exit code $LASTEXITCODE." }
 
         $child = Get-Content (Join-Path $runOut 'cert-report.json') -Raw | ConvertFrom-Json

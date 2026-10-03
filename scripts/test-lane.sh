@@ -142,6 +142,7 @@ case "$LANE" in
         ;;
     full)
         invoke_dotnet_test "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" ""
+        invoke_dotnet_test "tests/ETL-SQL.Scale.Tests/ETL-SQL.Scale.Tests.csproj" ""
         invoke_dotnet_test "tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj" ""
         invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "$PORTAL_FILTER"
         invoke_dotnet_test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "Category=HostedServices"

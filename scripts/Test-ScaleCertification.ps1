@@ -33,6 +33,10 @@
     Optional repository root containing the solution and tests. Intended for the same-worktree
     commit-comparison harness, which keeps this runner outside the checkout while switching refs.
 
+.PARAMETER FixtureRoot
+    Optional captured fixture directory produced by Copy-ScaleCertificationFixture. Its sources and
+    definition hash stay fixed while RepositoryRoot selects the product commit to build and measure.
+
 .EXAMPLE
     .\scripts\Test-ScaleCertification.ps1
     .\scripts\Test-ScaleCertification.ps1 -Tier All -RowCountScale 10
@@ -56,6 +60,9 @@ param(
 
     [string]$RepositoryRoot = '',
 
+    # A captured fixture can measure older product commits without their unrelated test assembly.
+    [string]$FixtureRoot = '',
+
     [switch]$SkipBuild,
 
     # Skips the discarded warm-up run. Only for throwaway smoke checks where the numbers are not
@@ -76,6 +83,24 @@ $RepoRoot = if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     (Resolve-Path -LiteralPath $RepositoryRoot).Path
 }
 $rowCountScaleWasSpecified = $RowCountScale -gt 0
+$fixtureWasCaptured = -not [string]::IsNullOrWhiteSpace($FixtureRoot)
+$fixtureDirectory = if ($fixtureWasCaptured) { [IO.Path]::GetFullPath($FixtureRoot) }
+    else { Join-Path $RepoRoot 'tests/ETL-SQL.Scale.Tests' }
+$supportDirectory = if ($fixtureWasCaptured) { Join-Path $fixtureDirectory 'support' }
+    else { Join-Path $RepoRoot 'tests/ETL-SQL.Tests/Scale' }
+$testProject = Join-Path $fixtureDirectory 'ETL-SQL.Scale.Tests.csproj'
+$fixtureInputs = @($testProject,
+    (Join-Path $fixtureDirectory 'ScaleCertificationTests.cs'),
+    (Join-Path $fixtureDirectory 'ScaleTestHelpers.cs'),
+    (Join-Path $supportDirectory 'ScenarioResourceSampler.cs'),
+    (Join-Path $supportDirectory 'StreamingRowSource.cs'))
+foreach ($inputFile in $fixtureInputs) {
+    if (-not (Test-Path -LiteralPath $inputFile -PathType Leaf)) { throw "Missing scale fixture input: $inputFile" }
+}
+$definition = ($fixtureInputs | ForEach-Object { [IO.File]::ReadAllText($_).Replace("`r`n", "`n") }) -join "`n"
+$fixtureHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($definition))).ToLowerInvariant()
+$fixtureProperties = @("-p:CertificationRepositoryRoot=$([IO.Path]::GetFullPath($RepoRoot))",
+    "-p:CertificationSupportRoot=$([IO.Path]::GetFullPath($supportDirectory))")
 
 function Invoke-GitText {
     param([string[]]$Arguments)
@@ -295,16 +320,19 @@ if (Get-Process -Name testhost -ErrorAction SilentlyContinue) {
 
 # ── 1. Build ──────────────────────────────────────────────────────────────────
 if (-not $SkipBuild) {
-    Write-Host "Building solution..." -ForegroundColor Yellow
-    dotnet build "$RepoRoot/ETL-SQL.slnx" -c Release --no-restore -v quiet
+    Write-Host "Building isolated scale fixture..." -ForegroundColor Yellow
+    $buildArgs = @('build', $testProject, '-c', 'Release', '--disable-build-servers',
+        '-p:UseSharedCompilation=false', '-nodeReuse:false', '-v', 'quiet') + $fixtureProperties
+    if (-not $fixtureWasCaptured) { $buildArgs += '--no-restore' }
+    dotnet @buildArgs
     if ($LASTEXITCODE -ne 0) { Write-Error "Build failed"; exit 1 }
 }
 
 # Sanity check: the test binary must be at least as new as its sources, or the run would
 # silently execute stale code (the exact trap that makes the live HUD appear frozen at 0/0).
-$testDll = Join-Path $RepoRoot 'tests/ETL-SQL.Tests/bin/Release/net10.0/ETL-SQL.Tests.dll'
+$testDll = Join-Path $fixtureDirectory 'bin/Release/net10.0/ETL-SQL.Scale.Tests.dll'
 if (Test-Path $testDll) {
-    $newestSrc = Get-ChildItem (Join-Path $RepoRoot 'tests/ETL-SQL.Tests') -Recurse -Filter *.cs -ErrorAction SilentlyContinue |
+    $newestSrc = $fixtureInputs | ForEach-Object { Get-Item -LiteralPath $_ } |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($newestSrc -and (Get-Item $testDll).LastWriteTime -lt $newestSrc.LastWriteTime) {
         throw ("Test binary ({0}) is older than source ({1}). Rebuild before scale certification." -f `
@@ -352,6 +380,8 @@ $config = [ordered]@{
     outputCapture = 'buffered-byte-stream-v1'
     temporaryStorage = 'run-owned-process-temp-v1'
     preEnumerateTheories = $false
+    testFixture = 'isolated-scale-v1'
+    fixtureDefinitionSha256 = $fixtureHash
 }
 $sourceMetadata = Get-SourceMetadata $config
 
@@ -400,9 +430,8 @@ function Clear-ScaleSpill {
         Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
     }
 }
-$testProject = Join-Path $RepoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
 $dotnetArgs = @('test', $testProject, '--filter', $filterExpr,
-    '--logger', 'console;verbosity=detailed', '--settings', $scaleSettingsPath, '--no-build', '-c', 'Release')
+    '--logger', 'console;verbosity=detailed', '--settings', $scaleSettingsPath, '--no-build', '--no-restore', '-c', 'Release') + $fixtureProperties
 
 $allSampleMetrics = @()
 $sampleReports = @()

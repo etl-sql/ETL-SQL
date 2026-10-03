@@ -25,7 +25,8 @@ using Xunit.Abstractions;
 namespace ETL_SQL.Tests.Scale
 {
     /// <summary>
-    /// Smoke-tier scale certification tests (50k–100k rows). Run with:
+    /// Scale certification uses a dedicated fixture so unrelated test discovery cannot change GC.
+    /// Smoke-tier scenarios (50k–100k rows). Run from this project with:
     ///   dotnet test --filter "Category=ScaleCertification"
     ///
     /// Each test emits a JSON metrics line to ITestOutputHelper, consumed by

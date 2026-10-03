@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ETL_SQL.Tests.Scale</RootNamespace>
+    <AssemblyName>ETL-SQL.Scale.Tests</AssemblyName>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>disable</Nullable>
+    <NoWarn>CS8632</NoWarn>
+    <CertificationRepositoryRoot Condition="'$(CertificationRepositoryRoot)' == ''">$(MSBuildThisFileDirectory)../..</CertificationRepositoryRoot>
+    <CertificationSupportRoot Condition="'$(CertificationSupportRoot)' == ''">$(MSBuildThisFileDirectory)../ETL-SQL.Tests/Scale</CertificationSupportRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="System.Linq.Async" />
+    <ProjectReference Include="$(CertificationRepositoryRoot)/src/ETL-SQL.App/ETL-SQL.App.csproj" />
+    <Compile Include="ScaleCertificationTests.cs" />
+    <Compile Include="ScaleTestHelpers.cs" />
+    <Compile Include="$(CertificationSupportRoot)/ScenarioResourceSampler.cs" Link="ScenarioResourceSampler.cs" />
+    <Compile Include="$(CertificationSupportRoot)/StreamingRowSource.cs" Link="StreamingRowSource.cs" />
+  </ItemGroup>
+</Project>

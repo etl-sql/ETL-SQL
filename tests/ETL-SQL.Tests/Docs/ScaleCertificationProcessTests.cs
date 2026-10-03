@@ -5,6 +5,28 @@ namespace ETL_SQL.Tests.Docs;
 public sealed class ScaleCertificationProcessTests
 {
     [Theory]
+    [InlineData("", "", true)]
+    [InlineData("", "current", false)]
+    [InlineData("current", "current", true)]
+    [InlineData("previous", "current", false)]
+    [InlineData("missing", "missing", false)]
+    public async Task BaselineComparison_RequiresMatchingFixtureDefinitions(string baseline, string current, bool compatible)
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper($$"""
+            $baselineConfig = @{}
+            $currentConfig = @{}
+            if ('{{baseline}}') { $baselineConfig.testFixture='isolated-scale-v1'; $baselineConfig.fixtureDefinitionSha256='{{baseline}}' }
+            if ('{{current}}') { $currentConfig.testFixture='isolated-scale-v1'; $currentConfig.fixtureDefinitionSha256='{{current}}' }
+            if ('{{baseline}}' -eq 'missing') { $baselineConfig.Remove('fixtureDefinitionSha256') }
+            if ('{{current}}' -eq 'missing') { $currentConfig.Remove('fixtureDefinitionSha256') }
+            Assert-ScaleCaptureCompatibility -BaselineReport @{config=$baselineConfig} -CurrentReport @{config=$currentConfig}
+            'Compatible'
+            """, helperName: "ScaleCertification.Helpers.ps1");
+        Assert.Equal(compatible, result.ExitCode == 0);
+        Assert.Contains(compatible ? "Compatible" : "Scale test fixtures differ", result.Output);
+    }
+
+    [Theory]
     [InlineData("passed", true)]
     [InlineData("failed-report", false)]
     [InlineData("empty", false)]

@@ -282,6 +282,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
   write-through output-file latency inside measured result formatting. Its fixture defers unrelated
   theory data, records the test-host runtime, rejects stale/incomplete evidence and cleans only its
   own temporary spill directory. Baseline comparisons refuse incompatible capture/discovery settings.
+- Scale scenarios compile in a dedicated test assembly. Reports identify the fixture definition,
+  comparisons retain the same fixture across product commits, and Bash delegates to the canonical
+  runner so it preserves repeated samples, metadata and failures.
 - Release certification ZIPs select the current release's claims and exact clean candidate bundles.
   Packaging rejects stale, dirty, skipped or mixed evidence and verifies the archived file hashes.
 - Maintenance releases accept tags on `release/**` branches, choose the newest published stable MSI

@@ -89,6 +89,31 @@ function Assert-ScaleCaptureCompatibility {
     if ($baselineStorage -ne $currentStorage) {
         throw 'Temporary-storage fixtures differ. Calibrate matching measurement fixtures before regression decisions.'
     }
+    $baselineFixture = $BaselineReport.config.testFixture
+    $currentFixture = $CurrentReport.config.testFixture
+    if (-not $baselineFixture) { $baselineFixture = 'full-test-assembly-v1' }
+    if (-not $currentFixture) { $currentFixture = 'full-test-assembly-v1' }
+    if ($baselineFixture -ne $currentFixture -or
+        ($currentFixture -eq 'isolated-scale-v1' -and
+            ([string]::IsNullOrWhiteSpace($BaselineReport.config.fixtureDefinitionSha256) -or
+             [string]::IsNullOrWhiteSpace($CurrentReport.config.fixtureDefinitionSha256))) -or
+        $BaselineReport.config.fixtureDefinitionSha256 -ne $CurrentReport.config.fixtureDefinitionSha256) {
+        throw 'Scale test fixtures differ. Calibrate the same isolated fixture before regression decisions.'
+    }
+}
+
+function Copy-ScaleCertificationFixture {
+    param([Parameter(Mandatory)][string]$RepositoryRoot, [Parameter(Mandatory)][string]$Destination)
+
+    New-Item -ItemType Directory -Path $Destination -ErrorAction Stop | Out-Null
+    foreach ($file in @('ETL-SQL.Scale.Tests.csproj','ScaleCertificationTests.cs','ScaleTestHelpers.cs')) {
+        Copy-Item -LiteralPath (Join-Path $RepositoryRoot "tests/ETL-SQL.Scale.Tests/$file") -Destination (Join-Path $Destination $file)
+    }
+    $support = Join-Path $Destination 'support'
+    New-Item -ItemType Directory -Path $support | Out-Null
+    foreach ($file in @('ScenarioResourceSampler.cs','StreamingRowSource.cs')) {
+        Copy-Item -LiteralPath (Join-Path $RepositoryRoot "tests/ETL-SQL.Tests/Scale/$file") -Destination (Join-Path $support $file)
+    }
 }
 
 function Assert-ScaleComparisonEvidence {
