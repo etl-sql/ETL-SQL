@@ -381,6 +381,7 @@ $config = [ordered]@{
     temporaryStorage = 'run-owned-process-temp-v1'
     preEnumerateTheories = $false
     testFixture = 'isolated-scale-v1'
+    resourceScope = 'timed-operations-lifecycle-peaks-v1'
     fixtureDefinitionSha256 = $fixtureHash
 }
 $sourceMetadata = Get-SourceMetadata $config

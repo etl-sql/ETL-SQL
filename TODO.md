@@ -68,5 +68,6 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
   still fail regression comparisons. Phase probes also found verification/forced-GC contamination
   in resource totals; a smaller fixture did not reduce GC pause. An unchanged-fixture product control
   removed the earlier GC gap; the dedicated scale assembly passed 39 development Smoke checks.
-  Finish resource-interval correction, clean Smoke/Standard calibration and final-candidate comparison
+  Resource intervals are now corrected; all 30 focused tests and 39 development Smoke measurements
+  passed with Docker running. Finish clean Smoke/Standard calibration and final-candidate comparison
   before closing this item. No baseline has been replaced.

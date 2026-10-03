@@ -285,6 +285,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Scale scenarios compile in a dedicated test assembly. Reports identify the fixture definition,
   comparisons retain the same fixture across product commits, and Bash delegates to the canonical
   runner so it preserves repeated samples, metadata and failures.
+- Scale allocation, GC and CPU measurements cover the timed operations. Memory containment retains
+  setup and verification peaks, dataset write/reload sums separate intervals, and failure cleanup
+  measures the engine exception path before asserting its type.
 - Release certification ZIPs select the current release's claims and exact clean candidate bundles.
   Packaging rejects stale, dirty, skipped or mixed evidence and verifies the archived file hashes.
 - Maintenance releases accept tags on `release/**` branches, choose the newest published stable MSI

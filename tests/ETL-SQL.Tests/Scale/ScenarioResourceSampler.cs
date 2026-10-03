@@ -13,7 +13,33 @@ internal sealed record ScenarioResourceMetrics(
     int Gen2Collections,
     TimeSpan GcPauseTime,
     TimeSpan CpuTime,
-    double CpuUtilizationPercent);
+    double CpuUtilizationPercent,
+    TimeSpan ObservedDuration)
+{
+    public ScenarioResourceMetrics AddOperation(ScenarioResourceMetrics other)
+    {
+        var duration = ObservedDuration + other.ObservedDuration;
+        var cpu = CpuTime + other.CpuTime;
+        return this with
+        {
+            PeakWorkingSetBytes = Math.Max(PeakWorkingSetBytes, other.PeakWorkingSetBytes),
+            PeakPrivateBytes = Math.Max(PeakPrivateBytes, other.PeakPrivateBytes),
+            PeakManagedHeapBytes = Math.Max(PeakManagedHeapBytes, other.PeakManagedHeapBytes),
+            AllocatedBytes = AllocatedBytes + other.AllocatedBytes,
+            Gen0Collections = Gen0Collections + other.Gen0Collections,
+            Gen1Collections = Gen1Collections + other.Gen1Collections,
+            Gen2Collections = Gen2Collections + other.Gen2Collections,
+            GcPauseTime = GcPauseTime + other.GcPauseTime,
+            CpuTime = cpu,
+            CpuUtilizationPercent = Utilization(cpu, duration),
+            ObservedDuration = duration
+        };
+    }
+
+    internal static double Utilization(TimeSpan cpu, TimeSpan duration)
+        => Math.Round(Math.Max(0, cpu.TotalSeconds / Math.Max(0.001, duration.TotalSeconds)
+            / Environment.ProcessorCount * 100), 1);
+}
 
 /// <summary>Continuously samples process and GC resources, then atomically snapshots and resets.</summary>
 internal sealed class ScenarioResourceSampler : IDisposable
@@ -26,6 +52,7 @@ internal sealed class ScenarioResourceSampler : IDisposable
     private long _peakPrivateBytes;
     private long _peakManagedHeap;
     private Baseline _baseline;
+    private Baseline? _operationBaseline;
 
     public ScenarioResourceSampler()
     {
@@ -39,21 +66,10 @@ internal sealed class ScenarioResourceSampler : IDisposable
         Sample();
         lock (_gate)
         {
+            if (_operationBaseline != null)
+                throw new InvalidOperationException("Finish the timed operation before resetting lifecycle resources.");
             var now = CaptureBaseline();
-            var elapsed = Math.Max(0.001, (now.Timestamp - _baseline.Timestamp).TotalSeconds);
-            var cpu = now.CpuTime - _baseline.CpuTime;
-            var result = new ScenarioResourceMetrics(
-                _baseline.WorkingSetBytes,
-                _peakWorkingSet,
-                _peakPrivateBytes,
-                _peakManagedHeap,
-                Math.Max(0, now.AllocatedBytes - _baseline.AllocatedBytes),
-                Math.Max(0, now.Gen0Collections - _baseline.Gen0Collections),
-                Math.Max(0, now.Gen1Collections - _baseline.Gen1Collections),
-                Math.Max(0, now.Gen2Collections - _baseline.Gen2Collections),
-                now.GcPauseTime - _baseline.GcPauseTime,
-                cpu,
-                Math.Round(Math.Max(0, cpu.TotalSeconds / elapsed / Environment.ProcessorCount * 100), 1));
+            var result = Measure(_baseline, now);
 
             _baseline = now;
             _peakWorkingSet = 0;
@@ -61,6 +77,45 @@ internal sealed class ScenarioResourceSampler : IDisposable
             _peakManagedHeap = 0;
             return result;
         }
+    }
+
+    // Operation deltas exclude fixture setup and verification. Lifecycle peaks continue sampling
+    // through both, so the memory containment gate still covers the complete scenario.
+    public void StartOperation()
+    {
+        lock (_gate)
+        {
+            if (_operationBaseline != null)
+                throw new InvalidOperationException("A timed operation is already running.");
+            _operationBaseline = CaptureBaseline();
+        }
+    }
+
+    public ScenarioResourceMetrics FinishOperation()
+    {
+        Sample();
+        lock (_gate)
+        {
+            if (_operationBaseline == null)
+                throw new InvalidOperationException("No timed operation is running.");
+            var result = Measure(_operationBaseline, CaptureBaseline());
+            _operationBaseline = null;
+            return result;
+        }
+    }
+
+    private ScenarioResourceMetrics Measure(Baseline start, Baseline end)
+    {
+        var duration = Stopwatch.GetElapsedTime(start.Timestamp, end.Timestamp);
+        var cpu = end.CpuTime - start.CpuTime;
+        return new ScenarioResourceMetrics(
+            start.WorkingSetBytes, _peakWorkingSet, _peakPrivateBytes, _peakManagedHeap,
+            Math.Max(0, end.AllocatedBytes - start.AllocatedBytes),
+            Math.Max(0, end.Gen0Collections - start.Gen0Collections),
+            Math.Max(0, end.Gen1Collections - start.Gen1Collections),
+            Math.Max(0, end.Gen2Collections - start.Gen2Collections),
+            end.GcPauseTime - start.GcPauseTime, cpu,
+            ScenarioResourceMetrics.Utilization(cpu, duration), duration);
     }
 
     private async Task SampleContinuouslyAsync(CancellationToken cancellationToken)
@@ -75,10 +130,10 @@ internal sealed class ScenarioResourceSampler : IDisposable
 
     private void Sample()
     {
-        _process.Refresh();
-        var managedHeap = GC.GetGCMemoryInfo().HeapSizeBytes;
         lock (_gate)
         {
+            _process.Refresh();
+            var managedHeap = GC.GetGCMemoryInfo().HeapSizeBytes;
             _peakWorkingSet = Math.Max(_peakWorkingSet, _process.WorkingSet64);
             _peakPrivateBytes = Math.Max(_peakPrivateBytes, _process.PrivateMemorySize64);
             _peakManagedHeap = Math.Max(_peakManagedHeap, managedHeap);
@@ -89,7 +144,7 @@ internal sealed class ScenarioResourceSampler : IDisposable
     {
         _process.Refresh();
         return new Baseline(
-            DateTimeOffset.UtcNow,
+            Stopwatch.GetTimestamp(),
             _process.TotalProcessorTime,
             GC.GetTotalAllocatedBytes(precise: false),
             GC.CollectionCount(0),
@@ -108,7 +163,7 @@ internal sealed class ScenarioResourceSampler : IDisposable
     }
 
     private sealed record Baseline(
-        DateTimeOffset Timestamp,
+        long Timestamp,
         TimeSpan CpuTime,
         long AllocatedBytes,
         int Gen0Collections,

@@ -285,7 +285,7 @@ namespace ETL_SQL.Tests.Scale
 
         private void EmitMetrics(string scenario, int rowCount, long elapsedMs,
             long spillBytes, long resultRows, decimal checksum, bool passed,
-            ITelemetryContext? telemetry = null, ScenarioResourceMetrics? measuredResources = null)
+            ScenarioResourceMetrics measuredResources, ITelemetryContext? telemetry = null)
         {
             var rowScale = RowScale();
             var memoryTier = MemoryTier(rowScale);
@@ -295,14 +295,15 @@ namespace ETL_SQL.Tests.Scale
                 certificationTier = memoryTier;
             }
 
-            var resources = measuredResources ?? _resourceSampler.SnapshotAndReset();
+            var lifecycle = _resourceSampler.SnapshotAndReset();
+            var resources = measuredResources;
             const double bytesPerMb = 1024.0 * 1024.0;
-            var startWorkingSetMB = Math.Round(resources.StartWorkingSetBytes / bytesPerMb, 1);
-            var peakWorkingSetMB = Math.Round(resources.PeakWorkingSetBytes / bytesPerMb, 1);
+            var startWorkingSetMB = Math.Round(lifecycle.StartWorkingSetBytes / bytesPerMb, 1);
+            var peakWorkingSetMB = Math.Round(lifecycle.PeakWorkingSetBytes / bytesPerMb, 1);
             var workingSetGrowthMB = Math.Round(
-                Math.Max(0, resources.PeakWorkingSetBytes - resources.StartWorkingSetBytes) / bytesPerMb, 1);
-            var peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / bytesPerMb, 1);
-            var peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / bytesPerMb, 1);
+                Math.Max(0, lifecycle.PeakWorkingSetBytes - lifecycle.StartWorkingSetBytes) / bytesPerMb, 1);
+            var peakPrivateBytesMB = Math.Round(lifecycle.PeakPrivateBytes / bytesPerMb, 1);
+            var peakManagedHeapMB = Math.Round(lifecycle.PeakManagedHeapBytes / bytesPerMb, 1);
             var allocatedMB = Math.Round(resources.AllocatedBytes / bytesPerMb, 1);
             var memoryBoundMB = MemoryBoundMB(rowScale);
             var rowsPerSecond = elapsedMs <= 0 ? 0 : Math.Round(rowCount / (elapsedMs / 1000.0), 1);
@@ -349,6 +350,10 @@ namespace ETL_SQL.Tests.Scale
                 peakPrivateBytesMB,
                 peakManagedHeapMB,
                 allocatedMB,
+                resourceScope = "timed-operations-lifecycle-peaks-v1",
+                lifecycleAllocatedMB = Math.Round(lifecycle.AllocatedBytes / bytesPerMb, 1),
+                lifecycleGcPauseMs = Math.Round(lifecycle.GcPauseTime.TotalMilliseconds, 1),
+                lifecycleCpuTimeMs = Math.Round(lifecycle.CpuTime.TotalMilliseconds, 1),
                 gcGen0Collections = resources.Gen0Collections,
                 gcGen1Collections = resources.Gen1Collections,
                 gcGen2Collections = resources.Gen2Collections,
@@ -437,12 +442,14 @@ namespace ETL_SQL.Tests.Scale
             ev.ExternalSortChunkSize = Math.Min(100_000, Math.Max(5_000, Rows / 64));
 
             ev.Telemetry.Clear();
+            _resourceSampler.StartOperation();
             var sw = Stopwatch.StartNew();
 
             // Sort into a temp table so we can run aggregate verification queries against it.
             await ev.Evaluate(TestHelpers.Parse("SELECT grp, val INTO #sorted FROM #cert ORDER BY val DESC;"));
 
             sw.Stop();
+            var measuredResources = _resourceSampler.FinishOperation();
 
             var countRow = await AggQuery(ev, "SELECT COUNT(*) AS n FROM #sorted;");
             var aggRow = await AggQuery(ev, "SELECT MIN(val) AS mn, MAX(val) AS mx, SUM(val) AS s FROM #sorted;");
@@ -459,7 +466,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "ExternalSort");
-            EmitMetrics($"ExternalSort_{Rows}_DESC", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true, ev.Telemetry);
+            EmitMetrics($"ExternalSort_{Rows}_DESC", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true, measuredResources, ev.Telemetry);
         }
 
         // ── 2. External Aggregate (GROUP BY) ─────────────────────────────────
@@ -474,6 +481,7 @@ namespace ETL_SQL.Tests.Scale
             ev.OperatorMemoryGrantMB = 1;  // small grant forces ExternalAggregateEngine
 
             ev.Telemetry.Clear();
+            _resourceSampler.StartOperation();
             var sw = Stopwatch.StartNew();
 
             var res = await ev.ExecuteQuery(
@@ -481,6 +489,7 @@ namespace ETL_SQL.Tests.Scale
                 .FirstAsync();
 
             sw.Stop();
+            var measuredResources = _resourceSampler.FinishOperation();
 
             // 10 groups × 10k rows each → all 10 groups fit in one batch
             Assert.Equal(Groups, res.Rows.Count);
@@ -492,7 +501,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "ExternalAggregate");
-            EmitMetrics($"ExternalAggregate_{Rows}_10grps", Rows, sw.ElapsedMilliseconds, spillBytes, res.Rows.Count, firstGroupSum, true, ev.Telemetry);
+            EmitMetrics($"ExternalAggregate_{Rows}_10grps", Rows, sw.ElapsedMilliseconds, spillBytes, res.Rows.Count, firstGroupSum, true, measuredResources, ev.Telemetry);
         }
 
         // ── 3. External Join ──────────────────────────────────────────────────
@@ -518,6 +527,7 @@ namespace ETL_SQL.Tests.Scale
                 ("score", i => (decimal)(i + 1) * 2));
 
             ev.Telemetry.Clear();
+            _resourceSampler.StartOperation();
             var sw = Stopwatch.StartNew();
 
             // JOIN into temp table for aggregate verification.
@@ -525,6 +535,7 @@ namespace ETL_SQL.Tests.Scale
                 "SELECT l.id, r.score INTO #joined FROM #certL l JOIN #certR r ON l.id = r.id;"));
 
             sw.Stop();
+            var measuredResources = _resourceSampler.FinishOperation();
 
             var aggRow = await AggQuery(ev,
                 "SELECT COUNT(*) AS n, MIN(id) AS mn, MAX(id) AS mx, SUM(score) AS s FROM #joined;");
@@ -541,7 +552,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "ExternalJoin");
-            EmitMetrics($"ExternalJoin_{Rows}_equality", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true, ev.Telemetry);
+            EmitMetrics($"ExternalJoin_{Rows}_equality", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true, measuredResources, ev.Telemetry);
         }
 
         // ── 4. Temp table spill (SELECT INTO) ────────────────────────────────
@@ -558,19 +569,21 @@ namespace ETL_SQL.Tests.Scale
             ev.TempTableSpillThresholdRows = ev.BatchSize;
 
             ev.Telemetry.Clear();
+            _resourceSampler.StartOperation();
             var sw = Stopwatch.StartNew();
 
             await ev.Evaluate(TestHelpers.Parse("SELECT grp, val INTO #result FROM #cert;"));
             var countRow = await AggQuery(ev, "SELECT COUNT(*) AS n FROM #result;");
 
             sw.Stop();
+            var measuredResources = _resourceSampler.FinishOperation();
 
             var n = Convert.ToInt64(countRow["n"]);
             Assert.Equal(Rows, n);
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "TempTableSpill");
-            EmitMetrics($"TempTableSpill_{Rows}_SELECT_INTO", Rows, sw.ElapsedMilliseconds, spillBytes, n, (decimal)n, n == Rows, ev.Telemetry);
+            EmitMetrics($"TempTableSpill_{Rows}_SELECT_INTO", Rows, sw.ElapsedMilliseconds, spillBytes, n, (decimal)n, n == Rows, measuredResources, ev.Telemetry);
         }
 
         // ── 5. Streaming SELECT — result cap check ────────────────────────────
@@ -594,8 +607,10 @@ namespace ETL_SQL.Tests.Scale
                 null or "" => null,
                 _ => throw new InvalidOperationException("CERT_RESULT_OUTPUT_DIAGNOSTIC must be forward or discard.")
             };
+            _resourceSampler.StartOperation();
             var sw = Stopwatch.StartNew();
 
+            ScenarioResourceMetrics measuredResources;
             try
             {
                 if (outputMeasurement != null) ResultFormatter.OutputSink = outputMeasurement;
@@ -604,9 +619,9 @@ namespace ETL_SQL.Tests.Scale
             finally
             {
                 sw.Stop();
+                measuredResources = _resourceSampler.FinishOperation();
                 ResultFormatter.OutputSink = originalSink;
             }
-            var measuredResources = _resourceSampler.SnapshotAndReset();
 
             if (outputMeasurement != null)
             {
@@ -631,8 +646,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             EmitMetrics($"StreamingSelect_{Rows}_cap{Cap}", Rows, sw.ElapsedMilliseconds, spillBytes,
-                ev.LastResult.Rows.Count, (decimal)ev.LastResult.Rows.Count, ev.LastResult.Rows.Count == Cap, ev.Telemetry,
-                measuredResources);
+                ev.LastResult.Rows.Count, (decimal)ev.LastResult.Rows.Count, ev.LastResult.Rows.Count == Cap, measuredResources, ev.Telemetry);
         }
 
         // The optional sink probe preserves formatting and result consumption. Discarded output is
@@ -676,12 +690,14 @@ namespace ETL_SQL.Tests.Scale
             ev.WindowSpillThreshold = 5_000;  // force window spill
 
             ev.Telemetry.Clear();
+            _resourceSampler.StartOperation();
             var sw = Stopwatch.StartNew();
 
             await ev.Evaluate(TestHelpers.Parse(
                 "SELECT val, ROW_NUMBER() OVER (ORDER BY val) AS rn INTO #windowed FROM #cert;"));
 
             sw.Stop();
+            var measuredResources = _resourceSampler.FinishOperation();
 
             var aggRow = await AggQuery(ev,
                 "SELECT COUNT(*) AS n, MIN(rn) AS mn, MAX(rn) AS mx, SUM(rn) AS s FROM #windowed;");
@@ -698,7 +714,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "WindowFunction");
-            EmitMetrics($"WindowFunction_ROW_NUMBER_{Rows}", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true, ev.Telemetry);
+            EmitMetrics($"WindowFunction_ROW_NUMBER_{Rows}", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true, measuredResources, ev.Telemetry);
         }
 
         // ── 7. CSV ingest ────────────────────────────────────────────────────
@@ -724,13 +740,15 @@ namespace ETL_SQL.Tests.Scale
                 var reader = new FlatFileDataSource(SystemExecutionContext.Instance, path,
                     new Dictionary<string, string> { ["HEADER"] = "ON" });
 
+                _resourceSampler.StartOperation();
                 var sw = Stopwatch.StartNew();
                 var (count, sum) = await CountAndSum(reader.ReadBatches(10_000));
                 sw.Stop();
+                var measuredResources = _resourceSampler.FinishOperation();
 
                 Assert.Equal(Rows, count);
                 Assert.Equal(expectedSum, sum);
-                EmitMetrics($"CsvIngest_{Rows}", Rows, sw.ElapsedMilliseconds, 0, count, sum, true);
+                EmitMetrics($"CsvIngest_{Rows}", Rows, sw.ElapsedMilliseconds, 0, count, sum, true, measuredResources);
             }
             finally
             {
@@ -759,13 +777,15 @@ namespace ETL_SQL.Tests.Scale
 
                 var reader = new ParquetDataSource(SystemExecutionContext.Instance, path);
 
+                _resourceSampler.StartOperation();
                 var sw = Stopwatch.StartNew();
                 var (count, sum) = await CountAndSum(reader.ReadBatches(10_000));
                 sw.Stop();
+                var measuredResources = _resourceSampler.FinishOperation();
 
                 Assert.Equal(Rows, count);
                 Assert.Equal(expectedSum, sum);
-                EmitMetrics($"ParquetRoundTrip_{Rows}", Rows, sw.ElapsedMilliseconds, 0, count, sum, true);
+                EmitMetrics($"ParquetRoundTrip_{Rows}", Rows, sw.ElapsedMilliseconds, 0, count, sum, true, measuredResources);
             }
             finally
             {
@@ -796,6 +816,7 @@ namespace ETL_SQL.Tests.Scale
                 first.DatasetRegistry = registry;
                 first.CurrentScriptPath = scriptPath;
 
+                _resourceSampler.StartOperation();
                 var sw = Stopwatch.StartNew();
                 await first.Evaluate(TestHelpers.Parse("""
                     CREATE DATASET &cert TTL = '1h' AS (
@@ -803,6 +824,7 @@ namespace ETL_SQL.Tests.Scale
                     );
                     """));
                 sw.Stop();
+                var measuredResources = _resourceSampler.FinishOperation();
 
                 var metadata = await registry.Lookup("&cert", "IsAdmin=true");
                 Assert.NotNull(metadata);
@@ -813,6 +835,7 @@ namespace ETL_SQL.Tests.Scale
                 second.DatasetRegistry = registry;
                 second.CurrentScriptPath = scriptPath;
 
+                _resourceSampler.StartOperation();
                 var reloadSw = Stopwatch.StartNew();
                 await second.Evaluate(TestHelpers.Parse("""
                     CREATE DATASET &cert TTL = '1h' AS (
@@ -820,6 +843,7 @@ namespace ETL_SQL.Tests.Scale
                     );
                     """));
                 reloadSw.Stop();
+                measuredResources = measuredResources.AddOperation(_resourceSampler.FinishOperation());
 
                 var row = await AggQuery(second, "SELECT COUNT(*) AS n, SUM(val) AS s FROM &cert;");
                 var count = Convert.ToInt64(row["n"]);
@@ -827,7 +851,7 @@ namespace ETL_SQL.Tests.Scale
 
                 Assert.Equal(Rows, count);
                 Assert.Equal(expectedSum, sum);
-                EmitMetrics($"ReportDatasetSnapshotReload_{Rows}", Rows, sw.ElapsedMilliseconds + reloadSw.ElapsedMilliseconds, 0, count, sum, true);
+                EmitMetrics($"ReportDatasetSnapshotReload_{Rows}", Rows, sw.ElapsedMilliseconds + reloadSw.ElapsedMilliseconds, 0, count, sum, true, measuredResources);
             }
             finally
             {
@@ -852,6 +876,7 @@ namespace ETL_SQL.Tests.Scale
             ev.OperatorMemoryGrantMB = 1;
 
             ev.Telemetry.Clear();
+            _resourceSampler.StartOperation();
             var sw = Stopwatch.StartNew();
 
             await ev.Evaluate(TestHelpers.Parse("""
@@ -862,6 +887,7 @@ namespace ETL_SQL.Tests.Scale
                 """));
 
             sw.Stop();
+            var measuredResources = _resourceSampler.FinishOperation();
 
             var row = await AggQuery(ev, "SELECT COUNT(*) AS n, SUM(total) AS s FROM #cube_result;");
             var count = Convert.ToInt64(row["n"]);
@@ -871,7 +897,7 @@ namespace ETL_SQL.Tests.Scale
             Assert.Equal(expectedInputSum * 4, sum);
             AssertSpilled(ev, "CubeGroupingSets");
             EmitMetrics($"CubeGroupingSets_{Rows}_{Groups}x{Buckets}", Rows, sw.ElapsedMilliseconds,
-                ev.Telemetry.TotalSpilledBytes, count, sum, true, ev.Telemetry);
+                ev.Telemetry.TotalSpilledBytes, count, sum, true, measuredResources, ev.Telemetry);
         }
 
         // ── 11. Scalar subquery cache at scale ───────────────────────────────
@@ -917,6 +943,7 @@ namespace ETL_SQL.Tests.Scale
             ev.Connections["#lookup"] = lookupSrc;
 
             ev.Telemetry.Clear();
+            _resourceSampler.StartOperation();
             var sw = Stopwatch.StartNew();
 
             await ev.Evaluate(TestHelpers.Parse("""
@@ -927,6 +954,7 @@ namespace ETL_SQL.Tests.Scale
                 """));
 
             sw.Stop();
+            var measuredResources = _resourceSampler.FinishOperation();
 
             var row = await AggQuery(ev, "SELECT COUNT(*) AS n, SUM(score) AS s FROM #subq_result;");
             var count = Convert.ToInt64(row["n"]);
@@ -937,7 +965,7 @@ namespace ETL_SQL.Tests.Scale
             Assert.Equal(distinctKeys, ev.Telemetry.SubqueryCacheMisses);
             Assert.Equal(Rows - distinctKeys, ev.Telemetry.SubqueryCacheHits);
             EmitMetrics($"ScalarSubqueryCache_{Rows}_{distinctKeys}keys", Rows, sw.ElapsedMilliseconds,
-                ev.Telemetry.TotalSpilledBytes, count, sum, true, ev.Telemetry);
+                ev.Telemetry.TotalSpilledBytes, count, sum, true, measuredResources, ev.Telemetry);
         }
 
         // ── 12. Spill cleanup after success ─────────────────────────────────
@@ -952,9 +980,11 @@ namespace ETL_SQL.Tests.Scale
             ev.TempTableSpillThresholdRows = 10_000;
 
             ev.Telemetry.Clear();
+            _resourceSampler.StartOperation();
             var sw = Stopwatch.StartNew();
             await ev.Evaluate(TestHelpers.Parse("SELECT grp, val INTO #cleanup_result FROM #cert;"));
             sw.Stop();
+            var measuredResources = _resourceSampler.FinishOperation();
 
             var spillRoot = ev.SpillStore.RootPath;
             var filesBeforeDispose = CountFiles(spillRoot);
@@ -965,7 +995,7 @@ namespace ETL_SQL.Tests.Scale
 
             Assert.False(Directory.Exists(spillRoot), $"Expected spill directory '{spillRoot}' to be removed after evaluator disposal.");
             EmitMetrics($"SpillCleanupSuccess_{Rows}", Rows, sw.ElapsedMilliseconds,
-                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true, ev.Telemetry);
+                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true, measuredResources, ev.Telemetry);
         }
 
         // ── 13. Spill cleanup after forced failure ──────────────────────────
@@ -981,11 +1011,21 @@ namespace ETL_SQL.Tests.Scale
             ev.Connections["#faulty"] = new ThrowingBatchDataSource(Rows, batchSize: 5_000, throwAfterBatches: 3);
 
             ev.Telemetry.Clear();
+            _resourceSampler.StartOperation();
             var sw = Stopwatch.StartNew();
-            await Assert.ThrowsAsync<ExecutionException>(() =>
-                ev.Evaluate(TestHelpers.Parse("SELECT grp, val INTO #failed_cleanup FROM #faulty;")));
+            ExecutionException? failure = null;
+            try
+            {
+                await ev.Evaluate(TestHelpers.Parse("SELECT grp, val INTO #failed_cleanup FROM #faulty;"));
+            }
+            catch (ExecutionException exception)
+            {
+                failure = exception;
+            }
             sw.Stop();
+            var measuredResources = _resourceSampler.FinishOperation();
 
+            Assert.IsType<ExecutionException>(failure);
             var spillRoot = ev.SpillStore.RootPath;
             var filesBeforeDispose = CountFiles(spillRoot);
             AssertSpilled(ev, "SpillCleanupFailure");
@@ -995,7 +1035,7 @@ namespace ETL_SQL.Tests.Scale
 
             Assert.False(Directory.Exists(spillRoot), $"Expected spill directory '{spillRoot}' to be removed after failed evaluator disposal.");
             EmitMetrics($"SpillCleanupFailure_{Rows}", Rows, sw.ElapsedMilliseconds,
-                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true, ev.Telemetry);
+                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true, measuredResources, ev.Telemetry);
         }
 
         private static string CreateTempDir()
