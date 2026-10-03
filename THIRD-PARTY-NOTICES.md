@@ -124,6 +124,10 @@ TypeScript, Vite, Vitest, xUnit, and VS Code test tooling. These should be
 included in a generated dependency report for source distributions and CI
 artifacts, but they are usually not shown in product UI acknowledgements.
 
+The pinned browser lint toolchain in `scripts/lint/package.json` uses `@eslint/js`,
+`eslint`, and `globals`, each under MIT. The dependency inventory records their
+exact pins alongside the extension and UI version ranges.
+
 Microsoft.Playwright (MIT) additionally downloads browser binaries at test time —
 Chromium and its headless shell, which carry their own upstream licenses. Those
 browsers are fetched into a per-machine cache by the opt-in browser test lane and

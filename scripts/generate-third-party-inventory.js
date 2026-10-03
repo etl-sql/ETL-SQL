@@ -164,7 +164,7 @@ function resolveMsBuildProperties(value, properties) {
 function classifyProject(filePath) {
   const rel = path.relative(repoRoot, filePath).replace(/\\/g, '/');
   if (rel.startsWith('tests/')) return 'test';
-  if (rel.includes('.Benchmarks')) return 'development';
+  if (rel.includes('.Benchmarks') || rel.startsWith('review/') || rel.startsWith('tools/')) return 'development';
   return 'runtime';
 }
 
@@ -272,7 +272,8 @@ function parseNpmPackages() {
     'src/etl-sql-vscode/ui/package.json',
     // The browser type gate's pinned toolchain. Same TypeScript the extension uses, declared
     // separately because it is installed at a different place and could drift from it.
-    'scripts/typecheck/package.json'
+    'scripts/typecheck/package.json',
+    'scripts/lint/package.json'
   ].map(file => path.join(repoRoot, file)).filter(fs.existsSync);
 
   const packages = new Map();
@@ -296,12 +297,13 @@ function addNpmDeps(packages, deps, usage, source) {
   for (const [name, version] of Object.entries(deps)) {
     const existing = packages.get(name) || {
       name,
-      version,
+      versions: new Set(),
       license: '',
       projectUrl: '',
       usage: new Set(),
       sources: []
     };
+    existing.versions.add(version);
     existing.usage.add(usage);
     existing.sources.push(source);
     packages.set(name, existing);
@@ -312,7 +314,8 @@ function readNpmPackageMetadata(packageName) {
   const candidates = [
     path.join(repoRoot, 'src', 'etl-sql-vscode', 'node_modules', packageName, 'package.json'),
     path.join(repoRoot, 'src', 'etl-sql-vscode', 'ui', 'node_modules', packageName, 'package.json'),
-    path.join(repoRoot, 'scripts', 'typecheck', 'node_modules', packageName, 'package.json')
+    path.join(repoRoot, 'scripts', 'typecheck', 'node_modules', packageName, 'package.json'),
+    path.join(repoRoot, 'scripts', 'lint', 'node_modules', packageName, 'package.json')
   ];
 
   for (const candidate of candidates) {
@@ -371,9 +374,9 @@ ${nuget.map(pkg => `| ${md(pkg.name)} | ${md(pkg.version)} | ${md(usageText(pkg.
 
 ## Direct npm Packages
 
-| Package | Version range | Usage | License | Project URL | Source manifests |
+| Package | Version ranges | Usage | License | Project URL | Source manifests |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-${npm.map(pkg => `| ${md(pkg.name)} | ${md(pkg.version)} | ${md(usageText(pkg.usage))} | ${md(pkg.license)} | ${md(pkg.projectUrl)} | ${md(pkg.sources.join('; '))} |`).join('\n')}
+${npm.map(pkg => `| ${md(pkg.name)} | ${md([...pkg.versions].join('; '))} | ${md(usageText(pkg.usage))} | ${md(pkg.license)} | ${md(pkg.projectUrl)} | ${md(pkg.sources.join('; '))} |`).join('\n')}
 
 ## Review Notes
 
@@ -391,7 +394,7 @@ if (checkOnly) {
     console.error(`${path.relative(repoRoot, outputPath)} does not exist. Run the generator first.`);
     process.exit(1);
   }
-  const current = readText(outputPath);
+  const current = readText(outputPath).replace(/\r\n/g, '\n');
   if (current !== output) {
     console.error(`${path.relative(repoRoot, outputPath)} is out of date. Run: node scripts/generate-third-party-inventory.js`);
     process.exit(1);

@@ -275,6 +275,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- The dependency inventory includes the pinned browser lint toolchain, preserves every declared npm
+  version range and classifies review/experiment projects as development dependencies. Its drift
+  check accepts Windows line endings while rejecting changed content.
 - Scale certification captures complete stdout/stderr through buffered byte streams, avoiding
   write-through output-file latency inside measured result formatting. Its fixture defers unrelated
   theory data, records the test-host runtime, rejects stale/incomplete evidence and cleans only its
@@ -289,7 +292,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - HA contract validation propagates child-command failures. Documentation link checks prune excluded
   caches before traversal, and Studio browser waits use the shared observable-condition helper.
 - Portal test factories close their own SQLite pools before deleting temporary files on both disposal
-  paths. Twelve repeated host starts/stops cover ordinary and hosted-service fixtures. Cleanup failures
+  paths. Twenty-four repeated host starts/stops cover ordinary and hosted-service fixtures. Cleanup failures
   now fail the fixture instead of being swallowed.
 
 - Independent numeric facets retain each authored MIN/MAX and derive only unspecified bounds from

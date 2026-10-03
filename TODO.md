@@ -63,5 +63,7 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
   until the cause is known — v0.17.0 established why.
   The [v0.20.0 harness investigation](docs/releases/v0.20.0-performance-results.md) identifies
   output capture and unrelated theory enumeration as measurement dependencies. The corrected
-  fixture passes repeated development runs; clean-commit Smoke/Standard calibration and candidate
-  comparison are still required before closing this item.
+  fixture passes repeated development runs. A clean Standard candidate/control/control/candidate
+  comparison passed all 260 correctness/memory checks, but sort GC pause and short cleanup timing
+  still fail regression comparisons. Resolve those findings and complete clean Smoke calibration
+  and final-candidate comparison before closing this item. No baseline has been replaced.
