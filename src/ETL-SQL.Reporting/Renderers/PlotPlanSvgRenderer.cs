@@ -28,6 +28,12 @@ internal sealed class PlotPlanSvgRenderer
     public string Render(PlotPlan plan)
     {
         plan.Validate();
+        return RenderValidated(plan);
+    }
+
+    // Facet copies adapt indices for rendering after the authoritative full plan has been validated.
+    private string RenderValidated(PlotPlan plan)
+    {
         var width = plan.Bounds.Width;
         var height = plan.Bounds.Height;
         var builder = new StringBuilder();
@@ -114,10 +120,12 @@ internal sealed class PlotPlanSvgRenderer
                         Y = facet.CartesianViewport.Y - facet.Bounds.Y
                     },
                     Scales = facet.Scales,
-                    Layers = plan.Layers.Select(layer => layer with { Data = layer.Data.Where(datum => rows.Contains(datum.RowIndex)).ToImmutableArray() }).ToImmutableArray(),
+                    Layers = plan.Layers.Select(layer => layer.Connections.IsDefault
+                        ? layer with { Data = layer.Data.Where(datum => rows.Contains(datum.RowIndex)).ToImmutableArray() }
+                        : ConnectedMarkResolver.SelectFacet(layer, facet.Id, rows)).ToImmutableArray(),
                     Facets = []
                 };
-                var nested = new PlotPlanSvgRenderer().Render(panel);
+                var nested = new PlotPlanSvgRenderer().RenderValidated(panel);
                 builder.AppendLine($"<g transform='translate({N(facet.Bounds.X)},{N(facet.Bounds.Y)})'>{nested}</g>");
             }
             builder.AppendLine("</svg>");
@@ -187,7 +195,7 @@ internal sealed class PlotPlanSvgRenderer
     {
         if (plan.Coordinate?.Kind == CoordinateKind.TransposedCartesian)
         {
-            if (plan.Coordinate.AspectRatio is not null)
+            if (plan.Coordinate.AspectRatio is not null || plan.Layers.Any(layer => !layer.Connections.IsDefault))
             {
                 // Adapt positional coordinates to physical axes without mutating the authoritative plan.
                 static FieldChannel Transpose(FieldChannel channel) => channel switch
@@ -203,14 +211,20 @@ internal sealed class PlotPlanSvgRenderer
                 RenderCartesian(builder, plan with
                 {
                     Coordinate = plan.Coordinate with { Kind = CoordinateKind.Cartesian },
+                    CartesianAxes = plan.CartesianAxes is { } axes ? new ResolvedCartesianAxes(axes.YScaleId, axes.XScaleId) : null,
                     Scales = plan.Scales.Select(scale => scale with { Channel = Transpose(scale.Channel) }).ToImmutableArray(),
                     Layers = plan.Layers.Select(layer => layer with
                     {
-                        Data = layer.Data.Select(datum => datum with
+                        Data = !layer.Connections.IsDefault ? layer.Data : layer.Data.Select(datum => datum with
                         {
                             Channels = datum.Channels.Select(channel => channel with
                             {
-                                Channel = Transpose(channel.Channel)
+                                Channel = layer.AreaConfidence ? channel.Channel switch
+                                {
+                                    FieldChannel.ConfidenceLow => FieldChannel.XStart,
+                                    FieldChannel.ConfidenceHigh => FieldChannel.XEnd,
+                                    _ => Transpose(channel.Channel)
+                                } : Transpose(channel.Channel)
                             }).ToImmutableArray()
                         }).ToImmutableArray()
                     }).ToImmutableArray()
@@ -233,10 +247,15 @@ internal sealed class PlotPlanSvgRenderer
         var seriesLabelsPos = (Style(plan, "SERIES_LABELS:POSITION") ?? "END").Trim().ToUpperInvariant();
         var isStartPos = seriesLabelsPos == "START";
 
-        var xScale = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.X);
+        var xScale = plan.Scales.FirstOrDefault(scale => plan.CartesianAxes is { } axes ? scale.Id.Equals(axes.XScaleId, StringComparison.OrdinalIgnoreCase) : scale.Channel == FieldChannel.X);
         var categories = xScale?.Categories ?? ImmutableArray<string>.Empty;
-        var yScale = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.Y);
+        var yScale = plan.Scales.FirstOrDefault(scale => plan.CartesianAxes is { } axes ? scale.Id.Equals(axes.YScaleId, StringComparison.OrdinalIgnoreCase) : scale.Channel == FieldChannel.Y);
         var y2Scale = plan.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.Y2);
+        // COMPAT_BREAK: 0.20.0 — a shared ribbon scale also owns the displayed primary Y axis.
+        var sharedRibbonScaleId = plan.Layers.FirstOrDefault()?.AreaRibbonScaleId;
+        if (plan.CartesianAxes is null && sharedRibbonScaleId is not null && plan.Layers.All(layer =>
+            string.Equals(layer.AreaRibbonScaleId, sharedRibbonScaleId, StringComparison.OrdinalIgnoreCase)))
+            yScale = plan.Scales.Single(scale => scale.Id.Equals(sharedRibbonScaleId, StringComparison.OrdinalIgnoreCase));
 
         var maxSeriesLabelWidth = 0m;
         if (seriesLabelsEnabled)
@@ -345,15 +364,29 @@ internal sealed class PlotPlanSvgRenderer
         builder.AppendLine($"<g clip-path='url(#{Esc(clipId)})'>");
 
         var hasPrimaryPoints = plan.Layers.Any(layer => layer.Mark == MarkKind.Point && LayerStyle(layer, "overlayType") is null);
-        foreach (var layer in plan.Layers
+        // COMPAT_BREAK: 0.20.0 — connected compositions paint every mark in authored z-order, including ordinary points.
+        var orderedLayers = plan.Layers.Any(layer => !layer.Connections.IsDefault) ? plan.Layers.AsEnumerable() : plan.Layers
             .OrderBy(item => LayerStyle(item, "overlayType") == "ReferenceBand" ? -1
                 : hasPrimaryPoints && item.Mark == MarkKind.Point && LayerStyle(item, "overlayType") is null ? 1 : 0)
-            .ThenBy(item => item.ZIndex)
-            .Select(item => ApplySampling(plan, item, area)))
+            .ThenBy(item => item.ZIndex);
+        foreach (var layer in orderedLayers.Select(item => ApplySampling(plan, item, area)))
         {
             var color = SafePaint(LayerStyle(layer, "color"),
                 plan.Palette.FirstOrDefault(item => item.SeriesKey == layer.SeriesKey)?.Color ?? "#5470c6");
             var overlayType = LayerStyle(layer, "overlayType");
+            if (layer.ConnectionInterpolation is not null)
+            {
+                var semanticPlan = transposedPointAxes ? plan with { Coordinate = plan.Coordinate! with { Kind = CoordinateKind.TransposedCartesian } } : plan;
+                RenderInterpolatedConnections(builder, semanticPlan, layer, area, xScale!, yScale!, color, transposedPointAxes);
+                if (layer.Mark == MarkKind.Line || layer.ConnectionDecorations)
+                    RenderConnectionDecorations(builder, plan, layer, area, xScale!, yScale!, color, showLabels, smartLabels, seriesLabelPlacements, transposedPointAxes);
+                continue;
+            }
+            if (transposedPointAxes && !layer.Connections.IsDefault)
+            {
+                RenderTransposedConnections(builder, plan, layer, area, xScale!, yScale!, color, showLabels, smartLabels, seriesLabelPlacements);
+                continue;
+            }
             if (overlayType is not null)
                 builder.AppendLine($"<g class='plot-overlay' data-overlay-type='{Esc(overlayType)}' data-z-index='{layer.ZIndex}'>");
             switch (layer.Mark)
@@ -379,8 +412,19 @@ internal sealed class PlotPlanSvgRenderer
                         RenderLine(builder, plan, layer, categories.Length, area, xScale, lineScale, color, showLabels, overlayLabels, smartLabels, seriesLabelPlacements, transposedPointAxes);
                     break;
                 case MarkKind.Area:
-                    var areaScale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale;
-                    RenderArea(builder, layer, categories.Length, area, xScale, areaScale, color);
+                    if (transposedPointAxes)
+                    {
+                        RenderHorizontalArea(builder, layer, yScale,
+                            value => MapX(value, xScale!, area), (datum, _) => MapY(PositionNumber(Channel(datum, FieldChannel.Y))!.Value, yScale!, area.Height), color, true);
+                        break;
+                    }
+                    // COMPAT_BREAK: 0.20.0 — map connected ribbons through their shared bound scale.
+                    var areaScale = layer.AreaRibbonScaleId is { } ribbonScaleId
+                        ? plan.Scales.Single(scale => scale.Id.Equals(ribbonScaleId, StringComparison.OrdinalIgnoreCase))
+                        : layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null) ? y2Scale ?? yScale : yScale;
+                    RenderArea(builder, plan, layer, categories.Length, area, xScale, areaScale, color);
+                    if (layer.ConnectionDecorations)
+                        RenderConnectionDecorations(builder, plan, layer, area, xScale!, areaScale!, color, showLabels, smartLabels, seriesLabelPlacements, false);
                     break;
                 case MarkKind.Point:
                     if (overlayType == "AnnotationPoint")
@@ -478,6 +522,10 @@ internal sealed class PlotPlanSvgRenderer
         var (slot, outerOffset) = CategoryLayout(categories.Length, plotHeight, bandScale);
         var showLabels = IsEnabled(plan.Style, "DATA_LABELS");
         var isGrouped = rectLayers.Count > 1 && rectLayers.Any(l => LayerStyle(l, "series") is not null);
+        var transposedValueScale = plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y);
+        var sharedRibbonScaleId = plan.Layers.FirstOrDefault()?.AreaRibbonScaleId;
+        if (sharedRibbonScaleId is not null && plan.Layers.All(layer => string.Equals(layer.AreaRibbonScaleId, sharedRibbonScaleId, StringComparison.OrdinalIgnoreCase)))
+            transposedValueScale = plan.Scales.Single(scale => scale.Id.Equals(sharedRibbonScaleId, StringComparison.OrdinalIgnoreCase));
         RenderPlotPanel(builder, plan, Left, Top, plotWidth, plotHeight);
         if (AxisLineEnabled(plan, "x"))
             builder.AppendLine($"<line class='plot-axis-line' x1='{N(Left)}' y1='{N(Top)}' x2='{N(Left)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
@@ -485,7 +533,7 @@ internal sealed class PlotPlanSvgRenderer
             builder.AppendLine($"<line class='plot-axis-line' x1='{N(Left)}' y1='{N(Top + plotHeight)}' x2='{N(Left + plotWidth)}' y2='{N(Top + plotHeight)}' stroke='#bbb'/>");
         if (IsEnabledByDefault(plan.Style, "GRID_LINES"))
         {
-            var gridScale = plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y);
+            var gridScale = transposedValueScale;
             if (gridScale is not null)
             {
                 decimal? previousGridValue = null;
@@ -503,7 +551,6 @@ internal sealed class PlotPlanSvgRenderer
                 }
             }
         }
-        var transposedValueScale = plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y);
         if (transposedValueScale is not null && IsEnabled(plan.Style, "ZERO_LINE"))
         {
             var (minimum, maximum) = Domain(transposedValueScale);
@@ -524,6 +571,8 @@ internal sealed class PlotPlanSvgRenderer
             var scale = layer.Data.Any(datum => Channel(datum, FieldChannel.Y2) is not null)
                 ? plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y2)
                 : plan.Scales.FirstOrDefault(item => item.Channel == FieldChannel.Y);
+            if (layer.AreaRibbonScaleId is { } ribbonScaleId)
+                scale = plan.Scales.Single(item => item.Id.Equals(ribbonScaleId, StringComparison.OrdinalIgnoreCase));
             if (scale is null) continue;
 
             var overlayType = LayerStyle(layer, "overlayType");
@@ -557,6 +606,21 @@ internal sealed class PlotPlanSvgRenderer
 
             var defaultColor = plan.Palette.FirstOrDefault(item => item.SeriesKey == layer.SeriesKey)?.Color ?? "#5470c6";
             var color = SafePaint(LayerStyle(layer, "fill") ?? LayerStyle(layer, "color"), defaultColor);
+            // COMPAT_BREAK: 0.20.0 — accepted transposed Y_START/Y_END ribbons previously emitted no geometry.
+            if (layer.Mark == MarkKind.Area && layer.Data.Any(datum => Channel(datum, FieldChannel.YStart) is not null))
+            {
+                RenderHorizontalArea(builder, layer, bandScale, value => MapHorizontal(value, scale, plotWidth), (datum, index) =>
+                {
+                    if (bandScale is not null && Continuous(bandScale) && PositionNumber(Channel(datum, FieldChannel.X)) is { } position)
+                        return MapVertical(position, bandScale, plotHeight);
+                    var category = Channel(datum, FieldChannel.X);
+                    var categoryIndex = category is null ? index : categories.IndexOf(PlotPlanResolver.Display(category));
+                    if (categoryIndex < 0) categoryIndex = index;
+                    if (bandScale?.Reverse == true) categoryIndex = Math.Max(0, categories.Length - 1) - categoryIndex;
+                    return Top + outerOffset + slot * (categoryIndex + .5m);
+                }, color, false);
+                continue;
+            }
             var layerOpacity = decimal.TryParse(LayerStyle(layer, "opacity"), NumberStyles.Any, CultureInfo.InvariantCulture, out var o) ? o : 1m;
             var errorBarStyle = LayerStyle(layer, "errorBarStyle") ?? LayerStyle(layer, "ERROR_BAR_STYLE") ?? LayerStyle(layer, "error_bar_style") ?? "CAPS";
             var hasCaps = !errorBarStyle.Equals("NO_CAPS", StringComparison.OrdinalIgnoreCase);
@@ -1213,27 +1277,81 @@ internal sealed class PlotPlanSvgRenderer
         builder.AppendLine($"<rect x='1' y='3' width='{N(Math.Max(0m, (width - 2m) * ratio))}' height='{N(Math.Max(1m, height - 6m))}' rx='{N(Math.Min(5m, height / 4m))}' fill='{Esc(color)}'/>");
     }
 
-    private static void RenderArea(StringBuilder builder, ResolvedMarkLayer layer, int categoryCount,
+    private static void RenderHorizontalArea(StringBuilder builder, ResolvedMarkLayer layer, ResolvedScale? verticalScale,
+        Func<decimal, decimal> horizontal, Func<ResolvedDatum, int, decimal> vertical, string color, bool transposedAxes)
+    {
+        var ribbon = layer.AreaRibbon || layer.Data.Any(datum => Channel(datum, transposedAxes ? FieldChannel.XStart : FieldChannel.YStart) is not null);
+        var upper = new List<(decimal X, decimal Y)>();
+        var lower = new List<(decimal X, decimal Y)>();
+        var descriptions = new List<string>();
+        var opacity = Math.Clamp(decimal.TryParse(LayerStyle(layer, "opacity"), NumberStyles.Any, CultureInfo.InvariantCulture, out var value) ? value : 1m, 0m, 1m);
+        void Flush()
+        {
+            if (upper.Count > 1)
+            {
+                var path = $"M {string.Join(" L ", upper.Select(point => $"{N(point.X)} {N(point.Y)}"))} " +
+                    $"L {string.Join(" L ", lower.AsEnumerable().Reverse().Select(point => $"{N(point.X)} {N(point.Y)}"))} Z";
+                if (layer.PathInterpolation is not null)
+                {
+                    var interpolation = ResolveInterpolation(LayerStyle(layer, "INTERPOLATION"), smoothFallback: false);
+                    if (transposedAxes) interpolation = ReverseStepDirection(interpolation);
+                    var lowerPath = PathData(lower.AsEnumerable().Reverse().ToArray(), ReverseStepDirection(interpolation));
+                    path = PathData(upper, interpolation) + " L" + lowerPath[1..] + " Z";
+                }
+                builder.AppendLine($"<path class='{(layer.AreaConfidence ? "plot-confidence-band" : ribbon ? "plot-ribbon" : "plot-area")}' d='{path}' fill='{Esc(color)}' fill-opacity='.2' opacity='{N(opacity)}' stroke='{Esc(color)}' stroke-width='{LineWidth(layer, "1")}'><title>{Esc(string.Join("; ", descriptions))}</title></path>");
+            }
+            upper.Clear();
+            lower.Clear();
+            descriptions.Clear();
+        }
+        for (var index = 0; index < layer.Data.Length; index++)
+        {
+            var datum = layer.Data[index];
+            var position = Channel(datum, transposedAxes ? FieldChannel.Y : FieldChannel.X);
+            var start = ribbon ? PositionNumber(Channel(datum, transposedAxes ? FieldChannel.XStart : FieldChannel.YStart)) : 0m;
+            var end = PositionNumber(Channel(datum, transposedAxes ? ribbon ? FieldChannel.XEnd : FieldChannel.X : ribbon ? FieldChannel.YEnd : FieldChannel.Y));
+            if (datum.IsGap || !start.HasValue || !end.HasValue || position is null || position.Kind == ChartValueKind.Null ||
+                verticalScale is not null && Continuous(verticalScale) && PositionNumber(position) is null)
+            {
+                Flush();
+                continue;
+            }
+            var y = vertical(datum, index) + datum.DisplayOffsetY;
+            upper.Add((horizontal(end.Value) + datum.DisplayOffsetX, y));
+            lower.Add((horizontal(start.Value) + datum.DisplayOffsetX, y));
+            descriptions.Add($"Row {datum.RowIndex + 1}: {(layer.AreaConfidence ? "confidence interval; " : "")}{PlotPlanResolver.CartesianAreaDescription(datum, ribbon, transposedAxes)}");
+        }
+        Flush();
+    }
+
+    private static void RenderArea(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
         in CartesianPlotArea area, ResolvedScale? xScale, ResolvedScale? scale, string color)
     {
         if (scale is null || layer.Data.IsDefaultOrEmpty) return;
         if (!layer.Connections.IsDefault)
         {
             var baseline = MapY(0m, scale, area.Height);
+            if (layer.ConnectionDecorations) BeginDecoratedConnections(builder, plan, layer);
             foreach (var connection in layer.Connections)
             {
                 var source = layer.Data[connection.SourceIndex];
                 var destination = layer.Data[connection.DestinationIndex];
-                var x0 = MapX(PlotPlanResolver.Number(Channel(source, FieldChannel.X)!)!.Value, xScale!, area);
-                var x1 = MapX(PlotPlanResolver.Number(Channel(destination, FieldChannel.X)!)!.Value, xScale!, area);
-                var y0 = MapY(PlotPlanResolver.Number(Channel(source, layer.AreaRibbon ? FieldChannel.YEnd : FieldChannel.Y)!)!.Value, scale, area.Height);
-                var y1 = MapY(PlotPlanResolver.Number(Channel(destination, layer.AreaRibbon ? FieldChannel.YEnd : FieldChannel.Y)!)!.Value, scale, area.Height);
-                var lower0 = layer.AreaRibbon ? MapY(PlotPlanResolver.Number(Channel(source, FieldChannel.YStart)!)!.Value, scale, area.Height) : baseline;
-                var lower1 = layer.AreaRibbon ? MapY(PlotPlanResolver.Number(Channel(destination, FieldChannel.YStart)!)!.Value, scale, area.Height) : baseline;
+                var sourceCoordinates = ResolvedMarkConnection.Coordinates(source, layer.AreaRibbon)!;
+                var destinationCoordinates = ResolvedMarkConnection.Coordinates(destination, layer.AreaRibbon)!;
+                var x0 = MapX(sourceCoordinates.X, xScale!, area);
+                var x1 = MapX(destinationCoordinates.X, xScale!, area);
+                var y0 = MapY((layer.AreaRibbon ? sourceCoordinates.YEnd : sourceCoordinates.Y)!.Value, scale, area.Height);
+                var y1 = MapY((layer.AreaRibbon ? destinationCoordinates.YEnd : destinationCoordinates.Y)!.Value, scale, area.Height);
+                var lower0 = layer.AreaRibbon ? MapY(sourceCoordinates.YStart!.Value, scale, area.Height) : baseline;
+                var lower1 = layer.AreaRibbon ? MapY(destinationCoordinates.YStart!.Value, scale, area.Height) : baseline;
                 var paint = EncodingText(source, ConditionalEncodingChannel.Color) is { } candidate ? SafePaint(candidate, color) : color;
                 var opacity = Math.Clamp(EncodingNumber(source, ConditionalEncodingChannel.Opacity) ?? 1m, 0m, 1m);
-                builder.AppendLine($"<path class='plot-conditional-area' data-source-index='{connection.SourceIndex}' data-destination-index='{connection.DestinationIndex}' d='M {N(x0)} {N(y0)} L {N(x1)} {N(y1)} L {N(x1)} {N(lower1)} L {N(x0)} {N(lower0)} Z' fill='{Esc(paint)}' opacity='{N(opacity)}' stroke='none'><title>{Esc(ConnectedMarkResolver.Describe(connection))}</title></path>");
+                if (layer.ConnectionDecorations)
+                    RenderDecoratedConnectionPath(builder, plan, layer, connection, $"M {N(x0)} {N(y0)} L {N(x1)} {N(y1)} L {N(x1)} {N(lower1)} L {N(x0)} {N(lower0)} Z", paint, opacity);
+                else
+                    builder.AppendLine($"<path class='plot-conditional-area' data-source-index='{connection.SourceIndex}' data-destination-index='{connection.DestinationIndex}' d='M {N(x0)} {N(y0)} L {N(x1)} {N(y1)} L {N(x1)} {N(lower1)} L {N(x0)} {N(lower0)} Z' fill='{Esc(paint)}' opacity='{N(opacity)}' stroke='none'><title>{Esc(ConnectedMarkResolver.Describe(connection, plan, layer))}</title></path>");
             }
+            if (layer.ConnectionDecorations) builder.AppendLine("</g>");
             return;
         }
         var isConfidence = layer.Data.Any(datum => Channel(datum, FieldChannel.ConfidenceLow) is not null || Channel(datum, FieldChannel.ConfidenceHigh) is not null);
@@ -1476,22 +1594,179 @@ internal sealed class PlotPlanSvgRenderer
         }
     }
 
-    private static void RenderConnectedLine(StringBuilder builder, ResolvedMarkLayer layer,
-        in CartesianPlotArea area, ResolvedScale xScale, ResolvedScale yScale, string color)
+    private static void RenderTransposedConnections(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
+        in CartesianPlotArea area, ResolvedScale horizontalScale, ResolvedScale verticalScale, string color, bool showLabels,
+        ICollection<SmartLabel> labels, ICollection<SeriesLabelPlacement> seriesLabels)
     {
-        var points = layer.Data.Select(datum => (
-            X: PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null()),
-            Y: PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null()))).ToArray();
+        var frame = area;
+        decimal Horizontal(decimal value) => MapX(value, horizontalScale, frame);
+        decimal Vertical(decimal value) => MapY(value, verticalScale, frame.Height);
+        var semanticPlan = plan with { Coordinate = plan.Coordinate! with { Kind = CoordinateKind.TransposedCartesian } };
+        if (layer.ConnectionDecorations) BeginDecoratedConnections(builder, semanticPlan, layer);
         foreach (var connection in layer.Connections)
         {
-            var source = points[connection.SourceIndex];
-            var destination = points[connection.DestinationIndex];
+            var source = ResolvedMarkConnection.Coordinates(layer.Data[connection.SourceIndex], layer.AreaRibbon)!;
+            var destination = ResolvedMarkConnection.Coordinates(layer.Data[connection.DestinationIndex], layer.AreaRibbon)!;
+            var x0 = Horizontal((layer.AreaRibbon ? source.YEnd : source.Y)!.Value);
+            var x1 = Horizontal((layer.AreaRibbon ? destination.YEnd : destination.Y)!.Value);
+            var y0 = Vertical(source.X);
+            var y1 = Vertical(destination.X);
+            var path = $"M {N(x0)} {N(y0)} L {N(x1)} {N(y1)}";
+            if (layer.Mark == MarkKind.Area)
+                path += $" L {N(Horizontal(layer.AreaRibbon ? destination.YStart!.Value : 0m))} {N(y1)} L {N(Horizontal(layer.AreaRibbon ? source.YStart!.Value : 0m))} {N(y0)} Z";
+            var paint = connection.Encodings.FirstOrDefault(encoding => encoding.Channel == ConditionalEncodingChannel.Color)?.Value.Text;
+            paint = SafePaint(paint, color);
+            var opacity = connection.Encodings.FirstOrDefault(encoding => encoding.Channel == ConditionalEncodingChannel.Opacity)?.Value;
+            var alpha = Math.Clamp(opacity is null ? 1m : PlotPlanResolver.Number(opacity) ?? 1m, 0m, 1m);
+            var areaMark = layer.Mark == MarkKind.Area;
+            var lineAttributes = areaMark ? "" : $" stroke-width='{LineWidth(layer, "2")}'" + LineStyleAttributes(LayerStyle(layer, "lineStyle"));
+            if (layer.ConnectionDecorations)
+                RenderDecoratedConnectionPath(builder, semanticPlan, layer, connection, path, paint, alpha);
+            else
+                builder.AppendLine($"<path class='{(areaMark ? "plot-conditional-area" : "plot-conditional-connection")}' data-source-index='{connection.SourceIndex}' data-destination-index='{connection.DestinationIndex}' d='{path}' fill='{(areaMark ? Esc(paint) : "none")}' stroke='{(areaMark ? "none" : Esc(paint))}'{lineAttributes} opacity='{N(alpha)}'><title>{Esc(ConnectedMarkResolver.Describe(connection, semanticPlan, layer))}</title></path>");
+        }
+        if (layer.ConnectionDecorations) builder.AppendLine("</g>");
+        if (layer.ConnectionDecorations)
+        {
+            RenderConnectionDecorations(builder, plan, layer, frame, horizontalScale, verticalScale, color, showLabels, labels, seriesLabels, true);
+            return;
+        }
+        if (layer.Mark != MarkKind.Line) return;
+        var eligible = layer.Data.Where(datum => ResolvedMarkConnection.HasCompleteCoordinates(datum, false)).ToArray();
+        var seriesEnabled = IsEnabled(plan.Style, "SERIES_LABELS");
+        var position = (Style(plan, "SERIES_LABELS:POSITION") ?? "END").Trim().ToUpperInvariant();
+        var target = position == "START" ? eligible.FirstOrDefault() : eligible.LastOrDefault();
+        var size = Style(plan, "SYMBOL_SIZE") ?? LayerStyle(layer, "SYMBOL_SIZE");
+        var radius = decimal.TryParse(size, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsedSize) && parsedSize > 0m ? parsedSize : 3m;
+        foreach (var datum in eligible)
+        {
+            var coordinates = ResolvedMarkConnection.Coordinates(datum, false)!;
+            var x = Horizontal(coordinates.Y!.Value);
+            var y = Vertical(coordinates.X);
+            var label = ConnectedMarkResolver.ZeroDetail(datum) ?? FormatDataLabel(coordinates.Y.Value, DataFormat(plan));
+            var paint = SafePaint(EncodingText(datum, ConditionalEncodingChannel.Color), color);
+            var opacity = Math.Clamp(EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? 1m, 0m, 1m);
+            if (IsEnabledByDefault(plan.Style, "SYMBOLS"))
+                RenderPointSymbol(builder, PointShape(plan, layer, datum), x, y, radius, paint, "plot-line-symbol", datum.RowIndex, label,
+                    PointStrokeAttributes(layer) + $" opacity='{N(opacity)}'");
+            if (showLabels && (!seriesEnabled || datum != target))
+                labels.Add(new SmartLabel(datum.RowIndex, x, y, label, SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444"), 120 + layer.ZIndex, FontSize(Style(plan, "DATA_LABELS:FONT_SIZE"))));
+        }
+        if (seriesEnabled && target is not null)
+        {
+            var series = plan.Series.FirstOrDefault(item => item.Key == (layer.SeriesKey ?? layer.Id));
+            var coordinates = ResolvedMarkConnection.Coordinates(target, false)!;
+            seriesLabels.Add(new SeriesLabelPlacement(series?.Key ?? layer.SeriesKey ?? layer.Id, series?.Label ?? layer.SeriesKey ?? layer.Id,
+                Horizontal(coordinates.Y!.Value), Vertical(coordinates.X), position == "START" ? "START" : "END", SafePaint(series?.Color, color), series?.Order ?? layer.ZIndex));
+        }
+    }
+
+    private static void RenderInterpolatedConnections(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
+        in CartesianPlotArea area, ResolvedScale horizontalScale, ResolvedScale verticalScale, string color, bool transposed)
+    {
+        var frame = area;
+        string Point(ResolvedConnectionPoint point) => $"{N(MapX(transposed ? point.Y : point.X, horizontalScale, frame))} {N(MapY(transposed ? point.X : point.Y, verticalScale, frame.Height))}";
+        string Boundary(ImmutableArray<ResolvedConnectionPoint> points, bool cubic, bool reverse, string start)
+        {
+            var values = reverse ? points.Reverse().ToArray() : points.ToArray();
+            return start + " " + Point(values[0]) + (cubic ? $" C {Point(values[1])} {Point(values[2])} {Point(values[3])}"
+                : string.Concat(values.Skip(1).Select(point => " L " + Point(point))));
+        }
+        BeginDecoratedConnections(builder, plan, layer);
+        foreach (var connection in layer.Connections)
+        {
+            var geometry = connection.Geometry!;
+            var path = Boundary(geometry.Upper, geometry.Cubic, false, "M");
+            if (!geometry.Lower.IsDefault) path += " " + Boundary(geometry.Lower, geometry.Cubic, true, "L") + " Z";
+            var paint = SafePaint(connection.Encodings.FirstOrDefault(value => value.Channel == ConditionalEncodingChannel.Color)?.Value.Text, color);
+            var opacity = Math.Clamp(PlotPlanResolver.Number(connection.Encodings.FirstOrDefault(value => value.Channel == ConditionalEncodingChannel.Opacity)?.Value ?? ChartValue.Null()) ?? 1m, 0m, 1m);
+            RenderDecoratedConnectionPath(builder, plan, layer, connection, path, paint, opacity);
+        }
+        builder.AppendLine("</g>");
+    }
+
+    private static void BeginDecoratedConnections(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer)
+    {
+        var series = plan.Series.FirstOrDefault(item => item.Key == layer.SeriesKey)?.Label;
+        var owner = $"Layer {layer.Id}{(series is null ? "" : ", series " + series)}";
+        if (plan.Title is { } title) owner += (layer.Connections.Any(connection => connection.FacetId is not null) ? ", facet " : ", ") + title;
+        if (plan.Coordinate?.Kind == CoordinateKind.TransposedCartesian) owner += "; X vertical, Y horizontal";
+        var line = "";
+        if (layer.ConnectionInterpolation is { } interpolation)
+        {
+            owner += "; interpolation " + ResolvedConnectionGeometry.Name(interpolation);
+            if (layer.Mark == MarkKind.Line)
+                line = $" stroke-width='{LineWidth(layer, "2")}'" + LineStyleAttributes(LayerStyle(layer, "lineStyle"));
+        }
+        builder.AppendLine($"<g class='plot-connected-layer' role='group' aria-label='{Esc(owner)}'{line}>");
+    }
+
+    private static void RenderDecoratedConnectionPath(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
+        ResolvedMarkConnection connection, string geometry, string paint, decimal opacity)
+    {
+        var area = layer.Mark == MarkKind.Area;
+        var alpha = opacity == 1m ? "" : $" opacity='{N(opacity)}'";
+        var line = area || layer.ConnectionInterpolation is not null ? "" : $" stroke-width='{LineWidth(layer, "2")}'" + LineStyleAttributes(LayerStyle(layer, "lineStyle"));
+        builder.AppendLine($"<path class='{(area ? "plot-conditional-area" : "plot-conditional-connection")}' d='{geometry}' fill='{(area ? Esc(paint) : "none")}' stroke='{(area ? "none" : Esc(paint))}'{line}{alpha}><title>{Esc(ConnectedMarkResolver.Describe(connection, plan, layer, includeOwner: false, includeInterpolation: layer.ConnectionInterpolation is null))}</title></path>");
+    }
+
+    private static void RenderConnectionDecorations(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
+        in CartesianPlotArea area, ResolvedScale horizontalScale, ResolvedScale verticalScale, string color, bool showLabels,
+        ICollection<SmartLabel> labels, ICollection<SeriesLabelPlacement> seriesLabels, bool transposed)
+    {
+        var frame = area;
+        decimal Horizontal(ResolvedConnectionDecoration decoration) => MapX(transposed ? decoration.Y : decoration.X, horizontalScale, frame);
+        decimal Vertical(ResolvedConnectionDecoration decoration) => MapY(transposed ? decoration.X : decoration.Y, verticalScale, frame.Height);
+        var eligible = layer.ConnectionDecorations ? layer.Data.Where(datum => datum.ConnectionDecoration is not null).ToArray()
+            : layer.Data.Select(datum => datum with { ConnectionDecoration = ResolvedConnectionDecoration.FromRaw(datum, layer, plan.Style) }).Where(datum => datum.ConnectionDecoration is not null).ToArray();
+        var seriesEnabled = layer.Mark == MarkKind.Line && IsEnabled(plan.Style, "SERIES_LABELS");
+        var position = (Style(plan, "SERIES_LABELS:POSITION") ?? "END").Trim().ToUpperInvariant();
+        var target = position == "START" ? eligible.FirstOrDefault() : eligible.LastOrDefault();
+        foreach (var datum in eligible)
+        {
+            var decoration = datum.ConnectionDecoration!;
+            var x = Horizontal(decoration);
+            var y = Vertical(decoration);
+            var paint = SafePaint(EncodingText(datum, ConditionalEncodingChannel.Color), color);
+            var opacity = Math.Clamp(EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? 1m, 0m, 1m);
+            if (IsEnabledByDefault(plan.Style, "SYMBOLS"))
+                RenderPointSymbol(builder, decoration.Shape == "CIRCLE" ? null : decoration.Shape, x, y, decoration.Radius, paint, layer.ConnectionDecorations ? "plot-connection-symbol" : "plot-line-symbol", datum.RowIndex,
+                    ConnectedMarkResolver.DatumDescription(datum, layer) + $"; size {N(decoration.Radius)}px; shape {decoration.Shape}" +
+                    (decoration.Text is not { } value ? "" : string.IsNullOrWhiteSpace(PlotPlanResolver.Display(value)) ? "; no text" : "; text " + PlotPlanResolver.Display(value)),
+                    PointStrokeAttributes(layer) + (opacity == 1m ? "" : $" opacity='{N(opacity)}'"));
+            var caption = decoration.Text is { } text ? PlotPlanResolver.Display(text)
+                : showLabels && (!seriesEnabled || datum != target) ? ConnectedMarkResolver.ZeroDetail(datum) ?? FormatDataLabel(decoration.Y, DataFormat(plan)) : null;
+            if (!string.IsNullOrWhiteSpace(caption))
+                labels.Add(new SmartLabel(datum.RowIndex, x, y, caption, SafePaint(Style(plan, "DATA_LABELS:COLOR"), paint),
+                    120 + layer.ZIndex, FontSize(Style(plan, "DATA_LABELS:FONT_SIZE")), opacity));
+        }
+        if (seriesEnabled && target?.ConnectionDecoration is { } anchor)
+        {
+            var series = plan.Series.FirstOrDefault(item => item.Key == (layer.SeriesKey ?? layer.Id));
+            seriesLabels.Add(new SeriesLabelPlacement(series?.Key ?? layer.SeriesKey ?? layer.Id, series?.Label ?? layer.SeriesKey ?? layer.Id,
+                Horizontal(anchor), Vertical(anchor), position == "START" ? "START" : "END", SafePaint(series?.Color, color), series?.Order ?? layer.ZIndex));
+        }
+    }
+
+    private static void RenderConnectedLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer,
+        in CartesianPlotArea area, ResolvedScale xScale, ResolvedScale yScale, string color)
+    {
+        var points = layer.Data.Select(datum => ResolvedMarkConnection.Coordinates(datum, false)).ToArray();
+        if (layer.ConnectionDecorations) BeginDecoratedConnections(builder, plan, layer);
+        foreach (var connection in layer.Connections)
+        {
+            var source = points[connection.SourceIndex]!;
+            var destination = points[connection.DestinationIndex]!;
             var stroke = connection.Encodings.FirstOrDefault(encoding => encoding.Channel == ConditionalEncodingChannel.Color)?.Value;
             var opacity = connection.Encodings.FirstOrDefault(encoding => encoding.Channel == ConditionalEncodingChannel.Opacity)?.Value;
             var paint = stroke is null ? color : SafePaint(PlotPlanResolver.Display(stroke), color);
             var alpha = Math.Clamp(opacity is null ? 1m : PlotPlanResolver.Number(opacity) ?? 1m, 0m, 1m);
-            builder.AppendLine($"<path class='plot-conditional-connection' data-source-index='{connection.SourceIndex}' data-destination-index='{connection.DestinationIndex}' d='M {N(MapX(source.X!.Value, xScale, area))} {N(MapY(source.Y!.Value, yScale, area.Height))} L {N(MapX(destination.X!.Value, xScale, area))} {N(MapY(destination.Y!.Value, yScale, area.Height))}' fill='none' stroke='{Esc(paint)}' stroke-width='{LineWidth(layer, "2")}' opacity='{N(alpha)}'><title>{Esc(ConnectedMarkResolver.Describe(connection))}</title></path>");
+            if (layer.ConnectionDecorations)
+                RenderDecoratedConnectionPath(builder, plan, layer, connection, $"M {N(MapX(source.X, xScale, area))} {N(MapY(source.Y!.Value, yScale, area.Height))} L {N(MapX(destination.X, xScale, area))} {N(MapY(destination.Y!.Value, yScale, area.Height))}", paint, alpha);
+            else
+                builder.AppendLine($"<path class='plot-conditional-connection' data-source-index='{connection.SourceIndex}' data-destination-index='{connection.DestinationIndex}' d='M {N(MapX(source.X, xScale, area))} {N(MapY(source.Y!.Value, yScale, area.Height))} L {N(MapX(destination.X, xScale, area))} {N(MapY(destination.Y!.Value, yScale, area.Height))}' fill='none' stroke='{Esc(paint)}' stroke-width='{LineWidth(layer, "2")}' opacity='{N(alpha)}'><title>{Esc(ConnectedMarkResolver.Describe(connection, plan, layer))}</title></path>");
         }
+        if (layer.ConnectionDecorations) builder.AppendLine("</g>");
     }
 
     private static void RenderLine(StringBuilder builder, PlotPlan plan, ResolvedMarkLayer layer, int categoryCount,
@@ -1502,7 +1777,12 @@ internal sealed class PlotPlanSvgRenderer
         if (scale is null || layer.Data.IsDefaultOrEmpty) return;
         if (!layer.Connections.IsDefault)
         {
-            RenderConnectedLine(builder, layer, area, xScale!, scale, color);
+            RenderConnectedLine(builder, plan, layer, area, xScale!, scale, color);
+            if (layer.ConnectionDecorations)
+            {
+                RenderConnectionDecorations(builder, plan, layer, area, xScale!, scale, color, showLabels, smartLabels, seriesLabelPlacements, false);
+                return;
+            }
         }
         var lineStyle = LayerStyle(layer, "lineStyle");
         var dashAttributes = LineStyleAttributes(lineStyle);
@@ -1512,6 +1792,13 @@ internal sealed class PlotPlanSvgRenderer
             : ResolveInterpolation(
                 LayerStyle(layer, "INTERPOLATION") ?? Style(plan, "INTERPOLATION"),
                 IsEnabled(plan.Style, "SMOOTH"));
+        if (layer.PathInterpolation is not null && transposedAspect)
+            smooth = smooth switch
+            {
+                LineInterpolation.StepBefore => LineInterpolation.StepAfter,
+                LineInterpolation.StepAfter => LineInterpolation.StepBefore,
+                _ => smooth
+            };
         var strokeWidth = isOverlay ? "3" : LineWidth(layer, "2");
         var overlayType = LayerStyle(layer, "overlayType");
         var lineClass = overlayType == "Forecast" ? " class='plot-forecast-line'" : string.Empty;
@@ -1535,8 +1822,9 @@ internal sealed class PlotPlanSvgRenderer
         for (var i = 0; i < layer.Data.Length; i++)
         {
             var d = layer.Data[i];
+            if (!layer.Connections.IsDefault && !ResolvedMarkConnection.HasCompleteCoordinates(d, false)) continue;
             if (d.IsGap && nullPolicy != NullValuePolicy.Zero) continue;
-            var v = PlotPlanResolver.Number(Channel(d, FieldChannel.Y) ?? Channel(d, FieldChannel.Y2) ?? ChartValue.Null());
+            var v = d.ConnectionCoordinates?.Y ?? PlotPlanResolver.Number(Channel(d, FieldChannel.Y) ?? Channel(d, FieldChannel.Y2) ?? ChartValue.Null());
             if (!v.HasValue && nullPolicy != NullValuePolicy.Zero) continue;
             if (xScale is not null && xScale.Kind is ScaleKind.Linear or ScaleKind.Logarithmic)
             {
@@ -1617,7 +1905,9 @@ internal sealed class PlotPlanSvgRenderer
         for (var index = 0; index < layer.Data.Length; index++)
         {
             var datum = layer.Data[index];
-            var value = PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? ChartValue.Null());
+            // COMPAT_BREAK: 0.20.0 — connected LINE decorations never invent an X anchor for incomplete rows.
+            if (!layer.Connections.IsDefault && !ResolvedMarkConnection.HasCompleteCoordinates(datum, false)) { Flush(); continue; }
+            var value = datum.ConnectionCoordinates?.Y ?? PlotPlanResolver.Number(Channel(datum, FieldChannel.Y) ?? Channel(datum, FieldChannel.Y2) ?? ChartValue.Null());
             if (datum.IsGap || !value.HasValue)
             {
                 if (nullPolicy == NullValuePolicy.Skip)
@@ -1634,7 +1924,7 @@ internal sealed class PlotPlanSvgRenderer
                     continue;
                 }
             }
-            var xValue = PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
+            var xValue = datum.ConnectionCoordinates?.X ?? PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
             var x = xScale is not null && xScale.Kind is ScaleKind.Linear or ScaleKind.Logarithmic && xValue.HasValue
                 ? MapX(xValue.Value, xScale, area)
                 : CategoryX(index, categoryCount, area, xScale);
@@ -1647,6 +1937,7 @@ internal sealed class PlotPlanSvgRenderer
             else
                 segment!.Add((x, y));
             var labelValue = transposedAspect ? PlotPlanResolver.Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null())!.Value : value.Value;
+            var labelText = ConnectedMarkResolver.ZeroDetail(datum) ?? FormatDataLabel(labelValue, DataFormat(plan));
             var symbolColor = EncodingText(datum, ConditionalEncodingChannel.Color) is { } condColor
                 ? SafePaint(condColor, color) : color;
             var symbolSizeStr = Style(plan, "SYMBOL_SIZE") ?? LayerStyle(layer, "SYMBOL_SIZE");
@@ -1657,12 +1948,12 @@ internal sealed class PlotPlanSvgRenderer
                 (!isOverlay || !plan.Layers.Any(candidate => candidate.Mark == MarkKind.Point && LayerStyle(candidate, "overlayType") is null)))
                 RenderPointSymbol(builder, isOverlay ? null : PointShape(plan, layer, datum),
                     x, y, symbolRadius, symbolColor, isOverlay ? "plot-overlay-point" : "plot-line-symbol",
-                    datum.RowIndex, FormatDataLabel(labelValue, DataFormat(plan)),
+                    datum.RowIndex, labelText,
                     isOverlay ? " stroke='white' stroke-width='1.5'" : PointStrokeAttributes(layer) +
                     (layer.Connections.IsDefault ? string.Empty : $" opacity='{N(Math.Clamp(EncodingNumber(datum, ConditionalEncodingChannel.Opacity) ?? 1m, 0m, 1m))}'"));
             if (showLabels && (!seriesLabelsEnabled || index != seriesLabelTargetIndex))
                 smartLabels.Add(new SmartLabel(datum.RowIndex, x, y,
-                    FormatDataLabel(labelValue, DataFormat(plan)),
+                    labelText,
                     SafePaint(Style(plan, "DATA_LABELS:COLOR"), "#444"),
                     120 + layer.ZIndex,
                     FontSize(Style(plan, "DATA_LABELS:FONT_SIZE"))));
@@ -1817,6 +2108,13 @@ internal sealed class PlotPlanSvgRenderer
             _ => smoothFallback ? LineInterpolation.Smooth : LineInterpolation.Linear
         };
 
+    private static LineInterpolation ReverseStepDirection(LineInterpolation interpolation) => interpolation switch
+    {
+        LineInterpolation.StepBefore => LineInterpolation.StepAfter,
+        LineInterpolation.StepAfter => LineInterpolation.StepBefore,
+        _ => interpolation
+    };
+
     private static string PathData(IReadOnlyList<(decimal X, decimal Y)> points, bool smooth) =>
         PathData(points, smooth ? LineInterpolation.Smooth : LineInterpolation.Linear);
 
@@ -1830,10 +2128,8 @@ internal sealed class PlotPlanSvgRenderer
             {
                 var previous = points[index - 1];
                 var current = points[index];
-                if (interpolation == LineInterpolation.StepBefore)
-                    steps.Append($" L {N(previous.X)} {N(current.Y)} L {N(current.X)} {N(current.Y)}");
-                else
-                    steps.Append($" L {N(current.X)} {N(previous.Y)} L {N(current.X)} {N(current.Y)}");
+                var corner = CartesianInterpolation.StepCorner(previous, current, interpolation == LineInterpolation.StepBefore);
+                steps.Append($" L {N(corner.X)} {N(corner.Y)} L {N(current.X)} {N(current.Y)}");
             }
             return steps.ToString();
         }
@@ -1847,9 +2143,8 @@ internal sealed class PlotPlanSvgRenderer
             var start = points[index];
             var end = points[index + 1];
             var after = index + 2 < points.Count ? points[index + 2] : end;
-            var control1 = (start.X + (end.X - before.X) / 6m, start.Y + (end.Y - before.Y) / 6m);
-            var control2 = (end.X - (after.X - start.X) / 6m, end.Y - (after.Y - start.Y) / 6m);
-            builder.Append($" C {N(control1.Item1)} {N(control1.Item2)} {N(control2.Item1)} {N(control2.Item2)} {N(end.X)} {N(end.Y)}");
+            var controls = CartesianInterpolation.CubicControls(before, start, end, after);
+            builder.Append($" C {N(controls.First.X)} {N(controls.First.Y)} {N(controls.Second.X)} {N(controls.Second.Y)} {N(end.X)} {N(end.Y)}");
         }
         return builder.ToString();
     }
@@ -3680,6 +3975,8 @@ internal sealed class PlotPlanSvgRenderer
     /// </summary>
     private static ResolvedMarkLayer ApplySampling(PlotPlan plan, ResolvedMarkLayer layer, in CartesianPlotArea area)
     {
+        // COMPAT_BREAK: 0.20.0 — source-owned connections require the full raw endpoint array; sampling cannot replace it.
+        if (!layer.Connections.IsDefault) return layer;
         if (layer.Mark is not (MarkKind.Line or MarkKind.Point or MarkKind.Area)) return layer;
         if (LayerStyle(layer, "overlayType") is not null) return layer;
 

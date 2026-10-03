@@ -137,6 +137,9 @@ New-Item -ItemType Directory -Force -Path $absoluteOutDir | Out-Null
 # warm-up, sampling, metadata, and report implementation as the candidate.
 $runnerCopy = Join-Path $absoluteOutDir 'Test-ScaleCertification.runner.ps1'
 Copy-Item -LiteralPath (Join-Path $ScriptRoot 'Test-ScaleCertification.ps1') -Destination $runnerCopy -Force
+foreach ($helper in @('ScaleCertification.Helpers.ps1', 'Release.Helpers.ps1')) {
+    Copy-Item -LiteralPath (Join-Path $ScriptRoot $helper) -Destination (Join-Path $absoluteOutDir $helper) -Force
+}
 
 $runs = @()
 $startedAt = Get-Date

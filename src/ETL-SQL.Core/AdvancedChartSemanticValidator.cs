@@ -383,7 +383,8 @@ public static class AdvancedChartSemanticValidator
             Add(results, node, $"Layer '{layer.Name}' JITTER amplitudes must be between zero and one.");
         if (position.Kind == AdvancedChartPositionKind.Nudge && position.Unit == AdvancedChartPositionUnit.Data &&
             chart.Coordinate.Kind != AdvancedChartCoordinateKind.Cartesian &&
-            chart.Coordinate is not { Kind: AdvancedChartCoordinateKind.TransposedCartesian, AspectRatio: not null })
+            chart.Coordinate is not { Kind: AdvancedChartCoordinateKind.TransposedCartesian, AspectRatio: not null } &&
+            !(chart.Coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian && chart.Layers.Any(candidate => candidate.Mark is (AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area) && candidate.Conditions.Length > 0)))
             Add(results, node, $"Layer '{layer.Name}' data-domain NUDGE requires Cartesian coordinates or a supported transposed ASPECT_RATIO composition.");
     }
 
@@ -424,8 +425,15 @@ public static class AdvancedChartSemanticValidator
                 else if (hasStart && channels.Contains(AdvancedChartChannel.Y))
                     Add(results, layerNode, $"AREA layer '{layer.Name}' cannot combine Y with Y_START/Y_END.");
                 else if (hasStart)
+                {
                     ValidateIntervalTypes(results, effective, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd, layerNode,
                         $"AREA layer '{layer.Name}' ribbon endpoints require matching quantitative or temporal types.");
+                    var start = effective.First(encoding => encoding.Channel == AdvancedChartChannel.YStart);
+                    var end = effective.First(encoding => encoding.Channel == AdvancedChartChannel.YEnd);
+                    // COMPAT_BREAK: 0.20.0 — ribbon bounds must share their effective Y scale.
+                    if (!EffectiveScaleId(chart.Coordinate.Kind, start).Equals(EffectiveScaleId(chart.Coordinate.Kind, end), StringComparison.OrdinalIgnoreCase))
+                        Add(results, Anchor(end, layerNode), $"AREA layer '{layer.Name}' ribbon endpoints must use the same Y scale.");
+                }
                 break;
             case AdvancedChartMarkKind.Rule:
                 ValidateIntervalPair(results, layer, effective, AdvancedChartChannel.XStart, AdvancedChartChannel.XEnd, "X_START/X_END", layerNode);
@@ -692,43 +700,86 @@ public static class AdvancedChartSemanticValidator
     private static void ValidateConditions(List<Diagnostic> results, AdvancedChartDefinition chart, AdvancedChartLayer layer, AstNode layerNode)
     {
         var bindings = EffectiveEncodings(chart, layer);
-        var ribbon = layer.Mark == AdvancedChartMarkKind.Area && bindings.Select(binding => binding.Channel).ToHashSet()
+        var positions = bindings.Where(binding => binding.Channel != AdvancedChartChannel.Color).ToArray();
+        var composition = chart.Layers.Any(candidate => candidate.Mark is (AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area) && candidate.Conditions.Length > 0) &&
+            (chart.Coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian || chart.Layers.Length > 1 || chart.Facet is not null || chart.Layers.Any(candidate => candidate.Mark is (AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area) && candidate.Conditions.Length > 0 && (candidate.Styles.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) && LiteralText(style.Value)?.Trim().ToUpperInvariant() is "SMOOTH" or "STEP_BEFORE" or "STEP_AFTER") || candidate.Conditions.Any(condition => condition.Channel is AdvancedChartConditionChannel.Size or AdvancedChartConditionChannel.Shape or AdvancedChartConditionChannel.Text) || string.Equals(candidate.NullHandling, "ZERO", StringComparison.OrdinalIgnoreCase) || EffectiveEncodings(chart, candidate).Any(binding => binding.Channel == AdvancedChartChannel.Color))));
+        var ribbon = layer.Mark == AdvancedChartMarkKind.Area && positions.Select(binding => binding.Channel).ToHashSet()
             .SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd]);
-        var connectedLine = layer.Mark is (AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area) && chart.Layers.Length == 1 &&
+        var sharedAxes = true;
+        if (composition)
+        {
+            foreach (var axis in new[] { AdvancedChartChannel.X, AdvancedChartChannel.Y })
+            {
+                var positional = chart.Layers.SelectMany(candidate => EffectiveEncodings(chart, candidate)).Where(binding => BaseScaleChannel(binding.Channel) == axis).ToArray();
+                var ids = positional.Select(binding => EffectiveScaleId(chart.Coordinate.Kind, binding)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                var scale = ids.Length == 1 ? chart.Scales.FirstOrDefault(scale => scale.Name.Equals(ids[0], StringComparison.OrdinalIgnoreCase)) : null;
+                sharedAxes &= ids.Length == 1 && positional.All(binding => binding.DataKind == AdvancedChartDataKind.Quantitative) &&
+                    (scale is null || scale.Channel == axis && scale.Kind == AdvancedChartScaleKind.Linear);
+            }
+            sharedAxes &= !chart.Layers.SelectMany(candidate => EffectiveEncodings(chart, candidate)).Any(binding => binding.Stack != AdvancedChartStackMode.None || binding.Channel == AdvancedChartChannel.Y2 || binding.Axis == AdvancedChartAxisRole.Secondary);
+        }
+        var connectedLine = layer.Mark is (AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area) &&
             (layer.Mark != AdvancedChartMarkKind.Area || (ribbon ? layer.AreaBaseline is null : string.Equals(layer.AreaBaseline, "ZERO", StringComparison.OrdinalIgnoreCase))) &&
-            chart.Coordinate.Kind == AdvancedChartCoordinateKind.Cartesian && chart.Facet is null &&
+            chart.Coordinate.Kind is (AdvancedChartCoordinateKind.Cartesian or AdvancedChartCoordinateKind.TransposedCartesian) && sharedAxes &&
             layer.Position.Kind == AdvancedChartPositionKind.Identity &&
-            string.Equals(layer.NullHandling, "GAP", StringComparison.OrdinalIgnoreCase) &&
+            (string.Equals(layer.NullHandling, "GAP", StringComparison.OrdinalIgnoreCase) || string.Equals(layer.NullHandling, "CONNECT", StringComparison.OrdinalIgnoreCase) || string.Equals(layer.NullHandling, "ZERO", StringComparison.OrdinalIgnoreCase)) &&
             layer.Styles.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(LiteralText(style.Value)?.Trim(), "LINEAR", StringComparison.OrdinalIgnoreCase)) &&
-            (ribbon || bindings.Select(binding => binding.Channel).ToHashSet().SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.Y])) &&
-            bindings.All(binding => binding.DataKind == AdvancedChartDataKind.Quantitative && binding.Stack == AdvancedChartStackMode.None &&
+                LiteralText(style.Value)?.Trim().ToUpperInvariant() is "LINEAR" or "SMOOTH" or "STEP_BEFORE" or "STEP_AFTER") &&
+            (ribbon || positions.Select(binding => binding.Channel).ToHashSet().SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.Y])) &&
+            positions.All(binding => binding.DataKind == AdvancedChartDataKind.Quantitative && binding.Stack == AdvancedChartStackMode.None &&
                 binding.Source.Kind is AdvancedChartBindingSourceKind.Field or AdvancedChartBindingSourceKind.Datum) &&
-            chart.Scales.All(scale => scale.Kind == AdvancedChartScaleKind.Linear);
+            bindings.Where(binding => binding.Channel == AdvancedChartChannel.Color).All(binding => binding.DataKind is AdvancedChartDataKind.Nominal or AdvancedChartDataKind.Ordinal && binding.Source.Kind == AdvancedChartBindingSourceKind.Field) &&
+            (composition || chart.Scales.All(scale => scale.Kind == AdvancedChartScaleKind.Linear));
+        if (connectedLine && !ribbon && string.Equals(layer.NullHandling, "ZERO", StringComparison.OrdinalIgnoreCase))
+        {
+            var yBinding = bindings.First(binding => binding.Channel == AdvancedChartChannel.Y);
+            var yScale = chart.Scales.FirstOrDefault(scale => scale.Name.Equals(EffectiveScaleId(chart.Coordinate.Kind, yBinding), StringComparison.OrdinalIgnoreCase));
+            if (yScale is not null &&
+                (yScale.Minimum is { } minimum && decimal.TryParse(LiteralNumberText(minimum), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var min) && min > 0m ||
+                 yScale.Maximum is { } maximum && decimal.TryParse(LiteralNumberText(maximum), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var max) && max < 0m))
+                Add(results, Anchor(yScale, layerNode), "Connected ZERO scalar Y requires a linear Y domain containing zero.");
+        }
         foreach (var condition in layer.Conditions)
         {
             var node = Anchor(condition, layerNode);
             if (layer.Mark is AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area &&
-                (!connectedLine || condition.Channel is not (AdvancedChartConditionChannel.Color or AdvancedChartConditionChannel.Opacity)))
-                Add(results, node, $"Layer '{layer.Name}' cannot use these CONDITIONS on connected {layer.Mark.ToString().ToUpperInvariant()} marks. Connected CONDITIONS require one Cartesian LINE or AREA layer, quantitative unstacked X/Y, linear scales, IDENTITY, NULL_HANDLING = GAP, INTERPOLATION = LINEAR, no facets, and COLOR/OPACITY only; AREA requires AREA_BASELINE = ZERO or X/Y_START/Y_END with no baseline.");
+                (!connectedLine || !Enum.IsDefined(condition.Channel)))
+                Add(results, node, $"Layer '{layer.Name}' cannot use these CONDITIONS on connected {layer.Mark.ToString().ToUpperInvariant()} marks. Connected CONDITIONS require Cartesian or transposed Cartesian LINE or AREA, quantitative unstacked X/Y, shared linear primary scales, optional categorical COLOR series, IDENTITY, NULL_HANDLING = GAP, CONNECT or ZERO, INTERPOLATION = LINEAR, SMOOTH, STEP_BEFORE or STEP_AFTER, COLOR/OPACITY connections and SIZE/SHAPE/TEXT row decorations; AREA requires AREA_BASELINE = ZERO or X/Y_START/Y_END with no baseline.");
             if (!IsSupportedPredicate(condition.Predicate))
                 Add(results, node, $"Layer '{layer.Name}' condition predicate supports only fields, parameters, literals, comparisons, AND/OR/NOT, and IS NULL.");
-            if (!IsConstant(condition.WhenTrue))
+            bool IsResultConstant(Expression value) => IsConstant(value) || connectedLine && condition.Channel == AdvancedChartConditionChannel.Size &&
+                SignedNumericLiteral(value) is { } literal && ConstantKind(literal) == LiteralKind.Numeric;
+            if (!IsResultConstant(condition.WhenTrue))
                 Add(results, node, $"Layer '{layer.Name}' condition THEN value must be a literal or parameter.");
-            if (condition.WhenFalse is not null && !IsConstant(condition.WhenFalse))
+            if (condition.WhenFalse is not null && !IsResultConstant(condition.WhenFalse))
                 Add(results, node, $"Layer '{layer.Name}' condition ELSE value must be a literal or parameter.");
             if (condition.Channel == AdvancedChartConditionChannel.Shape)
             {
-                if (layer.Mark != AdvancedChartMarkKind.Point)
+                if (layer.Mark != AdvancedChartMarkKind.Point && !connectedLine)
                     Add(results, node, $"Layer '{layer.Name}' may condition SHAPE only on POINT marks.");
                 ValidateConditionShape(condition.WhenTrue, "THEN");
                 if (condition.WhenFalse is not null) ValidateConditionShape(condition.WhenFalse, "ELSE");
             }
 
+            if (connectedLine)
+            {
+                ValidateDecorationValue(condition.WhenTrue);
+                if (condition.WhenFalse is not null) ValidateDecorationValue(condition.WhenFalse);
+            }
+
+            void ValidateDecorationValue(Expression value)
+            {
+                var kind = ConstantKind(SignedNumericLiteral(value) ?? value);
+                if (condition.Channel == AdvancedChartConditionChannel.Size && kind is not (null or LiteralKind.Numeric or LiteralKind.Null))
+                    Add(results, node, "Connected CONDITIONS SIZE requires a numeric or null literal or parameter.");
+                if (condition.Channel == AdvancedChartConditionChannel.Shape && kind is not (null or LiteralKind.Text or LiteralKind.Null))
+                    Add(results, node, "Connected CONDITIONS SHAPE requires a portable shape name or null.");
+            }
+
             void ValidateConditionShape(Expression value, string branch)
             {
                 if (LiteralText(value) is { } shape && !PointShapeVocabulary.IsSupported(shape))
-                    Add(results, node, $"Layer '{layer.Name}' condition {branch} SHAPE accepts only {PointShapeVocabulary.DisplayList}; found '{shape}'.");
+                    Add(results, node, connectedLine ? $"Connected CONDITIONS {branch} SHAPE accepts only {PointShapeVocabulary.DisplayList}; found '{shape}'." : $"Layer '{layer.Name}' condition {branch} SHAPE accepts only {PointShapeVocabulary.DisplayList}; found '{shape}'.");
             }
         }
     }
@@ -779,34 +830,67 @@ public static class AdvancedChartSemanticValidator
         }
         else if (coordinate.Projection is not null || coordinate.MapName is not null || coordinate.MapFile is not null || coordinate.FeatureKey is not null)
             Add(results, node, "PROJECTION, MAP_NAME, MAP_FILE, and FEATURE_KEY require GEOGRAPHIC coordinates.");
-        if (coordinate.AspectRatio is null) return;
+        var transposedConnected = coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian && chart.Layers.Any(layer => layer.Mark is (AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area) && layer.Conditions.Length > 0);
+        var transposedCompositionLabel = transposedConnected ? "TRANSPOSED_CARTESIAN connected composition" : "TRANSPOSED_CARTESIAN ASPECT_RATIO";
+        if (coordinate.AspectRatio is null && !transposedConnected) return;
         if (coordinate.AspectRatio <= 0m)
             Add(results, node, "Cartesian ASPECT_RATIO must be greater than zero.");
         if (coordinate.Kind is not (AdvancedChartCoordinateKind.Cartesian or AdvancedChartCoordinateKind.TransposedCartesian))
             Add(results, node, "ASPECT_RATIO requires CARTESIAN or TRANSPOSED_CARTESIAN coordinates.");
+        else if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian && chart.Layers.Any(layer => layer.Mark == AdvancedChartMarkKind.Area || layer.Mark == AdvancedChartMarkKind.Line && (layer.Conditions.Length > 0 || layer.Styles.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) && LiteralText(style.Value)?.Trim().ToUpperInvariant() is ("SMOOTH" or "STEP_BEFORE" or "STEP_AFTER")))))
+        {
+            foreach (var axis in new[] { AdvancedChartChannel.X, AdvancedChartChannel.Y })
+            {
+                var encodings = chart.Layers.SelectMany(layer => EffectiveEncodings(chart, layer)).Where(encoding => BaseScaleChannel(encoding.Channel) == axis).ToArray();
+                var ids = encodings.Select(encoding => EffectiveScaleId(coordinate.Kind, encoding)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                var scale = ids.Length == 1 ? chart.Scales.FirstOrDefault(scale => scale.Name.Equals(ids[0], StringComparison.OrdinalIgnoreCase)) : null;
+                if (ids.Length != 1 || encodings.Any(encoding => encoding.DataKind != AdvancedChartDataKind.Quantitative) ||
+                    scale is not null && (scale.Channel != axis || scale.Kind is not (AdvancedChartScaleKind.Linear or AdvancedChartScaleKind.Logarithmic)))
+                    Add(results, node, $"{transposedCompositionLabel} AREA compositions require one shared quantitative primary scale per X/Y axis.");
+            }
+        }
         else if (!ContinuousPositionalScale(chart, AdvancedChartChannel.X) || !ContinuousPositionalScale(chart, AdvancedChartChannel.Y))
             Add(results, node, "ASPECT_RATIO requires continuous quantitative primary X and Y scales.");
         if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian && chart.Layers.Any(layer =>
-            layer.Mark is not (AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Text or AdvancedChartMarkKind.Rule or AdvancedChartMarkKind.Rect or AdvancedChartMarkKind.Line) ||
+            layer.Mark is not (AdvancedChartMarkKind.Point or AdvancedChartMarkKind.Text or AdvancedChartMarkKind.Rule or AdvancedChartMarkKind.Rect or AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area) ||
             layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or { Kind: AdvancedChartPositionKind.Jitter } or
             { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data }) ||
             EffectiveEncodings(chart, layer).Any(encoding => encoding.Stack != AdvancedChartStackMode.None ||
                 encoding.Channel == AdvancedChartChannel.Y2)))
-            Add(results, node, "TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers, TEXT layers, supported LINE/RECT layers and RULE layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
+            Add(results, node, $"{transposedCompositionLabel} supports POINT, TEXT, supported LINE/AREA/RECT and RULE layers without stacking or secondary axes.");
         if (coordinate.Kind == AdvancedChartCoordinateKind.TransposedCartesian)
-            foreach (var layer in chart.Layers.Where(layer => layer.Mark is AdvancedChartMarkKind.Rule or AdvancedChartMarkKind.Rect or AdvancedChartMarkKind.Line))
+            foreach (var layer in chart.Layers.Where(layer => layer.Mark is AdvancedChartMarkKind.Rule or AdvancedChartMarkKind.Rect or AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area))
             {
                 var encodings = EffectiveEncodings(chart, layer);
                 var channels = encodings.Select(encoding => encoding.Channel).ToHashSet();
+                if (layer.Mark is (AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area) && layer.Conditions.Length > 0) continue;
+                if (layer.Mark == AdvancedChartMarkKind.Area)
+                {
+                    var ribbon = channels.SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd]) ||
+                        coordinate.AspectRatio is not null && channels.SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.ConfidenceLow, AdvancedChartChannel.ConfidenceHigh]);
+                    var interpolation = layer.Styles.FirstOrDefault(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase));
+                    var yEncoding = encodings.FirstOrDefault(encoding => encoding.Channel == AdvancedChartChannel.Y);
+                    var yScale = yEncoding is null ? null : chart.Scales.FirstOrDefault(scale => scale.Name.Equals(EffectiveScaleId(coordinate.Kind, yEncoding), StringComparison.OrdinalIgnoreCase));
+                    if ((!ribbon && !channels.SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.Y])) ||
+                        (ribbon ? layer.AreaBaseline is not null : !string.Equals(layer.AreaBaseline, "ZERO", StringComparison.OrdinalIgnoreCase) || yScale is { Kind: not AdvancedChartScaleKind.Linear }) ||
+                        !(layer.Position.Kind == AdvancedChartPositionKind.Identity || coordinate.AspectRatio is not null && layer.Position is ({ Kind: AdvancedChartPositionKind.Jitter } or { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data })) || layer.Conditions.Length > 0 ||
+                        !string.Equals(layer.NullHandling, "GAP", StringComparison.OrdinalIgnoreCase) ||
+                        !(string.Equals(interpolation is null ? null : LiteralText(interpolation.Value)?.Trim(), "LINEAR", StringComparison.OrdinalIgnoreCase) ||
+                            coordinate.AspectRatio is not null && interpolation is not null && LiteralText(interpolation.Value)?.Trim().ToUpperInvariant() is ("SMOOTH" or "STEP_BEFORE" or "STEP_AFTER")) ||
+                        encodings.Any(encoding => encoding.DataKind != AdvancedChartDataKind.Quantitative || encoding.Source.Kind is not (AdvancedChartBindingSourceKind.Field or AdvancedChartBindingSourceKind.Datum)))
+                        Add(results, Anchor(layer, chartNode), $"{transposedCompositionLabel} AREA requires quantitative field/DATUM X/Y with AREA_BASELINE = ZERO and a linear Y scale, or X/Y_START/Y_END with no baseline (also X/CONFIDENCE_LOW/CONFIDENCE_HIGH with ASPECT_RATIO); IDENTITY (or JITTER/NUDGE UNIT EM/BAND/DATA with ASPECT_RATIO), GAP, LINEAR interpolation (or SMOOTH/STEP_BEFORE/STEP_AFTER with ASPECT_RATIO) and no CONDITIONS.");
+                    continue;
+                }
                 if (layer.Mark == AdvancedChartMarkKind.Line)
                 {
                     var interpolation = layer.Styles.FirstOrDefault(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase));
                     if (!channels.SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.Y]) ||
-                        layer.Position.Kind != AdvancedChartPositionKind.Identity || layer.Conditions.Length > 0 ||
+                        !(layer.Position.Kind == AdvancedChartPositionKind.Identity || coordinate.AspectRatio is not null && layer.Position is ({ Kind: AdvancedChartPositionKind.Jitter } or { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data })) || layer.Conditions.Length > 0 ||
                         !string.Equals(layer.NullHandling, "GAP", StringComparison.OrdinalIgnoreCase) ||
-                        interpolation is null || !string.Equals(LiteralText(interpolation.Value)?.Trim(), "LINEAR", StringComparison.OrdinalIgnoreCase) ||
+                        interpolation is null || !(string.Equals(LiteralText(interpolation.Value)?.Trim(), "LINEAR", StringComparison.OrdinalIgnoreCase) ||
+                            coordinate.AspectRatio is not null && LiteralText(interpolation.Value)?.Trim().ToUpperInvariant() is ("SMOOTH" or "STEP_BEFORE" or "STEP_AFTER")) ||
                         encodings.Any(encoding => encoding.DataKind != AdvancedChartDataKind.Quantitative || encoding.Source.Kind is not (AdvancedChartBindingSourceKind.Field or AdvancedChartBindingSourceKind.Datum)))
-                        Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO LINE requires exactly quantitative field/DATUM X/Y bindings, IDENTITY, NULL_HANDLING = GAP, STYLE INTERPOLATION = LINEAR, and no CONDITIONS.");
+                        Add(results, Anchor(layer, chartNode), $"{transposedCompositionLabel} LINE requires exactly quantitative field/DATUM X/Y bindings, IDENTITY (or JITTER/NUDGE UNIT EM/BAND/DATA with ASPECT_RATIO), NULL_HANDLING = GAP, STYLE INTERPOLATION = LINEAR (or SMOOTH/STEP_BEFORE/STEP_AFTER with ASPECT_RATIO), and no CONDITIONS.");
                     continue;
                 }
                 if (layer.Mark == AdvancedChartMarkKind.Rect)
@@ -815,7 +899,7 @@ public static class AdvancedChartSemanticValidator
                         layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or { Kind: AdvancedChartPositionKind.Jitter } or { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data }) || layer.Conditions.Length > 0 ||
                         encodings.Any(encoding => encoding.DataKind != AdvancedChartDataKind.Quantitative ||
                             encoding.Source.Kind is not (AdvancedChartBindingSourceKind.Field or AdvancedChartBindingSourceKind.Datum)))
-                        Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO RECT requires exactly four quantitative field/DATUM X_START/X_END/Y_START/Y_END bindings, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
+                        Add(results, Anchor(layer, chartNode), $"{transposedCompositionLabel} RECT requires exactly four quantitative field/DATUM X_START/X_END/Y_START/Y_END bindings, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
                     continue;
                 }
                 var ranged = channels.SetEquals([AdvancedChartChannel.X, AdvancedChartChannel.YStart, AdvancedChartChannel.YEnd]) ||
@@ -827,7 +911,7 @@ public static class AdvancedChartSemanticValidator
                         { Kind: AdvancedChartPositionKind.Nudge, Unit: AdvancedChartPositionUnit.Em or AdvancedChartPositionUnit.Band or AdvancedChartPositionUnit.Data }) || layer.Conditions.Length > 0 ||
                         encodings.Any(encoding => encoding.DataKind != AdvancedChartDataKind.Quantitative ||
                             encoding.Source.Kind is not (AdvancedChartBindingSourceKind.Field or AdvancedChartBindingSourceKind.Datum)))
-                        Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO RULE segments require quantitative field/DATUM bindings, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
+                        Add(results, Anchor(layer, chartNode), $"{transposedCompositionLabel} RULE segments require quantitative field/DATUM bindings, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
                     continue;
                 }
                 if (layer.Position is not ({ Kind: AdvancedChartPositionKind.Identity } or { Kind: AdvancedChartPositionKind.Jitter } or
@@ -836,7 +920,7 @@ public static class AdvancedChartSemanticValidator
                     encodings[0].Source.Kind is not (AdvancedChartBindingSourceKind.Datum or AdvancedChartBindingSourceKind.Field) || encodings[0].DataKind != AdvancedChartDataKind.Quantitative ||
                     layer.Position.Kind is (AdvancedChartPositionKind.Nudge or AdvancedChartPositionKind.Jitter) &&
                     (encodings[0].Channel == AdvancedChartChannel.X ? layer.Position.Y != 0m : layer.Position.X != 0m))
-                    Add(results, Anchor(layer, chartNode), "TRANSPOSED_CARTESIAN ASPECT_RATIO RULE requires one quantitative field or DATUM X or Y binding, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA along the bound axis only, and no CONDITIONS or other encodings.");
+                    Add(results, Anchor(layer, chartNode), $"{transposedCompositionLabel} RULE requires one quantitative field or DATUM X or Y binding, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA along the bound axis only, and no CONDITIONS or other encodings.");
             }
     }
 
@@ -896,6 +980,14 @@ public static class AdvancedChartSemanticValidator
         AdvancedChartChannel.ConfidenceLow or AdvancedChartChannel.ConfidenceHigh;
 
     private static bool IsConstant(Expression expression) => expression is LiteralExpression or VariableExpression;
+
+    // The expression parser represents a negative literal as 0m minus the unsigned literal.
+    private static LiteralExpression? SignedNumericLiteral(Expression expression) => expression switch
+    {
+        BinaryExpression { Operator: TokenType.MINUS, Left: LiteralExpression { Value: 0m }, Right: LiteralExpression literal } => literal,
+        UnaryExpression { Operator: TokenType.MINUS or TokenType.PLUS, Expression: LiteralExpression literal } => literal,
+        _ => null
+    };
 
     private static bool IsSupportedPredicate(Expression expression) => expression switch
     {

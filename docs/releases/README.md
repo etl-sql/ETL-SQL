@@ -27,6 +27,7 @@
 | [ETL-SQL v0.19.0](v0.19.0.md) | **Released:** 2026-09-06 |
 | [v0.19.0 Code Review](v0.19.0-code-review.md) | **Reviewed:** 2026-09-07 · Checkout `1188a56e1` including the working tree; no product source changed. |
 | [v0.20.0 Browser File Split — Baseline](v0.20.0-browser-split-baseline.md) | Pre-split measurements for `designer.js` and `report-runtime.js`, recorded before any code moved. |
+| [v0.20.0 Performance Results — Scale Harness Investigation](v0.20.0-performance-results.md) | Output capture and theory-discovery measurements; clean-candidate calibration remains open. |
 | [ETL-SQL v0.2.0 *(Unofficial)*](v0.2.0.md) | **Released:** 2026-03-23 |
 | [ETL-SQL v0.3.0 *(Unofficial)*](v0.3.0.md) | **Released:** 2026-04-06 |
 | [ETL-SQL v0.4.0 *(Unofficial)*](v0.4.0.md) | **Released:** 2026-04-20 |

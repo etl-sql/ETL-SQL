@@ -76,7 +76,7 @@ public sealed class GrammarOfGraphicsContractTests
             .Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
         var plotJson = ChartContractSerializer.Serialize(GrammarOfGraphicsContractFixtures.PlotPlan())
             .Replace(ChartContractVersions.PlotPlanSchema, ChartContractVersions.LegacyPlotPlanSchema, StringComparison.Ordinal)
-            .Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
+            .Replace("\"version\": 3", "\"version\": 1", StringComparison.Ordinal);
 
         Assert.Equal(ChartContractVersions.ChartSpecCurrent, ChartContractSerializer.DeserializeChartSpec(chartJson).Version);
         Assert.Equal(ChartContractVersions.PlotPlanCurrent, ChartContractSerializer.DeserializePlotPlan(plotJson).Version);
@@ -103,7 +103,7 @@ public sealed class GrammarOfGraphicsContractTests
         };
         var plotJson = ChartContractSerializer.Serialize(plot)
             .Replace(ChartContractVersions.PlotPlanSchema, ChartContractVersions.LegacyPlotPlanSchema, StringComparison.Ordinal)
-            .Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
+            .Replace("\"version\": 3", "\"version\": 1", StringComparison.Ordinal);
         Assert.Throws<InvalidDataException>(() => ChartContractSerializer.DeserializePlotPlan(plotJson));
     }
 

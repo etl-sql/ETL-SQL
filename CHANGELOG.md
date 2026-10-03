@@ -14,6 +14,48 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Added
 
+- Transposed fixed-aspect AREA charts support paired confidence bounds with existing placement and
+  interpolation modes. Guarded contracts preserve CONFIDENCE_LOW/HIGH intent, crossing bound order,
+  gaps and raw interval descriptions. DATA nudges translate each whole band cross-section from its
+  authored low-bound anchor.
+- Ordinary transposed fixed-aspect AREA and ribbons accept SMOOTH, STEP_BEFORE and STEP_AFTER.
+  Both boundaries interpolate after scale mapping and placement, preserve crossing bound order,
+  and close with the correct reversed lower boundary. Guarded contracts, SVG/static export and
+  raw-interval terminal output preserve gaps, facets and authored values.
+- Ordinary transposed fixed-aspect LINE charts accept SMOOTH, STEP_BEFORE and STEP_AFTER with
+  GAP handling and existing placement modes. Curves follow mapped, displaced vertices through
+  logarithmic/reversed scales and facets. Versioned contracts preserve interpolation intent;
+  native SVG, static export, terminal paths and raw-value fallback retain their defined semantics.
+- Ordinary transposed AREA aspect charts accept deterministic stable-key jitter. Each cross-section
+  moves both bounds together through reversal, logarithmic axes, facets and resize. Raw values, domains,
+  gaps and displayed spans remain intact; reordered rows retain offsets by key.
+
+- Ordinary transposed AREA aspect charts accept DATA nudges anchored to the scalar Y vertex or
+  authored ribbon start. Both bounds keep their displayed span through original scales, side legends,
+  reversal, logarithmic axes, facets and resize. Raw values and domains remain intact; gaps keep zero offset.
+
+- Ordinary transposed AREA aspect charts accept EM/BAND nudges. Both ribbon bounds and zero baselines
+  translate together through reversal, logarithmic scales, facets and resize without changing raw values.
+
+- Ordinary transposed LINE aspect charts accept EM/BAND/DATA nudges and deterministic stable-key jitter.
+  Paths, symbols and labels share each vertex's physical displacement through reversal, logarithmic
+  scales, facets and resize; raw values remain intact.
+
+- Conditioned Cartesian and transposed LINE, zero-baseline AREA and ribbons support SMOOTH,
+  STEP_BEFORE and STEP_AFTER with GAP/CONNECT/ZERO, decorations, series, facets and optional aspect.
+  Guarded ChartSpec v10 and PlotPlan v13 retain semantic controls and step corners. Native SVG/PDF,
+  terminal and accessible output preserve source ownership and raw values.
+
+- Straight Cartesian and transposed Cartesian LINE, zero-baseline AREA and ribbons support row-owned
+  SIZE/SHAPE endpoint symbols and TEXT annotations with GAP/CONNECT/ZERO, series, facets and optional
+  aspect ratios. Missing endpoints have no symbol; scalar ZERO retains raw nulls. Guarded ChartSpec v9
+  and PlotPlan v12 preserve anchors and presentation across native SVG, PDF, terminal and fallback.
+
+- Transposed Cartesian LINE, zero-baseline AREA and ribbons support source-owned COLOR/OPACITY
+  conditions with GAP/CONNECT/ZERO, categorical series, facets and optional physical aspect ratios.
+  Raw nulls remain distinct from resolved zero geometry across SVG, terminal and accessible output.
+  Guarded ChartSpec v8 and PlotPlan v11 preserve semantic axes and connection ownership.
+
 - Single-layer Cartesian AREA ribbons support source-owned COLOR/OPACITY conditions on adjacent
   X/Y_START/Y_END cross-sections. Both bounds define the domain and remain visible in terminal
   and accessible output; missing bounds break the run and crossing bounds retain their authored order.
@@ -233,6 +275,29 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Scale certification captures complete stdout/stderr through buffered byte streams, avoiding
+  write-through output-file latency inside measured result formatting. Its fixture defers unrelated
+  theory data, records the test-host runtime, rejects stale/incomplete evidence and cleans only its
+  own temporary spill directory. Baseline comparisons refuse incompatible capture/discovery settings.
+- Release certification ZIPs select the current release's claims and exact clean candidate bundles.
+  Packaging rejects stale, dirty, skipped or mixed evidence and verifies the archived file hashes.
+- Maintenance releases accept tags on `release/**` branches, choose the newest published stable MSI
+  below the candidate version and preserve Latest when a newer stable release already exists.
+- Pre-release resume requires matching passed commands and retained evidence. Candidate fingerprints
+  include tracked and untracked file contents. Skipped test lanes cannot become passing evidence;
+  Enterprise certification reports incomplete scope when Portal tests are omitted.
+- HA contract validation propagates child-command failures. Documentation link checks prune excluded
+  caches before traversal, and Studio browser waits use the shared observable-condition helper.
+- Portal test factories close their own SQLite pools before deleting temporary files on both disposal
+  paths. Twelve repeated host starts/stops cover ordinary and hosted-service fixtures. Cleanup failures
+  now fail the fixture instead of being swallowed.
+
+- Independent numeric facets retain each authored MIN/MAX and derive only unspecified bounds from
+  panel data. Chart backend conformance compares ordered fallback content after serialization.
+
+- Dense conditioned LINE/AREA charts retain every connection endpoint when SAMPLING is enabled.
+  Ordinary POINT layers in connected compositions paint in authored Z_INDEX order.
+
 - Studio's dataset wizard lists the tables of a connection declared moments earlier. On the desktop
   host it read the schema before the host had analysed the script, reported "No connection named …
   is registered for this document", and stayed on that error until reopened.
@@ -366,7 +431,9 @@ For complete release details, highlights, and migration notes, see [Release Note
 - Named visuals reject unsupported `MAPPINGS` roles with a valid-role diagnostic instead of silently lowering a wrong chart.
 - `PAGE` options and `MOBILE_LAYOUT` reach the rendered page. `BACKGROUND_IMAGE`, `BACKGROUND_SIZE`, `MAX_WIDTH`, `ALIGN_CONTENT`, `OVERFLOW`, and the whole mobile layout block previously parsed into the manifest and were dropped before rendering.
 - `docs/grammar.ebnf` recognizes all 1,092 working documentation examples the parser accepts, including this release's own new syntax; the EBNF conformance lane is green.
-- Portal test factories no longer leak their temp directory — `WebApplicationFactory.DisposeAsync` does not route through `Dispose(bool)`, and one machine held 74,007 leaked directories across 11 GB.
+- Portal test factories added cleanup to both disposal paths after a machine accumulated 74,007
+  directories across 11 GB. That change still swallowed deletion failures; SQLite pool retention and
+  verified cleanup are addressed in the unreleased fixes above.
 - Studio fixes: a saved file keeps the line endings it was written with, the script pane no longer erases what was typed, canvas edits apply as undoable ranged transactions, the first click after editing a guided-dialog field is no longer swallowed, task-card drag works on the pipeline map, and dragging a visual onto the canvas binds a source rather than writing a script that cannot parse.
 - A chart visual delivered without a server-rendered SVG degrades to an announced "chart payload missing" state instead of raising a `ReferenceError` that took every other visual on the page with it.
 - An `ASSERT JOB` predicate naming a column no sink in the script writes is a lint error at author time, instead of a guard that skipped the unobserved metric and reported green forever.

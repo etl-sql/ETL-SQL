@@ -36,6 +36,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'ScaleCertification.Helpers.ps1')
 $legacyRegressionOverride = $PSBoundParameters.ContainsKey('RegressionPct')
 
 function Get-PropValue {
@@ -413,6 +414,7 @@ if (-not (Test-Path $NewReport)) {
 }
 
 $new = Get-Content $NewReport -Raw | ConvertFrom-Json
+Assert-ScaleComparisonEvidence -Report $new
 $tier = Get-PropValue $new @('tier')
 
 if (-not $Baseline) {
@@ -427,6 +429,7 @@ if (-not (Test-Path $Baseline)) {
 }
 
 $base = Get-Content $Baseline -Raw | ConvertFrom-Json
+Assert-ScaleCaptureCompatibility -BaselineReport $base -CurrentReport $new
 
 if ((Get-PropValue $base @('tier')) -ne $tier) {
     Write-Warning "Baseline tier '$(Get-PropValue $base @('tier'))' does not match new report tier '$tier' - skipping comparison."

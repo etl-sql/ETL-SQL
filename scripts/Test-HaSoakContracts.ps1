@@ -18,7 +18,9 @@ function Invoke-Step {
     )
 
     Write-Host "== $Name =="
+    $global:LASTEXITCODE = 0
     & $Action
+    if ($LASTEXITCODE -ne 0) { throw "$Name failed with exit code $LASTEXITCODE." }
 }
 
 Push-Location $RepoRoot
@@ -71,7 +73,11 @@ try {
         }
     }
 
-    Write-Host 'HA soak contract validation passed.'
+    if ($NoDotNet) {
+        Write-Host 'HA tool contracts passed; .NET checks were not run (-NoDotNet).' -ForegroundColor Yellow
+    } else {
+        Write-Host 'HA soak contract validation passed.'
+    }
 }
 finally {
     Pop-Location

@@ -39,6 +39,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+. (Join-Path $ScriptRoot 'Release.Helpers.ps1')
 $RepoRoot = (Resolve-Path (Join-Path $ScriptRoot "..")).Path
 $CoreTests = "tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj"
 $PortalTests = "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj"
@@ -418,6 +419,11 @@ try {
                 $commandText = "dotnet " + ($arguments -join " ")
             }
             $exitCode = $LASTEXITCODE
+            if (-not $phase.faultProfile -and $exitCode -eq 0 -and
+                -not (Test-ReleaseTestOutputExecuted -Output ($output -join "`n"))) {
+                $exitCode = 1
+                $output += "Certification phase '$($phase.name)' produced no passed test summary."
+            }
             $output | Set-Content -LiteralPath $logPath -Encoding utf8
             $results.Add([ordered]@{
                 lane = $phase.lane

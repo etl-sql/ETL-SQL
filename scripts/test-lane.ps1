@@ -50,6 +50,7 @@ $script:LaneFailures = @()
 $script:LaneExitCode = 0
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'Release.Helpers.ps1')
 $engineFilter = "(Category!=Integration)&(Category!=Performance)&(Category!=ScaleCertification)&(Category!=ScaleAssessment)&(Category!=BillionRowCertification)&(Category!=DeploymentProfile)&(Category!=EbnfConformance)"
 # Portal lanes run the whole Portal project (its WebApplicationFactory tests have
 # "Integration" in their names but need no Docker). Exclude only Docker-backed and
@@ -80,7 +81,14 @@ function Invoke-DotNetTest {
         )
     }
 
-    & dotnet @args
+    $testsExecuted = $false
+    & dotnet @args 2>&1 | ForEach-Object {
+        $testsExecuted = $testsExecuted -or (Test-ReleaseTestOutputExecuted -Output "$_")
+        Write-Host $_
+    }
+    if ($LASTEXITCODE -eq 0 -and -not $testsExecuted) {
+        throw "Test lane '$Lane' produced no passed test summary for '$Project' with filter '$Filter'."
+    }
     if ($LASTEXITCODE -ne 0) {
         if ($ContinueOnFailure) {
             $script:LaneFailures += "$Project $Filter".Trim()

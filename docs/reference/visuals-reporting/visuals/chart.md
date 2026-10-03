@@ -85,7 +85,7 @@ CREATE VISUAL name AS CUSTOM (
 
 ## Mappings
 
-- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` and `TEXT` layers with `IDENTITY`, `JITTER`, or `NUDGE(..., UNIT = EM|BAND|DATA)`, without stacking or secondary axes. LINE layers, RULE layers and RECT layers with both endpoint pairs are also supported under the restrictions below. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
+- **COORDINATE** — Selects `CARTESIAN`, `TRANSPOSED_CARTESIAN`, `POLAR`, or `GEOGRAPHIC`; polar coordinates may declare angles/radius. `ASPECT_RATIO` is the physical Y-unit/X-unit ratio and requires continuous quantitative primary X/Y scales. `TRANSPOSED_CARTESIAN` supports this ratio on `POINT` and `TEXT` layers with `IDENTITY`, `JITTER`, or `NUDGE(..., UNIT = EM|BAND|DATA)`, without stacking or secondary axes. LINE, AREA, RULE and four-endpoint RECT layers are supported under the restrictions below. Y becomes horizontal and X becomes vertical; logarithmic units are decades. Facets and resizing preserve the ratio. Terminal output preserves values and ordering, not physical distances.
 - **SCALES** — Optionally declares named `LINEAR`, `LOGARITHMIC`, `TIME`, `BAND`, `POINT`, `ORDINAL`, or `IDENTITY` scales. Encoding `SCALE` references must name a declared scale; omission requests deterministic inference from the required `TYPE`, channel, mark, and coordinate.
 - **RANGE** — Adds a dependency-free sRGB sequential or diverging output range to a quantitative `COLOR` scale. Colors use portable `#RRGGBB`; values clamp at the domain, nulls use `NULL_COLOR`, and a diverging midpoint must lie inside the resolved domain.
 - **Scale axis controls** — `MIN`/`MAX` set the domain, `INCLUDE_ZERO` expands a quantitative domain to zero, `REVERSE` flips its display direction, `MAJOR_TICK_COUNT` or `TICK_INTERVAL` controls major ticks, `MINOR_TICKS` adds midpoint ticks, `TIME_UNIT` truncates/bins temporal scales by calendar unit (`AUTO`, `DAY`, `WEEK`, `MONTH`, `QUARTER`, `YEAR`), `TICK_FORMAT` applies a custom date/time or numeric format pattern, and `LABEL_ROTATION`/`LABEL_SKIP` control crowded tick labels. `OUTER_PADDING = 0..1` adds space before the first and after the last category on `BAND` scales only.
@@ -94,7 +94,8 @@ CREATE VISUAL name AS CUSTOM (
 - **SHAPE** — On `POINT` layers, accepts `CIRCLE`, `SQUARE`, `TRIANGLE`, `DIAMOND`, `CROSS`, or `STAR`. Bind a nominal/ordinal field containing those names, use `DATUM`/`VALUE` for one constant shape, or set the same vocabulary through a `SHAPE` condition. Values are case-insensitive. Unsupported runtime field values fall back to `CIRCLE`; invalid authored constants are rejected.
 - **Binding sources** — A bare field reads a source column; `DATUM(literal-or-parameter)` supplies a typed data-domain constant that may use a scale; `VALUE(literal-or-parameter)` supplies a visual-range value and cannot use a scale or positional channel. Expressions, functions, aggregates, column references inside wrappers, null positional constants, and secret parameters are rejected.
 - **STYLE** — Applies renderer-neutral literal style tokens to one layer. `POINT` layers accept `SYMBOL_STROKE_COLOR = '#RRGGBB'` and a non-negative `SYMBOL_STROKE_WIDTH = n`; a color without a width uses `1` pixel, while a width without a color draws no stroke. `LINE` layers accept `LINE_WIDTH = n` from `0.1` through `10` pixels. `LINE` and `AREA` layers also accept `INTERPOLATION = 'LINEAR'|'SMOOTH'|'STEP_BEFORE'|'STEP_AFTER'`, which selects how the layer connects its points, and `LINE_DASH = 'SOLID'|'DASHED'|'DOTTED'`, which sets its stroke pattern. Both are rejected on other marks. `THICKNESS` remains specific to `TICK` marks and measures a fraction of one em.
-- **CONDITIONS** — Applies presentation-only values per row. Predicates accept fields, report parameters, literals, comparisons, `AND`, `OR`, `NOT`, and `IS [NOT] NULL`. A single Cartesian LINE, zero-baseline AREA or AREA ribbon layer supports COLOR/OPACITY conditions with quantitative unstacked X/Y, linear scales, IDENTITY, explicit GAP handling and LINEAR interpolation. AREA with Y requires explicit AREA_BASELINE = ZERO; ribbons use X/Y_START/Y_END and omit the baseline. Facets and other connected forms remain unsupported.
+- **CONDITIONS** — Applies presentation-only values per row. Predicates accept fields, report parameters, literals, comparisons, `AND`, `OR`, `NOT`, and `IS [NOT] NULL`. Cartesian and transposed Cartesian LINE, zero-baseline AREA and AREA ribbons support COLOR/OPACITY connections and SIZE/SHAPE/TEXT row decorations with quantitative unstacked positions, shared primary linear scales, IDENTITY, explicit GAP, CONNECT or ZERO and LINEAR, SMOOTH, STEP_BEFORE or STEP_AFTER interpolation. Multiple layers, nominal/ordinal COLOR series and facets are supported. AREA with Y requires explicit AREA_BASELINE = ZERO; ribbons use X/Y_START/Y_END and omit the baseline. Transposed forms accept optional ASPECT_RATIO. Other coordinate forms, placement, stacking and secondary axes remain unsupported for connected conditions.
+- **Connected row decorations** — SIZE is symbol radius in pixels, clamped to 2–30; numeric and null results are accepted. SHAPE uses the same six portable symbols as POINT. Null or unmatched SIZE/SHAPE uses symbol defaults. TEXT accepts a typed literal or report parameter and uses its display value. Supplied TEXT renders with DATA_LABELS off; null, empty or whitespace suppresses that row's annotation. Absent TEXT permits ordinary DATA_LABELS. SYMBOLS off hides symbols while preserving explicit annotations. SIZE does not change path width or text font. Scalar rows anchor at X/Y; ribbons anchor at X/Y_END in authored order. Final or isolated complete rows retain decorations. Missing X or a ribbon bound has none; scalar ZERO anchors null Y at zero and retains raw nulls in descriptions.
 
 ## Options
 
@@ -108,6 +109,7 @@ CREATE VISUAL name AS CUSTOM (
 - **TICK** — Draws a short category-local quantitative observation or target. It requires nominal/ordinal X and quantitative Y. `ORIENTATION = AUTO` resolves to a horizontal segment across the category band; `HORIZONTAL` and `VERTICAL` make that choice explicit. TICK is distinct from plot-spanning/ranged `RULE`; its `BAND_SIZE` is relative to the category band and `THICKNESS` is bounded to `(0, 1]` em.
 - **Error bars** — `POINT` and `RECT` layers support paired `ERROR_LOW` and `ERROR_HIGH` encoding channels under Cartesian or transposed Cartesian coordinates. Both channels require quantitative type, share the primary Y scale, and expand the scale domain to encompass the whiskers. Absolute endpoints are pre-computed in SQL. Optional layer style `STYLE (ERROR_BAR_STYLE = 'CAPS')` or `STYLE (ERROR_BAR_STYLE = 'NO_CAPS')` controls whether endpoint caps are drawn (defaults to `'CAPS'`). On transposed `POINT` charts with `ASPECT_RATIO`, whiskers run horizontally and caps run vertically; endpoint values still use the semantic Y scale and expand its domain before the aspect viewport is fitted. On `RECT`, whiskers anchor to the category position and primary quantitative value, and error channels cannot be combined with ranged rectangle or boxplot/candlestick channels.
 - **Confidence intervals** — `AREA` layers support paired `CONFIDENCE_LOW` and `CONFIDENCE_HIGH` encoding channels under Cartesian or transposed Cartesian coordinates. Both channels require quantitative type, share the primary Y scale, and expand the scale domain to encompass the ribbon. Values are absolute, pre-computed in SQL. Confidence channels cannot be combined with `Y`, `Y2`, `Y_START`, or `Y_END` on the same `AREA` layer.
+  Transposed fixed-aspect confidence bands support the [AREA placement and interpolation rules](#areas-on-transposed-fixed-aspect-charts), with no baseline or conditions. LINE confidence encodings are not part of the advanced CHART grammar.
 - **Statistical and financial rectangles** — A `RECT` with `X`, `LOW`, `Q1`, `MEDIAN`, `Q3`, and `HIGH` renders a box-plot glyph. A `RECT` with `X`, `OPEN`, `CLOSE`, `LOW`, and `HIGH` renders a candlestick glyph. These channels are quantitative and share the primary Y scale. Keep derived summaries in SQL. Add ordinary layers to the same `CUSTOM` chart for combinations such as box plot plus mean `TICK` or candlestick plus volume on `Y2`.
 - **Geographic composition** — `GEOGRAPHIC` requires an explicit `EQUIRECTANGULAR` or `MERCATOR` projection and exactly one geometry authority: a built-in `MAP_NAME` (`WORLD`, `US_STATES`, `US_COUNTIES`, `MN_COUNTIES`, `CANADA_PROVINCES`, or `EUROPE`) or a GeoJSON `MAP_FILE`. `MAP_FILE` is resolved through the engine path policy and is limited to 5 MiB, 10,000 features, 200,000 coordinates, and nesting depth 32. `FEATURE_KEY` names the GeoJSON property matched by `REGION`. Geographic `RECT` fills regions; `POINT` and `TEXT` require quantitative `LONGITUDE` and `LATITUDE`; `LINE` also requires nominal `ROUTE` and connects rows in source order. Rendering is bounded to 20,000 points/labels and 500 routes. Region and route fields are the default interaction keys. Terminal and assistive surfaces receive an ordered table/transition fallback, while browser and PDF use the same resolved SVG geometry. Resolved filesystem paths are never serialized.
 - **FACET** — Creates a row/column grid or a mutually exclusive one-dimensional `WRAP`. Wrap uses stable first-seen row-major ordering, 1–12 columns, at most 100 panels, render-work limits, and minimum panel dimensions.
@@ -348,16 +350,73 @@ CREATE VISUAL Totals AS CUSTOM (SOURCE = #prepared, CHART (
 
 ## Lines on transposed fixed-aspect charts
 
-LINE supports exactly quantitative field or DATUM X/Y bindings with IDENTITY placement,
-explicit NULL_HANDLING = GAP and explicit STYLE (INTERPOLATION = 'LINEAR'). Extra encodings,
-row-level conditions, nudges, jitter, stacking and secondary axes are not supported for this form.
+Unconditioned LINE supports exactly quantitative field or DATUM X/Y bindings with IDENTITY, JITTER or EM/BAND/DATA nudge placement,
+explicit NULL_HANDLING = GAP and explicit STYLE (INTERPOLATION = 'LINEAR'|'SMOOTH'|'STEP_BEFORE'|'STEP_AFTER'). Non-linear interpolation requires ASPECT_RATIO. Extra encodings,
+row-level conditions, stacking and secondary axes are not supported for this form. JITTER and nudges require ASPECT_RATIO.
 Use a literal STYLE color for each line; unrelated POINT color groups do not split it.
+For source-owned COLOR/OPACITY and other null policies, see [conditioned transposed connections](#conditioned-transposed-connections).
 
 Vertices follow source row order within each facet, including descending or repeated X values.
 A missing X or Y breaks the path. Coincident rows remain distinct. Semantic Y maps horizontally
 and X vertically through linear/logarithmic and reversed scales. Facets and resizing retain the
 physical aspect ratio. Symbols and optional data labels report semantic Y. Terminal output and
 accessible fallback preserve semantic values; they do not reproduce physical distances.
+
+Interpolation follows scale mapping and placement. SMOOTH uses Catmull-Rom cubic controls from
+neighbors in the same uninterrupted facet run, repeating endpoints at its edges; two-point runs
+stay straight. STEP_BEFORE changes semantic Y at the source X, so its first segment is horizontal
+after transposition. STEP_AFTER changes X first. Reversal changes axis mapping, not source order.
+Jitter and data nudges can change the curve because controls follow the displaced vertices. Curves
+may overshoot their anchors; raw values and scale domains remain unchanged. Terminal output draws
+the interpolated path at character resolution and includes raw X/Y rows and gap descriptions.
+
+```sql
+CREATE VISUAL SmoothRoute AS CUSTOM (SOURCE = #prepared, CHART (
+  COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+  LAYERS (route = LINE (NULL_HANDLING = GAP,
+    ENCODINGS (X = Distance (TYPE = QUANTITATIVE), Y = Estimate (TYPE = QUANTITATIVE)),
+    STYLE (INTERPOLATION = 'SMOOTH')))
+));
+```
+
+NUDGE with UNIT = EM moves the whole path, symbols and labels together in physical units.
+Positive X moves up and positive Y moves right; one em is 12 SVG units. Reversed axes do not
+reverse the displacement. Facets and resizing retain the same pixel offset, and raw values,
+domains and gap locations remain intact. This LINE placement requires ASPECT_RATIO.
+
+BAND nudges move the same whole path and anchors by fractions of the fitted viewport, before
+legend layout. Each continuous axis has one band. Positive X moves up by its fraction of plot
+height and positive Y moves right by its fraction of plot width. Reversal does not flip the offset;
+each facet and resize uses its own fitted dimensions. Raw values and domains remain unchanged.
+
+DATA nudges map each complete vertex to where X + nudge X and Y + nudge Y would land through
+the original scales and final plot area. Reversed axes reverse that movement. On logarithmic
+axes the pixel displacement can differ between vertices; anchors and shifted targets must stay
+positive. Symbols and labels follow their own vertex. Missing X/Y remains a gap with no offset.
+Raw coordinates, domains and reported values remain unchanged.
+
+JITTER moves each vertex, its symbol and label by a stable seeded displacement. X amplitude uses
+the fitted plot height and Y its width, excluding fixed axis margins before legend layout.
+Amplitudes range from 0 to 1. KEY must be unique and non-null across every source row, including
+rows with missing coordinates. Reordering rows keeps the offsets attached to their keys but changes
+the authored path order. Reversal does not flip offsets; each facet and resize scales the same hash
+to its fitted viewport. Missing coordinates still break the line. Raw values and domains stay intact.
+
+```sql
+CREATE VISUAL JitteredRoute AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    LAYERS (route = LINE (
+      INHERIT_ENCODINGS = OFF,
+      NULL_HANDLING = GAP,
+      POSITION = JITTER(X = 0.02, Y = 0.03, KEY = Id, SEED = 42),
+      ENCODINGS (X = Distance (TYPE = QUANTITATIVE), Y = Estimate (TYPE = QUANTITATIVE)),
+      STYLE (INTERPOLATION = 'LINEAR', COLOR = '#112233')
+    ))
+  )
+);
+```
 
 ```sql
 CREATE VISUAL Route AS CUSTOM (
@@ -367,6 +426,7 @@ CREATE VISUAL Route AS CUSTOM (
     LAYERS (route = LINE (
       INHERIT_ENCODINGS = OFF,
       NULL_HANDLING = GAP,
+      POSITION = NUDGE(X = 0.5, Y = -0.25, UNIT = EM),
       ENCODINGS (
         X = Distance (TYPE = QUANTITATIVE),
         Y = Estimate (TYPE = QUANTITATIVE)
@@ -376,6 +436,243 @@ CREATE VISUAL Route AS CUSTOM (
   )
 );
 ```
+
+```sql
+CREATE VISUAL BandRoute AS CUSTOM (SOURCE = #prepared, CHART (
+  COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+  LAYERS (route = LINE (NULL_HANDLING = GAP,
+    POSITION = NUDGE(X = 0.02, Y = -0.03, UNIT = BAND),
+    ENCODINGS (X = Distance (TYPE = QUANTITATIVE), Y = Estimate (TYPE = QUANTITATIVE)),
+    STYLE (INTERPOLATION = 'LINEAR', COLOR = '#112233')))
+));
+```
+
+```sql
+CREATE VISUAL DataRoute AS CUSTOM (SOURCE = #prepared, CHART (
+  COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+  LAYERS (route = LINE (NULL_HANDLING = GAP,
+    POSITION = NUDGE(X = 0.5, Y = -0.5, UNIT = DATA),
+    ENCODINGS (X = Distance (TYPE = QUANTITATIVE), Y = Estimate (TYPE = QUANTITATIVE)),
+    STYLE (INTERPOLATION = 'LINEAR', COLOR = '#112233')))
+));
+```
+
+## Areas on transposed fixed-aspect charts
+
+Unconditioned AREA supports quantitative field or DATUM bindings with IDENTITY, JITTER or EM/BAND/DATA NUDGE, explicit GAP handling,
+explicit LINEAR/SMOOTH/STEP_BEFORE/STEP_AFTER interpolation and no conditions, extra encodings, stacking or secondary axes.
+Non-linear interpolation requires ASPECT_RATIO.
+For source-owned COLOR/OPACITY and other null policies, see [conditioned transposed connections](#conditioned-transposed-connections).
+
+- **Zero baseline** — Bind X/Y and declare AREA_BASELINE = ZERO. Y must use a linear scale;
+  zero contributes to its domain. X may be linear or logarithmic.
+- **Ribbon** — Bind X/Y_START/Y_END without a baseline. Both bounds share one Y scale and
+  contribute to its domain. X and Y may use linear or logarithmic scales with positive log values.
+- **Confidence band** — Bind X/CONFIDENCE_LOW/CONFIDENCE_HIGH without a baseline. Both bounds
+  share the primary Y scale. The raw confidence channels remain in the plan, titles, terminal and
+  accessible fallback; the engine does not estimate or reorder them. Crossing or coincident bounds
+  retain their authored order. ChartSpec v13 and PlotPlan v16 preserve confidence intent, including
+  empty inputs and mixed layers. With DATA nudges, CONFIDENCE_LOW anchors the whole cross-section;
+  both bounds receive the same physical displacement. All four interpolation modes are supported.
+- **Shared axes** — All positional bindings in the composition use one primary scale per
+  semantic axis. Explicit SCALE references select the axes even when unused scales are declared first.
+- **Order and gaps** — Polygons follow source rows within each facet. Bounds retain authored order,
+  including crossings or coincidences. Missing X or either Y endpoint breaks the polygon.
+  Empty data and isolated rows produce no polygons.
+- **Backends** — SVG titles, terminal output and accessible fallback report raw X and the Y interval.
+  Facets and resizing preserve the physical ratio. LINEAR uses ChartSpec v5 and PlotPlan v8;
+  interpolated AREA uses ChartSpec v12 and PlotPlan v15. Terminal output reports the mode and raw intervals.
+- **Interpolation** — Each boundary interpolates its mapped, displaced vertices independently.
+  SMOOTH uses Catmull-Rom controls from neighbors in the same uninterrupted facet run, with repeated
+  endpoints; two-point runs stay straight. STEP_BEFORE changes Y at the source X, and STEP_AFTER
+  changes X first. The lower boundary closes in reverse source order with reversed step direction.
+  Bounds are never sorted, so crossing ribbons retain their authored orientation. Curves may overshoot
+  their anchors; domains and raw bounds remain unchanged. Missing coordinates split both boundaries.
+- **EM/BAND nudges** — Both bounds of every cross-section, including the zero baseline, share
+  the same physical translation. Positive X moves up and Y right; reversal does not flip it.
+  EM uses 12 pixels per unit. BAND uses fitted plot height for X and width for Y, excluding fixed
+  axis margins before legend layout. Each facet and resize recomputes BAND offsets. Raw coordinates,
+  domains, crossings and gaps stay intact.
+- **DATA nudges** — Each scalar Y vertex or ribbon's authored Y_START anchors its cross-section.
+  Map X + nudge X and anchor Y + nudge Y through the original scales and final plot area, including
+  side legends. Both bounds share that physical displacement and retain their displayed span.
+  Reversed scales reverse the movement; logarithmic anchors and shifted targets must remain positive.
+  Missing coordinates keep zero displacement and remain gaps. Raw intervals and domains stay intact.
+- **JITTER** — Both bounds of each cross-section share one stable-key displacement. X amplitude
+  uses fitted plot height and Y its width, excluding fixed margins before legend layout.
+  Amplitudes range from 0 to 1. KEY must be unique and non-null across every source row, including
+  gap rows. Reordering keeps offsets attached to keys and polygons follow the new source order.
+  Reversal preserves displacement direction; each facet and resize scales the same signed hashes.
+  Raw intervals, domains, gaps and displayed cross-section spans remain intact.
+
+```sql
+CREATE VISUAL ConfidenceBand AS CUSTOM (SOURCE = #prepared, CHART (
+  COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+  LAYERS (confidence = AREA (NULL_HANDLING = GAP,
+    ENCODINGS (X = Distance (TYPE = QUANTITATIVE),
+      CONFIDENCE_LOW = LowerBound (TYPE = QUANTITATIVE), CONFIDENCE_HIGH = UpperBound (TYPE = QUANTITATIVE)),
+    STYLE (INTERPOLATION = 'SMOOTH')))
+));
+```
+
+```sql
+CREATE VISUAL SmoothRibbon AS CUSTOM (SOURCE = #prepared, CHART (
+  COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+  LAYERS (ribbon = AREA (NULL_HANDLING = GAP,
+    ENCODINGS (X = Distance (TYPE = QUANTITATIVE),
+      Y_START = LowerBound (TYPE = QUANTITATIVE), Y_END = UpperBound (TYPE = QUANTITATIVE)),
+    STYLE (INTERPOLATION = 'SMOOTH')))
+));
+```
+
+```sql
+CREATE VISUAL JitteredRibbon AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    LAYERS (ribbon = AREA (
+      INHERIT_ENCODINGS = OFF, NULL_HANDLING = GAP,
+      POSITION = JITTER(X = 0.02, Y = 0.03, KEY = Id, SEED = 42),
+      ENCODINGS (X = Distance (TYPE = QUANTITATIVE),
+                 Y_START = LowerBound (TYPE = QUANTITATIVE), Y_END = UpperBound (TYPE = QUANTITATIVE)),
+      STYLE (INTERPOLATION = 'LINEAR', COLOR = '#112233')
+    ))
+  )
+);
+```
+
+```sql
+CREATE VISUAL DataRibbon AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    LAYERS (ribbon = AREA (
+      INHERIT_ENCODINGS = OFF, NULL_HANDLING = GAP,
+      POSITION = NUDGE(X = 0.02, Y = -0.03, UNIT = DATA),
+      ENCODINGS (X = Distance (TYPE = QUANTITATIVE),
+                 Y_START = LowerBound (TYPE = QUANTITATIVE), Y_END = UpperBound (TYPE = QUANTITATIVE)),
+      STYLE (INTERPOLATION = 'LINEAR', COLOR = '#112233')
+    ))
+  )
+);
+```
+
+```sql
+CREATE VISUAL NudgedArea AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    LAYERS (area = AREA (
+      INHERIT_ENCODINGS = OFF, NULL_HANDLING = GAP, AREA_BASELINE = ZERO,
+      POSITION = NUDGE(X = 0.02, Y = -0.03, UNIT = EM),
+      ENCODINGS (X = Distance (TYPE = QUANTITATIVE), Y = UpperBound (TYPE = QUANTITATIVE)),
+      STYLE (INTERPOLATION = 'LINEAR', COLOR = '#112233')
+    ))
+  )
+);
+```
+
+```sql
+CREATE VISUAL NudgedRibbon AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    LAYERS (ribbon = AREA (
+      INHERIT_ENCODINGS = OFF, NULL_HANDLING = GAP,
+      POSITION = NUDGE(X = 0.02, Y = -0.03, UNIT = BAND),
+      ENCODINGS (X = Distance (TYPE = QUANTITATIVE),
+                 Y_START = LowerBound (TYPE = QUANTITATIVE), Y_END = UpperBound (TYPE = QUANTITATIVE)),
+      STYLE (INTERPOLATION = 'LINEAR', COLOR = '#112233')
+    ))
+  )
+);
+```
+
+```sql
+CREATE VISUAL FilledRoute AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    LAYERS (area = AREA (
+      INHERIT_ENCODINGS = OFF,
+      NULL_HANDLING = GAP,
+      AREA_BASELINE = ZERO,
+      ENCODINGS (X = Distance (TYPE = QUANTITATIVE),
+                 Y = Estimate (TYPE = QUANTITATIVE)),
+      STYLE (INTERPOLATION = 'LINEAR', COLOR = '#112233')
+    ))
+  )
+);
+```
+
+```sql
+CREATE VISUAL Envelope AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    LAYERS (ribbon = AREA (
+      INHERIT_ENCODINGS = OFF,
+      NULL_HANDLING = GAP,
+      ENCODINGS (X = Distance (TYPE = QUANTITATIVE),
+                 Y_START = LowerBound (TYPE = QUANTITATIVE),
+                 Y_END = UpperBound (TYPE = QUANTITATIVE)),
+      STYLE (INTERPOLATION = 'LINEAR', COLOR = '#112233')
+    ))
+  )
+);
+```
+
+Without ASPECT_RATIO, unconditioned transposed ribbons also draw their paired Y bounds. Continuous X runs
+vertically in category order, from top to bottom; categorical X follows its resolved category order.
+Raw interval values and gaps remain visible in terminal and accessible fallback.
+
+## Conditioned transposed connections
+
+Use straight LINE, zero-baseline AREA or AREA ribbons with quantitative positions and shared
+primary linear X/Y scales. Each source row owns the outgoing connection's COLOR/OPACITY.
+X runs vertically and Y horizontally, including when ASPECT_RATIO is omitted. Axis reversal
+changes screen direction; it does not change source order or style ownership.
+
+- **GAP** — An incomplete cross-section breaks the run within its series and facet.
+- **CONNECT** — Incomplete cross-sections remain in raw output but are skipped as endpoints.
+- **ZERO** — A null scalar Y renders at zero when X is numeric. Predicates still see the raw null.
+  Missing X or either ribbon bound remains a gap. Scalar Y domains include zero.
+- **Composition** — Multiple layers, nominal/ordinal COLOR series and shared or independent facets
+  retain separate connections and null metadata. Ordinary unstacked layers share the same primary axes.
+- **Aspect and placement** — Optional ASPECT_RATIO preserves physical Y/X unit sizes through facets
+  and resize. Connected layers require IDENTITY and explicit supported interpolation. Ordinary POINT/TEXT layers
+  retain EM/BAND/DATA nudges on the physical axes; point error bars move with their anchors.
+- **Restrictions** — Connected conditions accept COLOR/OPACITY connections and SIZE/SHAPE/TEXT decorations. Log scales, stacking,
+  secondary axes and connected-layer placement adjustments are rejected.
+  Ordinary LINE/AREA layers in this composition require the straight GAP forms described above.
+  LINE and AREA accept IDENTITY, JITTER and EM/BAND/DATA nudges with ASPECT_RATIO. Confidence channels and
+  arbitrary baselines remain rejected, with or without ASPECT_RATIO.
+- **Output** — SVG, static export, terminal and accessible descriptions retain semantic X/Y,
+  source ownership and raw nulls. Straight undecorated forms use guarded ChartSpec v8 and PlotPlan v11;
+  decorations use v9/v12 and non-linear interpolation uses v10/v13.
+
+```sql
+CREATE VISUAL TransposedRoute AS CUSTOM (
+  SOURCE = #prepared,
+  CHART (
+    COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+    FACET (WRAP = Cohort, COLUMNS = 2),
+    RESOLVE (X = INDEPENDENT, Y = INDEPENDENT),
+    LAYERS (route = LINE (
+      NULL_HANDLING = ZERO,
+      ENCODINGS (X = Distance (TYPE = QUANTITATIVE),
+                 Y = Estimate (TYPE = QUANTITATIVE),
+                 COLOR = Series (TYPE = NOMINAL)),
+      STYLE (INTERPOLATION = 'LINEAR'),
+      CONDITIONS (COLOR WHEN Estimate IS NULL THEN '#ff0000' ELSE '#112233',
+                  OPACITY WHEN Flag = 'first' THEN 0.5 ELSE 1)
+    ))
+  )
+);
+```
+
+For a filled area, use AREA with AREA_BASELINE = ZERO. For a ribbon, use AREA with
+X/Y_START/Y_END and omit AREA_BASELINE; both bounds must use the same Y scale.
 
 ## Rectangles on transposed fixed-aspect charts
 
@@ -713,7 +1010,7 @@ CREATE VISUAL TrendWithAnnotations AS CUSTOM (
 
 Each source row owns the color and opacity of its outgoing segment. For red, blue and green rows,
 the first segment is red and the second is blue. The last row has no outgoing segment; its symbol
-keeps its own presentation. Null X/Y values break the line. Conditions preserve row order, raw
+keeps its own presentation. With GAP, null X/Y values break the line. Conditions preserve row order, raw
 values and scale domains. Missing conditional values use normal layer/series presentation; a
 destination row never supplies the incoming segment's style. Zero opacity keeps the connection in
 terminal and accessible descriptions.
@@ -746,6 +1043,9 @@ CREATE VISUAL Coverage AS CUSTOM (SOURCE = #prepared, CHART (
 ```
 
 For a conditional ribbon, replace Y with quantitative Y_START/Y_END and omit AREA_BASELINE.
+Both endpoints must use the same effective Y scale. Bind both to the same named scale, or leave
+both unbound for inference. The shared scale can appear anywhere in SCALES; unused Y scales do
+not replace it.
 Both bounds contribute to the Y domain; zero is not added automatically. Bounds retain their
 authored order, including crossings. Null X or either bound breaks the run. Terminal and accessible
 output show both endpoint values.
@@ -762,7 +1062,135 @@ CREATE VISUAL Ranges AS CUSTOM (SOURCE = #prepared, CHART (
 ```
 
 These forms use ChartSpec v3 and PlotPlan v5. Other charts retain their existing contract versions.
+Ribbons whose shared bound scale differs from the first primary Y scale use guarded PlotPlan v6
+to preserve the explicit scale selection, including unconditional ribbons. Existing ribbon plans
+keep their prior envelope when the first Y scale is the shared bound scale.
 Older readers that only implement connected LINE reject the AREA form.
+
+Use `NULL_HANDLING = CONNECT` on the same conditional LINE, zero-baseline AREA or ribbon forms
+to connect surviving rows across incomplete cross-sections. A missing X, Y or either ribbon bound
+skips that row as a connection endpoint. Raw rows, values and domains remain intact. The surviving
+source row supplies the color and opacity; skipped rows supply neither. Leading/trailing nulls and
+all-null data do not invent coordinates. The single-layer form uses guarded ChartSpec v4 and PlotPlan v7.
+
+```sql
+CREATE VISUAL ConnectedRoute AS CUSTOM (SOURCE = #prepared, CHART (
+  COORDINATE (TYPE = CARTESIAN),
+  LAYERS (route = LINE (NULL_HANDLING = CONNECT,
+    ENCODINGS (X = Distance (TYPE = QUANTITATIVE), Y = Estimate (TYPE = QUANTITATIVE)),
+    STYLE (INTERPOLATION = 'LINEAR'),
+    CONDITIONS (COLOR WHEN Distance < 2 THEN '#ff0000' ELSE '#0000ff')))
+));
+```
+
+## Null Y rendered at zero
+
+Use `NULL_HANDLING = ZERO` on conditional LINE or zero-baseline AREA to render a null Y at zero
+when X is numeric. The source null remains available to predicates and accessible output. Scalar Y
+domains include zero; explicit Y bounds must contain it. Missing X remains a gap. On ribbons, either
+missing bound also remains a gap; ZERO never substitutes a ribbon endpoint. Raw values are retained.
+These forms use guarded ChartSpec v7 and PlotPlan v10, including multiple layers, series and facets.
+
+```sql
+CREATE VISUAL ZeroRoute AS CUSTOM (SOURCE = #prepared, CHART (
+  COORDINATE (TYPE = CARTESIAN),
+  LAYERS (route = LINE (NULL_HANDLING = ZERO,
+    ENCODINGS (X = Distance (TYPE = QUANTITATIVE), Y = Estimate (TYPE = QUANTITATIVE)),
+    STYLE (INTERPOLATION = 'LINEAR'),
+    CONDITIONS (COLOR WHEN Estimate IS NULL THEN '#008000' ELSE '#0000ff')))
+));
+```
+
+## Connected layers, series and facets
+
+Conditional LINE, zero-baseline AREA and ribbons can share a Cartesian chart with ordinary layers.
+Bind all positional encodings to one primary linear X scale and one primary linear Y scale. Each
+conditioned layer chooses GAP, CONNECT or ZERO independently. Optional nominal/ordinal COLOR fields
+group each layer into its own series; null categories retain their rows. Facets partition connections
+inside each series. Rows belonging to another facet do not break a GAP run, and connections never
+cross layer, series or facet boundaries. Independent facet domains and empty grid panels are supported.
+
+```sql
+CREATE VISUAL Routes AS CUSTOM (SOURCE = #prepared, CHART (
+  COORDINATE (TYPE = CARTESIAN),
+  SCALES (horizontal = LINEAR (CHANNEL = X), vertical = LINEAR (CHANNEL = Y)),
+  FACET (ROW = Cohort, COLUMN = Phase),
+  RESOLVE (X = INDEPENDENT, Y = INDEPENDENT),
+  LAYERS (
+    uncertainty = AREA (INHERIT_ENCODINGS = OFF, NULL_HANDLING = CONNECT,
+      ENCODINGS (X = Distance (TYPE = QUANTITATIVE, SCALE = horizontal),
+        Y_START = Lower (TYPE = QUANTITATIVE, SCALE = vertical),
+        Y_END = Upper (TYPE = QUANTITATIVE, SCALE = vertical), COLOR = Series (TYPE = NOMINAL)),
+      STYLE (INTERPOLATION = 'LINEAR'),
+      CONDITIONS (COLOR WHEN Cohort = 'A' AND Distance > 0 THEN '#ff0000' ELSE '#0000ff')),
+    route = LINE (INHERIT_ENCODINGS = OFF, NULL_HANDLING = GAP,
+      ENCODINGS (X = Distance (TYPE = QUANTITATIVE, SCALE = horizontal),
+        Y = Estimate (TYPE = QUANTITATIVE, SCALE = vertical), COLOR = Series (TYPE = NOMINAL)),
+      STYLE (INTERPOLATION = 'LINEAR'),
+      CONDITIONS (OPACITY WHEN Cohort = 'A' THEN 0.5 ELSE 1)),
+    observations = POINT (INHERIT_ENCODINGS = OFF,
+      ENCODINGS (X = Distance (TYPE = QUANTITATIVE, SCALE = horizontal),
+        Y = Estimate (TYPE = QUANTITATIVE, SCALE = vertical))))
+));
+```
+
+These compositions use guarded ChartSpec v6 and PlotPlan v9, or v7/v10 when any conditioned layer
+uses ZERO. Native/static SVG and terminal
+descriptions identify the layer, series, facet and raw endpoint rows, including transparent
+connections. Ribbon fallback retains both bounds. Other coordinates, placement, stacking and secondary
+axes remain unsupported.
+
+### Decorate connected endpoints
+
+SIZE and SHAPE set each row's symbol. TEXT adds an annotation at that endpoint. COLOR and OPACITY
+still style outgoing connections. The same decoration rules apply to AREA baseline strips and ribbons.
+
+```sql
+CREATE VISUAL DecoratedRoute AS CUSTOM (SOURCE = #prepared, CHART (
+  COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+  LAYERS (route = LINE (NULL_HANDLING = ZERO,
+    ENCODINGS (X = Distance (TYPE = QUANTITATIVE), Y = Estimate (TYPE = QUANTITATIVE)),
+    STYLE (INTERPOLATION = 'LINEAR'),
+    CONDITIONS (COLOR WHEN Flag = 'first' THEN '#ff0000' ELSE '#0000ff',
+      SIZE WHEN Flag = 'first' THEN 7 ELSE 3,
+      SHAPE WHEN Flag = 'first' THEN 'DIAMOND' ELSE 'CIRCLE',
+      TEXT WHEN Flag = 'first' THEN 'Check this endpoint' ELSE NULL)))
+));
+```
+
+### Interpolate source-owned connections
+
+Use an explicit INTERPOLATION on each conditioned LINE or AREA layer. Null policies, source-owned
+COLOR/OPACITY and endpoint decorations apply before physical coordinate mapping.
+
+- **LINEAR** — Connects adjacent eligible endpoints directly.
+- **SMOOTH** — Uses neighboring eligible rows from the same layer, series and facet to form a cubic.
+  Style changes preserve the curve tangent. GAP resets the run; CONNECT skips incomplete rows.
+  A two-row run stays straight. Curves can overshoot endpoint ranges; domains still derive from raw endpoints.
+- **STEP_BEFORE** — Changes semantic Y at the source X, then moves to the destination X.
+- **STEP_AFTER** — Moves to the destination X at the source Y, then changes semantic Y.
+- **AREA boundaries** — Apply the same interpolation to the upper and lower boundary, preserving
+  authored ribbon bounds and source order. Scalar AREA retains its ZERO baseline.
+- **Orientation** — Transposition maps Y horizontally and X vertically. Reversal changes physical
+  direction; before/after still refers to semantic X/Y and source row order.
+- **Facets and output** — Independent numeric facets retain explicit MIN/MAX and derive only omitted
+  bounds. SVG/PDF draw resolved curves or steps; terminal scalar paths trace them and ribbons retain
+  their raw bound table. Accessible output names interpolation and source ownership. These conditioned
+  forms use guarded ChartSpec v10 and PlotPlan v13, including empty data. Ordinary transposed aspect
+  LINE/AREA remains LINEAR.
+
+```sql
+CREATE VISUAL CurvedRoute AS CUSTOM (SOURCE = #prepared, CHART (
+  COORDINATE (TYPE = TRANSPOSED_CARTESIAN, ASPECT_RATIO = 2),
+  FACET (WRAP = Cohort, COLUMNS = 2),
+  LAYERS (route = LINE (NULL_HANDLING = CONNECT,
+    ENCODINGS (X = Distance (TYPE = QUANTITATIVE), Y = Estimate (TYPE = QUANTITATIVE),
+      COLOR = Series (TYPE = NOMINAL)),
+    STYLE (INTERPOLATION = 'SMOOTH'),
+    CONDITIONS (COLOR WHEN Flag = 'red' THEN '#ff0000' ELSE '#0000ff',
+      TEXT WHEN Flag = 'red' THEN 'Check this endpoint' ELSE NULL)))
+));
+```
 
 ## References
 

@@ -89,7 +89,9 @@ public sealed class TransposedAspectRatioTests
     {
         var (spec, _) = Lower(Script);
         var invalid = spec with { Layers = [spec.Layers[0] with { Mark = MarkKind.Area }] };
-        Assert.Contains("supports POINT layers", Assert.Throws<InvalidDataException>(invalid.Validate).Message);
+        Assert.Contains("Unsupported ChartSpec schema", Assert.Throws<InvalidDataException>(invalid.Validate).Message);
+        invalid = invalid with { Schema = ChartContractVersions.TransposedAreaChartSpecSchema, Version = ChartContractVersions.TransposedAreaChartSpecVersion };
+        Assert.Contains("ASPECT_RATIO AREA", Assert.Throws<InvalidDataException>(invalid.Validate).Message);
     }
 
     [Fact]

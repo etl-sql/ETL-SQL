@@ -30,6 +30,7 @@ CREATE VISUAL visual_name AS CUSTOM (
   CHART (
     COORDINATE (
       TYPE = CARTESIAN | TRANSPOSED_CARTESIAN | POLAR | GEOGRAPHIC,
+      ASPECT_RATIO = number,
       START_ANGLE = number,
       END_ANGLE = number,
       INNER_RADIUS = number,
@@ -159,10 +160,26 @@ Conditions may set only the portable presentation channels `COLOR`, `OPACITY`, `
 `TEXT`. They do not add, remove, aggregate, calculate, join, rank, or reorder rows. Predicates may use
 source columns, literals, report parameters, comparison operators, `AND`, `OR`, `NOT`, `IS NULL`, and
 parentheses. Function calls, subqueries, aggregates, windows, and arithmetic are rejected by the
-Analysis tier. A single straight Cartesian `LINE`, zero-baseline `AREA`, or AREA ribbon supports
+Analysis tier. Cartesian and transposed Cartesian `LINE`, zero-baseline `AREA`, and AREA ribbons support
 source-owned COLOR/OPACITY conditions with quantitative unstacked X/Y (X/Y_START/Y_END for ribbons),
-linear scales, IDENTITY and explicit GAP handling. Other connected
-forms remain rejected. The [connected-mark contract](connected-mark-conditions.md)
+linear scales, IDENTITY and explicit GAP, CONNECT or ZERO handling. CONNECT retains raw rows and skips
+incomplete cross-sections as connection endpoints, using guarded ChartSpec v4 and PlotPlan v7.
+Multiple layers, categorical COLOR series and facets use ChartSpec v6 and PlotPlan v9 with shared
+primary linear axes and per-layer null metadata. ZERO uses guarded ChartSpec v7 and PlotPlan v10:
+null scalar Y resolves to zero, raw values remain intact, and missing X or ribbon bounds remain gaps.
+Scalar Y domains include zero. Conditioned transposed forms use ChartSpec v8 and PlotPlan v11,
+with optional ASPECT_RATIO; raw channels retain semantic axes and source-owned presentation.
+SIZE/SHAPE endpoint symbols and TEXT annotations on these forms use ChartSpec v9 and PlotPlan v12.
+Their anchors retain semantic X and scalar Y or authored ribbon Y_END. Missing endpoints have no
+decoration; scalar ZERO anchors null Y at zero. Row decoration values never style connections.
+Conditioned SMOOTH, STEP_BEFORE and STEP_AFTER use ChartSpec v10 and PlotPlan v13. Controls and
+corners resolve within each eligible layer/series/facet run; raw positions, domains and decoration
+anchors remain intact. Two-row SMOOTH runs remain straight. Transposition maps semantic step
+direction without changing source ownership. Ordinary transposed fixed-aspect LINE also supports all four modes with quantitative X/Y, GAP and supported placement. Its v11 ChartSpec/v14 PlotPlan declares display-space interpolation after mapping and placement; ordinary AREA uses the same display-space policy with separately interpolated boundaries and a guarded v12 ChartSpec/v15 PlotPlan.
+Ordinary fixed-aspect LINE accepts EM/BAND/DATA nudges and deterministic stable-key JITTER.
+Each symbol and label consumes its vertex's physical displacement; raw values, domains and gaps
+remain intact. Facets and resize use the existing PlotPlan v3 display-offset metadata.
+Other connected forms remain rejected. The [connected-mark contract](connected-mark-conditions.md)
 defines segment ownership and tracks the remaining combinations.
 
 ### 3.3 One- and two-dimensional facets
@@ -296,6 +313,10 @@ definitions, window clauses, or renderer-native escape hatches.
 
 ## 9. Deliberate exclusions
 
+- Transposed physical-aspect AREA beyond the straight IDENTITY/JITTER/EM/BAND/DATA NUDGE zero-baseline or ribbon form.
+  Unconditioned GAP forms use ChartSpec v5/PlotPlan v8; conditioned GAP/CONNECT/ZERO forms
+  use ChartSpec v8/PlotPlan v11. Both use shared primary quantitative axes;
+  see [AREA authoring](../../reference/visuals-reporting/visuals/chart.md#areas-on-transposed-fixed-aspect-charts).
 - Embedded Vega-Lite/Vega JSON and compatibility shims.
 - ECharts option fragments, JavaScript callbacks, arbitrary SVG paths, or CSS selectors.
 - Hidden visual transforms or calculated fields.
@@ -305,7 +326,7 @@ definitions, window clauses, or renderer-native escape hatches.
   layers resolved server-side.
 - Arbitrary repeat, concatenation, or nested dashboard layout inside one visual. Phase 7 composition
   is the explicit row/column facet grid; page/container layout composes independent visuals.
-- Connected-mark condition combinations beyond the supported single-layer straight Cartesian LINE/zero-baseline AREA/ribbon
+- Connected-mark condition combinations beyond the supported Cartesian/transposed LINE/zero-baseline AREA/ribbon
   forms; see the [connected-mark contract](connected-mark-conditions.md).
 
 ## 10. Acceptance evidence

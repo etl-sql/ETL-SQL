@@ -117,10 +117,9 @@ public sealed class ConnectedLinePlanTests
 
     [Theory]
     [InlineData("LINE (", "AREA (")]
-    [InlineData("TYPE = CARTESIAN", "TYPE = TRANSPOSED_CARTESIAN")]
-    [InlineData("NULL_HANDLING = GAP", "NULL_HANDLING = ZERO")]
+    [InlineData("TYPE = CARTESIAN", "TYPE = POLAR")]
     [InlineData("'LINEAR'", "'MONOTONE'")]
-    [InlineData("OPACITY WHEN", "SIZE WHEN")]
+    [InlineData("OPACITY WHEN", "SHAPE WHEN")]
     public void UnsupportedAuthoringIsRejected(string before, string after)
     {
         var statement = Parse(Sql.Replace(before, after, StringComparison.Ordinal));

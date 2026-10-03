@@ -262,7 +262,7 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
             styles.ToImmutableArray(),
             layer.Name)
         {
-            Conditions = layer.Conditions.Select(Condition).ToImmutableArray(),
+            Conditions = layer.Conditions.Select(condition => Condition(condition, layer.Mark is AdvancedChartMarkKind.Line or AdvancedChartMarkKind.Area)).ToImmutableArray(),
             BandSize = layer.BandSize,
             TickThickness = layer.TickThickness,
             TickOrientation = AdvancedChartEnumBridge.Tick(layer.TickOrientation),
@@ -280,14 +280,34 @@ public sealed class AdvancedChartLowerer(IExecutionContext context)
             position.Seed,
             AdvancedChartEnumBridge.Unit(position.Unit));
 
-    private EncodingConditionSpec Condition(AdvancedChartCondition condition)
+    private EncodingConditionSpec Condition(AdvancedChartCondition condition, bool connected)
     {
-        var whenTrue = EvaluateLiteral(condition.WhenTrue, condition);
-        var whenFalse = condition.WhenFalse is null ? null : EvaluateLiteral(condition.WhenFalse, condition);
+        ChartValue Result(Expression expression)
+        {
+            var literal = expression switch
+            {
+                BinaryExpression { Operator: TokenType.MINUS, Left: LiteralExpression { Value: 0m }, Right: LiteralExpression number } => number,
+                UnaryExpression { Operator: TokenType.MINUS or TokenType.PLUS, Expression: LiteralExpression number } => number,
+                _ => null
+            };
+            if (condition.Channel != AdvancedChartConditionChannel.Size || literal is null)
+                return EvaluateLiteral(expression, condition);
+            var value = Value(literal.Value);
+            if (expression is UnaryExpression { Operator: TokenType.PLUS }) return value;
+            return value.Kind switch
+            {
+                ChartValueKind.Integer => ChartValue.From(-value.Integer!.Value),
+                ChartValueKind.Decimal => ChartValue.From(-value.Decimal!.Value),
+                ChartValueKind.FloatingPoint => ChartValue.From(-value.FloatingPoint!.Value),
+                _ => throw AdvancedChartSemanticException.At(condition, "Connected CONDITIONS SIZE requires a numeric or null value.")
+            };
+        }
+        var whenTrue = Result(condition.WhenTrue);
+        var whenFalse = condition.WhenFalse is null ? null : Result(condition.WhenFalse);
         if (condition.Channel == AdvancedChartConditionChannel.Shape)
         {
-            ValidatePointShape(Display(whenTrue), condition);
-            if (whenFalse is not null) ValidatePointShape(Display(whenFalse), condition);
+            if (!connected || whenTrue.Kind != ChartValueKind.Null) ValidatePointShape(Display(whenTrue), condition);
+            if (whenFalse is not null && (!connected || whenFalse.Kind != ChartValueKind.Null)) ValidatePointShape(Display(whenFalse), condition);
         }
         return new EncodingConditionSpec(
             AdvancedChartEnumBridge.Condition(condition.Channel),

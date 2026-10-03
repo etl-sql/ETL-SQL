@@ -12,6 +12,7 @@
 | [Portal and Orchestrator Capacity Testing](capacity-testing.md) | Use `scripts/test-service-capacity.mjs` to measure Portal-user and Orchestrator-job capacity against |
 | [Concurrent PostgreSQL and Failure Soak Certification (v0.15.0 Phase 6) — Design](concurrent-postgres-failure-soak.md) | **Status:** Implementation in progress; Slice A topology harness is implemented. |
 | [Constrained HTML Visuals](constrained-html-visuals.md) | Accepted grammar, security, isolation, interaction, budget, and fallback contract for constrained HTML visuals. |
+| [Connected mark condition semantics](connected-mark-conditions.md) | Source-owned LINE/AREA connections, null policies, version guards and backend acceptance evidence. |
 | [Column & Job Data-Quality Rules — Design Specification](data-quality-rules.md) | Extend the engine's verification surface from **schema** (`EXPECT SCHEMA … ON DRIFT WARN`) and |
 | [Departmental Isolation Topology](departmental-isolation.md) | This document defines how to run **multiple isolated ETL-SQL environments** — for example |
 | [Disaster Recovery Objectives](disaster-recovery-objectives.md) | This guide defines supported RPO/RTO targets, recovery-set contents, restore-drill expectations, and |

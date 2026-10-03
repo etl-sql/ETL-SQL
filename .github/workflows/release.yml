@@ -28,16 +28,14 @@ jobs:
         with:
           ref: ${{ env.TAG_NAME }}
           fetch-depth: 0
-      - name: Verify release tag is on main
+      - name: Verify release tag is on a supported release branch
         shell: pwsh
         run: |
-          $TagCommit = git rev-parse "$env:TAG_NAME^{commit}"
-          if ($LASTEXITCODE -ne 0) { throw "Release tag '$env:TAG_NAME' does not exist." }
-
-          git merge-base --is-ancestor $TagCommit origin/main
-          if ($LASTEXITCODE -ne 0) {
-            throw "Release tag '$env:TAG_NAME' must point to a commit reachable from main."
-          }
+          . ./scripts/Release.Helpers.ps1
+          git fetch --prune origin '+refs/heads/main:refs/remotes/origin/main' '+refs/heads/release/*:refs/remotes/origin/release/*'
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot refresh main and maintenance release refs.' }
+          $branch = Assert-ReleaseTagReachable -Tag $env:TAG_NAME
+          Write-Host "Release tag is reachable from $branch."
       - name: Verify .NET
         run: dotnet --info
       - name: Build & Run Smoke Tests
@@ -260,8 +258,19 @@ jobs:
     needs: attest-provenance
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.TAG_NAME }}
       - name: Publish draft release
-        shell: bash
+        shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+        run: |
+          . ./scripts/Release.Helpers.ps1
+          $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate published releases before updating Latest.' }
+          $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ })
+          $latest = Get-ReleaseLatestValue -CandidateTag $env:TAG_NAME -Releases $releases
+          gh release edit $env:TAG_NAME --repo $env:GITHUB_REPOSITORY --draft=false "--latest=$latest"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot publish draft release.' }

@@ -24,6 +24,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Resolve-Path (Join-Path $ScriptRoot '..')
+. (Join-Path $ScriptRoot 'Release.Helpers.ps1')
 
 if ([string]::IsNullOrWhiteSpace($RunId)) {
     $RunId = 'enterprise-' + (Get-Date -Format 'yyyyMMdd-HHmmss')
@@ -80,8 +81,8 @@ function Invoke-CertCommand {
         Pop-Location
     }
 
-    if (-not (Test-Path -LiteralPath $ExpectedResultPath)) {
-        $message = "Certification step '$Name' produced no TRX result at '$ExpectedResultPath'."
+    if (-not (Test-ReleaseTrxComplete -Path $ExpectedResultPath)) {
+        $message = "Certification step '$Name' produced missing, empty, skipped or unsuccessful TRX evidence at '$ExpectedResultPath'."
         Add-Content -LiteralPath $logPath -Value $message -Encoding UTF8
         if ($exitCode -eq 0) { $exitCode = 1 }
     }
@@ -191,14 +192,20 @@ if (-not $SkipPortalTests) {
 }
 
 $stepArray = $steps.ToArray()
-$status = if (@($stepArray | Where-Object { -not $_.passed }).Count -eq 0) { 'Passed' } else { 'Failed' }
+$status = if (@($stepArray | Where-Object { -not $_.passed }).Count -gt 0) { 'Failed' }
+    elseif ($SkipPortalTests) { 'Incomplete' } else { 'Passed' }
+$dirtyPaths = @(& git -C $RepoRoot status --porcelain)
+if ($LASTEXITCODE -ne 0) { throw 'Cannot establish certification candidate cleanliness.' }
 $summary = [pscustomobject]@{
     schemaVersion = 1
-    phase = 'v0.16.0 enterprise policy and monitoring certification'
+    phase = 'Enterprise policy and monitoring certification'
     generatedAt = (Get-Date).ToUniversalTime().ToString('o')
     runId = $RunId
     platform = $Platform
     commit = $commit
+    dirty = $dirtyPaths.Count -gt 0
+    releaseEligible = $status -eq 'Passed' -and $dirtyPaths.Count -eq 0
+    uncovered = @(if ($SkipPortalTests) { 'Portal enterprise HTTP and policy tests were not run.' })
     status = $status
     steps = @($stepArray)
 }

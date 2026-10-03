@@ -357,8 +357,8 @@ public sealed record ChartSpec(
         ScaleResolutionSpec? scaleResolution = null,
         FacetSpec? facet = null,
         InteractionSpec? interactions = null) => new(
-            layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty) ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
-            layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty) ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent,
+            UsesTransposedConfidence(coordinate, layers) ? ChartContractVersions.TransposedConfidenceChartSpecSchema : UsesOrdinaryAreaInterpolation(coordinate, layers) ? ChartContractVersions.OrdinaryAreaInterpolationChartSpecSchema : UsesOrdinaryInterpolation(coordinate, layers) ? ChartContractVersions.OrdinaryInterpolationChartSpecSchema : UsesConnectedInterpolation(layers) ? ChartContractVersions.InterpolatedConnectedChartSpecSchema : UsesConnectedDecorations(layers) ? ChartContractVersions.DecoratedConnectedChartSpecSchema : UsesTransposedConnections(coordinate, layers) ? ChartContractVersions.TransposedConnectedChartSpecSchema : UsesZeroConditions(layers) ? ChartContractVersions.ZeroConnectedChartSpecSchema : UsesConnectedComposition(layers, facet) ? ChartContractVersions.ConnectedCompositionChartSpecSchema : UsesTransposedAreaAspect(coordinate, layers) ? ChartContractVersions.TransposedAreaChartSpecSchema : UsesConnectConditions(layers) ? ChartContractVersions.ConnectChartSpecSchema : layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty) ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
+            UsesTransposedConfidence(coordinate, layers) ? ChartContractVersions.TransposedConfidenceChartSpecVersion : UsesOrdinaryAreaInterpolation(coordinate, layers) ? ChartContractVersions.OrdinaryAreaInterpolationChartSpecVersion : UsesOrdinaryInterpolation(coordinate, layers) ? ChartContractVersions.OrdinaryInterpolationChartSpecVersion : UsesConnectedInterpolation(layers) ? ChartContractVersions.InterpolatedConnectedChartSpecVersion : UsesConnectedDecorations(layers) ? ChartContractVersions.DecoratedConnectedChartSpecVersion : UsesTransposedConnections(coordinate, layers) ? ChartContractVersions.TransposedConnectedChartSpecVersion : UsesZeroConditions(layers) ? ChartContractVersions.ZeroConnectedChartSpecVersion : UsesConnectedComposition(layers, facet) ? ChartContractVersions.ConnectedCompositionChartSpecVersion : UsesTransposedAreaAspect(coordinate, layers) ? ChartContractVersions.TransposedAreaChartSpecVersion : UsesConnectConditions(layers) ? ChartContractVersions.ConnectChartSpecVersion : layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty) ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent,
             id,
             title,
             dataReference,
@@ -377,8 +377,9 @@ public sealed record ChartSpec(
     public void Validate()
     {
         var connected = Layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty);
-        ChartContractValidation.RequireVersion(Schema, Version, connected ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
-            connected ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent, nameof(ChartSpec));
+        var connect = UsesConnectConditions(Layers);
+        ChartContractValidation.RequireVersion(Schema, Version, HasTransposedConfidence ? ChartContractVersions.TransposedConfidenceChartSpecSchema : HasOrdinaryAreaInterpolation ? ChartContractVersions.OrdinaryAreaInterpolationChartSpecSchema : HasOrdinaryInterpolation ? ChartContractVersions.OrdinaryInterpolationChartSpecSchema : HasConnectedInterpolation ? ChartContractVersions.InterpolatedConnectedChartSpecSchema : HasConnectedDecorations ? ChartContractVersions.DecoratedConnectedChartSpecSchema : IsTransposedConnected ? ChartContractVersions.TransposedConnectedChartSpecSchema : UsesZeroConditions(Layers) ? ChartContractVersions.ZeroConnectedChartSpecSchema : IsConnectedComposition ? ChartContractVersions.ConnectedCompositionChartSpecSchema : IsTransposedAreaAspect ? ChartContractVersions.TransposedAreaChartSpecSchema : connect ? ChartContractVersions.ConnectChartSpecSchema : connected ? ChartContractVersions.ConnectedChartSpecSchema : ChartContractVersions.ChartSpecSchema,
+            HasTransposedConfidence ? ChartContractVersions.TransposedConfidenceChartSpecVersion : HasOrdinaryAreaInterpolation ? ChartContractVersions.OrdinaryAreaInterpolationChartSpecVersion : HasOrdinaryInterpolation ? ChartContractVersions.OrdinaryInterpolationChartSpecVersion : HasConnectedInterpolation ? ChartContractVersions.InterpolatedConnectedChartSpecVersion : HasConnectedDecorations ? ChartContractVersions.DecoratedConnectedChartSpecVersion : IsTransposedConnected ? ChartContractVersions.TransposedConnectedChartSpecVersion : UsesZeroConditions(Layers) ? ChartContractVersions.ZeroConnectedChartSpecVersion : IsConnectedComposition ? ChartContractVersions.ConnectedCompositionChartSpecVersion : IsTransposedAreaAspect ? ChartContractVersions.TransposedAreaChartSpecVersion : connect ? ChartContractVersions.ConnectChartSpecVersion : connected ? ChartContractVersions.ConnectedChartSpecVersion : ChartContractVersions.ChartSpecCurrent, nameof(ChartSpec));
         ChartContractValidation.RequireName(Id, nameof(Id));
         ChartContractValidation.RequireName(DataReference, nameof(DataReference));
         ChartContractValidation.RequireUnique(Layers.Select(layer => layer.Id), "layer id");
@@ -386,6 +387,20 @@ public sealed record ChartSpec(
 
         if (Layers.IsDefaultOrEmpty)
             throw new InvalidDataException("A ChartSpec must contain at least one mark layer.");
+        if (IsConnectedComposition)
+        {
+            if (Coordinate.Kind is not (CoordinateKind.Cartesian or CoordinateKind.TransposedCartesian) || Layers.Any(layer => layer.Bindings.Any(binding => binding.Stack != StackMode.None || binding.Channel == FieldChannel.Y2 || binding.Axis == AxisRole.Secondary)))
+                throw new InvalidDataException("Connected compositions require Cartesian or transposed Cartesian coordinates, primary axes and unstacked layers.");
+            var axes = ResolveConnectedAxes()!;
+            if (Layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty &&
+                layer.Bindings.Any(binding => binding.Channel == FieldChannel.Y) && layer.Style.Any(token => token.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && token.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase))))
+            {
+                var y = Scales.First(scale => scale.Id.Equals(axes.YScaleId, StringComparison.OrdinalIgnoreCase));
+                if (y.DomainMinimum is { } minimum && (minimum.Decimal is > 0m || minimum.Integer is > 0L || minimum.FloatingPoint is > 0d) ||
+                    y.DomainMaximum is { } maximum && (maximum.Decimal is < 0m || maximum.Integer is < 0L || maximum.FloatingPoint is < 0d))
+                    throw new InvalidDataException("Connected ZERO scalar Y requires a linear Y domain containing zero.");
+            }
+        }
         if (Coordinate.Kind == CoordinateKind.Polar && Layers.Any(layer => layer.Bindings.Any(binding => binding.Stack != StackMode.None)))
         {
             if (Facet is not null || Layers.Any(layer => layer.Mark != MarkKind.Arc || layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) || !layer.Conditions.IsDefaultOrEmpty))
@@ -417,35 +432,52 @@ public sealed record ChartSpec(
             throw new InvalidDataException("A geography contract requires Geographic coordinates.");
         if (Coordinate.AspectRatio is <= 0m)
             throw new InvalidDataException("Cartesian ASPECT_RATIO must be greater than zero.");
-        if (Coordinate.AspectRatio is not null)
+        if (Coordinate.AspectRatio is not null || IsTransposedConnected)
         {
+            var transposedCompositionLabel = IsTransposedConnected ? "TRANSPOSED_CARTESIAN connected composition" : "TRANSPOSED_CARTESIAN ASPECT_RATIO";
             if (Coordinate.Kind is not (CoordinateKind.Cartesian or CoordinateKind.TransposedCartesian))
                 throw new InvalidDataException("ASPECT_RATIO requires CARTESIAN or TRANSPOSED_CARTESIAN coordinates.");
-            var xScale = Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.X);
-            var yScale = Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.Y);
+            var axes = ResolveCartesianAxes();
+            var xScale = Scales.FirstOrDefault(scale => axes is null ? scale.Channel == FieldChannel.X : scale.Id.Equals(axes.XScaleId, StringComparison.OrdinalIgnoreCase));
+            var yScale = Scales.FirstOrDefault(scale => axes is null ? scale.Channel == FieldChannel.Y : scale.Id.Equals(axes.YScaleId, StringComparison.OrdinalIgnoreCase));
             if (xScale?.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic) ||
                 yScale?.Kind is not (ScaleKind.Linear or ScaleKind.Logarithmic))
                 throw new InvalidDataException("ASPECT_RATIO requires continuous quantitative primary X and Y scales.");
             if (Coordinate.Kind == CoordinateKind.TransposedCartesian && Layers.Any(layer =>
-                layer.Mark is not (MarkKind.Point or MarkKind.Text or MarkKind.Rule or MarkKind.Rect or MarkKind.Line) ||
+                layer.Mark is not (MarkKind.Point or MarkKind.Text or MarkKind.Rule or MarkKind.Rect or MarkKind.Line or MarkKind.Area) ||
                 layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or { Kind: PositionAdjustmentKind.Jitter } or
                 { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data }) ||
                 layer.Bindings.Any(binding => binding.Stack != StackMode.None ||
                     binding.Channel == FieldChannel.Y2)))
-                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO supports POINT layers, TEXT layers, supported LINE/RECT layers and RULE layers with IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, without stacking or secondary axes.");
+                throw new InvalidDataException($"{transposedCompositionLabel} supports POINT, TEXT, supported LINE/AREA/RECT and RULE layers without stacking or secondary axes.");
             if (Coordinate.Kind == CoordinateKind.TransposedCartesian)
-                foreach (var layer in Layers.Where(layer => layer.Mark is MarkKind.Rule or MarkKind.Rect or MarkKind.Line))
+                foreach (var layer in Layers.Where(layer => layer.Mark is MarkKind.Rule or MarkKind.Rect or MarkKind.Line or MarkKind.Area))
                 {
                     var bindings = layer.Bindings.Where(binding => binding.Channel is not (FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap)).ToArray();
                     var channels = bindings.Select(binding => binding.Channel).ToHashSet();
+                    if (layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty) continue;
+                    if (layer.Mark == MarkKind.Area)
+                    {
+                        var ribbon = channels.SetEquals([FieldChannel.X, FieldChannel.YStart, FieldChannel.YEnd]) ||
+                            Coordinate.AspectRatio is not null && channels.SetEquals([FieldChannel.X, FieldChannel.ConfidenceLow, FieldChannel.ConfidenceHigh]);
+                        var baseline = layer.Style.FirstOrDefault(style => style.Name.Equals("areaBaseline", StringComparison.OrdinalIgnoreCase));
+                        if ((!ribbon && !channels.SetEquals([FieldChannel.X, FieldChannel.Y])) ||
+                            (ribbon ? baseline is not null : !string.Equals(baseline?.Value, "ZERO", StringComparison.OrdinalIgnoreCase) || yScale?.Kind != ScaleKind.Linear) ||
+                            !(layer.Position is null or { Kind: PositionAdjustmentKind.Identity } || Coordinate.AspectRatio is not null && layer.Position is ({ Kind: PositionAdjustmentKind.Jitter } or { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data })) || !layer.Conditions.IsDefaultOrEmpty ||
+                            !layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("GAP", StringComparison.OrdinalIgnoreCase)) ||
+                            !layer.Style.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) && (style.Value.Equals("LINEAR", StringComparison.OrdinalIgnoreCase) || Coordinate.AspectRatio is not null && ResolvedConnectionGeometry.Supports(style.Value))) ||
+                            bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative || binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)))
+                            throw new InvalidDataException($"{transposedCompositionLabel} AREA requires quantitative field/DATUM X/Y with AREA_BASELINE = ZERO and a linear Y scale, or X/Y_START/Y_END with no baseline (also X/CONFIDENCE_LOW/CONFIDENCE_HIGH with ASPECT_RATIO); IDENTITY (or JITTER/NUDGE UNIT EM/BAND/DATA with ASPECT_RATIO), GAP, LINEAR interpolation (or SMOOTH/STEP_BEFORE/STEP_AFTER with ASPECT_RATIO) and no CONDITIONS.");
+                        continue;
+                    }
                     if (layer.Mark == MarkKind.Line)
                     {
                         if (!channels.SetEquals([FieldChannel.X, FieldChannel.Y]) ||
-                            layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) || !layer.Conditions.IsDefaultOrEmpty ||
+                            !(layer.Position is null or { Kind: PositionAdjustmentKind.Identity } || Coordinate.AspectRatio is not null && layer.Position is ({ Kind: PositionAdjustmentKind.Jitter } or { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data })) || !layer.Conditions.IsDefaultOrEmpty ||
                             !layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("GAP", StringComparison.OrdinalIgnoreCase)) ||
-                            !layer.Style.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("LINEAR", StringComparison.OrdinalIgnoreCase)) ||
+                            !layer.Style.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) && (style.Value.Equals("LINEAR", StringComparison.OrdinalIgnoreCase) || Coordinate.AspectRatio is not null && ResolvedConnectionGeometry.Supports(style.Value))) ||
                             bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative || binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)))
-                            throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO LINE requires exactly quantitative field/DATUM X/Y bindings, IDENTITY, NULL_HANDLING = GAP, STYLE INTERPOLATION = LINEAR, and no CONDITIONS.");
+                            throw new InvalidDataException($"{transposedCompositionLabel} LINE requires exactly quantitative field/DATUM X/Y bindings, IDENTITY (or JITTER/NUDGE UNIT EM/BAND/DATA with ASPECT_RATIO), NULL_HANDLING = GAP, STYLE INTERPOLATION = LINEAR (or SMOOTH/STEP_BEFORE/STEP_AFTER with ASPECT_RATIO), and no CONDITIONS.");
                         continue;
                     }
                     if (layer.Mark == MarkKind.Rect)
@@ -454,7 +486,7 @@ public sealed record ChartSpec(
                             layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or { Kind: PositionAdjustmentKind.Jitter } or { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data }) || !layer.Conditions.IsDefaultOrEmpty ||
                             bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative ||
                                 binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)))
-                            throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO RECT requires exactly four quantitative field/DATUM X_START/X_END/Y_START/Y_END bindings, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
+                            throw new InvalidDataException($"{transposedCompositionLabel} RECT requires exactly four quantitative field/DATUM X_START/X_END/Y_START/Y_END bindings, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
                         continue;
                     }
                     var ranged = channels.SetEquals([FieldChannel.X, FieldChannel.YStart, FieldChannel.YEnd]) ||
@@ -466,7 +498,7 @@ public sealed record ChartSpec(
                             { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Em or PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data }) || !layer.Conditions.IsDefaultOrEmpty ||
                             bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative ||
                                 binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)))
-                            throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO RULE segments require quantitative field/DATUM bindings, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
+                            throw new InvalidDataException($"{transposedCompositionLabel} RULE segments require quantitative field/DATUM bindings, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA, and no CONDITIONS.");
                         continue;
                     }
                     if (layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity } or { Kind: PositionAdjustmentKind.Jitter } or
@@ -475,7 +507,7 @@ public sealed record ChartSpec(
                         bindings[0].SourceKind is not (BindingSourceKind.Datum or BindingSourceKind.Field) || bindings[0].SemanticKind != DataSemanticKind.Quantitative ||
                         layer.Position is { Kind: PositionAdjustmentKind.Nudge or PositionAdjustmentKind.Jitter } position &&
                         (bindings[0].Channel == FieldChannel.X ? position.Y != 0m : position.X != 0m))
-                        throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO RULE requires one quantitative field or DATUM X or Y binding, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA along the bound axis only, and no CONDITIONS or other encodings.");
+                        throw new InvalidDataException($"{transposedCompositionLabel} RULE requires one quantitative field or DATUM X or Y binding, IDENTITY, JITTER or NUDGE UNIT EM/BAND/DATA along the bound axis only, and no CONDITIONS or other encodings.");
                 }
         }
         if (Facet is not null)
@@ -575,7 +607,7 @@ public sealed record ChartSpec(
                     throw new InvalidDataException($"Layer '{layer.Id}' JITTER amplitudes must be between zero and one.");
                 if (position.Kind == PositionAdjustmentKind.Nudge && position.Unit == PositionAdjustmentUnit.Data &&
                     Coordinate.Kind != CoordinateKind.Cartesian &&
-                    Coordinate is not { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
+                    Coordinate is not { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } && !IsTransposedConnected)
                     throw new InvalidDataException($"Layer '{layer.Id}' data-domain NUDGE requires Cartesian coordinates or a supported transposed ASPECT_RATIO composition.");
             }
             foreach (var binding in layer.Bindings)
@@ -700,6 +732,10 @@ public sealed record ChartSpec(
                     var end = layer.Bindings.First(binding => binding.Channel == FieldChannel.YEnd);
                     if (start.SemanticKind != end.SemanticKind || start.SemanticKind is not (DataSemanticKind.Quantitative or DataSemanticKind.Temporal))
                         throw new InvalidDataException($"AREA layer '{layer.Id}' ribbon endpoints require matching quantitative or temporal types.");
+                    var defaultScale = Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.Y)?.Id;
+                    // COMPAT_BREAK: 0.20.0 — ribbons cannot mix endpoint domains.
+                    if (!string.Equals(start.ScaleId ?? defaultScale, end.ScaleId ?? defaultScale, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException($"AREA layer '{layer.Id}' ribbon endpoints must use the same Y scale.");
                 }
             }
             if (layer.Mark == MarkKind.Tick)
@@ -722,24 +758,34 @@ public sealed record ChartSpec(
             if (!layer.Style.IsDefault) ChartContractValidation.RequireUnique(layer.Style.Select(token => token.Name), $"style token in layer '{layer.Id}'");
             if (!layer.Conditions.IsDefaultOrEmpty && layer.Mark is MarkKind.Line or MarkKind.Area)
             {
-                var ribbon = layer.Mark == MarkKind.Area && layer.Bindings.Select(binding => binding.Channel).ToHashSet()
+                var positions = layer.Bindings.Where(binding => binding.Channel is not (FieldChannel.Color or FieldChannel.Row or FieldChannel.Column or FieldChannel.Wrap)).ToArray();
+                var ribbon = layer.Mark == MarkKind.Area && positions.Select(binding => binding.Channel).ToHashSet()
                     .SetEquals([FieldChannel.X, FieldChannel.YStart, FieldChannel.YEnd]);
-                if (layer.Mark is not (MarkKind.Line or MarkKind.Area) || Layers.Length != 1 || Coordinate.Kind != CoordinateKind.Cartesian || Facet is not null ||
+                var layerConnect = layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("CONNECT", StringComparison.OrdinalIgnoreCase));
+                var layerZero = layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase));
+                if (Coordinate.Kind is not (CoordinateKind.Cartesian or CoordinateKind.TransposedCartesian) ||
                     layer.Position is not (null or { Kind: PositionAdjustmentKind.Identity }) ||
-                    !layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("GAP", StringComparison.OrdinalIgnoreCase)) ||
-                    !layer.Style.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("LINEAR", StringComparison.OrdinalIgnoreCase)) ||
-                    (!ribbon && !layer.Bindings.Select(binding => binding.Channel).ToHashSet().SetEquals([FieldChannel.X, FieldChannel.Y])) ||
-                    layer.Bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative || binding.Stack != StackMode.None || binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)) ||
-                    Scales.Any(scale => scale.Kind != ScaleKind.Linear) || NullHandling.Default != NullValuePolicy.Gap ||
+                    !layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) &&
+                        style.Value.Equals(layerZero ? "ZERO" : layerConnect ? "CONNECT" : "GAP", StringComparison.OrdinalIgnoreCase)) ||
+                    !layer.Style.Any(style => style.Name.Equals("INTERPOLATION", StringComparison.OrdinalIgnoreCase) && ResolvedConnectionGeometry.Supports(style.Value)) ||
+                    (!ribbon && !positions.Select(binding => binding.Channel).ToHashSet().SetEquals([FieldChannel.X, FieldChannel.Y])) ||
+                    positions.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative || binding.Stack != StackMode.None || binding.SourceKind is not (BindingSourceKind.Field or BindingSourceKind.Datum)) ||
+                    layer.Bindings.Any(binding => binding.Channel == FieldChannel.Color && (binding.SemanticKind is not (DataSemanticKind.Nominal or DataSemanticKind.Ordinal) || binding.SourceKind != BindingSourceKind.Field)) ||
+                    (!IsConnectedComposition && (Scales.Any(scale => scale.Kind != ScaleKind.Linear) || NullHandling.Default != (layerConnect ? NullValuePolicy.Skip : NullValuePolicy.Gap))) ||
                     layer.Mark == MarkKind.Area && (ribbon ? layer.Style.Any(style => style.Name.Equals("areaBaseline", StringComparison.OrdinalIgnoreCase)) : !layer.Style.Any(style => style.Name.Equals("areaBaseline", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase))) ||
-                    layer.Conditions.Any(condition => condition.Channel is not (ConditionalEncodingChannel.Color or ConditionalEncodingChannel.Opacity)))
-                    throw new InvalidDataException($"Connected layer '{layer.Id}' CONDITIONS require one Cartesian LINE or AREA layer, quantitative unstacked X/Y, linear scales, IDENTITY, GAP, LINEAR interpolation, no facets, and COLOR/OPACITY only; AREA requires AREA_BASELINE = ZERO or X/Y_START/Y_END with no baseline.");
+                    layer.Conditions.Any(condition => !Enum.IsDefined(condition.Channel)))
+                    throw new InvalidDataException($"Connected layer '{layer.Id}' CONDITIONS require Cartesian or transposed Cartesian LINE or AREA, quantitative unstacked X/Y, shared linear primary scales, optional categorical COLOR series, IDENTITY, GAP, CONNECT or ZERO, LINEAR/SMOOTH/STEP_BEFORE/STEP_AFTER interpolation, COLOR/OPACITY connections and SIZE/SHAPE/TEXT row decorations; AREA requires AREA_BASELINE = ZERO or X/Y_START/Y_END with no baseline.");
             }
             if (!layer.Conditions.IsDefault)
                 foreach (var condition in layer.Conditions)
                 {
                     condition.WhenTrue.Validate();
                     condition.WhenFalse?.Validate();
+                    if (layer.Mark is (MarkKind.Line or MarkKind.Area))
+                    {
+                        ResolvedConnectionDecoration.ValidateEncoding(new(condition.Channel, condition.WhenTrue));
+                        if (condition.WhenFalse is not null) ResolvedConnectionDecoration.ValidateEncoding(new(condition.Channel, condition.WhenFalse));
+                    }
                     ValidatePredicate(condition.Predicate, layer.Id);
                 }
         }
@@ -767,6 +813,99 @@ public sealed record ChartSpec(
         if (value.Length != 7 || value[0] != '#' || value.Skip(1).Any(character => !Uri.IsHexDigit(character)))
             throw new InvalidDataException($"Scale '{scaleId}' color RANGE accepts portable #RRGGBB colors only; found '{value}'.");
     }
+
+    [JsonIgnore]
+    public bool IsTransposedAreaAspect => UsesTransposedAreaAspect(Coordinate, Layers);
+
+    [JsonIgnore]
+    public bool IsConnectedComposition => IsTransposedConnected || UsesConnectedComposition(Layers, Facet);
+
+    [JsonIgnore]
+    public bool HasConnectedDecorations => UsesConnectedDecorations(Layers);
+
+    [JsonIgnore]
+    public bool HasConnectedInterpolation => UsesConnectedInterpolation(Layers);
+
+    [JsonIgnore]
+    public bool HasOrdinaryInterpolation => UsesOrdinaryInterpolation(Coordinate, Layers);
+
+    [JsonIgnore]
+    public bool HasOrdinaryAreaInterpolation => UsesOrdinaryAreaInterpolation(Coordinate, Layers);
+
+    [JsonIgnore]
+    public bool HasTransposedConfidence => UsesTransposedConfidence(Coordinate, Layers);
+
+    private static bool UsesTransposedConfidence(CoordinateSpec coordinate, ImmutableArray<MarkLayerSpec> layers) =>
+        coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } && layers.Any(layer =>
+            layer.Mark == MarkKind.Area && layer.Bindings.Any(binding => binding.Channel is FieldChannel.ConfidenceLow or FieldChannel.ConfidenceHigh));
+
+    private static bool UsesOrdinaryAreaInterpolation(CoordinateSpec coordinate, ImmutableArray<MarkLayerSpec> layers) =>
+        coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } && layers.Any(layer =>
+            layer.Mark == MarkKind.Area && layer.Conditions.IsDefaultOrEmpty && ResolvedConnectionGeometry.Kind(layer.Style) is not null);
+
+    private static bool UsesOrdinaryInterpolation(CoordinateSpec coordinate, ImmutableArray<MarkLayerSpec> layers) =>
+        coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } && layers.Any(layer =>
+            layer.Mark is (MarkKind.Line or MarkKind.Area) && layer.Conditions.IsDefaultOrEmpty && ResolvedConnectionGeometry.Kind(layer.Style) is not null);
+
+    private static bool UsesConnectedInterpolation(ImmutableArray<MarkLayerSpec> layers) => layers.Any(layer =>
+        layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty && ResolvedConnectionGeometry.Kind(layer.Style) is not null);
+
+    private static bool UsesConnectedDecorations(ImmutableArray<MarkLayerSpec> layers) => layers.Any(layer =>
+        layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty && layer.Conditions.Any(condition => ResolvedConnectionDecoration.IsDecorationChannel(condition.Channel)));
+
+    [JsonIgnore]
+    public bool IsTransposedConnected => UsesTransposedConnections(Coordinate, Layers);
+
+    private static bool UsesTransposedConnections(CoordinateSpec coordinate, ImmutableArray<MarkLayerSpec> layers) =>
+        coordinate.Kind == CoordinateKind.TransposedCartesian && layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty);
+
+    private static bool UsesConnectedComposition(ImmutableArray<MarkLayerSpec> layers, FacetSpec? facet) =>
+        layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty) &&
+        (UsesConnectedInterpolation(layers) || UsesConnectedDecorations(layers) || UsesZeroConditions(layers) || layers.Length > 1 || facet is not null || layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Color)));
+
+    private static bool UsesZeroConditions(ImmutableArray<MarkLayerSpec> layers) => layers.Any(layer =>
+        layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty &&
+        layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase)));
+
+    public ResolvedCartesianAxes? ResolveCartesianAxes() => ResolveConnectedAxes() ?? ResolveTransposedAreaAxes();
+
+    public ResolvedCartesianAxes? ResolveConnectedAxes()
+    {
+        if (!IsConnectedComposition) return null;
+        string Axis(FieldChannel axis)
+        {
+            var bindings = Layers.SelectMany(layer => layer.Bindings).Where(binding => CompatibleScaleChannel(axis, binding.Channel)).ToArray();
+            var ids = bindings.Select(binding => binding.ScaleId ?? Scales.FirstOrDefault(scale => scale.Channel == axis)?.Id).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (ids.Length != 1 || ids[0] is not { } id || bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative) ||
+                !Scales.Any(scale => scale.Id.Equals(id, StringComparison.OrdinalIgnoreCase) && scale.Channel == axis && scale.Kind == ScaleKind.Linear))
+                throw new InvalidDataException("Connected compositions require one shared linear quantitative primary scale per X/Y axis.");
+            return Scales.First(scale => scale.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).Id;
+        }
+        return new ResolvedCartesianAxes(Axis(FieldChannel.X), Axis(FieldChannel.Y));
+    }
+
+    private static bool UsesTransposedAreaAspect(CoordinateSpec coordinate, ImmutableArray<MarkLayerSpec> layers) =>
+        coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } && layers.Any(layer => layer.Mark == MarkKind.Area);
+
+    public ResolvedCartesianAxes? ResolveTransposedAreaAxes()
+    {
+        if (!IsTransposedAreaAspect && !HasOrdinaryInterpolation) return null;
+        string Axis(FieldChannel axis)
+        {
+            var bindings = Layers.SelectMany(layer => layer.Bindings).Where(binding => CompatibleScaleChannel(axis, binding.Channel)).ToArray();
+            var ids = bindings.Select(binding => binding.ScaleId ?? Scales.FirstOrDefault(scale => scale.Channel == axis)?.Id)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (ids.Length != 1 || ids[0] is not { } id || bindings.Any(binding => binding.SemanticKind != DataSemanticKind.Quantitative) ||
+                !Scales.Any(scale => scale.Id.Equals(id, StringComparison.OrdinalIgnoreCase) && scale.Channel == axis && scale.Kind is ScaleKind.Linear or ScaleKind.Logarithmic))
+                throw new InvalidDataException("TRANSPOSED_CARTESIAN ASPECT_RATIO AREA compositions require one shared quantitative primary scale per X/Y axis.");
+            return Scales.First(scale => scale.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).Id;
+        }
+        return new ResolvedCartesianAxes(Axis(FieldChannel.X), Axis(FieldChannel.Y));
+    }
+
+    private static bool UsesConnectConditions(ImmutableArray<MarkLayerSpec> layers) => layers.Any(layer =>
+        layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty &&
+        layer.Style.Any(style => style.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && style.Value.Equals("CONNECT", StringComparison.OrdinalIgnoreCase)));
 
     private static void ValidateIntervalPair(MarkLayerSpec layer, FieldChannel start, FieldChannel end, string name)
     {

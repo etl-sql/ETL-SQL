@@ -17,6 +17,62 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.20.0 — Semantic: Independent numeric facets retain explicit bounds
+- **What changed**: Independent LINEAR/LOGARITHMIC facet domains previously replaced authored MIN/MAX with panel data extrema. Numeric facets now retain each supplied bound and derive only unspecified bounds from panel data. Existing INCLUDE_ZERO behavior remains in effect.
+- **Who is affected**: CUSTOM charts combining numeric scale MIN/MAX with independent X, Y or COLOR facet resolution.
+- **Migration**: No syntax change. Remove MIN/MAX on axes intended to fit each panel's data automatically. Regenerate reports to apply fixed authored bounds.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Runtime: Semantic conformance compares fallback content
+- **What changed**: Semantic conformance previously rejected an unchanged fallback after serialization because its immutable array was a different instance. It now compares fallback kind, heading, summary and ordered items by value.
+- **Who is affected**: Chart backend conformance checks using deserialized PlotPlans.
+- **Migration**: No script change. Round-trip projections now pass; altered or reordered fallback items remain failures.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Runtime: Connected paths retain their full endpoint rows
+- **What changed**: Sampling previously reduced the raw row array while retaining connection indices into the original array. Connected layers now retain all endpoint rows, preventing incorrect paths or index failures. Ordinary sampled layers keep their sampling behavior.
+- **Who is affected**: CUSTOM LINE or AREA charts with CONDITIONS and SAMPLING enabled on dense data.
+- **Migration**: No syntax change. Regenerate reports to restore every source-owned connection. Reduce the source dataset explicitly if fewer connections are needed.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Runtime: Connected compositions respect point layer priority
+- **What changed**: Ordinary POINT layers previously painted after every connected LINE/AREA layer regardless of Z_INDEX. Connected compositions now paint all marks in their authored priority order.
+- **Who is affected**: CUSTOM conditioned LINE/AREA charts containing an ordinary POINT layer with a lower Z_INDEX.
+- **Migration**: No syntax change. Set the POINT layer's Z_INDEX above the connected layer to keep points in front.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Runtime: Chart contract migration checks exact envelope fields
+- **What changed**: Legacy migration now requires an exact v1 schema and version at the JSON root. It preserves payload strings and handles compact JSON. Previously it rewrote matching text anywhere in the payload, including the v10 schema prefix, and could accept mismatched legacy versions.
+- **Who is affected**: Serialized chart contracts containing legacy schema text or compact version-one envelopes.
+- **Migration**: No script change. Use matching schema/version fields and regenerate malformed contracts. Titles and descriptions containing schema URLs remain unchanged.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Runtime: Connected LINE decorations skip incomplete anchors
+- **What changed**: Connected LINE rows missing X previously drew a symbol at an invented category position. Symbols and labels now require complete resolved coordinates, matching the connection paths. Raw rows remain in accessible fallback.
+- **Who is affected**: CUSTOM LINE charts with CONDITIONS and incomplete positional values.
+- **Migration**: No syntax change. Regenerate exported reports to remove the misplaced decorations.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Runtime: Transposed AREA ribbons produce geometry
+- **What changed**: Accepted TRANSPOSED_CARTESIAN AREA layers with Y_START/Y_END now draw gap-separated polygons through their shared bound scale. Previously they emitted no geometry. SVG titles, terminal rows and accessible fallback retain raw X and both Y bounds. The new fixed-aspect AREA form uses guarded ChartSpec v5 and PlotPlan v8 with explicit primary axis ownership.
+- **Who is affected**: CUSTOM transposed AREA ribbons without ASPECT_RATIO.
+- **Migration**: No syntax change. Regenerate exported reports to include the missing ribbon. Use a v8-capable renderer for new fixed-aspect AREA compositions.
+- **Diagnostic**: N/A
+- **Earliest removal**: N/A
+
+### v0.20.0 — Semantic: AREA ribbon bounds share one Y scale
+- **What changed**: Ribbon endpoints on different effective Y scales now fail validation. Ribbons bound to a shared Y scale other than the first declared Y scale render through that selected scale, instead of the first scale. Such output uses guarded PlotPlan v6; other ribbon plans retain their existing envelopes. Scale references differing only in case now contribute to global and independent facet domains, matching validation.
+- **Who is affected**: CUSTOM AREA ribbons with separately scaled bounds or a shared bound scale declared after another Y scale.
+- **Migration**: Bind Y_START and Y_END to the same Y scale, or leave both unbound to use the inferred scale. Regenerate plans with a renderer supporting v6 when the shared scale is not the first Y scale.
+- **Diagnostic**: RPT-CHART
+- **Earliest removal**: N/A
+
 ### v0.20.0 — Connector: Excel extraction streams the selected sheet
 - **What changed**: Excel extraction keeps one output batch in memory instead of materializing every worksheet before returning data. Cancellation is checked between reader calls and remains a cancellation exception.
 - **Who is affected**: Large Excel reads and workbooks with unreadable sheets outside the selected sheet.

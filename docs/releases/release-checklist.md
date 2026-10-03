@@ -137,6 +137,36 @@ decision, not the whole decision. Green CI is not a substitute because CI does n
 Docker-integration or SLT lanes; likewise, a green local gate is not a substitute for the
 cross-platform and operator-run certifications below.
 
+### Two-segment local validation on a memory-constrained host
+
+Use this when Docker Desktop's VM would compete with the engine, browser or scale lanes for RAM.
+Keep one clean candidate commit, configuration, platform list and output directory throughout.
+
+1. Finish unrelated container workloads, quit Docker Desktop normally and verify its WSL VM has
+   released its working set. Do not terminate unrelated WSL distributions. Run all non-Docker phases:
+
+   ```powershell
+   .\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeStandardScale -BuildInstallers -Platforms win-x64
+   ```
+
+2. Resolve every failure before proceeding. A code or documentation edit invalidates the fingerprint;
+   commit the corrected candidate and restart segment one. Do not use `-ForceResume` for release proof.
+   This first segment's Passed result alone is incomplete release evidence.
+
+3. Start Docker Desktop normally, wait for `docker version` to report the server, then add its phases:
+
+   ```powershell
+   .\scripts\Test-PreRelease.ps1 -Resume -IncludeSlt -IncludeStandardScale -BuildInstallers -Platforms win-x64 -IncludeDockerIntegration
+   ```
+
+The resumed state keeps passed logs and their original coverage/baseline artifact paths. It reuses
+only matching passed commands with retained evidence; skipped or failed phases run again. Keep both
+run directories. The final state must include the connector integration, Portal integration and
+local/container smoke parity phases, all Passed, alongside the retained non-Docker results. Check
+the full plan with `-Explain` and compare it with the final phase list. Missing logs/artifacts require
+a fresh non-Docker run with the Docker VM stopped; they are not a reason to run heavy lanes beside it.
+Native Linux/macOS packaging and cross-platform certifications still require their own evidence.
+
 - [ ] Preview the plan (no side effects):
       ```powershell
       .\scripts\Test-PreRelease.ps1 -Explain -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale
@@ -405,11 +435,19 @@ Linux (WSL/Docker) as part of the gate.
 
 ## Phase 4 — Build & package artifacts
 
-Packaging consumes validated evidence; it does not certify it. `publish-release.ps1` currently
-archives whatever is present under `certification-results/` without checking commit, freshness,
-topology, completeness, or result. Run packaging from the clean candidate worktree and include only
-the evidence accepted in Phase 3—never treat the existence of the ZIP as proof that its contents
-passed.
+Packaging consumes validated evidence. `publish-release.ps1` selects only run bundles referenced by
+`artifacts/release-evidence/x.y.z/deployment-profiles/claims-index.json`; an explicit
+`-CertificationEvidenceRoot` may point at the accepted index elsewhere. It requires the matching
+release version, exact clean candidate commit, Passed/release-eligible claims, executed phases,
+nonempty logs and timestamps no older than seven days. Mixed, dirty, skipped, stale, missing or
+linked evidence fails before deleting existing release output. Historical sibling runs are excluded.
+The ZIP includes a version/commit manifest and SHA-256 hashes checked against its actual entries.
+
+A build checkout without release-specific evidence emits no certification ZIP. That packaging result
+does not close Phase 3: upload the accepted certification ZIP and all other required operator,
+cross-platform and coverage evidence to the draft before publishing it. The certification ZIP covers
+the selected deployment-profile contracts/transitions; it does not certify hosted production. The
+unversioned `certification-results/` and `coverage/report/` trees are never attached automatically.
 
 - [ ] Build installers via the gate (preferred, logged) **or** the master orchestrator:
       ```powershell

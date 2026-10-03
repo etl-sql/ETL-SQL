@@ -647,21 +647,10 @@ namespace ETL_SQL.Tests.Docs
         [Fact]
         public void MarkdownLinks_AllResolveCleanly()
         {
-            var mdFiles = Directory.GetFiles(RepoRoot, "*.md", SearchOption.AllDirectories)
+            var mdFiles = RepositoryMarkdownFiles()
                 .Where(f =>
                 {
-                    var parts = f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                    return !parts.Contains("Docs_Legacy") &&
-                           !parts.Contains("node_modules") &&
-                           !parts.Contains(".git") &&
-                           !parts.Contains("bin") &&
-                           !parts.Contains("obj") &&
-                           !parts.Contains("Help_Legacy") &&
-                           !parts.Contains(".claude") &&
-                           !parts.Contains(".worktrees") &&
-                           !parts.Contains(".vscode-test") &&
-                           !parts.Contains("artifacts") &&
-                           !f.EndsWith("TEMPLATE.md", StringComparison.OrdinalIgnoreCase) &&
+                    return !f.EndsWith("TEMPLATE.md", StringComparison.OrdinalIgnoreCase) &&
                            !f.EndsWith("CLAUDE.md", StringComparison.OrdinalIgnoreCase) &&
                            !f.EndsWith("GEMINI.md", StringComparison.OrdinalIgnoreCase) &&
                            !f.EndsWith("AGENTS.md", StringComparison.OrdinalIgnoreCase);
@@ -728,6 +717,30 @@ namespace ETL_SQL.Tests.Docs
             Assert.True(brokenLinks.Count == 0,
                 $"Found broken relative markdown links in repository ({brokenLinks.Count}):\n" +
                 string.Join("\n", brokenLinks));
+        }
+
+        private static IEnumerable<string> RepositoryMarkdownFiles()
+        {
+            var excludedDirectories = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "Docs_Legacy", "node_modules", ".git", "bin", "obj", "Help_Legacy", ".claude",
+                ".worktrees", ".vscode-test", "artifacts"
+            };
+            var pending = new Stack<string>();
+            pending.Push(RepoRoot);
+            while (pending.Count > 0)
+            {
+                var directory = pending.Pop();
+                foreach (var file in Directory.EnumerateFiles(directory, "*.md", SearchOption.TopDirectoryOnly))
+                    yield return file;
+                foreach (var child in Directory.EnumerateDirectories(directory))
+                {
+                    // Prune generated/cache trees before walking them. Filtering after a recursive
+                    // GetFiles still opens VS Code's private IPC directories and can fail on access.
+                    if (!excludedDirectories.Contains(Path.GetFileName(child)))
+                        pending.Push(child);
+                }
+            }
         }
 
         /// <summary>Files git tracks, repo-relative with forward slashes.</summary>

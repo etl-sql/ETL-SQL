@@ -16,6 +16,9 @@ internal static class PlotPlanTerminalRenderer
     private static readonly string[] PointGlyphs = ["●", "◆", "▲", "■", "✚", "○", "◇"];
     private static readonly char[] Fractions = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
 
+    private static bool UsesTransposedPhysicalAxes(PlotPlan plan) => plan.Coordinate?.Kind == CoordinateKind.TransposedCartesian &&
+        (plan.Coordinate.AspectRatio is not null || plan.Layers.Any(layer => !layer.Connections.IsDefault));
+
     public static IRenderable Render(PlotPlan plan, int width = 80)
     {
         plan.Validate();
@@ -23,8 +26,13 @@ internal static class PlotPlanTerminalRenderer
         var facets = ResolveFacets(plan);
         var content = new List<IRenderable> { new Markup($"[grey]{Markup.Escape(plan.AccessibleSummary)}[/]") };
         foreach (var layer in plan.Layers.Where(layer => !layer.Connections.IsDefault))
+        {
             foreach (var connection in layer.Connections)
-                content.Add(new Text(ConnectedMarkResolver.Describe(connection)));
+                content.Add(new Text(ConnectedMarkResolver.Describe(connection, plan, layer)));
+            if (plan.Coordinate?.Kind == CoordinateKind.TransposedCartesian || layer.ConnectionDecorations)
+                foreach (var datum in layer.Data)
+                    content.Add(new Text($"Layer {layer.Id}, row {datum.RowIndex + 1}: {ConnectedMarkResolver.DatumDescription(datum, layer)}{(layer.ConnectionDecorations ? "; " + ConnectedMarkResolver.DecorationDescription(datum) : "")}"));
+        }
         if (facets.Count == 1)
         {
             content.Add(RenderFacet(plan, facets[0].Rows, width));
@@ -79,7 +87,7 @@ internal static class PlotPlanTerminalRenderer
     {
         if (plan.Layers.Length == 1 && plan.Layers[0].AreaRibbon)
             return new Rows(plan.Layers[0].Data.Where(datum => rows.Contains(datum.RowIndex)).Select(datum =>
-                (IRenderable)new Text($"Row {datum.RowIndex + 1}: {ConnectedMarkResolver.RibbonDescription(datum)}")));
+                (IRenderable)new Text($"Row {datum.RowIndex + 1}: {ConnectedMarkResolver.RibbonDescription(datum, ResolvedMarkConnection.FillsNullsWithZero(plan.Layers[0]), plan.Layers[0].AreaConfidence)}")));
         var content = new List<IRenderable>();
         var activeLayers = plan.Layers.Where(item => item.Mark != MarkKind.Arc)
             .Select(layer =>
@@ -103,7 +111,7 @@ internal static class PlotPlanTerminalRenderer
             .ToList();
 
         var referenceRules = activeLayers.Where(item => item.Layer.Mark == MarkKind.Rule &&
-            plan.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null }).ToList();
+            UsesTransposedPhysicalAxes(plan)).ToList();
         activeLayers = activeLayers.Except(referenceRules).ToList();
         foreach (var item in referenceRules)
             foreach (var datum in PlotPlanResolver.ReferenceRuleData(item.Data))
@@ -117,13 +125,23 @@ internal static class PlotPlanTerminalRenderer
                 content.Add(new Text($"{label}: {description}"));
             }
 
+        var areaLayers = activeLayers.Where(item => item.Layer.Mark == MarkKind.Area &&
+            (item.Layer.AreaRibbon || item.Layer.Connections.IsDefault && plan.Coordinate?.Kind == CoordinateKind.TransposedCartesian && (plan.CartesianAxes is not null ||
+                item.Data.Any(datum => datum.Channels.Any(value => value.Channel == FieldChannel.YStart))))).ToList();
+        activeLayers = activeLayers.Except(areaLayers).ToList();
+        foreach (var item in areaLayers)
+            foreach (var datum in item.Data)
+                content.Add(new Text($"{item.Label}, row {datum.RowIndex + 1}: {(item.Layer.AreaConfidence || item.Layer.ConnectionInterpolation is not null || ResolvedMarkConnection.FillsNullsWithZero(item.Layer)
+                    ? ConnectedMarkResolver.RibbonDescription(datum, true, item.Layer.AreaConfidence)
+                    : PlotPlanResolver.CartesianAreaDescription(datum, item.Layer.AreaRibbon || datum.Channels.Any(value => value.Channel == FieldChannel.YStart)))}"));
+
         var bandLayers = activeLayers.Where(item =>
             item.Layer.Style.Any(token => token.Name.Equals("overlayType", StringComparison.OrdinalIgnoreCase) &&
                 token.Value.Equals("ReferenceBand", StringComparison.OrdinalIgnoreCase))).ToList();
         activeLayers = activeLayers.Except(bandLayers).ToList();
 
         var textLayers = activeLayers.Where(item => item.Layer.Mark == MarkKind.Text &&
-            plan.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null }).ToList();
+            UsesTransposedPhysicalAxes(plan)).ToList();
         activeLayers = activeLayers.Except(textLayers).ToList();
         foreach (var item in textLayers)
         {
@@ -142,12 +160,22 @@ internal static class PlotPlanTerminalRenderer
             content.Add(table);
         }
 
+        var connectedLayers = activeLayers.Where(item => !item.Layer.Connections.IsDefault && plan.CartesianAxes is not null).ToList();
+        activeLayers = activeLayers.Except(connectedLayers).ToList();
+        foreach (var item in connectedLayers)
+            content.Add(RenderConnectedLine(item.Layer, rows, item.Label, item.Color, width, plan.Coordinate?.Kind == CoordinateKind.TransposedCartesian));
+
+        var interpolatedLayers = activeLayers.Where(item => item.Layer.PathInterpolation is not null).ToList();
+        activeLayers = activeLayers.Except(interpolatedLayers).ToList();
+        foreach (var item in interpolatedLayers)
+            content.Add(RenderOrdinaryInterpolatedLine(plan, item.Layer, item.Data, rows, item.Label, item.Color, width));
+
         var rectLayers = activeLayers.Where(item => item.Layer.Mark == MarkKind.Rect).ToList();
         var continuousLayers = activeLayers.Where(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area or MarkKind.Point).ToList();
         var ruleLayers = activeLayers.Where(item => item.Layer.Mark is MarkKind.Rule or MarkKind.Tick).ToList();
 
         if (rectLayers.Count > 0 && continuousLayers.Any(item => item.Layer.Mark is MarkKind.Line or MarkKind.Area) &&
-            plan.Coordinate is not { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
+            !UsesTransposedPhysicalAxes(plan))
         {
             content.Add(RenderCompositeBarLine(plan, rectLayers, continuousLayers, ruleLayers, width));
         }
@@ -301,7 +329,7 @@ internal static class PlotPlanTerminalRenderer
         var errorDetails = layers.SelectMany(l => l.Data.Select(d =>
         {
             var detail = ConfidenceIntervalDetail(d) ?? ErrorBarDetail(d);
-            if (plan.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
+            if (UsesTransposedPhysicalAxes(plan) &&
                 PlotPlanResolver.OffsetDetail(d) is { } groups)
                 detail = detail is null ? groups : $"{detail}; {groups}";
             return detail != null ? $"{Label(d)}: {detail}" : null;
@@ -438,7 +466,7 @@ internal static class PlotPlanTerminalRenderer
 
     private static IRenderable RenderRectangles(PlotPlan plan, ResolvedMarkLayer layer, IReadOnlyList<ResolvedDatum> data, string series, string color, int width)
     {
-        if (plan.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
+        if (UsesTransposedPhysicalAxes(plan))
         {
             var rangeRows = new List<IRenderable> { new Markup($"[bold]{Markup.Escape(series)}[/] [grey](rectangle ranges)[/]") };
             foreach (var datum in data)
@@ -641,6 +669,160 @@ internal static class PlotPlanTerminalRenderer
         return new Rows(
             table,
             new Markup($"[grey]Scale: {minVal.ToString(CultureInfo.InvariantCulture)} (░ low) … {maxVal.ToString(CultureInfo.InvariantCulture)} (█ high)[/]"));
+    }
+
+    private static IRenderable RenderOrdinaryInterpolatedLine(PlotPlan plan, ResolvedMarkLayer layer,
+        IReadOnlyList<ResolvedDatum> data, IReadOnlySet<int> rows, string label, string color, int width)
+    {
+        var facet = plan.Facets.IsDefaultOrEmpty ? null : plan.Facets.FirstOrDefault(panel => panel.RowIndices.Any(rows.Contains));
+        var scales = facet?.Scales ?? plan.Scales;
+        var axes = plan.CartesianAxes!;
+        var xScale = scales.First(scale => scale.Id.Equals(axes.XScaleId, StringComparison.OrdinalIgnoreCase));
+        var yScale = scales.First(scale => scale.Id.Equals(axes.YScaleId, StringComparison.OrdinalIgnoreCase));
+        var frame = facet?.CartesianViewport ?? facet?.Bounds ?? plan.CartesianViewport ?? plan.Bounds;
+        var area = TransposedAspectLayout.Resolve(frame, plan.Style, plan.Layers, plan.Legend.Length);
+        var canvas = new BrailleCanvas(Math.Clamp(width - 16, 16, 48), 7);
+        var paint = SafeAnsiColor(color);
+        var run = new List<(decimal X, decimal Y)>();
+        decimal Ratio(decimal value, ResolvedScale scale)
+        {
+            var low = PlotPlanResolver.Number(scale.Domain[0])!.Value;
+            var high = PlotPlanResolver.Number(scale.Domain[^1])!.Value;
+            if (high == low) high = low + 1m;
+            var ratio = scale.Kind == ScaleKind.Logarithmic
+                ? value <= 0m ? 0m : (decimal)((Math.Log10((double)value) - Math.Log10((double)low)) /
+                    (Math.Log10((double)high) - Math.Log10((double)low)))
+                : (value - low) / (high - low);
+            return scale.Reverse ? 1m - ratio : ratio;
+        }
+        void Line((decimal X, decimal Y) start, (decimal X, decimal Y) end) =>
+            canvas.Line((int)start.X, (int)start.Y, (int)end.X, (int)end.Y, paint);
+        void Flush()
+        {
+            for (var i = 1; i < run.Count; i++)
+            {
+                var start = run[i - 1];
+                var end = run[i];
+                if (layer.PathInterpolation == ConnectedInterpolationKind.Smooth && run.Count > 2)
+                {
+                    var controls = CartesianInterpolation.CubicControls(i > 1 ? run[i - 2] : start, start, end,
+                        i + 1 < run.Count ? run[i + 1] : end);
+                    var previous = start;
+                    for (var sample = 1; sample <= canvas.DotWidth * 2; sample++)
+                    {
+                        var point = CartesianInterpolation.CubicPoint(start, controls.First, controls.Second, end,
+                            sample / (decimal)(canvas.DotWidth * 2));
+                        Line(previous, point);
+                        previous = point;
+                    }
+                }
+                else if (layer.PathInterpolation is ConnectedInterpolationKind.StepBefore or ConnectedInterpolationKind.StepAfter)
+                {
+                    var corner = CartesianInterpolation.StepCorner(start, end, layer.PathInterpolation == ConnectedInterpolationKind.StepAfter);
+                    Line(start, corner);
+                    Line(corner, end);
+                }
+                else Line(start, end);
+            }
+            run.Clear();
+        }
+        foreach (var datum in data)
+        {
+            if (datum.IsGap || ResolvedMarkConnection.Coordinates(datum, false) is not { } point) { Flush(); continue; }
+            var position = (X: (Ratio(point.Y!.Value, yScale) + datum.DisplayOffsetX / area.Width) * (canvas.DotWidth - 1),
+                Y: (1m - Ratio(point.X, xScale) + datum.DisplayOffsetY / area.Height) * (canvas.DotHeight - 1));
+            run.Add(position);
+            canvas.Set((int)position.X, (int)position.Y, paint);
+        }
+        Flush();
+        return new Rows(new IRenderable[]
+        {
+            new Text($"{label}: {ResolvedConnectionGeometry.Name(layer.PathInterpolation!.Value)}; X vertical, Y horizontal; display placement retained"),
+            canvas.ToRenderable(),
+            new Text($"X scale: {PlotPlanResolver.Display(xScale.Domain[0])} to {PlotPlanResolver.Display(xScale.Domain[^1])}; {xScale.Kind}; reversed {xScale.Reverse}. " +
+                $"Y scale: {PlotPlanResolver.Display(yScale.Domain[0])} to {PlotPlanResolver.Display(yScale.Domain[^1])}; {yScale.Kind}; reversed {yScale.Reverse}.")
+        }.Concat(data.Select(datum => (IRenderable)new Text($"Row {datum.RowIndex + 1}: {ConnectedMarkResolver.DatumDescription(datum, layer)}"))));
+    }
+
+    private static IRenderable RenderConnectedLine(ResolvedMarkLayer layer, IReadOnlySet<int> rows, string series, string color, int width, bool transposed = false)
+    {
+        var selected = layer.Data.Select((datum, index) => (Datum: datum, Index: index))
+            .Where(item => rows.Contains(item.Datum.RowIndex) && ResolvedMarkConnection.HasCompleteCoordinates(item.Datum, false)).ToArray();
+        if (selected.Length == 0) return new Text($"{series}: all connection endpoints are missing");
+        var values = selected.Select(item => transposed ? ResolvedMarkConnection.Coordinates(item.Datum, false)!.X : ResolvedMarkConnection.Coordinates(item.Datum, false)!.Y!.Value).ToArray();
+        var area = layer.Mark == MarkKind.Area;
+        var minimum = area && !transposed ? Math.Min(0m, values.Min()) : values.Min();
+        var maximum = area && !transposed ? Math.Max(0m, values.Max()) : values.Max();
+        if (minimum == maximum) maximum = minimum + 1m;
+        var canvas = new BrailleCanvas(Math.Clamp(width - 16, 16, 48), 7);
+        var xValues = selected.Select(item => transposed ? ResolvedMarkConnection.Coordinates(item.Datum, false)!.Y!.Value : ResolvedMarkConnection.Coordinates(item.Datum, false)!.X).ToArray();
+        var minimumX = area && transposed ? Math.Min(0m, xValues.Min()) : xValues.Min();
+        var maximumX = area && transposed ? Math.Max(0m, xValues.Max()) : xValues.Max();
+        if (minimumX == maximumX) maximumX = minimumX + 1m;
+        var positions = selected.Select((item, index) => (item.Index, X: (int)((xValues[index] - minimumX) / (maximumX - minimumX) * (canvas.DotWidth - 1)),
+            Y: canvas.DotHeight - 1 - (int)((values[index] - minimum) / (maximum - minimum) * (canvas.DotHeight - 1))))
+            .ToDictionary(item => item.Index);
+        var baseline = transposed ? (int)((0m - minimumX) / (maximumX - minimumX) * (canvas.DotWidth - 1))
+            : canvas.DotHeight - 1 - (int)((0m - minimum) / (maximum - minimum) * (canvas.DotHeight - 1));
+        foreach (var item in selected)
+        {
+            var opacity = item.Datum.Encodings.FirstOrDefault(value => value.Channel == ConditionalEncodingChannel.Opacity)?.Value;
+            if (opacity is not null && PlotPlanResolver.Number(opacity) == 0m) continue;
+            var paint = item.Datum.Encodings.FirstOrDefault(value => value.Channel == ConditionalEncodingChannel.Color)?.Value.Text ?? color;
+            var point = positions[item.Index];
+            canvas.Set(point.X, point.Y, SafeAnsiColor(paint));
+        }
+        foreach (var connection in layer.Connections)
+        {
+            if (!positions.TryGetValue(connection.SourceIndex, out var source) || !positions.TryGetValue(connection.DestinationIndex, out var destination)) continue;
+            var opacity = connection.Encodings.FirstOrDefault(value => value.Channel == ConditionalEncodingChannel.Opacity)?.Value;
+            if (opacity is not null && PlotPlanResolver.Number(opacity) == 0m) continue;
+            var paint = SafeAnsiColor(connection.Encodings.FirstOrDefault(value => value.Channel == ConditionalEncodingChannel.Color)?.Value.Text ?? color);
+            if (connection.Geometry is { } geometry)
+            {
+                var boundary = geometry.Cubic ? Enumerable.Range(0, canvas.DotWidth * 2 + 1).Select(index =>
+                {
+                    var t = index / (decimal)(canvas.DotWidth * 2);
+                    var points = geometry.Upper;
+                    var point = CartesianInterpolation.CubicPoint((points[0].X, points[0].Y), (points[1].X, points[1].Y),
+                        (points[2].X, points[2].Y), (points[3].X, points[3].Y), t);
+                    return new ResolvedConnectionPoint(point.X, point.Y);
+                }).ToArray() : geometry.Upper.ToArray();
+                var mapped = boundary.Select(point => (X: (int)(((transposed ? point.Y : point.X) - minimumX) / (maximumX - minimumX) * (canvas.DotWidth - 1)),
+                    Y: canvas.DotHeight - 1 - (int)(((transposed ? point.X : point.Y) - minimum) / (maximum - minimum) * (canvas.DotHeight - 1)))).ToArray();
+                for (var index = 1; index < mapped.Length; index++)
+                {
+                    var first = mapped[index - 1];
+                    var last = mapped[index];
+                    if (area && transposed)
+                        for (var y = Math.Max(0, Math.Min(first.Y, last.Y)); y <= Math.Min(canvas.DotHeight - 1, Math.Max(first.Y, last.Y)); y++)
+                            canvas.Line(first.Y == last.Y ? first.X : first.X + (last.X - first.X) * (y - first.Y) / (last.Y - first.Y), y, baseline, y, paint);
+                    else if (area)
+                        for (var x = Math.Max(0, Math.Min(first.X, last.X)); x <= Math.Min(canvas.DotWidth - 1, Math.Max(first.X, last.X)); x++)
+                            canvas.Line(x, first.X == last.X ? first.Y : first.Y + (last.Y - first.Y) * (x - first.X) / (last.X - first.X), x, baseline, paint);
+                    else canvas.Line(first.X, first.Y, last.X, last.Y, paint);
+                }
+                continue;
+            }
+            if (area && transposed)
+                for (var y = Math.Min(source.Y, destination.Y); y <= Math.Max(source.Y, destination.Y); y++)
+                {
+                    var x = source.Y == destination.Y ? source.X : source.X + (destination.X - source.X) * (y - source.Y) / (destination.Y - source.Y);
+                    canvas.Line(x, y, baseline, y, paint);
+                }
+            else if (area)
+                for (var x = Math.Min(source.X, destination.X); x <= Math.Max(source.X, destination.X); x++)
+                {
+                    var y = source.X == destination.X ? source.Y : source.Y + (destination.Y - source.Y) * (x - source.X) / (destination.X - source.X);
+                    canvas.Line(x, y, x, baseline, paint);
+                }
+            else canvas.Line(source.X, source.Y, destination.X, destination.Y, paint);
+        }
+        var content = new List<IRenderable> { new Text($"{series} ({(area ? "Braille area" : "Braille line")}; source-owned connections{(transposed ? "; X vertical, Y horizontal" : "")})"), canvas.ToRenderableWithAxis(minimum, maximum) };
+        foreach (var item in selected)
+            if (ConnectedMarkResolver.ZeroDetail(item.Datum) is { } detail)
+                content.Add(new Text($"{series}, row {item.Datum.RowIndex + 1}: {detail}"));
+        return new Rows(content);
     }
 
     private static IRenderable RenderLine(IReadOnlyList<ResolvedDatum> data, string series, string color, int width, bool area)

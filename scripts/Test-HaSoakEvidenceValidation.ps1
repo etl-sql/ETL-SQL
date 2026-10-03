@@ -81,6 +81,9 @@ try {
     $failed = ($LASTEXITCODE -ne 0) -or ($failedSummary.status -eq 'Failed')
     Assert-True $failed 'Expected validator to fail when a required artifact is missing.'
 
+    # The nonzero exit belongs to the expected negative case, not to this successful self-test.
+    $global:LASTEXITCODE = 0
+
     Write-Host 'HA soak evidence validation self-test passed.'
 }
 finally {

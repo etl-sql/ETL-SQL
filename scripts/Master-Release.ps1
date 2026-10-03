@@ -98,10 +98,12 @@ if ($LASTEXITCODE -ne 0) {
 
 # --- STEP 4: Build Windows MSI Installer ---
 Write-Host "`n[5/7] Building Windows MSI Installer..." -ForegroundColor Yellow
-if (Get-Command candle.exe -ErrorAction SilentlyContinue) {
+if ($IsWindows) {
+    # build-msi also resolves WiX installations under Program Files. Missing WiX is a failure.
     & (Join-Path $PSScriptRoot "build-msi.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "MSI build failed with exit code $LASTEXITCODE." }
 } else {
-    Write-Warning "  Skipping MSI build (WiX Toolset not found in PATH)."
+    Write-Host "  Windows MSI requires the Windows packaging lane." -ForegroundColor Yellow
 }
 
 # --- STEP 5: Build Linux & Mac Packages ---

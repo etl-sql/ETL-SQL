@@ -560,27 +560,35 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
     /// </summary>
     private static async Task WaitForBranchesAsync(IPage page, string ifLabel, string[] inIf, string[] inElse)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(15);
-        while (true)
+        try
         {
-            var script = await ScriptAsync(page);
-            try
-            {
-                AssertBranches(script, ifLabel, inIf, inElse);
-                return;
-            }
-            catch (Exception) when (DateTime.UtcNow < deadline)
-            {
-                await Task.Delay(250);
-            }
-            catch (Exception exception)
-            {
-                var toasts = await page.Locator(".etlsql-feedback-toast").AllInnerTextsAsync();
-                throw new Xunit.Sdk.XunitException(
-                    $"The branches of '{ifLabel}' never held what was dropped on them. "
-                    + $"Feedback said: {(toasts.Count == 0 ? "(nothing)" : string.Join(" | ", toasts))}"
-                    + $"{Environment.NewLine}{exception.Message}", exception);
-            }
+            await ETL_SQL.TestSupport.LoadAwareWait.UntilAsync<Exception?>(
+                $"Branches of '{ifLabel}' contain the dropped tasks",
+                async cancellationToken =>
+                {
+                    var script = await ScriptAsync(page).WaitAsync(cancellationToken);
+                    try
+                    {
+                        AssertBranches(script, ifLabel, inIf, inElse);
+                        return null;
+                    }
+                    catch (Exception exception)
+                    {
+                        return exception;
+                    }
+                },
+                exception => exception is null,
+                TimeSpan.FromSeconds(15),
+                pollInterval: TimeSpan.FromMilliseconds(250),
+                describe: exception => exception?.Message ?? "Branches match");
+        }
+        catch (TimeoutException exception)
+        {
+            var toasts = await page.Locator(".etlsql-feedback-toast").AllInnerTextsAsync();
+            throw new Xunit.Sdk.XunitException(
+                $"The branches of '{ifLabel}' never held what was dropped on them. "
+                + $"Feedback said: {(toasts.Count == 0 ? "(nothing)" : string.Join(" | ", toasts))}"
+                + $"{Environment.NewLine}{exception.Message}", exception);
         }
     }
 

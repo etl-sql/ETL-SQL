@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -217,22 +218,9 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
     protected virtual void ConfigureHostedServices(IServiceCollection services)
         => services.RemoveAll<IHostedService>();
 
-    protected override void Dispose(bool disposing)
-    {
-        base.Dispose(disposing);
-        if (disposing) DeleteTempDir();
-    }
-
     /// <summary>
-    /// Deletes the temp directory on the asynchronous path too.
-    ///
-    /// <para><c>WebApplicationFactory.DisposeAsync</c> tears down the host and marks the factory
-    /// disposed without routing through <see cref="Dispose(bool)"/>. Every fixture that disposes a
-    /// factory with <c>await using</c> or through <c>IAsyncLifetime</c> — which is all of the browser
-    /// lane and most of the Portal lane — therefore left its directory behind. One stray directory
-    /// is invisible, which is the problem: the machine this was found on had 74,007 of them holding
-    /// 11 GB, and a temp directory that size is what eventually made unrelated hosts fail to start
-    /// with an error that names neither temp files nor this factory.</para>
+    /// Remove factory-owned files after the complete host shutdown. The base synchronous Dispose
+    /// calls this virtual method too; its reentrant Dispose(bool) must not delete files early.
     /// </summary>
     public override async ValueTask DisposeAsync()
     {
@@ -243,7 +231,26 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
     private void DeleteTempDir()
     {
         if (!Directory.Exists(TempDir)) return;
-        try { Directory.Delete(TempDir, recursive: true); } catch { /* best effort */ }
+
+        // Disposing a connection returns its native handle to the pool. Close only this factory's
+        // pools after host shutdown so Windows can remove the files without disturbing other hosts.
+        ClearFactoryPool($"Data Source={Path.Combine(TempDir, "portal.db")}");
+        ClearFactoryPool($"Data Source={Path.Combine(TempDir, "etlsql.db")}");
+        ClearFactoryPool(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(TempDir, "security", "security-events.db"),
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Pooling = true
+        }.ToString());
+
+        // A remaining handle is a fixture failure, not successful cleanup.
+        Directory.Delete(TempDir, recursive: true);
+    }
+
+    private static void ClearFactoryPool(string connectionString)
+    {
+        using var connection = new SqliteConnection(connectionString);
+        SqliteConnection.ClearPool(connection);
     }
 }
 

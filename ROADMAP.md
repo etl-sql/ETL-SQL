@@ -29,7 +29,8 @@ Before adding or revising an entry:
 7. **Make claims testable.** Exact latency, size, parity, coverage, or visual-count claims require a
    defined fixture and verification method. Otherwise describe them as targets to measure.
 8. **Preserve sources of truth.** Detailed design belongs in an ADR or architecture document;
-   executable tasks belong in `TODO.md`; shipped outcomes belong in `CHANGELOG.md` and release notes.
+   active executable tasks belong in `TODO.md`; deferred requirements stay with their roadmap entry
+   until picked up; shipped outcomes belong in `CHANGELOG.md` and release notes.
 9. **Retire completed work.** When the promised outcome ships and is verified, remove the roadmap
    entry or rewrite it to describe only the genuinely remaining increment.
 10. **Respect product boundaries.** Roadmap work must preserve script-first authoring, transparent
@@ -59,6 +60,27 @@ Each entry states its status, horizon, authoritative design, problem and intende
 horizon is appropriate, boundaries, dependencies, vertical delivery slices, and acceptance evidence.
 Keep entries concise and link to detailed designs rather than copying them here.
 
+### Sprint planning for backlog tables
+
+Select task IDs, not an entire family. Move only selected tasks into
+`TODO.md`, keeping their dependencies and finish lines. **S** targets 1–2 focused developer-days;
+**M** targets 3–5; **D** is a 1–2 day decision or measurement task whose output is a bounded proposal
+and an implementation estimate. These are initial sizing targets, not measured delivery promises.
+Re-estimate against the fixture and current source before committing a sprint. Split anything that
+still exceeds five engineering days. Environment provisioning, soak duration, external access and
+approval waits must be recorded separately from engineering effort. No task closes merely because
+its test exists; the stated behavior must pass. Any defect found outside its scope becomes an
+explicit task with its own estimate.
+
+Tables below are open backlog tasks. Dependencies name prerequisite IDs; an em dash means only the
+entry's existing foundations are required. Completed neighboring capabilities remain in the
+implemented baseline and are not work to redo.
+
+A task is ready for a sprint only when its fixture, prerequisite IDs, required environment/access
+and revised estimate are recorded. Decision tasks may finish by retaining an unsupported outcome;
+that does not schedule their proposed implementation.
+
+
 ---
 
 ## Foundation and Next Horizon
@@ -79,7 +101,7 @@ and rendered as something quietly wrong.
 **Problem and Intended Outcome:**
 The browser sources are small enough to reason about, linted and type-checked in CI, the client
 contract is generated from the C# DTOs rather than restated by hand, the test lanes report what
-actually failed, and Studio has closed the gaps that keep it an Alpha.
+actually failed. Remaining Studio Alpha work is backlogged for the next sprint.
 
 **Why now:** v0.19.0 put a type gate in place and it stands at zero findings. That holds the line
 against new defects but does nothing about the two conditions that produced the old ones: files too
@@ -146,20 +168,7 @@ requires a bundler.
    admin account and one sign-in gate across every test class, plus the mutable global connector
    registry. Auditing the lane for the wait-shape above is worth more than fixing them as they
    surface.
-4. **Close the Studio Alpha gaps.** Studio ships in v0.19.0 as an Alpha that does not replace
-   `ReportBuilder` or `WorkstationEditor`; this slice is what earns it that replacement. Three of the
-   five hosts are uncertified. Every certified journey is an author's and none is a reader's.
-   Row-level security under a second identity is unproven, and the schedule handoff stops at the
-   statements it writes. The authoring limits are real and specific: an `IF` written on the canvas
-   cannot be given an `ELSE` there, the task editor can only rename most kinds rather than edit their
-   fields, and `PARALLEL` has no swimlanes. Rebuilding the pipeline canvas as a teaching surface is
-   the largest single piece. Four more came out of driving Studio by hand in v0.19.0 and are open
-   for the same reason — the properties inspector offers no aggregate selector, so the aggregation a
-   measure uses can only be changed in the script; the dashboard workflow cannot be advanced past
-   cross-filter setup, so an author who wants none must configure some; paginated headers and footers
-   accept text only, with no field, page number or image; and a selection inside the current line is
-   invisible, because the active-line highlight paints over the selection background.
-5. **Move the sources to `.ts`.** A real module graph and a build step, over files that are by then
+4. **Move the sources to `.ts`.** A real module graph and a build step, over files that are by then
    linted, split, and type-checked. This is the step the delivery-model boundary applies to, and it
    is scheduled last so the sync, the drift gate and the sandbox are redesigned once, against modules
    that have stopped moving.
@@ -176,8 +185,7 @@ filters.
   ui-sandbox.
 - A failing `PortalBrowserFixture` names the port, the process holding it, and the inner exception.
 - Every `scripts/test-*.mjs` check passes, and they run in the pre-push gate.
-- The Studio journeys certify on all five hosts, including a reader's journey and a second identity.
-- After slice 5, the five-host sync, the drift gate and the ui-sandbox all still hold, proven by the
+- After the TypeScript migration, asset sync, the drift gate and the ui-sandbox all still hold, proven by the
   same checks that guard them today.
 
 
@@ -187,32 +195,200 @@ filters.
 
 **Status:** Incremental
 **Horizon:** Later
-**Authoritative design:** [Native Grammar-of-Graphics Contract](docs/architecture/decisions/grammar-of-graphics-spec-ir.md) and [Native Advanced Chart Authoring](docs/architecture/decisions/native-advanced-chart-authoring.md)
+**Scheduling:** Backlog. This sprint's GoG expansion is finished; no further combination is scheduled.
+**Authoritative design:** [Native Grammar-of-Graphics Contract](docs/architecture/decisions/grammar-of-graphics-spec-ir.md),
+[Native Advanced Chart Authoring](docs/architecture/decisions/native-advanced-chart-authoring.md),
+[Connected mark conditions](docs/architecture/decisions/connected-mark-conditions.md), and
+[Reporting semantic contracts](docs/architecture/reporting-semantic-contracts.md).
 
-The native `ChartSpec` → `PlotPlan` spine is shipped and remains closed as a foundation initiative.
-The next increment should address semantic combinations that deliberately fail validation today:
-renderer-neutral polar/radial stacking, physical aspect semantics beyond continuous Cartesian and transposed point/text plots with single-axis reference rules,
-and safe row-level conditions for connected `LINE` and `AREA` marks.
+**Implemented baseline:** The renderer-neutral spine, bounded polar ARC radial stacking,
+continuous quantitative transposed POINT/TEXT/LINE/AREA/RULE/RECT aspect forms, their supported
+placement/interpolation and intervals, and source-owned Cartesian/transposed LINE/AREA/ribbon
+conditions are implemented. Connected forms include GAP/CONNECT/ZERO, row decorations,
+interpolation, categorical series and facets. Exact supported combinations remain owned by the
+validator, capability matrix and focused references; implementation history remains in
+`CHANGELOG.md` and the linked contracts.
 
-**Why later:** These are useful expressiveness gains, but no current catalog visual or renderer
-retirement depends on them. Demand and representative reports should choose their order.
+**Problem and intended outcome:** Add a specific chart combination when a representative report
+needs it. Authors should receive consistent geometry, ownership and accessible meaning across
+backends, with explicit diagnostics for combinations outside the chosen scope.
 
-**Boundaries:** Do not add renderer-specific syntax, hidden data transformations, arbitrary SVG
-paths, or a second chart schema. Focused native layouts remain valid where a force, flow, hierarchy,
-map, or other specialized algorithm does not fit the shared plan. Do not migrate focused modules
-through `PlotPlan` only for architectural uniformity.
+**Why later:** No current catalog visual or renderer retirement depends on these extensions.
+The former two-checkbox task had no bounded completion point. Each increment below can close
+independently; finishing it creates no obligation to implement adjacent combinations.
 
-**Dependencies:** The versioned GoG contract, native SVG renderer, semantic fallback contract,
-capability matrix, lossless Report Builder editing, and existing cross-backend golden lane.
+**Boundaries:** Preserve raw values, source-owned conditions, domains and existing baseline,
+ribbon and confidence semantics. Keep transformations in the script. Do not add renderer-specific
+syntax, arbitrary paths, a second chart schema or new map providers/projections. Existing focused
+native layouts remain valid. Confidence conditions and arbitrary AREA baselines are not implicitly
+added to any task below.
 
-**Delivery slices:** Add one complete semantic combination at a time—grammar, immutable contracts,
-resolution, validation, authoring help, and every applicable backend—then update the capability
-matrix before selecting the next combination.
+**Dependencies:** Versioned ChartSpec/PlotPlan contracts, shared scale and axis ownership, native
+SVG/static export, semantic terminal/accessibility fallback, lossless authoring, capability matrix
+and the existing deterministic cross-backend tests.
 
-**Acceptance evidence:** Parser/formatter/LSP/lineage and Report Builder round trips; versioned
-`ChartSpec`/`PlotPlan` compatibility; deterministic plan and SVG goldens; browser, static export,
-terminal, and accessibility conformance; invalid-combination diagnostics; and unchanged payload,
-render-time, and bundle budgets.
+**How a chunk is selected:** Move only one named increment into `TODO.md`. Name its mark, coordinate
+orientation, scale kinds, placement unit, null policy and interpolation; include one representative
+report and explicit exclusions. An implementation increment includes resolution, validation and
+all applicable backends together. A decision increment finishes with an accepted contract and a
+bounded implementation proposal, or an explicit decision to retain rejection. It does not enable syntax.
+Facets, extra series, additional policies or orientations are separate follow-ups unless named in
+that increment. Do not open a replacement umbrella checkbox for "all remaining combinations".
+
+#### Connected placement — one mark and one unit per increment
+
+**Status:** Accepted
+**Horizon:** Later
+**Outcome:** Displace a conditioned path and its row decorations together without changing raw
+coordinates or source ownership. Start with one unstacked Cartesian layer, quantitative linear
+primary X/Y, GAP and LINEAR interpolation. AREA uses either the explicit zero baseline or the
+existing ribbon form. Retain the corresponding current decoration semantics.
+**Dependencies:** Existing connected geometry and ordinary placement arithmetic; BAND and JITTER
+also need fitted plot dimensions, and DATA needs a scale-mapped anchor contract.
+
+- [ ] **LINE EM nudge.** One display displacement for the path and its decorations.
+- [ ] **Zero-baseline AREA EM nudge.** Translate upper boundary, baseline and decorations together.
+- [ ] **Ribbon AREA EM nudge.** Translate both authored bounds and decorations together.
+- [ ] **LINE BAND nudge.** Use fitted plot dimensions; prove resize behavior.
+- [ ] **Zero-baseline AREA BAND nudge.** Translate the complete strip using fitted dimensions.
+- [ ] **Ribbon AREA BAND nudge.** Keep the displayed interval span intact through resize.
+- [ ] **LINE DATA nudge.** Map each vertex's target through its original primary scales.
+- [ ] **Zero-baseline AREA DATA nudge.** Define the scalar Y anchor and move its baseline with it.
+- [ ] **Ribbon AREA DATA nudge.** Use authored Y_START as the anchor for both bounds.
+- [ ] **LINE deterministic JITTER.** Keep stable-key displacement consistent across adjacent connections.
+- [ ] **Zero-baseline AREA deterministic JITTER.** Share each cross-section displacement with its baseline.
+- [ ] **Ribbon AREA deterministic JITTER.** Share each cross-section displacement between both bounds.
+
+**Completion evidence:** Common implementation evidence below, plus complete-path/strip and decoration
+alignment, raw-value/domain invariance, missing-coordinate behavior, resize and invalid targets.
+JITTER additionally proves seed/key stability and that presentation changes do not change offsets.
+Transposition, CONNECT/ZERO, non-linear interpolation, series and facets are excluded from these first
+increments. Add a separately bounded follow-up for one of those combinations only when selected.
+
+#### Stacking — separate connected and physical-aspect increments
+
+**Status:** Accepted
+**Horizon:** Later
+**Outcome:** Preserve stacked boundaries and source-owned styles without changing stack totals.
+**Dependencies:** Existing ordinary stack resolution; agree signed/normalized domain and baseline
+rules before enabling a new form. Each first increment uses nonnegative values, linear primary axes,
+LINEAR interpolation, GAP, IDENTITY and no facets or secondary axes.
+
+- [ ] **Conditioned Cartesian AREA ZERO stack.** One scalar AREA definition partitioned by categorical
+  series; resolve outgoing strips after stacking. No ribbons, placement or transposition.
+- [ ] **Conditioned Cartesian AREA NORMALIZE stack.** Extend the previous form with explicit zero-total
+  behavior and normalized bounds. No additional geometry forms.
+- [ ] **Ordinary transposed fixed-aspect AREA ZERO stack.** One scalar AREA definition with categorical
+  series and continuous quantitative X/Y; preserve physical units. No conditions or placement.
+- [ ] **Ordinary transposed fixed-aspect AREA NORMALIZE stack.** Extend the preceding form and prove
+  normalized scale/aspect behavior. No additional marks.
+
+**Completion evidence:** Common evidence plus exact cumulative boundaries, shared cross-section edges,
+series order, zero-total cases and unchanged totals under conditions. NORMALIZE depends on its ZERO
+increment. Signed stacks and stacking on other marks require separately accepted tasks.
+
+#### Secondary axes — one geometry form at a time
+
+**Status:** Accepted
+**Horizon:** Later
+**Outcome:** A connected layer uses its declared axis without borrowing another layer's scale.
+**Dependencies:** Explicit resolved axis ownership and current multi-axis scale/layout contracts.
+Start with a Cartesian chart containing one primary ordinary layer and one secondary conditioned
+layer, linear axes, IDENTITY, GAP and LINEAR interpolation; no facets or stacking.
+
+- [ ] **Secondary-axis conditioned LINE.** Resolve connections, symbols and captions through that layer's Y scale.
+- [ ] **Secondary-axis conditioned zero-baseline AREA.** Include zero in its owning Y domain and render its strips.
+- [ ] **Secondary-axis conditioned ribbon AREA.** Keep both bounds on one declared secondary scale.
+- [ ] **Decide physical aspect with secondary axes.** Define which scale owns the physical unit ratio,
+  how the other axis is mapped, and which combinations remain invalid.
+- [ ] **Transposed fixed-aspect POINT with a secondary axis.** After that decision, implement only its
+  accepted minimal point form. No connected marks, stacking, placement or intervals.
+
+**Completion evidence:** Common evidence plus deliberately different primary/secondary domains,
+unused declarations, correct axis labels and resize. The physical-aspect decision is a prerequisite
+for its POINT increment; other transposed marks remain separately selectable.
+
+#### Temporal and categorical aspect — semantics before implementations
+
+**Status:** Exploring
+**Horizon:** Later
+**Outcome:** Authors can predict the physical spacing of discrete or time coordinates.
+**Dependencies:** Explicit time units or category spacing, existing time/band scales and fitted layout.
+
+- [ ] **Decide temporal physical units.** Define elapsed-time units, supported date/time kinds and
+  timezone behavior using one representative report; retain rejection for unspecified combinations.
+- [ ] **Transposed aspect POINT with temporal X and quantitative Y.** After that decision, implement
+  one accepted time kind with IDENTITY, primary axes and no conditions, intervals, series or facets.
+- [ ] **Decide categorical physical spacing.** Define what an aspect ratio means for one ordered
+  category axis, including empty/singleton categories. Declining support is a valid recorded outcome.
+- [ ] **Transposed aspect POINT with categorical X and quantitative Y.** Only if the spacing contract
+  is accepted; one layer with IDENTITY and no conditions, intervals, series or facets.
+- [ ] **Transposed aspect TICK with categorical X and quantitative Y.** Depends on the categorical
+  contract; one ordinary layer with IDENTITY. Other mark/encoding forms remain rejected.
+
+**Completion evidence:** Decision tasks record exact units/spacing and exclusions. Implementation
+chunks use common evidence plus independent pixel-spacing oracles, reversal, resize, empty inputs
+and the chosen temporal or category edge cases. LINE/AREA and mixed-type compositions are separate work.
+
+#### Polar extensions — separate aspect and connected-path decisions
+
+**Status:** Exploring
+**Horizon:** Later
+**Outcome:** Extend the current ARC-only polar slice only where a report establishes a concrete need.
+**Dependencies:** The shipped polar/radial contract; new path marks require accepted angular
+connectivity and wrap semantics before any condition support.
+
+- [ ] **Decide polar physical aspect.** Define angular/radial units and plot fitting for an unstacked
+  ARC example; decide whether a physical aspect option is useful at all.
+- [ ] **One polar ARC physical-aspect form.** After acceptance, implement that exact unstacked ARC
+  example with IDENTITY, no conditions, facets or custom radius bounds.
+- [ ] **Decide a polar connected LINE form.** Specify base LINE geometry, angular wrap, gaps and
+  source ownership. Polar currently accepts ARC only, so this is a new-mark decision first.
+
+**Completion evidence:** Accepted decisions identify one implementable form or retain rejection.
+The ARC increment uses common evidence plus independent angular/radial geometry and resize.
+Polar connected LINE implementation and AREA forms are not commitments of these decisions; add
+one narrowly scoped task only after the underlying geometry is accepted.
+
+#### Geographic extensions — projection meaning before geometry expansion
+
+**Status:** Exploring
+**Horizon:** Later
+**Outcome:** Make one geographic distance/aspect or route-condition behavior explicit and portable.
+**Dependencies:** Existing server-resolved maps/routes and the bounded equirectangular/Mercator
+projection contract. No new projection, provider or remote map-loading behavior.
+
+- [ ] **Decide geographic physical aspect.** Distinguish projected-coordinate units from ground
+  distance and specify behavior near projection limits using one representative map.
+- [ ] **One geographic POINT physical-aspect form.** After acceptance, implement one existing
+  projection, one point layer with IDENTITY and no conditions or facets.
+- [ ] **Source-owned COLOR/OPACITY on one geographic LINE route.** Accept the route connection
+  contract first, including gaps and antimeridian crossings; then implement one existing projection.
+  Exclude placement, decorations, interpolation, AREA and multiple routes from the first increment.
+
+**Completion evidence:** Decisions state the projection, units and exclusions. Implementation uses
+common evidence plus an independent projection oracle and exact route endpoint/ownership checks.
+Geographic AREA remains outside the currently supported mark set and requires its own design decision.
+
+#### Logarithmic connected scales — explicitly decide whether to extend scope
+
+**Status:** Exploring
+**Horizon:** Later
+**Outcome:** Decide whether a real report needs conditioned connections on logarithmic scales.
+**Dependencies:** Positive-domain rules, connected null semantics and interpolation coordinate space.
+
+- [ ] **Decide one logarithmic connected LINE form.** Compare raw versus display-space geometry and
+  establish positive-value/null requirements. If accepted, create a separate task for one Cartesian
+  LINE with linear X, logarithmic Y, GAP, LINEAR and IDENTITY. Do not inherit scalar AREA ZERO,
+  ribbons, transposition or smooth curves as part of that decision.
+
+**Common implementation completion evidence:** Matching Core/ChartSpec validation and explicit
+negative cases for every excluded combination; authoring/designer round trips, lineage and LSP rename;
+guarded wire compatibility; deterministic plan/SVG fixtures with independent geometry assertions;
+browser and static PDF behavior; terminal and accessible fallback preserving semantic values;
+resize/reversal and missing-data cases; and unchanged payload, render-time and bundle budgets.
+Update the capability matrix and focused reference for only the accepted form. Finish that increment
+before selecting the next; preserve all existing fixtures for earlier supported forms.
 
 ### Presentation & Workspaces — Studio Authoring for Mobile Page Layouts
 
@@ -244,110 +420,163 @@ browser journey that authors a mobile layout and checks the rendered page at a n
 
 ### Presentation & Workspaces — ETL-SQL Studio (Report Studio, Script Editor, and Pipeline Studio)
 
-**Status:** Incremental  
-**Horizon:** v0.20.0  
-**Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md)  
+**Status:** Incremental
+**Horizon:** Next
+**Scheduling:** Backlog for the next sprint; remaining Alpha work is outside the current sprint.
+**Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md) and
+[Portal ETL documents](docs/architecture/decisions/portal-etl-documents.md).
 
-**Ships in v0.19.0 as an Alpha.** Studio is available and usable, and it does **not** replace
-`ReportBuilder` or `WorkstationEditor` — both remain the supported way to do the work Studio is
-still proving it can do. Slices 1 to 8 below have landed; what keeps it an Alpha is evidence rather
-than features: three of the five hosts that mount it are uncertified, every certified journey is an
-author's and none is a reader's, row-level security under a second identity is unproven, and three
-authoring limits are known and documented (no `ELSE` on a canvas-written `IF`, an editor that can
-only rename most task kinds, and no `PARALLEL` swimlanes). Closing those is slice 4 of
-[Code Stability](#code-stability--browser-sources-studio-and-the-test-lanes) in v0.20.0.
+Studio shipped in v0.19.0 as an Alpha. It mounts in Portal and the self-installed WorkstationEditor
+host, with the UI sandbox providing development coverage. Canvas ELSE authoring, task-field editing,
+PARALLEL swimlanes, guided transforms, dashboard interactions, paginated bands and host-side recovery
+drafts are implemented. The remaining scope is the backlog below; shipped details remain in
+`CHANGELOG.md` and the linked implementation contracts.
 
-**Legacy retirement is deliberately not scheduled.** Completing user acceptance, building the
-capability matrix against `ReportBuilder` and `WorkstationEditor`, and deprecating the legacy entry
-points all wait until the Alpha evidence above exists. Retiring an entry point on the strength of a
-feature list rather than a certified journey is how a replacement becomes a regression.
+**Problem and intended outcome:** Studio helps users build ETL pipelines, reports and dashboards
+while learning ETL-SQL. Visual helpers lead into confident script editing and remain available when
+an author gets stuck. Support both production hosts without requiring VS Code or a TUI fallback,
+including ordinary capability-scoped authors and readers. Learning must not require publishing or
+administration rights.
 
-Authors need a full-viewport visual workspace combining connection/table discovery, full script
-editing, guided report creation, drag-and-drop visual layout, design-time sample snapshot
-(`__ETLSNAP__`) live data rendering, visual filtering, and visual pipeline authoring while preserving
-clean `.rptsql` and `.etlsql` as the single source of truth. Studio Home provides distinct entry
-points for **Dashboard**, **Paginated Report**, **ETL Pipeline**, and ordinary script creation.
+**Why next:** Resume the remaining authoring, recovery and certification work next sprint. Legacy
+retirement remains unscheduled until certified journeys, a parity matrix and a migration decision
+establish that Studio can replace the existing entry points. Mobile authoring retains its separate
+Later horizon.
 
-**Problem and Intended Outcome:**
-Authoring currently splits across raw script editing and modal dialogs. Non-SQL business analysts
-need to browse tables, select fields, filter records visually, arrange interactive dashboards, and
-build print-oriented reports through a clear sequence. A dashboard canvas and a paginated report
-designer share datasets, expressions, formatting, preview, parser, and patcher services, but they do
-not share the same authoring workflow: dashboards are responsive and interaction-first; paginated
-reports are page-, group-, parameter-, and export-first. Advanced authors retain full access to the
-underlying script without visual tools clobbering hand-crafted queries. Studio also carries forward
-the full Workstation Editor scripting experience and adds a visual ETL pipeline DAG that remains
-synchronized with the authoritative `.etlsql` document.
+**Boundaries:** Preserve standard `.rptsql` and `.etlsql` scripts as the source of truth, surgical
+parser/patcher edits, per-document state, caller identity and row-level security, bounded previews,
+and policy-governed host drafts. Keep native SQL an explicitly labelled advanced escape hatch.
+Do not add a vendor SQL builder, proprietary project format or browser-side secret persistence.
 
-**Why now:**
-The native Grammar-of-Graphics spine, Connection Wizard, Gateway resource discovery, cascading parameters, offline snapshot engine (`__ETLSNAP__`), and design tokens have shipped. Unifying these capabilities into ETL-SQL Studio establishes the primary flagship UI across Desktop (`WorkstationEditor`) and SaaS Portal (`Portal Studio`).
+**Dependencies:** Shared typed authoring contracts, designer parser/patcher, CodeMirror workbench,
+connection/schema discovery, report runtime, Portal catalog capabilities and leases, recovery drafts,
+and Orchestrator execution and scheduling.
 
-**Boundaries:**
-1. **Zero Proprietary Formats:** The studio stores and outputs standard `.rptsql` and `.etlsql` scripts exclusively. No binary project files or proprietary UI schemas are introduced.
-2. **Surgical AST Patching:** Visual modifications patch only the targeted `VISUAL`, `PAGE`, `WHERE`, or pipeline AST clauses. Complex dataset SQL queries, CTEs, comments, and whitespace are preserved.
-3. **Stateless Server Analysis & Bounded Ingestion:** AST parsing (`POST /api/designer/parse`), linting (`POST /api/designer/analyze`), and sample ingestion (`POST /api/designer/data-sample`) remain stateless HTTP calls honoring caller identity and RLS. No persistent server-side LSP process is spawned.
-4. **Shared Core, Purpose-Built Report Workflows:** Dashboard and Paginated Report authoring reuse
-   the same Report-SQL services and controls where their semantics match. Each keeps its own guided
-   workflow, canvas rules, inspector, defaults, preview, and acceptance evidence.
-5. **Engine-Compatible Secret Handling:** Studio may prompt for the same passphrase used by VS Code,
-   TUI, and the Connection Wizard, but it must use that passphrase with the engine-compatible
-   encryption contract. Plaintext secret values are never rendered back into modal or DOM content,
-   and Base64 encoding is never presented as encryption.
+**Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
+Select individual IDs when this initiative is scheduled; task sizes exclude external waits.
 
-**Dependencies:**
-The canonical `connection-wizard.js`, `codemirror` bundle, `DesignerScriptPatcher`, `PlotPlan` renderer, `report-runtime.js` snapshot evaluator, and Portal data-preview endpoint.
+#### Replacement criteria and migration decisions
 
-**Vertical Delivery Slices:**
-1. **Slice 1 — Studio Home, Shell & Data Dock:** Full-viewport layout; distinct Dashboard,
-   Paginated Report, ETL Pipeline, and Script creation actions; catalog and Gateway resource picker;
-   and draggable typed field tree (`dates`, `measures`, `categories`).
-2. **Slice 2 — Shared Report Authoring Core:** Governed `TOP 250` sample ingestion, document-scoped
-   snapshots, shared dataset and expression editors, field mappings, formatting controls, parser and
-   patcher services, preview, and code/canvas synchronization.
-3. **Slice 3 — Dashboard Workflow:** Responsive/freeform card canvas, chart and KPI palette,
-   containers, visual and dataset filters, slicers, cross-visual interactions, smart formatting
-   defaults, and dashboard preview.
-4. **Slice 4 — Paginated Report Workflow:** Guided data and parameter setup, page-oriented canvas,
-   group/detail/total sections, headers and footers, page size/orientation/margins, explicit page
-   breaks, repeating table headers, pagination preview, and multi-page export.
-5. **Slice 5 — Full Script Workbench Parity:** CodeMirror editor, exact selection execution,
-   completion, hover, lint, formatting, Results, Messages, Performance, workspace operations, dirty
-   state, and session inspection carried forward from Workstation Editor.
-6. **Slice 6 — Connection Easy Button:** Production-host connector discovery, Gateway resources,
-   MOCKDB Test Data onboarding, diagnostics, valid script insertion, and engine-compatible secret
-   reference or encryption handling.
-7. **Slice 7 — Pipeline Projection and Visual Authoring:** Engine-projected DAG with real edges and
-   branches, draggable task palette, explicit parallel/loop/transaction containers, conditional
-   routes, lossless `.etlsql` patching, and run-to-node inspection.
-8. **Slice 8 — Governed Multi-Surface Packaging and Lifecycle:** Equivalent tested contracts across
-   Portal and desktop, authenticated preview execution under caller RLS and memory arbiters,
-   document-scoped state, save/reload correctness, and desktop multi-project lifecycle management.
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| ST01 | **ReportBuilder parity inventory.** Map existing workflows to Studio coverage; link passing evidence or define a missing acceptance fixture for each required workflow, and record deliberate non-goals. No feature or test implementation. | — | S |
+| ST02 | **WorkstationEditor parity inventory.** Map script editing, files, execution and recovery workflows with the same explicit gap/evidence inventory. No feature or test implementation. | — | S |
+| ST03 | **Legacy retirement decision.** Use both inventories and completed required journeys to decide whether either entry point can retire; record migration steps or continued support. This does not remove an editor. | ST01, ST02; required journey evidence | S |
 
-**Delivered foundation:** Portal Studio Home now lists only permission-visible catalog reports and
-writable folders from the Studio API. Catalog create/open/save/close carries report identity,
-optimistic version, source revision, deployment capabilities, and renewable edit leases. Snapshots,
-filters, selected data source, field metadata, preview cache, diagnostics/run ownership, and results
-are isolated per document and restored when tabs switch. Production browser tests cover catalog
-creation, opening, exact persistence, conflicts, lease acquisition/release, and cross-tab state
-isolation. Visual creation, duplication, deletion, mapping and option edits, and slicer promotion now
-flow through the shared typed authoring state and server parser/patcher. Report parameters are part of
-that contract, so slicer promotion emits parser-valid `DECLARE` and `ACTIONS` syntax while surgical
-patching preserves hand-authored SQL and comments.
+#### Portal pipelines and schedule handoffs
 
-**Acceptance Evidence:**
-- **AST Preservation Tests:** 100% round-trip fidelity asserting hand-written queries, CTEs, `WHERE` clauses, and comments are untouched after visual mutations.
-- **UI Sandbox Story:** Interactive story in `tools/ui-sandbox` demonstrating zero-code table scaffolding, live sample data aggregation, visual filter adjustments, property edits, and code drawer toggling.
-- **Playwright Browser Tests:** Automated browser tests exercising drag-and-drop card placement, filter pane updates, slicer promotion, code editing sync, and theme switching.
-- **Production Connection Journey:** Portal and desktop tests discover MOCKDB from the real connector
-  registry under Test Data, create a connection, run a sample, insert valid syntax, save, and reload.
-- **Dashboard Journey:** Build a KPI, trend, category, and detail dashboard with slicers,
-  cross-filtering, and persistent formatting entirely in Studio.
-- **Paginated Journey:** Build a parameterized grouped report with details, totals, headers,
-  repeating columns, page breaks, and a verified multi-page PDF entirely in Studio.
-- **Pipeline Journey:** Build a MOCKDB extract, `#temp` stage, validation, transform, explicit
-  parallel branch, and load flow; round-trip it through code and inspect intermediate execution
-  state.
-- **Pre-Push Gates:** Strict compliance with `scripts/Test-PrePush.ps1`, asset sync checks, and doc hub audits.
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| ST04 | **Submit one saved pipeline.** One Orchestrator-backed MOCKDB run under the federated author identity uses the saved revision, checks run grants and reports a missing Orchestrator clearly. No scheduling or Portal-process writes. | — | M |
+| ST05 | **Follow one pipeline run.** Studio shows that submitted run's status and bounded log through completion or failure, retaining its run ID; it never displays another run's output. | ST04 | M |
+| ST06 | **Cancel one pipeline run.** Stop reaches the submitted Orchestrator run, displays confirmed cancellation or an explicitly unconfirmed outcome, and preserves diagnostics. | ST04, ST05 | M |
+| ST07 | **Schedule one saved pipeline.** Create a governed schedule for the saved revision, advance the controlled clock to one due occurrence and verify the resulting run and output. No new recurrence vocabulary. | ST04, ST05 | M |
+| ST08 | **Pipeline configuration export/import.** Round-trip one pipeline with its declared portable state; exclude secrets and host-owned bindings and verify report-only surfaces still refuse it. | — | M |
+| ST09 | **Pipeline promotion.** Promote that package to one permitted target, verify ownership/bindings and reject a collision without partial changes. No new promotion topology. | ST08 | M |
+| ST10 | **Ordinary-author pipeline journey.** A Publisher with the required folder and Orchestrator grants creates, saves, reopens, runs and cancels one pipeline; denied grants fail explicitly. Admin identity cannot satisfy this task. | ST04, ST05, ST06 | M |
+| ST11 | **Report schedule handoff.** A Studio-authored report reaches one authorized scheduled execution and produces one verified artifact under the scheduled identity. Pipeline scheduling is ST07; subscriptions are separate scope. | — | M |
+
+#### Private unpublished drafts and publishing
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| ST12 | **Decide unpublished draft identity and policy.** Define host ownership, tenant/principal isolation, retention, allowed practice access and revision handling before a catalog report ID exists. No browser script storage. | — | D |
+| ST13 | **Portal private draft save/reopen.** A learner without folder Manage or ReportPublish creates, edits, saves and reopens one permitted host draft; another principal or tenant cannot read it. | ST12 | M |
+| ST14 | **Portal private draft crash recovery.** Recover that unpublished draft after browser restart and authentication renewal, with explicit revision-conflict handling and policy refusal. No offline persistence guarantee. | ST13 | M |
+| ST15 | **Publish a private draft.** Promote the saved host draft through the existing catalog publish action without losing text/history; an unauthorized attempt leaves the private draft intact. | ST13 | M |
+
+#### Author, reader and beginner practice journeys
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| ST16 | **Portal beginner report journey.** An ordinary scoped author uses sample data, makes a visual change, explains its generated syntax, hand-edits, reopens the helper, saves/reopens and runs one report with real parser/patcher responses. | — | M |
+| ST17 | **Desktop beginner report journey.** Run the same bounded sequence in the self-installed WorkstationEditor host, with external editors unavailable. | — | M |
+| ST18 | **Dedicated Portal reader journey.** A separate reader opens one permitted report, uses its parameters/interactions and reopens a saved view without receiving author/publish controls. | — | M |
+| ST19 | **Second-identity RLS journey.** Two ordinary identities open the same report and receive their expected disjoint rows, including preview/data/export paths that the chosen report exposes. No new RLS model. | ST18 | M |
+| ST20 | **Decide restricted practice execution.** Specify how a learner may run the MOCKDB failure/repair exercise in each host, including mutating steps, cleanup and permission boundaries. Portal execution must use the sanctioned sandbox path. | — | D |
+| ST21 | **Portal beginner ETL exercise.** Run the deliberate ASSERT failure, repair it, check expected rows and cleanup under the agreed practice identity; use no external service. | ST20; ST04 if the chosen path requires it | M |
+| ST22 | **Desktop beginner ETL exercise.** Execute the same failure/repair lifecycle and verify rows/cleanup under the agreed local restrictions. | ST20 | M |
+
+#### Keyboard and assistive technology
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| ST23 | **Portal keyboard editing journey.** Create, edit, undo and save one permitted document using only the keyboard; verify modal/tab navigation and focus return. | — | M |
+| ST24 | **Desktop keyboard editing journey.** Prove the same sequence in the self-installed host. | — | M |
+| ST25 | **Keyboard visual move/resize.** Provide or verify non-drag controls for one visual and persist its resulting layout; cover the shared sandbox and one production host. No canvas redesign. | — | M |
+| ST26 | **Portal zoom/focus journey.** At declared zoom settings, dialogs and split controls remain usable, preserve focus and return it to the invoking control. | ST23 | S |
+| ST27 | **Desktop zoom/focus journey.** Repeat the bounded zoom/focus checks in the desktop host. | ST24 | S |
+| ST28 | **Portal screen-reader pass.** One named screen reader/browser combination completes the keyboard document journey with meaningful labels, errors and announcements; keep the observed transcript. | ST23 | M |
+| ST29 | **Desktop screen-reader pass.** Record the same bounded journey in one supported desktop/browser combination. | ST24 | M |
+
+#### Execution scope, cancellation and bounded helper previews
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| ST30 | **Portal execution-scope journey.** Exercise no selection, unresolved statement and mutating-prefix consent refused/accepted; actual statements and displayed scope agree under the permitted execution path. | ST04 when pipeline submission is used | M |
+| ST31 | **Desktop execution-scope journey.** Prove the same cases against the desktop host, using real execution responses. | — | M |
+| ST32 | **Portal cancellation and lost response.** Confirm server cancellation and one lost-response case; retain the run ID for support and distinguish unknown outcome from stopped work. | ST30 | M |
+| ST33 | **Desktop cancellation and lost response.** Prove the same bounded failure cases and diagnostic ownership on the desktop host. | ST31 | M |
+| ST34 | **Portal native-dialect helper preview.** One named connector/dialect fixture executes a bounded read-only native task and accepts an empty result without running arbitrary predecessors. | — | M |
+| ST35 | **Desktop native-dialect helper preview.** Run that same fixture through the desktop preview path. | ST34 fixture contract | M |
+| ST36 | **Portal staged-context helper preview.** One staged-data task and required variable preview correctly; unavailable predecessor context is explained and never silently executed. | — | M |
+| ST37 | **Desktop staged-context helper preview.** Prove the same variable/staging and unavailable-context cases on the desktop host. | ST36 fixture contract | M |
+
+#### Degraded editor and failed session recovery
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| ST38 | **Portal degraded-editor recovery.** Force a module-load failure, type and switch two tabs, then retry successfully; buffers survive and unsupported actions are disabled or explained. | — | M |
+| ST39 | **Desktop degraded-editor recovery.** Prove the same failure/retry sequence in the desktop host. | — | M |
+| ST40 | **Portal session startup timeout/retry.** Bound an unanswered session request and cover HTTP 500/disconnect; display an actionable error and recover on Retry without granting fallback capabilities. | — | M |
+| ST41 | **Portal expired-session retry.** Cover access-token expiry and failed refresh during startup; re-authentication and retry restore the correct identity/capabilities and kept drafts. No new draft storage. | ST40 | M |
+
+#### Delivery budgets, catalog scale and large documents
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| ST54 | **Measure and decide Studio transfer budgets.** Inventory the full production import closure, designer assets and CodeMirror bundle; record raw/gzip baselines, accepted ceilings and the gate's implementation estimate. No asset optimization or gate implementation. | — | D |
+| ST42 | **Studio transfer-size gate.** Enforce the accepted raw/gzip ceilings for that import closure, with a negative oversized fixture. Preserve existing timing gates; new optimization work gets separate estimates. | ST54 | M |
+| ST43 | **Portal cold-load evidence.** Measure first usable editor on a declared uncached Portal fixture, record the environment and set a defensible regression ceiling. No broad performance optimization. | ST42 | M |
+| ST44 | **Desktop cold-load evidence.** Measure the matching desktop fixture with its own host ceiling. | ST42 | M |
+| ST45 | **Paged Portal catalog discovery.** One bounded server-side search/paging path feeds Home while preserving folder/tenant visibility; verify a declared large-catalog fixture. No real-time synchronization. | — | M |
+| ST46 | **Fresh catalog and stale-open recovery.** Refresh the paged list after external create/rename/move/delete; a stale deleted/moved selection fails clearly without disturbing dirty buffers. | ST45 | M |
+| ST53 | **Measure and decide the large-document contract.** Pin one several-thousand-line Portal fixture and the existing server byte limit; measure editing/analysis, define client limit/degraded behavior and estimate implementation. No editor changes. | — | D |
+| ST47 | **Portal large-document limits.** Implement the accepted client ceiling/degraded behavior on that fixture and verify the server-limit boundary without losing text. No general editor rewrite. | ST53 | M |
+| ST48 | **Desktop large-document contract.** Measure the same bounded document in the desktop host and verify its limit/degraded behavior. | ST47 fixture contract | M |
+| ST49 | **Portal analysis throttling recovery.** One controlled designer-rate-limit rejection preserves the buffer, explains stale diagnostics and resumes analysis after permitted retry; no arbitrary predecessor execution. | ST47 | M |
+
+#### Release-versioned Studio guidance
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| ST50 | **Beginner report guide.** Document the certified report exercise, code/helper round trips and both host entry points, referring to release versions. | ST16, ST17 | S |
+| ST51 | **Pipeline run/schedule guide.** Document the certified pipeline flow, grants, status/log/Stop and missing-Orchestrator behavior. | ST07, ST10 | S |
+| ST52 | **Draft, publishing and recovery guide.** Explain kept versus unavailable drafts, private/public permissions, conflicts and retry/support diagnostics; include desktop policy limits. | ST14, ST15, ST40, ST41 | S |
+
+#### Small pickup options for sprint planning
+
+These are selectable outcomes, not committed sprints. The ranges sum the initial task sizes for one
+developer and exclude external waits. Re-estimate and split again if the selected fixture exposes
+more work; do not fill a sprint by assuming every M task takes three days.
+
+| Outcome | Select first | Initial engineering range | Follow-on work |
+| :--- | :--- | :--- | :--- |
+| Know the replacement gaps | ST01, ST02 | 2–4 days | Select required journeys individually; ST03 waits for their evidence. |
+| Keep one unpublished Portal draft | ST12, ST13 | 4–7 days | ST14 recovery and ST15 publishing are separate increments. |
+| Submit and observe one Portal pipeline | ST04, ST05 | 6–10 days | ST06 cancellation, then ST10 ordinary-author proof; ST07 scheduling is separate. |
+| Set measurable delivery limits | ST53, ST54 | 2–4 days | Schedule ST47 and ST42 independently after the decisions. |
+
+**Separate Later backlog:** [Mobile page-layout authoring](#presentation--workspaces--studio-authoring-for-mobile-page-layouts)
+retains its own horizon. Its preview, grid editor and breakpoint/omitted-visual checks are three
+separately selectable increments outside the remaining Alpha backlog.
+
+**Shared completion evidence:** Each selected journey uses the named production host and intended
+identity, real parser/patcher/execution responses, exact saved/reopened bytes and expected output.
+Add focused regression evidence for defects found within that task. Preserve existing typed contracts,
+asset sync, lint/type gates, isolation, draft policy and performance ceilings. Sandbox/source-pattern
+checks alone do not certify a production-host journey. The parity inventories identify which
+completed task IDs are required before the retirement decision can approve a replacement.
 
 ---
 
@@ -357,6 +586,7 @@ patching preserves hand-authored SQL and comments.
 
 **Status:** Incremental
 **Horizon:** Launch Gate
+**Scheduling:** Backlog; outside the current sprint. Required before the corresponding hosted-production claims.
 **Authoritative design:** [SaaS Tenant Isolation Architecture](docs/architecture/saas-tenant-isolation.md), [Deployment Profile Certification](docs/administration/platform/deployment-profile-certification.md), and [Provider-Neutral Fault Certification](docs/architecture/decisions/provider-neutral-fault-certification.md)
 
 Managed Dedicated and Shared SaaS profile lanes have passed their topology-specific isolation gates,
@@ -379,15 +609,91 @@ authorization input.
 scheduler workload identity, object-native artifact storage, tenant metering ledger, hardened
 sandbox provider, production canaries, HA soak tooling, and release claims index.
 
-**Delivery slices:** Add the sandbox metering producer — `TenantMeteringSource.Sandbox` is declared
-and nothing writes it, so sandbox execution is the one class the ledger cannot account for; add
-explicit Shared upgrade, promotion/import, backup/restore, and exit lanes where those journeys are
-supported, since every SaaS transition row in the v0.19.0 claims index reads `NotCertified` for
-Shared; then run the provider-specific hardened-runtime, cloud-fault, HA/soak, and canary evidence
-for each production topology.
+**Planning:** Use the [backlog sizing and readiness rules](#sprint-planning-for-backlog-tables).
+Select individual IDs when this initiative is scheduled; task sizes exclude external waits.
 
-**Acceptance evidence:** Tenant-partitioned and idempotent metering across every producer; restart
-tests that recover only current queued authority; release-eligible Shared transition bundles with
-hostile negative cases; physical-provider fault reports naming runtime/provider versions; validated
-HA and canary artifacts for the exact clean candidate commit; and a claims ledger whose uncovered
-items and human-readable documentation agree with its topology rows.
+**Scope for every hosted task:** Instantiate an ID for one named topology, runtime/provider version,
+region and candidate configuration. Passing one instance does not certify other providers, regions
+or topologies. SA12 records the selected instance and infrastructure prerequisites before physical
+work is estimated. Missing prerequisites mean pending work. Soak and certification run durations are
+calendar time in addition to the engineering size below. Repeat the relevant tasks as separate
+instances when another topology is selected.
+
+#### Sandbox metering producer
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SA01 | **Decide sandbox measurement semantics.** Define attempt/event identity, terminal statuses, CPU/peak-memory/I/O units and unavailable-counter behavior using the existing counts-only ledger schema. No billing prices or authorization changes. | — | D |
+| SA02 | **Meter one completed sandbox attempt.** Wire verified tenant/workload identity and runtime counters to the ledger for one supported runtime; success/failure/cancellation records contain only approved measurements. | SA01 | M |
+| SA03 | **Meter interrupted attempts.** Record worker loss or termination with an explicit incomplete/ambiguous outcome; recovery never invents counters or attributes a stale attempt to a new run. | SA02 | M |
+| SA30 | **Decide metering delivery failure/retry policy.** Specify observable ledger-outage behavior, retry ownership, retention and delivery identity; estimate implementation using the existing ledger. Preserve execution admission, authority and reported workload outcome. No retry implementation. | SA01 | D |
+| SA04 | **Metering delivery failure/retry.** Implement the accepted policy for one ledger-outage/recovery fixture; verify observable failures and idempotent retries without altering execution admission, authority or reported workload outcome. | SA02, SA30 | M |
+| SA05 | **Sandbox producer isolation/replay evidence.** Interleave two tenant attempts, duplicate deliveries and restart; verify correct partitioned counts and no double accounting or secret/script data. | SA02, SA03, SA04 | M |
+
+#### Shared lifecycle transitions — one journey per task
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SA06 | **Select supported Shared transitions.** Name one source/target/version fixture for each supported upgrade, promotion/import, restore and exit journey; record unsupported routes and the portable/host-owned boundary. | — | D |
+| SA07 | **Shared in-place upgrade.** One accepted N-to-N+1 fixture preserves tenant state, rejects stale scheduler authority and proves its rollback point while another tenant remains isolated. | SA06 | M |
+| SA08 | **Promotion into Shared.** One accepted source topology imports into a disabled Shared tenant, verifies ownership/bindings and rejects collisions or cross-tenant activation without partial changes. No additional source topologies. | SA06 | M |
+| SA09 | **Shared portable import.** One approved bundle-to-tenant import round-trips declared state and rejects tampering, replay and another tenant's bindings; no new package format. | SA06 | M |
+| SA10 | **Shared tenant backup/restore.** Restore one approved tenant fixture, validate usable state and prove another tenant is unaffected; include hostile target/tamper cases. No whole-platform disaster recovery claim. | SA06 | M |
+| SA11 | **Shared customer exit.** One Shared-to-self-hosted Enterprise fixture verifies/decrypts its portable bundle without source-operator contact and states required target bindings before mutation. Preserve backward-promotion refusal. | SA06 | M |
+| SA12 | **Select one hosted evidence target.** Pin topology, provider/runtime versions, region, image digest, database/artifact providers and access prerequisites; declare fault fixtures, soak duration and measurable claim limits. Produce per-task estimates. | — | D |
+| SA13 | **Publish Shared transition evidence through the runner.** Register only supported completed transition fixtures; emit topology-specific claim rows and fail missing/skipped/dirty evidence. Uncovered transitions remain NotCertified. | SA07–SA11 for selected supported routes | M |
+
+#### Physical hardened runtime
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SA14 | **Provision one pinned hardened target.** Prepare the selected runtime and worker image, verify required controls and record reproducible setup. Standard container evidence cannot satisfy the hostile-tenant claim. | SA12 | M |
+| SA15 | **Certify one physical hardened runtime.** Run the existing lifecycle/isolation fixtures on that target and retain version/digest-bound hostile negative evidence and clean teardown. No inference from deterministic adapters. | SA14 | M |
+
+#### Physical fault activation — one scenario per task
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SA16 | **Process/worker loss.** Activate one real loss point, run the catalog's required repetitions and retain safe outcome/checkpoint evidence. | SA12, SA15 | M |
+| SA17 | **Lease expiry/fencing race.** Activate the selected target's real race and prove stale owners cannot commit alongside a new owner. | SA12, SA15 | M |
+| SA18 | **Database disconnect.** Activate one physical provider disconnect and prove explicit failure/recovery with no silent loss. | SA12, SA15 | M |
+| SA19 | **Partial artifact operation.** Interrupt one physical write and prove that partial state cannot masquerade as a committed artifact. | SA12, SA15 | M |
+| SA20 | **Storage outage.** Make the selected storage provider unavailable and verify visible failure/recovery under the existing operation contract. | SA12, SA15 | M |
+| SA21 | **Network partition.** Partition one declared authority path and prove single mutation authority and bounded recovery. | SA12, SA15 | M |
+| SA22 | **Duplicate delivery.** Repeat one real workload delivery and prove at most one committed result for its operation identity. | SA12, SA15 | M |
+| SA23 | **Clock skew.** Activate one declared physical clock-skew fixture and prove the lease/fencing invariants. Do not perturb unrelated shared hosts. | SA12, SA15 | M |
+| SA24 | **Disk exhaustion.** Fill only the isolated test capacity declared in the fixture and prove failure, cleanup and safe retry eligibility. | SA12, SA15 | M |
+
+Each fault task must implement or verify its physical provider action and emit the unchanged
+provider-neutral evidence contract. Adapter-only tests do not close it. Use the runner's required
+repetitions and checkpoint rules. If SA12 finds a missing provider-control capability, create and
+estimate that prerequisite before assigning the affected M-sized task.
+
+#### HA, soak, canary and final claims
+
+| ID | Chunk and finish line | Depends on | Size |
+| :--- | :--- | :--- | :--- |
+| SA25 | **One topology failover drill.** Lose one active node during the declared workload and prove lease fencing, output continuity or explicit safe failure, and measured recovery within the stated claim. | SA12, SA15; relevant completed fault tasks | M |
+| SA26 | **One declared soak run.** Execute the pinned workload/duration, retain raw resource and correctness measurements, and evaluate the predefined pass criteria. Run duration is separate calendar time. | SA25 | M |
+| SA27 | **One canary rollout/rollback drill.** Upgrade one permitted canary, verify drain and workload results, then exercise rollback/stop on a failed health check without lowering isolation. | SA12, SA15 | M |
+| SA28 | **One clean-candidate evidence closure.** Re-run and validate every required selected-target lane against the exact clean candidate commit; hash/link complete bundles and reject stale, dirty, missing or skipped proof. Engineering estimate excludes execution time. | SA05, SA13 for claimed Shared routes, SA15–SA27 for the target claims | S |
+| SA29 | **Reconcile one hosted claim set.** Align the claims index, operator guidance and release wording with that target's actual evidence; list unsupported topologies/transitions/regions explicitly. | SA28 | S |
+
+#### Small pickup options for sprint planning
+
+Select one track or a capacity-sized subset. Physical work is ready only after SA12 records access,
+provider controls and revised estimates. These engineering ranges exclude provisioning waits and
+run durations; tasks may span calendar sprints even when implementation is small.
+
+| Outcome | Select first | Initial engineering range | Follow-on work |
+| :--- | :--- | :--- | :--- |
+| Account for one sandbox attempt | SA01, SA02 | 4–7 days | SA03 interruption, then SA30/SA04 delivery recovery and SA05 isolation/replay proof. |
+| Establish one Shared transition | SA06, one of SA07–SA11 | 4–7 days | Register that supported route through SA13; other routes remain separate. |
+| Establish one physical hardened target | SA12, SA14, SA15 | 7–12 days | Select individual fault scenarios SA16–SA24 after checking provider prerequisites. |
+
+**Shared completion evidence:** Verified tenant partitioning and idempotent measurements;
+positive and hostile-negative transition outcomes with continuity/rollback artifacts; physical
+provider actions, exact versions and complete fault observations; validated HA/soak/canary reports;
+and a claims index bound to the same clean candidate commit. Shared evidence must name Shared.
+Managed Dedicated results cannot close Shared tasks, and a passed profile does not certify an
+unexecuted lifecycle transition. Deterministic contract evidence remains useful development proof.

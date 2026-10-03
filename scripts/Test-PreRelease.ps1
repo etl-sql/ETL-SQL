@@ -77,6 +77,7 @@ $RepoRoot = Resolve-Path (Join-Path $ScriptRoot "..")
 
 # Shared NuGet dependency-audit helpers (reliable deprecated/vulnerable audit under SDK 10.0.300 + CPM).
 . (Join-Path $ScriptRoot "lib/DependencyAudit.ps1")
+. (Join-Path $ScriptRoot "Release.Helpers.ps1")
 $ValidationRoot = Join-Path $RepoRoot $OutDir
 $LatestDir = Join-Path $ValidationRoot "latest"
 $StatePath = Join-Path $LatestDir "state.json"
@@ -86,6 +87,8 @@ $ReportJsonPath = Join-Path $RunDir "pre-release-report.json"
 $ReportMarkdownPath = Join-Path $RunDir "pre-release-report.md"
 $CoverageResultsRelative = Join-Path $OutDir "$RunId\coverage"
 $CoverageReportDir = Join-Path $RunDir "coverage\report"
+$smokeBaselineReport = Join-Path $RunDir "cert-baseline-smoke.md"
+$standardBaselineReport = Join-Path $RunDir "cert-baseline-standard.md"
 
 $EffectiveSkipNode = $SkipNode -or $Quick
 $EffectiveSkipScale = $SkipScale -or $Quick
@@ -209,17 +212,7 @@ function New-Sha256 {
 }
 
 function Get-SourceFingerprint {
-    Push-Location $RepoRoot
-    try {
-        $head = ""
-        $status = ""
-        try { $head = (& git rev-parse HEAD 2>$null) -join "`n" } catch { }
-        try { $status = (& git status --short 2>$null) -join "`n" } catch { }
-        return New-Sha256 "$head`n$status"
-    }
-    finally {
-        Pop-Location
-    }
+    return Get-ReleaseSourceFingerprint -RepoRoot $RepoRoot
 }
 
 function Read-State {
@@ -415,6 +408,10 @@ function Save-State {
         sourceFingerprint = $Fingerprint
         commitHash = $commitHash
         configuration = $Configuration
+        coverageResultsRelative = $CoverageResultsRelative
+        coverageReportDirectory = $CoverageReportDir
+        smokeBaselineReport = $smokeBaselineReport
+        standardBaselineReport = $standardBaselineReport
         phases = @($Results)
     }
 
@@ -430,12 +427,15 @@ function Get-PreReleasePhaseDependencies {
         "Format verify" { return @("Dotnet restore") }
         "Smoke lane" { return @("Dotnet build") }
         "Fast lane" { return @("Dotnet build") }
-        "Engine lane and coverage gate" { return @("Dotnet build") }
+        "Engine lane" { return @("Dotnet build") }
+        "Coverage gate" { return @("Engine lane") }
         "Portal lane" { return @("Dotnet build") }
         "Browser lane" { return @("Dotnet build") }
         "N->N+1 upgrade-path drill" { return @("Dotnet build") }
         "SLT lane" { return @("Dotnet build") }
-        "Docker integration lane" { return @("Dotnet build") }
+        "Docker connector integration" { return @("Dotnet build") }
+        "Docker portal integration" { return @("Dotnet build") }
+        "Local/container smoke parity" { return @("Dotnet build") }
         "Release publish artifacts" { return @("Dotnet build") }
         "Windows MSI" { return @("Release publish artifacts") }
         "VS Code npm audit" { return @("VS Code npm ci", "VS Code UI npm ci") }
@@ -505,8 +505,7 @@ function Start-PhaseWatchdog {
 
     $watchScript = Join-Path $ScriptRoot "lib/Watch-PhaseTimeout.ps1"
     if (-not (Test-Path -LiteralPath $watchScript)) {
-        Write-Host "    (watchdog script missing at $watchScript; phase runs unbounded)" -ForegroundColor DarkYellow
-        return $null
+        throw "Required phase watchdog is missing at $watchScript."
     }
 
     $markerPath = $LogBase + ".running"
@@ -529,9 +528,8 @@ function Start-PhaseWatchdog {
         )
     }
     catch {
-        Write-Host "    (could not start phase watchdog: $($_.Exception.Message))" -ForegroundColor DarkYellow
         Remove-Item -LiteralPath $markerPath -Force -ErrorAction SilentlyContinue
-        return $null
+        throw "Cannot start the required phase watchdog: $($_.Exception.Message)"
     }
 
     return [ordered]@{ Process = $process; MarkerPath = $markerPath; ReasonPath = $reasonPath }
@@ -574,15 +572,15 @@ function Invoke-LoggedPhase {
 
     if ($Resume -and $PreviousPhaseMap.ContainsKey($Name)) {
         $previous = $PreviousPhaseMap[$Name]
-        if ($previous.status -eq "Passed" -or $previous.status -eq "Skipped") {
+        if (Test-PreReleasePhaseReusable -PreviousPhase $previous -Command $Command) {
             $Results.Add([ordered]@{
                 name = $Name
                 command = $Command
-                status = "Skipped"
+                status = "Passed"
                 elapsedSeconds = 0
                 log = $previous.log
                 artifacts = @($previous.artifacts)
-                note = "Skipped by -Resume; previous phase passed for this source fingerprint."
+                note = "Reused by -Resume; matching command passed for this source fingerprint and its log exists."
             })
             $hasAnyFailure = $Results | Where-Object { $_.status -eq "Failed" }
             Save-State -Results $Results.ToArray() -Status $(if ($hasAnyFailure) { "Failed" } else { "Running" }) -Fingerprint $Fingerprint
@@ -813,16 +811,21 @@ function Invoke-HangPreflight {
     $env:POWERSHELL_UPDATECHECK = "Off"
     $env:CI = "true"
 
-    # 3. Leftovers from an interrupted earlier run. A killed browser lane leaves chrome.exe holding
-    #    the fixture's port, and the next run then fails every fixture test in about a millisecond
-    #    with "server has not been started" — a misleading error that has already cost a wrong root
-    #    cause more than once. Orphaned test hosts hold file locks that make a build hang instead.
+    # 3. Clear only stale test processes whose command line proves workspace ownership. Browser
+    # names alone cannot distinguish a test instance from the maintainer's interactive browser.
     $stale = @()
-    foreach ($name in @("chrome", "chromedriver", "testhost", "vstest.console", "msedgedriver")) {
-        foreach ($proc in @(Get-Process -Name $name -ErrorAction SilentlyContinue)) {
-            # Only processes older than this run, and never an ancestor of it.
-            if ($proc.Id -eq $PID) { continue }
-            $stale += $proc
+    if ($IsWindows) {
+        try {
+            $candidates = @(Get-CimInstance Win32_Process -Filter "Name='chromedriver.exe' OR Name='testhost.exe' OR Name='vstest.console.exe' OR Name='msedgedriver.exe'" -ErrorAction Stop)
+            foreach ($candidate in $candidates) {
+                if ($candidate.ProcessId -eq $PID -or [string]::IsNullOrWhiteSpace($candidate.CommandLine)) { continue }
+                if ($candidate.CommandLine.Contains([string]$RepoRoot, [StringComparison]::OrdinalIgnoreCase)) {
+                    $proc = Get-Process -Id $candidate.ProcessId -ErrorAction SilentlyContinue
+                    if ($proc) { $stale += $proc }
+                }
+            }
+        } catch {
+            Write-Host '  Cannot prove stale test-process ownership; no processes cleared.' -ForegroundColor DarkYellow
         }
     }
     if ($stale.Count -gt 0) {
@@ -894,32 +897,16 @@ if ($Resume) {
     }
 
     if (-not $ForceResume -and $previousState.sourceFingerprint -ne $fingerprint) {
-        # Check if the only difference is formatting/whitespace
-        $prevCommit = $previousState.commitHash
-        $onlyFormatting = $false
-        if ($prevCommit) {
-            Push-Location $RepoRoot
-            try {
-                $diff = & git diff -w --ignore-all-space $prevCommit 2>$null
-                if ($LASTEXITCODE -eq 0 -and [string]::IsNullOrEmpty(($diff -join "").Trim())) {
-                    $onlyFormatting = $true
-                }
-            }
-            catch { }
-            finally {
-                Pop-Location
-            }
-        }
-
-        if (-not $onlyFormatting) {
-            throw "Source fingerprint changed since the previous run. Rerun without -Resume, or use -ForceResume to override."
-        }
-        else {
-            Write-Host "Source fingerprint changed, but only formatting/whitespace differences were detected. Resuming..." -ForegroundColor Yellow
-        }
+        throw "Source fingerprint changed since the previous run. Rerun without -Resume. -ForceResume is only for development iteration, not release evidence."
     }
 
     $previousPhaseMap = Convert-PhaseMap $previousState
+    # Carry the original artifact paths through repeated resumes. Changing a run directory must not
+    # rerun the memory-heavy lanes just to add the Docker segment to the same candidate evidence.
+    if ($previousState.coverageResultsRelative) { $CoverageResultsRelative = $previousState.coverageResultsRelative }
+    if ($previousState.coverageReportDirectory) { $CoverageReportDir = $previousState.coverageReportDirectory }
+    if ($previousState.smokeBaselineReport) { $smokeBaselineReport = $previousState.smokeBaselineReport }
+    if ($previousState.standardBaselineReport) { $standardBaselineReport = $previousState.standardBaselineReport }
 }
 
 $results = New-Object System.Collections.Generic.List[object]
@@ -1037,7 +1024,6 @@ try {
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Smoke" } `
             $previousPhaseMap $fingerprint $results
 
-        $smokeBaselineReport = Join-Path $RunDir "cert-baseline-smoke.md"
         Invoke-LoggedPhase "Cert baseline regression check (smoke)" `
             ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport $smokeBaselineReport" `
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-MarkdownReport" $smokeBaselineReport } `
@@ -1050,7 +1036,6 @@ try {
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Standard" } `
             $previousPhaseMap $fingerprint $results
 
-        $standardBaselineReport = Join-Path $RunDir "cert-baseline-standard.md"
         Invoke-LoggedPhase "Cert baseline regression check (standard)" `
             ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport $standardBaselineReport" `
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-MarkdownReport" $standardBaselineReport } `

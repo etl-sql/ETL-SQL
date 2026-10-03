@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace ETL_SQL.Reporting.Semantics;
@@ -15,9 +16,8 @@ public static class ChartContractSerializer
     public static ChartSpec DeserializeChartSpec(string json)
     {
         ArgumentNullException.ThrowIfNull(json);
-        var legacy = json.Contains(ChartContractVersions.LegacyChartSpecSchema, StringComparison.Ordinal);
         var value = Deserialize<ChartSpec>(MigrateLegacy(json,
-            ChartContractVersions.LegacyChartSpecSchema, ChartContractVersions.ChartSpecSchema, ChartContractVersions.ChartSpecCurrent));
+            ChartContractVersions.LegacyChartSpecSchema, ChartContractVersions.ChartSpecSchema, ChartContractVersions.ChartSpecCurrent, out var legacy));
         if (!legacy || !Enabled(value.Theme.Tokens, "STACKED")) return value;
         value = value with
         {
@@ -39,9 +39,8 @@ public static class ChartContractSerializer
     public static PlotPlan DeserializePlotPlan(string json)
     {
         ArgumentNullException.ThrowIfNull(json);
-        var legacy = json.Contains(ChartContractVersions.LegacyPlotPlanSchema, StringComparison.Ordinal);
         var value = Deserialize<PlotPlan>(MigrateLegacy(json,
-            ChartContractVersions.LegacyPlotPlanSchema, ChartContractVersions.PlotPlanSchema, ChartContractVersions.PlotPlanCurrent));
+            ChartContractVersions.LegacyPlotPlanSchema, ChartContractVersions.PlotPlanSchema, ChartContractVersions.PlotPlanCurrent, out var legacy));
         if (legacy && Enabled(value.Style, "STACKED"))
             throw new InvalidDataException("A version-one PlotPlan using global STACKED geometry must be regenerated from its ChartSpec; it cannot be migrated without silently changing resolved geometry.");
         return value;
@@ -55,11 +54,18 @@ public static class ChartContractSerializer
             !value.Equals("FALSE", StringComparison.OrdinalIgnoreCase) && value != "0";
     }
 
-    private static string MigrateLegacy(string json, string legacySchema, string currentSchema, int currentVersion)
+    private static string MigrateLegacy(string json, string legacySchema, string currentSchema, int currentVersion, out bool legacy)
     {
-        if (string.IsNullOrWhiteSpace(json) || !json.Contains(legacySchema, StringComparison.Ordinal)) return json;
-        return json.Replace(legacySchema, currentSchema, StringComparison.Ordinal)
-            .Replace("\"version\": 1", $"\"version\": {currentVersion}", StringComparison.Ordinal);
+        legacy = false;
+        if (string.IsNullOrWhiteSpace(json)) return json;
+        // COMPAT_BREAK: 0.20.0 — migrate only an exact version-one envelope, preserving strings in the payload.
+        if (JsonNode.Parse(json) is not JsonObject envelope ||
+            envelope["schema"] is not JsonValue schema || !schema.TryGetValue<string>(out var schemaText) || schemaText != legacySchema ||
+            envelope["version"] is not JsonValue version || !version.TryGetValue<int>(out var number) || number != 1) return json;
+        legacy = true;
+        envelope["schema"] = currentSchema;
+        envelope["version"] = currentVersion;
+        return envelope.ToJsonString();
     }
 
     private static string SerializeContract<T>(T value) where T : IVersionedChartContract
@@ -107,9 +113,9 @@ internal static class ChartContractValidation
         if (string.IsNullOrWhiteSpace(value)) throw new InvalidDataException($"{field} is required.");
     }
 
-    internal static void RequireUnique(IEnumerable<string> values, string field)
+    internal static void RequireUnique(IEnumerable<string> values, string field, IEqualityComparer<string>? comparer = null)
     {
-        var duplicate = values.GroupBy(value => value, StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1);
+        var duplicate = values.GroupBy(value => value, comparer ?? StringComparer.OrdinalIgnoreCase).FirstOrDefault(group => group.Count() > 1);
         if (duplicate is not null) throw new InvalidDataException($"Duplicate {field} '{duplicate.Key}'.");
     }
 }

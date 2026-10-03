@@ -284,7 +284,7 @@ namespace ETL_SQL.Tests.Scale
 
         private void EmitMetrics(string scenario, int rowCount, long elapsedMs,
             long spillBytes, long resultRows, decimal checksum, bool passed,
-            ITelemetryContext? telemetry = null)
+            ITelemetryContext? telemetry = null, ScenarioResourceMetrics? measuredResources = null)
         {
             var rowScale = RowScale();
             var memoryTier = MemoryTier(rowScale);
@@ -294,7 +294,7 @@ namespace ETL_SQL.Tests.Scale
                 certificationTier = memoryTier;
             }
 
-            var resources = _resourceSampler.SnapshotAndReset();
+            var resources = measuredResources ?? _resourceSampler.SnapshotAndReset();
             const double bytesPerMb = 1024.0 * 1024.0;
             var startWorkingSetMB = Math.Round(resources.StartWorkingSetBytes / bytesPerMb, 1);
             var peakWorkingSetMB = Math.Round(resources.PeakWorkingSetBytes / bytesPerMb, 1);
@@ -355,6 +355,7 @@ namespace ETL_SQL.Tests.Scale
                 cpuTimeMs = Math.Round(resources.CpuTime.TotalMilliseconds, 1),
                 cpuUtilizationPercent = resources.CpuUtilizationPercent,
                 serverGcEnabled = GCSettings.IsServerGC,
+                runtimeVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
                 memoryBoundMB,
                 memoryMetric = "peak process working set",
                 memoryGateMode,
@@ -583,19 +584,81 @@ namespace ETL_SQL.Tests.Scale
             ev.MaxLastResultRows = Cap;
 
             ev.Telemetry.Clear();
+            var diagnosticMode = Environment.GetEnvironmentVariable("CERT_RESULT_OUTPUT_DIAGNOSTIC");
+            var originalSink = ResultFormatter.OutputSink;
+            ResultOutputMeasurement? outputMeasurement = diagnosticMode switch
+            {
+                "forward" => new ResultOutputMeasurement(originalSink, discard: false),
+                "discard" => new ResultOutputMeasurement(originalSink, discard: true),
+                null or "" => null,
+                _ => throw new InvalidOperationException("CERT_RESULT_OUTPUT_DIAGNOSTIC must be forward or discard.")
+            };
             var sw = Stopwatch.StartNew();
 
-            await ev.Evaluate(TestHelpers.Parse("SELECT grp, val FROM #cert;"));
+            try
+            {
+                if (outputMeasurement != null) ResultFormatter.OutputSink = outputMeasurement;
+                await ev.Evaluate(TestHelpers.Parse("SELECT grp, val FROM #cert;"));
+            }
+            finally
+            {
+                sw.Stop();
+                ResultFormatter.OutputSink = originalSink;
+            }
+            var measuredResources = _resourceSampler.SnapshotAndReset();
 
-            sw.Stop();
+            if (outputMeasurement != null)
+            {
+                _out.WriteLine("CERT_OUTPUT_DIAGNOSTIC:" + JsonSerializer.Serialize(new
+                {
+                    mode = diagnosticMode,
+                    elapsedMs = sw.Elapsed.TotalMilliseconds,
+                    outputWriteMs = outputMeasurement.Elapsed.TotalMilliseconds,
+                    outputCharacters = outputMeasurement.Characters,
+                    outputWrites = outputMeasurement.Writes,
+                    runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription
+                }));
+            }
 
             Assert.NotNull(ev.LastResult);
-            Assert.True(ev.LastResult.Rows.Count <= Cap,
-                $"Result rows {ev.LastResult.Rows.Count} exceeded cap {Cap}");
+            Assert.Equal(Cap, ev.LastResult.Rows.Count);
+            for (int index = 0; index < Cap; index++)
+            {
+                Assert.Equal((decimal)(index % 10), Convert.ToDecimal(ev.LastResult.Rows[index]["grp"]));
+                Assert.Equal((decimal)(index + 1), Convert.ToDecimal(ev.LastResult.Rows[index]["val"]));
+            }
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             EmitMetrics($"StreamingSelect_{Rows}_cap{Cap}", Rows, sw.ElapsedMilliseconds, spillBytes,
-                ev.LastResult.Rows.Count, (decimal)ev.LastResult.Rows.Count, ev.LastResult.Rows.Count <= Cap, ev.Telemetry);
+                ev.LastResult.Rows.Count, (decimal)ev.LastResult.Rows.Count, ev.LastResult.Rows.Count == Cap, ev.Telemetry,
+                measuredResources);
+        }
+
+        // The optional sink probe preserves formatting and result consumption. Discarded output is
+        // diagnostic evidence only and cannot be compared with the ordinary console-output baseline.
+        private sealed class ResultOutputMeasurement(ResultFormatter.IResultOutputSink inner, bool discard)
+            : ResultFormatter.IResultOutputSink
+        {
+            public TimeSpan Elapsed { get; private set; }
+            public long Characters { get; private set; }
+            public int Writes { get; private set; }
+
+            public void WriteLine(string text)
+            {
+                var started = Stopwatch.GetTimestamp();
+                try
+                {
+                    if (!discard) inner.WriteLine(text);
+                }
+                finally
+                {
+                    Elapsed += Stopwatch.GetElapsedTime(started);
+                    Characters += text.Length;
+                    Writes++;
+                }
+            }
+
+            public ConsoleKeyInfo ReadKey(bool intercept) => inner.ReadKey(intercept);
         }
 
         // ── 6. Window function at scale ───────────────────────────────────────

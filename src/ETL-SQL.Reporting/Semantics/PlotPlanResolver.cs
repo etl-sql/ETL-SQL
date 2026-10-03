@@ -39,7 +39,7 @@ public sealed class PlotPlanResolver
             Layers = layers,
             AccessibleSummary = summary,
             Facets = facets,
-            CartesianViewport = ResolveCartesianViewport(spec.Coordinate, plan.Scales, bounds)
+            CartesianViewport = ResolveCartesianViewport(spec.Coordinate, plan.Scales, bounds, plan.CartesianAxes)
         };
         resolved.Validate();
         return resolved;
@@ -56,20 +56,28 @@ public sealed class PlotPlanResolver
         var formatter = new ChartValueFormatter(spec.Formatting);
         var categories = ResolveCategories(spec, columns);
         var seriesKeys = ResolveSeries(spec, columns, categories);
-        var distinctSortedSeries = seriesKeys.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+        var seriesComparer = spec.IsConnectedComposition ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
+        var distinctSortedSeries = seriesKeys.Distinct(seriesComparer).OrderBy(k => k, seriesComparer).ToList();
         var series = seriesKeys.Select((key, _) =>
         {
             var identityIndex = distinctSortedSeries.IndexOf(key);
             if (identityIndex < 0) identityIndex = 0;
-            return new ResolvedSeries(key, key, identityIndex, ResolveColor(spec, key, identityIndex));
+            return new ResolvedSeries(key, spec.IsConnectedComposition ? CompositionSeriesLabel(spec, key) : key, identityIndex, ResolveColor(spec, key, identityIndex));
         }).OrderBy(s => s.Order).ThenBy(s => s.Key, StringComparer.Ordinal).ToImmutableArray();
         var palette = series.Select(item => new PaletteAssignment(item.Key, item.Color)).ToImmutableArray();
         var legend = series.Select(item => new LegendEntry(item.Key, item.Label, item.Order, item.Color)).ToImmutableArray();
         var layers = ResolveLayers(spec, data, columns, categories, series, formatter).ToImmutableArray();
+        if (spec.IsConnectedComposition)
+            layers = layers.OrderBy(layer => layer.ZIndex).ThenBy(layer => layer.Id, StringComparer.Ordinal).ToImmutableArray();
+        if (layers.Any(layer => !layer.Connections.IsDefault && ResolvedMarkConnection.FillsNullsWithZero(layer)))
+            layers = ConnectedMarkResolver.ResolveZeroGeometry(layers);
+        if (layers.Any(layer => layer.ConnectionDecorations))
+            layers = ConnectedMarkResolver.ResolveDecorations(layers, spec.Theme.Tokens);
         var radial = spec.Coordinate.Kind == CoordinateKind.Polar && layers.Any(layer => layer.Stack != StackMode.None);
         layers = radial ? RadialStackResolver.Resolve(spec, layers.Select((layer, index) => layer with { ZIndex = index }).ToImmutableArray()) : ResolveStacking(layers);
-        var scaleSpec = spec.Layers.Any(layer => layer.Mark == MarkKind.Area && !layer.Conditions.IsDefaultOrEmpty && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Y))
-            ? spec with { Scales = spec.Scales.Select(scale => scale.Channel == FieldChannel.Y ? scale with { IncludeZero = true } : scale).ToImmutableArray() }
+        var axes = spec.ResolveCartesianAxes();
+        var scaleSpec = spec.Layers.Any(layer => (layer.Mark == MarkKind.Area && (!layer.Conditions.IsDefaultOrEmpty || spec.IsTransposedAreaAspect || spec.IsTransposedConnected) || layer.Mark == MarkKind.Line && !layer.Conditions.IsDefaultOrEmpty && layer.Style.Any(token => token.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase) && token.Value.Equals("ZERO", StringComparison.OrdinalIgnoreCase))) && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Y))
+            ? spec with { Scales = spec.Scales.Select(scale => scale.Channel == FieldChannel.Y && (axes is null || scale.Id.Equals(axes.YScaleId, StringComparison.OrdinalIgnoreCase)) ? scale with { IncludeZero = true } : scale).ToImmutableArray() }
             : spec;
         var scales = ResolveScales(scaleSpec, columns, categories, layers, formatter).ToImmutableArray();
         if (radial)
@@ -147,11 +155,16 @@ public sealed class PlotPlanResolver
         // `gapRows.Contains` on an ImmutableArray made the skipped-row scan O(rows x gap rows).
         var gapRowSet = new HashSet<int>();
         var usedRows = new HashSet<int>();
+        var conditionedConnection = spec.Layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty);
         foreach (var layer in layers)
         {
             if (!layer.Style.IsDefault && layer.Style.Any(token => token.Name == "overlayType")) continue;
+            var connect = conditionedConnection && !layer.Connections.IsDefault && ResolvedMarkConnection.ConnectsAcrossNulls(layer);
             foreach (var datum in layer.Data)
+            {
+                if (connect && !ResolvedMarkConnection.HasCompleteCoordinates(datum, layer.AreaRibbon)) continue;
                 (datum.IsGap ? gapRowSet : usedRows).Add(datum.RowIndex);
+            }
         }
         var gapRows = gapRowSet.Order().ToImmutableArray();
         var skippedRows = Enumerable.Range(0, data.RowCount)
@@ -176,6 +189,9 @@ public sealed class PlotPlanResolver
         var facets = ResolveFacets(spec, independent.Columns, independent.Scales, bounds, independent.Formatter);
         var layers = ResolveDisplayOffsets(spec, data, independent.Columns, independent.Layers,
             independent.Scales, facets, bounds, independent.Legend.Length);
+        if (spec.HasOrdinaryInterpolation)
+            layers = layers.Select(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && layer.Connections.IsDefault
+                ? layer with { PathInterpolation = ResolvedConnectionGeometry.Kind(layer.Style) } : layer).ToImmutableArray();
         var summary = BuildSummary(spec, data, independent.Series, layers, independent.Scales, facets,
             independent.Nulls.GapRows, independent.Nulls.SkippedRows);
 
@@ -195,14 +211,25 @@ public sealed class PlotPlanResolver
             spec.Theme.Tokens,
             facets) with
         {
-            CartesianViewport = ResolveCartesianViewport(spec.Coordinate, independent.Scales, bounds),
+            CartesianAxes = spec.ResolveCartesianAxes(),
+            CartesianViewport = ResolveCartesianViewport(spec.Coordinate, independent.Scales, bounds, spec.ResolveCartesianAxes()),
             Interaction = independent.Interaction,
             Geography = independent.Geography
         };
         if (layers.Any(layer => layer.Mark == MarkKind.Arc && layer.Stack != StackMode.None))
             plan = plan with { Schema = ChartContractVersions.RadialPlotPlanSchema, Version = ChartContractVersions.RadialPlotPlanVersion };
+        if (layers.Any(layer => layer.AreaRibbonScaleId is not null))
+            plan = plan with { Schema = ChartContractVersions.ScaledRibbonPlotPlanSchema, Version = ChartContractVersions.ScaledRibbonPlotPlanVersion };
+        if (spec.IsTransposedAreaAspect)
+            plan = plan with { Schema = ChartContractVersions.TransposedAreaPlotPlanSchema, Version = ChartContractVersions.TransposedAreaPlotPlanVersion };
         if (spec.Layers.Any(layer => layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty))
             plan = ConnectedMarkResolver.Attach(plan);
+        if (spec.HasOrdinaryInterpolation)
+            plan = plan with { Schema = ChartContractVersions.OrdinaryInterpolationPlotPlanSchema, Version = ChartContractVersions.OrdinaryInterpolationPlotPlanVersion };
+        if (spec.HasOrdinaryAreaInterpolation)
+            plan = plan with { Schema = ChartContractVersions.OrdinaryAreaInterpolationPlotPlanSchema, Version = ChartContractVersions.OrdinaryAreaInterpolationPlotPlanVersion };
+        if (spec.HasTransposedConfidence)
+            plan = plan with { Schema = ChartContractVersions.TransposedConfidencePlotPlanSchema, Version = ChartContractVersions.TransposedConfidencePlotPlanVersion };
         plan.Validate();
         return plan;
     }
@@ -309,6 +336,14 @@ public sealed class PlotPlanResolver
         IReadOnlyDictionary<string, ChartColumn> columns,
         ImmutableArray<string> categories)
     {
+        if (spec.IsConnectedComposition)
+            return spec.Layers.SelectMany(layer =>
+            {
+                var color = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color && binding.SemanticKind is DataSemanticKind.Nominal or DataSemanticKind.Ordinal);
+                return color?.Field is { } field && columns.TryGetValue(field, out var column)
+                    ? column.Values.Select(CompositionSeriesKey)
+                    : layer.Mark == MarkKind.Rule ? [] : new[] { "layer:" + layer.Id };
+            }).Distinct(StringComparer.Ordinal).ToImmutableArray();
         if (spec.Coordinate.Kind == CoordinateKind.Polar && !spec.Layers.Any(layer => layer.Bindings.Any(binding => binding.Stack != StackMode.None)) && spec.Bindings.Any(binding => binding.Channel == FieldChannel.Theta)) return categories;
         var color = spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color);
         if (color?.SemanticKind is not DataSemanticKind.Quantitative && color?.Field is { } colorField && columns.TryGetValue(colorField, out var colorColumn))
@@ -325,6 +360,11 @@ public sealed class PlotPlanResolver
         return [measure?.Field ?? spec.Id];
     }
 
+    private static string CompositionSeriesKey(ChartValue value) => value.Kind == ChartValueKind.Null ? "null:" : "value:" + ValueKey(value);
+
+    private static string CompositionSeriesLabel(ChartSpec spec, string key) => key.StartsWith("value:", StringComparison.Ordinal) ? key[6..]
+        : key == "null:" ? "(null)" : spec.Layers.First(layer => "layer:" + layer.Id == key).Style.FirstOrDefault(token => token.Name == "series")?.Value ?? key[6..];
+
     private static IEnumerable<ResolvedScale> ResolveScales(
         ChartSpec spec,
         IReadOnlyDictionary<string, ChartColumn> columns,
@@ -334,8 +374,9 @@ public sealed class PlotPlanResolver
     {
         foreach (var scale in spec.Scales)
         {
+            // COMPAT_BREAK: 0.20.0 — scale IDs have the same case-insensitive identity as validation.
             var bindings = spec.Bindings.Concat(spec.Layers.SelectMany(layer => layer.Bindings))
-                .Where(binding => binding.ScaleId == scale.Id &&
+                .Where(binding => string.Equals(binding.ScaleId, scale.Id, StringComparison.OrdinalIgnoreCase) &&
                     (binding.SourceKind != BindingSourceKind.Field || binding.Field is not null && columns.ContainsKey(binding.Field))).ToList();
             if (scale.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal)
             {
@@ -594,24 +635,39 @@ public sealed class PlotPlanResolver
             }
 
             // COMPAT_BREAK: 0.20 — isolated single-axis rules must not inherit another layer's color groups.
-            var isolatedGeometry = layer.Mark is (MarkKind.Rule or MarkKind.Rect or MarkKind.Line) && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null };
+            var isolatedGeometry = spec.IsConnectedComposition || layer.Mark is (MarkKind.Rule or MarkKind.Rect or MarkKind.Line or MarkKind.Area) && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null };
             var colorBinding = layer.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color)
                 ?? (isolatedGeometry || spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Stack != StackMode.None) ? null : spec.Bindings.FirstOrDefault(binding => binding.Channel == FieldChannel.Color));
             var explicitSeries = layer.Style.FirstOrDefault(token => token.Name == "series")?.Value;
+            var conditioned = layer.Mark is (MarkKind.Line or MarkKind.Area) && !layer.Conditions.IsDefaultOrEmpty;
+            var areaConfidence = spec.HasTransposedConfidence && layer.Mark == MarkKind.Area && layer.Bindings.Any(binding => binding.Channel == FieldChannel.ConfidenceLow);
+            var areaRibbon = areaConfidence || layer.Mark == MarkKind.Area && (conditioned || spec.IsTransposedAreaAspect || spec.IsConnectedComposition) && layer.Bindings.Any(binding => binding.Channel == FieldChannel.YStart);
+            var ribbonScaleId = layer.Mark == MarkKind.Area &&
+                layer.Bindings.FirstOrDefault(binding => binding.Channel == (areaConfidence ? FieldChannel.ConfidenceLow : FieldChannel.YStart))?.ScaleId is { } endpointScaleId &&
+                !endpointScaleId.Equals(spec.Scales.FirstOrDefault(scale => scale.Channel == FieldChannel.Y)?.Id, StringComparison.OrdinalIgnoreCase)
+                    ? endpointScaleId : null;
             if (colorBinding?.SemanticKind is not DataSemanticKind.Quantitative && colorBinding?.Field is { } colorField && columns.TryGetValue(colorField, out var colorColumn))
             {
-                foreach (var resolvedSeries in series)
+                if (spec.IsConnectedComposition && colorColumn.Values.IsDefaultOrEmpty)
+                {
+                    yield return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, null, [])
+                    { Style = layer.Style, Stack = LayerStack(layer, spec), Position = layer.Position, AreaRibbon = areaRibbon, AreaConfidence = areaConfidence, AreaRibbonScaleId = ribbonScaleId, ConnectionInterpolation = conditioned ? ResolvedConnectionGeometry.Kind(layer.Style) : null, ConnectionDecorations = conditioned && layer.Conditions.Any(condition => ResolvedConnectionDecoration.IsDecorationChannel(condition.Channel)), Connections = conditioned ? [] : default };
+                    continue;
+                }
+                var presentKeys = spec.IsConnectedComposition ? colorColumn.Values.Select(CompositionSeriesKey).ToHashSet(StringComparer.Ordinal) : null;
+                var layerSeries = presentKeys is not null ? series.Where(item => presentKeys.Contains(item.Key)) : series.AsEnumerable();
+                foreach (var resolvedSeries in layerSeries)
                 {
                     var dataPoints = ResolveLayerData(layer, spec, data, columns, categories, formatter,
-                        rowIndex => ValueKey(colorColumn.Values[rowIndex]) == resolvedSeries.Key);
-                    yield return new ResolvedMarkLayer($"{layer.Id}-{resolvedSeries.Order:D2}", layer.Mark, layer.ZIndex + resolvedSeries.Order,
+                        rowIndex => (spec.IsConnectedComposition ? CompositionSeriesKey(colorColumn.Values[rowIndex]) : ValueKey(colorColumn.Values[rowIndex])) == resolvedSeries.Key);
+                    yield return new ResolvedMarkLayer($"{layer.Id}-{resolvedSeries.Order:D2}", layer.Mark, spec.IsConnectedComposition ? layer.ZIndex : layer.ZIndex + resolvedSeries.Order,
                         resolvedSeries.Key, dataPoints)
-                    { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position };
+                    { Style = layer.Style, Stack = LayerStack(layer, spec), BandSize = layer.BandSize, TickThickness = layer.TickThickness, TickOrientation = layer.TickOrientation, Position = layer.Position, AreaRibbon = areaRibbon, AreaConfidence = areaConfidence, AreaRibbonScaleId = ribbonScaleId, ConnectionInterpolation = conditioned ? ResolvedConnectionGeometry.Kind(layer.Style) : null, ConnectionDecorations = conditioned && layer.Conditions.Any(condition => ResolvedConnectionDecoration.IsDecorationChannel(condition.Channel)), Connections = conditioned ? [] : default };
                 }
             }
             else
             {
-                var seriesKey = explicitSeries ?? (spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Stack != StackMode.None) ? layer.Id : series.FirstOrDefault()?.Key);
+                var seriesKey = spec.IsConnectedComposition ? layer.Mark == MarkKind.Rule ? null : "layer:" + layer.Id : explicitSeries ?? (spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Stack != StackMode.None) ? layer.Id : series.FirstOrDefault()?.Key);
                 yield return new ResolvedMarkLayer(layer.Id, layer.Mark, layer.ZIndex, seriesKey,
                     ResolveLayerData(layer, spec, data, columns, categories, formatter, _ => true))
                 {
@@ -621,7 +677,12 @@ public sealed class PlotPlanResolver
                     TickThickness = layer.TickThickness,
                     TickOrientation = layer.TickOrientation,
                     Position = layer.Position,
-                    AreaRibbon = layer.Mark == MarkKind.Area && !layer.Conditions.IsDefaultOrEmpty && layer.Bindings.Any(binding => binding.Channel == FieldChannel.YStart)
+                    AreaRibbon = areaRibbon,
+                    AreaConfidence = areaConfidence,
+                    ConnectionInterpolation = conditioned ? ResolvedConnectionGeometry.Kind(layer.Style) : null,
+                    ConnectionDecorations = conditioned && layer.Conditions.Any(condition => ResolvedConnectionDecoration.IsDecorationChannel(condition.Channel)),
+                    Connections = conditioned ? [] : default,
+                    AreaRibbonScaleId = ribbonScaleId
                 };
             }
         }
@@ -851,6 +912,16 @@ public sealed class PlotPlanResolver
                 !layer.Bindings.Any(existing => existing.Channel == binding.Channel)));
         // The condition grouping is identical for every row of a layer; it used to be rebuilt per row.
         var conditionGroups = GroupConditions(layer.Conditions);
+        var nulls = spec.IsConnectedComposition ? spec.NullHandling with
+        {
+            Default = layer.Style.FirstOrDefault(token => token.Name.Equals("nullHandling", StringComparison.OrdinalIgnoreCase))?.Value.ToUpperInvariant() switch
+            {
+                "CONNECT" => NullValuePolicy.Skip,
+                "GAP" => NullValuePolicy.Gap,
+                "ZERO" => NullValuePolicy.Zero,
+                _ => spec.NullHandling.Default
+            }
+        } : spec.NullHandling;
         var categoryBinding = layerBindings.FirstOrDefault(binding => binding.Channel is FieldChannel.X or FieldChannel.Theta);
         var rows = new List<ResolvedDatum>();
         var preserveRows = spec.Coordinate.Kind == CoordinateKind.Polar && layer.Bindings.Any(binding => binding.Channel == FieldChannel.Radius && binding.Stack != StackMode.None) || layer.Style.Any(token => token.Name.Equals("preserveRows", StringComparison.OrdinalIgnoreCase)
@@ -880,7 +951,7 @@ public sealed class PlotPlanResolver
                 foreach (var facetKey in facetKeys)
                     foreach (var category in categories)
                         if (firstRowByFacetCategory.TryGetValue((facetKey, category), out var rowIndex))
-                            rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, conditionGroups, formatter));
+                            rows.Add(Datum(rowIndex, layerBindings, columns, nulls, conditionGroups, formatter));
                 return rows.ToImmutableArray();
             }
             // The same one-pass indexing for the unfaceted category path.
@@ -895,14 +966,14 @@ public sealed class PlotPlanResolver
             {
                 var category = categories[categoryIndex];
                 rows.Add(firstRowByCategory.TryGetValue(category, out var rowIndex)
-                    ? Datum(rowIndex, layerBindings, columns, spec.NullHandling, conditionGroups, formatter)
+                    ? Datum(rowIndex, layerBindings, columns, nulls, conditionGroups, formatter)
                     : GapDatum(categoryIndex, layerBindings, categoryBinding, category));
             }
             return rows.ToImmutableArray();
         }
 
         for (var rowIndex = 0; rowIndex < data.RowCount; rowIndex++)
-            if (include(rowIndex)) rows.Add(Datum(rowIndex, layerBindings, columns, spec.NullHandling, conditionGroups, formatter));
+            if (include(rowIndex)) rows.Add(Datum(rowIndex, layerBindings, columns, nulls, conditionGroups, formatter));
         return rows.ToImmutableArray();
     }
 
@@ -1200,9 +1271,20 @@ public sealed class PlotPlanResolver
         return text is null ? null : text.DisplayValue ?? Display(text.Value);
     }
 
+    internal static string CartesianAreaDescription(ResolvedDatum datum, bool ribbon, bool transposedAxes = false)
+    {
+        string Value(FieldChannel channel) => Display(datum.Channels.FirstOrDefault(value => value.Channel == channel)?.Value ?? ChartValue.Null());
+        if (datum.IsGap) return "gap";
+        var x = Value(transposedAxes ? FieldChannel.Y : FieldChannel.X);
+        var end = Value(transposedAxes ? ribbon ? FieldChannel.XEnd : FieldChannel.X : ribbon ? FieldChannel.YEnd : FieldChannel.Y);
+        var start = ribbon ? Value(transposedAxes ? FieldChannel.XStart : FieldChannel.YStart) : "0";
+        return $"X {x}; Y {start} to {end}";
+    }
+
     private static SemanticFallback BuildFallback(ChartSpec spec, ImmutableArray<ResolvedMarkLayer> layers,
         ImmutableArray<string> categories, ChartValueFormatter formatter)
     {
+        var transposedPhysical = spec.Coordinate.Kind == CoordinateKind.TransposedCartesian && (spec.Coordinate.AspectRatio is not null || spec.IsTransposedConnected);
         if (spec.Coordinate.Kind == CoordinateKind.Polar && layers.Any(layer => layer.Stack != StackMode.None))
             return new SemanticFallback(SemanticFallbackKind.ProportionalBreakdown, spec.Title ?? spec.Id,
                 layers.SelectMany(layer => layer.Data.Select(datum => new SemanticFallbackItem(RadialStackResolver.Theta(datum) ?? "gap",
@@ -1214,10 +1296,24 @@ public sealed class PlotPlanResolver
             .Where(value => value is not null).Sum(value => Math.Max(0m, Number(value!.Value) ?? 0m));
         var items = sourceLayers.SelectMany((layer, layerIndex) => layer.Data.Select((datum, index) =>
         {
-            if (layer.AreaRibbon)
-                return new SemanticFallbackItem($"Row {datum.RowIndex + 1}", ConnectedMarkResolver.RibbonDescription(datum), index)
-                { Group = layer.Id, Detail = "ribbon interval" };
-            if (layer.Mark == MarkKind.Rect && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
+            if (layer.ConnectionDecorations)
+                return new SemanticFallbackItem($"Row {datum.RowIndex + 1}", ConnectedMarkResolver.DatumDescription(datum, layer), (layerIndex * 100000) + index)
+                { Group = layer.Id, Detail = ConnectedMarkResolver.DecorationDescription(datum) + "; " + string.Join(", ", datum.Encodings.Select(value => $"conditional {value.Channel}: {formatter.Format(value.Value)}")) };
+            if ((spec.IsTransposedConnected || layer.ConnectionInterpolation is not null) && !layer.Connections.IsDefault)
+            {
+                var presentation = datum.Encodings.IsDefaultOrEmpty ? "layer presentation" : string.Join(", ",
+                    datum.Encodings.Select(value => $"conditional {value.Channel}: {formatter.Format(value.Value)}"));
+                return new SemanticFallbackItem($"Row {datum.RowIndex + 1}", ConnectedMarkResolver.DatumDescription(datum, layer), (layerIndex * 100000) + index)
+                { Group = layer.Id, Detail = (spec.IsTransposedConnected ? "X vertical, Y horizontal; " : "") + presentation };
+            }
+            // COMPAT_BREAK: 0.20.0 — transposed ribbons expose their raw interval in semantic fallbacks.
+            if (layer.AreaRibbon || layer.Mark == MarkKind.Area && spec.Coordinate.Kind == CoordinateKind.TransposedCartesian && datum.Channels.Any(value => value.Channel == FieldChannel.YStart))
+                return new SemanticFallbackItem($"Row {datum.RowIndex + 1}", ConnectedMarkResolver.RibbonDescription(datum, !layer.Connections.IsDefault && ResolvedMarkConnection.FillsNullsWithZero(layer), layer.AreaConfidence), index)
+                { Group = layer.Id, Detail = layer.AreaConfidence ? "confidence interval" : "ribbon interval" };
+            if (layer.Mark == MarkKind.Area && spec.IsTransposedAreaAspect)
+                return new SemanticFallbackItem($"Row {datum.RowIndex + 1}", CartesianAreaDescription(datum, false), (layerIndex * 100000) + index)
+                { Group = layer.Id, Detail = "zero-baseline area" };
+            if (layer.Mark == MarkKind.Rect && transposedPhysical)
             {
                 var range = datum.IsGap ? null : CartesianRangeDescription(datum);
                 return new SemanticFallbackItem($"Row {datum.RowIndex + 1}", range ?? "gap", (layerIndex * 100000) + index)
@@ -1228,7 +1324,7 @@ public sealed class PlotPlanResolver
             }
             var label = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Region or FieldChannel.Route or FieldChannel.Text or FieldChannel.X or FieldChannel.Theta)?.DisplayValue
                 ?? (index < categories.Length ? categories[index] : $"Row {index + 1}");
-            if (layer.Mark == MarkKind.Text && spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
+            if (layer.Mark == MarkKind.Text && transposedPhysical)
                 label = TextLabel(datum) ?? label;
             var value = datum.Channels.FirstOrDefault(channel => channel.Channel is FieldChannel.Y or FieldChannel.Y2 or FieldChannel.Radius or
                 FieldChannel.Median or FieldChannel.Close or FieldChannel.Size or FieldChannel.YEnd);
@@ -1247,13 +1343,20 @@ public sealed class PlotPlanResolver
             };
             var item = new SemanticFallbackItem(label ?? $"Row {index + 1}", datum.IsGap ? "gap" : value is null ? "" : value.DisplayValue ?? formatter.Format(value.Value), (layerIndex * 100000) + index)
             {
-                Group = layer.SeriesKey ?? (overlayKind is "Forecast" or "ForecastConfidence" or "ForecastAnomaly" ? layer.Id : null),
+                Group = spec.IsConnectedComposition ? layer.Id : layer.SeriesKey ?? (overlayKind is "Forecast" or "ForecastConfidence" or "ForecastAnomaly" ? layer.Id : null),
                 Detail = datum.IsGap ? "null gap" : confidenceDetail ?? errorDetail ?? interval ?? overlayDetail ?? conditionDetail ?? (layer.Mark == MarkKind.Arc && numeric.HasValue && total > 0m
                     ? $"{numeric.Value / total:P1} of total"
                     : null)
             };
-            var offsetDetail = spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null }
+            var offsetDetail = transposedPhysical
                 ? OffsetDetail(datum) : null;
+            if (ConnectedMarkResolver.ZeroDetail(datum) is { } zeroDetail)
+                item = item with { Detail = item.Detail is null ? zeroDetail : $"{zeroDetail}; {item.Detail}" };
+            else if (!layer.Connections.IsDefault && ResolvedMarkConnection.FillsNullsWithZero(layer) && datum.IsGap)
+            {
+                string Raw(FieldChannel channel) => datum.Channels.FirstOrDefault(value => value.Channel == channel) is { Value.Kind: not ChartValueKind.Null } raw ? formatter.Format(raw.Value) : "null";
+                item = item with { Detail = $"gap; raw X {Raw(FieldChannel.X)}; raw Y {Raw(FieldChannel.Y)}" };
+            }
             return offsetDetail is null ? item : item with
             {
                 Detail = item.Detail is null ? offsetDetail : $"{item.Detail}; {offsetDetail}"
@@ -1261,7 +1364,7 @@ public sealed class PlotPlanResolver
         })).Concat(layers.Where(layer => layer.Mark == MarkKind.Rule)
             .SelectMany(layer =>
             {
-                if (spec.Coordinate is not { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null })
+                if (!transposedPhysical)
                     return Enumerable.Repeat(layer, 1);
                 var references = ReferenceRuleData(layer.Data).Select(datum => layer with { Data = [datum] });
                 return layer.Data.Any(IsRangeRule) ? references : references.DefaultIfEmpty(layer with { Data = [] });
@@ -1278,9 +1381,9 @@ public sealed class PlotPlanResolver
                 ? rawLabel
                 : (overlayKind == "ReferenceLine" ? "Reference" : overlayKind ?? layer.Id);
             var detail = overlayKind == "ReferenceLine" ? "author reference line" : "labeled reference rule";
-            if (spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } && value is not null)
+            if (transposedPhysical && value is not null)
                 detail = $"{value.Channel} = {value.DisplayValue ?? formatter.Format(value.Value)}; {(value.Channel == FieldChannel.X ? "horizontal" : "vertical")} reference rule";
-            if (spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
+            if (transposedPhysical &&
                 layer.Data.FirstOrDefault() is { } rangeDatum && CartesianRangeDescription(rangeDatum) is { } range)
                 return new SemanticFallbackItem(label, range, ((sourceLayers.Count + 1) * 100000) + index)
                 { Detail = "reference segment", Group = "Reference" };
@@ -1325,14 +1428,14 @@ public sealed class PlotPlanResolver
                 var rowLabel = rowValues[rowIndex];
                 var columnLabel = columnValues[columnIndex];
                 var indices = FacetIndices(sourceRowCount, rowFacetKeys, rowLabel, columnFacetKeys, columnLabel);
-                if (indices.IsDefaultOrEmpty) continue;
+                if (indices.IsDefaultOrEmpty && !spec.IsConnectedComposition) continue;
                 var scales = globalScales.Select(scale => Independent(scale, spec.Facet.Resolution, spec, columns, indices, formatter)).ToImmutableArray();
                 var panelBounds = new PlotBounds(bounds.X + columnIndex * panelWidth, bounds.Y + rowIndex * panelHeight, panelWidth, panelHeight);
                 panels.Add(new ResolvedFacetPanel(
                     $"facet-{rowIndex:D2}-{columnIndex:D2}", rowLabel, columnLabel,
                     panelBounds, indices, scales)
                 {
-                    CartesianViewport = ResolveCartesianViewport(spec.Coordinate, scales, panelBounds)
+                    CartesianViewport = ResolveCartesianViewport(spec.Coordinate, scales, panelBounds, spec.ResolveCartesianAxes())
                 });
             }
         return panels.ToImmutableArray();
@@ -1370,7 +1473,7 @@ public sealed class PlotPlanResolver
                 $"facet-wrap-{index:D3}", null, label,
                 panelBounds, indices, scales)
             {
-                CartesianViewport = ResolveCartesianViewport(spec.Coordinate, scales, panelBounds)
+                CartesianViewport = ResolveCartesianViewport(spec.Coordinate, scales, panelBounds, spec.ResolveCartesianAxes())
             });
         }
         return panels.ToImmutableArray();
@@ -1393,11 +1496,11 @@ public sealed class PlotPlanResolver
     }
 
     private static PlotBounds? ResolveCartesianViewport(
-        CoordinateSpec coordinate, ImmutableArray<ResolvedScale> scales, PlotBounds bounds)
+        CoordinateSpec coordinate, ImmutableArray<ResolvedScale> scales, PlotBounds bounds, ResolvedCartesianAxes? axes = null)
     {
         if (coordinate.AspectRatio is not { } aspectRatio) return null;
-        var xScale = scales.First(scale => scale.Channel == FieldChannel.X);
-        var yScale = scales.First(scale => scale.Channel == FieldChannel.Y);
+        var xScale = scales.First(scale => axes is null ? scale.Channel == FieldChannel.X : scale.Id.Equals(axes.XScaleId, StringComparison.OrdinalIgnoreCase));
+        var yScale = scales.First(scale => axes is null ? scale.Channel == FieldChannel.Y : scale.Id.Equals(axes.YScaleId, StringComparison.OrdinalIgnoreCase));
         var xSpan = ScaleSpan(xScale);
         var ySpan = ScaleSpan(yScale);
         if (xSpan <= 0m || ySpan <= 0m)
@@ -1485,8 +1588,9 @@ public sealed class PlotPlanResolver
             _ => ScaleResolutionMode.Shared
         };
         if (mode == ScaleResolutionMode.Shared) return scale;
+        // COMPAT_BREAK: 0.20.0 — independent domains honor case-insensitive scale references too.
         var bindings = spec.Bindings.Concat(spec.Layers.SelectMany(layer => layer.Bindings))
-            .Where(binding => binding.ScaleId == scale.Id &&
+            .Where(binding => string.Equals(binding.ScaleId, scale.Id, StringComparison.OrdinalIgnoreCase) &&
                 (binding.SourceKind != BindingSourceKind.Field || binding.Field is not null && columns.ContainsKey(binding.Field))).ToList();
         if (scale.Kind is ScaleKind.Band or ScaleKind.Point or ScaleKind.Ordinal)
         {
@@ -1515,8 +1619,10 @@ public sealed class PlotPlanResolver
         var values = bindings.SelectMany(binding => rows.Select(index => Number(BindingValue(binding, columns, index))))
             .Where(value => value.HasValue).Select(value => value!.Value).ToList();
         if (values.Count == 0) return scale;
-        var minimum = values.Min();
-        var maximum = values.Max();
+        var intent = spec.Scales.Single(candidate => candidate.Id.Equals(scale.Id, StringComparison.OrdinalIgnoreCase));
+        // COMPAT_BREAK: 0.20.0 — independent numeric facets retain explicit MIN/MAX bounds.
+        var minimum = intent.DomainMinimum is { } lower ? Number(lower)!.Value : values.Min();
+        var maximum = intent.DomainMaximum is { } upper ? Number(upper)!.Value : values.Max();
         if (scale.Kind == ScaleKind.Logarithmic && minimum <= 0m)
             throw new InvalidOperationException($"Independent logarithmic scale '{scale.Id}' requires positive values.");
         if (scale.IncludesZero) { minimum = Math.Min(0m, minimum); maximum = Math.Max(0m, maximum); }
@@ -1584,11 +1690,12 @@ public sealed class PlotPlanResolver
                 throw new InvalidOperationException($"Layer '{layer.Id}' JITTER key field '{keyField}' contains duplicate value '{duplicate.Key}'.");
         }
 
-        var transposedPlacementViewport = spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
+        var physicalTransposed = spec.Coordinate.Kind == CoordinateKind.TransposedCartesian && (spec.Coordinate.AspectRatio is not null || spec.IsTransposedConnected);
+        var transposedPlacementViewport = physicalTransposed &&
             layers.Any(layer => layer.Position is { Kind: PositionAdjustmentKind.Jitter } or
             { Kind: PositionAdjustmentKind.Nudge, Unit: PositionAdjustmentUnit.Band or PositionAdjustmentUnit.Data } ||
                 layer.Data.Any(datum => datum.Channels.Any(channel => channel.Channel is FieldChannel.XOffset or FieldChannel.YOffset)))
-            ? ResolveCartesianViewport(spec.Coordinate, scales, bounds) : null;
+            ? ResolveCartesianViewport(spec.Coordinate, scales, bounds, spec.ResolveCartesianAxes()) ?? bounds : null;
 
         var dataAreas = new Dictionary<PlotBounds, PlotBounds>();
         PlotBounds DataArea(PlotBounds viewport)
@@ -1598,6 +1705,7 @@ public sealed class PlotPlanResolver
             return area;
         }
 
+        var axes = spec.ResolveCartesianAxes();
         return layers.Select(layer => layer with
         {
             Data = layer.Data.Select(datum =>
@@ -1605,15 +1713,15 @@ public sealed class PlotPlanResolver
                 var panel = panelByRow.GetValueOrDefault(datum.RowIndex);
                 var datumScales = panel?.Scales ?? scales;
                 var datumBounds = panel?.CartesianViewport ?? panel?.Bounds ?? bounds;
-                var xScale = datumScales.FirstOrDefault(scale => scale.Channel == FieldChannel.X);
-                var yScale = datumScales.FirstOrDefault(scale => scale.Channel is FieldChannel.Y or FieldChannel.Y2);
+                var xScale = datumScales.FirstOrDefault(scale => axes is null ? scale.Channel == FieldChannel.X : scale.Id.Equals(axes.XScaleId, StringComparison.OrdinalIgnoreCase));
+                var yScale = datumScales.FirstOrDefault(scale => axes is null ? scale.Channel is FieldChannel.Y or FieldChannel.Y2 : scale.Id.Equals(axes.YScaleId, StringComparison.OrdinalIgnoreCase));
                 var xBand = datumBounds.Width / Math.Max(1, xScale?.Categories.Length ?? 1);
                 var yBand = datumBounds.Height / Math.Max(1, yScale?.Categories.Length ?? 1);
                 var offsetX = ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, xBand);
                 var offsetY = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, yBand);
                 if (transposedPlacementViewport is not null)
                 {
-                    var viewport = panel?.CartesianViewport ?? transposedPlacementViewport;
+                    var viewport = panel?.CartesianViewport ?? panel?.Bounds ?? transposedPlacementViewport;
                     offsetX = ResolveOffsetChannel(datum, FieldChannel.YOffset, datumScales, viewport.Width - 80m, respectReverse: true);
                     offsetY = -ResolveOffsetChannel(datum, FieldChannel.XOffset, datumScales, viewport.Height - 100m, respectReverse: true);
                 }
@@ -1627,7 +1735,7 @@ public sealed class PlotPlanResolver
                         {
                             // Jitter amplitudes use the fitted plot before renderer-specific legend layout.
                             // Semantic X moves vertically; semantic Y moves horizontally.
-                            var viewport = panel?.CartesianViewport ?? transposedPlacementViewport;
+                            var viewport = panel?.CartesianViewport ?? panel?.Bounds ?? transposedPlacementViewport;
                             offsetX += SignedHash(spec.Id, identity, key, "y", position.Seed) * position.Y * (viewport.Width - 80m);
                             offsetY -= SignedHash(spec.Id, identity, key, "x", position.Seed) * position.X * (viewport.Height - 100m);
                         }
@@ -1641,10 +1749,10 @@ public sealed class PlotPlanResolver
                     }
                     else if (position.Kind == PositionAdjustmentKind.Nudge)
                     {
-                        // Display offsets are physical coordinates. For the fixed-aspect transposed
-                        // point composition, semantic X is vertical and semantic Y is horizontal.
-                        var viewport = panel?.CartesianViewport ?? transposedPlacementViewport;
-                        var nudge = spec.Coordinate is { Kind: CoordinateKind.TransposedCartesian, AspectRatio: not null } &&
+                        // Display offsets are physical coordinates. In a transposed composition,
+                        // semantic X is vertical and semantic Y is horizontal.
+                        var viewport = panel?.CartesianViewport ?? panel?.Bounds ?? transposedPlacementViewport;
+                        var nudge = physicalTransposed &&
                             position.Unit == PositionAdjustmentUnit.Em
                             ? (X: position.Y * 12m, Y: -position.X * 12m)
                             : transposedPlacementViewport is not null && position.Unit == PositionAdjustmentUnit.Band
@@ -1677,8 +1785,12 @@ public sealed class PlotPlanResolver
     private static (decimal X, decimal Y) ResolveTransposedDataNudge(PositionAdjustmentSpec position, ResolvedDatum datum,
         ResolvedScale xScale, ResolvedScale yScale, PlotBounds area, string layerId, MarkKind mark)
     {
+        if (mark is (MarkKind.Line or MarkKind.Area) && datum.IsGap) return (0m, 0m);
         var x = Number(Channel(datum, FieldChannel.X) ?? ChartValue.Null());
         var y = Number(Channel(datum, FieldChannel.Y) ?? ChartValue.Null());
+        // A ribbon's authored start anchors the whole cross-section, including crossing bounds.
+        if (mark == MarkKind.Area && (Channel(datum, FieldChannel.YStart) ?? Channel(datum, FieldChannel.ConfidenceLow)) is { } start)
+            y = Number(start);
         if (mark is (MarkKind.Rule or MarkKind.Rect) && IsRangeRule(datum))
         {
             // Translate the complete range geometry by its authored start point's displacement.
@@ -1750,10 +1862,18 @@ public sealed class PlotPlanResolver
 
     private static string BuildSummary(ChartSpec spec, ChartDataSet data, ImmutableArray<ResolvedSeries> series,
         ImmutableArray<ResolvedMarkLayer> layers, ImmutableArray<ResolvedScale> scales,
-        ImmutableArray<ResolvedFacetPanel> facets, ImmutableArray<int> gaps, ImmutableArray<int> skipped) =>
-        $"{spec.Title ?? spec.Id}: {data.RowCount} rows, {layers.Length} ordered layers, {series.Length} series, " +
+        ImmutableArray<ResolvedFacetPanel> facets, ImmutableArray<int> gaps, ImmutableArray<int> skipped)
+    {
+        var summary = $"{spec.Title ?? spec.Id}: {data.RowCount} rows, {layers.Length} ordered layers, {series.Length} series, " +
         $"{(facets.IsDefaultOrEmpty ? 1 : facets.Length)} facet panels, {gaps.Length} gaps, {skipped.Length} skipped rows." +
         (scales.FirstOrDefault(scale => scale.ColorRange is not null)?.ColorRange is { } range ? " " + range.AccessibleDescription : string.Empty);
+        var zeroCount = layers.SelectMany(layer => layer.Data).Count(datum => ConnectedMarkResolver.ZeroDetail(datum) is not null);
+        foreach (var layer in layers.Where(layer => layer.PathInterpolation is not null))
+            summary += $" {layer.Id}: {ResolvedConnectionGeometry.Name(layer.PathInterpolation!.Value)} interpolation after scale mapping and placement; X vertical, Y horizontal.";
+        foreach (var layer in layers.Where(layer => layer.AreaConfidence))
+            summary += $" {layer.Id}: confidence interval from authored low/high bounds; X vertical, Y horizontal.";
+        return zeroCount > 0 ? summary + $" {zeroCount} null Y values rendered at zero; raw values retained." : summary;
+    }
 
     private static string ResolveColor(ChartSpec spec, string key, int index) =>
         ChartPalette.Resolve(spec.Theme.Tokens, key, index);

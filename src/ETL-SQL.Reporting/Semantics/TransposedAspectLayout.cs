@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace ETL_SQL.Reporting.Semantics.Runtime;
 
-/// <summary>Physical plot area for the supported fixed-aspect POINT/TEXT and supported RULE/RECT composition.</summary>
+/// <summary>Physical plot area shared by supported transposed fixed-aspect marks.</summary>
 internal static class TransposedAspectLayout
 {
     internal static PlotBounds Resolve(PlotBounds frame, ImmutableArray<StyleToken> style,

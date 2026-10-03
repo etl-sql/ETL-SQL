@@ -130,7 +130,6 @@ public sealed class ConnectedAreaPlanTests
     [Theory]
     [InlineData("AREA_BASELINE = ZERO", "AREA_BASELINE = 2")]
     [InlineData("AREA_BASELINE = ZERO,", "")]
-    [InlineData("NULL_HANDLING = GAP", "NULL_HANDLING = ZERO")]
     public void InvalidFormsRemainRejected(string before, string after) =>
         Assert.Contains(AdvancedChartSemanticValidator.Validate(Parse(Sql.Replace(before, after, StringComparison.Ordinal))),
             diagnostic => diagnostic.Message.Contains("Connected CONDITIONS", StringComparison.Ordinal));

@@ -1,6 +1,6 @@
 # Splitting the two large browser files
 
-Design for [TODO.md §2](../../../TODO.md#2-split-the-two-large-browser-files). Covers
+Design for [the completed browser split](../../releases/v0.20.0-browser-split-baseline.md). Covers
 `designer/designer.js` (9,008 lines) and `report-runtime.js` (9,668 lines).
 
 ## Why

@@ -63,12 +63,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             Write-Warning "git diff failed against $baseSha; checking HEAD~1..."
             $changedPaths = @(git diff --name-only HEAD~1 HEAD)
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot classify MSI impact from the changed paths.' }
           }
 
           $upgradePatterns = @(
             '^src/ETL-SQL\.Installer/',
             '^scripts/Test-MsiUpgrade\.ps1$',
             '^scripts/MsiUpgrade\.Helpers\.ps1$',
+            '^scripts/Release\.Helpers\.ps1$',
             '^scripts/build-msi\.ps1$',
             '^\.github/workflows/msi-upgrade\.yml$',
             '^Directory\.Build\.props$'
@@ -109,15 +111,14 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($currentVersion)) { throw 'Directory.Build.props has no VersionPrefix.' }
 
           $currentTag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "v$currentVersion" }
-          $releases = gh release list --limit 30 --json tagName,isDraft,isPrerelease,publishedAt | ConvertFrom-Json
-          $previous = $releases |
-            Where-Object { -not $_.isDraft -and -not $_.isPrerelease -and $_.tagName -ne $currentTag } |
-            Sort-Object { [version]($_.tagName.TrimStart('v')) } -Descending |
-            Select-Object -First 1
-          if (-not $previous) { throw "No prior stable GitHub release found before $currentTag." }
+          . ./scripts/Release.Helpers.ps1
+          $pages = gh api --paginate --slurp "repos/$env:GITHUB_REPOSITORY/releases?per_page=100"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate prior GitHub releases.' }
+          $releases = @($pages | ConvertFrom-Json | ForEach-Object { $_ })
+          $previousTag = Select-PreviousStableRelease -CurrentVersion $currentVersion -Releases $releases
 
           "current_version=$currentVersion" >> $env:GITHUB_OUTPUT
-          "previous_tag=$($previous.tagName)" >> $env:GITHUB_OUTPUT
+          "previous_tag=$previousTag" >> $env:GITHUB_OUTPUT
 
       - name: Restore cached previous MSI
         id: previous-cache

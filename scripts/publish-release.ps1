@@ -3,13 +3,32 @@
 
 param(
     [string[]]$Platforms = @("win-x64", "linux-x64", "osx-x64", "osx-arm64"),
-    [switch]$SkipVsix
+    [switch]$SkipVsix,
+    [string]$CertificationEvidenceRoot
 )
 
-$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.19.0" }
+$ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent $PSScriptRoot
+$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else {
+    [xml]$versionProps = Get-Content -LiteralPath (Join-Path $RepoRoot 'Directory.Build.props')
+    [string]$versionProps.Project.PropertyGroup.VersionPrefix
+}
 $ReleaseRoot = Join-Path $RepoRoot "release"
 $SampleSource = Join-Path $RepoRoot "samples"
+. (Join-Path $PSScriptRoot 'ReleaseEvidence.Helpers.ps1')
+$explicitEvidenceRoot = -not [string]::IsNullOrWhiteSpace($CertificationEvidenceRoot)
+if (-not $explicitEvidenceRoot) {
+    $CertificationEvidenceRoot = Join-Path $RepoRoot "artifacts/release-evidence/$Version/deployment-profiles"
+}
+$hasCertificationEvidence = Test-Path -LiteralPath $CertificationEvidenceRoot -PathType Container
+if ($explicitEvidenceRoot -or $hasCertificationEvidence) {
+    $CandidateCommit = & git -C $RepoRoot rev-parse HEAD
+    if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the candidate commit.' }
+    $dirty = & git -C $RepoRoot status --porcelain
+    if ($LASTEXITCODE -ne 0 -or $dirty) { throw 'Certification packaging requires the clean candidate worktree.' }
+    # Validate before deleting an earlier release output or spending time publishing binaries.
+    $null = @(Get-ReleaseCertificationInputs -EvidenceRoot $CertificationEvidenceRoot -ReleaseVersion $Version -CandidateCommit $CandidateCommit)
+}
 
 function Join-PathSegments {
     param([string[]]$Segments)
@@ -95,8 +114,13 @@ $Projects = @(
 )
 
 # 1. Cleanup
-if (Test-Path $ReleaseRoot) {
-    Remove-Item $ReleaseRoot -Recurse -Force
+$ReleaseRoot = [IO.Path]::GetFullPath($ReleaseRoot)
+$expectedReleaseRoot = Join-Path ([IO.Path]::GetFullPath($RepoRoot)) 'release'
+if ($ReleaseRoot -ne $expectedReleaseRoot -or ((Get-Item -LiteralPath $ReleaseRoot -ErrorAction SilentlyContinue).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+    throw 'Release output must be the workspace release directory and must not be a link.'
+}
+if (Test-Path -LiteralPath $ReleaseRoot) {
+    Remove-Item -LiteralPath $ReleaseRoot -Recurse -Force
 }
 New-Item -ItemType Directory -Path $ReleaseRoot | Out-Null
 
@@ -212,18 +236,19 @@ foreach ($Platform in $Platforms) {
 
 # 7.5 Retain test and certification reports in release assets
 Write-Host "`nPackaging test and certification reports..." -ForegroundColor Yellow
-if (Test-Path (Join-Path $RepoRoot "certification-results")) {
-    New-VerifiedArchive -SourceGlob (Join-Path $RepoRoot "certification-results\*") -DestinationPath (Join-Path $ReleaseRoot "ETL-SQL-v$Version-certification-results.zip")
-    Write-Host "  Packaged certification results." -ForegroundColor Green
-}
-if (Test-Path (Join-Path $RepoRoot "coverage/report")) {
-    New-VerifiedArchive -SourceGlob (Join-Path $RepoRoot "coverage\report\*") -DestinationPath (Join-Path $ReleaseRoot "ETL-SQL-v$Version-coverage-report.zip")
-    Write-Host "  Packaged coverage report." -ForegroundColor Green
+if ($hasCertificationEvidence) {
+    New-ReleaseCertificationArchive -EvidenceRoot $CertificationEvidenceRoot -ReleaseVersion $Version -CandidateCommit $CandidateCommit `
+        -DestinationPath (Join-Path $ReleaseRoot "ETL-SQL-v$Version-certification-results.zip")
+    Write-Host "  Packaged verified release-specific certification bundles." -ForegroundColor Green
+} else {
+    Write-Host "  No release-specific certification evidence present; no certification ZIP produced." -ForegroundColor Yellow
+    Write-Host "  Release publication still requires the accepted evidence bundles from the checklist." -ForegroundColor Yellow
 }
 
 # 8. Generate SBOM
 Write-Host "`nGenerating Software Bill of Materials (SBOM)..." -ForegroundColor Yellow
 node (Join-Path $PSScriptRoot "generate-sbom.js")
+Assert-NativeCommandSucceeded -Description 'SBOM generation'
 
 # 9. Generate Checksums
 Write-Host "`nGenerating SHA-256 checksums..." -ForegroundColor Yellow

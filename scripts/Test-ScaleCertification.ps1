@@ -26,8 +26,8 @@
     Optional named scenario to run in isolation. Intended for reproducible baseline capture.
 
 .PARAMETER Samples
-    Number of repeated samples to capture. When omitted, Smoke and operator-style lanes use one
-    sample; Standard uses three samples.
+    Number of repeated samples to capture. When omitted, complete tiers use three samples;
+    isolated scenario investigations use one.
 
 .PARAMETER RepositoryRoot
     Optional repository root containing the solution and tests. Intended for the same-worktree
@@ -65,6 +65,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+. (Join-Path $PSScriptRoot 'ScaleCertification.Helpers.ps1')
+. (Join-Path $PSScriptRoot 'Release.Helpers.ps1')
+if (-not [string]::IsNullOrWhiteSpace($env:CERT_RESULT_OUTPUT_DIAGNOSTIC)) {
+    throw 'Result-output probes are diagnostic only; clear CERT_RESULT_OUTPUT_DIAGNOSTIC before certification.'
+}
 $RepoRoot = if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
     Join-Path $PSScriptRoot '..'
 } else {
@@ -94,7 +99,7 @@ function Get-SourceMetadata {
 
     $configJson = $Config | ConvertTo-Json -Depth 10 -Compress
     $commitText = if ($sha) { $sha } else { 'unknown-commit' }
-    $dirtyText = if ($dirty) { $status } else { 'clean' }
+    $dirtyText = Get-ReleaseSourceFingerprint -RepoRoot $RepoRoot
     $fingerprintInput = @(
         $commitText,
         $dirtyText,
@@ -282,16 +287,10 @@ Write-Host " Tier: $Tier  |  Row scale: ${RowCountScale}x  |  Samples: $Samples 
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ── 0. Clear leftover test hosts ────────────────────────────────────────────────
-# A lingering test host from a previous run keeps the test DLLs locked, so the build below
-# silently reuses a STALE binary (e.g. one missing live-progress reporting or recent engine
-# fixes) instead of failing. Clear them first so every run uses freshly built code.
-$leftoverHosts = Get-Process -Name testhost -ErrorAction SilentlyContinue
-if ($leftoverHosts) {
-    Write-Host ("Stopping {0} leftover test host(s) so the build isn't blocked: {1}" -f `
-        $leftoverHosts.Count, ($leftoverHosts.Id -join ', ')) -ForegroundColor Yellow
-    $leftoverHosts | Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
+# A concurrent test host may own the binaries or spill root. Do not kill unrelated work by
+# process name, and do not start measurements while it is still running.
+if (Get-Process -Name testhost -ErrorAction SilentlyContinue) {
+    throw 'A test host is already running. Finish or stop its owning run before scale certification.'
 }
 
 # ── 1. Build ──────────────────────────────────────────────────────────────────
@@ -308,7 +307,7 @@ if (Test-Path $testDll) {
     $newestSrc = Get-ChildItem (Join-Path $RepoRoot 'tests/ETL-SQL.Tests') -Recurse -Filter *.cs -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($newestSrc -and (Get-Item $testDll).LastWriteTime -lt $newestSrc.LastWriteTime) {
-        Write-Warning ("Test binary ({0}) is older than source ({1}) — the build may not have updated it; results may run stale code." -f `
+        throw ("Test binary ({0}) is older than source ({1}). Rebuild before scale certification." -f `
             (Get-Item $testDll).LastWriteTime, $newestSrc.LastWriteTime)
     }
 }
@@ -350,10 +349,20 @@ $config = [ordered]@{
     memoryGrantMB = if ($env:CERT_MEMORY_GRANT_MB) { [int]$env:CERT_MEMORY_GRANT_MB } else { 2048 }
     memoryBoundMB = if ($env:CERT_MEMORY_BOUND_MB) { [double]$env:CERT_MEMORY_BOUND_MB } else { $null }
     adaptiveEnabled = (($env:ETLSQL_ADAPTIVE_EXECUTION -eq '1') -or ($env:ETLSQL_ADAPTIVE_EXECUTION -eq 'true'))
+    outputCapture = 'buffered-byte-stream-v1'
+    temporaryStorage = 'run-owned-process-temp-v1'
+    preEnumerateTheories = $false
 }
 $sourceMetadata = Get-SourceMetadata $config
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+$outputRoot = [IO.Path]::GetFullPath($OutDir)
+$captureTempRoot = Join-Path $outputRoot ('process-temp-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $captureTempRoot | Out-Null
+$captureEnvironment = @{ TEMP = $captureTempRoot; TMP = $captureTempRoot; TMPDIR = $captureTempRoot }
+$scaleSettingsPath = Join-Path $outputRoot 'scale.runsettings'
+[IO.File]::WriteAllText($scaleSettingsPath,
+    '<RunSettings><xUnit><PreEnumerateTheories>false</PreEnumerateTheories></xUnit></RunSettings>')
 $rawLog = Join-Path $OutDir 'raw-output.txt'
 Remove-Item $rawLog -ErrorAction SilentlyContinue
 
@@ -376,32 +385,48 @@ if ($Tier -eq 'Standard') {
     $env:CERT_PROVIDER_ROW_SCALE = if ($rowCountScaleWasSpecified) { $RowCountScale } else { 1.0 }
 }
 
-$spillRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'ETL-SQL-Spill'
+$spillRoot = Join-Path $captureTempRoot 'ETL-SQL-Spill'
+function Clear-ScaleSpill {
+    # This exact directory belongs to children of this run. Never delete the shared OS spill root.
+    $target = [IO.Path]::GetFullPath($spillRoot)
+    $expected = [IO.Path]::GetFullPath((Join-Path $captureTempRoot 'ETL-SQL-Spill'))
+    if ($target -ne $expected -or -not $target.StartsWith($outputRoot + [IO.Path]::DirectorySeparatorChar)) {
+        throw 'Scale spill cleanup target is outside the run output directory.'
+    }
+    if (Test-Path -LiteralPath $target) {
+        if ((Get-Item -LiteralPath $target).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw 'Scale spill cleanup refuses a linked directory.'
+        }
+        Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
+    }
+}
 $testProject = Join-Path $RepoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
 $dotnetArgs = @('test', $testProject, '--filter', $filterExpr,
-    '--logger', 'console;verbosity=detailed', '--no-build', '-c', 'Release')
+    '--logger', 'console;verbosity=detailed', '--settings', $scaleSettingsPath, '--no-build', '-c', 'Release')
 
 $allSampleMetrics = @()
 $sampleReports = @()
 $testExitCode = 0
 
 # ── Warm-up run, discarded ────────────────────────────────────────────────────────────────────
-# The first run after a build measures JIT compilation and antivirus scanning of fresh binaries,
-# not the code. Because the release gate runs certification after ~70 minutes of test lanes, those
+# The discarded process primes file caches and initial binary scanning. Each measured process
+# still has its own JIT and tiered-compilation state; this is not an in-process JIT warm-up.
+# Because the release gate used to run certification after ~70 minutes of test lanes, those
 # readings were the least trustworthy in the whole gate: the same commit measured 5013 ms warmed and
 # 8977 ms cold — a 56% spread, wider than any band being compared against. That produced repeated
 # false regressions across v0.15.0, v0.16.0 and v0.17.0, and one false "the engine regressed 49%"
 # alarm that cost most of a release day. See
 # docs/architecture/decisions/v0.17.0-performance-results.md.
 if (-not $NoWarmUp) {
-    Write-Host "Warm-up run (discarded — first run after a build measures JIT, not the code)..." -ForegroundColor Yellow
+    Write-Host "Discarded run (primes file caches; measured processes retain their own JIT startup)..." -ForegroundColor Yellow
     $warmLog = Join-Path $OutDir 'raw-output-warmup.txt'
     Remove-Item $warmLog -ErrorAction SilentlyContinue
     $env:CERT_PROGRESS_FILE = [System.IO.Path]::GetFullPath((Join-Path $OutDir 'progress-warmup.txt'))
-    $warm = Start-Process -FilePath 'dotnet' -ArgumentList $dotnetArgs `
-        -RedirectStandardOutput $warmLog -RedirectStandardError "$warmLog.err" -NoNewWindow -PassThru
-    $warm.WaitForExit()
-    Write-Host ("  warm-up complete (exit {0}) — measuring now" -f $warm.ExitCode) -ForegroundColor Gray
+    $warm = Start-ScaleCapturedProcess -FileName 'dotnet' -Arguments $dotnetArgs `
+        -StandardOutputPath $warmLog -StandardErrorPath "$warmLog.err" -ChildEnvironment $captureEnvironment
+    $warmExit = Complete-ScaleCapturedProcess $warm
+    if ($warmExit -ne 0) { throw "Discarded scale run failed with exit code $warmExit; inspect $warmLog." }
+    Write-Host "  discarded run passed — measuring now" -ForegroundColor Gray
 }
 
 for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
@@ -412,9 +437,7 @@ for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
 
     # Clean orphaned non-persistent spill from any prior killed run so it doesn't bloat disk or
     # inflate the live spill gauge. (Killed runs don't clean their own %TEMP%\ETL-SQL-Spill\<guid>.)
-    if (Test-Path $spillRoot) {
-        try { Remove-Item $spillRoot -Recurse -Force -ErrorAction SilentlyContinue } catch {}
-    }
+    Clear-ScaleSpill
 
     # Live progress side-channel (the test writes the current scenario here immediately, since
     # ITestOutputHelper buffers until the whole [Fact] finishes). Must be an ABSOLUTE path — the test
@@ -424,8 +447,9 @@ for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
     $env:CERT_PROGRESS_FILE = $progressFile
 
     Write-Host "Live status sample $sampleIndex/$Samples (full output -> $sampleRawLog):" -ForegroundColor Gray
-    $proc = Start-Process -FilePath 'dotnet' -ArgumentList $dotnetArgs `
-        -RedirectStandardOutput $sampleRawLog -RedirectStandardError $errLog -NoNewWindow -PassThru
+    $capture = Start-ScaleCapturedProcess -FileName 'dotnet' -Arguments $dotnetArgs `
+        -StandardOutputPath $sampleRawLog -StandardErrorPath $errLog -ChildEnvironment $captureEnvironment
+    $proc = $capture.Process
     $runStart = Get-Date
 
     while (-not $proc.HasExited) {
@@ -487,7 +511,7 @@ for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
             -f $elapsed, $sampleIndex, $Samples, $phase, $procGB, $freeDisplay, $spillGB, $eta, $act, $warn)
         Write-Host ("`r" + $line.PadRight(170)) -NoNewline
     }
-    $proc.WaitForExit()
+    $sampleExitCode = Complete-ScaleCapturedProcess $capture
     Write-Host ""  # finish the in-place status line
     if (Test-Path $errLog) { Get-Content $errLog | Add-Content $sampleRawLog }
 
@@ -496,7 +520,11 @@ for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
         Get-Content $sampleRawLog | Add-Content $rawLog
     }
 
-    if ($proc.ExitCode -ne 0 -and $testExitCode -eq 0) { $testExitCode = $proc.ExitCode }
+    if ($sampleExitCode -ne 0 -and $testExitCode -eq 0) { $testExitCode = $sampleExitCode }
+    if (-not (Test-ReleaseTestOutputExecuted -Output (Get-Content -LiteralPath $sampleRawLog -Raw))) {
+        Write-Warning "Sample $sampleIndex has no executed passing test result."
+        $testExitCode = 1
+    }
 
     $sampleMetrics = Get-Content $sampleRawLog |
         Where-Object { $_ -match 'CERT_METRIC:(.+)$' } |
@@ -515,16 +543,14 @@ for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
     $allSampleMetrics += @($sampleMetrics)
     $sampleReports += [ordered]@{
         sample = $sampleIndex
-        exitCode = $proc.ExitCode
+        exitCode = $sampleExitCode
         rawLog = $sampleRawLog
         metrics = @($sampleMetrics)
     }
 
     # The certification evaluator is explicitly non-persistent. A force-killed test host cannot run its
     # disposer, so the runner owns final cleanup after the child exits as a second line of defense.
-    if (Test-Path $spillRoot) {
-        try { Remove-Item $spillRoot -Recurse -Force -ErrorAction SilentlyContinue } catch {}
-    }
+    Clear-ScaleSpill
 }
 
 try { $computer = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop } catch { $computer = $null }
@@ -553,8 +579,29 @@ $hardware = [ordered]@{
 
 # ── 3. Aggregate CERT_METRIC samples ──────────────────────────────────────────
 $metrics = Merge-CertSamples @($allSampleMetrics)
+if ($metrics.Count -eq 0 -or @($metrics | Where-Object { $_.samples -ne $Samples -or -not $_.passed }).Count -gt 0) {
+    Write-Warning 'Certification requires passing metrics for every requested sample; evidence is missing or failed.'
+    $testExitCode = 1
+}
 
 $hardware.serverGcEnabled = if ($metrics.Count -gt 0) { [bool]$metrics[0].serverGcEnabled } else { $null }
+$measuredRuntimes = @($allSampleMetrics | ForEach-Object { $_.runtimeVersion } | Where-Object { $_ } | Select-Object -Unique)
+if ($measuredRuntimes.Count -eq 0) {
+    # Older commits have no runtime metric. Use their adapter's actual test-host version, never
+    # the PowerShell parent runtime; the same-worktree comparison deliberately measures old commits.
+    $measuredRuntimes = @($sampleReports | ForEach-Object {
+        $header = Get-Content -LiteralPath $_.rawLog -TotalCount 25 | Where-Object { $_ -match 'xUnit.*Adapter' }
+        foreach ($line in $header) {
+            if ($line -match '(\.NET \d+\.\d+\.\d+)') { $Matches[1] }
+        }
+    } | Select-Object -Unique)
+}
+if ($measuredRuntimes.Count -eq 1) {
+    $hardware.runtimeVersion = $measuredRuntimes[0]
+} else {
+    Write-Warning 'Cannot identify one test-host runtime from the measured samples.'
+    $testExitCode = 1
+}
 
 # ── 4. Write JSON report ──────────────────────────────────────────────────────
 $report = [ordered]@{
@@ -610,6 +657,9 @@ $mdLines += "- RAM: $([math]::Round($hardware.physicalMemoryBytes / 1GB, 1)) GB"
 $mdLines += "- Disk: $($hardware.diskModel), $([math]::Round($hardware.diskSizeBytes / 1GB, 1)) GB; workspace free $([math]::Round($hardware.workspaceFreeBytes / 1GB, 1)) GB"
 $mdLines += "- Runtime: $($hardware.runtimeVersion), $($hardware.processArchitecture), Release, server GC enabled: $($hardware.serverGcEnabled)"
 $mdLines += "- Engine memory grant: $($hardware.memoryGrantMB) MB"
+$mdLines += "- Output capture: $($config.outputCapture); full formatted result output retained"
+$mdLines += "- Temporary storage: $($config.temporaryStorage)"
+$mdLines += "- Theory data pre-enumeration: $($config.preEnumerateTheories) (selected theories still execute all their rows)"
 $mdLines += "- Commit: $($sourceMetadata.commit.sha) ($($sourceMetadata.commit.branch)); dirty: $($sourceMetadata.commit.isDirty)"
 $mdLines += "- Source fingerprint: $($sourceMetadata.sourceFingerprint)"
 $mdLines += "- Config fingerprint: $($sourceMetadata.configFingerprint)"

@@ -576,22 +576,24 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
 
     private static async Task WaitForRegionsAsync(IFrameLocator report, string visual, Func<HashSet<string>, bool> done, string because)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(30);
-        HashSet<string> regions = [];
-        while (DateTime.UtcNow < deadline)
-        {
-            try
+        await ETL_SQL.TestSupport.LoadAwareWait.UntilAsync<HashSet<string>?>(
+            because,
+            async cancellationToken =>
             {
-                regions = await RegionsShownAsync(report, visual);
-                if (done(regions)) return;
-            }
-            catch (PlaywrightException)
-            {
-                // The table is re-rendered by the refresh; read it again.
-            }
-            await Task.Delay(250);
-        }
-        throw new Xunit.Sdk.XunitException($"{because}; it shows {string.Join(", ", regions)}.");
+                try
+                {
+                    return await RegionsShownAsync(report, visual).WaitAsync(cancellationToken);
+                }
+                catch (PlaywrightException)
+                {
+                    // The table is re-rendered by the refresh; read it again.
+                    return null;
+                }
+            },
+            regions => regions is not null && done(regions),
+            TimeSpan.FromSeconds(30),
+            pollInterval: TimeSpan.FromMilliseconds(250),
+            describe: regions => regions is null ? "Table is re-rendering" : $"Regions: {string.Join(", ", regions)}");
     }
 
     // ── Setup ────────────────────────────────────────────────────────────────
