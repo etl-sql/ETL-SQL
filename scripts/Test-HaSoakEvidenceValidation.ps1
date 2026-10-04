@@ -17,6 +17,7 @@ function Assert-True {
 $runId = 'ha-soak-evidence-validation-test'
 $tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("etl-sql-ha-evidence-validation-" + [Guid]::NewGuid().ToString('N'))
 $resultRoot = Join-Path $RepoRoot "certification-results/postgres-ha-soak/$runId"
+$faultResultRoot = Join-Path $RepoRoot "certification-results/ha-fault-injection/$runId"
 New-Item -ItemType Directory -Path $tempRoot | Out-Null
 
 try {
@@ -73,6 +74,31 @@ try {
     Assert-True ($summary.status -eq 'Passed') 'Expected synthetic sustained evidence to pass.'
     Assert-True ($summary.checkedArtifactCount -ge 6) 'Expected validator to check generated artifacts.'
 
+    New-Item -ItemType Directory -Force -Path $faultResultRoot | Out-Null
+    '{}' | Set-Content -LiteralPath (Join-Path $faultResultRoot 'ha-fault-injection-plan.json') -Encoding UTF8
+    '# Fault Plan' | Set-Content -LiteralPath (Join-Path $faultResultRoot 'ha-fault-injection-plan.md') -Encoding UTF8
+    '# Fault Report' | Set-Content -LiteralPath (Join-Path $faultResultRoot 'fault-report.md') -Encoding UTF8
+    foreach ($case in @(
+        @{ mode = 'CiSmoke'; level = 'CiSmokeEvidence'; expected = 'Passed' },
+        @{ mode = 'ManualCertification'; level = 'CiSmokeEvidence'; expected = 'Failed' },
+        @{ mode = 'CiSmoke'; level = 'ManualCertificationEvidence'; expected = 'Failed' }
+    )) {
+        ([ordered]@{
+            runnerKind = 'NativeBoundedFaultInjectionCiSmoke'
+            mode = $case.mode
+            certificationLevel = $case.level
+            passed = $true
+            status = 'Passed'
+        } | ConvertTo-Json) | Set-Content -LiteralPath (Join-Path $faultResultRoot 'fault-report.json') -Encoding UTF8
+        $scopeSummary = & (Join-Path $ScriptRoot 'Test-HaSoakEvidence.ps1') `
+            -TopologyRunRoot $topology.runRoot -RequiredGate FaultInjection -AllowDirty
+        Assert-True ($scopeSummary.status -eq $case.expected) 'Expected bounded evidence to retain its CI-smoke scope.'
+        if ($case.expected -eq 'Failed') {
+            Assert-True (@($scopeSummary.issues | Where-Object { $_.kind -eq 'evidence-scope-mismatch' }).Count -gt 0) 'Expected a scope mismatch diagnostic.'
+        }
+        $global:LASTEXITCODE = 0
+    }
+
     foreach ($leak in @(
         'ORCH_IDENTITY_SIGNING_SECRET=synthetic-unredacted-value',
         '{"signingSecret":"synthetic-unredacted-value"}'
@@ -105,5 +131,8 @@ finally {
     }
     if (Test-Path -LiteralPath $resultRoot) {
         Remove-Item -LiteralPath $resultRoot -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $faultResultRoot) {
+        Remove-Item -LiteralPath $faultResultRoot -Recurse -Force
     }
 }

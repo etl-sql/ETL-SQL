@@ -124,6 +124,10 @@ function Test-GenericPassedReport {
     param([string]$Path, [string]$Kind)
     $report = Read-Json $Path $Kind
     if ($null -eq $report) { return }
+    if ([string]$report.runnerKind -clike 'NativeBounded*' -and
+        ($report.mode -cne 'CiSmoke' -or $report.certificationLevel -cne 'CiSmokeEvidence')) {
+        Add-Issue 'Error' 'evidence-scope-mismatch' "$Kind bounded native report cannot certify a physical topology run."
+    }
     if ($null -ne $report.PSObject.Properties['passed'] -and $report.passed -ne $true) {
         Add-Issue 'Error' 'failed-report' "$Kind did not pass."
     }

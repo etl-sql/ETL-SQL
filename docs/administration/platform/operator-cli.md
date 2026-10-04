@@ -204,9 +204,9 @@ etl-sql admin ha-soak prepare --run-id ha-20260710 --output-root .ha-soak-runs -
 etl-sql admin ha-soak workload --run-root .ha-soak-runs/ha-20260710 --force
 etl-sql admin ha-soak runbook --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force
 etl-sql admin ha-soak evidence --run-root .ha-soak-runs/ha-20260710 --force
-etl-sql admin ha-soak large-job-plan --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force
+etl-sql admin ha-soak large-job-plan --run-root .ha-soak-runs/ha-20260710 --mode CiSmoke --force
 etl-sql admin ha-soak large-job-run --run-root .ha-soak-runs/ha-20260710 --force
-etl-sql admin ha-soak fault-plan --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force
+etl-sql admin ha-soak fault-plan --run-root .ha-soak-runs/ha-20260710 --mode CiSmoke --force
 etl-sql admin ha-soak fault-run --run-root .ha-soak-runs/ha-20260710 --force
 
 # Capture post-run evidence or diagnostics
@@ -231,6 +231,11 @@ diagnostic run. `fault-run` writes `fault-report.json/.md`, per-fault `fault-res
 only after sustained-load, large-job, and fault-injection measured reports exist; the native
 `LargeJob` and `FaultInjection` gates cover bounded CI-smoke evidence, while release publication
 still requires the longer operator-run evidence called out in `TODO.md`.
+
+The native runners reject `ManualCertification` plans. Their checks use bounded local workloads and
+fault simulations. Manual plans and runbooks describe the requested physical topology work; complete
+that work with measured operator runs before publishing HA recovery or capacity observations.
+Both evidence validators reject native bounded reports relabelled as manual certification.
 
 The HA compose template requires `ORCH_IDENTITY_SIGNING_SECRET` (at least 32 UTF-8 bytes), shared
 by all Portal and Orchestrator instances and distinct from `ORCH_API_KEY`. `prepare` generates it.

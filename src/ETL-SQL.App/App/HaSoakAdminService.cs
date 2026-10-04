@@ -441,6 +441,9 @@ namespace ETL_SQL.App
                 : ResolveRepoPath(ctx.HaSoakPlanPath);
             var plan = ReadJsonObject(RequireFile(planPath, "HA large-job soak plan"));
             var mode = plan["mode"]?.GetValue<string>() ?? "CiSmoke";
+            // COMPAT_BREAK: 0.20.0
+            if (mode != "CiSmoke")
+                return Task.FromResult(Fail(logger, "The bounded native large-job runner supports only CiSmoke plans. Manual certification requires a measured physical topology run."));
             var outputRoot = string.IsNullOrWhiteSpace(ctx.HaSoakOutputRoot)
                 ? Path.Combine(Directory.GetCurrentDirectory(), "certification-results", "ha-large-job-soak", runId)
                 : Path.GetFullPath(ctx.HaSoakOutputRoot.Trim());
@@ -469,7 +472,7 @@ namespace ETL_SQL.App
                 ["status"] = passed ? "Passed" : "Failed",
                 ["passed"] = passed,
                 ["runnerKind"] = "NativeBoundedLargeJobCiSmoke",
-                ["certificationLevel"] = mode == "ManualCertification" ? "ManualCertificationEvidence" : "CiSmokeEvidence",
+                ["certificationLevel"] = "CiSmokeEvidence",
                 ["startedAt"] = suiteStart.ToString("o"),
                 ["completedAt"] = DateTime.UtcNow.ToString("o"),
                 ["durationSeconds"] = durationSeconds,
@@ -703,6 +706,9 @@ namespace ETL_SQL.App
                 : ResolveRepoPath(ctx.HaSoakPlanPath);
             var plan = ReadJsonObject(RequireFile(planPath, "HA fault-injection plan"));
             var mode = plan["mode"]?.GetValue<string>() ?? "CiSmoke";
+            // COMPAT_BREAK: 0.20.0
+            if (mode != "CiSmoke")
+                return Task.FromResult(Fail(logger, "The bounded native fault runner supports only CiSmoke plans. Manual certification requires a measured physical topology run."));
             var outputRoot = string.IsNullOrWhiteSpace(ctx.HaSoakOutputRoot)
                 ? Path.Combine(Directory.GetCurrentDirectory(), "certification-results", "ha-fault-injection", runId)
                 : Path.GetFullPath(ctx.HaSoakOutputRoot.Trim());
@@ -728,7 +734,7 @@ namespace ETL_SQL.App
                 ["status"] = passed ? "Passed" : "Failed",
                 ["passed"] = passed,
                 ["runnerKind"] = "NativeBoundedFaultInjectionCiSmoke",
-                ["certificationLevel"] = mode == "ManualCertification" ? "ManualCertificationEvidence" : "CiSmokeEvidence",
+                ["certificationLevel"] = "CiSmokeEvidence",
                 ["startedAt"] = suiteStart.ToString("o"),
                 ["completedAt"] = DateTime.UtcNow.ToString("o"),
                 ["topologyMetadataPath"] = RelativeLabel(Path.Combine(runRoot, "topology-metadata.json")),
@@ -1108,6 +1114,9 @@ namespace ETL_SQL.App
             var report = TryReadJsonObject(Path.Combine(dir, $"{reportBase}.json"), $"{kind} report", issues, checkedArtifacts);
             RequireArtifact(Path.Combine(dir, $"{reportBase}.md"), $"{kind} Markdown report", issues, checkedArtifacts);
             if (report == null) return;
+            if (report["runnerKind"]?.GetValue<string>()?.StartsWith("NativeBounded", StringComparison.Ordinal) == true
+                && (report["mode"]?.GetValue<string>() != "CiSmoke" || report["certificationLevel"]?.GetValue<string>() != "CiSmokeEvidence"))
+                AddIssue(issues, "Error", "evidence-scope-mismatch", $"{kind} bounded native report cannot certify a physical topology run.");
             if (report["passed"]?.GetValue<bool>() == false)
                 AddIssue(issues, "Error", "failed-report", $"{kind} report did not pass.");
             var status = report["status"]?.GetValue<string>();

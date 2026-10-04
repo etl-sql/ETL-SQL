@@ -292,6 +292,9 @@ and [the review record](docs/releases/v0.20.0-code-review.md) for validation sti
 
 ### Fixed
 
+- Bounded native HA runners reject manual certification plans; both validators reject relabelled
+  smoke reports so simulated checks cannot certify a physical topology.
+
 - HA compose and topology generators configure the separate Orchestrator caller signing secret.
   Capacity workloads exchange authenticated Portal sessions for short-lived assertions, constrain
   credentials to the paired origin and refuse redirects; diagnostics redact the new secret.

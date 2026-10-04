@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.20.0 — Runtime: Bounded HA runners reject manual certification plans
+- **What changed**: Native large-job and fault runners previously accepted ManualCertification plans and labelled bounded local checks as manual evidence. They now reject those plans. Both validators reject relabelled native reports.
+- **Who is affected**: Operators using `admin ha-soak large-job-run` or `fault-run` with manual plans.
+- **Migration**: Use CiSmoke plans for native checks. Run and measure the physical topology separately for manual certification; regenerate misleading historical reports.
+- **Diagnostic**: `evidence-scope-mismatch` for relabelled reports; native runners print the unsupported-plan reason and return nonzero.
+- **Earliest removal**: N/A
+
 ### v0.20.0 — Semantic: Independent numeric facets retain explicit bounds
 - **What changed**: Independent LINEAR/LOGARITHMIC facet domains previously replaced authored MIN/MAX with panel data extrema. Numeric facets now retain each supplied bound and derive only unspecified bounds from panel data. Existing INCLUDE_ZERO behavior remains in effect.
 - **Who is affected**: CUSTOM charts combining numeric scale MIN/MAX with independent X, Y or COLOR facet resolution.

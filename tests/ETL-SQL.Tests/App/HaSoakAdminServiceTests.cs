@@ -235,6 +235,43 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.Contains("Status: **Passed**", File.ReadAllText(validationReport));
         }
 
+        [Theory]
+        [Trait("CompatBreak", "0.20.0")]
+        [InlineData("large-job", "ha-large-job-soak", "ha-large-job-soak-plan.json", "soak-report.json")]
+        [InlineData("fault", "ha-fault-injection", "ha-fault-injection-plan.json", "fault-report.json")]
+        public async Task BoundedRunnersRejectManualCertificationPlans(string command, string evidenceDirectory,
+            string planName, string reportName)
+        {
+            var logger = new CapturingLogger();
+            var runRoot = Path.Combine(_outputRoot, _runId);
+            Assert.Equal(0, await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-prepare",
+                HaSoakRunId = _runId,
+                HaSoakOutputRoot = _outputRoot
+            }, logger));
+            Assert.Equal(0, await RunAsync(new CliContext
+            {
+                Command = $"admin-ha-soak-{command}-plan",
+                HaSoakRunRoot = runRoot,
+                HaSoakMode = "ManualCertification"
+            }, logger));
+            Assert.Equal("ManualCertification", (string?)JsonNode.Parse(
+                File.ReadAllText(Path.Combine(runRoot, planName)))!["mode"]);
+
+            var exitCode = await RunAsync(new CliContext
+            {
+                Command = $"admin-ha-soak-{command}-run",
+                HaSoakRunRoot = runRoot,
+                HaSoakDurationSeconds = 1
+            }, logger);
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains(logger.Messages, message => message.Contains("CiSmoke", StringComparison.Ordinal)
+                && message.Contains("physical", StringComparison.Ordinal));
+            Assert.False(File.Exists(Path.Combine(_evidenceRoot, evidenceDirectory, _runId, reportName)));
+        }
+
         [Fact]
         public async Task FaultRunProducesEvidenceAcceptedByValidator()
         {
@@ -278,6 +315,7 @@ namespace ETL_SQL.Tests.CliCommands
             var report = JsonNode.Parse(File.ReadAllText(Path.Combine(outputRoot, "fault-report.json")))!.AsObject();
             Assert.True((bool?)report["passed"]);
             Assert.Equal("NativeBoundedFaultInjectionCiSmoke", (string?)report["runnerKind"]);
+            Assert.Equal("CiSmokeEvidence", (string?)report["certificationLevel"]);
 
             var validationReport = Path.Combine(_outputRoot, "fault-validation.md");
             var validationExit = await RunAsync(new CliContext
@@ -291,6 +329,20 @@ namespace ETL_SQL.Tests.CliCommands
 
             Assert.True(validationExit == 0, File.ReadAllText(validationReport));
             Assert.Contains("Status: **Passed**", File.ReadAllText(validationReport));
+
+            report["mode"] = "ManualCertification";
+            report["certificationLevel"] = "ManualCertificationEvidence";
+            File.WriteAllText(Path.Combine(outputRoot, "fault-report.json"), report.ToJsonString());
+            var rejectedExit = await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-validate",
+                HaSoakRunRoot = runRoot,
+                HaSoakRequiredGate = "FaultInjection",
+                HaSoakAllowDirty = true,
+                HaSoakMarkdownReport = validationReport
+            }, logger);
+            Assert.Equal(1, rejectedExit);
+            Assert.Contains("evidence-scope-mismatch", File.ReadAllText(validationReport));
         }
 
         private void SeedSustainedEvidence()
