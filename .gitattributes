@@ -33,3 +33,6 @@ tests/fixtures/reporting/goldens/**  text eol=lf
 # the deliberate CRLF fixture, which pins CRLF so both line-ending shapes are actually exercised.
 tests/fixtures/reporting/designer-round-trip/**            text eol=lf
 tests/fixtures/reporting/designer-round-trip/line-endings-crlf.rptsql  text eol=crlf
+
+# Binary images must retain their bytes even inside LF-pinned browser asset folders.
+*.png -text

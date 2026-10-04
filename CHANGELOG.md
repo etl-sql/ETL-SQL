@@ -281,6 +281,8 @@ and [the review record](docs/releases/v0.20.0-code-review.md) for validation sti
 
 ### Fixed
 
+- PNG assets retain their binary bytes across Windows and Linux checkouts, including the VS Code
+  icon inside the browser asset folders pinned to LF.
 - Hash and external joins honor the active case comparison. Nested transactions retain enlistments
   until the outermost COMMIT, and the first remote mutation participates in rollback. Remote UPDATE
   binds literals and variables without rewriting quoted text.
