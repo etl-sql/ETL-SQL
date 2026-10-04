@@ -63,14 +63,9 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
   until the cause is known — v0.17.0 established why.
   The [v0.20.0 harness investigation](docs/releases/v0.20.0-performance-results.md) identifies
   output capture and unrelated theory enumeration as measurement dependencies. The corrected
-  fixture passes repeated development runs. Matching-fixture Smoke calibration passed every pairing;
-  Standard passed all 260 correctness/memory checks and resolved the earlier sort-GC gap, but one
-  arm still failed short failure-path timing. That fixture always stopped after 15,000 rows while
-  advertising a scaled input. Its failure workload and row metrics now scale correctly, and scenario
-  memory measurements start after the preceding forced collections. All 31 focused tests, 39
-  development Smoke measurements and five corrected Standard failure measurements passed with Docker
-  running. Finish calibration of the corrected fixture and final-candidate comparison before closing
-  this item. The latest comparison still shows first-arm timing drift and released-control Smoke
-  memory variability. Fixture roots now dispose their providers, watchers and loggers between
-  scenarios and restore run-owned database isolation; 39 Smoke and 39 Standard development
-  measurements passed. Recalibrate that lifecycle correction. No baseline has been replaced.
+  fixture now scales its failure input, brackets timed resources, closes providers/watchers/loggers
+  between scenarios and isolates its database. Clean Smoke/Standard calibration passed all 520
+  correctness/memory measurements, all eight candidate/control comparisons and all eight repeat-run
+  comparisons under unchanged bands. Both released-control arms contribute to each replacement
+  reference; the original files are preserved in the historical archive. Finish fresh comparisons
+  of the final clean candidate in the full release gate before closing this item.

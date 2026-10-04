@@ -155,6 +155,12 @@ and [the review record](docs/releases/v0.20.0-code-review.md) for validation sti
 - The browser sources are linted. `eslint.config.mjs` at the repository root points `eslint:recommended` at the canonical shared assets and the Portal's own modules — the same sources the type gate covers — and `node scripts/lint-browser.mjs` gates them from pre-push and CI against `browser-lint-baseline.txt`, on the same shrink-only ratchet as the type baseline. A file ESLint cannot parse is never baselined.
 
 ### Changed
+
+- Recalibrated Smoke and Standard scale references from two clean v0.19.0 control runs using the
+  corrected isolated fixture. All 520 measurements and candidate/control/repeat comparisons passed
+  with unchanged bands; both controls contribute to each reference and the historical files remain
+  archived. Final-candidate release comparisons remain required.
+
 - ReportPlayer and the VS Code extension no longer ship ETL-SQL Studio's browser modules, which
   neither loads. ReportPlayer receives the report runtime only; the extension receives the report
   designer and connection wizard, computed from their imports by `scripts/sync-assets.js`, which
