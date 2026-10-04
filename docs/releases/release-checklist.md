@@ -19,7 +19,7 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 > external CI/operator evidence. Complete every applicable checkbox in this document before tagging;
 > a green local gate alone is necessary but not sufficient.
 
-Replace `x.y.z` with the target version (current target: **0.19.0**) throughout.
+Replace `x.y.z` with the target version (current target: **0.20.0**) throughout.
 
 ---
 

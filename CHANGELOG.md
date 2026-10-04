@@ -12,6 +12,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.20.0] — Release candidate
+
+Candidate preparation is in progress. Certification and packaged assets remain pending; this is
+not a publication record. See [v0.20.0 release notes](docs/releases/v0.20.0.md) for upgrade actions
+and [the review record](docs/releases/v0.20.0-code-review.md) for validation still required.
+
 ### Added
 
 - Transposed fixed-aspect AREA charts support paired confidence bounds with existing placement and
@@ -275,6 +281,21 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Hash and external joins honor the active case comparison. Nested transactions retain enlistments
+  until the outermost COMMIT, and the first remote mutation participates in rollback. Remote UPDATE
+  binds literals and variables without rewriting quoted text.
+- REST redirects keep credentials on their configured origin, refuse cross-origin body replay,
+  disable implicit cookie persistence and apply the timeout to response-body reads. SharePoint
+  continuations and Active Directory paging retain complete, non-duplicated results.
+- Excel extraction streams only the selected sheet. LIST retains complete VARCHAR text, page
+  selections encode multiple values as JSON arrays, and tool JSON preserves exact numbers.
+- External tool cancellation reaches peer streams. Bounded diagnostics, sanitized errors and
+  environment-name credential forwarding keep secrets out of argv, logs and UI callbacks.
+- Scheduler evidence-store failures preserve the completed workload outcome without retrying its
+  mutations. Sandbox recovery retains admission and ownership until runtime detachment and cleanup
+  are proven.
+- Host-side Studio recovery retains supported unsaved work after a crash or expired sign-in.
+  Save completion preserves edits made during the save, and each tab retains its own undo state.
 - The dependency inventory includes the pinned browser lint toolchain, preserves every declared npm
   version range and classifies review/experiment projects as development dependencies. Its drift
   check accepts Windows line endings while rejecting changed content.
