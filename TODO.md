@@ -70,4 +70,7 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
   memory measurements start after the preceding forced collections. All 31 focused tests, 39
   development Smoke measurements and five corrected Standard failure measurements passed with Docker
   running. Finish calibration of the corrected fixture and final-candidate comparison before closing
-  this item. No baseline has been replaced.
+  this item. The latest comparison still shows first-arm timing drift and released-control Smoke
+  memory variability. Fixture roots now dispose their providers, watchers and loggers between
+  scenarios and restore run-owned database isolation; 39 Smoke and 39 Standard development
+  measurements passed. Recalibrate that lifecycle correction. No baseline has been replaced.

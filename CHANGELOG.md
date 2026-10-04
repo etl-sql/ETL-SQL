@@ -291,6 +291,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Failure-cleanup certification scales its input with the selected tier and reports only rows
   emitted before the injected failure. Scenario memory measurements start after the preceding
   scenario's forced collections and retain the starting working set in their peak.
+- Scale fixtures close their service providers, configuration watchers and registered loggers after
+  each scenario. Their Orchestrator state stays in the run-owned temporary directory.
 - Release certification ZIPs select the current release's claims and exact clean candidate bundles.
   Packaging rejects stale, dirty, skipped or mixed evidence and verifies the archived file hashes.
 - Maintenance releases accept tags on `release/**` branches, choose the newest published stable MSI

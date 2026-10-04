@@ -18,6 +18,7 @@ using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Tests.Core;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
@@ -42,10 +43,11 @@ namespace ETL_SQL.Tests.Scale
 
     [Collection("ScaleCertification")]
     [Trait("Category", "ScaleCertification")]
-    public class ScaleCertificationTests : IDisposable
+    public class ScaleCertificationTests : IAsyncLifetime
     {
         private readonly ITestOutputHelper _out;
         private readonly ScenarioResourceSampler _resourceSampler;
+        private readonly Dictionary<Evaluator, FixtureRoot> _roots = new();
 
         public ScaleCertificationTests(ITestOutputHelper output)
         {
@@ -55,13 +57,45 @@ namespace ETL_SQL.Tests.Scale
             _resourceSampler = new ScenarioResourceSampler();
         }
 
-        public void Dispose() => _resourceSampler.Dispose();
+        public Task InitializeAsync() => Task.CompletedTask;
+
+        public async Task DisposeAsync()
+        {
+            try { await DisposeFixtureRootsAsync(); }
+            finally { _resourceSampler.Dispose(); }
+        }
+
+        private async Task DisposeFixtureRootsAsync()
+        {
+            foreach (var evaluator in _roots.Keys.ToArray())
+                await DisposeEvaluatorRootAsync(evaluator);
+        }
+
+        private async Task DisposeEvaluatorRootAsync(Evaluator evaluator)
+        {
+            if (!_roots.Remove(evaluator, out var root)) return;
+            try { await ((IAsyncDisposable)root.Provider).DisposeAsync(); }
+            finally
+            {
+                try { root.Logger?.Dispose(); }
+                finally { root.Configuration?.Dispose(); }
+            }
+        }
+
+        private sealed record FixtureRoot(IServiceProvider Provider, IDisposable? Configuration, IDisposable? Logger);
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
-        private static Evaluator NewEvaluator()
+        private Evaluator NewEvaluator()
         {
-            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var provider = DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
+            {
+                ["Orchestrator:DatabasePath"] = Path.Combine(Path.GetTempPath(), $"scale-history-{Guid.NewGuid():N}.db")
+            });
+            var ev = provider.GetRequiredService<Evaluator>();
+            // Configuration and logger are registered instances, so DI does not own their disposal.
+            _roots.Add(ev, new FixtureRoot(provider, provider.GetService<IConfiguration>() as IDisposable,
+                provider.GetService<ETL_SQL.Common.ILogger>() as IDisposable));
             // Certification hosts are disposable and must expose spill under the runner's monitored
             // temp root. Persisting these sessions both hides live disk use from the HUD and leaves
             // multi-gigabyte artifacts after a successful run.
@@ -107,7 +141,7 @@ namespace ETL_SQL.Tests.Scale
                 $"Connections=[{string.Join(", ", ev.Connections.Select(c => $"{c.Key}:{c.Value?.GetType().Name}"))}]");
         }
 
-        private static async Task<Evaluator> EvWithRows(int rowCount, int groups = 10)
+        private async Task<Evaluator> EvWithRows(int rowCount, int groups = 10)
         {
             var ev = NewEvaluator();
             ev.Connections["#cert"] = await SourceWithRows(rowCount, groups);
@@ -201,7 +235,8 @@ namespace ETL_SQL.Tests.Scale
                 for (int i = 0; i < scenarios.Length; i++)
                 {
                     WriteProgress(certificationTier, i + 1, scenarios.Length, scenarios[i].Name);
-                    await scenarios[i].Run();
+                    try { await scenarios[i].Run(); }
+                    finally { await DisposeFixtureRootsAsync(); }
                     GC.Collect(2, GCCollectionMode.Forced, blocking: true);
                     GC.WaitForPendingFinalizers();
                     GC.Collect(2, GCCollectionMode.Forced, blocking: true);
@@ -243,8 +278,11 @@ namespace ETL_SQL.Tests.Scale
             try
             {
                 await Cert_Smoke_CsvIngest_50kRows_CorrectChecksum();
+                await DisposeFixtureRootsAsync();
                 await Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum();
+                await DisposeFixtureRootsAsync();
                 await Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum();
+                await DisposeFixtureRootsAsync();
             }
             finally
             {
@@ -1003,7 +1041,7 @@ namespace ETL_SQL.Tests.Scale
             AssertSpilled(ev, "SpillCleanupSuccess");
             Assert.True(filesBeforeDispose > 0, "Expected spill files before evaluator disposal.");
 
-            await ev.DisposeAsync();
+            await DisposeEvaluatorRootAsync(ev);
 
             Assert.False(Directory.Exists(spillRoot), $"Expected spill directory '{spillRoot}' to be removed after evaluator disposal.");
             EmitMetrics($"SpillCleanupSuccess_{Rows}", Rows, sw.ElapsedMilliseconds,
@@ -1052,7 +1090,7 @@ namespace ETL_SQL.Tests.Scale
             AssertSpilled(ev, "SpillCleanupFailure");
             Assert.Equal(0, filesBeforeDispose); // completed and incomplete extents are deleted on failure
 
-            await ev.DisposeAsync();
+            await DisposeEvaluatorRootAsync(ev);
 
             Assert.False(Directory.Exists(spillRoot), $"Expected spill directory '{spillRoot}' to be removed after failed evaluator disposal.");
             EmitMetrics($"SpillCleanupFailure_{source.RowsEmitted}", source.RowsEmitted, sw.ElapsedMilliseconds,
