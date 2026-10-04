@@ -63,11 +63,11 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
   until the cause is known — v0.17.0 established why.
   The [v0.20.0 harness investigation](docs/releases/v0.20.0-performance-results.md) identifies
   output capture and unrelated theory enumeration as measurement dependencies. The corrected
-  fixture passes repeated development runs. A clean Standard candidate/control/control/candidate
-  comparison passed all 260 correctness/memory checks, but sort GC pause and short cleanup timing
-  still fail regression comparisons. Phase probes also found verification/forced-GC contamination
-  in resource totals; a smaller fixture did not reduce GC pause. An unchanged-fixture product control
-  removed the earlier GC gap; the dedicated scale assembly passed 39 development Smoke checks.
-  Resource intervals are now corrected; all 30 focused tests and 39 development Smoke measurements
-  passed with Docker running. Finish clean Smoke/Standard calibration and final-candidate comparison
-  before closing this item. No baseline has been replaced.
+  fixture passes repeated development runs. Matching-fixture Smoke calibration passed every pairing;
+  Standard passed all 260 correctness/memory checks and resolved the earlier sort-GC gap, but one
+  arm still failed short failure-path timing. That fixture always stopped after 15,000 rows while
+  advertising a scaled input. Its failure workload and row metrics now scale correctly, and scenario
+  memory measurements start after the preceding forced collections. All 31 focused tests, 39
+  development Smoke measurements and five corrected Standard failure measurements passed with Docker
+  running. Finish calibration of the corrected fixture and final-candidate comparison before closing
+  this item. No baseline has been replaced.

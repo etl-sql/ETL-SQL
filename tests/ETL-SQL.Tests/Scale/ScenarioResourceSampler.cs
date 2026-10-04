@@ -72,12 +72,14 @@ internal sealed class ScenarioResourceSampler : IDisposable
             var result = Measure(_baseline, now);
 
             _baseline = now;
-            _peakWorkingSet = 0;
-            _peakPrivateBytes = 0;
-            _peakManagedHeap = 0;
+            _peakWorkingSet = now.WorkingSetBytes;
+            _peakPrivateBytes = _process.PrivateMemorySize64;
+            _peakManagedHeap = GC.GetGCMemoryInfo().HeapSizeBytes;
             return result;
         }
     }
+
+    public void StartScenario() => SnapshotAndReset();
 
     // Operation deltas exclude fixture setup and verification. Lifecycle peaks continue sampling
     // through both, so the memory containment gate still covers the complete scenario.

@@ -5,6 +5,31 @@ namespace ETL_SQL.Tests.Scale;
 public sealed class ScenarioResourceSamplerTests
 {
     [Fact]
+    public void ScenarioStartExcludesBetweenScenarioWorkAndRetainsStartingMemory()
+    {
+        using var sampler = new ScenarioResourceSampler();
+        var previousScenario = new byte[32 * 1024 * 1024];
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+        sampler.SnapshotAndReset();
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+
+        sampler.StartScenario();
+        sampler.StartOperation();
+        var operation = new byte[2 * 1024 * 1024];
+        sampler.FinishOperation();
+        var verification = new byte[1024 * 1024];
+        var lifecycle = sampler.SnapshotAndReset();
+
+        Assert.InRange(lifecycle.AllocatedBytes, 1024 * 1024, 8 * 1024 * 1024);
+        Assert.Equal(0, lifecycle.Gen2Collections);
+        Assert.True(lifecycle.PeakManagedHeapBytes >= previousScenario.Length);
+        Assert.True(lifecycle.PeakWorkingSetBytes >= lifecycle.StartWorkingSetBytes);
+        GC.KeepAlive(previousScenario);
+        GC.KeepAlive(operation);
+        GC.KeepAlive(verification);
+    }
+
+    [Fact]
     public void TimedResourcesExcludeSetupAndVerificationButLifecycleRetainsThem()
     {
         using var sampler = new ScenarioResourceSampler();

@@ -288,6 +288,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Scale allocation, GC and CPU measurements cover the timed operations. Memory containment retains
   setup and verification peaks, dataset write/reload sums separate intervals, and failure cleanup
   measures the engine exception path before asserting its type.
+- Failure-cleanup certification scales its input with the selected tier and reports only rows
+  emitted before the injected failure. Scenario memory measurements start after the preceding
+  scenario's forced collections and retain the starting working set in their peak.
 - Release certification ZIPs select the current release's claims and exact clean candidate bundles.
   Packaging rejects stale, dirty, skipped or mixed evidence and verifies the archived file hashes.
 - Maintenance releases accept tags on `release/**` branches, choose the newest published stable MSI

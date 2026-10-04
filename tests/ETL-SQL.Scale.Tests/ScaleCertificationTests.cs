@@ -432,6 +432,7 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
             // Expected sum of 1..N = N*(N+1)/2
             var expectedSum = (decimal)Rows * (Rows + 1) / 2;
@@ -475,6 +476,7 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_ExternalAggregate_100kRows_CorrectSums()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(100_000);
             const int Groups = 10;
             var ev = await EvWithRows(Rows, Groups);
@@ -510,6 +512,7 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_ExternalJoin_50kRows_CorrectResults()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
             // score = id * 2, so SUM(score) = 2 * SUM(1..N) = N*(N+1)
             var expectedScoreSum = (decimal)Rows * (Rows + 1);
@@ -561,6 +564,7 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_TempTableSpill_50kRows_CorrectCount()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
             var ev = await EvWithRows(Rows);
             // Retain one configured batch, then force all subsequent batches through spill.
@@ -592,6 +596,7 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_StreamingSelect_ResultCapEnforced()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(100_000);
             var Cap = Math.Min(50_000, Math.Max(1_000, Rows / 2));
             var ev = await EvWithRows(Rows);
@@ -682,6 +687,7 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_WindowFunction_50kRows_CorrectRankValues()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
             // SUM of ROW_NUMBERs 1..N = N*(N+1)/2
             var expectedRnSum = (decimal)Rows * (Rows + 1) / 2;
@@ -725,6 +731,7 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Connector", "CSV")]
         public async Task Cert_Smoke_CsvIngest_50kRows_CorrectChecksum()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
             var expectedSum = (decimal)Rows * (Rows + 1) / 2;
             var dir = CreateTempDir();
@@ -764,6 +771,7 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Connector", "PARQUET")]
         public async Task Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
             var expectedSum = (decimal)Rows * (Rows + 1) / 2;
             var dir = CreateTempDir();
@@ -801,6 +809,7 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Connector", "PARQUET")]
         public async Task Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
             var expectedSum = (decimal)Rows * (Rows + 1) / 2;
             var dir = CreateTempDir();
@@ -865,6 +874,7 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
             const int Groups = 10;
             const int Buckets = 5;
@@ -906,6 +916,7 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
             var distinctKeys = Math.Min(1_000, Rows);
             decimal expectedScoreSum = 0;
@@ -974,6 +985,7 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
             var ev = await EvWithRows(Rows);
             ev.IsPersistentSession = false;
@@ -1004,11 +1016,18 @@ namespace ETL_SQL.Tests.Scale
         [Trait("Tier", "Smoke")]
         public async Task Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles()
         {
+            _resourceSampler.StartScenario();
             var Rows = ScaleRows(50_000);
+            var batchRows = Math.Min(5_000, Math.Max(1, Rows / 10));
+            var failureAfterBatches = Math.Max(1, Rows / batchRows * 4 / 5);
+            var expectedRowsBeforeFailure = batchRows * failureAfterBatches;
             var ev = NewEvaluator();
             ev.IsPersistentSession = false;
-            ev.TempTableSpillThresholdRows = 1_000;
-            ev.Connections["#faulty"] = new ThrowingBatchDataSource(Rows, batchSize: 5_000, throwAfterBatches: 3);
+            ev.TempTableSpillThresholdRows = Math.Min(1_000, batchRows);
+            // Fail after roughly 80% of the tier's input. A fixed three-batch failure never
+            // exercised the advertised larger tiers and overstated their input throughput.
+            var source = new ThrowingBatchDataSource(Rows, batchRows, failureAfterBatches);
+            ev.Connections["#faulty"] = source;
 
             ev.Telemetry.Clear();
             _resourceSampler.StartOperation();
@@ -1026,15 +1045,17 @@ namespace ETL_SQL.Tests.Scale
             var measuredResources = _resourceSampler.FinishOperation();
 
             Assert.IsType<ExecutionException>(failure);
+            Assert.Equal(expectedRowsBeforeFailure, source.RowsEmitted);
+            Assert.True(source.RowsEmitted < Rows, "Expected a failure before the input completed.");
             var spillRoot = ev.SpillStore.RootPath;
             var filesBeforeDispose = CountFiles(spillRoot);
             AssertSpilled(ev, "SpillCleanupFailure");
-            Assert.Equal(0, filesBeforeDispose); // incomplete extent is deleted eagerly on failure
+            Assert.Equal(0, filesBeforeDispose); // completed and incomplete extents are deleted on failure
 
             await ev.DisposeAsync();
 
             Assert.False(Directory.Exists(spillRoot), $"Expected spill directory '{spillRoot}' to be removed after failed evaluator disposal.");
-            EmitMetrics($"SpillCleanupFailure_{Rows}", Rows, sw.ElapsedMilliseconds,
+            EmitMetrics($"SpillCleanupFailure_{source.RowsEmitted}", source.RowsEmitted, sw.ElapsedMilliseconds,
                 ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true, measuredResources, ev.Telemetry);
         }
 
@@ -1128,6 +1149,7 @@ namespace ETL_SQL.Tests.Scale
             private readonly int _rowCount;
             private readonly int _batchSize;
             private readonly int _throwAfterBatches;
+            public int RowsEmitted { get; private set; }
 
             public ThrowingBatchDataSource(int rowCount, int batchSize, int throwAfterBatches)
             {
@@ -1162,6 +1184,7 @@ namespace ETL_SQL.Tests.Scale
                     }
 
                     emitted += take;
+                    RowsEmitted += take;
                     batchNumber++;
                     yield return table;
                 }
