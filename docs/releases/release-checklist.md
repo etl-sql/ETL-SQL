@@ -297,8 +297,10 @@ Missing, skipped, dirty, stale, or wrong-commit evidence is a release failure.
       ```
       Evidence for both commands:
       `artifacts/release-evidence/x.y.z/deployment-profiles/claims-index.{json,md}` plus every linked
-      timestamped bundle. Managed Dedicated evidence must say `Managed Dedicated`; Shared SaaS must
-      remain `NotCertified` until its own hostile shared-topology lane exists.
+      timestamped bundle. Managed Dedicated evidence must say `Managed Dedicated`. The Shared SaaS
+      application/policy lane retains its isolation results under `ApplicationAndPolicyContracts`;
+      full Shared SaaS remains `NotCertified` until live hardened-runtime and hosted-topology evidence
+      exists. Review each row's scope and uncovered work before making a release claim.
 - [ ] **Enterprise hardening:** `Test-EnterpriseHardeningCertification.ps1` passes on both Windows
       and Linux for the candidate SHA. Use the `Enterprise Certification (windows)` and `(linux)` CI
       artifacts, or equivalent controlled-host runs under
@@ -439,7 +441,8 @@ Packaging consumes validated evidence. `publish-release.ps1` selects only run bu
 `artifacts/release-evidence/x.y.z/deployment-profiles/claims-index.json`; an explicit
 `-CertificationEvidenceRoot` may point at the accepted index elsewhere. It requires the matching
 release version, exact clean candidate commit, Passed/release-eligible claims, executed phases,
-nonempty logs and timestamps no older than seven days. Mixed, dirty, skipped, stale, missing or
+nonempty logs and timestamps no older than seven days. Claim text, topology, scope and uncovered
+work must match the executed report. Mixed, dirty, skipped, stale, missing or
 linked evidence fails before deleting existing release output. Historical sibling runs are excluded.
 The ZIP includes a version/commit manifest and SHA-256 hashes checked against its actual entries.
 

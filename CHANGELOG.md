@@ -20,6 +20,11 @@ and [the review record](docs/releases/v0.20.0-code-review.md) for validation sti
 
 ### Added
 
+- Deployment-profile evidence distinguishes Shared SaaS application isolation and sandbox policy
+  contracts from live hardened-runtime and hosted-production certification. Release archives reject
+  claim text or scope that differs from the executed evidence and preserve uncovered work. Canary
+  reports also state their deterministic adapter scope and live regional/notification gaps.
+
 - Transposed fixed-aspect AREA charts support paired confidence bounds with existing placement and
   interpolation modes. Guarded contracts preserve CONFIDENCE_LOW/HIGH intent, crossing bound order,
   gaps and raw interval descriptions. DATA nudges translate each whole band cross-section from its

@@ -6,6 +6,7 @@ public sealed class ReleaseEvidenceArchiveTests
 {
     [Theory]
     [InlineData("valid", true)]
+    [InlineData("valid-default-scope", true)]
     [InlineData("mixed-claim", false)]
     [InlineData("mixed-report", false)]
     [InlineData("mixed-nested-report", false)]
@@ -15,6 +16,10 @@ public sealed class ReleaseEvidenceArchiveTests
     [InlineData("stale", false)]
     [InlineData("missing-log", false)]
     [InlineData("escaping-path", false)]
+    [InlineData("inflated-claim", false)]
+    [InlineData("inflated-scope", false)]
+    [InlineData("omitted-gap", false)]
+    [InlineData("missing-topology-claim", false)]
     public async Task Archive_SelectsOnlyFreshPassedBundlesForTheExactRelease(string mutation, bool accepted)
     {
         var root = Path.Combine(Path.GetTempPath(), $"etlsql_release_evidence_{Guid.NewGuid():N}");
@@ -30,13 +35,19 @@ public sealed class ReleaseEvidenceArchiveTests
                 New-Item -ItemType Directory -Path $bundle | Out-Null
                 Set-Content -LiteralPath (Join-Path $bundle proof.log) -Value 'Passed 12 tests'
                 $phase = @{phase='fixture'; status='Passed'; exitCode=0; command='dotnet test fixture'; startedUtc=$now; completedUtc=$now; log='proof.log'}
-                $report = @{schemaVersion='etl-sql.deployment-profile-certification/v1'; commit='candidate-sha'; dirty=$false; releaseEligible=$true; result='Passed'; kind='Profile'; lanes=@('Solo'); phases=@($phase)}
-                $claim = @{lane='Solo'; kind='Profile'; result='Passed'; releaseEligible=$true; commit='candidate-sha'; evidence='candidate/certification.json'}
+                $topology = @{lane='SharedSaaS'; topology='Shared application state and deterministic adapters'; claim='Application isolation'; claimScope='ApplicationAndPolicyContracts'; sharedSaaS='NotCertified'; uncovered=@('Live hardened runtime not certified')}
+                $report = @{schemaVersion='etl-sql.deployment-profile-certification/v1'; commit='candidate-sha'; dirty=$false; releaseEligible=$true; result='Passed'; kind='Profile'; lanes=@('SharedSaaS'); phases=@($phase); topologyClaims=@($topology)}
+                $claim = $topology.Clone()
+                $claim.kind = 'Profile'; $claim.result = 'Passed'; $claim.releaseEligible = $true; $claim.commit = 'candidate-sha'; $claim.evidence = 'candidate/certification.json'
                 $index = @{schemaVersion='etl-sql.deployment-profile-release-claims/v1'; releaseVersion='0.20.0'; generatedUtc=$now; claims=@($claim)}
                 $old = Join-Path $root historical
                 New-Item -ItemType Directory -Path $old | Out-Null
                 Set-Content -LiteralPath (Join-Path $old old-report.txt) -Value 'Not this release'
                 switch ('{{mutation}}') {
+                    'valid-default-scope' {
+                        $topology.Remove('claimScope'); $topology.Remove('sharedSaaS'); $topology.Remove('uncovered')
+                        $claim.claimScope = 'ProfileAndTransitionContracts'; $claim.sharedSaaS = 'N/A'; $claim.uncovered = @()
+                    }
                     'mixed-claim' { $claim.commit = 'old-sha' }
                     'mixed-report' { $report.commit = 'old-sha' }
                     'mixed-nested-report' {
@@ -50,6 +61,10 @@ public sealed class ReleaseEvidenceArchiveTests
                     'stale' { $phase.startedUtc = [DateTimeOffset]::UtcNow.AddDays(-30).ToString('O') }
                     'missing-log' { Remove-Item -LiteralPath (Join-Path $bundle proof.log) }
                     'escaping-path' { $claim.evidence = '../old/certification.json' }
+                    'inflated-claim' { $claim.claim = 'Hosted production certified'; $claim.sharedSaaS = 'Certified' }
+                    'inflated-scope' { $claim.claimScope = 'LiveHardenedRuntime' }
+                    'omitted-gap' { $claim.uncovered = @() }
+                    'missing-topology-claim' { $report.topologyClaims = @() }
                 }
                 $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $bundle certification.json)
                 $index | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $root claims-index.json)

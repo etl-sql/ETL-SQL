@@ -1,10 +1,12 @@
 <#
 .SYNOPSIS
-    Certifies the production-canary plan, isolation boundary, alert attribution, and fault drills.
+    Certifies production-canary plan and deterministic adapter contracts.
 
 .DESCRIPTION
-    Runs the complete ordered journey catalog across every declared region and failure domain. The
-    lane writes commit-bound JSON and Markdown evidence and fails closed on missing or invalid runs.
+    Runs the ordered journey catalog through deterministic test adapters for every declared region
+    and failure-domain identifier. This proves plan, provisioning, credential and alert contracts;
+    live regional availability, latency, provisioning and notification delivery need separate evidence.
+    The lane writes commit-bound JSON and Markdown evidence and fails closed on missing or invalid runs.
 #>
 [CmdletBinding()]
 param(
@@ -110,6 +112,8 @@ try {
         commit = $commit
         dirty = $dirtyLines.Count -gt 0
         dirtyPaths = @($dirtyLines)
+        evidenceScope = "DeterministicCanaryContracts"
+        uncovered = @("Live regional provisioning, availability and latency are not certified by this lane.", "External notification delivery and hosted fleet recovery require operator evidence.")
         startedUtc = $started.ToString("O")
         completedUtc = ([DateTimeOffset]::UtcNow).ToString("O")
         plan = [ordered]@{
@@ -141,7 +145,7 @@ try {
         "- Result: **$($evidence.result)**",
         "- Runs: $($evidence.actualRunCount) / $expectedRuns",
         "",
-        "The evidence covers the normal path plus correctness, availability, latency, and synthetic-dependency drills for every journey, region, and failure domain. Every run must retain the synthetic tenant and dedicated quota boundary.",
+        "The evidence covers deterministic normal/fault contracts for every declared journey, region and failure-domain identifier. Every run must retain the synthetic tenant and dedicated quota boundary. These test adapters do not prove live regional availability, latency or provisioning, external notification delivery, or hosted fleet recovery.",
         "",
         "- [Detailed journey evidence](journey-evidence/production-canary-report.json)",
         "- [Synthetic provisioning evidence](journey-evidence/production-canary-provisioning.json)",

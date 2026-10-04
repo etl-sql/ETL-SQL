@@ -127,7 +127,7 @@ function Get-ProfilePhases {
                 New-Phase "Shared audit, PII, lineage, and quality isolation" $PortalTests "FullyQualifiedName~SharedAuditTenantIsolationTests|FullyQualifiedName~SharedLineageTenantIsolationTests|FullyQualifiedName~SharedStewardshipTenantIsolationTests|FullyQualifiedName~SharedLineageEndpointTests" "Audit, PII stewardship, lineage, and quality evidence remain tenant-scoped in shared stores and APIs."
                 New-Phase "Shared path, key, and checkpoint isolation" $CoreTests "FullyQualifiedName~TenantStorageCapabilityTests|FullyQualifiedName~KeyMaterialContractTests|FullyQualifiedName~NamedCheckpointResumeTests|FullyQualifiedName~TenantScopedArtifactStorageTests" "Server-derived tenant capabilities fence paths, key namespaces, artifacts, and resumable checkpoints."
                 New-Phase "Shared Gateway and network authority" $CoreTests "FullyQualifiedName~GatewayEnrollmentAndAuthorityTests|FullyQualifiedName~GatewayBindingTests|FullyQualifiedName~GatewayOperationProtocolTests|FullyQualifiedName~GatewayTransportTests" "Gateway identity, binding, grants, typed operations, replay decisions, and outbound transport reject cross-tenant authority."
-                New-Phase "Shared sandbox and resource-exhaustion isolation" $CoreTests "FullyQualifiedName~SandboxExecutionCoordinatorTests|FullyQualifiedName~SandboxWorkloadPolicyResolverTests|FullyQualifiedName~SandboxAdmissionControllerTests|FullyQualifiedName~SaasFleetRolloutSequencerTests" "Hardened placement, tenant admission, resource bounds, and fleet drain never lower isolation or transfer work across tenants."
+                New-Phase "Shared sandbox and resource-exhaustion policy contracts" $CoreTests "FullyQualifiedName~SandboxExecutionCoordinatorTests|FullyQualifiedName~SandboxWorkloadPolicyResolverTests|FullyQualifiedName~SandboxAdmissionControllerTests|FullyQualifiedName~SaasFleetRolloutSequencerTests" "Deterministic adapters prove hardened placement policy, tenant admission, resource bounds, and fleet drain contracts. Live hardened-runtime containment requires separate evidence."
                 New-Phase "Shared quota, telemetry, and metering isolation" $PortalTests "FullyQualifiedName~TenantExecutionQuotaTests|FullyQualifiedName~TenantMeteringLedgerTests|FullyQualifiedName~TenantUsageStoreTests|FullyQualifiedName~SharedTenantMeteringIntegrationTests" "Noisy-neighbor admission and tenant-attributed telemetry remain bounded and partitioned."
                 New-Phase "Shared support and restore isolation" $PortalTests "FullyQualifiedName~SupportAccessApprovalServiceTests|FullyQualifiedName~SupportBundleTests|FullyQualifiedName~SharedBackupAndRecoveryTests|FullyQualifiedName~SharedBackupSurfaceInventoryTests" "Support access is approved and audited, while backup/restore inventories retain every shared tenant surface."
                 New-Phase "Shared identity boundary" $PortalTests "FullyQualifiedName~SharedTenantHttpBoundaryTests|FullyQualifiedName~SharedTenantCredentialBindingTests|FullyQualifiedName~SharedOidcAuthTests|FullyQualifiedName~SharedIdentityPartitionStoreTests" "Only verified credentials derive tenant context and shared identity state remains partitioned."
@@ -199,7 +199,14 @@ function Get-TopologyClaim {
             [ordered]@{ lane = $Name; topology = "Managed Dedicated (one host-fixed tenant runtime boundary per tenant)"; claim = "Managed Dedicated"; sharedSaaS = "NotCertified" }
         }
         "SharedSaaS" {
-            [ordered]@{ lane = $Name; topology = "Shared tenant-aware control planes with hardened per-run execution"; claim = "Shared SaaS hostile isolation"; sharedSaaS = "Certified" }
+            [ordered]@{
+                lane = $Name
+                topology = "Shared tenant-aware application state and deterministic sandbox adapters"
+                claim = "Shared SaaS application isolation and sandbox policy contracts"
+                claimScope = "ApplicationAndPolicyContracts"
+                sharedSaaS = "NotCertified"
+                uncovered = @("Live hardened-runtime containment is not certified by this lane.", "Hosted production regions, fleet capacity and recovery objectives are not certified by this lane.")
+            }
         }
         "SoloToTeam" {
             [ordered]@{ lane = $Name; topology = "Solo local state to Team single-node providers"; claim = "Solo to Team" }
@@ -309,7 +316,9 @@ function Update-ReleaseClaimsIndex {
             kind = $Kind
             topology = $_.topology
             claim = $_.claim
+            claimScope = if ($null -eq $_.claimScope) { "ProfileAndTransitionContracts" } else { $_.claimScope }
             sharedSaaS = if ($null -eq $_.sharedSaaS) { "N/A" } else { $_.sharedSaaS }
+            uncovered = if ($null -eq $_.uncovered) { @() } else { @($_.uncovered) }
             commit = $Commit
             result = $Result
             releaseEligible = $ReleaseEligible
@@ -328,13 +337,13 @@ function Update-ReleaseClaimsIndex {
     $markdown = New-Object System.Collections.Generic.List[string]
     $markdown.Add("# Deployment-profile release claims — v$Version")
     $markdown.Add("")
-    $markdown.Add("| Kind | Lane | Topology | Claim | Shared SaaS | Result | Release eligible | Evidence |")
-    $markdown.Add("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+    $markdown.Add("| Kind | Lane | Topology | Claim | Scope | Shared SaaS | Uncovered | Result | Release eligible | Evidence |")
+    $markdown.Add("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
     foreach ($item in $index.claims) {
-        $markdown.Add("| $($item.kind) | $($item.lane) | $($item.topology) | $($item.claim) | $($item.sharedSaaS) | $($item.result) | $($item.releaseEligible) | [$($item.evidence)]($($item.evidence)) |")
+        $markdown.Add("| $($item.kind) | $($item.lane) | $($item.topology) | $($item.claim) | $($item.claimScope) | $($item.sharedSaaS) | $($item.uncovered -join ' ') | $($item.result) | $($item.releaseEligible) | [$($item.evidence)]($($item.evidence)) |")
     }
     $markdown.Add("")
-    $markdown.Add('Only rows with `releaseEligible = True` support a release claim. Managed Dedicated evidence never certifies Shared SaaS.')
+    $markdown.Add('Only rows with `releaseEligible = True` support the stated claim and scope. Application/policy contracts and Managed Dedicated evidence never certify Shared SaaS runtime containment or hosted production.')
     $markdown | Set-Content -LiteralPath (Join-Path $Root "claims-index.md") -Encoding utf8
 }
 
@@ -485,7 +494,10 @@ try {
     foreach ($unproven in $unprovenPrerequisites) { $uncovered.Add("Enterprise hosted prerequisite not proven: $($unproven.prerequisite)") }
     if ($laneNames -contains "SaaS" -or $laneNames -contains "EnterpriseToSaaS" -or
         $laneNames -contains "SoloToSaaS" -or $laneNames -contains "Upgrade") {
-        $uncovered.Add("Shared SaaS is not certified; SaaS evidence in this lane is Managed Dedicated only.")
+        $uncovered.Add("Managed Dedicated profile and transition evidence does not certify Shared SaaS.")
+    }
+    foreach ($claim in @($laneNames | ForEach-Object { Get-TopologyClaim $_ })) {
+        foreach ($gap in $claim.uncovered) { $uncovered.Add($gap) }
     }
     if ($dirtyLines.Count -gt 0) {
         $uncovered.Add("The worktree was dirty at start; this run is development evidence and cannot support a release claim.")
@@ -533,11 +545,12 @@ try {
     $markdown.Add("")
     $markdown.Add("## Topology claims")
     $markdown.Add("")
-    $markdown.Add("| Lane | Certified topology | Claim | Shared SaaS |")
-    $markdown.Add("| :--- | :--- | :--- | :--- |")
+    $markdown.Add("| Lane | Tested topology | Claim | Scope | Shared SaaS |")
+    $markdown.Add("| :--- | :--- | :--- | :--- | :--- |")
     foreach ($claim in $evidence.topologyClaims) {
         $shared = if ($null -eq $claim.sharedSaaS) { "N/A" } else { $claim.sharedSaaS }
-        $markdown.Add("| $($claim.lane) | $($claim.topology) | $($claim.claim) | $shared |")
+        $scope = if ($null -eq $claim.claimScope) { "ProfileAndTransitionContracts" } else { $claim.claimScope }
+        $markdown.Add("| $($claim.lane) | $($claim.topology) | $($claim.claim) | $scope | $shared |")
     }
     if ($hostedPrerequisites.Count -gt 0) {
         $markdown.Add("")

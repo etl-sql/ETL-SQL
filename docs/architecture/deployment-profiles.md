@@ -700,6 +700,12 @@ decision records when it materially constrains future providers.
 
 ## 18. Architecture Definition of Done
 
+The `SharedSaaS` deployment-profile lane certifies application isolation and sandbox policy contracts.
+Its deterministic execution adapters do not prove live hardened-runtime containment, hosted fleet
+capacity, regional recovery objectives or production launch readiness. Evidence preserves those
+gaps separately while retaining the passing application checks. Full Shared SaaS certification
+requires the additional runtime and hosted-topology evidence below.
+
 The deployment-profile architecture is realized when:
 
 1. Common artifacts execute with equivalent semantics through all applicable profile providers.

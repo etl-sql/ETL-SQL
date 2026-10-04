@@ -64,6 +64,23 @@ function Get-ReleaseCertificationInputs {
             $report.kind -ne $claim.kind -or $claim.lane -notin $report.lanes -or @($report.phases).Count -eq 0) {
             throw "Unusable or mixed-candidate certification: '$($claim.evidence)'."
         }
+        $reportedClaims = @($report.topologyClaims | Where-Object { $_.lane -eq $claim.lane })
+        if ($reportedClaims.Count -ne 1) { throw "Missing or ambiguous topology claim: '$($claim.lane)'." }
+        $reportedClaim = $reportedClaims[0]
+        foreach ($field in @('topology', 'claim', 'claimScope', 'sharedSaaS')) {
+            $expected = $reportedClaim.$field
+            if ($field -eq 'claimScope' -and $null -eq $expected) { $expected = 'ProfileAndTransitionContracts' }
+            if ($field -eq 'sharedSaaS' -and $null -eq $expected) { $expected = 'N/A' }
+            if ([string]::IsNullOrWhiteSpace($claim.$field) -or $claim.$field -cne $expected) {
+                throw "Release claim differs from its executed evidence ($field): '$($claim.lane)'."
+            }
+        }
+        $expectedGaps = if ($null -eq $reportedClaim.uncovered) { @() } else { @($reportedClaim.uncovered) }
+        $claimGaps = if ($null -eq $claim.uncovered) { @() } else { @($claim.uncovered) }
+        if ((ConvertTo-Json -InputObject @($claimGaps) -Compress) -cne
+            (ConvertTo-Json -InputObject @($expectedGaps) -Compress)) {
+            throw "Release claim omits or changes uncovered scope: '$($claim.lane)'."
+        }
         $bundleRoot = Split-Path -Parent $reportPath
         if ($bundleRoot -eq $root) { throw 'Certification must be in a distinct run bundle.' }
         foreach ($phase in $report.phases) {
