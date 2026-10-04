@@ -292,6 +292,12 @@ and [the review record](docs/releases/v0.20.0-code-review.md) for validation sti
 
 ### Fixed
 
+- HA compose and topology generators configure the separate Orchestrator caller signing secret.
+  Capacity workloads exchange authenticated Portal sessions for short-lived assertions, constrain
+  credentials to the paired origin and refuse redirects; diagnostics redact the new secret.
+  Portal uses the shared Orchestrator database, and HAProxy checks Portal readiness and learns its
+  node cookie for affinity.
+
 - PNG assets retain their binary bytes across Windows and Linux checkouts, including the VS Code
   icon inside the browser asset folders pinned to LF.
 - Hash and external joins honor the active case comparison. Nested transactions retain enlistments

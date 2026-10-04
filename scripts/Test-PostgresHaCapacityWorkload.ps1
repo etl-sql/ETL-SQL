@@ -35,6 +35,9 @@ try {
     Assert-True ($workload.portal.baseUrl -eq 'http://localhost:5900') 'Expected Portal URL from topology env.'
     Assert-True ($workload.orchestrator.baseUrl -eq 'http://localhost:5901') 'Expected Orchestrator URL from topology env.'
     Assert-True ($workload.orchestrator.apiKey -ne 'CHANGE_ME') 'Expected generated Orchestrator API key.'
+    $envIdentitySecret = ((Get-Content -LiteralPath $topology.envFile | Where-Object { $_ -like 'ORCH_IDENTITY_SIGNING_SECRET=*' }) -split '=', 2)[1]
+    Assert-True ($workload.orchestrator.identityRole -eq 'admin') 'Expected caller identity to come from the authenticated Portal role.'
+    Assert-True (-not ((Get-Content -LiteralPath $materialized.outputPath -Raw).Contains($envIdentitySecret))) 'The workload must not copy the host signing secret.'
     Assert-True ($workload.portal.roles.admin.password -eq $envAdminPassword) 'Expected generated admin password.'
     Assert-True ($workload.environment.topologyMetadataPath.EndsWith('topology-metadata.json')) 'Expected metadata path in workload environment.'
 

@@ -25,6 +25,8 @@ await fs.mkdir(outDir, { recursive: true });
 const context = {
   tokens: {},
   apiKey: config.orchestrator?.apiKey ?? '',
+  orchestratorIdentityRole: config.orchestrator?.identityRole,
+  orchestratorAssertions: new Map(),
   variables: { ...(config.variables ?? {}) },
 };
 
@@ -71,6 +73,9 @@ function parseArgs(values) {
 function validateConfig(value) {
   if (!value || typeof value !== 'object') throw new Error('Configuration must be a JSON object.');
   if (!value.breachCriteria) throw new Error('breachCriteria is required.');
+  if (value.orchestrator?.identityRole && !value.portal?.roles?.[value.orchestrator.identityRole]) {
+    throw new Error('orchestrator.identityRole must name a configured Portal login role.');
+  }
   for (const serviceName of ['portal', 'orchestrator']) {
     const service = value[serviceName];
     if (!service) continue;
@@ -209,13 +214,22 @@ async function sendRequest(request, context) {
   const url = new URL(substitute(request.path, context.variables), baseUrl);
   const headers = { ...(request.headers ?? {}) };
   if (request.role && context.tokens[request.role]) headers.Authorization = `Bearer ${context.tokens[request.role]}`;
-  if (request.useApiKey && context.apiKey) headers['X-Orchestrator-Key'] = context.apiKey;
+  if (request.useApiKey && context.apiKey) {
+    if (url.origin !== new URL(config.orchestrator.baseUrl).origin) {
+      throw new Error('Orchestrator credentials may only be sent to the configured Orchestrator origin.');
+    }
+    headers['X-Orchestrator-Key'] = context.apiKey;
+    if (context.orchestratorIdentityRole) {
+      headers['X-Orchestrator-Identity'] = await getOrchestratorAssertion(context);
+    }
+  }
   if (request.body !== undefined) headers['Content-Type'] = 'application/json';
 
   try {
     const response = await fetch(url, {
       method: request.method,
       headers,
+      redirect: request.useApiKey ? 'error' : 'follow',
       body: request.body === undefined ? undefined : JSON.stringify(substituteObject(request.body, context.variables)),
     });
     const text = await response.text();
@@ -236,6 +250,39 @@ async function sendRequest(request, context) {
       sqliteContention: /database is locked|database is busy|sqlite_busy|sqlite_locked/i.test(String(error)),
       error: String(error),
     };
+  }
+}
+
+async function getOrchestratorAssertion(context) {
+  const role = context.orchestratorIdentityRole;
+  if (!context.tokens[role]) throw new Error('Orchestrator identity requires an authenticated Portal role.');
+  const cached = context.orchestratorAssertions.get(role);
+  if (cached?.pending) return cached.pending;
+  if (cached?.expiresAt > Date.now() + 15000) return cached.assertion;
+
+  const pending = (async () => {
+    const response = await fetch(new URL('/api/auth/orchestrator-assertion', config.portal.baseUrl), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${context.tokens[role]}` },
+      redirect: 'error',
+    });
+    if (!response.ok) throw new Error(`Portal Orchestrator assertion exchange failed with status ${response.status}.`);
+    const issued = await response.json();
+    const expiresAt = Date.parse(issued.expiresAt);
+    if (issued.headerName !== 'X-Orchestrator-Identity' || issued.audience !== 'etl-sql-orchestrator-api'
+      || typeof issued.assertion !== 'string' || !issued.assertion || !Number.isFinite(expiresAt)
+      || expiresAt <= Date.now() + 15000) {
+      throw new Error('Portal Orchestrator assertion exchange returned an invalid or expired assertion.');
+    }
+    context.orchestratorAssertions.set(role, { assertion: issued.assertion, expiresAt });
+    return issued.assertion;
+  })();
+  context.orchestratorAssertions.set(role, { pending });
+  try {
+    return await pending;
+  } catch (error) {
+    context.orchestratorAssertions.delete(role);
+    throw error;
   }
 }
 

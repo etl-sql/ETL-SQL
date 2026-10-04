@@ -53,6 +53,14 @@ The harness warms each service, runs each concurrency step for a fixed duration,
 metrics endpoints, detects SQLite lock/busy errors, applies breach criteria, and writes JSON and
 Markdown reports under `capacity-results/`.
 
+Federated Orchestrators also require `orchestrator.identityRole`, naming a configured Portal login
+role. The HA workload uses its `admin` login. The runner exchanges that authenticated session at
+`POST /api/auth/orchestrator-assertion`, caches the short-lived assertion and refreshes it before
+expiry. Requests marked `useApiKey` receive the assertion and service key. The Portal supplies the
+caller identity, roles, groups and scopes; the workload does not receive the host signing secret.
+Credentials are restricted to the configured Orchestrator origin, and those requests refuse
+redirects. Generated credentials and assertions do not belong in published reports.
+
 Use `thinkTimeMs` on a service or individual workload request to model a deliberate request rate.
 Request-level values override the service default. This is especially important for scheduled-job
 triggers: an unpaced worker measures HTTP trigger ingestion, not a defensible jobs-per-hour workload.

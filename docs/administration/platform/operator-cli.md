@@ -218,7 +218,8 @@ etl-sql admin ha-soak validate --run-root .ha-soak-runs/ha-20260710 --required-g
 ```
 
 Use `prepare --start --pull` only when you are ready to start the Docker topology. Generated env
-files and local workload configs may contain disposable credentials or API keys; they belong in the
+files and local workload configs contain disposable credentials and a separate Orchestrator identity
+signing secret; they belong in the
 ignored run root, not source control. Developers and release maintainers still have script-level
 contract tests in `scripts/README.md`, but administrators should use the `etl-sql admin ha-soak`
 commands as the stable cross-platform interface. `large-job-run` writes `soak-report.json/.md`,
@@ -230,3 +231,9 @@ diagnostic run. `fault-run` writes `fault-report.json/.md`, per-fault `fault-res
 only after sustained-load, large-job, and fault-injection measured reports exist; the native
 `LargeJob` and `FaultInjection` gates cover bounded CI-smoke evidence, while release publication
 still requires the longer operator-run evidence called out in `TODO.md`.
+
+The HA compose template requires `ORCH_IDENTITY_SIGNING_SECRET` (at least 32 UTF-8 bytes), shared
+by all Portal and Orchestrator instances and distinct from `ORCH_API_KEY`. `prepare` generates it.
+Regenerate an older disposable run root or supply this value in an existing HA environment before
+starting v0.20.0 services. The sustained workload sends both the service key and a signed caller
+assertion; the topology keeps federated authorization enabled.

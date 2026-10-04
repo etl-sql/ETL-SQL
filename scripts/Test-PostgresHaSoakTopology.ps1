@@ -37,12 +37,15 @@ try {
     Assert-True ($envText.Contains('PORTAL_JWT_SECRET=')) 'Expected Portal key settings.'
     Assert-True ($envText.Contains('PORTAL_DATASET_KEY=')) 'Expected dataset key setting.'
     Assert-True ($envText.Contains('ORCH_API_KEY=')) 'Expected orchestrator API key setting.'
+    $identitySecret = (($envText -split '\r?\n' | Where-Object { $_ -like 'ORCH_IDENTITY_SIGNING_SECRET=*' }) -split '=', 2)[1]
+    Assert-True ([Text.Encoding]::UTF8.GetByteCount($identitySecret) -ge 32) 'Expected a generated identity signing secret of at least 32 bytes.'
 
     $metadata = Get-Content -LiteralPath $result.metadataPath -Raw | ConvertFrom-Json
     Assert-True ($metadata.topology.portal -eq 2) 'Expected Portal scale in metadata.'
     Assert-True ($metadata.topology.orchestrator -eq 2) 'Expected Orchestrator scale in metadata.'
     Assert-True ($metadata.requirements.portalDatabaseProvider -eq 'Postgres') 'Expected Postgres Portal requirement.'
-    Assert-True ($metadata.requirements.orchestratorAuthentication -eq 'X-Orchestrator-Key') 'Expected authenticated Orchestrator requirement.'
+    Assert-True ($metadata.requirements.orchestratorAuthentication -eq 'X-Orchestrator-Key + X-Orchestrator-Identity (federated)') 'Expected federated Orchestrator requirement.'
+    Assert-True (-not ((Get-Content -LiteralPath $result.metadataPath -Raw).Contains($identitySecret))) 'Metadata must omit the identity signing secret.'
     Assert-True (-not ((Get-Content -LiteralPath $result.metadataPath -Raw).Contains('PORTAL_JWT_SECRET='))) 'Metadata must not include secret values.'
 
     Write-Host 'PostgreSQL HA soak topology harness self-test passed.'

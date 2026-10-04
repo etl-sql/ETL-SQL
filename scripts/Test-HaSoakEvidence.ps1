@@ -79,7 +79,9 @@ function Test-Redaction {
         'PORTAL_JWT_SECRET\s*=\s*(?!\*{4,})\S+',
         'PORTAL_DATASET_KEY\s*=\s*(?!\*{4,})\S+',
         'ORCH_API_KEY\s*=\s*(?!\*{4,})\S+',
+        'ORCH_IDENTITY_SIGNING_SECRET\s*=\s*(?!\*{4,})\S+',
         '"apiKey"\s*:\s*"(?!\*{4,}|CHANGE_ME")([^"]+)"',
+        '"signingSecret"\s*:\s*"(?!\*{4,}|CHANGE_ME")([^"]+)"',
         '"password"\s*:\s*"(?!\*{4,}|CHANGE_ME")([^"]+)"'
     )
     foreach ($pattern in $secretPatterns) {

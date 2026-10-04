@@ -63,6 +63,9 @@ function Assert-TopologyTemplate {
         'Portal__Storage__KeyRingPath=/app/data/.portal-keys',
         'Portal__Dataset__AtRestKey=${PORTAL_DATASET_KEY}',
         'Portal__Orchestrator__ApiKey=${ORCH_API_KEY}',
+        'Orchestrator__RequireFederatedIdentity=true',
+        'Orchestrator__IdentitySigningSecret=${ORCH_IDENTITY_SIGNING_SECRET:',
+        'Portal__Orchestrator__IdentitySigningSecret=${ORCH_IDENTITY_SIGNING_SECRET:',
         'Portal__FirstRun__AdminPassword=${PORTAL_ADMIN_PASSWORD}',
         'Portal__FirstRun__MustChangePassword=${PORTAL_ADMIN_MUST_CHANGE_PASSWORD:-true}',
         'Session__Root=/app/Sessions'
@@ -82,6 +85,7 @@ function Assert-TopologyTemplate {
         'PORTAL_JWT_SECRET=',
         'PORTAL_DATASET_KEY=',
         'ORCH_API_KEY=',
+        'ORCH_IDENTITY_SIGNING_SECRET=',
         'PORTAL_ADMIN_PASSWORD=',
         'PORTAL_ADMIN_MUST_CHANGE_PASSWORD='
     )) {
@@ -202,6 +206,7 @@ $envLines = @(
     "PORTAL_JWT_SECRET=$(New-Base64Secret 48)",
     "PORTAL_DATASET_KEY=$(New-Base64Secret 32)",
     "ORCH_API_KEY=$(New-Base64Secret 32)",
+    "ORCH_IDENTITY_SIGNING_SECRET=$(New-Base64Secret 32)",
     'PORTAL_ADMIN_USERNAME=admin',
     "PORTAL_ADMIN_PASSWORD=$(New-PortalAdminPassword)",
     'PORTAL_ADMIN_MUST_CHANGE_PASSWORD=false'
@@ -237,7 +242,7 @@ $metadata = [ordered]@{
         sharedDataProtectionKeyRing = 'Portal__Storage__KeyRingPath=/app/data/.portal-keys'
         sessionRoot = 'Session__Root=/app/Sessions'
         stickyAffinity = 'ETLSQL_PORTAL_AFFINITY via deploy/docker/haproxy.cfg'
-        orchestratorAuthentication = 'X-Orchestrator-Key'
+        orchestratorAuthentication = 'X-Orchestrator-Key + X-Orchestrator-Identity (federated)'
     }
     commands = [ordered]@{
         start = 'docker compose --env-file "{0}" -f "{1}" up -d --scale portal={2} --scale orchestrator={3}' -f $envRelative, $composeRelative, $PortalScale, $OrchestratorScale

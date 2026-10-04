@@ -99,6 +99,14 @@ Recommended HA readiness configuration:
 Keep `MinLivePortalNodes` at `1` during bootstrap if the first node must become ready before the
 remaining nodes are started. Raise it after the cluster is fully provisioned.
 
+The HA compose template supplies the shared Orchestrator PostgreSQL authority to Portal nodes as
+well as Orchestrator nodes. Its HAProxy backend checks Portal `/healthz`, learns the node-issued
+`ETLSQL_PORTAL_AFFINITY` response cookie and matches it on later requests without rewriting it.
+DNS retry and retention settings are separate resolver directives. See the
+[HAProxy 2.8 configuration reference](https://docs.haproxy.org/2.8/configuration.html#4.2-stick%20store-response)
+for response-cookie stick tables. Restarting the load balancer clears its in-memory affinity table;
+interactive sessions remain node-local and should be reopened if routing moves to another node.
+
 ## Readiness and Health
 
 Use `GET /healthz` as the load-balancer readiness probe. It returns HTTP 200 only when this node can

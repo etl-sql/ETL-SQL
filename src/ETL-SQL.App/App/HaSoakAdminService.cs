@@ -18,7 +18,7 @@ namespace ETL_SQL.App
     internal static class HaSoakAdminService
     {
         private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-        private static readonly Regex SecretEnvPattern = new("^(PG_PASSWORD|PORTAL_JWT_SECRET|PORTAL_DATASET_KEY|ORCH_API_KEY|PORTAL_ADMIN_PASSWORD)=", RegexOptions.Compiled);
+        private static readonly Regex SecretEnvPattern = new("^(PG_PASSWORD|PORTAL_JWT_SECRET|PORTAL_DATASET_KEY|ORCH_API_KEY|ORCH_IDENTITY_SIGNING_SECRET|PORTAL_ADMIN_PASSWORD)=", RegexOptions.Compiled);
         private static readonly Regex RunIdPattern = new("^[a-zA-Z0-9][a-zA-Z0-9_.-]*$", RegexOptions.Compiled);
 
         internal static async Task<int> RunAsync(CliContext ctx, ILogger logger)
@@ -131,6 +131,7 @@ namespace ETL_SQL.App
                 $"PORTAL_JWT_SECRET={NewBase64Secret(48)}",
                 $"PORTAL_DATASET_KEY={NewBase64Secret(32)}",
                 $"ORCH_API_KEY={NewBase64Secret(32)}",
+                $"ORCH_IDENTITY_SIGNING_SECRET={NewBase64Secret(32)}",
                 "PORTAL_ADMIN_USERNAME=admin",
                 $"PORTAL_ADMIN_PASSWORD={NewPortalAdminPassword()}",
                 "PORTAL_ADMIN_MUST_CHANGE_PASSWORD=false"
@@ -170,7 +171,7 @@ namespace ETL_SQL.App
                     ["sharedDataProtectionKeyRing"] = "Portal__Storage__KeyRingPath=/app/data/.portal-keys",
                     ["sessionRoot"] = "Session__Root=/app/Sessions",
                     ["stickyAffinity"] = "ETLSQL_PORTAL_AFFINITY via deploy/docker/haproxy.cfg",
-                    ["orchestratorAuthentication"] = "X-Orchestrator-Key"
+                    ["orchestratorAuthentication"] = "X-Orchestrator-Key + X-Orchestrator-Identity (federated)"
                 },
                 ["commands"] = new JsonObject
                 {
@@ -223,13 +224,13 @@ namespace ETL_SQL.App
             var env = ReadEnv(envFile);
             var metadata = ReadJsonObject(metadataPath);
             var workload = ReadJsonObject(templatePath);
-            RequireEnv(env, "PORT_PORTAL", "PORT_ORCH", "ORCH_API_KEY", "PORTAL_ADMIN_PASSWORD");
+            RequireEnv(env, "PORT_PORTAL", "PORT_ORCH", "ORCH_API_KEY", "ORCH_IDENTITY_SIGNING_SECRET", "PORTAL_ADMIN_PASSWORD");
 
             workload["environment"] ??= new JsonObject();
             var environment = workload["environment"]!.AsObject();
             environment["deploymentMode"] = $"PostgreSQL HA soak topology ({metadata["runId"]?.GetValue<string>()})";
             environment["databaseLocation"] = $"PostgreSQL via {metadata["composeFile"]?.GetValue<string>()}";
-            environment["notes"] = $"Materialized from {metadata["envFile"]?.GetValue<string>()}. Generated workload contains the local Orchestrator API key; do not commit it.";
+            environment["notes"] = $"Materialized from {metadata["envFile"]?.GetValue<string>()}. Generated workload contains local credentials; do not commit it. Caller assertions come from the authenticated Portal.";
             environment["topologyMetadataPath"] = metadataPath;
 
             workload["portal"]!["baseUrl"] = $"http://localhost:{env["PORT_PORTAL"]}";
@@ -1149,8 +1150,10 @@ namespace ETL_SQL.App
                 "PORTAL_JWT_SECRET\\s*=\\s*(?!\\*{4,})\\S+",
                 "PORTAL_DATASET_KEY\\s*=\\s*(?!\\*{4,})\\S+",
                 "ORCH_API_KEY\\s*=\\s*(?!\\*{4,})\\S+",
+                "ORCH_IDENTITY_SIGNING_SECRET\\s*=\\s*(?!\\*{4,})\\S+",
                 "PORTAL_ADMIN_PASSWORD\\s*=\\s*(?!\\*{4,})\\S+",
                 "\"apiKey\"\\s*:\\s*\"(?!\\*{4,}|CHANGE_ME\")([^\"]+)\"",
+                "\"signingSecret\"\\s*:\\s*\"(?!\\*{4,}|CHANGE_ME\")([^\"]+)\"",
                 "\"password\"\\s*:\\s*\"(?!\\*{4,}|CHANGE_ME\")([^\"]+)\""
             })
             {
@@ -1341,11 +1344,11 @@ namespace ETL_SQL.App
         private static void AssertTopologyTemplate(string composePath, string examplePath)
         {
             var compose = File.ReadAllText(RequireFile(composePath, "Compose file"));
-            foreach (var token in new[] { "postgres:", "orchestrator:", "portal:", "loadbalancer:", "Portal__Database__Provider=Postgres", "Orchestrator__Database__Provider=Postgres", "Portal__Storage__KeyRingPath=/app/data/.portal-keys", "Portal__Dataset__AtRestKey=${PORTAL_DATASET_KEY}", "Portal__Orchestrator__ApiKey=${ORCH_API_KEY}", "Portal__FirstRun__AdminPassword=${PORTAL_ADMIN_PASSWORD}", "Portal__FirstRun__MustChangePassword=${PORTAL_ADMIN_MUST_CHANGE_PASSWORD:-true}", "Session__Root=/app/Sessions" })
+            foreach (var token in new[] { "postgres:", "orchestrator:", "portal:", "loadbalancer:", "Portal__Database__Provider=Postgres", "Orchestrator__Database__Provider=Postgres", "Portal__Storage__KeyRingPath=/app/data/.portal-keys", "Portal__Dataset__AtRestKey=${PORTAL_DATASET_KEY}", "Portal__Orchestrator__ApiKey=${ORCH_API_KEY}", "Orchestrator__RequireFederatedIdentity=true", "Orchestrator__IdentitySigningSecret=${ORCH_IDENTITY_SIGNING_SECRET:", "Portal__Orchestrator__IdentitySigningSecret=${ORCH_IDENTITY_SIGNING_SECRET:", "Portal__FirstRun__AdminPassword=${PORTAL_ADMIN_PASSWORD}", "Portal__FirstRun__MustChangePassword=${PORTAL_ADMIN_MUST_CHANGE_PASSWORD:-true}", "Session__Root=/app/Sessions" })
                 if (!compose.Contains(token, StringComparison.Ordinal))
                     throw new InvalidOperationException($"Compose file is missing required PostgreSQL HA soak token: {token}");
             var example = File.ReadAllText(RequireFile(examplePath, "Environment example"));
-            foreach (var token in new[] { "COMPOSE_PROJECT_NAME=", "ENV_DATA_ROOT=", "PG_PASSWORD=", "PG_DB_PORTAL=", "PG_DB_ORCH=", "PORTAL_JWT_SECRET=", "PORTAL_DATASET_KEY=", "ORCH_API_KEY=", "PORTAL_ADMIN_PASSWORD=", "PORTAL_ADMIN_MUST_CHANGE_PASSWORD=" })
+            foreach (var token in new[] { "COMPOSE_PROJECT_NAME=", "ENV_DATA_ROOT=", "PG_PASSWORD=", "PG_DB_PORTAL=", "PG_DB_ORCH=", "PORTAL_JWT_SECRET=", "PORTAL_DATASET_KEY=", "ORCH_API_KEY=", "ORCH_IDENTITY_SIGNING_SECRET=", "PORTAL_ADMIN_PASSWORD=", "PORTAL_ADMIN_MUST_CHANGE_PASSWORD=" })
                 if (!example.Contains(token, StringComparison.Ordinal))
                     throw new InvalidOperationException($"Environment example is missing required PostgreSQL HA soak token: {token}");
         }

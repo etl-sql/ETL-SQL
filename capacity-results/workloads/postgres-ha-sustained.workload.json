@@ -46,6 +46,7 @@
   "orchestrator": {
     "baseUrl": "http://localhost:5601",
     "apiKey": "CHANGE_ME",
+    "identityRole": "admin",
     "metricsPath": "/metrics",
     "metricSampleIntervalMs": 1000,
     "thinkTimeMs": 250,

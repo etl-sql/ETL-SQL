@@ -65,6 +65,10 @@ try {
         & node (Join-Path $ScriptRoot 'test-capacity-workload-configs.mjs')
     }
 
+    Invoke-Step 'Capacity caller identity exchange' {
+        & node (Join-Path $ScriptRoot 'test-service-capacity-smoke.mjs')
+    }
+
     if (-not $NoDotNet) {
         Invoke-Step 'HA soak manifest and native CLI tests' {
             dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj `

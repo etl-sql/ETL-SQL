@@ -73,6 +73,19 @@ try {
     Assert-True ($summary.status -eq 'Passed') 'Expected synthetic sustained evidence to pass.'
     Assert-True ($summary.checkedArtifactCount -ge 6) 'Expected validator to check generated artifacts.'
 
+    foreach ($leak in @(
+        'ORCH_IDENTITY_SIGNING_SECRET=synthetic-unredacted-value',
+        '{"signingSecret":"synthetic-unredacted-value"}'
+    )) {
+        $leak | Set-Content -LiteralPath (Join-Path $resultRoot 'capacity-report.md') -Encoding UTF8
+        $leakedSummary = & (Join-Path $ScriptRoot 'Test-HaSoakEvidence.ps1') `
+            -TopologyRunRoot $topology.runRoot -RequiredGate Sustained -AllowDirty
+        Assert-True ($leakedSummary.status -eq 'Failed') 'Expected a leaked signing secret to fail evidence validation.'
+        Assert-True (@($leakedSummary.issues | Where-Object { $_.kind -eq 'secret-leak' }).Count -gt 0) 'Expected a secret-leak diagnostic.'
+        $global:LASTEXITCODE = 0
+    }
+    '# Capacity Report' | Set-Content -LiteralPath (Join-Path $resultRoot 'capacity-report.md') -Encoding UTF8
+
     Remove-Item -LiteralPath (Join-Path $resultRoot 'capacity-report.md') -Force
     $failedSummary = & (Join-Path $ScriptRoot 'Test-HaSoakEvidence.ps1') `
         -TopologyRunRoot $topology.runRoot `

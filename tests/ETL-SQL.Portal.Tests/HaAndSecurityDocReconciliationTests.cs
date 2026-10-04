@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Portal.Tests;
 
@@ -252,6 +253,34 @@ public sealed class HaAndSecurityDocReconciliationTests
         {
             try { Directory.Delete(keyRing, recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public void HaComposePortalUsesTheSharedOrchestratorAuthority()
+    {
+        var lines = File.ReadAllLines(Path.Combine(RepoRoot(), "deploy", "docker", "docker-compose.ha.yml"));
+        var portal = ComposeServiceConfiguration(lines, "portal");
+        var orchestrator = ComposeServiceConfiguration(lines, "orchestrator");
+        var factory = new ETL_SQL.Orchestrator.Storage.OrchestratorStoreFactory(portal);
+
+        Assert.Equal(ETL_SQL.Common.DatabaseProvider.Postgres, factory.Provider);
+        Assert.False(string.IsNullOrWhiteSpace(portal["Orchestrator:Database:ConnectionString"]));
+        Assert.Equal(orchestrator["Orchestrator:Database:ConnectionString"], portal["Orchestrator:Database:ConnectionString"]);
+        Assert.Equal("HighAvailability", portal["Portal:Topology:ExpectedMode"]);
+        Assert.Equal("true", portal["Portal:LoadBalancer:SessionAffinityEnabled"]);
+    }
+
+    private static Microsoft.Extensions.Configuration.IConfiguration ComposeServiceConfiguration(string[] lines, string service)
+    {
+        var settings = lines.SkipWhile(line => line != $"  {service}:").Skip(1)
+            .TakeWhile(line => !line.StartsWith("  ", StringComparison.Ordinal)
+                || line.StartsWith("    ", StringComparison.Ordinal) || string.IsNullOrWhiteSpace(line))
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith("- ", StringComparison.Ordinal))
+            .Select(line => line[2..].Split('=', 2))
+            .Where(pair => pair.Length == 2)
+            .ToDictionary(pair => pair[0].Replace("__", ":", StringComparison.Ordinal), pair => (string?)pair[1]);
+        return new Microsoft.Extensions.Configuration.ConfigurationBuilder().AddInMemoryCollection(settings).Build();
     }
 
     private static string RepoRoot()

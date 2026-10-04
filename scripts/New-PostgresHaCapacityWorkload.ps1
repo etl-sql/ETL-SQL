@@ -64,7 +64,7 @@ $env = Read-EnvFile $envFile
 $metadata = Get-Content -LiteralPath $metadataFile -Raw | ConvertFrom-Json
 $workload = Get-Content -LiteralPath $templatePath -Raw | ConvertFrom-Json
 
-foreach ($required in @('PORT_PORTAL', 'PORT_ORCH', 'ORCH_API_KEY', 'PORTAL_ADMIN_PASSWORD')) {
+foreach ($required in @('PORT_PORTAL', 'PORT_ORCH', 'ORCH_API_KEY', 'ORCH_IDENTITY_SIGNING_SECRET', 'PORTAL_ADMIN_PASSWORD')) {
     if (-not $env.ContainsKey($required) -or [string]::IsNullOrWhiteSpace($env[$required])) {
         throw "Generated topology env is missing $required."
     }
@@ -84,7 +84,7 @@ $effectiveAdminPassword = if ([string]::IsNullOrWhiteSpace($AdminPassword)) { $e
 
 $workload.environment.deploymentMode = "PostgreSQL HA soak topology ($($metadata.runId))"
 $workload.environment.databaseLocation = "PostgreSQL via $($metadata.composeFile)"
-$workload.environment.notes = "Materialized from $($metadata.envFile). Generated workload contains the local Orchestrator API key; do not commit it."
+$workload.environment.notes = "Materialized from $($metadata.envFile). Generated workload contains local credentials; do not commit it. Caller assertions come from the authenticated Portal."
 $workload.environment | Add-Member -NotePropertyName topologyMetadataPath -NotePropertyValue $metadataFile -Force
 $workload.portal.baseUrl = $portalBaseUrl
 $workload.portal.roles.admin.password = $effectiveAdminPassword
