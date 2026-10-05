@@ -1,0 +1,149 @@
+name: Native Package Certification
+
+on:
+  pull_request:
+    branches: [main, 'release/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-package:
+    name: Native package (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-15-intel
+            rid: osx-x64
+          - os: macos-15
+            rid: osx-arm64
+    env:
+      PACKAGE_RID: ${{ matrix.rid }}
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          fetch-depth: 0
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Record candidate and native host
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $commit = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $commit -ne $env:CANDIDATE_SHA) {
+            throw 'Checkout does not match the requested candidate.'
+          }
+          $dirty = @(git status --porcelain)
+          if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) { throw 'Candidate checkout is not clean.' }
+          $os = if ($IsWindows) { 'win' } elseif ($IsLinux) { 'linux' } else { 'osx' }
+          $architecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+          if ("$os-$architecture" -ne $env:PACKAGE_RID) { throw 'Package RID must match the native host.' }
+          $outDir = Join-Path $PWD "artifacts/native-packages/$env:PACKAGE_RID"
+          New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+          [ordered]@{
+            schemaVersion = 1
+            commit = $commit
+            dirty = $false
+            rid = $env:PACKAGE_RID
+            operatingSystem = [Runtime.InteropServices.RuntimeInformation]::OSDescription
+            architecture = $architecture
+            runnerImage = $env:ImageVersion
+            runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            startedAt = [DateTime]::UtcNow.ToString('o')
+            status = 'Incomplete'
+            scope = 'Native ZIP and VSIX packaging, checksum verification, extracted CLI launch'
+            uncovered = @('MSI in-place upgrade and deployment-profile certification use their separate evidence lanes.',
+              'DEB/DMG installation and live service startup are not established by this package check.')
+          } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $outDir 'certification.json')
+          dotnet --info | Tee-Object -FilePath (Join-Path $outDir 'dotnet-info.log')
+          if ($LASTEXITCODE -ne 0) { throw '.NET host inspection failed.' }
+
+      - name: Build native ZIP and VSIX
+        shell: pwsh
+        run: |
+          $log = "artifacts/native-packages/$env:PACKAGE_RID/publish.log"
+          & pwsh -NoProfile -File ./scripts/publish-release.ps1 -Platforms $env:PACKAGE_RID *>&1 |
+            Tee-Object -FilePath $log
+          if ($LASTEXITCODE -ne 0) { throw 'Native publish failed.' }
+
+      - name: Verify checksums and launch the extracted CLI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $outDir = Join-Path $PWD "artifacts/native-packages/$env:PACKAGE_RID"
+          $summaryPath = Join-Path $outDir 'certification.json'
+          $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+          $summary.status = 'Failed'
+          try {
+            [xml]$props = Get-Content -LiteralPath 'Directory.Build.props'
+            $version = [string]$props.Project.PropertyGroup.VersionPrefix
+            $checksums = @(Get-Content -LiteralPath 'release/sha256sums.txt')
+            if ($checksums.Count -eq 0) { throw 'Package checksums are empty.' }
+            foreach ($line in $checksums) {
+              if ($line -notmatch '^([0-9a-f]{64})  ([^/\\]+)$') { throw 'Invalid checksum entry.' }
+              $expectedHash = $Matches[1]
+              $artifact = Join-Path 'release' $Matches[2]
+              if ((Get-FileHash -LiteralPath $artifact -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedHash) {
+                throw 'Package checksum mismatch.'
+              }
+            }
+            $zip = Join-Path $PWD "release/ETL-SQL-v$version-$env:PACKAGE_RID.zip"
+            $expanded = Join-Path $env:RUNNER_TEMP ("etlsql-native-" + [Guid]::NewGuid().ToString('N'))
+            Expand-Archive -LiteralPath $zip -DestinationPath $expanded
+            $cliName = if ($IsWindows) { 'ETL-SQL.exe' } else { 'ETL-SQL' }
+            $cli = Join-Path $expanded "bin/$cliName"
+            if (-not $IsWindows) {
+              & chmod +x $cli
+              if ($LASTEXITCODE -ne 0) { throw 'Cannot set the extracted CLI executable mode.' }
+            }
+            $output = @(& $cli --version *>&1)
+            $exitCode = $LASTEXITCODE
+            $output | Set-Content -LiteralPath (Join-Path $outDir 'cli-version.log')
+            $expectedVersion = [regex]::Escape("$version+$($summary.commit)")
+            if ($exitCode -ne 0 -or ($output -join "`n") -notmatch "(?m)^$expectedVersion\s*$") {
+              throw 'Extracted CLI does not launch with the exact candidate version.'
+            }
+            $dirty = @(git status --porcelain)
+            if ($LASTEXITCODE -ne 0 -or $dirty.Count -ne 0) { throw 'Packaging changed candidate source files.' }
+            $summary | Add-Member -NotePropertyName version -NotePropertyValue $version
+            $summary | Add-Member -NotePropertyName zipSha256 -NotePropertyValue (Get-FileHash -LiteralPath $zip).Hash.ToLowerInvariant()
+            $summary | Add-Member -NotePropertyName checkedArtifacts -NotePropertyValue $checksums.Count
+            $summary.status = 'Passed'
+          } finally {
+            $summary | Add-Member -NotePropertyName finishedAt -NotePropertyValue ([DateTime]::UtcNow.ToString('o'))
+            $summary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $summaryPath
+          }
+
+      - name: Retain native package evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-package-${{ matrix.rid }}-${{ github.run_attempt }}
+          path: |
+            artifacts/native-packages/${{ matrix.rid }}/
+            release/*.zip
+            release/*.vsix
+            release/sha256sums.txt
+            release/sbom.json
+          if-no-files-found: error
+          retention-days: 30

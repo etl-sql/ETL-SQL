@@ -467,6 +467,14 @@ unversioned `certification-results/` and `coverage/report/` trees are never atta
       evidence directory; neither archive substitutes for the Phase 3 evidence review.
 - [ ] Windows MSI built (WiX 3.14 `candle`/`light` on PATH) — `build-msi.ps1`.
 - [ ] Linux/Mac packages built on (or via WSL/native host) as applicable.
+- [ ] Retain the four RID artifacts from
+      [Native Package Certification](../../.github/workflows/native-packages.yml) for the final
+      candidate. It runs on candidate pull requests and supports manual dispatch once available on
+      the default branch. Each job checks its native host architecture, builds ZIP/VSIX packages,
+      verifies checksums and launches the extracted CLI with the exact candidate version/commit.
+      Its JSON records the scope and gaps; MSI upgrade, deployment certification, DEB/DMG installation
+      and live service startup require their own applicable evidence. The macOS matrix uses separate
+      Intel and ARM runners from [GitHub's runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 - [ ] Spot-check a built binary launches: `dotnet ETL-SQL.dll --version` (or run an MSI install in a VM).
 - [ ] **In-place upgrade check** (MSI): install the *previous* released MSI, then install this
       version's MSI over it. Confirm it **upgrades** (not a side-by-side second install), preserves

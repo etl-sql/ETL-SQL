@@ -309,6 +309,8 @@ and [the review record](docs/releases/v0.20.0-code-review.md) for validation sti
 - Sample validation uses the gate's built configuration and runs two passes on both platforms.
 - VSIX release packaging uses the reviewed npm lockfile and limits cleanup to its workspace
   extension artifacts. It leaves running application processes alone.
+- Native package certification builds ZIP/VSIX artifacts on all four supported RIDs and retains
+  checksums and extracted CLI launch evidence. Packaged documentation links use the current onboarding path.
 - Chart grammar conformance covers the existing coordinate, scale, position, encoding and facet
   options, including supported clause ordering and signed numeric values.
 - Scheduler shutdown waits for queued jobs to finish their completion writes. Throttle slot

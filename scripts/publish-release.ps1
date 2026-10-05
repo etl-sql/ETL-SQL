@@ -165,7 +165,7 @@ foreach ($Platform in $Platforms) {
         "Full documentation is maintained online and versioned with each release:",
         "",
         "  Docs:            $DocsUrl",
-        "  Getting started: https://github.com/etl-sql/ETL-SQL/blob/v$Version/docs/guides/getting-started.md",
+        "  Getting started: https://github.com/etl-sql/ETL-SQL/blob/v$Version/docs/guides/onboarding/getting-started.md",
         "  Repository:      https://github.com/etl-sql/ETL-SQL",
         "  Issues:          https://github.com/etl-sql/ETL-SQL/issues",
         "",
