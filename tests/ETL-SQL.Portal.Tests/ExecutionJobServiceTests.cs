@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Net.Http.Json;
 using ETL_SQL.Core.Data;
@@ -11,6 +12,7 @@ using ETL_SQL.Portal.Services;
 using ETL_SQL.Reporting;
 using ETL_SQL.TestSupport;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -32,6 +34,103 @@ public class ExecutionJobServiceTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_tempDir, recursive: true); } catch { /* best effort */ }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task Shutdown_CancelsQueuedAndRunningJobs_AndWaitsForCleanup(
+        bool disposeAsync, bool cancelFirstWait)
+    {
+        var scriptPath = Path.Combine(_tempDir, "scripts", "shutdown.rptsql");
+        await File.WriteAllTextAsync(scriptPath, string.Empty);
+        var config = FairnessConfig(globalCap: 1, perUserCap: 1, timeoutSeconds: 60);
+        using var handler = new ShutdownControlledHandler();
+        await using var service = HangingService(config, httpHandler: handler);
+
+        var running = await service.EnqueueExecutionAsync(1, 7, scriptPath);
+        await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var queuedRefresh = await service.EnqueueRefreshAsync(2, 7, scriptPath);
+        var queuedExecution = await service.EnqueueExecutionAsync(3, 7, scriptPath);
+        Assert.Equal(JobStatus.Pending, (await service.GetAsync(queuedRefresh))!.Status);
+        Assert.Equal(JobStatus.Pending, (await service.GetAsync(queuedExecution))!.Status);
+
+        Task? shutdown = null;
+        try
+        {
+            if (cancelFirstWait)
+            {
+                using var cancelled = new CancellationTokenSource();
+                cancelled.Cancel();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                    () => service.StopAsync(cancelled.Token));
+            }
+            shutdown = disposeAsync
+                ? service.DisposeAsync().AsTask()
+                : service.StopAsync(CancellationToken.None);
+            await handler.CancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.False(shutdown.IsCompleted, "Shutdown returned while execution cleanup still held resources.");
+            await Assert.ThrowsAsync<NodeDrainingException>(
+                () => service.EnqueueExecutionAsync(4, 7, scriptPath));
+            await Assert.ThrowsAsync<NodeDrainingException>(
+                () => service.EnqueueRefreshAsync(4, 7, scriptPath));
+        }
+        finally
+        {
+            handler.ReleaseCleanup.TrySetResult();
+            if (shutdown is not null)
+                await shutdown.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        foreach (var id in new[] { running, queuedRefresh, queuedExecution })
+            Assert.Equal(JobStatus.Cancelled, (await service.GetAsync(id))!.Status);
+        Assert.Null(await service.GetActiveRefreshJobIdAsync(2));
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Shutdown_WaitsForAcceptedRequestStillWritingItsJob(bool refresh)
+    {
+        var scriptPath = Path.Combine(_tempDir, "scripts", "accepted.rptsql");
+        await File.WriteAllTextAsync(scriptPath, string.Empty);
+        var config = FairnessConfig(globalCap: 1, perUserCap: 1, timeoutSeconds: 60);
+        var interceptor = new AcceptedJobWriteInterceptor();
+        await using var provider = new ServiceCollection()
+            .AddDbContext<PortalDbContext>(options => options.UseSqlite($"Data Source={config.DatabasePath}")
+                .AddInterceptors(interceptor))
+            .BuildServiceProvider();
+        await using (var scope = provider.CreateAsyncScope())
+            await scope.ServiceProvider.GetRequiredService<PortalDbContext>().Database.EnsureCreatedAsync();
+        await using var service = HangingService(config, provider.GetRequiredService<IServiceScopeFactory>());
+
+        var enqueue = refresh
+            ? service.EnqueueRefreshAsync(1, 7, scriptPath)
+            : service.EnqueueExecutionAsync(1, 7, scriptPath);
+        await interceptor.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var shutdown = service.StopAsync(CancellationToken.None);
+        try
+        {
+            Assert.False(shutdown.IsCompleted, "Shutdown missed an accepted request before its job started.");
+            await Assert.ThrowsAsync<NodeDrainingException>(
+                () => service.EnqueueExecutionAsync(2, 7, scriptPath));
+        }
+        finally
+        {
+            interceptor.ReleaseWrite.TrySetResult();
+            await shutdown.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        var jobId = await enqueue;
+        await using var verification = provider.CreateAsyncScope();
+        var database = verification.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var stored = await database.PortalExecutionJobs.SingleAsync(job => job.Id == jobId);
+        Assert.Equal("Cancelled", stored.Status);
+        Assert.Equal("Execution service is shutting down.", stored.Error);
+        Assert.NotNull(stored.CompletedAt);
+        Assert.Null(await service.GetActiveRefreshJobIdAsync(1));
     }
 
     /// <summary>
@@ -863,6 +962,50 @@ public class ExecutionJobServiceTests : IDisposable
             ProcessorCount: 1,
             IsOverloaded: IsOverloaded,
             CapturedAtUtc: DateTime.UtcNow);
+    }
+
+    private sealed class AcceptedJobWriteInterceptor : DbCommandInterceptor
+    {
+        private int _blocked;
+        internal TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource ReleaseWrite { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.StartsWith("INSERT INTO \"PortalExecutionJobs\"", StringComparison.Ordinal)
+                && Interlocked.Exchange(ref _blocked, 1) == 0)
+            {
+                Started.TrySetResult();
+                await ReleaseWrite.Task.WaitAsync(cancellationToken);
+            }
+            return result;
+        }
+    }
+
+    private sealed class ShutdownControlledHandler : HttpMessageHandler
+    {
+        internal TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource CancellationObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource ReleaseCleanup { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Started.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+                throw new InvalidOperationException("The shutdown test request must be cancelled.");
+            }
+            catch (OperationCanceledException)
+            {
+                CancellationObserved.TrySetResult();
+                await ReleaseCleanup.Task;
+                throw;
+            }
+        }
     }
 
     private sealed class NeverRespondingHandler : HttpMessageHandler

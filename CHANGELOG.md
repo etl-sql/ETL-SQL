@@ -314,6 +314,8 @@ and [the review record](docs/releases/v0.20.0-code-review.md) for validation sti
 - Scheduler shutdown waits for queued jobs to finish their completion writes. Throttle slot
   disposal also finishes its heartbeat and database release before returning. Concurrent node
   heartbeat shutdown calls await the same deregistration write.
+- Portal shutdown cancels running and queued report jobs and waits for accepted submissions,
+  terminal status writes and cleanup before releasing their execution resources.
 
 - npm dependency inventory uses locked licenses and stable package links, so a fresh checkout
   produces the same release review record as a prepared development tree.

@@ -212,7 +212,7 @@ Report execution is asynchronous:
 
 ```
 POST /api/reports/{id}/execute
-  └── ExecutionJobService.EnqueueAsync()
+  └── ExecutionJobService.EnqueueExecutionAsync()
         └── Runs ETL-SQL script via ReportHosting.DashboardService
               └── On completion: writes snapshot, notifies SessionCache
 
@@ -228,8 +228,8 @@ lock.
 The execution semaphore, interactive session cache, ASP.NET rate-limit partitions, and PDF quota
 are therefore intentionally process-local.
 
-**`ExecutionJobService`** is a singleton/hosted service that manages a `SemaphoreSlim` with
-`MaxConcurrentReportExecutions` slots. Jobs that exceed the slot limit are queued. Every job is
+**`ExecutionJobService`** is a singleton/hosted service with weighted interactive/refresh admission
+limited by `MaxConcurrentReportExecutions`. Jobs that exceed the slot limit are queued. Every job is
 also written to `PortalExecutionJobs`, so `GET /api/jobs/{jobId}` remains meaningful after a
 restart. A filtered unique index permits only one `Pending`/`Running` refresh per report. Startup
 marks abandoned jobs and report refresh status as `Cancelled` with an interruption reason; it
@@ -237,6 +237,11 @@ does not claim that vanished work completed successfully. While the process is l
 node heartbeat is also treated as a local-work lease: if heartbeat renewal fails long enough for
 this node's registry lease to expire, `ExecutionJobService` cancels every locally running execution
 before another node can safely take over work.
+
+Shutdown refuses new submissions, cancels running and queued jobs, and waits for accepted requests,
+terminal status writes and cancellation monitors before disposing execution gates. Both synchronous
+and asynchronous disposal wait for this same drain, including hosts that remove the hosted-service
+registration. Cancelling a `StopAsync` caller's wait leaves the shared drain running.
 
 **`SessionCache`** is a singleton hosted service that holds in-memory execution sessions for
 active result streaming. It evicts idle sessions after `SessionCacheTtlMinutes` and enforces a max

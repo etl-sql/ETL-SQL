@@ -67,8 +67,14 @@ public record ExecutionJob(
 /// and stores the ManifestPath in ReportSnapshots.
 /// Concurrency is capped by MaxConcurrentReportExecutions.
 /// </summary>
-public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDisposable
+public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDisposable, IAsyncDisposable
 {
+    private readonly object _lifecycleGate = new();
+    private readonly HashSet<Task> _inFlight = new();
+    private readonly CancellationTokenSource _shutdown = new();
+    private TaskCompletionSource? _stopCompletion;
+    private bool _stopping;
+    private bool _disposed;
     private readonly ConcurrentDictionary<string, ExecutionJob> _jobs = new();
     private readonly ConcurrentDictionary<(string TenantId, int ReportId), string> _activeRefreshes = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _runningJobCancellations = new();
@@ -245,7 +251,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         string actorType = "User", string? actorId = null, string? effectiveScopes = null,
         string? correlationId = null, int? impersonatedUserId = null)
     {
-        RefuseWhenDraining();
+        using var work = ReserveWork();
         EvictExpiredJobs();
         var keyScope = await ResolveKeyScopeAsync(reportId, userId);
         var jobId = Guid.NewGuid().ToString("N");
@@ -259,7 +265,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         _jobs[jobId] = job;
         await PersistNewJobAsync(job, "Execution");
 
-        _ = RunJobAsync(job, scriptPath, parameters, ExecutionWorkloadKind.Interactive, CancellationToken.None);
+        work.Start(job, scriptPath, parameters, ExecutionWorkloadKind.Interactive);
         return jobId;
     }
 
@@ -276,7 +282,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         string actorType = "User", string? actorId = null, string? effectiveScopes = null,
         string? correlationId = null)
     {
-        RefuseWhenDraining();
+        using var work = ReserveWork();
         EvictExpiredJobs();
         var keyScope = await ResolveKeyScopeAsync(reportId, userId);
 
@@ -328,8 +334,78 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 ?? throw new InvalidOperationException("The active refresh claim could not be resolved.");
         }
 
-        _ = RunJobAsync(job, scriptPath, parameters: null, ExecutionWorkloadKind.Refresh, CancellationToken.None);
+        work.Start(job, scriptPath, parameters: null, ExecutionWorkloadKind.Refresh);
         return jobId;
+    }
+
+    // Reserve before the first await: shutdown must also wait for requests still resolving their
+    // tenant or persisting an accepted job, not just executions that have acquired a slot.
+    private WorkReservation ReserveWork()
+    {
+        lock (_lifecycleGate)
+        {
+            RefuseWhenDraining();
+            if (_stopping)
+                throw new NodeDrainingException("Execution service is shutting down.");
+            var work = new WorkReservation(this);
+            _inFlight.Add(work.Completion.Task);
+            return work;
+        }
+    }
+
+    private async Task RunTrackedJobAsync(WorkReservation work, ExecutionJob job,
+        string scriptPath, Dictionary<string, string>? parameters, ExecutionWorkloadKind workloadKind)
+    {
+        try
+        {
+            await RunJobAsync(job, scriptPath, parameters, workloadKind, _shutdown.Token);
+        }
+        catch (Exception ex)
+        {
+            // Admission failures occur before RunJobAsync's execution catch. Observe them and
+            // finish durable bookkeeping before releasing this service's lifetime reservation.
+            job.Status = JobStatus.Failed;
+            job.CompletedAt = DateTime.UtcNow;
+            job.Error = SecretRedactor.Redact(LogSanitizer.Clean(ex.Message));
+            await PersistJobAsync(job);
+            await UpdateReportRefreshStatusAsync(job, "Failed", job.Error);
+            _activeRefreshes.TryRemove(
+                new KeyValuePair<(string TenantId, int ReportId), string>(
+                    (job.KeyScope, job.ReportId), job.Id));
+            _log.LogError("Execution job {JobId} failed before completion: {Message}", job.Id, job.Error);
+        }
+        finally
+        {
+            work.Complete();
+        }
+    }
+
+    private sealed class WorkReservation(ExecutionJobService owner) : IDisposable
+    {
+        internal TaskCompletionSource Completion { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private bool _started;
+
+        internal void Start(ExecutionJob job, string scriptPath,
+            Dictionary<string, string>? parameters, ExecutionWorkloadKind kind)
+        {
+            _started = true;
+            _ = owner.RunTrackedJobAsync(this, job, scriptPath, parameters, kind);
+        }
+
+        internal void Complete()
+        {
+            lock (owner._lifecycleGate)
+            {
+                Completion.TrySetResult();
+                owner._inFlight.Remove(Completion.Task);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (!_started) Complete();
+        }
     }
 
     private async Task RunJobAsync(
@@ -388,7 +464,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
 
             // Timed out while queued — no global permit was retained, so only the job
             // bookkeeping needs unwinding (the refresh debounce must clear).
-            job.Error = "Execution timed out while waiting for an execution slot";
+            job.Error = _shutdown.IsCancellationRequested
+                ? "Execution service is shutting down."
+                : "Execution timed out while waiting for an execution slot";
             job.CompletedAt = DateTime.UtcNow;
             job.Status = JobStatus.Cancelled;
             _activeRefreshes.TryRemove(
@@ -630,7 +708,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         {
             job.Error = _jobCancellationReasons.TryRemove(job.Id, out var reason)
                 ? reason
-                : "Execution timed out or was cancelled";
+                : _shutdown.IsCancellationRequested
+                    ? "Execution service is shutting down."
+                    : "Execution timed out or was cancelled";
             job.CompletedAt = DateTime.UtcNow;
             job.Status = JobStatus.Cancelled;
             await PersistJobAsync(job);
@@ -662,10 +742,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             _activeRefreshes.TryRemove(
                 new KeyValuePair<(string TenantId, int ReportId), string>(
                     (job.KeyScope, job.ReportId), job.Id));
+            if (cancellationMonitor is not null)
+                await cancellationMonitor.ConfigureAwait(false);
         }
-
-        if (cancellationMonitor is not null)
-            await cancellationMonitor.ConfigureAwait(false);
     }
 
     private async Task MonitorPersistedCancellationAsync(
@@ -896,7 +975,38 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
-        => Task.CompletedTask;
+    {
+        Task[]? pending = null;
+        TaskCompletionSource completion;
+        lock (_lifecycleGate)
+        {
+            if (_stopCompletion is null)
+            {
+                _stopping = true;
+                _stopCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                pending = _inFlight.ToArray();
+            }
+            completion = _stopCompletion;
+        }
+        if (pending is not null)
+            _ = StopCoreAsync(pending, completion);
+        // A caller's timeout does not abandon the shared drain or release resources early.
+        return completion.Task.WaitAsync(cancellationToken);
+    }
+
+    private async Task StopCoreAsync(Task[] pending, TaskCompletionSource completion)
+    {
+        try
+        {
+            _shutdown.Cancel();
+            await Task.WhenAll(pending);
+            completion.TrySetResult();
+        }
+        catch (Exception ex)
+        {
+            completion.TrySetException(ex);
+        }
+    }
 
     private async Task PersistNewJobAsync(ExecutionJob job, string kind)
     {
@@ -1118,9 +1228,29 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
 
     public void Dispose()
     {
-        CancelLocalRunningJobs("Execution service is shutting down.");
+        StopAsync(CancellationToken.None).GetAwaiter().GetResult();
+        DisposeResources();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopAsync(CancellationToken.None);
+        DisposeResources();
+    }
+
+    private void DisposeResources()
+    {
+        lock (_lifecycleGate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+        }
         foreach (var gate in _userGates.Values)
             gate.Dispose();
+        foreach (var gate in _groupGates.Values)
+            gate.Dispose();
+        _shutdown.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     private Task SaveSnapshotManifestAsync(
