@@ -417,9 +417,13 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
     };
 
     private static Task<string> RegionOfMarkAsync(ILocator mark) =>
-        mark.EvaluateAsync<string>(
+        // Resolve the mark and read its card in one browser evaluation. A retained element handle
+        // can be detached by a chart redraw between locator resolution and EvaluateAsync.
+        mark.EvaluateAllAsync<string>(
             """
-            mark => {
+            marks => {
+                const mark = marks[0];
+                if (!mark) throw new Error('The chart mark is not rendered.');
                 const card = mark.closest('[data-visual-name]');
                 const data = card._visualData || card.closest('.visual-card')?._visualData;
                 const index = (data.columns || []).findIndex(c => c.toLowerCase() === 'region');
@@ -530,15 +534,7 @@ public sealed class StudioInteractionJourneyTests(StudioAuthoringFixture fixture
     private static async Task<string> ClickChartMarkAsync(IFrameLocator report, string visual)
     {
         var mark = report.Locator($"[data-visual-name='{visual}'] [data-row-index]").First;
-        var region = await mark.EvaluateAsync<string>(
-            """
-            mark => {
-                const card = mark.closest('[data-visual-name]');
-                const data = card._visualData || card.closest('.visual-card')?._visualData;
-                const index = (data.columns || []).findIndex(c => c.toLowerCase() === 'region');
-                return String(data.rows[Number(mark.dataset.rowIndex)][index]);
-            }
-            """);
+        var region = await RegionOfMarkAsync(mark);
         await mark.ClickAsync(new() { Force = true });
         return region;
     }

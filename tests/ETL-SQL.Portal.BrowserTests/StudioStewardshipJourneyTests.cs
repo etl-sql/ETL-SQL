@@ -272,6 +272,9 @@ public sealed class StudioStewardshipJourneyTests(StudioAuthoringFixture fixture
         await page.FillAsync("#pr-name", reportName);
         await page.FillAsync("#pr-path", scriptFileName);
 
+        // The form opens before its fresh folder request finishes.
+        await Expect(page.Locator("#pr-folder option").Filter(new() { HasTextString = folderName }))
+            .ToHaveCountAsync(1);
         var folderOptionValue = await page.Locator("#pr-folder").EvaluateAsync<string?>(
             "(select, name) => Array.from(select.options).find(o => o.textContent.includes(name))?.value",
             folderName);
