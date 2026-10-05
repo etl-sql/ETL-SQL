@@ -292,6 +292,8 @@ and [the review record](docs/releases/v0.20.0-code-review.md) for validation sti
 
 ### Fixed
 
+- Scale runners close redirected stdin so hidden Windows launchers preserve ordinary console-output
+  timing. Every formatted result write remains captured; performance references and bands are unchanged.
 - Failed out-of-process jobs retain sanitized stderr diagnostics when the CLI's final JSON packet
   contains execution metrics but no error text.
 - Release watchdogs preserve spaces in phase names and paths; Docker integration image builds

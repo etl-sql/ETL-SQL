@@ -378,6 +378,7 @@ $config = [ordered]@{
     memoryBoundMB = if ($env:CERT_MEMORY_BOUND_MB) { [double]$env:CERT_MEMORY_BOUND_MB } else { $null }
     adaptiveEnabled = (($env:ETLSQL_ADAPTIVE_EXECUTION -eq '1') -or ($env:ETLSQL_ADAPTIVE_EXECUTION -eq 'true'))
     outputCapture = 'buffered-byte-stream-v1'
+    standardInput = 'closed-pipe-v1'
     temporaryStorage = 'run-owned-process-temp-v1'
     preEnumerateTheories = $false
     testFixture = 'isolated-scale-v1'

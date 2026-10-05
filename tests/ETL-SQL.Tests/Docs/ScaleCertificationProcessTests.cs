@@ -161,6 +161,43 @@ public sealed class ScaleCertificationProcessTests
     }
 
     [Fact]
+    public async Task Capture_ChildInputIsRedirectedAndImmediatelyReachesEndOfFile()
+    {
+        var result = await ReleasePolicyHelperTests.RunHelper("""
+            $root = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('etlsql_capture_' + [guid]::NewGuid().ToString('N'))))
+            New-Item -ItemType Directory -Path $root | Out-Null
+            try {
+                $stdoutPath = Join-Path $root 'stdout.log'
+                $stderrPath = Join-Path $root 'stderr.log'
+                $child = "@{ redirected = [Console]::IsInputRedirected; input = [Console]::In.ReadToEnd() } | ConvertTo-Json -Compress"
+                $capture = Start-ScaleCapturedProcess -FileName (Get-Process -Id $PID).Path `
+                    -Arguments @('-NoProfile', '-NonInteractive', '-Command', $child) `
+                    -StandardOutputPath $stdoutPath -StandardErrorPath $stderrPath
+                if (-not $capture.Process.WaitForExit(10000)) {
+                    $capture.Process.Kill($true)
+                    $null = Complete-ScaleCapturedProcess $capture
+                    throw 'The captured child did not receive end-of-file on stdin.'
+                }
+                $exitCode = Complete-ScaleCapturedProcess $capture
+                if ($exitCode -ne 0) { throw "Child failed: $([IO.File]::ReadAllText($stderrPath))" }
+                [IO.File]::ReadAllText($stdoutPath)
+            } finally {
+                $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar)
+                if (-not $root.StartsWith($tempRoot + [IO.Path]::DirectorySeparatorChar) -or
+                    (Get-Item -LiteralPath $root).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                    throw 'Capture fixture cleanup escaped its owned temporary directory.'
+                }
+                Remove-Item -LiteralPath $root -Recurse -Force
+            }
+            """, helperName: "ScaleCertification.Helpers.ps1");
+
+        Assert.True(result.ExitCode == 0, result.Output);
+        using var evidence = JsonDocument.Parse(result.Output);
+        Assert.True(evidence.RootElement.GetProperty("redirected").GetBoolean());
+        Assert.Equal("", evidence.RootElement.GetProperty("input").GetString());
+    }
+
+    [Fact]
     public async Task Capture_RejectsOverlappingOutputFiles()
     {
         var result = await ReleasePolicyHelperTests.RunHelper("""

@@ -27,11 +27,15 @@ function Start-ScaleCapturedProcess {
         $startInfo.UseShellExecute = $false
         $startInfo.CreateNoWindow = $true
         $startInfo.WorkingDirectory = [IO.Path]::GetFullPath($WorkingDirectory)
+        # Hidden Windows launchers can leave stdin attached to a console even with piped output.
+        # A closed input pipe makes the test tree noninteractive and keeps console writes comparable.
+        $startInfo.RedirectStandardInput = $true
         $startInfo.RedirectStandardOutput = $true
         $startInfo.RedirectStandardError = $true
         foreach ($name in $ChildEnvironment.Keys) { $startInfo.Environment[$name] = [string]$ChildEnvironment[$name] }
         foreach ($argument in $Arguments) { $startInfo.ArgumentList.Add($argument) }
         $process = [Diagnostics.Process]::Start($startInfo)
+        $process.StandardInput.Close()
         $outputCopy = $process.StandardOutput.BaseStream.CopyToAsync($outputStream)
         $errorCopy = $process.StandardError.BaseStream.CopyToAsync($errorStream)
         return [pscustomobject]@{
