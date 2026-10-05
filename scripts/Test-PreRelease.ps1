@@ -156,7 +156,7 @@ function Get-PlannedPreReleasePhases {
     if (-not $EffectiveSkipNode) {
         $phases.Add([ordered]@{ Phase = "VS Code npm ci"; Command = "npm ci"; Reason = "Extension dependencies install from lockfile." })
         $phases.Add([ordered]@{ Phase = "VS Code UI npm ci"; Command = "npm ci"; Reason = "UI package dependencies install from lockfile." })
-        $phases.Add([ordered]@{ Phase = "VS Code npm audit"; Command = "npm outdated / npm audit"; Reason = "Extension dependency risk is visible before release." })
+        $phases.Add([ordered]@{ Phase = "VS Code npm audit"; Command = "npm outdated / npm audit (all five npm roots)"; Reason = "Extension, UI and browser-toolchain dependency risk is visible before release." })
         $phases.Add([ordered]@{ Phase = "VS Code compile"; Command = "npm run compile"; Reason = "TypeScript extension compiles." })
         $phases.Add([ordered]@{ Phase = "VS Code lint"; Command = "npm run lint"; Reason = "Production extension lint warnings fail the release gate." })
         $phases.Add([ordered]@{ Phase = "VS Code UI lint"; Command = "npm run lint"; Reason = "UI package lint warnings fail the release gate." })
@@ -322,6 +322,11 @@ function Get-NpmAuditFindings {
         $AuditResult
     )
 
+    if ($null -eq $AuditResult.json -or $null -eq $AuditResult.json.metadata.vulnerabilities -or
+        $null -eq $AuditResult.json.vulnerabilities) {
+        throw "npm audit did not return an authoritative vulnerability report. Check registry access and the lockfile."
+    }
+
     $summary = [ordered]@{
         total = 0
         low = 0
@@ -364,6 +369,10 @@ function Get-NpmAuditFindings {
         if ($summary.total -eq 0) {
             $summary.total = $summary.packages.Count
         }
+    }
+
+    if ($AuditResult.exitCode -ne 0 -and $summary.total -eq 0 -and $summary.packages.Count -eq 0) {
+        throw "npm audit failed without a vulnerability finding. Check registry access and the lockfile."
     }
 
     return $summary
@@ -1138,11 +1147,14 @@ try {
             $previousPhaseMap $fingerprint $results
 
         Invoke-LoggedPhase "VS Code npm audit" `
-            "npm outdated / npm audit (src\etl-sql-vscode, src\etl-sql-vscode\ui)" `
+            "npm outdated / npm audit (extension, UI, typecheck, lint, CodeMirror)" `
             {
                 $npmRoots = @(
                     [ordered]@{ label = "src\etl-sql-vscode"; path = "src\etl-sql-vscode" },
-                    [ordered]@{ label = "src\etl-sql-vscode\ui"; path = "src\etl-sql-vscode\ui" }
+                    [ordered]@{ label = "src\etl-sql-vscode\ui"; path = "src\etl-sql-vscode\ui" },
+                    [ordered]@{ label = "scripts\typecheck"; path = "scripts\typecheck" },
+                    [ordered]@{ label = "scripts\lint"; path = "scripts\lint" },
+                    [ordered]@{ label = "scripts\codemirror"; path = "scripts\codemirror" }
                 )
 
                 $totalOutdated = 0

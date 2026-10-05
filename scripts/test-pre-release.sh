@@ -142,7 +142,7 @@ show_pre_release_plan() {
     if [[ "$EFFECTIVE_SKIP_NODE" != true ]]; then
         print_plan_phase "$i" "VS Code npm ci" "npm ci" "Extension dependencies install from lockfile."; i=$((i + 1))
         print_plan_phase "$i" "VS Code UI npm ci" "npm ci" "UI package dependencies install from lockfile."; i=$((i + 1))
-        print_plan_phase "$i" "VS Code npm audit" "npm outdated / npm audit" "Extension dependency risk is visible before release."; i=$((i + 1))
+        print_plan_phase "$i" "VS Code npm audit" "npm outdated / npm audit (all five npm roots)" "Extension, UI and browser-toolchain dependency risk is visible before release."; i=$((i + 1))
         print_plan_phase "$i" "VS Code compile" "npm run compile" "TypeScript extension compiles."; i=$((i + 1))
         print_plan_phase "$i" "VS Code lint" "npm run lint" "Production extension lint warnings fail the release gate."; i=$((i + 1))
         print_plan_phase "$i" "VS Code UI lint" "npm run lint" "UI package lint warnings fail the release gate."; i=$((i + 1))
@@ -234,15 +234,19 @@ npm_print_audit_summary() {
     status="$NPM_JSON_STATUS"
 
     if [[ -z "${output//[[:space:]]/}" ]]; then
-        echo "[$label] Vulnerabilities: total=0, low=0, moderate=0, high=0, critical=0"
-        return 0
+        echo "[$label] npm audit did not return a vulnerability report." >&2
+        return 1
     fi
 
     set +e
-    NPM_LABEL="$label" NPM_JSON="$output" node -e '
+    NPM_LABEL="$label" NPM_JSON="$output" NPM_AUDIT_STATUS="$status" node -e '
 const label = process.env.NPM_LABEL;
 const data = process.env.NPM_JSON ? JSON.parse(process.env.NPM_JSON) : {};
-const metadata = (data.metadata && data.metadata.vulnerabilities) || {};
+if (!data.metadata?.vulnerabilities || !data.vulnerabilities) {
+  console.error(`[${label}] npm audit did not return an authoritative vulnerability report. Check registry access and the lockfile.`);
+  process.exit(1);
+}
+const metadata = data.metadata.vulnerabilities;
 const total = Number(metadata.total || 0);
 const low = Number(metadata.low || 0);
 const moderate = Number(metadata.moderate || 0);
@@ -268,7 +272,7 @@ if (names.length > 20) {
   console.log(`  - ... and ${names.length - 20} more`);
 }
 
-if (total > 0 || names.length > 0) {
+if (total > 0 || names.length > 0 || Number(process.env.NPM_AUDIT_STATUS) !== 0) {
   process.exit(1);
 }
 '
@@ -280,17 +284,13 @@ if (total > 0 || names.length > 0) {
 
 npm_dependency_audit_phase() {
     local any_failed=0
-
-    npm_print_outdated_summary "src/etl-sql-vscode" "$REPO_ROOT/src/etl-sql-vscode"
-    npm_print_outdated_summary "src/etl-sql-vscode/ui" "$REPO_ROOT/src/etl-sql-vscode/ui"
-
-    if ! npm_print_audit_summary "src/etl-sql-vscode" "$REPO_ROOT/src/etl-sql-vscode"; then
-        any_failed=1
-    fi
-
-    if ! npm_print_audit_summary "src/etl-sql-vscode/ui" "$REPO_ROOT/src/etl-sql-vscode/ui"; then
-        any_failed=1
-    fi
+    local root
+    for root in src/etl-sql-vscode src/etl-sql-vscode/ui scripts/typecheck scripts/lint scripts/codemirror; do
+        npm_print_outdated_summary "$root" "$REPO_ROOT/$root"
+        if ! npm_print_audit_summary "$root" "$REPO_ROOT/$root"; then
+            any_failed=1
+        fi
+    done
 
     return "$any_failed"
 }
@@ -755,7 +755,7 @@ if [[ "$EFFECTIVE_SKIP_NODE" != true ]]; then
         bash -c "cd '$REPO_ROOT/src/etl-sql-vscode/ui' && npm ci"
 
     run_phase "VS Code npm audit" \
-        "npm outdated / npm audit (src/etl-sql-vscode, src/etl-sql-vscode/ui)" \
+        "npm outdated / npm audit (extension, UI, typecheck, lint, CodeMirror)" \
         npm_dependency_audit_phase
 
     run_phase "VS Code compile" \

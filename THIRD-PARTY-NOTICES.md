@@ -127,6 +127,8 @@ artifacts, but they are usually not shown in product UI acknowledgements.
 The pinned browser lint toolchain in `scripts/lint/package.json` uses `@eslint/js`,
 `eslint`, and `globals`, each under MIT. The dependency inventory records their
 exact pins alongside the extension and UI version ranges.
+Its transitive `brace-expansion` dependency is locked to 5.0.12 (MIT), which includes
+the nested-brace recursion and quadratic rewrite security fixes.
 
 The extension and UI use Vitest 4.1.11 (MIT). The extension's security overrides also use patched
 brace-expansion, Undici and js-yaml releases, all under MIT. The webview's single-file build uses

@@ -292,6 +292,10 @@ and [the review record](docs/releases/v0.20.0-code-review.md) for validation sti
 
 ### Fixed
 
+- The browser lint toolchain locks its transitive brace-expansion dependency to patched 5.0.12.
+  Release npm audits now cover the extension, UI and all three browser toolchains, and reject missing
+  reports or registry errors. CI audits the browser toolchains alongside its existing extension checks.
+
 - Scale runners close redirected stdin so hidden Windows launchers preserve ordinary console-output
   timing. Every formatted result write remains captured; performance references and bands are unchanged.
 - Failed out-of-process jobs retain sanitized stderr diagnostics when the CLI's final JSON packet

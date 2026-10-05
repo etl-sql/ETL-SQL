@@ -50,6 +50,14 @@ jobs:
       - name: Install browser lint-gate toolchain
         run: npm ci --prefix scripts/lint
 
+      - name: Audit browser toolchain packages for known vulnerabilities
+        shell: pwsh
+        run: |
+          foreach ($root in @('scripts/typecheck', 'scripts/lint', 'scripts/codemirror')) {
+            npm audit --prefix $root
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
       - name: Lint the browser sources
         run: node scripts/lint-browser.mjs
 
