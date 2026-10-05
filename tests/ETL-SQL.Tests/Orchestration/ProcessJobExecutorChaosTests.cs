@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using ETL_SQL.Orchestrator.Execution;
@@ -145,8 +146,16 @@ public class ProcessJobExecutorChaosTests
         }
     }
 
-    [Fact]
-    public async Task CleanupOrphans_KillsPersistedChildProcess_FromPreviousRun()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(7)]
+    public async Task CleanupOrphans_KillsPersistedChildProcess_FromPreviousRun(int attempt)
     {
         var tempDir = NewTempDir();
         var pidStore = Path.Combine(tempDir, "child-pids.json");
@@ -155,10 +164,15 @@ public class ProcessJobExecutorChaosTests
 
         try
         {
-            var firstTracker = new ChildProcessTracker(new Mock<ILogger<ChildProcessTracker>>().Object, pidStore);
-            firstTracker.Register(child.Id, "orphaned-chaos-script.etlsql");
+            var trackerLogger = new Mock<ILogger<ChildProcessTracker>>();
+            var firstTracker = new ChildProcessTracker(trackerLogger.Object, pidStore);
+            firstTracker.Register(child.Id, $"orphaned-chaos-{attempt}.etlsql");
 
-            Assert.Equal(1, firstTracker.ActiveCount);
+            var diagnostics = string.Join(Environment.NewLine, trackerLogger.Invocations
+                .Where(invocation => invocation.Method.Name == nameof(ILogger.Log))
+                .Select(invocation => $"{invocation.Arguments[2]} {invocation.Arguments[3]}"));
+            Assert.True(firstTracker.ActiveCount == 1,
+                $"Child registration failed. Exited={child.HasExited}. {diagnostics}");
             Assert.True(File.Exists(pidStore));
 
             var restartTracker = new ChildProcessTracker(new Mock<ILogger<ChildProcessTracker>>().Object, pidStore);

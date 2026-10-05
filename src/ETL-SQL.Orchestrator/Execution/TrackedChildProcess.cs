@@ -1,4 +1,8 @@
+using System.ComponentModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
+using Microsoft.Win32.SafeHandles;
 
 namespace ETL_SQL.Orchestrator.Execution;
 
@@ -35,8 +39,29 @@ internal sealed class TrackedChildProcessFactory : ITrackedChildProcessFactory
 
         public bool HasExited => _process.HasExited;
         public ChildProcessIdentity Identity => new(_process.StartTime.ToUniversalTime().Ticks,
-            _process.MainModule?.FileName ?? throw new InvalidOperationException("Cannot identify child executable."));
+            GetExecutablePath(_process));
         public void Kill() => _process.Kill(entireProcessTree: true);
         public void Dispose() => _process.Dispose();
+
+        private static string GetExecutablePath(Process process)
+        {
+            if (!OperatingSystem.IsWindows())
+                return process.MainModule?.FileName
+                    ?? throw new InvalidOperationException("Cannot identify child executable.");
+
+            // A newly started Windows process may not have populated its module list yet.
+            // Query the image attached to the retained process handle without waiting for its loader.
+            var path = new StringBuilder(32_768);
+            var length = path.Capacity;
+            if (!QueryFullProcessImageName(process.SafeHandle, 0, path, ref length))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            return path.ToString();
+        }
+
+        [DllImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW",
+            ExactSpelling = true, CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool QueryFullProcessImageName(
+            SafeProcessHandle process, int flags, StringBuilder executablePath, ref int length);
     }
 }

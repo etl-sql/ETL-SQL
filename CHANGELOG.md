@@ -336,6 +336,8 @@ and [the review record](docs/releases/v0.20.0-code-review.md) for validation sti
 - Scheduler evidence-store failures preserve the completed workload outcome without retrying its
   mutations. Sandbox recovery retains admission and ownership until runtime detachment and cleanup
   are proven.
+- Newly started Windows job children retain executable and creation identity before the loader
+  populates its module list, so restart cleanup can track them without unsafe PID-only records.
 - Host-side Studio recovery retains supported unsaved work after a crash or expired sign-in.
   Save completion preserves edits made during the save, and each tab retains its own undo state.
 - The dependency inventory includes the pinned browser lint toolchain, preserves every declared npm
