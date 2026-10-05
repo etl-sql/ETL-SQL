@@ -292,6 +292,24 @@ and [the review record](docs/releases/v0.20.0-code-review.md) for validation sti
 
 ### Fixed
 
+- Studio opens CRLF pipeline files with their execution map and task palette. Replies for an
+  edited buffer are discarded after all response bodies have been read.
+- VS Code test dependencies use patched Vitest releases and updated security overrides. A local
+  Vite plugin embeds the webview assets and removes the vulnerable single-file plugin dependency.
+- Release gates retain separate Smoke, Standard and spill-allocation reports inside each validation
+  run. Scale checks use their own report and preserve a clean source identity between phases.
+- Spill-allocation profiling defers unrelated theory enumeration and records its actual GC mode.
+  The existing allocation and peak-memory budgets remain unchanged.
+- Sample validation uses the gate's built configuration and runs two passes on both platforms.
+- Chart grammar conformance covers the existing coordinate, scale, position, encoding and facet
+  options, including supported clause ordering and signed numeric values.
+- Scheduler shutdown waits for queued jobs to finish their completion writes. Throttle slot
+  disposal also finishes its heartbeat and database release before returning. Concurrent node
+  heartbeat shutdown calls await the same deregistration write.
+
+- npm dependency inventory uses locked licenses and stable package links, so a fresh checkout
+  produces the same release review record as a prepared development tree.
+
 - Bounded native HA runners reject manual certification plans; both validators reject relabelled
   smoke reports so simulated checks cannot certify a physical topology.
 

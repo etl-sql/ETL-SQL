@@ -1,6 +1,6 @@
 #!/bin/bash
 # test-all-samples.sh - Run all ETL-SQL sample scripts and report pass/fail.
-# Usage: ./scripts/test-all-samples.sh [passes]
+# Usage: ./scripts/test-all-samples.sh [passes] [Debug|Release]
 #
 # passes (default 1) runs the whole suite that many times. More than one pass proves the samples are
 # re-runnable: sample output is gitignored, so a sample that writes to a persistent store passes on
@@ -9,6 +9,11 @@
 set -e
 
 PASSES="${1:-1}"
+CONFIGURATION="${2:-Debug}"
+if [[ "$CONFIGURATION" != Debug && "$CONFIGURATION" != Release ]]; then
+    echo "Configuration must be Debug or Release." >&2
+    exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
@@ -48,6 +53,7 @@ FAILED_NAMES=()
 
 echo "======================================================="
 echo " ETL-SQL SAMPLE VALIDATOR STARTING..."
+echo " Configuration: $CONFIGURATION"
 
 mapfile -t SCRIPTS < <(find "$SAMPLES_DIR" -type f \( -name "*.etlsql" -o -name "*.rptsql" \) | sort)
 echo " Found ${#SCRIPTS[@]} scripts to validate in '$SAMPLES_DIR'."
@@ -94,7 +100,7 @@ for SCRIPT_FILE in "${SCRIPTS[@]}"; do
 
     printf "Starting: %s ... " "$SCRIPT_NAME"
 
-    OUTPUT=$(ETLSQL_SECURITY_EVENT_OUTBOX_PATH="$SECURITY_EVENT_OUTBOX_PATH" Session__Root="$SESSION_ROOT" Orchestrator__DatabasePath="$ORCHESTRATOR_DATABASE_PATH" timeout 180 dotnet run --no-build --project "$PROJECT_PATH" -- run "$SCRIPT_FILE" --silent 2>&1) && EXIT_CODE=$? || EXIT_CODE=$?
+    OUTPUT=$(ETLSQL_SECURITY_EVENT_OUTBOX_PATH="$SECURITY_EVENT_OUTBOX_PATH" Session__Root="$SESSION_ROOT" Orchestrator__DatabasePath="$ORCHESTRATOR_DATABASE_PATH" timeout 180 dotnet run --no-build --configuration "$CONFIGURATION" --project "$PROJECT_PATH" -- run "$SCRIPT_FILE" --silent 2>&1) && EXIT_CODE=$? || EXIT_CODE=$?
 
     HAS_INTERNAL_ERROR=false
     if [[ "$OUTPUT" =~ "CRITICAL FAILURE" || "$OUTPUT" =~ "Unhandled exception" ]]; then

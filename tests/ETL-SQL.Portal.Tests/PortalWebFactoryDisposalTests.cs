@@ -8,6 +8,31 @@ namespace ETL_SQL.Portal.Tests;
 public sealed class PortalWebFactoryDisposalTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PairedOrchestrator_ShutdownLeavesThePortalDirectoryUntilItsOwnerDisposes(bool asynchronous)
+    {
+        var portal = new PortalWebFactory();
+        var tempDirectory = portal.TempDir;
+        try
+        {
+            using var portalClient = portal.CreateClient();
+            var orchestrator = new OrchestratorWebFactory(tempDirectory);
+            using var orchestratorClient = orchestrator.CreateClient();
+            if (asynchronous) await orchestrator.DisposeAsync();
+            else orchestrator.Dispose();
+            Assert.True(Directory.Exists(tempDirectory));
+            Assert.True(File.Exists(Path.Combine(tempDirectory, "portal.db")));
+            Assert.True((await portalClient.GetAsync("/healthz")).IsSuccessStatusCode);
+        }
+        finally
+        {
+            await portal.DisposeAsync();
+        }
+        Assert.False(Directory.Exists(tempDirectory));
+    }
+
+    [Theory]
     [InlineData(false, false, false)]
     [InlineData(true, false, false)]
     [InlineData(false, true, false)]

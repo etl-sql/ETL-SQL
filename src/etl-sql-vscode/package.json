@@ -566,7 +566,7 @@
     "@types/vscode": "^1.91.0",
     "@typescript-eslint/eslint-plugin": "^8.62.0",
     "@typescript-eslint/parser": "^8.62.0",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.11",
     "@vscode/test-electron": "^2.5.2",
     "eslint": "^10.6.0",
     "glob": "^13.0.6",
@@ -574,13 +574,13 @@
     "jsdom": "^29.0.2",
     "mocha": "^11.3.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "serialize-javascript": ">=7.0.5",
     "diff": ">=8.0.3",
-    "brace-expansion": ">=5.0.9",
-    "undici": ">=7.29.0 <8.0.0",
-    "js-yaml": ">=5.2.1"
+    "brace-expansion": ">=5.0.12",
+    "undici": ">=7.29.1 <8.0.0",
+    "js-yaml": ">=5.4.1"
   }
 }

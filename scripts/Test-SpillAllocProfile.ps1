@@ -7,6 +7,8 @@
     the requested row count and writes the JSON report (cumulative allocation + rate + per-type
     sampled attribution, retained-bytes delta, GC counts/pause, CPU, process I/O, spill bytes) under
     -OutDir. Publish the report BEFORE changing the spill implementation; later runs diff against it.
+    Unrelated theory data is not enumerated during discovery, so its heap cannot inflate this
+    single-scenario profile. Selected profiling tests still execute normally.
 
     Call-site attribution needs stacks, which the in-process sampler cannot see. For that drill-down
     run the profile once, note the test-host PID printed by dotnet, and in a second terminal:
@@ -38,6 +40,9 @@ $outRoot = if ([System.IO.Path]::IsPathRooted($OutDir)) { $OutDir }
 New-Item -ItemType Directory -Force -Path $outRoot | Out-Null
 $commit = (& git -C $repoRoot rev-parse --short HEAD).Trim()
 $result = Join-Path $outRoot ("profile-{0}rows-{1}.json" -f $Rows, $commit)
+$settingsPath = Join-Path $outRoot 'spill.runsettings'
+[IO.File]::WriteAllText($settingsPath,
+    '<RunSettings><xUnit><PreEnumerateTheories>false</PreEnumerateTheories></xUnit></RunSettings>')
 
 if (-not $SkipBuild) {
     & dotnet build (Join-Path $repoRoot 'ETL-SQL.slnx') -c Release --no-restore -v quiet
@@ -51,6 +56,7 @@ $env:CERT_BATCH_ROWS = $BatchRows.ToString([Globalization.CultureInfo]::Invarian
 try {
     & dotnet test (Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj') `
         -c Release --no-build --no-restore -m:1 `
+        --settings $settingsPath `
         --filter 'FullyQualifiedName~SpillAllocationProfilingTests'
     if ($LASTEXITCODE -ne 0) { throw "Profiling run failed (exit $LASTEXITCODE)." }
 }

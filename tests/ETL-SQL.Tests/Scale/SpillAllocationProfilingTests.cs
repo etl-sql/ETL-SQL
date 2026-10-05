@@ -108,6 +108,7 @@ namespace ETL_SQL.Tests.Scale
                 },
                 gc = new
                 {
+                    serverGcEnabled = System.Runtime.GCSettings.IsServerGC,
                     gen0 = resources.Gen0Collections,
                     gen1 = resources.Gen1Collections,
                     gen2 = resources.Gen2Collections,

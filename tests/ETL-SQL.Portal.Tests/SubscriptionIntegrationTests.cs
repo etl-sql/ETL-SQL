@@ -1103,6 +1103,12 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
 
     internal sealed class FailingOrchestratorPortalFactory : PortalWebFactory
     {
+        protected override void ClearFactoryPools()
+        {
+            base.ClearFactoryPools();
+            ClearFactoryPool($"Data Source={Path.Combine(TempDir, "lock.db")}");
+        }
+
         protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
         {
             base.ConfigureWebHost(builder);

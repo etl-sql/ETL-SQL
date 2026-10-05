@@ -233,12 +233,14 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
     /// <para>Before, stages were placed by depth alone: a two-step branch and a one-step branch shared
     /// rows, and nothing on the map said which steps ran side by side.</para>
     /// </summary>
-    [Fact]
-    public async Task ParallelBranchesAreDrawnAsLanes()
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public async Task ParallelBranchesAreDrawnAsLanes(string lineEnding)
     {
         using var workspace = new StudioTempWorkspace();
         var file = Path.Combine(workspace.Root, "lanes.etlsql");
-        await File.WriteAllTextAsync(file, Seed + """
+        var script = Seed + """
 
             load_fanout:
             PARALLEL BEGIN
@@ -264,7 +266,9 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
             EXECUTE sample_data BEGIN
                 SELECT 4 AS done;
             END;
-            """);
+            """;
+        await File.WriteAllTextAsync(file,
+            script.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", lineEnding, StringComparison.Ordinal));
 
         await using var host = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
             workspace.Root, file, 0, false, "lane-token",
@@ -277,7 +281,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
         await page.WaitForFunctionAsync("() => Boolean(window.__STUDIO__)", null,
             new PageWaitForFunctionOptions { Timeout = 20_000 });
         await page.Locator("[data-projection='split']").ClickAsync();
-        await page.Locator("[data-task-key='after_load']").WaitForAsync(new LocatorWaitForOptions { Timeout = 15_000 });
+        await WaitForPipelineElementAsync(session, "[data-task-key='after_load']", 15_000);
         await page.WaitForFunctionAsync("() => document.querySelectorAll('[data-dag-lane]').length === 2", null,
             new PageWaitForFunctionOptions { Timeout = 15_000 });
 
@@ -412,18 +416,22 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
     /// Transforms built from the palette, each reading the #temp an earlier step staged: the #temp
     /// tables are offered by name, and their columns are ticked rather than typed.
     /// </summary>
-    [Fact]
-    public async Task TransformsAreBuiltFromThePaletteOnStagedTables()
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public async Task TransformsAreBuiltFromThePaletteOnStagedTables(string lineEnding)
     {
         using var workspace = new StudioTempWorkspace();
         var file = Path.Combine(workspace.Root, "transforms.etlsql");
-        await File.WriteAllTextAsync(file, Seed + """
+        var initialScript = Seed + """
 
             read_users:
             SELECT UserID, UserName
             INTO #staged_users
             FROM sample_data.Users;
-            """);
+            """;
+        await File.WriteAllTextAsync(file,
+            initialScript.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", lineEnding, StringComparison.Ordinal));
 
         await using var host = WorkstationEditorApp.Create([], new WorkstationEditorOptions(
             workspace.Root, file, 0, false, "transform-token",
@@ -438,6 +446,7 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
         await page.Locator("[data-projection='split']").ClickAsync();
 
         // ── Filter & pick columns ────────────────────────────────────────────
+        await WaitForPipelineElementAsync(session, "[data-task-kind='reshape']", 30_000);
         await page.Locator("[data-task-kind='reshape']").ClickAsync();
         await page.Locator("[data-task-id]").FillAsync("clean_users");
         await page.Locator("datalist[id^='etlsql-task-temps'] option[value='#staged_users']").First.WaitForAsync(
@@ -549,6 +558,22 @@ public sealed class StudioSsisJourneyTests(StudioAuthoringFixture fixture)
         }
 
         Assert.False(string.IsNullOrWhiteSpace(await edge.GetAttributeAsync("d")), $"The {label} line has no path data.");
+    }
+
+    private static async Task WaitForPipelineElementAsync(BrowserSession session, string selector, float timeout)
+    {
+        try
+        {
+            await session.Page.Locator(selector).WaitForAsync(new LocatorWaitForOptions { Timeout = timeout });
+        }
+        catch (TimeoutException exception)
+        {
+            var statuses = await session.Page.Locator("[data-dag-status], .etlsql-studio-dag-message").AllInnerTextsAsync();
+            var failures = session.PageErrors.Concat(session.ConsoleErrors).Concat(session.FailedRequests);
+            throw new Xunit.Sdk.XunitException(
+                $"Pipeline element '{selector}' did not appear. Map status: {string.Join(" | ", statuses)}. "
+                + $"Browser failures: {string.Join(" | ", failures)}", exception);
+        }
     }
 
     private static Task<string> ScriptAsync(IPage page) =>

@@ -138,6 +138,7 @@ public sealed class ReportRenameProviderTests
               ))
             ));
             """;
+        script = script.Replace("\r\n", "\n", System.StringComparison.Ordinal);
         if (!ribbon) script = script.Replace("NULL_HANDLING = GAP,", "NULL_HANDLING = GAP, AREA_BASELINE = ZERO,", System.StringComparison.Ordinal)
             .Replace("Y_START = LowerBound (TYPE = QUANTITATIVE, SCALE = estimates),\n               Y_END = UpperBound", "Y = UpperBound", System.StringComparison.Ordinal);
         if (unit == "JITTER") script = script.Replace("NULL_HANDLING = GAP,", "NULL_HANDLING = GAP, POSITION = JITTER(X = 0.02, Y = 0.03, KEY = Id, SEED = 42),", System.StringComparison.Ordinal);

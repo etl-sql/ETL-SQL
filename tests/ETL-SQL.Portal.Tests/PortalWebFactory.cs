@@ -232,6 +232,14 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
     {
         if (!Directory.Exists(TempDir)) return;
 
+        ClearFactoryPools();
+
+        // A remaining handle is a fixture failure, not successful cleanup.
+        Directory.Delete(TempDir, recursive: true);
+    }
+
+    protected virtual void ClearFactoryPools()
+    {
         // Disposing a connection returns its native handle to the pool. Close only this factory's
         // pools after host shutdown so Windows can remove the files without disturbing other hosts.
         ClearFactoryPool($"Data Source={Path.Combine(TempDir, "portal.db")}");
@@ -242,12 +250,9 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
             Mode = SqliteOpenMode.ReadWriteCreate,
             Pooling = true
         }.ToString());
-
-        // A remaining handle is a fixture failure, not successful cleanup.
-        Directory.Delete(TempDir, recursive: true);
     }
 
-    private static void ClearFactoryPool(string connectionString)
+    protected static void ClearFactoryPool(string connectionString)
     {
         using var connection = new SqliteConnection(connectionString);
         SqliteConnection.ClearPool(connection);

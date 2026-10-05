@@ -22,45 +22,6 @@ const bundledAssets = [
   ...readCodeMirrorLockAssets()
 ];
 
-const npmLicenseFallbacks = {
-  '@eslint/js': 'MIT',
-  '@tailwindcss/vite': 'MIT',
-  '@tanstack/react-table': 'MIT',
-  '@types/glob': 'MIT',
-  '@types/jsdom': 'MIT',
-  '@types/mocha': 'MIT',
-  '@types/node': 'MIT',
-  '@types/react': 'MIT',
-  '@types/react-dom': 'MIT',
-  '@types/vscode': 'MIT',
-  '@typescript-eslint/eslint-plugin': 'MIT',
-  '@typescript-eslint/parser': 'MIT',
-  '@vitejs/plugin-react': 'MIT',
-  '@vitest/coverage-v8': 'MIT',
-  '@vscode/test-electron': 'MIT',
-  '@vscode/webview-ui-toolkit': 'MIT',
-  'clsx': 'MIT',
-  'eslint': 'MIT',
-  'eslint-plugin-react-hooks': 'MIT',
-  'eslint-plugin-react-refresh': 'MIT',
-  'framer-motion': 'MIT',
-  'glob': 'ISC',
-  'globals': 'MIT',
-  'jsdom': 'MIT',
-  'lucide-react': 'ISC',
-  'mocha': 'MIT',
-  'react': 'MIT',
-  'react-dom': 'MIT',
-  'tailwind-merge': 'MIT',
-  'tailwindcss': 'MIT',
-  'typescript': 'Apache-2.0',
-  'typescript-eslint': 'MIT',
-  'vite': 'MIT',
-  'vite-plugin-singlefile': 'MIT',
-  'vitest': 'MIT',
-  'vscode-languageclient': 'MIT'
-};
-
 function readCodeMirrorLockAssets() {
   const bundleFile = 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js';
   const manifestFiles = 'scripts/codemirror/package.json; scripts/codemirror/package-lock.json';
@@ -83,10 +44,11 @@ function readCodeMirrorLockAssets() {
       const pkg = lock.packages[`node_modules/${name}`];
       const meta = metadata[name];
       if (!pkg?.version) throw new Error(`Missing ${name} in CodeMirror package-lock.json`);
+      if (typeof pkg.license !== 'string' || !pkg.license) throw new Error(`Missing locked license for ${name} in CodeMirror package-lock.json.`);
       return {
         component: `${meta.component} ${pkg.version}`,
         files: meta.files,
-        license: pkg.license || npmLicenseFallbacks[name] || '',
+        license: pkg.license,
         project: meta.project
       };
     });
@@ -282,61 +244,41 @@ function parseNpmPackages() {
   for (const file of packageJsonFiles) {
     const rel = path.relative(repoRoot, file).replace(/\\/g, '/');
     const json = JSON.parse(readText(file));
-    addNpmDeps(packages, json.dependencies || {}, 'runtime', rel);
-    addNpmDeps(packages, json.devDependencies || {}, 'development', rel);
+    const lockPath = path.join(path.dirname(file), 'package-lock.json');
+    const lock = JSON.parse(readText(lockPath));
+    addNpmDeps(packages, json.dependencies || {}, 'runtime', rel, lock);
+    addNpmDeps(packages, json.devDependencies || {}, 'development', rel, lock);
   }
 
   for (const pkg of packages.values()) {
-    const metadata = readNpmPackageMetadata(pkg.name);
-    pkg.license = metadata.license || npmLicenseFallbacks[pkg.name] || '';
-    pkg.projectUrl = metadata.homepage || metadata.repository || '';
+    pkg.license = [...pkg.licenses].sort().join('; ');
+    pkg.projectUrl = `https://www.npmjs.com/package/${pkg.name}`;
   }
 
   return [...packages.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function addNpmDeps(packages, deps, usage, source) {
+function addNpmDeps(packages, deps, usage, source, lock) {
   for (const [name, version] of Object.entries(deps)) {
+    const locked = lock.packages?.[`node_modules/${name}`];
+    if (typeof locked?.license !== 'string' || !locked.license) {
+      throw new Error(`Missing locked license for ${name} in ${source.replace('package.json', 'package-lock.json')}.`);
+    }
     const existing = packages.get(name) || {
       name,
       versions: new Set(),
+      licenses: new Set(),
       license: '',
       projectUrl: '',
       usage: new Set(),
       sources: []
     };
     existing.versions.add(version);
+    existing.licenses.add(locked.license);
     existing.usage.add(usage);
     existing.sources.push(source);
     packages.set(name, existing);
   }
-}
-
-function readNpmPackageMetadata(packageName) {
-  const candidates = [
-    path.join(repoRoot, 'src', 'etl-sql-vscode', 'node_modules', packageName, 'package.json'),
-    path.join(repoRoot, 'src', 'etl-sql-vscode', 'ui', 'node_modules', packageName, 'package.json'),
-    path.join(repoRoot, 'scripts', 'typecheck', 'node_modules', packageName, 'package.json'),
-    path.join(repoRoot, 'scripts', 'lint', 'node_modules', packageName, 'package.json')
-  ];
-
-  for (const candidate of candidates) {
-    if (!fs.existsSync(candidate)) continue;
-    const json = JSON.parse(readText(candidate));
-    return {
-      license: typeof json.license === 'string' ? json.license : '',
-      homepage: json.homepage || '',
-      repository: normalizeRepository(json.repository)
-    };
-  }
-
-  return {};
-}
-
-function normalizeRepository(repository) {
-  if (!repository) return '';
-  if (typeof repository === 'string') return repository;
-  return repository.url || '';
 }
 
 function usageText(set) {

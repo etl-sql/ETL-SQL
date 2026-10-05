@@ -105,7 +105,7 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
         const nonce = getNonce();
         
         try {
-            // Path to the built React app (single-file mode via vite-plugin-singlefile)
+            // Path to the built React app with its JavaScript and CSS embedded.
             const indexPath = vscode.Uri.joinPath(this._extensionUri, 'ui', 'dist', 'index.html');
             if (!ResultsPanel._rawHtmlCache) {
                 ResultsPanel._rawHtmlCache = await fs.promises.readFile(indexPath.fsPath, 'utf8');

@@ -38,8 +38,12 @@ public sealed class TransposedAspectAreaTests
         );
         """;
 
-    private static string Form(bool ribbon) => ribbon ? Script : Script.Replace("NULL_HANDLING = GAP,", "NULL_HANDLING = GAP, AREA_BASELINE = ZERO,", StringComparison.Ordinal)
-        .Replace("Y_START = LowerBound (TYPE = QUANTITATIVE, SCALE = estimates),\n                 Y_END = UpperBound", "Y = UpperBound", StringComparison.Ordinal);
+    private static string Form(bool ribbon)
+    {
+        var script = Script.Replace("\r\n", "\n", StringComparison.Ordinal);
+        return ribbon ? script : script.Replace("NULL_HANDLING = GAP,", "NULL_HANDLING = GAP, AREA_BASELINE = ZERO,", StringComparison.Ordinal)
+            .Replace("Y_START = LowerBound (TYPE = QUANTITATIVE, SCALE = estimates),\n                 Y_END = UpperBound", "Y = UpperBound", StringComparison.Ordinal);
+    }
 
     public static IEnumerable<object[]> GeometryCases()
     {

@@ -115,7 +115,8 @@ namespace ETL_SQL.Orchestrator.Execution
 
         /// <summary>
         /// Acquires a concurrency slot, waiting until one is available across all processes.
-        /// Returns a disposable that releases the slot on disposal.
+        /// The returned disposable also implements IAsyncDisposable. Async owners should await
+        /// disposal so the lease heartbeat and database release finish before host shutdown.
         /// </summary>
         public async Task<IDisposable> AcquireAsync(string jobName, CancellationToken ct = default)
         {
@@ -273,11 +274,11 @@ namespace ETL_SQL.Orchestrator.Execution
             try
             {
                 using var conn = _dialect.CreateConnection();
-                await conn.OpenAsync();
+                await conn.OpenAsync().ConfigureAwait(false);
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = "DELETE FROM ThrottleSlots WHERE Id = @id;";
                 cmd.AddParam("@id", slotId);
-                await cmd.ExecuteNonQueryAsync();
+                await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -316,20 +317,22 @@ namespace ETL_SQL.Orchestrator.Execution
 
         public void Dispose() { }
 
-        private sealed class Slot : IDisposable
+        private sealed class Slot : IDisposable, IAsyncDisposable
         {
             private readonly JobThrottle _owner;
             private readonly string _jobName;
             private readonly long _slotId;
             private readonly CancellationTokenSource _heartbeatCancellation = new();
-            private bool _disposed;
+            private readonly Task _heartbeatTask;
+            private readonly object _disposeLock = new();
+            private Task? _disposalTask;
 
             public Slot(JobThrottle owner, string jobName, long slotId)
             {
                 _owner = owner;
                 _jobName = jobName;
                 _slotId = slotId;
-                _ = HeartbeatAsync();
+                _heartbeatTask = HeartbeatAsync();
             }
 
             private async Task HeartbeatAsync()
@@ -338,8 +341,8 @@ namespace ETL_SQL.Orchestrator.Execution
                 {
                     while (!_heartbeatCancellation.IsCancellationRequested)
                     {
-                        await Task.Delay(_owner._slotHeartbeat, _heartbeatCancellation.Token);
-                        await _owner.RenewSlotAsync(_slotId, _heartbeatCancellation.Token);
+                        await Task.Delay(_owner._slotHeartbeat, _heartbeatCancellation.Token).ConfigureAwait(false);
+                        await _owner.RenewSlotAsync(_slotId, _heartbeatCancellation.Token).ConfigureAwait(false);
                     }
                 }
                 catch (OperationCanceledException) when (_heartbeatCancellation.IsCancellationRequested) { }
@@ -351,10 +354,29 @@ namespace ETL_SQL.Orchestrator.Execution
 
             public void Dispose()
             {
-                if (_disposed) return;
-                _disposed = true;
-                _heartbeatCancellation.Cancel();
-                _ = _owner.ReleaseAsync(_jobName, _slotId);
+                // IDisposable callers need the same completed release as async owners. All awaits
+                // in the disposal path avoid a captured synchronization context.
+                DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                lock (_disposeLock)
+                    return new ValueTask(_disposalTask ??= DisposeCoreAsync());
+            }
+
+            private async Task DisposeCoreAsync()
+            {
+                try
+                {
+                    _heartbeatCancellation.Cancel();
+                    await _heartbeatTask.ConfigureAwait(false);
+                    await _owner.ReleaseAsync(_jobName, _slotId).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _heartbeatCancellation.Dispose();
+                }
             }
         }
     }

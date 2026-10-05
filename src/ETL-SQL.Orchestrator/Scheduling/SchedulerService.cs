@@ -59,6 +59,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private CancellationTokenSource? _cts;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, CancellationTokenSource> _runningJobs = new();
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _scheduledJobStarts = new(StringComparer.OrdinalIgnoreCase);
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<long, Task> _jobTasks = new();
+        private long _nextJobTaskId;
 
         /// <summary>Identifies this scheduler instance as a lease owner (P1.1). Unique per process
         /// start so a restarted instance never silently inherits its previous leases.</summary>
@@ -110,8 +112,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
         }
 
         /// <summary>
-        /// Stops the scheduler by cancelling the background task and waiting up to 5 seconds for
-        /// it to terminate.
+        /// Cancels scheduling and waits up to 5 seconds for the loop and queued jobs, including
+        /// their final history and schedule writes, to terminate.
         /// </summary>
         /// <remarks>
         /// This method intentionally uses <c>Task.Wait</c> (sync-over-async) so that it can be
@@ -121,10 +123,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// </remarks>
         public void Stop()
         {
-            _cts?.Cancel();
             try
             {
-                _runTask?.Wait(TimeSpan.FromSeconds(5));
+                StopAsync().Wait();
             }
             catch (AggregateException ae)
             {
@@ -132,31 +133,69 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error waiting for scheduler background task to terminate.");
+                _logger.LogWarning(ex, "Error waiting for scheduler shutdown.");
             }
         }
 
         public async Task StopAsync(CancellationToken cancellationToken = default)
         {
             _cts?.Cancel();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var shutdown = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
             try
             {
                 if (_runTask != null)
                 {
-                    await _runTask.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+                    try
+                    {
+                        await _runTask.WaitAsync(shutdown.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (!shutdown.IsCancellationRequested)
+                    {
+                        // The scheduler loop exits when its own cancellation token is signalled.
+                    }
+                    catch (Exception ex) when (_runTask.IsCompleted && !shutdown.IsCancellationRequested)
+                    {
+                        _logger.LogWarning(ex, "Scheduler loop terminated with an error during shutdown.");
+                    }
                 }
+                await Task.WhenAll(_jobTasks.Values).WaitAsync(shutdown.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 throw;
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (timeout.IsCancellationRequested)
             {
+                _logger.LogWarning("Scheduler shutdown exceeded 5 seconds; queued jobs may still be finishing.");
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error waiting for scheduler background task to terminate.");
+                _logger.LogWarning(ex, "Error waiting for scheduler shutdown.");
             }
+        }
+
+        private void QueueJob(string jobName, Func<Task> execute)
+        {
+            var taskId = Interlocked.Increment(ref _nextJobTaskId);
+            var task = Task.Run(async () =>
+            {
+                try
+                {
+                    await execute();
+                }
+                finally
+                {
+                    _scheduledJobStarts.TryRemove(jobName, out _);
+                }
+            }, CancellationToken.None);
+            _jobTasks[taskId] = task;
+            _ = task.ContinueWith(completed =>
+            {
+                _jobTasks.TryRemove(taskId, out _);
+                if (completed.IsFaulted)
+                    _logger.LogError(completed.Exception, "Job {JobName}: queued execution terminated unexpectedly.", jobName);
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
 
         private async Task RunAsync(CancellationToken ct)
@@ -213,17 +252,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             continue;
                         }
 
-                        _ = Task.Run(async () =>
-                        {
-                            try
-                            {
-                                await ExecuteJobAsync(job);
-                            }
-                            finally
-                            {
-                                _scheduledJobStarts.TryRemove(job.Name, out _);
-                            }
-                        }, CancellationToken.None);
+                        QueueJob(job.Name, () => ExecuteJobAsync(job));
                     }
 
                     // Resolve intervals from configuration with safe defaults
@@ -406,17 +435,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 return ManualTriggerResult.AlreadyRunning;
             }
 
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await ExecuteJobAsync(job, capturedOverrides);
-                }
-                finally
-                {
-                    _scheduledJobStarts.TryRemove(job.Name, out _);
-                }
-            }, CancellationToken.None);
+            QueueJob(job.Name, () => ExecuteJobAsync(job, capturedOverrides));
             return ManualTriggerResult.Accepted;
         }
 
@@ -487,18 +506,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     history.CheckpointLabel,
                     "The job already has an execution in progress.");
 
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await ExecuteJobAsync(
-                        job, initialSessionId: history.SessionId, resumeFromCheckpoint: true);
-                }
-                finally
-                {
-                    _scheduledJobStarts.TryRemove(job.Name, out _);
-                }
-            }, CancellationToken.None);
+            QueueJob(job.Name, () => ExecuteJobAsync(
+                job, initialSessionId: history.SessionId, resumeFromCheckpoint: true));
 
             return new(ResumeTriggerStatus.Accepted, history.CheckpointLabel);
         }
@@ -662,7 +671,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     try
                     {
                         var throttleSw = System.Diagnostics.Stopwatch.StartNew();
-                        using var slot = await _throttle.AcquireAsync(job.Name, cycleCts.Token);
+                        await using var slot = (IAsyncDisposable)await _throttle.AcquireAsync(job.Name, cycleCts.Token);
                         throttleSw.Stop();
                         var queueWaitMs = throttleSw.ElapsedMilliseconds;
                         attemptQueueWaitMs = queueWaitMs;

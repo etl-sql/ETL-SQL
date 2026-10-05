@@ -97,8 +97,8 @@ NuGet package details can be reviewed at:
 
 ## Direct npm Dependencies
 
-The VS Code extension UI uses the following direct npm packages. License values
-should be regenerated from npm package metadata before publishing the extension.
+The VS Code extension UI uses the following direct npm packages. The generated inventory reads
+their licenses from the committed npm lockfiles before publishing the extension.
 
 | Package | License | Notes |
 | :--- | :--- | :--- |
@@ -127,6 +127,11 @@ artifacts, but they are usually not shown in product UI acknowledgements.
 The pinned browser lint toolchain in `scripts/lint/package.json` uses `@eslint/js`,
 `eslint`, and `globals`, each under MIT. The dependency inventory records their
 exact pins alongside the extension and UI version ranges.
+
+The extension and UI use Vitest 4.1.11 (MIT). The extension's security overrides also use patched
+brace-expansion, Undici and js-yaml releases, all under MIT. The webview's single-file build uses
+the existing Vite plugin API in repository code; vite-plugin-singlefile and its micromatch/braces
+dependency chain are removed from the UI lockfile. No replacement third-party dependency is added.
 
 Microsoft.Playwright (MIT) additionally downloads browser binaries at test time —
 Chromium and its headless shell, which carry their own upstream licenses. Those

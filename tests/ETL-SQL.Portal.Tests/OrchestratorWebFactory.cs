@@ -8,6 +8,7 @@ using ETL_SQL.Orchestrator.Service;
 using ETL_SQL.Orchestrator.Storage;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -21,10 +22,12 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
     public const string IdentitySecret = "test-only-federated-orchestrator-identity-secret";
     public string TempDir { get; }
     private readonly bool requireFederatedIdentity;
+    private readonly bool ownsTempDir;
 
     public OrchestratorWebFactory(string? tempDir = null, bool requireFederatedIdentity = false)
     {
         this.requireFederatedIdentity = requireFederatedIdentity;
+        ownsTempDir = tempDir is null;
         TempDir = tempDir ?? Path.Combine(Path.GetTempPath(), $"orch_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(TempDir);
         Directory.CreateDirectory(Path.Combine(TempDir, "logs"));
@@ -90,12 +93,13 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
         });
     }
 
-    protected override void Dispose(bool disposing)
+    public override async ValueTask DisposeAsync()
     {
-        base.Dispose(disposing);
-        if (disposing && Directory.Exists(TempDir))
-        {
-            try { Directory.Delete(TempDir, recursive: true); } catch { /* best effort */ }
-        }
+        await base.DisposeAsync();
+        using var connection = new SqliteConnection($"Data Source={Path.Combine(TempDir, "etlsql.db")}");
+        SqliteConnection.ClearPool(connection);
+        // A supplied directory belongs to the paired Portal factory, which is still running.
+        if (ownsTempDir && Directory.Exists(TempDir))
+            Directory.Delete(TempDir, recursive: true);
     }
 }

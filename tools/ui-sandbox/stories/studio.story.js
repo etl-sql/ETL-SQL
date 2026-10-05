@@ -146,6 +146,7 @@ export default {
   fixtures: [
     { id: 'default', label: 'Multi-Tab Workbench (Report, ETL, Script)' },
     { id: 'pending-save', label: 'Slow Save (type while saving)' },
+    { id: 'crlf-pipeline', label: 'CRLF Pipeline (initial projection)' },
   ],
   async mount(stage, fixtureId, ctx) {
     // Import canonical studio module
@@ -175,8 +176,14 @@ export default {
       return api(url, init);
     };
 
+    const documents = JSON.parse(JSON.stringify(SAMPLE_DOCS));
+    if (fixtureId === 'crlf-pipeline') {
+      const pipeline = documents.find(document => document.id === 'doc-etl');
+      pipeline.content = pipeline.content.replace(/\r?\n/g, '\r\n');
+    }
     const workbench = await studioMod.createStudioWorkbench(stage, {
-      documents: JSON.parse(JSON.stringify(SAMPLE_DOCS)),
+      documents,
+      activeDocId: fixtureId === 'crlf-pipeline' ? 'doc-etl' : undefined,
       workspaceFiles: JSON.parse(JSON.stringify(sandboxWorkspace.files)),
       workspaceFolders: JSON.parse(JSON.stringify(sandboxWorkspace.folders)),
       authFetch,

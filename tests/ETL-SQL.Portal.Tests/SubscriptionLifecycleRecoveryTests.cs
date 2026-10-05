@@ -90,7 +90,8 @@ public class SubscriptionLifecycleRecoveryTests
 
         // Orchestrator job DB with: a job for a deleted subscription, a stale-named duplicate
         // for the drifted subscription, and the drifted job itself with wrong schedule/enable.
-        var orchDbPath = Path.Combine(factory.TempDir, $"recovery-orch-{suffix}.db");
+        // The factory owns this isolated database and closes its connection pool at shutdown.
+        var orchDbPath = config.Orchestrator.DatabasePath;
         var store = new SQLiteJobHistoryStore(orchDbPath);
         await store.InitializeAsync();
 

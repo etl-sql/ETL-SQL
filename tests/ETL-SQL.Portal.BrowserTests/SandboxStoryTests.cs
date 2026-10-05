@@ -944,16 +944,23 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
         Assert.Empty(session.PageErrors);
     }
 
-    [Fact]
-    public async Task Studio_PipelineCanvasUsesEngineDagAndPreservesScriptBytes()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Studio_PipelineCanvasUsesEngineDagAndPreservesScriptBytes(bool initialCrlfProjection)
     {
         await using var session = await fixture.NewSessionAsync();
         var page = session.Page;
 
         await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html");
         await page.ClickAsync("button.story-link[data-story-id='studio']");
+        if (initialCrlfProjection)
+            await page.SelectOptionAsync("#fixtureSel", "crlf-pipeline");
         await WaitForStudioAsync(page);
-        await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
+        if (initialCrlfProjection)
+            await page.WaitForFunctionAsync("() => window.__STUDIO_INSTANCE__?.state.activeDocId === 'doc-etl'");
+        else
+            await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.switchDoc('doc-etl')");
 
         var status = page.Locator("[data-dag-status]");
         await status.WaitForAsync();
@@ -961,6 +968,9 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
 
         var sourceBefore = await page.EvaluateAsync<string>(
             "() => window.__STUDIO_INSTANCE__.state.documents.find(d => d.id === 'doc-etl').content");
+        var editorBefore = await page.EvaluateAsync<string>(
+            "() => window.__STUDIO_INSTANCE__.state.editorInstance.getValue()");
+        if (initialCrlfProjection) Assert.Contains("\r\n", sourceBefore);
         var dagNodes = page.Locator("[data-dag-node]");
         // Six projected stages plus the one labelled task the sample script declares.
         Assert.Equal(7, await dagNodes.CountAsync());
@@ -999,7 +1009,7 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
               .find(request => request.url.endsWith('/api/designer/dag'))
               ?.body?.script
             """);
-        Assert.Equal(sourceBefore, requestScript);
+        Assert.Equal(editorBefore, requestScript);
 
         await page.EvaluateAsync("() => window.__STUDIO_INSTANCE__.state.editorInstance.setValue('>>> INVALID <<<')");
         await page.WaitForFunctionAsync("() => document.querySelector('[data-dag-status]')?.textContent?.includes('Last valid flow')");

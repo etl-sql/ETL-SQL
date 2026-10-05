@@ -128,24 +128,24 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Test structure audit"; Command = ".\scripts\Get-TestLaneInventory.ps1 -FailOnIssues"; Reason = "Lane ownership is category-based, release-only suites have targeted runners, and milestone-era/root-level test naming cannot drift back in." })
     $phases.Add([ordered]@{ Phase = "Format verify"; Command = "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)"; Reason = "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run." })
     if (-not $EffectiveSkipScale) {
-        $phases.Add([ordered]@{ Phase = "Scale certification smoke"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke"; Reason = "Small certification workload still meets baseline before the long test lanes heat the machine." })
-        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (smoke)"; Command = ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport <run>\cert-baseline-smoke.md"; Reason = "Smoke certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
+        $phases.Add([ordered]@{ Phase = "Scale certification smoke"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke -OutDir <run>\scale-smoke"; Reason = "Small certification workload still meets baseline before the long test lanes heat the machine." })
+        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (smoke)"; Command = ".\scripts\Compare-CertBaseline.ps1 -NewReport <run>\scale-smoke\cert-report.json -MarkdownReport <run>\cert-baseline-smoke.md"; Reason = "Smoke certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
     }
     if ($EffectiveIncludeStandardScale) {
-        $phases.Add([ordered]@{ Phase = "Scale certification standard"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Standard"; Reason = "Release-size certification workload still meets baseline before the long test lanes heat the machine." })
-        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (standard)"; Command = ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport <run>\cert-baseline-standard.md"; Reason = "Standard certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
-        $phases.Add([ordered]@{ Phase = "Spill allocation budget (10M)"; Command = ".\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild"; Reason = "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget." })
+        $phases.Add([ordered]@{ Phase = "Scale certification standard"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Standard -OutDir <run>\scale-standard"; Reason = "Release-size certification workload still meets baseline before the long test lanes heat the machine." })
+        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (standard)"; Command = ".\scripts\Compare-CertBaseline.ps1 -NewReport <run>\scale-standard\cert-report.json -MarkdownReport <run>\cert-baseline-standard.md"; Reason = "Standard certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
+        $phases.Add([ordered]@{ Phase = "Spill allocation budget (10M)"; Command = ".\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild -OutDir <run>\spill-allocation"; Reason = "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget." })
     }
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
     $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Bounded quick-feedback lane: smoke coverage plus language-server tests." })
     $phases.Add([ordered]@{ Phase = "EBNF conformance lane"; Command = ".\scripts\test-lane.ps1 -Lane ebnf"; Reason = "Deterministic grammar generation strictly agrees with execution-parser acceptance and rejection." })
-    $phases.Add([ordered]@{ Phase = "Engine lane"; Command = ".\scripts\test-lane.ps1 -Lane engine -CollectCoverage"; Reason = "Broad engine/parser/evaluator regression coverage collected across 8 deterministic shards." })
+    $phases.Add([ordered]@{ Phase = "Engine lane"; Command = ".\scripts\test-lane.ps1 -Lane engine -CollectCoverage"; Reason = "Broad engine/parser/evaluator regression coverage collected across deterministic shards." })
     $phases.Add([ordered]@{ Phase = "Coverage gate"; Command = ".\scripts\Test-CoverageGate.ps1 -MinimumLineCoverage 70"; Reason = "Coverage report generation enforcing the fail-closed 70% line-coverage release threshold." })
     $phases.Add([ordered]@{ Phase = "Portal lane"; Command = ".\scripts\test-lane.ps1 -Lane portal"; Reason = "Portal API coverage, including the role/permission authorization matrix, departmental environment isolation, policy distribution, and Studio capabilities." })
     $phases.Add([ordered]@{ Phase = "Browser lane"; Command = ".\scripts\test-lane.ps1 -Lane browser"; Reason = "Everything only a real browser can prove: the critical journey, role journeys, accessibility/responsive checks, and UI-sandbox stories." })
     $phases.Add([ordered]@{ Phase = "N->N+1 upgrade-path drill"; Command = "dotnet test ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests"; Reason = "In-place EF migration over a live release-N catalog keeps permissions, jobs, subscriptions, datasets, and audit history intact." })
-    $phases.Add([ordered]@{ Phase = "Sample scripts (pass 1)"; Command = ".\scripts\Test-AllSamples.ps1 -Passes 1"; Reason = "Published samples remain runnable on a clean state." })
-    $phases.Add([ordered]@{ Phase = "Sample scripts (pass 2)"; Command = ".\scripts\Test-AllSamples.ps1 -Passes 1"; Reason = "Published samples remain runnable a second time without failing on pre-existing artifacts." })
+    $phases.Add([ordered]@{ Phase = "Sample scripts (pass 1)"; Command = ".\scripts\Test-AllSamples.ps1 -Passes 1 -Configuration $Configuration"; Reason = "Published samples remain runnable on a clean state." })
+    $phases.Add([ordered]@{ Phase = "Sample scripts (pass 2)"; Command = ".\scripts\Test-AllSamples.ps1 -Passes 1 -Configuration $Configuration"; Reason = "Published samples remain runnable a second time without failing on pre-existing artifacts." })
     $phases.Add([ordered]@{ Phase = "HA soak contract gate"; Command = ".\scripts\Test-HaSoakContracts.ps1"; Reason = "PostgreSQL HA soak topology, workload, metrics, diagnostics, runbook, and evidence validation contracts stay usable." })
 
     if ($IncludeSlt) {
@@ -910,6 +910,12 @@ if ($Resume) {
 }
 
 $results = New-Object System.Collections.Generic.List[object]
+$smokeScaleOutput = Join-Path (Split-Path -Parent $smokeBaselineReport) 'scale-smoke'
+$standardScaleOutput = Join-Path (Split-Path -Parent $standardBaselineReport) 'scale-standard'
+$smokeScaleJson = Join-Path $smokeScaleOutput 'cert-report.json'
+$standardScaleJson = Join-Path $standardScaleOutput 'cert-report.json'
+$spillAllocationOutput = Join-Path (Split-Path -Parent $standardBaselineReport) 'spill-allocation'
+$spillAllocationJson = Join-Path $spillAllocationOutput ("profile-10000000rows-{0}.json" -f ((& git -C $RepoRoot rev-parse --short HEAD).Trim()))
 
 try {
     Invoke-LoggedPhase "Asset drift check" `
@@ -1020,32 +1026,32 @@ try {
 
     if (-not $EffectiveSkipScale) {
         Invoke-LoggedPhase "Scale certification smoke" `
-            ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Smoke" } `
-            $previousPhaseMap $fingerprint $results
+            ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke -OutDir $smokeScaleOutput" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Smoke" "-OutDir" $smokeScaleOutput } `
+            $previousPhaseMap $fingerprint $results @($smokeScaleJson, (Join-Path $smokeScaleOutput 'cert-report.md'))
 
         Invoke-LoggedPhase "Cert baseline regression check (smoke)" `
-            ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport $smokeBaselineReport" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-MarkdownReport" $smokeBaselineReport } `
+            ".\scripts\Compare-CertBaseline.ps1 -NewReport $smokeScaleJson -MarkdownReport $smokeBaselineReport" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-NewReport" $smokeScaleJson "-MarkdownReport" $smokeBaselineReport } `
             $previousPhaseMap $fingerprint $results @($smokeBaselineReport)
     }
 
     if ($EffectiveIncludeStandardScale) {
         Invoke-LoggedPhase "Scale certification standard" `
-            ".\scripts\Test-ScaleCertification.ps1 -Tier Standard" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Standard" } `
-            $previousPhaseMap $fingerprint $results
+            ".\scripts\Test-ScaleCertification.ps1 -Tier Standard -OutDir $standardScaleOutput" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Standard" "-OutDir" $standardScaleOutput } `
+            $previousPhaseMap $fingerprint $results @($standardScaleJson, (Join-Path $standardScaleOutput 'cert-report.md'))
 
         Invoke-LoggedPhase "Cert baseline regression check (standard)" `
-            ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport $standardBaselineReport" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-MarkdownReport" $standardBaselineReport } `
+            ".\scripts\Compare-CertBaseline.ps1 -NewReport $standardScaleJson -MarkdownReport $standardBaselineReport" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-NewReport" $standardScaleJson "-MarkdownReport" $standardBaselineReport } `
             $previousPhaseMap $fingerprint $results @($standardBaselineReport)
 
         # Release configuration is already built by the Dotnet build phase, hence -SkipBuild.
         Invoke-LoggedPhase "Spill allocation budget (10M)" `
-            ".\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-SpillAllocProfile.ps1" "-Rows" "10000000" "-SkipBuild" } `
-            $previousPhaseMap $fingerprint $results
+            ".\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild -OutDir $spillAllocationOutput" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-SpillAllocProfile.ps1" "-Rows" "10000000" "-SkipBuild" "-OutDir" $spillAllocationOutput } `
+            $previousPhaseMap $fingerprint $results @($spillAllocationJson)
     }
 
     Invoke-LoggedPhase "Smoke lane" `
@@ -1098,13 +1104,13 @@ try {
     # Two passes, split into granular checkpoints: sample output is gitignored, so a sample that writes
     # to a persistent store can pass on a clean checkout and fail for every user who runs it a second time.
     Invoke-LoggedPhase "Sample scripts (pass 1)" `
-        ".\scripts\Test-AllSamples.ps1 -Passes 1" `
-        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-AllSamples.ps1" "-Passes" "1" } `
+        ".\scripts\Test-AllSamples.ps1 -Passes 1 -Configuration $Configuration" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-AllSamples.ps1" "-Passes" "1" "-Configuration" $Configuration } `
         $previousPhaseMap $fingerprint $results
 
     Invoke-LoggedPhase "Sample scripts (pass 2)" `
-        ".\scripts\Test-AllSamples.ps1 -Passes 1" `
-        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-AllSamples.ps1" "-Passes" "1" } `
+        ".\scripts\Test-AllSamples.ps1 -Passes 1 -Configuration $Configuration" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-AllSamples.ps1" "-Passes" "1" "-Configuration" $Configuration } `
         $previousPhaseMap $fingerprint $results
 
     Invoke-LoggedPhase "HA soak contract gate" `

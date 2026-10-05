@@ -186,8 +186,15 @@ RunAsync():
        c. Task.Delay(30s, ct)         — cooperative cancellable sleep
 
 SchedulerService.Stop()
-  └── _cts.Cancel()                   — cancels the delay; loop exits cleanly
+  ├── _cts.Cancel()                   — cancels the delay; loop exits cleanly
+  └── wait for queued executions     — includes final history, schedule and throttle writes
 ```
+
+`StopAsync` uses a shared five-second budget for the polling loop and queued scheduled, manual and
+resumed executions. Caller cancellation propagates; expiry logs that jobs may still be finishing.
+The synchronous `Stop` uses the same shutdown path. A throttle slot implements `IAsyncDisposable`
+as well as `IDisposable`; the scheduler awaits disposal to stop its heartbeat and release the
+database slot before its execution task finishes.
 
 ### 3.2 Job execution flow
 
@@ -255,6 +262,9 @@ JSON on every heartbeat: process working set, GC heap bytes, available memory, m
 process CPU percent, processor count, and `IsOverloaded`. The scheduler uses the same
 `INodeCapacityMonitor` locally before it claims a job lease. If the node is overloaded, it skips
 the claim for that cycle so another healthy node can acquire the work.
+
+Concurrent `NodeHeartbeatService.StopAsync` calls share one shutdown task. Each caller waits for
+the heartbeat loop and the same node deregistration write before the host's store is disposed.
 
 After each execution cycle, `SchedulerService` reads the latest history rows for the job. If the
 latest `Scheduler:QuarantineFailureThreshold` rows are all failures, the scheduler saves the job as

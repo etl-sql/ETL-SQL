@@ -1,7 +1,8 @@
-﻿import { describe, it } from 'vitest';
+﻿import { afterEach, beforeEach, describe, it } from 'vitest';
 import * as cp from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 
 function getEnginePath(): string | null {
     const isWindows = process.platform === 'win32';
@@ -25,6 +26,22 @@ function getEnginePath(): string | null {
 
 describe('Engine Integration (Real Pipe)', () => {
     const exePath = getEnginePath();
+    let stateRoot: string;
+    beforeEach(() => {
+        stateRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'etlsql-vscode-engine-'));
+    });
+    afterEach(() => {
+        fs.rmSync(stateRoot, { recursive: true, force: true });
+    });
+    function engineEnvironment(): NodeJS.ProcessEnv {
+        return {
+            ...process.env,
+            FORCE_COLOR: '0',
+            ETLSQL_SECURITY_EVENT_OUTBOX_PATH: path.join(stateRoot, 'security-events.db'),
+            Session__Root: path.join(stateRoot, 'sessions'),
+            Orchestrator__DatabasePath: path.join(stateRoot, 'orchestrator.db'),
+        };
+    }
 
     it('successfully pings the real engine via stdin/stdout', async () => {
         if (!exePath) {
@@ -34,7 +51,7 @@ describe('Engine Integration (Real Pipe)', () => {
 
         return new Promise<void>((resolve, reject) => {
             const child = cp.spawn(exePath, ['ui', 'repl', '--json', '--verbose'], {
-                env: { ...process.env, "FORCE_COLOR": "0" },
+                env: engineEnvironment(),
                 stdio: ['pipe', 'pipe', 'pipe']
             });
 
@@ -99,7 +116,7 @@ describe('Engine Integration (Real Pipe)', () => {
 
         return new Promise<void>((resolve, reject) => {
             const child = cp.spawn(exePath, ['ui', 'repl', '--json'], {
-                env: { ...process.env, "FORCE_COLOR": "0" },
+                env: engineEnvironment(),
                 stdio: ['pipe', 'pipe', 'pipe']
             });
 

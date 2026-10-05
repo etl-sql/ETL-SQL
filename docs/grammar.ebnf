@@ -667,15 +667,18 @@ sourced_visual_type = "BAR" | "HBAR" | "LINE" | "SCATTER" | "PIE" | "DONUT" | "C
 sourceless_visual_type = "TEXT" | "IMAGE" | "SLICER" | "DATEPICKER" | "RELDATEPICKER" | "SLIDER" | "MULTISELECT" | "SEARCH" | "TEXTBOX" | "NUMBERBOX" | "CHECKBOX" ;
 visual_type = sourced_visual_type | sourceless_visual_type ;
 visual_source = "(" select_statement ")" | temp_table_name | dataset_name | string_literal ;
-advanced_chart_clause = "CHART" "(" advanced_coordinate_clause [ "," advanced_scales_clause ]
-                        [ "," advanced_shared_encodings_clause ] "," advanced_layers_clause
-                        [ "," advanced_facet_clause ] [ "," advanced_resolve_clause ]
-                        [ "," advanced_annotations_clause ] ")" ;
+advanced_chart_clause = "CHART" "(" { advanced_chart_optional_clause "," }
+                        ( advanced_coordinate_clause "," { advanced_chart_optional_clause "," } advanced_layers_clause
+                        | advanced_layers_clause "," { advanced_chart_optional_clause "," } advanced_coordinate_clause )
+                        { "," advanced_chart_optional_clause } ")" ;
+advanced_chart_optional_clause = advanced_scales_clause | advanced_shared_encodings_clause
+                               | advanced_facet_clause | advanced_resolve_clause | advanced_annotations_clause ;
 advanced_coordinate_clause = "COORDINATE" "(" "TYPE" "=" advanced_coordinate_type
                              { "," advanced_coordinate_option } ")" ;
 advanced_coordinate_type = "CARTESIAN" | "TRANSPOSED_CARTESIAN" | "POLAR" | "GEOGRAPHIC" ;
-advanced_coordinate_option = ( "START_ANGLE" | "END_ANGLE" | "INNER_RADIUS" ) "=" number
-                           | ( "PROJECTION" | "MAP_NAME" | "FEATURE_KEY" ) "=" ( identifier | string_literal ) ;
+advanced_coordinate_option = ( "START_ANGLE" | "END_ANGLE" | "INNER_RADIUS" | "ASPECT_RATIO" ) "=" advanced_signed_number
+                           | "PROJECTION" "=" ( "EQUIRECTANGULAR" | "MERCATOR" )
+                           | ( "MAP_NAME" | "MAP_FILE" | "FEATURE_KEY" ) "=" string_literal ;
 advanced_annotations_clause = "ANNOTATIONS" "(" advanced_annotation { "," advanced_annotation } ")" ;
 advanced_annotation = "POINT" "(" advanced_annotation_option { "," advanced_annotation_option } ")" ;
 advanced_annotation_option = "SERIES" "=" ( identifier | string_literal )
@@ -684,27 +687,48 @@ advanced_annotation_option = "SERIES" "=" ( identifier | string_literal )
 advanced_scales_clause = "SCALES" "(" advanced_scale { "," advanced_scale } ")" ;
 advanced_scale = identifier "=" advanced_scale_kind "(" "CHANNEL" "=" advanced_scale_channel { "," advanced_scale_option } ")" ;
 advanced_scale_kind = "LINEAR" | "LOGARITHMIC" | "TIME" | "BAND" | "POINT" | "ORDINAL" | "IDENTITY" ;
-advanced_scale_option = "INCLUDE_ZERO" "=" ( "ON" | "OFF" )
+advanced_scale_option = ( "INCLUDE_ZERO" | "REVERSE" | "MINOR_TICKS" ) "=" ( "ON" | "OFF" )
                       | ( "MIN" | "MAX" ) "=" expression
+                      | ( "MAJOR_TICK_COUNT" | "LABEL_SKIP" ) "=" number
+                      | ( "TICK_INTERVAL" | "OUTER_PADDING" ) "=" advanced_signed_number
+                      | "LABEL_ROTATION" "=" ( "AUTO" | number )
+                      | "LABEL_SKIP" "=" "AUTO"
+                      | "TICK_FORMAT" "=" string_literal
+                      | "TIME_UNIT" "=" ( "AUTO" | "DAY" | "WEEK" | "MONTH" | "QUARTER" | "YEAR" )
                       | "ORDER" "=" ( "SOURCE" | "ASCENDING" | "DESCENDING" | "(" expression { "," expression } ")" ) ;
-advanced_scale_channel = "X" | "Y" | "Y2" | "COLOR" | "THETA" | "RADIUS" ;
+advanced_scale_channel = advanced_encoding_channel ;
 advanced_shared_encodings_clause = "ENCODINGS" "(" advanced_encoding { "," advanced_encoding } ")" ;
 advanced_layers_clause = "LAYERS" "(" advanced_layer { "," advanced_layer } ")" ;
 advanced_layer = identifier "=" advanced_mark_kind "(" { advanced_layer_option "," }
                  "ENCODINGS" "(" advanced_encoding { "," advanced_encoding } ")"
                  { "," advanced_layer_option } ")" ;
-advanced_mark_kind = "RECT" | "LINE" | "AREA" | "POINT" | "RULE" | "ARC" | "TEXT" ;
-advanced_layer_option = "Z_INDEX" "=" number
-                      | "BAND_SIZE" "=" number
+advanced_mark_kind = "RECT" | "LINE" | "AREA" | "POINT" | "RULE" | "ARC" | "TEXT" | "TICK" ;
+advanced_layer_option = "Z_INDEX" "=" advanced_signed_integer
+                      | ( "BAND_SIZE" | "THICKNESS" ) "=" advanced_signed_number
+                      | "INHERIT_ENCODINGS" "=" ( "ON" | "OFF" )
+                      | "POSITION" "=" advanced_position
+                      | "ORIENTATION" "=" ( "AUTO" | "HORIZONTAL" | "VERTICAL" )
                       | "NULL_HANDLING" "=" ( "GAP" | "ZERO" | "CONNECT" )
+                      | "AREA_BASELINE" "=" ( "ZERO" | advanced_signed_number )
+                      | "HOVER_FOCUS" "=" ( "NONE" | "SELF" | "SERIES" )
                       | "STYLE" "(" advanced_style_item { "," advanced_style_item } ")"
                       | "CONDITIONS" "(" advanced_condition { "," advanced_condition } ")" ;
+advanced_signed_number = [ "-" ] number_literal ;
+advanced_signed_integer = [ "-" ] number ;
+advanced_position = "IDENTITY"
+                   | "NUDGE" "(" [ advanced_nudge_option { "," advanced_nudge_option } ] ")"
+                   | "JITTER" "(" { advanced_jitter_option "," } "KEY" "=" identifier
+                     { "," advanced_jitter_option } ")" ;
+advanced_nudge_option = ( "X" | "Y" ) "=" advanced_signed_number
+                      | "UNIT" "=" ( "DATA" | "BAND" | "EM" ) ;
+advanced_jitter_option = ( "X" | "Y" ) "=" advanced_signed_number
+                       | "SEED" "=" advanced_signed_integer ;
 advanced_encoding = advanced_encoding_channel "=" advanced_encoding_field
                     "(" "TYPE" "=" advanced_encoding_type { "," advanced_encoding_option } ")" ;
-advanced_encoding_field = identifier | "VALUE" "(" ( string_literal | number ) ")" ;
+advanced_encoding_field = identifier | ( "DATUM" | "VALUE" ) "(" ( literal | advanced_signed_number | variable_name ) ")" ;
 advanced_encoding_type = "QUANTITATIVE" | "TEMPORAL" | "NOMINAL" | "ORDINAL" ;
-advanced_encoding_channel = "X" | "Y" | "Y2" | "COLOR" | "SIZE" | "SHAPE" | "THETA" | "RADIUS" | "TEXT" | "TOOLTIP" | "DETAIL"
-                          | "OPEN" | "CLOSE" | "LOW" | "HIGH"
+advanced_encoding_channel = "X" | "X2" | "X_OFFSET" | "Y" | "Y2" | "Y_OFFSET" | "COLOR" | "SIZE" | "SHAPE" | "THETA" | "RADIUS" | "TEXT" | "TOOLTIP" | "DETAIL"
+                          | "OPEN" | "CLOSE" | "LOW" | "Q1" | "MEDIAN" | "Q3" | "HIGH" | "MEAN"
                           | "ERROR_LOW" | "ERROR_HIGH"
                           | "CONFIDENCE_LOW" | "CONFIDENCE_HIGH"
                           | "REGION" | "LONGITUDE" | "LATITUDE" | "ROUTE"
@@ -713,11 +737,13 @@ advanced_encoding_option = "TYPE" "=" advanced_encoding_type
                          | "SCALE" "=" identifier
                          | "AXIS" "=" ( "NONE" | "PRIMARY" | "SECONDARY" )
                          | "SORT" "=" ( "SOURCE" | "ASCENDING" | "DESCENDING" )
+                         | "STACK" "=" ( "NONE" | "ZERO" | "NORMALIZE" )
                          | "FORMAT" "=" string_literal ;
 advanced_style_item = identifier "=" expression ;
 advanced_condition = advanced_condition_channel "WHEN" expression "THEN" expression [ "ELSE" expression ] ;
 advanced_condition_channel = "COLOR" | "OPACITY" | "SIZE" | "SHAPE" | "TEXT" ;
-advanced_facet_clause = "FACET" "(" ( "ROW" | "COLUMN" ) "=" identifier [ "," ( "ROW" | "COLUMN" ) "=" identifier ] ")" ;
+advanced_facet_clause = "FACET" "(" ( ( "ROW" | "COLUMN" ) "=" identifier [ "," ( "ROW" | "COLUMN" ) "=" identifier ]
+                      | "WRAP" "=" identifier [ "," "COLUMNS" "=" number ] ) ")" ;
 advanced_resolve_clause = "RESOLVE" "(" advanced_resolve_item { "," advanced_resolve_item } ")" ;
 advanced_resolve_item = ( "X" | "Y" | "COLOR" ) "=" ( "SHARED" | "INDEPENDENT" ) ;
 visual_clause = ( "TITLE" | "SUBTITLE" | "CONTENT" | "DEFAULT" | "VALUE" | "PLACEHOLDER" ) [ "=" ] expression

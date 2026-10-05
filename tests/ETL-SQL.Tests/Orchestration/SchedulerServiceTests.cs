@@ -41,7 +41,8 @@ namespace ETL_SQL.Tests.Orchestration
                 INodeCapacityMonitor? capacityMonitor = null,
                 Dictionary<string, string?>? config = null,
                 Mock<ISandboxScheduledJobExecutor>? sandboxExecutor = null,
-                Mock<ITenantMeteringLedger>? meteringLedger = null)
+                Mock<ITenantMeteringLedger>? meteringLedger = null,
+                Mock<ISessionStateManager>? sessionManager = null)
         {
             capacityMonitor ??= new FixedCapacityMonitor(isOverloaded: false);
             var mockStore = new Mock<IJobHistoryStore>();
@@ -66,7 +67,8 @@ namespace ETL_SQL.Tests.Orchestration
                         .ReturnsAsync(result);
 
             return (BuildService(mockStore, mockExecutor, capacityMonitor, config,
-                sandboxExecutor: sandboxExecutor, meteringLedger: meteringLedger), mockStore, mockExecutor);
+                sessionManager: sessionManager, sandboxExecutor: sandboxExecutor,
+                meteringLedger: meteringLedger), mockStore, mockExecutor);
         }
 
         private SchedulerService BuildService(
@@ -175,6 +177,77 @@ namespace ETL_SQL.Tests.Orchestration
 
         private static bool HasTag(Dictionary<string, object?> tags, string key, object value) =>
             tags.TryGetValue(key, out var actual) && Equals(actual, value);
+
+        [Theory]
+        [InlineData("scheduled")]
+        [InlineData("manual")]
+        [InlineData("resume")]
+        public async Task StopAsync_WaitsForJobWritesAfterExecution(string trigger)
+        {
+            var job = new JobDefinition("ShutdownJob", "SET PERSIST ON; resume_here: SELECT 1;",
+                1, "HOUR", null, null, null, Id: JobId.New());
+            var sessions = new Mock<ISessionStateManager>();
+            sessions.Setup(s => s.LoadSession("shutdown-session")).ReturnsAsync(new SessionState
+            {
+                SessionId = "shutdown-session",
+                GlobalVariables = new Dictionary<string, object?>
+                {
+                    ["@_LAST_CHECKPOINT_LABEL"] = "resume_here"
+                }
+            });
+            var (service, store, executor) = Build([job], new ScriptExecutionResult(true, 1),
+                sessionManager: sessions);
+            store.Setup(s => s.GetJobByIdAsync(job.Id)).ReturnsAsync(job);
+            store.Setup(s => s.GetHistoryEntryAsync(42)).ReturnsAsync(new JobHistoryEntry(
+                42, job.Name, DateTime.Now.AddMinutes(-1), DateTime.Now, "FAILURE", "boom",
+                SessionId: "shutdown-session", CheckpointLabel: "resume_here", JobId: job.Id));
+            executor.Setup(e => e.ResumeTextAsync(job.Script, "shutdown-session",
+                    It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>(), null))
+                .ReturnsAsync(new ScriptExecutionResult(true, 1));
+
+            var writeEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseWrite = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var finalRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            store.Setup(s => s.TryUpdateJobLastRunFencedAsync(job.Id,
+                    It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<long>()))
+                .Returns(async () =>
+                {
+                    writeEntered.TrySetResult();
+                    await releaseWrite.Task;
+                    return true;
+                });
+            store.Setup(s => s.GetHistoryAsync(job.Id, It.IsAny<int>())).Returns(() =>
+            {
+                finalRead.TrySetResult();
+                return Task.FromResult<IEnumerable<JobHistoryEntry>>(Array.Empty<JobHistoryEntry>());
+            });
+
+            try
+            {
+                if (trigger == "scheduled")
+                    service.Start();
+                else if (trigger == "manual")
+                    Assert.Equal(ManualTriggerResult.Accepted,
+                        await service.TriggerJobWithOverridesAsync(job.Id, null));
+                else
+                    Assert.Equal(ResumeTriggerStatus.Accepted, (await service.ResumeJobAsync(42)).Status);
+
+                await writeEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                var stopping = service.StopAsync();
+                Assert.False(stopping.IsCompleted);
+                Assert.False(finalRead.Task.IsCompleted);
+                releaseWrite.TrySetResult();
+                await stopping.WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.True(finalRead.Task.IsCompleted);
+                Assert.Equal(0, service.GetMetrics().ActiveJobs);
+            }
+            finally
+            {
+                releaseWrite.TrySetResult();
+                await finalRead.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                await service.StopAsync();
+            }
+        }
 
         [Fact]
         public void SchedulerObservability_EmitsScheduledJobSpanAndMetrics()

@@ -116,21 +116,23 @@ show_pre_release_plan() {
     print_plan_phase "$i" "Test structure audit" "./scripts/Get-TestLaneInventory.ps1 -FailOnIssues (via pwsh)" "Lane ownership and semantic test organization remain explicit."; i=$((i + 1))
     print_plan_phase "$i" "Format verify" "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)" "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run."; i=$((i + 1))
     if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
-        print_plan_phase "$i" "Scale certification smoke" "./scripts/test-scale-certification.sh --tier Smoke" "Small certification workload still meets baseline before the long test lanes heat the machine."; i=$((i + 1))
-        print_plan_phase "$i" "Cert baseline regression check (smoke)" "./scripts/Compare-CertBaseline.ps1 -MarkdownReport <run>/cert-baseline-smoke.md (via pwsh)" "Smoke certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
+        print_plan_phase "$i" "Scale certification smoke" "./scripts/test-scale-certification.sh --tier Smoke --out-dir <run>/scale-smoke" "Small certification workload still meets baseline before the long test lanes heat the machine."; i=$((i + 1))
+        print_plan_phase "$i" "Cert baseline regression check (smoke)" "./scripts/Compare-CertBaseline.ps1 -NewReport <run>/scale-smoke/cert-report.json -MarkdownReport <run>/cert-baseline-smoke.md (via pwsh)" "Smoke certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
     fi
     if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
-        print_plan_phase "$i" "Scale certification standard" "./scripts/test-scale-certification.sh --tier Standard" "Release-size certification workload still meets baseline before the long test lanes heat the machine."; i=$((i + 1))
-        print_plan_phase "$i" "Cert baseline regression check (standard)" "./scripts/Compare-CertBaseline.ps1 -MarkdownReport <run>/cert-baseline-standard.md (via pwsh)" "Standard certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
-        print_plan_phase "$i" "Spill allocation budget (10M)" "./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild (via pwsh)" "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget."; i=$((i + 1))
+        print_plan_phase "$i" "Scale certification standard" "./scripts/test-scale-certification.sh --tier Standard --out-dir <run>/scale-standard" "Release-size certification workload still meets baseline before the long test lanes heat the machine."; i=$((i + 1))
+        print_plan_phase "$i" "Cert baseline regression check (standard)" "./scripts/Compare-CertBaseline.ps1 -NewReport <run>/scale-standard/cert-report.json -MarkdownReport <run>/cert-baseline-standard.md (via pwsh)" "Standard certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
+        print_plan_phase "$i" "Spill allocation budget (10M)" "./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild -OutDir <run>/spill-allocation (via pwsh)" "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget."; i=$((i + 1))
     fi
     print_plan_phase "$i" "Smoke lane" "./scripts/test-lane.sh --lane smoke" "Critical startup, security, report, and portal checks."; i=$((i + 1))
     print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Bounded quick-feedback lane: smoke coverage plus language-server tests."; i=$((i + 1))
     print_plan_phase "$i" "EBNF conformance lane" "./scripts/test-lane.sh --lane ebnf" "Deterministic grammar generation strictly agrees with execution-parser acceptance and rejection."; i=$((i + 1))
     print_plan_phase "$i" "Engine lane and coverage gate" "./scripts/Test-CoverageGate.ps1 -RunEngineLane -MinimumLineCoverage 70 (via pwsh)" "Broad engine/parser/evaluator coverage is collected once and must meet the fail-closed 70% release threshold."; i=$((i + 1))
     print_plan_phase "$i" "Portal lane" "./scripts/test-lane.sh --lane portal" "Portal API and browser-side smoke coverage remain explicit without slowing the default fast lane."; i=$((i + 1))
+    print_plan_phase "$i" "Browser lane" "./scripts/test-lane.sh --lane browser" "Real browser journeys, accessibility, responsive checks, and UI-sandbox stories pass."; i=$((i + 1))
     print_plan_phase "$i" "N->N+1 upgrade-path drill" "dotnet test tests/ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" "In-place EF migration over a live release-N catalog keeps data intact (release gate)."; i=$((i + 1))
-    print_plan_phase "$i" "Sample scripts" "./scripts/test-all-samples.sh" "Published samples remain runnable."; i=$((i + 1))
+    print_plan_phase "$i" "Sample scripts (pass 1)" "./scripts/test-all-samples.sh 1 $CONFIGURATION" "Published samples remain runnable on a clean state."; i=$((i + 1))
+    print_plan_phase "$i" "Sample scripts (pass 2)" "./scripts/test-all-samples.sh 1 $CONFIGURATION" "Published samples remain runnable a second time without failing on pre-existing artifacts."; i=$((i + 1))
     print_plan_phase "$i" "HA soak contract gate" "./scripts/Test-HaSoakContracts.ps1 (via pwsh)" "PostgreSQL HA soak topology, workload, metrics, diagnostics, runbook, evidence validation, and fault/soak plan contracts stay usable before release."; i=$((i + 1))
 
     if [[ "$INCLUDE_SLT" == true ]]; then
@@ -353,13 +355,10 @@ nuget_dependency_audit_phase() {
 }
 
 cert_baseline_phase() {
-    local report_path="${1:-}"
+    local new_report="$1"
+    local report_path="$2"
     local pwsh; pwsh="$(resolve_pwsh)" || return 1
-    if [[ -n "$report_path" ]]; then
-        "$pwsh" -NoProfile -File ./scripts/Compare-CertBaseline.ps1 -MarkdownReport "$report_path"
-    else
-        "$pwsh" -NoProfile -File ./scripts/Compare-CertBaseline.ps1
-    fi
+    "$pwsh" -NoProfile -File ./scripts/Compare-CertBaseline.ps1 -NewReport "$new_report" -MarkdownReport "$report_path"
 }
 
 ha_soak_contract_phase() {
@@ -369,7 +368,7 @@ ha_soak_contract_phase() {
 
 spill_allocation_budget_phase() {
     local pwsh; pwsh="$(resolve_pwsh)" || return 1
-    "$pwsh" -NoProfile -File ./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild
+    "$pwsh" -NoProfile -File ./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild -OutDir "$RUN_DIR/spill-allocation"
 }
 
 # ---------------------------------------------------------------------------
@@ -676,25 +675,25 @@ run_phase "Format verify" \
 
 if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
     run_phase "Scale certification smoke" \
-        "./scripts/test-scale-certification.sh --tier Smoke" \
-        bash "./scripts/test-scale-certification.sh" "--tier" "Smoke"
+        "./scripts/test-scale-certification.sh --tier Smoke --out-dir $RUN_DIR/scale-smoke" \
+        bash "./scripts/test-scale-certification.sh" "--tier" "Smoke" "--out-dir" "$RUN_DIR/scale-smoke"
 
     run_phase "Cert baseline regression check (smoke)" \
-        "./scripts/Compare-CertBaseline.ps1 -MarkdownReport $RUN_DIR/cert-baseline-smoke.md (via pwsh)" \
-        cert_baseline_phase "$RUN_DIR/cert-baseline-smoke.md"
+        "./scripts/Compare-CertBaseline.ps1 -NewReport $RUN_DIR/scale-smoke/cert-report.json -MarkdownReport $RUN_DIR/cert-baseline-smoke.md (via pwsh)" \
+        cert_baseline_phase "$RUN_DIR/scale-smoke/cert-report.json" "$RUN_DIR/cert-baseline-smoke.md"
 fi
 
 if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
     run_phase "Scale certification standard" \
-        "./scripts/test-scale-certification.sh --tier Standard" \
-        bash "./scripts/test-scale-certification.sh" "--tier" "Standard"
+        "./scripts/test-scale-certification.sh --tier Standard --out-dir $RUN_DIR/scale-standard" \
+        bash "./scripts/test-scale-certification.sh" "--tier" "Standard" "--out-dir" "$RUN_DIR/scale-standard"
 
     run_phase "Cert baseline regression check (standard)" \
-        "./scripts/Compare-CertBaseline.ps1 -MarkdownReport $RUN_DIR/cert-baseline-standard.md (via pwsh)" \
-        cert_baseline_phase "$RUN_DIR/cert-baseline-standard.md"
+        "./scripts/Compare-CertBaseline.ps1 -NewReport $RUN_DIR/scale-standard/cert-report.json -MarkdownReport $RUN_DIR/cert-baseline-standard.md (via pwsh)" \
+        cert_baseline_phase "$RUN_DIR/scale-standard/cert-report.json" "$RUN_DIR/cert-baseline-standard.md"
 
     run_phase "Spill allocation budget (10M)" \
-        "./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild (via pwsh)" \
+        "./scripts/Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild -OutDir $RUN_DIR/spill-allocation (via pwsh)" \
         spill_allocation_budget_phase
 fi
 
@@ -718,15 +717,23 @@ run_phase "Portal lane" \
     "./scripts/test-lane.sh --lane portal --configuration $CONFIGURATION --no-restore --no-build" \
     bash "./scripts/test-lane.sh" "--lane" "portal" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
 
+run_phase "Browser lane" \
+    "./scripts/test-lane.sh --lane browser --configuration $CONFIGURATION --no-restore --no-build" \
+    bash "./scripts/test-lane.sh" "--lane" "browser" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
+
 # Explicit release gate: prove the in-place N->N+1 upgrade drill independently so this named phase
 # makes the upgrade gate visible and separately logged.
 run_phase "N->N+1 upgrade-path drill" \
     "dotnet test tests/ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" \
     dotnet test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "--filter" "FullyQualifiedName~UpgradePathDrillTests" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
 
-run_phase "Sample scripts" \
-    "./scripts/test-all-samples.sh" \
-    bash "./scripts/test-all-samples.sh"
+run_phase "Sample scripts (pass 1)" \
+    "./scripts/test-all-samples.sh 1 $CONFIGURATION" \
+    bash "./scripts/test-all-samples.sh" "1" "$CONFIGURATION"
+
+run_phase "Sample scripts (pass 2)" \
+    "./scripts/test-all-samples.sh 1 $CONFIGURATION" \
+    bash "./scripts/test-all-samples.sh" "1" "$CONFIGURATION"
 
 run_phase "HA soak contract gate" \
     "./scripts/Test-HaSoakContracts.ps1 (via pwsh)" \

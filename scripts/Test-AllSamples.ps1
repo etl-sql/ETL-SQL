@@ -16,6 +16,10 @@
     clean checkout and fail for anyone who runs it twice. Sample output is gitignored, so a single
     pass on a fresh CI checkout cannot see that class of defect.
 
+.PARAMETER Configuration
+    Build configuration containing the already-built CLI. Defaults to Debug for local development;
+    the pre-release gate supplies its selected configuration.
+
 .EXAMPLE
     .\Test-AllSamples.ps1
 
@@ -25,7 +29,9 @@
 
 param(
     [ValidateRange(1, 10)]
-    [int]$Passes = 1
+    [int]$Passes = 1,
+    [ValidateSet('Debug', 'Release')]
+    [string]$Configuration = 'Debug'
 )
 
 $ErrorActionPreference = "Stop"
@@ -45,6 +51,7 @@ New-Item -ItemType Directory -Path $validatorStateRoot -Force | Out-Null
 
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " ETL-SQL SAMPLE VALIDATOR STARTING..." -ForegroundColor Cyan
+Write-Host " Configuration: $Configuration" -ForegroundColor Cyan
 Write-Host " Found $($etlScripts.Count) scripts to validate in '$samplesDir'." -ForegroundColor Cyan
 if ($Passes -gt 1) {
     Write-Host " Running $Passes passes to prove the samples are re-runnable." -ForegroundColor Cyan
@@ -123,7 +130,10 @@ foreach ($script in $etlScripts) {
         $procInfo = New-Object System.Diagnostics.ProcessStartInfo
         $procInfo.FileName = "dotnet"
         $projectPath = Join-Path $solutionRoot "src/ETL-SQL.App"
-        $procInfo.Arguments = "run --no-build --project `"$projectPath`" -- run `"$($script.FullName)`" --silent"
+        foreach ($argument in @('run', '--no-build', '--configuration', $Configuration,
+            '--project', $projectPath, '--', 'run', $script.FullName, '--silent')) {
+            $procInfo.ArgumentList.Add($argument)
+        }
         $procInfo.WorkingDirectory = $solutionRoot
         $procInfo.RedirectStandardOutput = $true
         $procInfo.RedirectStandardError = $true

@@ -357,18 +357,20 @@ export function createStudioPipelineView(hostContext) {
             if (projected?.parsed === false || projected?.error) {
                 throw new Error(projected.error || 'The script could not be projected.');
             }
-            if (controller.signal.aborted || context.dagRevision !== revision || hostContext.getActiveDoc() !== doc || doc.content !== content)
-                return;
             // A host that does not serve the editing routes still gets the read-only map: the canvas
             // simply offers no editable tasks, rather than failing to draw.
             const tasks = taskResponse.ok ? ((await taskResponse.json())?.tasks ?? []) : [];
             const connections = parseResponse.ok ? ((await parseResponse.json())?.designState?.connections ?? []) : [];
+            // CodeMirror normalizes file line endings. Compare the buffer submitted above, after
+            // all asynchronous body reads, so CRLF files render and edits invalidate late replies.
+            if (controller.signal.aborted || context.dagRevision !== revision || hostContext.getActiveDoc() !== doc || hostContext.activeScriptText() !== content)
+                return;
             const graph = projected?.dag || projected || { nodes: [], edges: [] };
             context.lastValidDag = { script: content, graph, tasks, connections };
             paintPipelineDag(doc, graph, 'Engine projection', 'neutral', tasks, connections);
         }
         catch (error) {
-            if (controller.signal.aborted || context.dagRevision !== revision || hostContext.getActiveDoc() !== doc)
+            if (controller.signal.aborted || context.dagRevision !== revision || hostContext.getActiveDoc() !== doc || hostContext.activeScriptText() !== content)
                 return;
             const detail = errorMessage(error) || String(error);
             if (context.lastValidDag) {

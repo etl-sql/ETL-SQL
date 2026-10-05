@@ -36,6 +36,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly ILogger<NodeHeartbeatService> _logger;
         private readonly IReadOnlyList<INodeLeaseLossHandler> _leaseLossHandlers;
         private readonly INodeCapacityMonitor _capacityMonitor;
+        private readonly object _stopLock = new();
+        private Task? _stopTask;
 
         /// <summary>Stable, process-unique node id (machine:pid:guid), like the scheduler's lease owner id.</summary>
         public string NodeId { get; } =
@@ -210,12 +212,20 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
         }
 
-        public override async Task StopAsync(CancellationToken cancellationToken)
+        public override Task StopAsync(CancellationToken cancellationToken)
         {
-            await base.StopAsync(cancellationToken);
+            // RunAsync's shutdown waiter and an explicit host shutdown can stop the service
+            // concurrently. Both must await deregistration before disposing the host's store.
+            lock (_stopLock)
+                return _stopTask ??= StopCoreAsync(cancellationToken);
+        }
+
+        private async Task StopCoreAsync(CancellationToken cancellationToken)
+        {
+            await base.StopAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await _store.DeregisterNodeAsync(NodeId);
+                await _store.DeregisterNodeAsync(NodeId).ConfigureAwait(false);
                 _logger.LogInformation("Node heartbeat stopped and deregistered: {NodeId}.", NodeId);
             }
             catch (Exception ex)

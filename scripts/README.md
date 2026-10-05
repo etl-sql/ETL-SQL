@@ -266,12 +266,17 @@ Reports and logs are written to `release-validation/`. Use `-Resume` / `--resume
 
 `-Explain` / `--explain` prints the phase list without running it. `-Quick` / `--quick` skips Node, scale, Docker, and installer phases. `-IncludeSlt` / `--include-slt` adds the SQL Logic Test lane to the local release gate.
 
-> The PowerShell and Bash gates run the **same phases in the same order**. The Bash gate reuses the
+> The PowerShell and Bash gates cover the **same checks in the same order**. Bash combines engine
+> execution and coverage enforcement into one phase. The Bash gate reuses the
 > canonical PowerShell helpers for a few phases (dependency-audit self-test, NuGet dependency audit,
 > cert-baseline regression checks) via `pwsh`, so those phases require **PowerShell 7+ (`pwsh`)** on
 > `PATH` even on Linux/macOS. This keeps a single source of truth rather than a parallel Bash port.
 
-The full plan with `-IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` is: asset drift check; secret scan; restore; dependency-audit self-test; NuGet dependency audit; SBOM generation; third-party inventory drift; release build; format verify (auto-fixes drift); smoke lane; fast lane; engine lane; portal lane; N→N+1 upgrade-path drill; sample scripts; HA soak contract gate; SLT lane; VS Code npm ci/audit/compile/lint/build/VSIX-package/unit tests; smoke scale certification and baseline check; Docker integration lane; standard scale certification and baseline check; spill allocation budget; publish artifacts; Windows MSI.
+The full plan with `-IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` is: asset drift check; changelog compilation; secret scan; restore and local tool restore; phase-watchdog self-test; dependency-audit self-test; NuGet dependency audit; SBOM generation; third-party inventory drift; release build; test structure audit; format verify (auto-fixes drift); Smoke and Standard scale certification with baseline comparisons; 10M spill allocation budget; smoke lane; fast lane; EBNF conformance lane; engine lane with coverage; 70% coverage gate; Portal lane; browser lane; N→N+1 upgrade-path drill; sample scripts twice in the selected build configuration; HA soak contract gate; SLT lane; VS Code npm ci/audit/compile/lint/build/VSIX-package/unit tests; Docker connector and Portal integration; local/container smoke parity; publish artifacts; Windows MSI.
+
+Scale and spill reports are written under that validation run's directory. Each baseline comparison
+reads its corresponding run-owned report; the gate does not overwrite the tracked certification
+report. Use `-Explain` for the individual phases and their current commands.
 
 Windows MSI packaging requires WiX Toolset v3.x (`candle.exe` and `light.exe`). On a clean Windows CI runner, install it before `build-msi.ps1`:
 

@@ -24,13 +24,24 @@ namespace ETL_SQL.Tests.UI
             Assert.Null(ex);
         }
 
-        [Fact]
-        public void MarkdownToMarkup_AppliesStyles()
+        [Theory]
+        [InlineData(false, "────────")]
+        [InlineData(true, "--------")]
+        public void MarkdownToMarkup_AppliesStyles(bool ascii, string fence)
         {
-            Assert.Contains("[bold yellow]", EditorRenderer.MarkdownToMarkup("## Syntax"));
-            Assert.Contains("[bold]", EditorRenderer.MarkdownToMarkup("**bold**"));
-            Assert.Contains("[cyan]", EditorRenderer.MarkdownToMarkup("use `CODE` here"));
-            Assert.Equal("[grey]────────[/]", EditorRenderer.MarkdownToMarkup("```sql"));
+            var previous = TerminalCapabilities.Current;
+            TerminalCapabilities.Current = TerminalCapabilities.Detect(name => name == "ETLSQL_TUI_ASCII" && ascii ? "1" : null);
+            try
+            {
+                Assert.Contains("[bold yellow]", EditorRenderer.MarkdownToMarkup("## Syntax"));
+                Assert.Contains("[bold]", EditorRenderer.MarkdownToMarkup("**bold**"));
+                Assert.Contains("[cyan]", EditorRenderer.MarkdownToMarkup("use `CODE` here"));
+                Assert.Equal($"[grey]{fence}[/]", EditorRenderer.MarkdownToMarkup("```sql"));
+            }
+            finally
+            {
+                TerminalCapabilities.Current = previous;
+            }
         }
 
         [Fact]
