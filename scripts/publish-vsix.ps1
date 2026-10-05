@@ -21,8 +21,29 @@ if (-not $VsixTarget) {
     exit 1
 }
 
-$ExtensionDir = Join-Path $PSScriptRoot "..\src\etl-sql-vscode"
+$ExtensionDir = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\src\etl-sql-vscode"))
+if ((Get-Item -LiteralPath $ExtensionDir).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+    throw 'The extension packaging directory must not be a link.'
+}
 $BundledBinDir = Join-Path $ExtensionDir "bin"
+
+function Remove-VsixArtifact {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $resolvedPath = [IO.Path]::GetFullPath($Path)
+    $pathComparison = if ([OperatingSystem]::IsWindows()) { [StringComparison]::OrdinalIgnoreCase }
+                      else { [StringComparison]::Ordinal }
+    if (-not $resolvedPath.StartsWith($ExtensionDir + [IO.Path]::DirectorySeparatorChar,
+            $pathComparison)) {
+        throw 'VSIX cleanup must stay inside the workspace extension directory.'
+    }
+    if (Test-Path -LiteralPath $resolvedPath) {
+        if ((Get-Item -LiteralPath $resolvedPath).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw 'VSIX cleanup targets must not be links.'
+        }
+        Remove-Item -LiteralPath $resolvedPath -Recurse -Force
+    }
+}
 
 function Remove-VsixDevArtifacts {
     param([Parameter(Mandatory = $true)][string]$Root)
@@ -36,9 +57,7 @@ function Remove-VsixDevArtifacts {
 
     foreach ($relativePath in $relativePaths) {
         $path = Join-Path $Root $relativePath
-        if (Test-Path -LiteralPath $path) {
-            Remove-Item -LiteralPath $path -Recurse -Force
-        }
+        Remove-VsixArtifact -Path $path
     }
 }
 
@@ -65,14 +84,8 @@ function Assert-VsixPayload {
 
 Write-Host "Packaging VSIX for $VsixTarget..." -ForegroundColor Cyan
 
-# Stop running processes to avoid file locks
-Write-Host "  Stopping any running ETL-SQL processes..." -ForegroundColor Gray
-Stop-Process -Name "ETL-SQL" -ErrorAction SilentlyContinue
-Stop-Process -Name "ETL-SQL-LSP" -ErrorAction SilentlyContinue
-Stop-Process -Name "ETL-SQL-Report" -ErrorAction SilentlyContinue
-
 # 1. Prepare bin folder in extension
-if (Test-Path $BundledBinDir) { Remove-Item $BundledBinDir -Recurse -Force }
+Remove-VsixArtifact -Path $BundledBinDir
 New-Item -ItemType Directory -Path $BundledBinDir | Out-Null
 Remove-VsixDevArtifacts -Root $ExtensionDir
 
@@ -101,8 +114,8 @@ Push-Location $ExtensionDir
 try {
     # Ensure dependencies and compile extension
     Write-Host "  Compiling extension..." -ForegroundColor Gray
-    npm install --no-audit --no-fund --legacy-peer-deps | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "npm install failed with exit code $LASTEXITCODE" }
+    npm ci --no-audit --no-fund | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE" }
     npm run compile | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "npm run compile failed with exit code $LASTEXITCODE" }
     
@@ -122,6 +135,6 @@ try {
     }
 } finally {
     # Cleanup bundled binaries so they don't leak into dev environment
-    if (Test-Path $BundledBinDir) { Remove-Item $BundledBinDir -Recurse -Force }
+    Remove-VsixArtifact -Path $BundledBinDir
     Pop-Location
 }
