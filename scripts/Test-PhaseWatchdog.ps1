@@ -26,6 +26,7 @@ param()
 $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $WatchScript = Join-Path $ScriptRoot "lib/Watch-PhaseTimeout.ps1"
+. (Join-Path $ScriptRoot "lib/PhaseWatchdog.Helpers.ps1")
 
 if (-not (Test-Path -LiteralPath $WatchScript)) {
     Write-Error "Watchdog script not found at $WatchScript."
@@ -36,7 +37,8 @@ $pwshExe = (Get-Command pwsh -ErrorAction SilentlyContinue)?.Source
 if (-not $pwshExe) { $pwshExe = (Get-Command powershell -ErrorAction Stop).Source }
 
 $failures = New-Object System.Collections.Generic.List[string]
-$workRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("etlsql-watchdog-" + [guid]::NewGuid().ToString("N").Substring(0, 10))
+$tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar)
+$workRoot = Join-Path $tempRoot ("etlsql-watchdog " + [guid]::NewGuid().ToString("N").Substring(0, 10))
 New-Item -ItemType Directory -Force -Path $workRoot | Out-Null
 
 function Invoke-WatchedPhase {
@@ -54,7 +56,7 @@ function Invoke-WatchedPhase {
     $reasonPath = $base + ".timeout"
     (Get-Date).ToString("o") | Set-Content -LiteralPath $markerPath -Encoding UTF8
 
-    $watchdog = Start-Process -FilePath $pwshExe -PassThru -WindowStyle Hidden -ArgumentList @(
+    $watchdog = Start-PhaseWatchdogProcess -PowerShellPath $pwshExe -Arguments @(
         "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $WatchScript,
         "-OwnerPid", $PID,
         "-LogPath", $logPath,
@@ -90,7 +92,7 @@ function Invoke-WatchedPhase {
 # The child prints once and then goes quiet for far longer than the stall window. This is the case
 # that used to stop the gate indefinitely.
 Write-Host "1/3 A silent hang is killed and reported..." -ForegroundColor Cyan
-$hang = Invoke-WatchedPhase -Name "silent-hang" `
+$hang = Invoke-WatchedPhase -Name "silent hang" `
     -ChildCommand @("Write-Output 'begin'; Start-Sleep -Seconds 120; Write-Output 'end'") `
     -StallSeconds 8 -HardSeconds 300
 
@@ -111,7 +113,7 @@ else {
 # Runs well past the stall window while printing steadily. A watchdog that kills this would fail a
 # release for making progress, which is worse than the hang it is meant to catch.
 Write-Host "2/3 A phase that keeps printing is left alone..." -ForegroundColor Cyan
-$busy = Invoke-WatchedPhase -Name "steady-output" `
+$busy = Invoke-WatchedPhase -Name "steady output" `
     -ChildCommand @("1..12 | ForEach-Object { Write-Output ""tick `$_""; Start-Sleep -Seconds 1 }") `
     -StallSeconds 5 -HardSeconds 300
 
@@ -127,7 +129,7 @@ else {
 
 # ── 3. A normal phase leaves nothing behind ─────────────────────────────────
 Write-Host "3/3 A phase that completes leaves no verdict and no orphan..." -ForegroundColor Cyan
-$quick = Invoke-WatchedPhase -Name "fast-pass" `
+$quick = Invoke-WatchedPhase -Name "fast pass" `
     -ChildCommand @("Write-Output 'done'") `
     -StallSeconds 30 -HardSeconds 300
 
@@ -147,7 +149,12 @@ else {
     Write-Host "    watchdog stood down on marker removal" -ForegroundColor DarkGray
 }
 
-Remove-Item -Recurse -Force -LiteralPath $workRoot -ErrorAction SilentlyContinue
+$cleanupRoot = [IO.Path]::GetFullPath($workRoot)
+if (-not $cleanupRoot.StartsWith($tempRoot + [IO.Path]::DirectorySeparatorChar) -or
+    (Get-Item -LiteralPath $cleanupRoot).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+    throw 'Watchdog test cleanup target is outside the owned temporary directory or is linked.'
+}
+Remove-Item -Recurse -Force -LiteralPath $cleanupRoot -ErrorAction Stop
 
 Write-Host ""
 if ($failures.Count -gt 0) {

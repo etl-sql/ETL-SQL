@@ -292,6 +292,10 @@ and [the review record](docs/releases/v0.20.0-code-review.md) for validation sti
 
 ### Fixed
 
+- Failed out-of-process jobs retain sanitized stderr diagnostics when the CLI's final JSON packet
+  contains execution metrics but no error text.
+- Release watchdogs preserve spaces in phase names and paths; Docker integration image builds
+  stay inside the selected candidate worktree.
 - Studio opens CRLF pipeline files with their execution map and task palette. Replies for an
   edited buffer are discarded after all response bodies have been read.
 - VS Code test dependencies use patched Vitest releases and updated security overrides. A local

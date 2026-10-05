@@ -78,6 +78,7 @@ $RepoRoot = Resolve-Path (Join-Path $ScriptRoot "..")
 # Shared NuGet dependency-audit helpers (reliable deprecated/vulnerable audit under SDK 10.0.300 + CPM).
 . (Join-Path $ScriptRoot "lib/DependencyAudit.ps1")
 . (Join-Path $ScriptRoot "Release.Helpers.ps1")
+. (Join-Path $ScriptRoot "lib/PhaseWatchdog.Helpers.ps1")
 $ValidationRoot = Join-Path $RepoRoot $OutDir
 $LatestDir = Join-Path $ValidationRoot "latest"
 $StatePath = Join-Path $LatestDir "state.json"
@@ -516,7 +517,7 @@ function Start-PhaseWatchdog {
     (Get-Date).ToString("o") | Set-Content -LiteralPath $markerPath -Encoding UTF8
 
     try {
-        $process = Start-Process -FilePath $PowerShellExe -PassThru -WindowStyle Hidden -ArgumentList @(
+        $process = Start-PhaseWatchdogProcess -PowerShellPath $PowerShellExe -Arguments @(
             "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $watchScript,
             "-OwnerPid", $PID,
             "-LogPath", $LogPath,

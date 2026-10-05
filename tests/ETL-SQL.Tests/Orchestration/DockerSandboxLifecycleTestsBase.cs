@@ -33,6 +33,10 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
         DECLARE @Stage VARCHAR(50);
         SET @Stage = 'checkpointed-by-the-first-sandbox';
         Checkpoint1:
+        CREATE CONNECTION CheckpointSignal AS FLATFILE(PATH = '/workspace/output/checkpoint-ready.csv', DELIMITER = ',', HEADER = ON);
+        CREATE TABLE #CheckpointSignal (Signal VARCHAR(50));
+        INSERT INTO #CheckpointSignal VALUES ('sandbox-checkpoint-ready');
+        INSERT INTO CheckpointSignal SELECT * FROM #CheckpointSignal;
         WAITFOR DELAY '00:05:00';
         PRINT 'this script is not expected to finish';
         """;
@@ -271,7 +275,7 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
             default);
         var firstContainer = TrackContainer(firstWorkspace.AssignmentId);
         var firstRun = firstAttempt.RunAsync(default);
-        await WaitForCheckpointAsync(sessionId, firstRun);
+        await WaitForCheckpointAsync(sessionId, firstWorkspace.OutputPath, firstRun);
         Assert.Equal(0, (await _docker.RunAsync("docker", ["kill", firstContainer])).ExitCode);
         Assert.Equal(137, (await firstRun).ExitCode);
         await firstAttempt.DestroyAsync(default);
@@ -491,13 +495,14 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
     /// Waits for the checkpoint to be durable on the tenant's session root rather than for a log
     /// line, so the kill below cannot race the write it is supposed to happen after.
     /// </summary>
-    private async Task WaitForCheckpointAsync(string sessionId, Task<SandboxExecutionOutcome>? runTask = null)
+    private async Task WaitForCheckpointAsync(
+        string sessionId, string outputPath, Task<SandboxExecutionOutcome>? runTask = null)
     {
-        // The file appearing is not the checkpoint being finished: killing the sandbox between the
-        // store creating its database and finishing the write leaves state the next attempt cannot
-        // read, which looks exactly like resume being broken. Wait until the variables table
-        // is committed and queryable.
+        // The label handler awaits SaveSession before writing the signal file. Observe that
+        // completion without opening its live SQLite database from another OS.
+        // A Windows SQLite reader racing the Linux writer caused SQLITE_IOERR during initialization.
         var metadata = Path.Combine(SessionRoot, "tenant-a", sessionId, "metadata.db");
+        var signal = Path.Combine(outputPath, "checkpoint-ready.csv");
         // flaky-wait-budget-ok: checkpoint file settling deadline
         var deadline = DateTime.UtcNow.AddSeconds(120);
         while (DateTime.UtcNow < deadline)
@@ -508,24 +513,16 @@ public abstract class DockerSandboxLifecycleTestsBase : IAsyncLifetime
                 Assert.Fail($"The sandbox exited prematurely before checkpointing (exit code {earlyOutcome.ExitCode}): {earlyOutcome.SanitizedDiagnostic}\n{earlyOutcome.Result?.ErrorMessage}");
             }
 
-            if (File.Exists(metadata))
+            if (File.Exists(signal))
             {
-                try
+                await using var stream = new FileStream(signal, FileMode.Open, FileAccess.Read,
+                    FileShare.ReadWrite, 4096, FileOptions.Asynchronous);
+                using var reader = new StreamReader(stream);
+                var content = await reader.ReadToEndAsync();
+                if (content.Contains("sandbox-checkpoint-ready", StringComparison.Ordinal))
                 {
-                    await using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={metadata};Mode=ReadOnly");
-                    await conn.OpenAsync();
-                    await using var cmd = conn.CreateCommand();
-                    cmd.CommandText = "SELECT COUNT(*) FROM variables WHERE name LIKE '%Stage%';";
-                    var count = Convert.ToInt32(await cmd.ExecuteScalarAsync());
-                    if (count > 0)
-                    {
-                        Microsoft.Data.Sqlite.SqliteConnection.ClearPool(conn);
-                        return;
-                    }
-                }
-                catch
-                {
-                    // Database may be locked or initializing schema; retry next poll
+                    Assert.True(File.Exists(metadata), "The checkpoint completion signal has no persisted database.");
+                    return;
                 }
             }
 

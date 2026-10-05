@@ -366,7 +366,18 @@ namespace ETL_SQL.Orchestrator.Execution
                     if (root.TryGetProperty("cpuTimeSeconds", out var envelopeCpu) &&
                         envelopeCpu.ValueKind == JsonValueKind.Number)
                         cpuSeconds = Math.Max(cpuSeconds, envelopeCpu.GetDouble());
-                    string? error = root.TryGetProperty("error", out var e) ? e.GetString() : null;
+                    string? error = root.TryGetProperty("error", out var e)
+                        ? LogSanitizer.Clean(SecretRedactor.Redact(e.GetString()))
+                        : null;
+                    // The CLI writes its error to stderr and then emits a metrics-only done packet.
+                    // Reading that packet must not discard the reason the process failed.
+                    if (!success && string.IsNullOrWhiteSpace(error))
+                    {
+                        var diagnostic = LogSanitizer.Clean(SecretRedactor.Redact(stderr.Trim()));
+                        error = string.IsNullOrWhiteSpace(diagnostic)
+                            ? $"Process exited with code {exitCode}."
+                            : diagnostic;
+                    }
                     string? session = root.TryGetProperty("sessionId", out var sid) ? sid.GetString() : null;
 
                     // Data-quality outcomes (absent on older runners → defaults of 0/null).
@@ -396,8 +407,8 @@ namespace ETL_SQL.Orchestrator.Execution
             if (exitCode == 0)
                 return new ScriptExecutionResult(true, 0, null, peakMemory, cpuSeconds);
 
-            var stdoutText = LogSanitizer.Clean(stdout.Trim());
-            var stderrText = LogSanitizer.Clean(stderr.Trim());
+            var stdoutText = LogSanitizer.Clean(SecretRedactor.Redact(stdout.Trim()));
+            var stderrText = LogSanitizer.Clean(SecretRedactor.Redact(stderr.Trim()));
             var message = new StringBuilder($"Process exited with code {exitCode}.");
             if (!string.IsNullOrWhiteSpace(stdoutText))
                 message.Append(" Stdout: ").Append(stdoutText);

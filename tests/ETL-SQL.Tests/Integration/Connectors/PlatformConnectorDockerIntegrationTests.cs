@@ -294,12 +294,13 @@ namespace ETL_SQL.Tests.Integration.Connectors
 
     internal static class PlatformFixtureHelpers
     {
-        public static string FindRepoRoot()
+        public static string FindRepoRoot(string? startingDirectory = null)
         {
-            var dir = AppContext.BaseDirectory;
-            while (dir != null && !Directory.Exists(Path.Combine(dir, ".git")))
+            var dir = startingDirectory ?? AppContext.BaseDirectory;
+            while (dir != null && !Directory.Exists(Path.Combine(dir, ".git")) &&
+                !File.Exists(Path.Combine(dir, ".git")))
                 dir = Path.GetDirectoryName(dir);
-            return dir ?? throw new InvalidOperationException("Cannot find repo root (.git directory).");
+            return dir ?? throw new InvalidOperationException("Cannot find repo root (.git directory or worktree file).");
         }
 
         public static async Task BuildDockerImageAsync(string dockerfile, string imageName)
