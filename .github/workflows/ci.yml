@@ -372,7 +372,8 @@ jobs:
           $images = @(
             'mcr.microsoft.com/dotnet/sdk:10.0',
             'mcr.microsoft.com/dotnet/aspnet:10.0',
-            'mcr.microsoft.com/dotnet/runtime:10.0'
+            'mcr.microsoft.com/dotnet/runtime:10.0',
+            'cgr.dev/chainguard/minio:latest'
           )
           foreach ($img in $images) {
             $pulled = $false
