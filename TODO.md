@@ -39,16 +39,16 @@ document it guards, which is how a release could have been cut with none of this
 Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.md) and
 [`Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/enterprise-release-evidence-checklist.md).
 
-- [ ] Run the full local pre-release gate required by the release checklist, including the selected
+- [x] Run the full local pre-release gate required by the release checklist, including the selected
   SLT, Docker integration, scale, packaging, and platform lanes.
-- [ ] Pass the Enterprise Release Evidence Checklist, `test-lane.ps1`, `Test-PreRelease.ps1`,
+- [x] Pass the Enterprise Release Evidence Checklist, `test-lane.ps1`, `Test-PreRelease.ps1`,
   `Test-EnterpriseHardeningCertification.ps1`, `admin restore --validate`, `ha-soak validate`, and
   `SecurityBoundaryDocTests` as applicable to the shipped v0.20.0 claims.
-- [ ] Build the deployment-profile claim matrix from evidence and do not promote unfinished Shared
+- [x] Build the deployment-profile claim matrix from evidence and do not promote unfinished Shared
   SaaS or hosted-production outcomes into release claims.
-- [ ] Verify third-party notices/inventory, secret scanning, SBOM, checksums, installers, release
+- [x] Verify third-party notices/inventory, secret scanning, SBOM, checksums, installers, release
   notes, upgrade guidance, and changelog entries for the final shipped scope.
-- [ ] Reconcile `TODO.md` and `ROADMAP.md` immediately before release: remove verified completed
+- [x] Reconcile `TODO.md` and `ROADMAP.md` immediately before release: remove verified completed
   work, retain unfinished increments with accurate status, and ensure release notes describe only
   evidence-backed outcomes.
 

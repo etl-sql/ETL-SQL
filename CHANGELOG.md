@@ -12,11 +12,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.20.0] — Release candidate
+## [0.20.0] — 2026-10-06
 
-Candidate preparation is in progress. Certification and packaged assets remain pending; this is
-not a publication record. See [v0.20.0 release notes](docs/releases/v0.20.0.md) for upgrade actions
-and [the review record](docs/releases/v0.20.0-code-review.md) for validation still required.
+For complete release details, highlights, and migration notes, see [Release Notes v0.20.0](docs/releases/v0.20.0.md).
 
 ### Added
 
