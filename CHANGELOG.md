@@ -12,6 +12,10 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+### Documentation
+
+- Update migration guide baseline to reflect published v0.20.0 release.
+
 ## [0.20.0] — 2026-10-06
 
 For complete release details, highlights, and migration notes, see [Release Notes v0.20.0](docs/releases/v0.20.0.md).

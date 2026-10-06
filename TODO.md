@@ -10,45 +10,36 @@ Active sprint work and release gates are represented below. Deferred initiatives
 
 ---
 
-## v0.20.0 open work
+## v0.21.0 open work
 
-v0.20.0 is *Code Stability*: making the browser side of ETL-SQL something that can be changed safely
-rather than adding to it. The theme and its ordering are
-[Code Stability in `ROADMAP.md`](ROADMAP.md#code-stability--browser-sources-studio-and-the-test-lanes);
-this file decomposes it into executable work.
+v0.21.0 focuses on the next milestone increments from `ROADMAP.md` (remaining browser TypeScript
+migration, Studio Alpha journey completions, and scale baseline recalibration).
 
 | Remaining work | Where |
 | :--- | :--- |
 | Release engineering | [§6](#6-release-engineering-follow-ups) |
 
-Prioritize release-blocking defects, then release work. Section numbers remain
-stable for existing links. Browser changes use the established TypeScript compilation and asset-sync
-pipeline. Historical implementation evidence belongs in
-[the verification record](docs/releases/v0.20.0-browser-split-baseline.md), not this unfinished-work list.
-
 ---
 
-## v0.20.0 Release Evidence Gates
+## v0.21.0 Release Evidence Gates
 
-Target release: **v0.20.0**
+Target release: **v0.21.0**
 
-Reinstated after the v0.19.0 section was removed when this file opened for v0.20.0. The gates are
-not v0.19.0-specific and dropping them left `SecurityBoundaryDocTests` red against the very
-document it guards, which is how a release could have been cut with none of this evidence tracked.
+The gates track release proof continuously across all milestone cycles.
 
 Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.md) and
 [`Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/enterprise-release-evidence-checklist.md).
 
-- [x] Run the full local pre-release gate required by the release checklist, including the selected
+- [ ] Run the full local pre-release gate required by the release checklist, including the selected
   SLT, Docker integration, scale, packaging, and platform lanes.
-- [x] Pass the Enterprise Release Evidence Checklist, `test-lane.ps1`, `Test-PreRelease.ps1`,
+- [ ] Pass the Enterprise Release Evidence Checklist, `test-lane.ps1`, `Test-PreRelease.ps1`,
   `Test-EnterpriseHardeningCertification.ps1`, `admin restore --validate`, `ha-soak validate`, and
-  `SecurityBoundaryDocTests` as applicable to the shipped v0.20.0 claims.
-- [x] Build the deployment-profile claim matrix from evidence and do not promote unfinished Shared
+  `SecurityBoundaryDocTests` as applicable to the shipped v0.21.0 claims.
+- [ ] Build the deployment-profile claim matrix from evidence and do not promote unfinished Shared
   SaaS or hosted-production outcomes into release claims.
-- [x] Verify third-party notices/inventory, secret scanning, SBOM, checksums, installers, release
+- [ ] Verify third-party notices/inventory, secret scanning, SBOM, checksums, installers, release
   notes, upgrade guidance, and changelog entries for the final shipped scope.
-- [x] Reconcile `TODO.md` and `ROADMAP.md` immediately before release: remove verified completed
+- [ ] Reconcile `TODO.md` and `ROADMAP.md` immediately before release: remove verified completed
   work, retain unfinished increments with accurate status, and ensure release notes describe only
   evidence-backed outcomes.
 

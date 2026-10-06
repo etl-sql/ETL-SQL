@@ -87,13 +87,14 @@ that does not schedule their proposed implementation.
 
 ### Code Stability — Browser Sources, Studio, and the Test Lanes
 
-**Status:** Planned  
-**Horizon:** v0.20.0  
+**Status:** Incremental  
+**Horizon:** v0.21.0  
 **Authoritative design:** [ETL-SQL Studio](docs/architecture/decisions/etl-sql-studio.md) for the
 Studio scope; the browser plan and the evidence behind its ordering are the slices below.
 
-v0.20.0 is about making the browser side of ETL-SQL something that can be changed safely, rather
-than adding to it. Studio, the Portal's reporting and stewardship surfaces, and the multi-tenant
+v0.20.0 shipped browser linting, the designer/runtime module split, and test lane stability.
+v0.21.0 continues this trajectory with the remaining TypeScript source migrations and Studio
+Alpha backlog tasks. Studio, the Portal's reporting and stewardship surfaces, and the multi-tenant
 admin screens are carried by roughly 51,000 lines of JavaScript. The recurring defect is not a wrong
 algorithm; it is a binding, a route name, or a DTO field that does not exist, hidden by a `catch`
 and rendered as something quietly wrong.

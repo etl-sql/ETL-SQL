@@ -1,8 +1,7 @@
 # ETL-SQL Migration Guide (v0.20.0)
 
-ETL-SQL v0.20.0 is the candidate baseline covered by this guide. Release certification is pending;
-v0.19.0 remains the published release. Maintainers and early testers upgrading to the candidate
-should review the [v0.20.0 required actions](../../releases/v0.20.0.md#breaking-changes--required-actions)
+ETL-SQL v0.20.0 is the published baseline covered by this guide. Maintainers and users
+upgrading to v0.20.0 should review the [v0.20.0 required actions](../../releases/v0.20.0.md#breaking-changes--required-actions)
 and [BREAKING_CHANGES.md](../../../BREAKING_CHANGES.md) before validating their scripts and deployment.
 
 For current syntax, prefer [Getting Started](getting-started.md), the [Syntax Index](../../syntax-index.md), [Statement Reference](../../reference/statements/README.md), [Data Connectors](../../reference/connectors/README.md), and [Report SQL](../feature-guides/report-sql.md).

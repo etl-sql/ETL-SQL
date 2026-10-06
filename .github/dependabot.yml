@@ -1,24 +1,22 @@
 version: 2
-# Dependabot schedules paused during v0.20.0 release window
-updates: []
-# updates:
-#   - package-ecosystem: "github-actions"
-#     directory: "/"
-#     schedule:
-#       interval: "weekly"
-# 
-#   - package-ecosystem: "nuget"
-#     directory: "/"
-#     schedule:
-#       interval: "weekly"
-# 
-#   - package-ecosystem: "npm"
-#     directory: "/src/etl-sql-vscode"
-#     schedule:
-#       interval: "weekly"
-# 
-#   - package-ecosystem: "npm"
-#     directory: "/src/etl-sql-vscode/ui"
-#     schedule:
-#       interval: "weekly"
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/src/etl-sql-vscode"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/src/etl-sql-vscode/ui"
+    schedule:
+      interval: "weekly"
 
