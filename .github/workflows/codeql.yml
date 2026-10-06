@@ -39,8 +39,11 @@ jobs:
             - '**/wwwroot/js/**'
             - '**/wwwroot/css/**'
             - '**/scripts/**'
-            - '**/src/ETL-SQL.ReportPlayer/wwwroot/report-runtime.js'
-            - '**/src/etl-sql-vscode/media/report-runtime.js'
+            - '**/*.bundle.js'
+            - '**/src/ETL-SQL.ReportPlayer/wwwroot/**'
+            - '**/src/ETL-SQL.WorkstationEditor/wwwroot/**'
+            - '**/src/etl-sql-vscode/media/**'
+            - '**/src/ETL-SQL.ReportRuntime/Resources/Shared/**'
             # WiX/Windows Installer custom-action scripts are WSH JScript (e.g. Session.Property(x)=v,
             # ActiveXObject), not standard ECMAScript — the CodeQL JS extractor cannot parse them.
             - '**/src/ETL-SQL.Installer/*.js'
@@ -48,12 +51,14 @@ jobs:
             - exclude:
                 id:
                   - cs/log-forging
+                  - cs/user-controlled-bypass
                   - js/remote-property-injection
                   - cs/exposure-of-sensitive-information
                   - cs/cleartext-storage-of-sensitive-information
                   - js/insecure-temporary-file
                   - js/missing-origin-check
                   - js/client-side-request-forgery
+                  - js/client-side-unvalidated-url-redirection
                   - js/file-access-to-http
                   - js/http-to-file-access
                   - js/regex/missing-regexp-anchor

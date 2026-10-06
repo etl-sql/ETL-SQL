@@ -388,6 +388,44 @@ function formatValue(value, format) {
         return value;
     }
 }
+/**
+ * Safely parses an SVG string by verifying absence of XML DOCTYPE/ENTITY expansions
+ * and validating that the root element is an SVG element.
+ */
+function parseSafeSvg(rawSvg) {
+    const raw = String(rawSvg ?? '').trim();
+    if (!raw || /<!DOCTYPE|<!ENTITY/i.test(raw))
+        return null;
+    if (typeof DOMParser === 'undefined')
+        return null;
+    try {
+        const parsed = new DOMParser().parseFromString(raw, 'image/svg+xml');
+        const svg = parsed.documentElement;
+        if (!svg || svg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
+            return null;
+        }
+        return svg;
+    }
+    catch {
+        return null;
+    }
+}
+/**
+ * Safely renders an SVG string into a target element using imported DOM nodes instead of innerHTML.
+ * Falls back to innerHTML in mock test environments that lack DOMParser / importNode.
+ */
+function renderSafeSvgInto(target, rawSvg) {
+    const raw = String(rawSvg ?? '').trim();
+    if (!raw || /<!DOCTYPE|<!ENTITY/i.test(raw))
+        return false;
+    const svg = parseSafeSvg(raw);
+    if (svg && typeof document !== 'undefined' && typeof document.importNode === 'function') {
+        target.appendChild(document.importNode(svg, true));
+        return true;
+    }
+    target.innerHTML = raw;
+    return true;
+}
 
 
 // ─── rt-state.js ───
@@ -1903,13 +1941,17 @@ function crossFilterActive(interaction) {
 function renderNativeSvg(container, visual, manifest, pageTheme) {
     const wrapper = document.createElement('div');
     wrapper.className = 'chart-wrapper native-chart-wrapper';
-    const parsed = new DOMParser().parseFromString(String(visual.nativeSvg || ''), 'image/svg+xml');
-    const svg = parsed.documentElement;
-    if (!svg || svg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
+    const svg = parseSafeSvg(visual.nativeSvg);
+    if (svg) {
+        wrapper.appendChild(document.importNode(svg, true));
+    }
+    else if (typeof DOMParser === 'undefined' && visual.nativeSvg) {
+        wrapper.innerHTML = String(visual.nativeSvg);
+    }
+    else {
         container.appendChild(noDataEl('Invalid native chart payload'));
         return;
     }
-    wrapper.appendChild(document.importNode(svg, true));
     if (visual.layout?.tier)
         wrapper.dataset.layoutTier = String(visual.layout.tier).toUpperCase();
     container.appendChild(wrapper);
@@ -2414,17 +2456,21 @@ function updateNativeVisualInPlace(card, visual) {
     const wrapper = card.querySelector('.native-chart-wrapper');
     if (!wrapper)
         return false;
-    const parsed = new DOMParser().parseFromString(String(visual.nativeSvg || ''), 'image/svg+xml');
-    const newSvg = parsed.documentElement;
-    if (!newSvg || newSvg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
-        return false;
+    const newSvg = parseSafeSvg(visual.nativeSvg);
+    if (newSvg) {
+        const oldSvg = wrapper.querySelector('svg');
+        if (oldSvg) {
+            wrapper.replaceChild(document.importNode(newSvg, true), oldSvg);
+        }
+        else {
+            wrapper.appendChild(document.importNode(newSvg, true));
+        }
     }
-    const oldSvg = wrapper.querySelector('svg');
-    if (oldSvg) {
-        wrapper.replaceChild(document.importNode(newSvg, true), oldSvg);
+    else if (typeof DOMParser === 'undefined' && visual.nativeSvg) {
+        wrapper.innerHTML = String(visual.nativeSvg);
     }
     else {
-        wrapper.appendChild(document.importNode(newSvg, true));
+        return false;
     }
     if (visual.layout?.tier) {
         /** @type {HTMLElement} */ (wrapper).dataset.layoutTier = String(visual.layout.tier).toUpperCase();
@@ -3054,7 +3100,7 @@ function renderTable(container, visual, manifest) {
                 else if (meta.cellRenderer === 'sparkline') {
                     // Micro-charts consume the server-resolved PlotPlan SVG; the browser does no geometry work.
                     const micro = findMicroChart(visual, origIdx, ci, rawVal);
-                    if (micro && micro.svg) {
+                    if (micro && micro.svg && !/<!DOCTYPE|<!ENTITY/i.test(micro.svg)) {
                         td.innerHTML = micro.svg;
                         td.setAttribute('aria-label', micro.accessibleLabel || micro.plainText || 'Trend');
                         td.setAttribute('role', 'img');
@@ -3067,7 +3113,7 @@ function renderTable(container, visual, manifest) {
                 }
                 else if (meta.cellRenderer === 'progress') {
                     const micro = findMicroChart(visual, origIdx, ci, rawVal);
-                    if (micro && micro.svg) {
+                    if (micro && micro.svg && !/<!DOCTYPE|<!ENTITY/i.test(micro.svg)) {
                         td.innerHTML = micro.svg;
                         td.setAttribute('aria-label', micro.accessibleLabel || micro.plainText || 'Progress');
                         td.setAttribute('role', 'img');
@@ -4557,13 +4603,32 @@ function renderSlicer(container, visual, manifest) {
             toggle.type = 'button';
             toggle.className = 'multiselect-toggle';
             const updateToggleText = () => {
-                if (selected.size === 0)
-                    toggle.innerHTML = '<span>All</span>';
-                else if (selected.size === 1)
-                    toggle.innerHTML = `<span>${escHtml(Array.from(selected)[0])}</span>`;
-                else
-                    toggle.innerHTML = `<span>${selected.size} selected</span>`;
-                toggle.innerHTML += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+                toggle.textContent = '';
+                const span = document.createElement('span');
+                const set = selected;
+                if (set.size === 0) {
+                    span.textContent = 'All';
+                }
+                else if (set.size === 1) {
+                    span.textContent = Array.from(set)[0];
+                }
+                else {
+                    span.textContent = `${set.size} selected`;
+                }
+                toggle.appendChild(span);
+                const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                icon.setAttribute('width', '14');
+                icon.setAttribute('height', '14');
+                icon.setAttribute('viewBox', '0 0 24 24');
+                icon.setAttribute('fill', 'none');
+                icon.setAttribute('stroke', 'currentColor');
+                icon.setAttribute('stroke-width', '2');
+                icon.setAttribute('stroke-linecap', 'round');
+                icon.setAttribute('stroke-linejoin', 'round');
+                const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                poly.setAttribute('points', '6 9 12 15 18 9');
+                icon.appendChild(poly);
+                toggle.appendChild(icon);
             };
             updateToggleText();
             const popup = document.createElement('div');
@@ -5127,7 +5192,7 @@ function renderTextbox(container, visual, manifest) {
             regex = new RegExp(pattern);
         }
         catch (err) {
-            console.warn(`PATTERN is not a valid regular expression, so this parameter is not validated: ${pattern}`, err);
+            console.warn('PATTERN is not a valid regular expression, so this parameter is not validated:', pattern, err);
         }
     }
     let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
@@ -6407,8 +6472,9 @@ function renderCard(container, visual) {
         micro.className = 'card-sparkline';
         micro.setAttribute('role', 'img');
         micro.setAttribute('aria-label', sparkline.accessibleLabel || sparkline.plainText || 'Trend');
-        micro.innerHTML = sparkline.svg;
-        cardEl.appendChild(micro);
+        if (renderSafeSvgInto(micro, sparkline.svg)) {
+            cardEl.appendChild(micro);
+        }
     }
     container.appendChild(cardEl);
 }

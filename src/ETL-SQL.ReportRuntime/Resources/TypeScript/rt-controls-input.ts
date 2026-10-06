@@ -408,10 +408,31 @@ export function renderSlicer(container: HTMLElement, visual: ControlVisual & { n
             toggle.className = 'multiselect-toggle';
 
             const updateToggleText = () => {
-                if ((selected as Set<string>).size === 0) toggle.innerHTML = '<span>All</span>';
-                else if ((selected as Set<string>).size === 1) toggle.innerHTML = `<span>${escHtml(Array.from(selected as Set<string>)[0])}</span>`;
-                else toggle.innerHTML = `<span>${(selected as Set<string>).size} selected</span>`;
-                toggle.innerHTML += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+                toggle.textContent = '';
+                const span = document.createElement('span');
+                const set = selected as Set<string>;
+                if (set.size === 0) {
+                    span.textContent = 'All';
+                } else if (set.size === 1) {
+                    span.textContent = Array.from(set)[0];
+                } else {
+                    span.textContent = `${set.size} selected`;
+                }
+                toggle.appendChild(span);
+
+                const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                icon.setAttribute('width', '14');
+                icon.setAttribute('height', '14');
+                icon.setAttribute('viewBox', '0 0 24 24');
+                icon.setAttribute('fill', 'none');
+                icon.setAttribute('stroke', 'currentColor');
+                icon.setAttribute('stroke-width', '2');
+                icon.setAttribute('stroke-linecap', 'round');
+                icon.setAttribute('stroke-linejoin', 'round');
+                const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                poly.setAttribute('points', '6 9 12 15 18 9');
+                icon.appendChild(poly);
+                toggle.appendChild(icon);
             };
             updateToggleText();
 
@@ -994,7 +1015,7 @@ export function renderTextbox(container: HTMLElement, visual: ControlVisual, man
         try {
             regex = new RegExp(pattern);
         } catch (err) {
-            console.warn(`PATTERN is not a valid regular expression, so this parameter is not validated: ${pattern}`, err);
+            console.warn('PATTERN is not a valid regular expression, so this parameter is not validated:', pattern, err);
         }
     }
 

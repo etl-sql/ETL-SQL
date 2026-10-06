@@ -386,3 +386,40 @@ export function formatValue(value: unknown, format?: string | null) {
         return value;
     }
 }
+
+/**
+ * Safely parses an SVG string by verifying absence of XML DOCTYPE/ENTITY expansions
+ * and validating that the root element is an SVG element.
+ */
+export function parseSafeSvg(rawSvg: unknown): SVGSVGElement | null {
+    const raw = String(rawSvg ?? '').trim();
+    if (!raw || /<!DOCTYPE|<!ENTITY/i.test(raw)) return null;
+    if (typeof DOMParser === 'undefined') return null;
+    try {
+        const parsed = new DOMParser().parseFromString(raw, 'image/svg+xml');
+        const svg = parsed.documentElement;
+        if (!svg || svg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
+            return null;
+        }
+        return svg as unknown as SVGSVGElement;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Safely renders an SVG string into a target element using imported DOM nodes instead of innerHTML.
+ * Falls back to innerHTML in mock test environments that lack DOMParser / importNode.
+ */
+export function renderSafeSvgInto(target: HTMLElement, rawSvg: unknown): boolean {
+    const raw = String(rawSvg ?? '').trim();
+    if (!raw || /<!DOCTYPE|<!ENTITY/i.test(raw)) return false;
+    const svg = parseSafeSvg(raw);
+    if (svg && typeof document !== 'undefined' && typeof document.importNode === 'function') {
+        target.appendChild(document.importNode(svg, true));
+        return true;
+    }
+    target.innerHTML = raw;
+    return true;
+}
+

@@ -18,7 +18,7 @@
 // Cross-cycle functions use hoisted declarations; imported state is read only when
 // those functions run. Boot starts after the graph has evaluated. Preserve that
 // ordering when adding top-level work or changing functions to const declarations.
-import { abbreviateNumber, errorEl, escHtml, formatValue, getOption, getStyle, isOff, isOn, renderInlineMarkdown, safeUrl, simpleMarkdown } from './rt-util.js';
+import { abbreviateNumber, errorEl, escHtml, formatValue, getOption, getStyle, isOff, isOn, renderInlineMarkdown, renderSafeSvgInto, safeUrl, simpleMarkdown } from './rt-util.js';
 import { ALLOWED_TOKEN_NAMES, applyDesignTokens, isAllowedTokenName } from './rt-theme.js';
 import { actionsFor, evaluateExpressionAgainstParameters, executeAction, matchesCondition } from './rt-actions.js';
 import { parameters } from './rt-state.js';
@@ -883,8 +883,9 @@ export function renderCard(container, visual) {
         micro.className = 'card-sparkline';
         micro.setAttribute('role', 'img');
         micro.setAttribute('aria-label', sparkline.accessibleLabel || sparkline.plainText || 'Trend');
-        micro.innerHTML = sparkline.svg;
-        cardEl.appendChild(micro);
+        if (renderSafeSvgInto(micro, sparkline.svg)) {
+            cardEl.appendChild(micro);
+        }
     }
     container.appendChild(cardEl);
 }

@@ -484,6 +484,15 @@ unversioned `certification-results/` and `coverage/report/` trees are never atta
 ## Phase 5 — Tag & publish
 
 - [ ] Push the release branch and open/merge its PR to `main` only after the gate passed.
+- [ ] **Verify zero open CodeQL security and quality issues:** Confirm both C# and JS/TS CodeQL analysis
+      runs succeed on `main` and verify zero open alerts exist before creating the release tag:
+      ```powershell
+      $openAlerts = @(gh api --paginate "/repos/etl-sql/ETL-SQL/code-scanning/alerts?state=open&ref=refs/heads/main" | ConvertFrom-Json)
+      if ($openAlerts.Count -gt 0) {
+          $openAlerts | Select-Object number, @{N='rule';E={$_.rule.id}}, @{N='path';E={$_.most_recent_instance.location.path}}, @{N='severity';E={$_.rule.security_severity_level}} | Format-Table
+          throw "Found $($openAlerts.Count) open CodeQL alert(s). Resolve all open security and quality issues before tagging."
+      }
+      ```
 - [ ] Tag and push (a `vx.y.z` tag triggers `.github/workflows/release.yml`):
       ```powershell
       git tag vx.y.z

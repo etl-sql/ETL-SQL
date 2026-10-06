@@ -8,7 +8,7 @@
  *
  * Native SVG charts, toolbox, zoom, and responsive layout.
  */
-import { noDataEl } from './rt-util.js';
+import { noDataEl, parseSafeSvg } from './rt-util.js';
 import { actionsFor, applyPageCrossFilter, executeAction, showCtxMenu } from './rt-actions.js';
 import { appendDetailStaticNote, attachDetailSurface } from './rt-detail.js';
 import { apiBase, getLastManifest, isWebMode, vscode } from './rt-state.js';
@@ -83,13 +83,17 @@ export function crossFilterActive(interaction) {
 export function renderNativeSvg(container, visual, manifest, pageTheme) {
     const wrapper = document.createElement('div');
     wrapper.className = 'chart-wrapper native-chart-wrapper';
-    const parsed = new DOMParser().parseFromString(String(visual.nativeSvg || ''), 'image/svg+xml');
-    const svg = parsed.documentElement;
-    if (!svg || svg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
+    const svg = parseSafeSvg(visual.nativeSvg);
+    if (svg) {
+        wrapper.appendChild(document.importNode(svg, true));
+    }
+    else if (typeof DOMParser === 'undefined' && visual.nativeSvg) {
+        wrapper.innerHTML = String(visual.nativeSvg);
+    }
+    else {
         container.appendChild(noDataEl('Invalid native chart payload'));
         return;
     }
-    wrapper.appendChild(document.importNode(svg, true));
     if (visual.layout?.tier)
         wrapper.dataset.layoutTier = String(visual.layout.tier).toUpperCase();
     container.appendChild(wrapper);
@@ -594,17 +598,21 @@ function updateNativeVisualInPlace(card, visual) {
     const wrapper = card.querySelector('.native-chart-wrapper');
     if (!wrapper)
         return false;
-    const parsed = new DOMParser().parseFromString(String(visual.nativeSvg || ''), 'image/svg+xml');
-    const newSvg = parsed.documentElement;
-    if (!newSvg || newSvg.nodeName.toLowerCase() !== 'svg' || parsed.querySelector('parsererror')) {
-        return false;
+    const newSvg = parseSafeSvg(visual.nativeSvg);
+    if (newSvg) {
+        const oldSvg = wrapper.querySelector('svg');
+        if (oldSvg) {
+            wrapper.replaceChild(document.importNode(newSvg, true), oldSvg);
+        }
+        else {
+            wrapper.appendChild(document.importNode(newSvg, true));
+        }
     }
-    const oldSvg = wrapper.querySelector('svg');
-    if (oldSvg) {
-        wrapper.replaceChild(document.importNode(newSvg, true), oldSvg);
+    else if (typeof DOMParser === 'undefined' && visual.nativeSvg) {
+        wrapper.innerHTML = String(visual.nativeSvg);
     }
     else {
-        wrapper.appendChild(document.importNode(newSvg, true));
+        return false;
     }
     if (visual.layout?.tier) {
         /** @type {HTMLElement} */ (wrapper).dataset.layoutTier = String(visual.layout.tier).toUpperCase();

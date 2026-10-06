@@ -472,7 +472,7 @@ export function renderTable(container, visual, manifest) {
                 else if (meta.cellRenderer === 'sparkline') {
                     // Micro-charts consume the server-resolved PlotPlan SVG; the browser does no geometry work.
                     const micro = findMicroChart(visual, origIdx, ci, rawVal);
-                    if (micro && micro.svg) {
+                    if (micro && micro.svg && !/<!DOCTYPE|<!ENTITY/i.test(micro.svg)) {
                         td.innerHTML = micro.svg;
                         td.setAttribute('aria-label', micro.accessibleLabel || micro.plainText || 'Trend');
                         td.setAttribute('role', 'img');
@@ -485,7 +485,7 @@ export function renderTable(container, visual, manifest) {
                 }
                 else if (meta.cellRenderer === 'progress') {
                     const micro = findMicroChart(visual, origIdx, ci, rawVal);
-                    if (micro && micro.svg) {
+                    if (micro && micro.svg && !/<!DOCTYPE|<!ENTITY/i.test(micro.svg)) {
                         td.innerHTML = micro.svg;
                         td.setAttribute('aria-label', micro.accessibleLabel || micro.plainText || 'Progress');
                         td.setAttribute('role', 'img');
