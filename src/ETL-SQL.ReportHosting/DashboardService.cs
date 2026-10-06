@@ -28,7 +28,7 @@ namespace ETL_SQL.ReportHosting
     /// Parameter changes from slicer interactions re-evaluate affected visuals
     /// and fall back to <see cref="RebuildAsync"/> when selective refresh cannot apply.
     /// </summary>
-    public class DashboardService : IAsyncDisposable
+    public class DashboardService : IDisposable, IAsyncDisposable
     {
         private readonly string _scriptPath;
         private readonly IServiceScopeFactory _scopeFactory;
@@ -41,6 +41,9 @@ namespace ETL_SQL.ReportHosting
         private readonly SemaphoreSlim _lock = new(1, 1);
         private readonly NativeChartLayoutProfile _layoutProfile;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<NativeChartLayoutCacheKey, NativeChartLayoutCacheEntry> _layoutCache = new();
+
+        private bool _disposed;
+        private readonly object _disposalSync = new();
 
         private IServiceScope? _currentScope;
         private ReportManifest? _manifest;
@@ -70,38 +73,102 @@ namespace ETL_SQL.ReportHosting
 
         public async ValueTask DisposeAsync()
         {
-            if (_currentScope is IAsyncDisposable asyncScope)
-                await asyncScope.DisposeAsync();
-            else
-                _currentScope?.Dispose();
-
-            _currentScope = null;
-
-            if (_evaluator != null)
+            lock (_disposalSync)
             {
-                await _evaluator.DisposeAsync();
-                _evaluator = null;
+                if (_disposed) return;
             }
 
-            _lock.Dispose();
+            try
+            {
+                await _lock.WaitAsync();
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+
+            try
+            {
+                lock (_disposalSync)
+                {
+                    if (_disposed) return;
+                    _disposed = true;
+                }
+
+                if (_currentScope is IAsyncDisposable asyncScope)
+                    await asyncScope.DisposeAsync();
+                else
+                    _currentScope?.Dispose();
+
+                _currentScope = null;
+
+                if (_evaluator != null)
+                {
+                    await _evaluator.DisposeAsync();
+                    _evaluator = null;
+                }
+            }
+            finally
+            {
+                try { _lock.Release(); } catch (ObjectDisposedException) { }
+                _lock.Dispose();
+            }
+            GC.SuppressFinalize(this);
         }
 
         public void Dispose()
         {
-            // Fallback for sync disposal (though we prefer DisposeAsync)
-            _currentScope?.Dispose();
-            _lock.Dispose();
+            lock (_disposalSync)
+            {
+                if (_disposed) return;
+            }
+
+            try
+            {
+                _lock.Wait();
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
+
+            try
+            {
+                lock (_disposalSync)
+                {
+                    if (_disposed) return;
+                    _disposed = true;
+                }
+
+                _currentScope?.Dispose();
+                _currentScope = null;
+
+                if (_evaluator != null)
+                {
+                    _evaluator.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                    _evaluator = null;
+                }
+            }
+            finally
+            {
+                try { _lock.Release(); } catch (ObjectDisposedException) { }
+                _lock.Dispose();
+            }
+            GC.SuppressFinalize(this);
         }
 
         /// <summary>Returns the cached manifest, building it on first call.</summary>
-        public async Task<ReportManifest> GetManifestAsync()
+        public Task<ReportManifest> GetManifestAsync() => GetManifestAsync(CancellationToken.None);
+
+        /// <summary>Returns the cached manifest, building it on first call.</summary>
+        public async Task<ReportManifest> GetManifestAsync(CancellationToken ct)
         {
             if (_manifest != null)
             {
                 StampDefaultLayouts(_manifest);
                 return _manifest;
             }
-            return await RebuildAsync();
+            return await RebuildAsync(ct);
         }
 
         /// <summary>
@@ -174,12 +241,12 @@ namespace ETL_SQL.ReportHosting
         /// <summary>
         /// Updates multiple parameters atomically and re-evaluates only the affected visuals.
         /// </summary>
-        public async Task<ReportManifest> SetParametersAsync(IEnumerable<(string Name, string Value)> updates, bool isInteraction = false, string? pageName = null, string? sourceVisual = null)
+        public async Task<ReportManifest> SetParametersAsync(IEnumerable<(string Name, string Value)> updates, bool isInteraction = false, string? pageName = null, string? sourceVisual = null, CancellationToken ct = default)
         {
             var updateList = updates.ToList();
             // Warm the session on first access so interaction calls have a live evaluator to work with.
             if (_manifest == null || _evaluator == null)
-                await GetManifestAsync();
+                await GetManifestAsync(ct);
 
             // Only update global context if NOT an interaction
             if (!isInteraction)
@@ -188,18 +255,18 @@ namespace ETL_SQL.ReportHosting
                 {
                     foreach (var (name, value) in updateList) _parameters[name] = value;
                     _runPages.Add(pageName);
-                    return await RebuildAsync();
+                    return await RebuildAsync(ct);
                 }
 
                 if (string.IsNullOrWhiteSpace(pageName) && HasPaginatedPages())
                 {
                     foreach (var (name, value) in updateList) _parameters[name] = value;
                     MarkAllPaginatedPagesRun();
-                    return await RebuildAsync();
+                    return await RebuildAsync(ct);
                 }
             }
 
-            await _lock.WaitAsync();
+            await _lock.WaitAsync(ct);
             try
             {
                 // Checked under the lock: a rebuild in flight holds it with no evaluator, and a
@@ -269,7 +336,7 @@ namespace ETL_SQL.ReportHosting
             // takes effect, so it must carry it.
             if (!isInteraction)
                 foreach (var (name, value) in updateList) _parameters[name] = value;
-            var result = await RebuildAsync();
+            var result = await RebuildAsync(ct);
             result.IsInteraction = isInteraction;
             return result;
         }
@@ -277,8 +344,8 @@ namespace ETL_SQL.ReportHosting
         /// <summary>
         /// Updates one parameter and re-evaluates only the affected visuals.
         /// </summary>
-        public async Task<ReportManifest> SetParameterAsync(string name, string value, bool isInteraction = false, string? pageName = null)
-            => await SetParametersAsync(new[] { (name, value) }, isInteraction, pageName);
+        public async Task<ReportManifest> SetParameterAsync(string name, string value, bool isInteraction = false, string? pageName = null, CancellationToken ct = default)
+            => await SetParametersAsync(new[] { (name, value) }, isInteraction, pageName, ct: ct);
 
         /// <summary>
         /// Applies an author bookmark by name as one server-side transaction: resolve the envelope,
@@ -502,13 +569,17 @@ namespace ETL_SQL.ReportHosting
         }
 
         /// <summary>Full rebuild: re-evaluate the script and re-snapshot all visuals.</summary>
-        public async Task<ReportManifest> RebuildAsync()
+        public Task<ReportManifest> RebuildAsync() => RebuildAsync(CancellationToken.None);
+
+        /// <summary>Full rebuild: re-evaluate the script and re-snapshot all visuals.</summary>
+        public async Task<ReportManifest> RebuildAsync(CancellationToken ct)
         {
-            await _lock.WaitAsync();
+            await _lock.WaitAsync(ct);
             try
             {
+                ct.ThrowIfCancellationRequested();
                 _drillStates.Clear();
-                var source = await File.ReadAllTextAsync(_scriptPath);
+                var source = await File.ReadAllTextAsync(_scriptPath, ct);
 
                 var lexer = new Lexer(source);
                 var tokens = lexer.Tokenize();
@@ -533,6 +604,7 @@ namespace ETL_SQL.ReportHosting
 
                 _currentScope = _scopeFactory.CreateScope();
                 var evaluator = _currentScope.ServiceProvider.GetRequiredService<Evaluator>();
+                _evaluator = evaluator;
                 evaluator.ExecutionIdentity = _executionIdentity;
                 var portalConfig = _currentScope.ServiceProvider.GetService<ETL_SQL.Portal.PortalConfig>();
                 var persistedTenant = portalConfig?.SharedTenancy.Enabled == true
@@ -575,25 +647,29 @@ namespace ETL_SQL.ReportHosting
                     evaluator.ReportContext.BaselineParameters[varName] = value;
                 }
 
-                using var cts = new CancellationTokenSource(_executionTimeout);
+                using var timeoutCts = new CancellationTokenSource(_executionTimeout);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, ct);
 
                 try
                 {
-                    await evaluator.Evaluate(script, cts.Token);
+                    await evaluator.Evaluate(script, linkedCts.Token);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
                     // Build a "failure" manifest that still contains the logs and execution tree
                     var failBuilder = new ManifestBuilder(evaluator);
-                    _evaluator = evaluator;
                     _manifest = await failBuilder.BuildAsync(_scriptPath);
                     _manifest.Error = ex.Message;
                     StampDefaultLayouts(_manifest);
                     return _manifest;
                 }
 
+                ct.ThrowIfCancellationRequested();
                 var builder = new ManifestBuilder(evaluator);
-                _evaluator = evaluator;
                 _manifest = await builder.BuildAsync(_scriptPath, runPages: _runPages);
                 StampDefaultLayouts(_manifest);
 

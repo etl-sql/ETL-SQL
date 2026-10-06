@@ -1165,6 +1165,9 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
 
         // The Location header should point to the job
         Assert.Contains($"/api/jobs/{jobId}", res.Headers.Location?.ToString() ?? "");
+
+        var terminalJob = await WaitForJobAsync(token, jobId);
+        Assert.Equal("Completed", terminalJob["status"]!.GetValue<string>());
     }
 
     [Fact]
@@ -1448,5 +1451,21 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         req.Headers.Authorization = new("Bearer", token);
         await IfMatchVersioning.StampAsync(_client, req, await GetAdminTokenAsync());
         return await _client.SendAsync(req);
+    }
+
+    private async Task<JsonObject> WaitForJobAsync(string token, string jobId)
+    {
+        return await ETL_SQL.TestSupport.LoadAwareWait.UntilAsync(
+            $"Portal execution job '{jobId}' to become terminal",
+            async _ =>
+            {
+                var response = await AuthGet(token, $"/api/jobs/{jobId}");
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                return (await response.Content.ReadFromJsonAsync<JsonObject>(_json))!;
+            },
+            job => job["status"]!.GetValue<string>() is "Completed" or "Failed" or "Cancelled",
+            TimeSpan.FromSeconds(60),
+            TimeSpan.FromMilliseconds(200),
+            job => $"status={job["status"]?.GetValue<string>() ?? "<missing>"}");
     }
 }

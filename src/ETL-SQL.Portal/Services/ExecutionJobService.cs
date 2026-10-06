@@ -591,9 +591,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                     keyScope: job.KeyScope);
 
                 if (parameters is { Count: > 0 })
-                    await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));
+                    await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)), ct: cts.Token);
 
-                var manifest = await svc.RebuildAsync().WaitAsync(cts.Token);
+                var manifest = await svc.RebuildAsync(cts.Token);
                 process.Refresh();
                 job.RowsProcessed = manifest.Telemetry?.RowsProcessed ?? 0;
                 job.PeakMemoryBytes = process.PeakWorkingSet64;

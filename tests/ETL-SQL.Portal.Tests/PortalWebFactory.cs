@@ -218,12 +218,37 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
     protected virtual void ConfigureHostedServices(IServiceCollection services)
         => services.RemoveAll<IHostedService>();
 
+    private IHost? _host;
+
+    protected override IHost CreateHost(IHostBuilder builder)
+    {
+        var host = base.CreateHost(builder);
+        _host = host;
+        return host;
+    }
+
     /// <summary>
     /// Remove factory-owned files after the complete host shutdown. The base synchronous Dispose
     /// calls this virtual method too; its reentrant Dispose(bool) must not delete files early.
     /// </summary>
     public override async ValueTask DisposeAsync()
     {
+        if (_host is not null)
+        {
+            try
+            {
+                var jobService = _host.Services.GetService<ExecutionJobService>();
+                if (jobService is not null)
+                {
+                    await jobService.DisposeAsync();
+                }
+            }
+            catch
+            {
+                // Best effort before host teardown
+            }
+        }
+
         await base.DisposeAsync();
         DeleteTempDir();
     }
@@ -235,7 +260,17 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
         ClearFactoryPools();
 
         // A remaining handle is a fixture failure, not successful cleanup.
-        Directory.Delete(TempDir, recursive: true);
+        try
+        {
+            Directory.Delete(TempDir, recursive: true);
+        }
+        catch (IOException ex)
+        {
+            var remaining = Directory.Exists(TempDir)
+                ? string.Join(", ", Directory.EnumerateFileSystemEntries(TempDir, "*", SearchOption.AllDirectories))
+                : string.Empty;
+            throw new IOException($"Failed to clean up test directory '{TempDir}'. Remaining entries: [{remaining}].", ex);
+        }
     }
 
     protected virtual void ClearFactoryPools()

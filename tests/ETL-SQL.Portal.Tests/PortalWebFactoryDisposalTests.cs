@@ -71,4 +71,46 @@ public sealed class PortalWebFactoryDisposalTests
             Assert.False(Directory.Exists(tempDirectory), $"Disposal left factory files at {tempDirectory}.");
         }
     }
+
+    [Fact]
+    public async Task InFlightExecutionJob_CancelsAndCleansUpTempDirOnDisposal()
+    {
+        var factory = new PortalWebFactory();
+        var tempDirectory = factory.TempDir;
+        try
+        {
+            var scriptPath = Path.Combine(tempDirectory, "scripts", "long_running.rptsql");
+            Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
+            await File.WriteAllTextAsync(scriptPath, """
+                WAITFOR DELAY '00:00:10';
+                CREATE VISUAL V AS CARD (
+                    SOURCE = (SELECT 1 AS X),
+                    MAPPINGS (VALUE = X)
+                );
+                """);
+
+            var jobs = factory.Services.GetRequiredService<ETL_SQL.Portal.Services.ExecutionJobService>();
+            var jobId = await jobs.EnqueueExecutionAsync(
+                reportId: 1,
+                userId: 1,
+                scriptPath: scriptPath,
+                isAdministrator: true);
+
+            Assert.False(string.IsNullOrWhiteSpace(jobId));
+
+            // Wait until the job starts running before disposing the factory
+            await ETL_SQL.TestSupport.LoadAwareWait.UntilAsync(
+                $"Execution job '{jobId}' to start",
+                async _ => await jobs.GetAsync(jobId),
+                job => job?.Status == ETL_SQL.Portal.Services.JobStatus.Running,
+                TimeSpan.FromSeconds(5),
+                TimeSpan.FromMilliseconds(50));
+        }
+        finally
+        {
+            await factory.DisposeAsync();
+        }
+
+        Assert.False(Directory.Exists(tempDirectory), $"Disposal left factory files at {tempDirectory}.");
+    }
 }
