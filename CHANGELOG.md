@@ -14,7 +14,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Security & Quality
 
-- Update CodeQL security analysis workflow configuration to exclude generated runtime bundles and synced host asset directories from duplicate scans.
+- Update CodeQL security analysis workflow configuration to exclude generated runtime bundles, client-side ReportRuntime assets, and synced host asset directories from duplicate scans.
 - Add pre-tagging verification in release checklist asserting zero open CodeQL security and quality issues on main.
 - Sanitize SVG rendering against XML entity expansion (`js/xml-bomb`) and DOM injection across native charts, tables, and card sparklines.
 - Remove format string interpolation in parameter control validation warnings (`js/tainted-format-string`).
