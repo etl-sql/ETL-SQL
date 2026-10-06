@@ -112,6 +112,29 @@ foreach ($Bin in $BinaryList) {
 # 3. Build and Package
 Push-Location $ExtensionDir
 try {
+    # Ensure shared browser compiler toolchain
+    $typecheckDir = Join-Path $PSScriptRoot "typecheck"
+    if (-not (Test-Path (Join-Path $typecheckDir "node_modules/typescript"))) {
+        Write-Host "  Installing shared browser compiler..." -ForegroundColor Gray
+        npm ci --prefix $typecheckDir --no-audit --no-fund | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "npm ci for scripts/typecheck failed with exit code $LASTEXITCODE" }
+    }
+
+    # Ensure UI package is built
+    $uiDir = Join-Path $ExtensionDir "ui"
+    if ((Test-Path $uiDir) -and (-not (Test-Path (Join-Path $uiDir "dist")))) {
+        Write-Host "  Building extension UI..." -ForegroundColor Gray
+        Push-Location $uiDir
+        try {
+            npm ci --no-audit --no-fund | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "npm ci for extension UI failed with exit code $LASTEXITCODE" }
+            npm run build | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "npm run build for extension UI failed with exit code $LASTEXITCODE" }
+        } finally {
+            Pop-Location
+        }
+    }
+
     # Ensure dependencies and compile extension
     Write-Host "  Compiling extension..." -ForegroundColor Gray
     npm ci --no-audit --no-fund | Out-Null

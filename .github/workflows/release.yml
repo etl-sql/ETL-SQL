@@ -78,6 +78,15 @@ jobs:
       - name: Verify Node.js
         run: node --version
 
+      - name: Install shared browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Build extension UI
+        working-directory: src/etl-sql-vscode/ui
+        run: |
+          npm ci
+          npm run build
+
       - name: Build & Publish
         shell: pwsh
         run: |
@@ -119,6 +128,15 @@ jobs:
       - name: Verify Node.js
         run: node --version
 
+      - name: Install shared browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Build extension UI
+        working-directory: src/etl-sql-vscode/ui
+        run: |
+          npm ci
+          npm run build
+
       - name: Publish Binaries
         shell: pwsh
         run: |
@@ -149,6 +167,15 @@ jobs:
         run: dotnet --info
       - name: Verify Node.js
         run: node --version
+
+      - name: Install shared browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Build extension UI
+        working-directory: src/etl-sql-vscode/ui
+        run: |
+          npm ci
+          npm run build
 
       # Apple Silicon is the priority artifact (most current Macs). Publish and upload it
       # FIRST so an Intel/R2R failure below can never cost us the arm64 release. Each
