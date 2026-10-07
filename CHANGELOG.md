@@ -12,13 +12,17 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
-### Security & Quality
+## [0.20.1] — 2026-10-06
 
-- Update CodeQL security analysis workflow configuration to exclude generated runtime bundles, client-side ReportRuntime assets, and synced host asset directories from duplicate scans.
-- Add pre-tagging verification in release checklist asserting zero open CodeQL security and quality issues on main.
+For complete release details, highlights, and migration notes, see [Release Notes v0.20.1](docs/releases/v0.20.1.md).
+
+### Security
+
 - Sanitize SVG rendering against XML entity expansion (`js/xml-bomb`) and DOM injection across native charts, tables, and card sparklines.
 - Remove format string interpolation in parameter control validation warnings (`js/tainted-format-string`).
 - Replace innerHTML with textContent and DOM APIs in multiselect filter toggles.
+- Update CodeQL security analysis workflow configuration to exclude generated runtime bundles, client-side ReportRuntime assets, and synced host asset directories from duplicate scans.
+- Add pre-tagging verification in release checklist asserting zero open CodeQL security and quality issues on main.
 
 ### Documentation
 

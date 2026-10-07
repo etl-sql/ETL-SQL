@@ -1,4 +1,4 @@
-# ETL-SQL Migration Guide (v0.20.0)
+# ETL-SQL Migration Guide (v0.20.1)
 
 ETL-SQL v0.20.0 is the published baseline covered by this guide. Maintainers and users
 upgrading to v0.20.0 should review the [v0.20.0 required actions](../../releases/v0.20.0.md#breaking-changes--required-actions)
