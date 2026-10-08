@@ -31,6 +31,7 @@ and scale baseline recalibration).
 | Studio — Delivery budgets, catalog scale & large documents | [§9](#9-studio--delivery-budgets-catalog-scale-and-large-documents) |
 | Studio — Release-versioned guidance | [§10](#10-studio--release-versioned-guidance) |
 | Release engineering | [§11](#11-release-engineering-follow-ups) |
+| Database schema standardization — Table and column snake_case naming | [§12](#12-database-schema-standardization--table-and-column-snake_case-naming) |
 
 ---
 
@@ -98,7 +99,8 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
 - [x] Triage rendering and host interactions (`triage-ui.js`): retain running jobs on quiet boards,
   reject incomplete board/run evidence, preserve incident selection across reordered polls, and guard
   stale responses, disposal, and partial batch reruns.
-- [ ] Gateway administration (`gateways-admin.js`).
+- [x] Gateway administration (`gateways-admin.js`): validate fleet and mutation responses, count
+  clusters across enrollment history, clear one-time credentials, and guard stale/disposed work.
 - [ ] Policy authority administration (`policy-authority-admin.js`).
 - [ ] Connection administration (`connections-admin.js`).
 - [ ] Data-quality queue (`data-quality-queue.js`).
@@ -118,7 +120,7 @@ focused regression coverage. The 18 documentation sanity checks pass after fixin
 scanning to avoid traversing ignored VS Code runtime caches. These results do not replace the final
 runs against the complete change.
 
-Shared runtime/designer TypeScript is complete. Forty-five Portal modules now have strict TypeScript
+Shared runtime/designer TypeScript is complete. Forty-nine Portal modules now have strict TypeScript
 owners, including login, documentation, navigation, branding, operational charts, lineage rendering,
 Orchestrator activity loading/table/access rendering, secret administration/response validation, and UI helpers.
 Secret administration has three passing focused browser stories covering saved-value clearing,
@@ -161,7 +163,7 @@ tenant JWT accepted for tenant administration but rejected by the platform endpo
 sandbox/control-plane regression passed 91 checks without skips. All 85 consumer checks, 14
 server/contract regressions, and 18 documentation checks pass; strict type/lint gates report zero findings.
 The prepared ownership inventory for those checks contained 420 outputs. Final whole-change delivery checks remain open.
-Ten remaining authored JavaScript modules include administration/catalog controllers, lineage,
+Nine remaining authored JavaScript modules include administration/catalog controllers, lineage,
 governance/quality, and the admin/index/orchestrator page controllers.
 The separately generated API validator remains a tracked input pending its ownership audit.
 
@@ -178,6 +180,19 @@ checks. All 85 consumer checks, 22 server/contract checks, and 18 documentation 
 type/lint gates and the flaky-wait audit are clean. Before/after evidence screenshots were reviewed.
 The prepared inventory now contains 424 outputs. Evidence is under `artifacts/section1/triage/`.
 Final whole-change lanes and §1.1 delivery/index acceptance remain open.
+
+Gateway administration now has strict TypeScript controller, view, response-validation, and wizard
+adapter owners backed by C# enrollment, session, discovery, schema, and diagnostic declarations.
+Missing fleet data shows unavailable state; current enrollment selection prevents duplicate history
+rows from inflating cluster/node counts. Done, new enrollment, and disposal clear one-time tokens
+and setup commands. Expiration validation, literal PowerShell arguments, matching mutation receipts,
+duplicate-submit guards, explicit refresh recovery, and stale/disposal guards have focused coverage.
+Binding validates metadata before mounting the shared wizard; node dialogs preserve keyboard focus.
+Seven focused browser checks passed, including a real Portal enrollment/revocation journey. All 86
+consumer checks and 14 server/contract checks pass; strict type/lint gates and the flaky-wait audit
+are clean. The final sandbox/gateway regression passed 101 browser checks without skips, and all 18
+documentation checks pass. Failure and node-dialog screenshots were reviewed. Evidence is under
+`artifacts/section1/gateway/`; final whole-change lanes and §1.1 delivery/index acceptance remain open.
 
 Designer and Studio page controllers now have strict TypeScript owners, typed authoring-response
 validators, and catalog persistence callbacks. Designer retains the original script for generation
@@ -252,7 +267,7 @@ JavaScript, tooling, canonical vendor assets, and generator inputs under source 
 remains part of the published products. Remaining handwritten JavaScript migration is tracked in §1.
 
 **Readiness:** Preparation and preliminary source-only checks are implemented. The last prepared ownership
-inventory records 424 outputs from 88 shared and 45 Portal TypeScript modules, the offline bundle,
+inventory records 428 outputs from 88 shared and 49 Portal TypeScript modules, the offline bundle,
 and host copies. Refresh this inventory after further source edits. Git cleanup remains pending the
 complete delivery-path checks below. Refresh the earlier snapshot evidence against the final source
 state before untracking; migration of every remaining handwritten Portal module is not a prerequisite
@@ -606,3 +621,24 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
   comparisons under unchanged bands. Both released-control arms contribute to each replacement
   reference; the original files are preserved in the historical archive. Finish fresh comparisons
   of the final clean candidate in the full release gate before closing this item.
+
+---
+
+## 12. Database schema standardization — Table and column snake_case naming
+
+**Horizon:** v0.21.0  
+**Authoritative design:** [Connector Standards](docs/architecture/standards/connectors-standards.md), [Connectors](docs/architecture/connectors.md), and [Platform Administration](docs/administration/platform/README.md)
+
+Standardize all internal SQL tables and column names across ETL-SQL subsystem databases to `snake_case` naming conventions, matching the engine's virtual/catalog tables (`eng.*`) and session SQLite tables (`security_events`, `variables`). Portal and Orchestrator persistence layers are internal infrastructure and will be migrated to `snake_case`.
+
+- [ ] **Configure EF Core snake_case naming convention in Portal.**
+  - Configure `PortalDbContext` (in `src/ETL-SQL.Portal.Data/PortalDbContext.cs` or EF Core naming conventions) to map entity names and properties to `snake_case` table and column names (`studio_recovery_drafts`, `reports`, `report_id`, `created_at`, etc.).
+  - Update or generate database migrations (`src/ETL-SQL.Portal.Data/Migrations/` and `src/ETL-SQL.Portal.Migrations.Postgres/Migrations/`) to apply the renamed tables, columns, foreign keys, and indexes for SQLite and PostgreSQL providers.
+  - Verify that Portal API endpoints, repositories, and Studio recovery drafts continue to function across database providers.
+- [ ] **Standardize Orchestrator database storage schema to snake_case.**
+  - Migrate `RelationalJobHistoryStore.cs` / `SQLiteJobHistoryStore.cs` (and PostgreSQL store dialects under `src/ETL-SQL.Orchestrator/Storage/`) DDL schemas and raw SQL queries from `PascalCase` (`JobHistory`, `JobSchedules`, `JobId`, `StartTime`) to `snake_case` (`job_history`, `job_schedules`, `job_id`, `start_time`).
+  - Provide automated schema migration or bootstrap logic for SQLite/PostgreSQL Orchestrator databases so upgrade paths transition cleanly without manual intervention.
+  - Verify job scheduling, job execution history recording, metric queries, and Orchestrator API integration tests pass against the updated schema.
+- [ ] **Audit and align internal catalog & temporary table documentation.**
+  - Confirm all internal virtual tables (`eng.metrics`, `eng.security_events`, `eng.columns`, `eng.jobs`, etc.) adhere strictly to the `snake_case` table and column standard.
+  - Document the unified database schema naming standard in `docs/architecture/standards/`, ensuring clear distinction between engine/internal tables (`snake_case`) and external target tables (which respect user-specified names).
