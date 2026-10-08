@@ -1,4 +1,4 @@
-﻿# ETL-SQL Reporting Architecture & Engineering Reference
+# ETL-SQL Reporting Architecture & Engineering Reference
 
 This document describes the internal mechanics of the ETL-SQL reporting subsystem — the layer responsible for parsing `.rptsql` files, evaluating their data sources, building serializable manifests, and serving interactive dashboards. It is the primary reference for engineers working on `ETL-SQL.ReportBuilder`, `ETL-SQL-Report`, and the reporting runtime.
 
@@ -568,7 +568,7 @@ Produces a static, portable `.md` file:
 TypeScript configuration to its existing `Shared/rt-util.js` path. Other runtime modules remain
 JavaScript. Asset sync compiles before bundling and copying; check mode rejects stale output.
 The .NET build consumes checked-in outputs without Node. See the
-[asset ownership standard](standards/report-runtime-asset-standards.md#planned-typescript-compilation-and-ownership).
+[asset ownership standard](standards/report-runtime-asset-standards.md#runtime-module-and-offline-bundle-ownership).
 
 The entry `report-runtime.js` imports 16 sibling `rt-*.js` modules for state, theme, transport,
 data, detail surfaces, renderers, layouts, actions, saved views, and chrome. Online hosts load the
