@@ -44,6 +44,7 @@ let activeCategoryFilter = 'all';
 let collapsedCategories = new Set();
 let stageTheme = 'light'; // 'light' or 'dark'
 let isSidebarCollapsed = false;
+let reloading = false;
 
 // Parse URL Hash on initial load
 function parseUrlHash() {
@@ -326,10 +327,8 @@ function mount() {
 
 // Mount the current story into the stage
 async function mountNow() {
-  if (currentInstance) {
-    try { currentInstance.dispose?.(); } catch { /* ignore */ }
-    currentInstance = null;
-  }
+  if (reloading) return;
+  disposeCurrentStory();
 
   $stage.replaceChildren();
   $stat.textContent = 'Mounting component...';
@@ -340,11 +339,17 @@ async function mountNow() {
   };
 
   try {
-    currentInstance = await currentStory.mount($stage, fixtureVal, ctx);
+    const mounted = await currentStory.mount($stage, fixtureVal, ctx);
+    if (reloading) {
+      try { mounted?.dispose?.(); } catch { /* the document is already leaving */ }
+      return;
+    }
+    currentInstance = mounted;
     if (!$stat.textContent || $stat.textContent === 'Mounting component...') {
       $stat.textContent = `Mounted "${currentStory.title}" (${fixtureVal || 'default'})`;
     }
   } catch (err) {
+    if (reloading) return;
     const pre = document.createElement('pre');
     pre.className = 'sandbox-err';
     pre.textContent = `Mount failed for "${currentStory.title}" (${fixtureVal}):\n${err.stack || err.message}`;
@@ -354,6 +359,22 @@ async function mountNow() {
   }
 
   syncUrlHash();
+}
+
+function disposeCurrentStory() {
+  const previous = currentInstance;
+  currentInstance = null;
+  try { previous?.dispose?.(); } catch { /* disposal must not prevent leaving the story */ }
+}
+
+function reloadSandbox() {
+  if (reloading) return;
+  reloading = true;
+  syncUrlHash();
+  disposeCurrentStory();
+  // A fresh document clears the complete ES-module map, including static and dynamic imports.
+  // The dev server disables HTTP caching; the URL hash restores the sandbox controls.
+  window.location.reload();
 }
 
 function selectStory(autoExpand = true) {
@@ -532,7 +553,7 @@ $themeToggleBtn.addEventListener('click', () => {
 });
 
 $copyLinkBtn.addEventListener('click', copyDeepLink);
-$reloadBtn.addEventListener('click', mount);
+$reloadBtn.addEventListener('click', reloadSandbox);
 
 window.addEventListener('resize', () => currentInstance?.resize?.());
 

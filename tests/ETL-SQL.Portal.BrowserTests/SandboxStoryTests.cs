@@ -73,6 +73,133 @@ public sealed class SandboxStoryTests(SandboxStoryFixture fixture) : IAsyncLifet
     }
 
     [Fact]
+    public async Task SandboxReload_RecompiledDependencySurvivesCompilerFailureAndRecoversWithoutChangingTheEntry()
+    {
+        await using var session = await fixture.NewSessionAsync();
+        var page = session.Page;
+        var root = Path.Combine(RepoRoot(), "artifacts", "section1", "sandbox-reload", "typed-" + Guid.NewGuid().ToString("N"));
+        var sources = Path.Combine(root, "src", "ETL-SQL.Portal", "BrowserSources");
+        var delivery = Path.Combine(root, "src", "ETL-SQL.Portal", "wwwroot", "js");
+        Directory.CreateDirectory(sources);
+        await File.WriteAllTextAsync(Path.Combine(root, "tsconfig.browser-build.json"),
+            await File.ReadAllTextAsync(Path.Combine(RepoRoot(), "tsconfig.browser-build.json")));
+        var dependency = Path.Combine(sources, "dependency.ts");
+        await File.WriteAllTextAsync(dependency, "export const message: string = 'before';\n");
+        await File.WriteAllTextAsync(Path.Combine(sources, "entry.ts"), """
+            import { message } from './dependency.js';
+            export function mount(host: HTMLElement, fixture: string) {
+              const result = document.createElement('h1');
+              result.id = 'typed-result'; result.textContent = `${message}: ${fixture}`; host.append(result);
+              const button = document.createElement('button'); button.id = 'typed-action';
+              button.textContent = 'Exercise current listener'; host.append(button);
+              const action = () => { result.dataset.actions = String(Number(result.dataset.actions ?? '0') + 1); };
+              button.addEventListener('click', action);
+              return { dispose() {
+                button.removeEventListener('click', action);
+                sessionStorage.setItem('__typedDisposals', String(Number(sessionStorage.getItem('__typedDisposals') ?? '0') + 1));
+              } };
+            }
+            """);
+        var first = await CompileSandboxFixtureAsync(root);
+        Assert.Equal(0, first.ExitCode);
+        await File.WriteAllTextAsync(Path.Combine(root, "compile-before.log"), first.Output);
+        var entry = await File.ReadAllBytesAsync(Path.Combine(delivery, "entry.js"));
+        var compiledDependency = await File.ReadAllBytesAsync(Path.Combine(delivery, "dependency.js"));
+        var relative = "/" + Path.GetRelativePath(RepoRoot(), delivery).Replace('\\', '/');
+        var registry = await File.ReadAllTextAsync(Path.Combine(RepoRoot(), "tools", "ui-sandbox", "stories", "index.js"));
+        registry = "import { importFresh } from '../util.js';\n" + registry + $$"""
+            stories.push({ id: 'typed-reload-proof', title: 'TypeScript dependency reload', category: 'Other Surfaces',
+              fixtures: [{ id: 'one', label: 'One' }, { id: 'two', label: 'Two' }],
+              async mount(stage, fixture) { const mod = await importFresh('{{relative}}/entry.js'); return mod.mount(stage, fixture); }
+            });
+            """;
+        await page.RouteAsync("**/tools/ui-sandbox/stories/index.js", route => route.FulfillAsync(new()
+        {
+            Status = 200,
+            ContentType = "text/javascript",
+            Body = registry
+        }));
+        var requests = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        await page.RouteAsync("**" + relative + "/*.js*", async route =>
+        {
+            var name = Path.GetFileName(new Uri(route.Request.Url).LocalPath);
+            Assert.True(name is "entry.js" or "dependency.js");
+            requests.Enqueue(name);
+            await route.FulfillAsync(new()
+            {
+                Status = 200,
+                ContentType = "text/javascript",
+                Headers = new Dictionary<string, string> { ["Cache-Control"] = "no-store" },
+                Body = await File.ReadAllTextAsync(Path.Combine(delivery, name))
+            });
+        });
+        await page.GotoAsync($"{baseUrl}/tools/ui-sandbox/index.html#story=typed-reload-proof&fixture=two&theme=dark&sidebar=collapsed");
+        await Assertions.Expect(page.Locator("#typed-result")).ToHaveTextAsync("before: two");
+        await page.ScreenshotAsync(new() { Path = Path.Combine(root, "before.png"), Animations = ScreenshotAnimations.Disabled });
+
+        await File.WriteAllTextAsync(dependency, "export const message: string = 123;\n");
+        var failed = await CompileSandboxFixtureAsync(root);
+        Assert.NotEqual(0, failed.ExitCode);
+        Assert.Contains("not assignable", failed.Output);
+        await File.WriteAllTextAsync(Path.Combine(root, "compile-failed.log"), failed.Output);
+        Assert.Equal(entry, await File.ReadAllBytesAsync(Path.Combine(delivery, "entry.js")));
+        Assert.Equal(compiledDependency, await File.ReadAllBytesAsync(Path.Combine(delivery, "dependency.js")));
+        await page.Locator("#reloadBtn").ClickAsync();
+        await Assertions.Expect(page.Locator("#typed-result")).ToHaveTextAsync("before: two");
+        Assert.Equal("1", await page.EvaluateAsync<string>("() => sessionStorage.getItem('__typedDisposals')"));
+
+        foreach (var value in new[] { "after", "latest" })
+        {
+            await File.WriteAllTextAsync(dependency, $"export const message: string = '{value}';\n");
+            var recovered = await CompileSandboxFixtureAsync(root);
+            Assert.Equal(0, recovered.ExitCode);
+            await File.WriteAllTextAsync(Path.Combine(root, "compile-" + value + ".log"), recovered.Output);
+            Assert.Equal(entry, await File.ReadAllBytesAsync(Path.Combine(delivery, "entry.js")));
+            await page.Locator("#reloadBtn").ClickAsync();
+            await Assertions.Expect(page.Locator("#typed-result")).ToHaveTextAsync(value + ": two");
+            await page.Locator("#typed-action").ClickAsync();
+            await Assertions.Expect(page.Locator("#typed-result")).ToHaveAttributeAsync("data-actions", "1");
+        }
+        await page.ScreenshotAsync(new() { Path = Path.Combine(root, "after.png"), Animations = ScreenshotAnimations.Disabled });
+        Assert.Equal("3", await page.EvaluateAsync<string>("() => sessionStorage.getItem('__typedDisposals')"));
+        Assert.Equal(4, requests.Count(name => name == "dependency.js"));
+        Assert.Equal(4, requests.Count(name => name == "entry.js"));
+        await Assertions.Expect(page.Locator("#fixtureSel")).ToHaveValueAsync("two");
+        await Assertions.Expect(page.Locator("body")).ToHaveClassAsync(new System.Text.RegularExpressions.Regex("stage-theme-dark.*sidebar-collapsed"));
+        Assert.Empty(session.PageErrors);
+    }
+
+    private static async Task<(int ExitCode, string Output)> CompileSandboxFixtureAsync(string root)
+    {
+        var compiler = new Uri(Path.Combine(RepoRoot(), "scripts", "compile-browser.mjs")).AbsoluteUri;
+        var script = $"import {{ compileBrowser }} from {JsonSerializer.Serialize(compiler)}; "
+            + $"try {{ console.log(process.version); compileBrowser({{ root: {JsonSerializer.Serialize(root)}, toolchain: {JsonSerializer.Serialize(RepoRoot())} }}); }} "
+            + "catch (error) { console.error(error.message); process.exitCode = 1; }";
+        var start = new System.Diagnostics.ProcessStartInfo(Environment.GetEnvironmentVariable("ETLSQL_BROWSER_BUILD_NODE") ?? "node")
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WorkingDirectory = RepoRoot()
+        };
+        start.ArgumentList.Add("--input-type=module"); start.ArgumentList.Add("--eval"); start.ArgumentList.Add(script);
+        using var process = System.Diagnostics.Process.Start(start) ?? throw new InvalidOperationException("Browser compiler could not start.");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        var errors = process.StandardError.ReadToEndAsync(timeout.Token);
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+            return (process.ExitCode, await output + await errors);
+        }
+        finally
+        {
+            if (!process.HasExited) { process.Kill(entireProcessTree: true); await process.WaitForExitAsync(); }
+        }
+    }
+
+    [Fact]
     public async Task EveryStoryAndFixture_MountsWithoutThrowing()
     {
         await using var session = await fixture.NewSessionAsync();

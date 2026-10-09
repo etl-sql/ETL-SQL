@@ -7,6 +7,12 @@ For migrated TypeScript such as `rt-util.ts`, startup compiles once. Install the
 editing TypeScript and hit **↻ Reload** after successful compilation. Authored JS/CSS still reloads
 directly. Run `node scripts/sync-assets.js` before committing to update the offline bundle and hosts.
 
+**↻ Reload** disposes the current story and reloads the sandbox document. This clears the browser's
+complete module cache, including imported helpers and styles. The URL hash preserves the selected
+story, fixture, theme, sidebar, search, and category filter. The loopback server sends `no-store` headers.
+A failed TypeScript compilation keeps the last successful delivery files; fix the error, wait for
+successful preparation, then reload again.
+
 Storybook-style: a categorized, searchable sidebar lists **stories** (components) and a fixture picker
 drives each with sample data.
 

@@ -1,11 +1,11 @@
 // Shared helpers for the UI sandbox stories.
 
-// Canonical designer component module (the file you edit). Imported fresh on every
-// mount so editing it + hitting ↻ Reload shows changes with no sync / portal build.
+// Canonical designer delivery modules. The sandbox Reload button opens a fresh document
+// so transitive imports are refreshed too. TypeScript owners need successful compilation first.
 export const DESIGNER_JS = '/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js';
 export const STUDIO_JS = '/src/ETL-SQL.ReportRuntime/Resources/Shared/designer/studio.js';
 
-// Dynamic import with a cache-bust query so the browser re-fetches the latest source.
+// Re-fetch the entry when mounting a fixture. Reload clears its dependencies' module cache.
 export function importFresh(path) {
   return import(`${path}?t=${Date.now()}`);
 }

@@ -767,12 +767,15 @@ does not close build, package, runtime, or Git-index acceptance.
   command only watches extension TypeScript. Establish an asset watcher or documented companion process
   that prepares shared and Portal dependencies before the webview reloads. Verify a dependency-only
   edit, a newly added module, and compiler failure/recovery through the actual development webview.
-- [ ] **Verify sandbox reload refreshes imported dependencies.** `tools/ui-sandbox/util.js` currently
-  adds a cache-busting query to the entry module; its static imports can remain cached. Make the
-  supported reload workflow load changed rendering, validation, and controller dependencies after
-  successful preparation. Exercise a dependency-only TypeScript edit without changing its entry
-  module, verify the new behavior in the mounted story, and cover compilation failure followed by
-  recovery. An entry-module request with a new query string alone does not satisfy this task.
+- [x] **Verify sandbox reload refreshes imported dependencies.** Reload disposes the mounted story and
+  opens a fresh document, clearing the full module cache and restoring the story, fixture, theme,
+  sidebar, search, and category from the URL. A production Portal-view reproduction proved the old
+  reload kept a cached dependency. An isolated strict TypeScript fixture changes only its dependency,
+  verifies failed compilation preserves both delivery files, and loads two successive successful edits
+  while the entry stays byte-identical. Repeated reloads dispose each old instance once and retain one
+  action listener. All five focused/reload/story-inventory checks pass without skips. Before/after
+  screenshots and compile logs are under `artifacts/section1/sandbox-reload/`; browser results are in
+  `sandbox-reload-*.log` and matching TRX files under `artifacts/section1/admin/`.
 - [ ] **Verify recovery after cleaning generated files.** In an isolated checkout, exercise `dotnet clean`
   and removal of inventoried outputs or preparation manifests, then restore dependencies and prepare again
   through the documented workflow. Confirm missing files cannot be masked by cached build output and
