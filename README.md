@@ -51,7 +51,7 @@ ELT is attractive because it centralizes execution in a warehouse, but it often 
 | :--- | :--- |
 | Cross-source staging | Join, cleanse, validate, and enrich data from 25+ unrelated systems in engine-managed `#temp` tables. |
 | Transform-centered ETL | Stage data before load so validation, masking, enrichment, dedupe, lineage tagging, and quality gates happen before downstream systems are mutated. |
-| Native data quality & routing | Declare column rules (`EXPECT … ON FAILURE …`) directly in `SELECT` queries with automated `ON FAILURE QUARANTINE / WARN / ABORT` routing. |
+| Native data quality & routing | Declare column rules (`EXPECT … ON FAILURE …`) directly in `SELECT` queries and route failures with `QUARANTINE`, `WARN`, or `THROW`. Gate the whole run with `ASSERT JOB` (row counts, quarantine rate, null rate, freshness, historical drift) and reprocess fixed rows with `REPLAY QUARANTINE`. |
 | Stateful incremental watermarks | Persist atomic high-water mark cursors across scheduled job runs using `GET_JOB_STATE` and `SET_JOB_STATE`. |
 | Source-control native pipelines | Plain-text `.etlsql` and `.rptsql` files are diffable, reviewable, testable, and runnable unchanged in CLI, VS Code, notebooks, Orchestrator, and CI/CD. |
 | Built-in lineage and tags | Attach metadata where transformations happen, then query, diagram, or export lineage instead of reconstructing it after the fact. |
@@ -94,14 +94,19 @@ ELT is attractive because it centralizes execution in a warehouse, but it often 
 ### Prerequisites
 
 - [.NET 10.0 SDK](https://dotnet.microsoft.com/download)
+- [Node.js 22](https://nodejs.org/) — compiles and syncs the browser assets the .NET build verifies
 
 ### Build From Source
 
 ```bash
 git clone https://github.com/etl-sql/ETL-SQL.git
 cd ETL-SQL
-dotnet build
+npm ci --prefix scripts/typecheck
+node scripts/sync-assets.js
+dotnet build ETL-SQL.slnx
 ```
+
+Re-run `node scripts/sync-assets.js` after pulling changes to browser sources. The build fails with the preparation command if assets are missing or stale.
 
 ### Run a Script
 
@@ -132,49 +137,123 @@ etl-sql-report build my_report.rptsql --format md
 
 ## ETL Example
 
-This script extracts from SQL Server, stages rows inside the ETL-SQL engine, writes a CSV archive, and sends a completion email.
+A vendor drops a customer CSV every night. This script tags the columns as it reads them, validates every row, quarantines the bad ones, gates the run on quality metrics, loads SQL Server, exports lineage, and emails a summary.
 
 ```sql
-CREATE CONNECTION prod_db AS MSSQL(
-    SERVER = 'prod',
+CREATE CONNECTION vendor_feed AS FLATFILE(
+    PATH = 'C:\Feeds\customers.csv',
+    HEADER = ON,
+    NULL_AS = 'EMPTY'
+);
+
+-- Durable home for rejected rows, kept for steward review
+CREATE CONNECTION customer_quarantine AS FLATFILE(
+    PATH = 'C:\Feeds\quarantine\customers_rejected.csv',
+    HEADER = ON
+);
+
+CREATE CONNECTION dw AS MSSQL(
+    SERVER = 'dw.internal',
     DATABASE = 'Sales',
     TRUSTED_CONNECTION = TRUE
 );
 
-CREATE CONNECTION archive AS FLATFILE(
-    PATH = 'C:\Exports\sales_2026.csv',
-    FORMAT = 'DELIMITED',
-    DELIMITER = ',',
-    HEADER = ON
-);
-
-CREATE CONNECTION my_smtp AS SMTP(
+CREATE CONNECTION mailer AS SMTP(
     HOST = 'smtp.company.com',
     PORT = 587,
     USERNAME = 'etl-service',
-    PASSWORD = 'ENC:replace-with-encrypted-value',
+    PASSWORD = 'SECRET:smtp_password',
     USE_SSL = TRUE
 );
 
-BEGIN TRY
-    SELECT OrderId, Customer, Amount
-    INTO #latest
-    FROM prod_db.dbo.Orders
-    WHERE OrderDate >= '2026-01-01';
+SET LINEAGE_NAMESPACE = 'sales-customer-feed';
 
-    INSERT INTO archive SELECT * FROM #latest;
+-- Extract, tag, and validate in one pass. The label is the replay entry point.
+load_customers:
+SELECT
+    TRY_CAST(CustomerId AS INT) AS CustomerId
+        EXPECT NOT NULL ON FAILURE THROW
+        EXPECT UNIQUE   ON FAILURE QUARANTINE
+        /* @d: 'Vendor customer key.'; @owner: 'Sales Data Team'; */
+    ,LOWER(TRIM(Email)) AS Email
+        EXPECT MATCHES '^[^@]+@[^@]+\.[^@]+$' ON FAILURE QUARANTINE
+        /* @pii: true; @classification: 'Confidential'; */
+    ,Region
+        EXPECT IN ('NA', 'EMEA', 'APAC') ON FAILURE QUARANTINE
+        /* @domain: 'Sales'; */
+    ,TRY_CAST(UpdatedAt AS DATETIME) AS UpdatedAt
+        EXPECT NOT NULL ON FAILURE WARN
+INTO #customers
+FROM vendor_feed.FILE
+    ON FAILURE QUARANTINE TO customer_quarantine
+    ON FAILURE WARN
+    ON FAILURE THROW
+;
 
-    SEND EMAIL
-        TO      'admin@company.com'
-        FROM    'etl@company.com'
-        SUBJECT 'ETL Success'
-        BODY    ('Archived ' + CAST((SELECT COUNT(*) FROM #latest) AS STRING) + ' orders.')
-        AT      my_smtp;
-END TRY
-BEGIN CATCH
-    PRINT 'Load failed: ' + ERROR_MESSAGE();
-    THROW;
-END CATCH;
+-- Run-level gate: stop before touching the warehouse if the feed looks wrong
+ASSERT JOB customer_feed (
+    ROW_COUNT > 0,
+    QUARANTINE_PERCENT < 0.02
+)
+ON FAILURE THROW;
+
+INSERT INTO dw.dbo.Customers (CustomerId, Email, Region, UpdatedAt)
+SELECT CustomerId, Email, Region, UpdatedAt FROM #customers;
+
+-- @pii and @classification followed Email into dw.dbo.Customers
+EXPORT LINEAGE FOR dw.dbo.Customers AS OPENLINEAGE TO 'C:\Exports\lineage\customers.openlineage.jsonl';
+EXPORT LINEAGE FOR dw.dbo.Customers AS MARKDOWN    TO 'C:\Exports\lineage\customers.md';
+
+SEND EMAIL
+    TO      'data-team@company.com'
+    FROM    'etl@company.com'
+    SUBJECT 'Customer feed loaded'
+    BODY    ('Loaded ' + CAST((SELECT COUNT(*) FROM #customers) AS STRING) + ' customers.')
+    AT      mailer;
+```
+
+Run it with a counts-only quality report:
+
+```bash
+etl-sql run customer_feed.etlsql --quality-summary
+```
+
+```text
+Data Quality Summary
+Status: COMPLETED
+Rows: processed=1000, validated=1000, warned=4, quarantined=8
+Rule failures: 12
+- Email | QUARANTINE | MATCHES '^[^@]+@[^@]+\.[^@]+$' | 5
+- Region | QUARANTINE | IN ('NA', 'EMEA', 'APAC') | 3
+- UpdatedAt | WARN | NOT NULL | 4
+```
+
+What each piece does:
+
+- **`/* @tag: value; */`** — governance metadata on the column. Tags like `@pii` inherit through every downstream table, so the warehouse column is flagged without retagging it.
+- **`EXPECT … ON FAILURE …`** — row rules are grammar, not comments, so no formatter can strip them. `THROW` stops the run, `QUARANTINE` diverts the row with `__dq_*` diagnostics, `WARN` lets it through and reports it.
+- **`ASSERT JOB`** — fails the run on the load's own metrics. Add `ROW_COUNT WITHIN 0.2 OF HISTORICAL` once the job has run history.
+- **`EXPORT LINEAGE`** — OpenLineage JSONL for Marquez, DataHub, or OpenMetadata, plus a Markdown/Mermaid diagram for review.
+
+Quarantined rows keep the original source values plus `__dq_rule`, `__dq_reason`, and `__dq_status`, so a steward can see the cause and not just the symptom. For the fix-and-replay loop (`REPLAY QUARANTINE`) and the Portal steward queue, see [Quarantine and Remediation](docs/guides/data-quality/quarantine-and-remediation.md).
+
+### Ask the Engine What It Knows
+
+Tags, rules, and lineage are queryable in the same session:
+
+```sql
+-- Where is personal data now?
+SELECT target_table, target_column, tag_name, tag_value
+FROM eng.tags
+WHERE tag_name = 'pii' AND tag_value = 'true';
+
+-- Where did each warehouse column come from?
+SELECT target_column, source_tables, source_columns, transformation_kind, functions_applied
+FROM eng.lineage
+WHERE target_table = 'dw.dbo.Customers';
+
+-- Which rules protect which columns?
+SELECT * FROM eng.data_quality_rules;
 ```
 
 ---
@@ -203,12 +282,23 @@ INTO #regions
 FROM #revenue
 ORDER BY Value;
 
-DECLARE @region varchar(200) = 'All';
+DECLARE @region VARCHAR INPUT = 'All';
 
 CREATE VISUAL RegionSlicer AS SLICER (
     SOURCE   = #regions,
     MAPPINGS (VALUE = Value),
+    DEFAULT  = 'All',
     ACTIONS  (ON_CHANGE = SET_PARAMETER(@region, Value))
+);
+
+CREATE VISUAL TotalKpi AS CARD (
+    SOURCE   = (
+        SELECT SUM(Revenue) AS Value, 'Total Revenue' AS Label
+        FROM #revenue
+        WHERE (@region = 'All' OR Region = @region)
+    ),
+    MAPPINGS (VALUE = Value, LABEL = Label),
+    OPTIONS  (FORMAT = 'C0')
 );
 
 CREATE VISUAL RevChart AS BAR (
@@ -218,19 +308,13 @@ CREATE VISUAL RevChart AS BAR (
         WHERE (@region = 'All' OR Region = @region)
     ),
     MAPPINGS (X = Quarter, Y = Revenue, SERIES = Region),
-    STYLE    (HEIGHT = '380px', THEME = dark)
-);
-
-CREATE VISUAL TotalKpi AS CARD (
-    SOURCE   = (SELECT SUM(Revenue) AS Value, 'Total Revenue' AS Label FROM #revenue),
-    MAPPINGS (VALUE = Value, LABEL = Label),
-    OPTIONS  (FORMAT = 'C0')
+    STYLE    (HEIGHT = '380px')
 );
 
 CREATE PAGE Sales AS DASHBOARD (
     TITLE     = 'Sales',
-    STRUCTURE = 'A A / B C',
-    MAP ('A' = RevChart, 'B' = RegionSlicer, 'C' = TotalKpi)
+    STRUCTURE = 'A B / C C',
+    MAP ('A' = RegionSlicer, 'B' = TotalKpi, 'C' = RevChart)
 );
 ```
 
@@ -248,6 +332,8 @@ etl-sql-report build sales_dashboard.rptsql --format pdf
 etl-sql-report build sales_dashboard.rptsql --format json
 ```
 
+Visuals compile into ETL-SQL's managed Grammar of Graphics engine (`PlotPlan`), rendering directly to native SVG vectors and ANSI terminal grids with zero external JavaScript charting runtimes or browser automation. For multi-layer marks and custom scales beyond standard chart shapes, use `CREATE VISUAL ... AS CUSTOM` (see [From Named Visuals to Custom Charts](docs/guides/reporting/custom-chart-learning-path.md)).
+
 ---
 
 ## Core Capabilities
@@ -256,7 +342,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 
 - Read and write across 25+ connectors: relational databases (`MSSQL`, `POSTGRES`, `ORACLE`, `MYSQL`, `SQLITE`, `ODBC`), cloud warehouses (`SNOWFLAKE`, `BIGQUERY`), storage & files (`FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `S3`, `AZURE_BLOB`), NoSQL & messaging (`KAFKA`, `MONGODB`, `NEO4J`), and services (`API`/`REST`, `SFTP`, `FTP`, `SMTP`, `WEBHOOK`, `SHAREPOINT`, `ACTIVE_DIRECTORY`).
 - Stage rows in engine-managed `#temp` tables for cross-source joins, validation, filtering, enrichment, lineage, and reporting.
-- Apply inline data quality validation gates with `EXPECT` column rules and `ON FAILURE` routing (Quarantine, Warn, Abort).
+- Validate data at three levels: structure (`EXPECT SCHEMA`), rows (`EXPECT` column rules with `ON FAILURE QUARANTINE | WARN | THROW`), and the run (`ASSERT JOB` with historical baselines).
 - Manage atomic incremental watermarks across scheduled executions (`GET_JOB_STATE` / `SET_JOB_STATE`).
 - Run external Python scripts or hardened OCI containers with schema guarantees via `CREATE TOOL` and `EXECUTE TOOL`.
 - Use procedural control flow: variables, `IF`, `WHILE`, `FOR`, `FOREACH`, `TRY...CATCH`, transactions, and `PARALLEL`.
@@ -276,7 +362,8 @@ etl-sql-report build sales_dashboard.rptsql --format json
 - Block script mutation of `.etlsql`, `.rptsql`, `.sql`, and other protected source files.
 - Encrypt credentials with `ENC:` values.
 - Use `SET WHAT_IF ON` to validate side-effecting operations before they run.
-- Track data lineage with standard tags, transformation metadata, OpenLineage export, and Mermaid diagrams.
+- Tag columns inline (`@pii`, `@phi`, `@classification`, `@owner`, `@freshness`, …); protected-data tags inherit through every downstream table.
+- Query tags and provenance with `eng.tags`, `eng.lineage`, and `eng.missing_tags`; export with `EXPORT LINEAGE` as OpenLineage JSONL or Markdown/Mermaid.
 
 ### Reporting & Portal
 
