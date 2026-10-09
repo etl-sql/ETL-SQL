@@ -18,6 +18,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Capture each proxied Orchestrator request's destination and key together so concurrent settings
+  changes cannot mix configurations.
 - Preserve saved Orchestrator keys when the key field is blank and retain explicit clears after a
   restart. Persist settings atomically before changing runtime values; failed writes and invalid
   branding URLs leave the previous settings active.

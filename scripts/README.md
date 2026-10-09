@@ -108,7 +108,7 @@ Candidate artifacts are not product claims until the public certification matrix
 | **[`Invoke-Release.ps1`](./Invoke-Release.ps1)** / **[`invoke-release.sh`](./invoke-release.sh)** | PowerShell / Bash | Cross-platform | Mechanical release driver: lands `main`, tags, sets curated release notes, and drives the tag-to-publish steps. Run with `-DryRun` first; `-Force` continues a partial release. |
 | **[`generate-sbom.js`](./generate-sbom.js)** | JavaScript | Cross-platform | Emits the CycloneDX `sbom.json` published with each release. Called by the release pipeline. |
 | **[`scan-secrets.js`](./scan-secrets.js)** | JavaScript | Cross-platform | Dependency-free pre-release secret scan over the tree. Called by the release pipeline. |
-| **[`pre-commit`](./pre-commit)** | POSIX shell | Cross-platform via Git | Optional Git hook enabled with `git config core.hooksPath scripts`; formats staged C# files and refuses partially staged C# files with unstaged edits. |
+| **[`pre-commit`](./pre-commit)** | POSIX shell | Cross-platform via Git | Git hook enabled with `git config core.hooksPath scripts`; verifies staged C# whitespace in an isolated index snapshot, preserving partial staging and working-tree edits. |
 
 ### Certification and performance gates
 

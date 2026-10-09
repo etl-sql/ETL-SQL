@@ -479,13 +479,8 @@ public class OrchestratorProxyService(
         long? version = null,
         CancellationToken cancellationToken = default)
     {
-        var url = settings.BuildUrl(path);
-        if (url is null) return null;
-
-        var req = new HttpRequestMessage(method, url);
-        var key = settings.ApiKey;
-        if (!string.IsNullOrEmpty(key))
-            req.Headers.TryAddWithoutValidation("X-Orchestrator-Key", key);
+        using var req = settings.CreateRequest(method, path);
+        if (req is null) return null;
 
         var identityAssertion = await CurrentIdentityAssertionAsync(cancellationToken);
         if (identityAssertion is not null)
@@ -526,8 +521,8 @@ public class OrchestratorProxyService(
             || !string.Equals(grant.AuthorizationReference, command.AuthorizationReference, StringComparison.Ordinal))
             throw new UnauthorizedAccessException("Lifecycle command does not match its platform grant.");
 
-        var url = settings.BuildUrl("api/platform/shared-tenants/lifecycle");
-        if (url is null) return null;
+        using var request = settings.CreateRequest(HttpMethod.Post, "api/platform/shared-tenants/lifecycle");
+        if (request is null) return null;
         var secret = portalConfig?.Orchestrator.IdentitySigningSecret;
         if (string.IsNullOrWhiteSpace(secret))
             throw new InvalidOperationException(
@@ -538,9 +533,6 @@ public class OrchestratorProxyService(
                 "platform", grant.OperatorPrincipal, grant.OperatorPrincipal,
                 ["PlatformLifecycle"], [], platformTenant.Tenant.Value),
             secret, command.NowUtc);
-        var request = new HttpRequestMessage(HttpMethod.Post, url);
-        if (!string.IsNullOrEmpty(settings.ApiKey))
-            request.Headers.TryAddWithoutValidation("X-Orchestrator-Key", settings.ApiKey);
         request.Headers.TryAddWithoutValidation(OrchestratorIdentityAssertion.HeaderName, assertion);
         request.Content = JsonContent.Create(new
         {

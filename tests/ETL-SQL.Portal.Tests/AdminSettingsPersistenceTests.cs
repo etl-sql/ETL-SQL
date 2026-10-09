@@ -89,5 +89,20 @@ public sealed class AdminSettingsPersistenceTests : IDisposable
         Assert.Equal("/img/logo.png", branding.LogoUrl);
     }
 
+    [Fact]
+    public async Task RequestCapturesTheUrlAndKeyTogetherAcrossASettingsChange()
+    {
+        var settings = await OrchestratorAsync();
+        using var captured = settings.CreateRequest(HttpMethod.Get, "health");
+        await settings.UpdateAsync("https://updated.example.test", "updated-fixture-key");
+        using var current = settings.CreateRequest(HttpMethod.Get, "health");
+        Assert.NotNull(captured);
+        Assert.NotNull(current);
+        Assert.Equal("https://configured.example.test/health", captured.RequestUri!.AbsoluteUri);
+        Assert.Equal("configured-fixture-key", Assert.Single(captured.Headers.GetValues("X-Orchestrator-Key")));
+        Assert.Equal("https://updated.example.test/health", current.RequestUri!.AbsoluteUri);
+        Assert.Equal("updated-fixture-key", Assert.Single(current.Headers.GetValues("X-Orchestrator-Key")));
+    }
+
     public void Dispose() => Directory.Delete(directory, recursive: true);
 }

@@ -88,10 +88,15 @@ public class OrchestratorSettingsService
         return new(snapshot.ApiUrl, !string.IsNullOrEmpty(snapshot.ApiKey));
     }
 
-    public string? BuildUrl(string path)
+    public HttpRequestMessage? CreateRequest(HttpMethod method, string path)
     {
-        var b = ApiUrl?.TrimEnd('/');
-        return string.IsNullOrEmpty(b) ? null : b + '/' + path.TrimStart('/');
+        var snapshot = Volatile.Read(ref current);
+        var url = snapshot.ApiUrl?.TrimEnd('/');
+        if (string.IsNullOrEmpty(url)) return null;
+        var request = new HttpRequestMessage(method, url + '/' + path.TrimStart('/'));
+        if (!string.IsNullOrEmpty(snapshot.ApiKey))
+            request.Headers.TryAddWithoutValidation("X-Orchestrator-Key", snapshot.ApiKey);
+        return request;
     }
 
     private sealed class PersistedSettings
