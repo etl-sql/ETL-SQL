@@ -116,11 +116,17 @@ public record UpdateOrchestratorSettingsRequest(
     string? ApiKey
 );
 
+public sealed record OrchestratorSettingsDto(string? ApiUrl, bool HasApiKey);
+
+public sealed record OrchestratorConnectionStatusDto(bool Online, object? Status);
+
 public record UpdatePortalBrandingRequest(
     string? DisplayName,
     string? FooterText,
     string? LogoUrl
 );
+
+public sealed record PortalBrandingDto(string? DisplayName, string? FooterText, string? LogoUrl);
 
 public record JobStateEntryDto(
     string JobName,

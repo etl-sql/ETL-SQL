@@ -826,6 +826,10 @@ builder.Services.AddScoped<ETL_SQL.Portal.Services.ISharedTenantLifecycleOrchest
 
 // ── App pipeline ──────────────────────────────────────────────────────────────
 var app = builder.Build();
+await app.Services.GetRequiredService<ETL_SQL.Portal.Services.OrchestratorSettingsService>()
+    .InitializeAsync(app.Lifetime.ApplicationStopping);
+await app.Services.GetRequiredService<ETL_SQL.Portal.Services.PortalBrandingSettingsService>()
+    .InitializeAsync(app.Lifetime.ApplicationStopping);
 app.UseWebSockets(new WebSocketOptions
 {
     KeepAliveInterval = TimeSpan.FromSeconds(30)

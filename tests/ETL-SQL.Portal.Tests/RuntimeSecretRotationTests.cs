@@ -149,7 +149,7 @@ public class RuntimeSecretRotationTests
     }
 
     [Fact]
-    public void OrchestratorSettings_MigratesPlaintextSidecarToProtectedValue()
+    public async Task OrchestratorSettings_MigratesPlaintextSidecarToProtectedValue()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"portal_secret_test_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
@@ -167,6 +167,7 @@ public class RuntimeSecretRotationTests
             var settings = new OrchestratorSettingsService(
                 new PortalConfig { DatabasePath = databasePath },
                 protector);
+            await settings.InitializeAsync();
 
             var persisted = JsonNode.Parse(File.ReadAllText(settingsPath))!.AsObject();
             Assert.Equal("plaintext-secret", settings.ApiKey);

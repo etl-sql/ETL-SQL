@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ETL_SQL.Portal.Models;
 
 namespace ETL_SQL.Portal.Services;
 
@@ -10,12 +11,14 @@ namespace ETL_SQL.Portal.Services;
 public class PortalBrandingSettingsService
 {
     private readonly string _settingsPath;
-    private readonly object _lock = new();
+    private readonly SemaphoreSlim gate = new(1, 1);
     private readonly ILogger<PortalBrandingSettingsService> _logger;
 
-    public string? DisplayName { get; private set; }
-    public string? FooterText { get; private set; }
-    public string? LogoUrl { get; private set; } = "/img/logo.png";
+    private PortalBrandingDto current = new(null, null, "/img/logo.png");
+    private bool initialized;
+    public string? DisplayName => Volatile.Read(ref current).DisplayName;
+    public string? FooterText => Volatile.Read(ref current).FooterText;
+    public string? LogoUrl => Volatile.Read(ref current).LogoUrl;
 
     public PortalBrandingSettingsService(PortalConfig config, ILogger<PortalBrandingSettingsService> logger)
     {
@@ -23,52 +26,49 @@ public class PortalBrandingSettingsService
         var dbDir = Path.GetDirectoryName(Path.GetFullPath(config.DatabasePath)) ?? ".";
         _settingsPath = Path.Combine(dbDir, "portal-branding.json");
 
-        if (!File.Exists(_settingsPath)) return;
+    }
 
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        await gate.WaitAsync(cancellationToken);
         try
         {
-            var persisted = JsonSerializer.Deserialize<PersistedSettings>(File.ReadAllText(_settingsPath));
-            DisplayName = Clean(persisted?.DisplayName);
-            FooterText = Clean(persisted?.FooterText);
-            LogoUrl = Clean(persisted?.LogoUrl);
+            if (initialized) return;
+            var persisted = await PortalSettingsFile.ReadAsync<PersistedSettings>(_settingsPath, cancellationToken);
+            if (persisted is not null)
+                Volatile.Write(ref current, new(Clean(persisted.DisplayName, 80), Clean(persisted.FooterText), ValidateLogoUrl(persisted.LogoUrl)));
+            initialized = true;
         }
-        catch (Exception ex)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
         {
-            _logger.LogWarning(ex, "Portal branding settings could not be loaded from {Path}. Defaults will be used.", _settingsPath);
+            _logger.LogWarning("Portal branding settings could not be loaded ({ErrorType}).", error.GetType().Name);
+            throw new InvalidOperationException("Portal branding settings could not be loaded.");
         }
+        finally { gate.Release(); }
     }
 
-    public void Update(string? displayName, string? footerText, string? logoUrl)
+    public async Task UpdateAsync(string? displayName, string? footerText, string? logoUrl, CancellationToken cancellationToken = default)
     {
-        lock (_lock)
+        var next = new PortalBrandingDto(Clean(displayName, 80), Clean(footerText), ValidateLogoUrl(logoUrl));
+        await InitializeAsync(cancellationToken);
+        await gate.WaitAsync(cancellationToken);
+        try
         {
-            DisplayName = Clean(displayName, 80);
-            FooterText = Clean(footerText, 120);
-            LogoUrl = ValidateLogoUrl(logoUrl);
-
             try
             {
-                var directory = Path.GetDirectoryName(_settingsPath);
-                if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
-
-                File.WriteAllText(_settingsPath,
-                    JsonSerializer.Serialize(
-                        new PersistedSettings { DisplayName = DisplayName, FooterText = FooterText, LogoUrl = LogoUrl },
-                        new JsonSerializerOptions { WriteIndented = true }));
+                await PortalSettingsFile.WriteAsync(_settingsPath,
+                    new PersistedSettings { DisplayName = next.DisplayName, FooterText = next.FooterText, LogoUrl = next.LogoUrl }, cancellationToken);
             }
-            catch (Exception ex)
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                throw new InvalidOperationException("Portal branding settings could not be saved.", ex);
+                throw new InvalidOperationException("Portal branding settings could not be saved.");
             }
+            Volatile.Write(ref current, next);
         }
+        finally { gate.Release(); }
     }
 
-    public object ToDto() => new
-    {
-        DisplayName,
-        FooterText,
-        LogoUrl
-    };
+    public PortalBrandingDto ToDto() => Volatile.Read(ref current);
 
     private static string? Clean(string? value, int maxLength = 120)
     {

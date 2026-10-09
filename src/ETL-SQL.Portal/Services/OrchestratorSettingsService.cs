@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ETL_SQL.Portal.Models;
 
 namespace ETL_SQL.Portal.Services;
 
@@ -13,10 +14,13 @@ public class OrchestratorSettingsService
 {
     private readonly string _settingsPath;
     private readonly OrchestratorApiKeyProtector protector;
-    private readonly object _lock = new();
+    private readonly SemaphoreSlim gate = new(1, 1);
+    private sealed record Settings(string? ApiUrl, string? ApiKey);
+    private Settings current;
+    private bool initialized;
 
-    public string? ApiUrl { get; private set; }
-    public string? ApiKey { get; private set; }
+    public string? ApiUrl => Volatile.Read(ref current).ApiUrl;
+    public string? ApiKey => Volatile.Read(ref current).ApiKey;
 
     public OrchestratorSettingsService(
         PortalConfig config,
@@ -26,37 +30,62 @@ public class OrchestratorSettingsService
         var dbDir = Path.GetDirectoryName(Path.GetFullPath(config.DatabasePath)) ?? ".";
         _settingsPath = Path.Combine(dbDir, "portal-orchestrator.json");
 
-        ApiUrl = config.Orchestrator.ApiUrl;
-        ApiKey = config.Orchestrator.ApiKey;
-
-        if (File.Exists(_settingsPath))
-        {
-            try
-            {
-                var persisted = JsonSerializer.Deserialize<PersistedSettings>(File.ReadAllText(_settingsPath));
-                if (persisted?.ApiUrl is not null) ApiUrl = persisted.ApiUrl;
-                if (persisted?.ProtectedApiKey is not null)
-                    ApiKey = protector.Unprotect(persisted.ProtectedApiKey) ?? ApiKey;
-                else if (persisted?.ApiKey is not null)
-                {
-                    // One-time migration from the pre-v0.11 plaintext sidecar format.
-                    ApiKey = persisted.ApiKey;
-                    Persist();
-                }
-            }
-            catch { }
-        }
+        current = new(config.Orchestrator.ApiUrl, config.Orchestrator.ApiKey);
     }
 
-    public void Update(string? apiUrl, string? apiKey)
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        lock (_lock)
+        await gate.WaitAsync(cancellationToken);
+        try
         {
-            ApiUrl = string.IsNullOrWhiteSpace(apiUrl) ? null : apiUrl.Trim();
-            ApiKey = string.IsNullOrEmpty(apiKey) ? null : apiKey;
-
-            Persist();
+            if (initialized) return;
+            try
+            {
+                var persisted = await PortalSettingsFile.ReadAsync<PersistedSettings>(_settingsPath, cancellationToken);
+                if (persisted is not null)
+                {
+                    var apiUrl = persisted.FormatVersion == 1 ? persisted.ApiUrl : persisted.ApiUrl ?? current.ApiUrl;
+                    var apiKey = persisted.ProtectedApiKey is not null
+                        ? protector.Unprotect(persisted.ProtectedApiKey)
+                            ?? throw new InvalidOperationException("The saved Orchestrator key could not be read.")
+                        : persisted.FormatVersion == 1 ? null : persisted.ApiKey ?? current.ApiKey;
+                    var loaded = new Settings(apiUrl, apiKey);
+                    // Upgrade the legacy plaintext sidecar before publishing its values.
+                    if (persisted.ApiKey is not null) await PersistAsync(loaded, cancellationToken);
+                    Volatile.Write(ref current, loaded);
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
+            {
+                throw new InvalidOperationException("Orchestrator settings could not be loaded.");
+            }
+            initialized = true;
         }
+        finally { gate.Release(); }
+    }
+
+    public async Task UpdateAsync(string? apiUrl, string? apiKey, CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        var url = string.IsNullOrWhiteSpace(apiUrl) ? null : apiUrl.Trim();
+        if (url is not null && (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("http" or "https") || uri.UserInfo.Length != 0))
+            throw new ArgumentException("Orchestrator API URL must be an absolute http/https URL without credentials.");
+        await gate.WaitAsync(cancellationToken);
+        try
+        {
+            // Null preserves the existing key; an empty string explicitly clears it.
+            var next = new Settings(url, apiKey is null ? current.ApiKey : apiKey.Length == 0 ? null : apiKey);
+            await PersistAsync(next, cancellationToken);
+            Volatile.Write(ref current, next);
+        }
+        finally { gate.Release(); }
+    }
+
+    public OrchestratorSettingsDto ToDto()
+    {
+        var snapshot = Volatile.Read(ref current);
+        return new(snapshot.ApiUrl, !string.IsNullOrEmpty(snapshot.ApiKey));
     }
 
     public string? BuildUrl(string path)
@@ -67,30 +96,28 @@ public class OrchestratorSettingsService
 
     private sealed class PersistedSettings
     {
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int FormatVersion { get; init; }
         public string? ApiUrl { get; init; }
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? ProtectedApiKey { get; init; }
         // Legacy read-only field. Persist() never writes plaintext API keys.
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? ApiKey { get; init; }
     }
 
-    private void Persist()
+    private async Task PersistAsync(Settings settings, CancellationToken cancellationToken)
     {
         try
         {
-            File.WriteAllText(_settingsPath,
-                JsonSerializer.Serialize(
-                    new PersistedSettings
-                    {
-                        ApiUrl = ApiUrl,
-                        ProtectedApiKey = string.IsNullOrEmpty(ApiKey)
-                            ? null
-                            : protector.Protect(ApiKey)
-                    },
-                    new JsonSerializerOptions { WriteIndented = true }));
+            await PortalSettingsFile.WriteAsync(_settingsPath, new PersistedSettings
+            {
+                FormatVersion = 1,
+                ApiUrl = settings.ApiUrl,
+                ProtectedApiKey = settings.ApiKey is null ? null : protector.Protect(settings.ApiKey)
+            }, cancellationToken);
         }
-        catch { }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException("Orchestrator settings could not be saved.");
+        }
     }
 }

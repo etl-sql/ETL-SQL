@@ -1953,19 +1953,17 @@ public class AdminController(
     public IActionResult GetOrchestratorSettings(
         [FromServices] ETL_SQL.Portal.Services.OrchestratorSettingsService settings)
     {
-        return Ok(new
-        {
-            ApiUrl = settings.ApiUrl,
-            HasApiKey = !string.IsNullOrEmpty(settings.ApiKey)
-        });
+        return Ok(settings.ToDto());
     }
 
     [HttpPut("settings/orchestrator")]
     public async Task<IActionResult> UpdateOrchestratorSettings(
         [FromServices] ETL_SQL.Portal.Services.OrchestratorSettingsService settings,
-        [FromBody] Models.UpdateOrchestratorSettingsRequest req)
+        [FromBody] Models.UpdateOrchestratorSettingsRequest req, CancellationToken cancellationToken)
     {
-        settings.Update(req.ApiUrl, req.ApiKey);
+        try { await settings.UpdateAsync(req.ApiUrl, req.ApiKey, cancellationToken); }
+        catch (ArgumentException error) { return BadRequest(new { Error = error.Message }); }
+        catch (InvalidOperationException error) { return StatusCode(500, new { Error = error.Message }); }
         await audit.LogAsync(CurrentUserId, "UPDATE_ORCHESTRATOR_SETTINGS", "System", null, req.ApiUrl);
         return NoContent();
     }
@@ -2014,11 +2012,11 @@ public class AdminController(
     [HttpPut("settings/branding")]
     public async Task<IActionResult> UpdateBrandingSettings(
         [FromServices] ETL_SQL.Portal.Services.PortalBrandingSettingsService branding,
-        [FromBody] Models.UpdatePortalBrandingRequest req)
+        [FromBody] Models.UpdatePortalBrandingRequest req, CancellationToken cancellationToken)
     {
         try
         {
-            branding.Update(req.DisplayName, req.FooterText, req.LogoUrl);
+            await branding.UpdateAsync(req.DisplayName, req.FooterText, req.LogoUrl, cancellationToken);
         }
         catch (ArgumentException ex)
         {

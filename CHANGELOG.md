@@ -16,6 +16,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 - Update CodeQL security analysis workflow action dependencies to v4.37.9.
 
+### Fixed
+
+- Preserve saved Orchestrator keys when the key field is blank and retain explicit clears after a
+  restart. Persist settings atomically before changing runtime values; failed writes and invalid
+  branding URLs leave the previous settings active.
+- Verify staged C# whitespace from an isolated index snapshot so partial commits preserve
+  unrelated working-tree edits.
+
 ## [0.20.1] — 2026-10-06
 
 For complete release details, highlights, and migration notes, see [Release Notes v0.20.1](docs/releases/v0.20.1.md).
