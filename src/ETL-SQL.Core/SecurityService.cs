@@ -224,8 +224,9 @@ public partial class SecurityService
 
     // Kernel and OS directories whose modification would be catastrophic or where secrets live.
     // "etc" covers /etc (Linux) and C:\Windows\System32\drivers\etc (Windows hosts file).
+    // "/proc" covers Linux procfs (/proc/self/environ, /proc/*/mem, etc.) to prevent environment/secret extraction.
     private static readonly string[] CriticalSystemDirectories = {
-         "Windows", "System32", "SysWOW64", "etc", "/bin", "/sbin", "/root", "/usr", "/var"
+         "Windows", "System32", "SysWOW64", "etc", "/bin", "/sbin", "/root", "/usr", "/var", "/proc"
     };
 
     private static readonly string[] SensitiveDirectories = {
@@ -311,7 +312,13 @@ public partial class SecurityService
     public void ValidateHost(string host)
     {
         if (string.IsNullOrEmpty(host)) return;
-        if (IsInternalOperation || IsTestMode) return;
+        if (IsInternalOperation) return;
+
+        // Egress filtering for cloud metadata IP (169.254.169.254, fd00:ec2::254 IPv6)
+        // and hosting infrastructure. Non-bypassable even when AllowedHosts contains "*".
+        InfrastructureEgressFence.EnforceHost(host);
+
+        if (IsTestMode) return;
 
         // Always allow local loopback
         if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
@@ -366,7 +373,7 @@ public partial class SecurityService
         // 1. Authorization Bypass Checklist (Safe Zones, Test Mode)
         bool isSafeZone = false;
         string? matchedZone = null;
-        if (IsTestMode)
+        if (IsTestMode && ProtectionMode != PathProtectionMode.Defined)
         {
             var baseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
             var tempPath = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;

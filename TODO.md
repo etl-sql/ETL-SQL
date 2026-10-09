@@ -67,9 +67,9 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 **Horizon:** v0.21.0  
 **Authoritative design:** [Connectors & Security Standards](docs/architecture/standards/connectors-standards.md) and [Deployment Profiles](docs/architecture/deployment-profiles.md)
 
-- [ ] **Block `/proc` in runtime `SecurityService` path validation.** Add `/proc` to `CriticalSystemDirectories` in `SecurityService.cs` so any file connector or script reading `/proc/self/environ` (or any `/proc/*` path) is blocked at the kernel path boundary on Linux hosts and containers, aligning the runtime with the linter's `SchemaValidationRule`.
-- [ ] **Enforce `PathProtectionMode.Defined` for multi-tenant and Shared SaaS execution.** Require that multi-tenant and Shared SaaS worker profiles run in `PathProtectionMode.Defined` with explicit `ApprovedSafeZones`, preventing scripts from reading arbitrary host paths outside tenant storage directories.
-- [ ] **Egress filtering for cloud metadata IP (`169.254.169.254`).** Add `169.254.169.254` (and `fd00:ec2::254` IPv6) to default blocked destinations in `SecurityService.ValidateHost()` to prevent SSRF credential extraction against AWS/Azure/GCP instance metadata services (IMDS).
+- [x] **Block `/proc` in runtime `SecurityService` path validation.** Add `/proc` to `CriticalSystemDirectories` in `SecurityService.cs` so any file connector or script reading `/proc/self/environ` (or any `/proc/*` path) is blocked at the kernel path boundary on Linux hosts and containers, aligning the runtime with the linter's `SchemaValidationRule`.
+- [x] **Enforce `PathProtectionMode.Defined` for multi-tenant and Shared SaaS execution.** Require that multi-tenant and Shared SaaS worker profiles run in `PathProtectionMode.Defined` with explicit `ApprovedSafeZones`, preventing scripts from reading arbitrary host paths outside tenant storage directories.
+- [x] **Egress filtering for cloud metadata IP (`169.254.169.254`).** Add `169.254.169.254` (and `fd00:ec2::254` IPv6) to default blocked destinations in `SecurityService.ValidateHost()` to prevent SSRF credential extraction against AWS/Azure/GCP instance metadata services (IMDS).
 
 ---
 

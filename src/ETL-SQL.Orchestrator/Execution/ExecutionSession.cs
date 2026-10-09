@@ -141,6 +141,10 @@ namespace ETL_SQL.Orchestrator.Execution
                     evaluator.SessionRoot = storageAuthority.CheckpointRoot;
                     evaluator.CheckpointKeyScope = storageAuthority.Tenant.Tenant.Value;
                 }
+                else if (!string.IsNullOrWhiteSpace(_ctx.SaasTenantId))
+                {
+                    evaluator.SecurityService.ProtectionMode = ETL_SQL.Services.PathProtectionMode.Defined;
+                }
                 evaluator.JobName = jobName;
                 evaluator.ExecutionIdentity = executionIdentity;
                 evaluator.Telemetry.IsProfiling = true;

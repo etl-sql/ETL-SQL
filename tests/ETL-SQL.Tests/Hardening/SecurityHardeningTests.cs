@@ -102,5 +102,91 @@ namespace ETL_SQL.Tests.Hardening
             _security.ValidateHost("localhost"); // Should pass (hardcoded loopback exception)
             _security.ValidateHost("127.0.0.1"); // Should pass
         }
+
+        [Theory]
+        [InlineData("/proc")]
+        [InlineData("/proc/self/environ")]
+        [InlineData("/proc/cpuinfo")]
+        [InlineData(@"C:\proc\self\environ")]
+        [InlineData(@"C:\proc\cpuinfo")]
+        public void ValidatePath_ShouldBlockProcDirectory(string path)
+        {
+            Assert.Throws<SecurityException>(() => _security.ValidatePath(path));
+        }
+
+        [Theory]
+        [InlineData("169.254.169.254")]
+        [InlineData("fd00:ec2::254")]
+        [InlineData("[fd00:ec2::254]")]
+        [InlineData("metadata.google.internal")]
+        public void ValidateHost_ShouldBlockCloudMetadataByDefault(string host)
+        {
+            // Even with wildcard AllowedHosts, IMDS and cloud metadata must be blocked
+            _security.AllowedHosts.Clear();
+            _security.AllowedHosts.Add("*");
+
+            Assert.Throws<SecurityException>(() => _security.ValidateHost(host));
+        }
+
+        [Fact]
+        public void StorageCapability_EnforcesPathProtectionModeDefined()
+        {
+            var root = Path.Combine(Path.GetTempPath(), $"tenant-defined-{Guid.NewGuid():N}");
+            var outside = Path.Combine(Path.GetTempPath(), $"tenant-outside-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(root);
+            Directory.CreateDirectory(outside);
+
+            try
+            {
+                var capability = ETL_SQL.Core.Multitenancy.TenantStorageCapability.FromServerAuthority(
+                    ETL_SQL.Core.Multitenancy.TenantContext.FromHostConfiguration("tenant-defined-test"),
+                    "run-101",
+                    [("workspace", root, ETL_SQL.Core.Multitenancy.TenantStorageAccess.All)]);
+
+                var context = new ETL_SQL.Core.Common.SystemExecutionContext();
+                context.StorageCapability = capability;
+
+                Assert.Equal(PathProtectionMode.Defined, context.SecurityService.ProtectionMode);
+                Assert.Contains(root, context.SecurityService.ApprovedSafeZones);
+
+                // Inside the grant root is permitted
+                context.SecurityService.ValidatePath(Path.Combine(root, "allowed.csv"));
+
+                // Outside the grant root must be blocked in Defined mode
+                Assert.Throws<SecurityException>(() =>
+                    context.SecurityService.ValidatePath(Path.Combine(outside, "forbidden.csv")));
+            }
+            finally
+            {
+                try { Directory.Delete(root, true); } catch { }
+                try { Directory.Delete(outside, true); } catch { }
+            }
+        }
+
+        [Fact]
+        public void EnvironmentSecretAccess_DoesNotTouchProcAndRespectsAllowlist()
+        {
+            var testVarName = $"ETLSQL_TEST_SECRET_{Guid.NewGuid():N}";
+            var testSecretValue = "ultra-secret-token-value";
+
+            try
+            {
+                Environment.SetEnvironmentVariable(testVarName, testSecretValue);
+
+                // Denied when not in AllowedEnvVars
+                Assert.Throws<SecurityException>(() => _security.ValidateEnvVar(testVarName));
+
+                // Allowed when added to AllowedEnvVars
+                _security.AllowedEnvVars.Add(testVarName);
+                _security.ValidateEnvVar(testVarName);
+
+                // Value is retrieved successfully via in-memory Environment API
+                Assert.Equal(testSecretValue, Environment.GetEnvironmentVariable(testVarName));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(testVarName, null);
+            }
+        }
     }
 }

@@ -47,6 +47,9 @@ public sealed class DockerSandboxExecutionProviderTests : IDisposable
         Assert.DoesNotContain("--privileged", create);
         Assert.Contains($"{DockerSandboxExecutionProvider.AdmissionLabel}=admission-1", create);
         Assert.Contains("Session__Root=/var/lib/etl-sql/sessions", create);
+        Assert.Contains("Security__PathProtectionMode=Defined", create);
+        Assert.Contains("Security__ApprovedSafeZones__0=/workspace", create);
+        Assert.Contains("Security__ApprovedSafeZones__1=/var/lib/etl-sql/sessions", create);
         Assert.Contains("ETLSQL_MACHINE_KEY_FILE=/run/secrets/etlsql-machine-key", create);
         Assert.Contains(create, argument => argument.Contains("tenant-a.key", StringComparison.Ordinal));
         Assert.Contains("/workspace/input/job.etlsql", create);

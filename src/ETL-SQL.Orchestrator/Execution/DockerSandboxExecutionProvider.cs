@@ -362,6 +362,9 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             "--env", "XDG_CACHE_HOME=/workspace/scratch",
             "--env", "ETLSQL_SECURITY_EVENT_OUTBOX_PATH=/workspace/scratch/security-events.db",
             "--env", "Logging__AppLog__Directory=/workspace/scratch/logs/app",
+            "--env", "Security__PathProtectionMode=Defined",
+            "--env", "Security__ApprovedSafeZones__0=/workspace",
+            "--env", "Security__ApprovedSafeZones__1=/var/lib/etl-sql/sessions",
             "--workdir", "/workspace",
             "--label", $"{AdmissionLabel}={request.AdmissionId}",
             "--label", $"{TenantLabel}={request.Assignment.Tenant.Tenant.Value}",
@@ -377,7 +380,8 @@ public sealed class DockerSandboxExecutionProvider : ISandboxExecutionProvider
             args.InsertRange(args.IndexOf("--workdir"),
             [
                 "--mount", $"type=bind,source={capabilityPath},target=/run/secrets/capabilities,readonly",
-                "--env", "ETLSQL_CAPABILITY_ROOT=/run/secrets/capabilities"
+                "--env", "ETLSQL_CAPABILITY_ROOT=/run/secrets/capabilities",
+                "--env", "Security__ApprovedSafeZones__2=/run/secrets/capabilities"
             ]);
         }
         if (request.Limits.MaxRows is { } maxRows)

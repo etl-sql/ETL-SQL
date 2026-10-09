@@ -25,7 +25,24 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
 {
     public Governance.ExecutionPolicySnapshot? ExecutionPolicy { get; set; }
     public Governance.ExecutionIdentity? ExecutionIdentity { get; set; }
-    public Multitenancy.TenantStorageCapability? StorageCapability { get; set; }
+    private Multitenancy.TenantStorageCapability? _storageCapability;
+    public Multitenancy.TenantStorageCapability? StorageCapability
+    {
+        get => _storageCapability;
+        set
+        {
+            _storageCapability = value;
+            if (value is not null)
+            {
+                SecurityService.ProtectionMode = PathProtectionMode.Defined;
+                SecurityService.ApprovedSafeZones.Clear();
+                foreach (var grant in value.Grants)
+                {
+                    SecurityService.ApprovedSafeZones.Add(grant.CanonicalRoot);
+                }
+            }
+        }
+    }
     public IVariableContext VarContext => this;
     public IReportContext ReportContext => this;
     public ITelemetryContext Telemetry => this;

@@ -48,7 +48,24 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 {
     public ExecutionPolicySnapshot? ExecutionPolicy { get; set; }
     public ExecutionIdentity? ExecutionIdentity { get; set; }
-    public ETL_SQL.Core.Multitenancy.TenantStorageCapability? StorageCapability { get; set; }
+    private ETL_SQL.Core.Multitenancy.TenantStorageCapability? _storageCapability;
+    public ETL_SQL.Core.Multitenancy.TenantStorageCapability? StorageCapability
+    {
+        get => _storageCapability;
+        set
+        {
+            _storageCapability = value;
+            if (value is not null)
+            {
+                _securityService.ProtectionMode = ETL_SQL.Services.PathProtectionMode.Defined;
+                _securityService.ApprovedSafeZones.Clear();
+                foreach (var grant in value.Grants)
+                {
+                    _securityService.ApprovedSafeZones.Add(grant.CanonicalRoot);
+                }
+            }
+        }
+    }
     /// <summary>
     /// Process-wide by default; settable so tests (and future per-tenant hosting) can bound an
     /// evaluator with an isolated budget instead of mutating <see cref="MemoryGrantArbiter.Shared"/>.

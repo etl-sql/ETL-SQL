@@ -619,6 +619,10 @@ namespace ETL_SQL.ReportHosting
                     evaluator.StorageCapability = storageAuthority.CreateRunCapability(_storageRunId);
                     evaluator.SessionRoot = storageAuthority.CheckpointRoot;
                 }
+                else if (portalConfig?.SharedTenancy.Enabled == true && !string.IsNullOrWhiteSpace(_keyScope))
+                {
+                    evaluator.SecurityService.ProtectionMode = ETL_SQL.Services.PathProtectionMode.Defined;
+                }
                 var registry = _currentScope.ServiceProvider.GetService<IDatasetRegistry>();
                 if (registry != null)
                 {
