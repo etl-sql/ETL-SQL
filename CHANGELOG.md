@@ -18,6 +18,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Add lease-fenced scheduled-job activity storage contracts and a tenant-scoped, distinct-job
+  projection of UTC-day outcomes.
 - Detect changed or added browser generator helpers, host asset-selection files, and retained Portal
   markup/styles in read-only asset and MSBuild verification. Preserve prepared files on stale checks.
 - Reject unsupported Node.js and missing, mismatched, or broken restored TypeScript compilers before

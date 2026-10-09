@@ -138,6 +138,13 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
 - [ ] Orchestrator page composition (`pages/orchestrator.js`).
 - [ ] Catalog/home page composition (`pages/index.js`).
 
+**Orchestrator activity storage:** The Core contract and relational-store implementation provide
+lease-fenced run state and tenant-scoped, distinct-job UTC-day outcome membership. Thirteen focused
+SQLite checks pass, covering identity reuse, time offsets, expired/reclaimed leases, cancellation,
+and existing-database migration. Tracking these APIs also repairs the missing members referenced by
+the archived Portal test sources. Scheduler/API/browser acceptance and the final candidate checks
+remain separate work; the storage checkpoint does not close those lanes.
+
 **Verified progress (2026-10-07):** The earlier full browser lane passed 582 tests without skips; the ordinary Portal lane passed
 1,352, and the separate hosted-service lane passed six. Earlier Portal conversions passed 26 affected
 journey checks and 69 sandbox checks. After the metric-chip integration, the combined sandbox,
