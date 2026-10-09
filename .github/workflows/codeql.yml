@@ -26,6 +26,17 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
 
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: '22'
+
+    - name: Install browser compiler
+      run: npm ci --prefix scripts/typecheck
+
+    - name: Prepare browser assets
+      run: node scripts/sync-assets.js
+
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4.37.9
       with:

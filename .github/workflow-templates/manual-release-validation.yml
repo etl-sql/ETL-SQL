@@ -19,6 +19,17 @@ jobs:
           git fetch --no-tags --prune --depth=1 origin $env:GITHUB_SHA
           git checkout --force FETCH_HEAD
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
+
       - name: Restore tools
         run: dotnet tool restore
 

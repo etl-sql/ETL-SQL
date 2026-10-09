@@ -613,6 +613,12 @@ without changing prepared files. The full freshness task remains open for contra
 package freshness, and final candidate acceptance. Evidence is under
 `artifacts/section1/freshness-before.log` and `freshness-after.log`.
 
+CI preparation now precedes asset consumers in all 14 audited build/certification job definitions
+across CI, release, native-package, CodeQL, and manual-release workflows. Release-tag validation
+precedes dependency restore. Parsed workflow/order checks pass; this is configuration evidence,
+not a completed GitHub run or container/package certification. See
+`artifacts/section1/workflow-preparation-before.log` and `workflow-preparation-after.log`.
+
 1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
    safe obsolete-output cleanup, and build/gate integration.
 2. Verify every supported delivery path from source-only inputs, including final packages and runtime checks.

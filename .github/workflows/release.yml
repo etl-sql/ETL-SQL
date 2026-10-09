@@ -28,6 +28,7 @@ jobs:
         with:
           ref: ${{ env.TAG_NAME }}
           fetch-depth: 0
+
       - name: Verify release tag is on a supported release branch
         shell: pwsh
         run: |
@@ -36,6 +37,18 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot refresh main and maintenance release refs.' }
           $branch = Assert-ReleaseTagReachable -Tag $env:TAG_NAME
           Write-Host "Release tag is reachable from $branch."
+
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
+
       - name: Verify .NET
         run: dotnet --info
       - name: Build & Run Smoke Tests
@@ -73,13 +86,21 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ env.TAG_NAME }}
+
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
       - name: Verify .NET
         run: dotnet --info
       - name: Verify Node.js
         run: node --version
-
-      - name: Install shared browser compiler
-        run: npm ci --prefix scripts/typecheck
 
       - name: Build extension UI
         working-directory: src/etl-sql-vscode/ui
@@ -123,13 +144,21 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ env.TAG_NAME }}
+
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
       - name: Verify .NET
         run: dotnet --info
       - name: Verify Node.js
         run: node --version
-
-      - name: Install shared browser compiler
-        run: npm ci --prefix scripts/typecheck
 
       - name: Build extension UI
         working-directory: src/etl-sql-vscode/ui
@@ -163,13 +192,21 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: ${{ env.TAG_NAME }}
+
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
       - name: Verify .NET
         run: dotnet --info
       - name: Verify Node.js
         run: node --version
-
-      - name: Install shared browser compiler
-        run: npm ci --prefix scripts/typecheck
 
       - name: Build extension UI
         working-directory: src/etl-sql-vscode/ui

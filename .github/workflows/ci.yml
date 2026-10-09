@@ -18,6 +18,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
+
       - name: Verify .NET
         run: dotnet --info
 
@@ -36,9 +47,6 @@ jobs:
 
       - name: Verify formatting
         run: dotnet format ETL-SQL.slnx --verify-no-changes --no-restore
-
-      - name: Install browser type-gate toolchain
-        run: npm ci --prefix scripts/typecheck
 
       - name: Check shared report runtime assets
         shell: pwsh
@@ -60,6 +68,12 @@ jobs:
 
       - name: Lint the browser sources
         run: node scripts/lint-browser.mjs
+
+      - name: Run browser and consumer contract checks
+        run: node scripts/check-consumer-contracts.mjs
+
+      - name: Verify prepared assets after consumer checks
+        run: node scripts/sync-assets.js -Check
 
       - name: Check syntax index is up to date with LanguageMetadata.cs
         run: node scripts/generate-syntax-index.js --check
@@ -106,6 +120,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
+
       - name: Verify .NET
         run: dotnet --info
 
@@ -122,9 +147,6 @@ jobs:
       - name: Install UI dependencies
         working-directory: src/etl-sql-vscode/ui
         run: npm ci
-
-      - name: Install shared browser compiler
-        run: npm ci --prefix scripts/typecheck
 
       - name: Audit npm packages for known vulnerabilities
         working-directory: src/etl-sql-vscode
@@ -174,6 +196,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
+
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
@@ -207,6 +240,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
@@ -259,6 +303,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
+
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
@@ -309,6 +364,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
+
       - name: Set up .NET
         uses: actions/setup-dotnet@v6
         with:
@@ -338,6 +404,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Set up browser compiler runtime
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v6

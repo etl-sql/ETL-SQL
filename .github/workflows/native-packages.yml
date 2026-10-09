@@ -45,6 +45,12 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install browser compiler
+        run: npm ci --prefix scripts/typecheck
+
+      - name: Prepare browser assets
+        run: node scripts/sync-assets.js
+
       - name: Record candidate and native host
         shell: pwsh
         run: |

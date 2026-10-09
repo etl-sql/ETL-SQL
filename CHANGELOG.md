@@ -18,6 +18,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Restore the locked browser compiler and prepare assets before CI/release/certification build
+  steps. Keep release-tag validation before dependency restore and run all consumer checks in CI.
 - Add lease-fenced scheduled-job activity storage contracts and a tenant-scoped, distinct-job
   projection of UTC-day outcomes.
 - Detect changed or added browser generator helpers, host asset-selection files, and retained Portal
