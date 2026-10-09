@@ -18,7 +18,7 @@ and scale baseline recalibration).
 
 | Remaining work | Where |
 | :--- | :--- |
-| Security hardening — Environment & system path protection | [§0](#0-security-hardening--environment-and-system-path-protection) |
+| Security hardening — Environment & system path protection | [§0](#0-security-hardening--environment-variable-and-system-path-protection) |
 | Code stability — Browser sources, Studio, test lanes | [§1](#1-code-stability--browser-sources-studio-and-test-lanes) |
 | Generated browser assets — Build preparation & source-control cleanup | [§1.1](#11-generated-browser-assets--build-preparation-and-source-control-cleanup) |
 | Studio — Replacement criteria & migration decisions | [§2](#2-studio--replacement-criteria-and-migration-decisions) |
@@ -54,7 +54,8 @@ Authoritative policy: [`release-checklist.md`](docs/releases/release-checklist.m
 - [ ] Verify third-party notices/inventory, secret scanning, SBOM, checksums, installers, release
   notes, upgrade guidance, and changelog entries for the final shipped scope.
 - [ ] Pass the clean-checkout asset generation and published-host checks in §1.1 before shipping
-  with generated browser JavaScript excluded from source control.
+  with generated browser JavaScript excluded from source control. Include final-candidate behavior
+  checks and fresh Git checkout verification after the index cleanup.
 - [ ] Reconcile `TODO.md` and `ROADMAP.md` immediately before release: remove verified completed
   work, retain unfinished increments with accurate status, and ensure release notes describe only
   evidence-backed outcomes.
@@ -101,13 +102,39 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
   stale responses, disposal, and partial batch reruns.
 - [x] Gateway administration (`gateways-admin.js`): validate fleet and mutation responses, count
   clusters across enrollment history, clear one-time credentials, and guard stale/disposed work.
-- [ ] Policy authority administration (`policy-authority-admin.js`).
-- [ ] Connection administration (`connections-admin.js`).
-- [ ] Data-quality queue (`data-quality-queue.js`).
-- [ ] Dataset administration (`datasets-admin.js`).
-- [ ] Lineage catalog (`lineage-catalog.js`).
-- [ ] Governance controller (`governance-portal.js`).
-- [ ] Admin page composition (`pages/admin.js`).
+- [x] Policy authority administration (`policy-authority-admin.js`): bind rows/actions to their
+  loaded scope, validate response/receipt contracts, and reject stale validation and mutation work.
+- [x] Connection administration (`connections-admin.js`): retain gateway bindings and discovered
+  providers, validate catalog/diagnostic/import outcomes, and guard stale reads and duplicate writes.
+- [x] Data-quality queue (`data-quality-queue.js`): validate queue, row, trend, and submission
+  responses; guard superseded/disposed work, restored job identities, unconfirmed writes, and
+  observed row status. Preserve edits during polling, clear revoked previews, and handle arbitrary
+  row IDs and source column names without changing object prototypes.
+- [x] Dataset administration (`datasets-admin.js`): validate catalog, viewer, statistics, values,
+  permissions, lineage, and mutation receipts; guard stale/disposed work, duplicate submissions,
+  unconfirmed writes, and opened-version conflicts. Preserve viewer queries in exports and picker focus.
+- [x] Lineage catalog (`lineage-catalog.js`): validate history, stewardship, protected-data,
+  suggestion, impact, audit, and metric contracts; distinguish unavailable sources from empty
+  results, guard stale/disposed work, and preserve identity-scoped views, export filters, and keyboard tabs.
+- [x] Governance controller (`governance-portal.js`): validate mutation receipts and HTTP statuses,
+  guard duplicate/unconfirmed writes, and preserve dialog focus and drafts.
+  Preserve existing glossary stewards and disabled flags during edits; verify scan status and the scope
+  of finding counts and exceptions. Preserve public tab handling and verify sandbox reload imports
+  the latest compiled owner. Strict TypeScript owners, read/write validation, lifetime guards, and
+  native/sandbox acceptance pass. Transitive dependency reload remains tracked separately in §1.1.
+- [x] Admin page composition (`pages/admin.js`): add a strict TypeScript owner and focused page
+  behavior coverage. Offer the server's available roles in the user editor, including stewardship roles.
+  Server role validation, unknown-role rejection, and atomic account/role/audit creation are implemented;
+  the users panel now has strict TypeScript controller, API, and response-validation owners, and native
+  role-picker acceptance passes. Groups/membership also have strict owners and native acceptance.
+  Folders/ACL now have strict owners and native hierarchy/permission acceptance.
+  Reports/publish also has strict controller, API, and response-validation owners with native acceptance.
+  Audit browsing/export now has strict owners and native pagination, actor-retention, CSV, and token-refresh acceptance.
+  Subscriptions/parameters now have strict owners and native persistence, pagination, state, history,
+  and deletion acceptance. The three reproduced P0 parameter/history races are fixed.
+  Settings and page composition now have strict owners, draft/lifetime guards, and focused native/sandbox
+  acceptance. Every mounted panel is disposed when leaving the page; tab changes retain loaded drafts.
+  The page-wide regression and corrected dataset selector have passing evidence below.
 - [ ] Orchestrator page composition (`pages/orchestrator.js`).
 - [ ] Catalog/home page composition (`pages/index.js`).
 
@@ -120,8 +147,9 @@ focused regression coverage. The 18 documentation sanity checks pass after fixin
 scanning to avoid traversing ignored VS Code runtime caches. These results do not replace the final
 runs against the complete change.
 
-Shared runtime/designer TypeScript is complete. Forty-nine Portal modules now have strict TypeScript
-owners, including login, documentation, navigation, branding, operational charts, lineage rendering,
+Shared runtime/designer TypeScript is complete. At the connection-administration checkpoint,
+fifty-five Portal modules had strict TypeScript owners, including login, documentation, navigation,
+branding, operational charts, lineage rendering,
 Orchestrator activity loading/table/access rendering, secret administration/response validation, and UI helpers.
 Secret administration has three passing focused browser stories covering saved-value clearing,
 malformed responses, superseded loads, and disposal.
@@ -163,8 +191,8 @@ tenant JWT accepted for tenant administration but rejected by the platform endpo
 sandbox/control-plane regression passed 91 checks without skips. All 85 consumer checks, 14
 server/contract regressions, and 18 documentation checks pass; strict type/lint gates report zero findings.
 The prepared ownership inventory for those checks contained 420 outputs. Final whole-change delivery checks remain open.
-Nine remaining authored JavaScript modules include administration/catalog controllers, lineage,
-governance/quality, and the admin/index/orchestrator page controllers.
+At that checkpoint, seven authored JavaScript modules still needed conversion, including
+administration/catalog controllers, lineage, governance/quality, and the admin/index/orchestrator pages.
 The separately generated API validator remains a tracked input pending its ownership audit.
 
 Triage now has strict TypeScript rendering, formatting, response-validation, and controller owners.
@@ -193,6 +221,263 @@ consumer checks and 14 server/contract checks pass; strict type/lint gates and t
 are clean. The final sandbox/gateway regression passed 101 browser checks without skips, and all 18
 documentation checks pass. Failure and node-dialog screenshots were reviewed. Evidence is under
 `artifacts/section1/gateway/`; final whole-change lanes and §1.1 delivery/index acceptance remain open.
+
+Policy authority administration now has strict TypeScript controller, view, and response-validation
+owners backed by C# signer, validation, version, machine, and mutation declarations. Scope edits
+invalidate rows and pending confirmations; late reads, validation of older JSON, and disposed work
+cannot render or announce outcomes. Receipts must match the requested scope, identity, and rollout
+state, plus applicable hash/cohort/expiry. Duplicate submissions are blocked; unconfirmed sent writes
+require explicit successful scope refresh even after navigating away and back. Local expiry defaults
+preserve wall time across daylight saving changes. Canary selectors, GUIDs, and certificate thumbprints
+have focused validation. Seven focused browser checks passed, including real signed publish, staged
+activation, halt/reissue, promotion, rollback signature verification, audited machine lifecycle, and
+Dedicated tenant refusal. The percentage and named-group canary journeys both pass through the real
+Portal. The broader sandbox/policy/gateway regression passed 108 browser checks without skips; all 87
+consumer checks, 22 server/contract checks, and 18 documentation checks pass. Strict type/lint gates
+and the flaky-wait audit are clean. Before/after sandbox screenshots were reviewed. Evidence is
+under `artifacts/section1/policy-authority/`; final whole-change lanes and §1.1 delivery/index acceptance
+remain open.
+
+Connection administration now has strict TypeScript controller, view, and response-validation
+owners backed by C# catalog, verification, diagnostic, import, help, and parsed-string declarations.
+Detail edits retain gateway bindings and providers absent from the initial selector. Masked display
+values cannot round-trip into saves; malformed option errors report line numbers without copying
+possible credentials. Incomplete diagnostics and stale verification results cannot claim success.
+Read generations protect refreshes, closed panels, help, and in-progress form edits; disposal cancels
+work and clears temporary input. Duplicate writes are blocked, acknowledgements must match the
+endpoint's 204 contract, and unconfirmed writes require explicit successful refresh. Import/export
+retain disabled state and gateway definitions. Connection administration reuses the authenticated
+gateway wizard adapter with typed parsing, metadata, diagnostic, and save callbacks. Seven focused
+connection checks pass, including two real Portal lifecycle/wizard journeys; the final focused set
+including gateway enrollment passed eight checks. The broader sandbox/connection/gateway regression
+passed 113 browser checks without skips. All 88 consumer checks, 21 server/contract checks, and 18
+documentation checks pass; strict type/lint gates and the flaky-wait audit are clean. Before/after
+sandbox screenshots were reviewed. The prepared inventory contains 434 outputs. Evidence is under
+`artifacts/section1/connections/`; final whole-change lanes and §1.1 delivery/index acceptance remain open.
+
+Data-quality queue administration now has strict TypeScript controller, state, view, and response
+owners backed by C# queue, row, trend, rule, and submission declarations. Unavailable sources clear
+stale counts and cannot report confirmed empty results. Read generations, cancellation, and disposal
+guard target/filter changes and closed panels. Restored submission metadata is isolated by issuer,
+tenant, and subject and revalidated against matching job ID, kind, target, and terminal state.
+Accepted receipts require HTTP 202; duplicate/unconfirmed writes remain guarded until inspection
+and explicit refresh. Polling preserves row edits, notes, and keyboard focus. Refreshing revoked
+preview access clears rows and cancels pending reads; arbitrary row IDs and column names cannot
+change object prototypes. Disposition requests guard the observed row status and support quarantined,
+released, and replaying rows with the appropriate recovery actions. Nine focused browser checks pass,
+including two real Portal preview/trend/audit/submission journeys. The final sandbox/role regression
+passed 144 checks without skips. All 89 consumer checks, 50 server/contract checks, and 18
+documentation checks pass; strict type/lint, asset verification, and the flaky-wait audit are clean.
+Sandbox failure and source-key screenshots were reviewed. The prepared inventory contains 438
+outputs from 88 shared and 59 Portal TypeScript owners. Evidence is under
+`artifacts/section1/data-quality/`; six authored-source conversions, final whole-change lanes,
+and §1.1 delivery/index acceptance remain open.
+
+Dataset administration now has strict TypeScript controller, view, and response-validation owners
+backed by C# declarations. Unavailable or incomplete responses clear stale rows, counts, and statistics.
+Read generations and cancellation protect changed datasets, closed panels, picker searches, identity
+changes, and disposal. Saves retain the opened version, preserve another form's edits, and clear TTL
+through the server's supported request shape. Mutations require matching receipts and expected HTTP
+statuses; unconfirmed sent writes require explicit successful refresh before retry. Permissions include
+Refresh and distinct user/group revoke routes. The value picker preserves keyboard focus and ignores
+late searches; exports retain the displayed query. Real Portal coverage found and fixed Parquet text
+serializing as character arrays, inclusive numeric filters admitting null cells, and concurrent encrypted
+cache reads colliding. Each defect has a failing-before regression and passing corrected evidence.
+Nine focused browser checks pass, including two real Portal cache/filter/export/audit/conflict journeys.
+The final sandbox/role/data-quality/dataset regression passed 153 checks without skips. All 90 consumer
+checks, 57 server/contract checks, 46 encryption regressions, and 18 documentation checks pass; strict
+type/lint, asset verification, and the flaky-wait audit are clean. Sandbox failure and picker screenshots
+were reviewed. The prepared inventory contains 441 outputs from 88 shared and 62 Portal TypeScript
+owners. Evidence is under `artifacts/section1/datasets/`; five authored-source conversions, final
+whole-change lanes, and §1.1 delivery/index acceptance remain open.
+
+Lineage catalog now has strict TypeScript controller, view, response-validation, and contract owners
+backed by reflected C# declarations. Failed or malformed sources clear stale evidence and show
+unavailable state. Protected observations use the actual server shape; inventory counts and filter
+scope are explicit. Read generations, cancellation, identity changes, and disposal guard late results.
+Saved views retain visible edits and stay with their identity. Query edits invalidate exports; the
+inclusive UTC end date retains observations in the last fractional second. Impact responses must
+match the request and include alerts; graph names cannot collide with object properties or edge keys.
+Keyboard tabs, current-form visibility, and ownership facets have focused coverage. Nine focused
+browser checks pass, including a real Portal history/protected/stewardship/impact/export journey.
+The final sandbox/role/data-quality/dataset/lineage regression passed 162 checks without skips.
+All 91 consumer checks, 19 server/contract checks, and 18 documentation checks pass; strict type/lint,
+asset verification, and the flaky-wait audit are clean. Before/after sandbox screenshots were reviewed.
+The prepared inventory contains 445 outputs from 88 shared and 66 Portal TypeScript owners.
+Evidence is under `artifacts/section1/lineage/`; four authored-source conversions, final whole-change
+lanes, and §1.1 delivery/index acceptance remain open.
+
+**Governance conversion (2026-10-08):** The controller, view, response validators, and
+state contracts have strict TypeScript owners with reflected C# governance DTO and receipt declarations.
+Unavailable quality sources clear counts and rows; malformed dashboards cannot claim a valid estate.
+Read generations, cancellation, host ownership, and identity checks guard late work. Trend reads
+validate the requested job, cover all jobs with at most five concurrent requests, and keep missing
+evidence distinct from zero. Closed trend dialogs cannot overwrite a different job. Matching HTTP
+statuses and write receipts are required before success; duplicate and unconfirmed-write guards
+survive leaving and remounting the view. Explicit successful refresh recovers uncertain outcomes.
+Glossary stewards, disabled flags, settings edits, and new dialog drafts survive unrelated late work.
+Cancel/Escape, focus return, and Tab wrapping pass in the sandbox and native Portal. Running scans
+remain distinct from completed scans; findings and exceptions are labeled with their estate-wide scope.
+The seeded stewardship roles reach the views their APIs permit.
+The final sandbox/role/quality/dataset/lineage/governance/snapshot/accessibility regression passed
+233 browser checks without skips. The updated server also passed seven native governance/admin
+journeys. All 92 discovered consumer checks and 268 related server/API/identity/contract checks pass.
+Strict type/lint, asset verification, and the flaky-wait audit are clean. Seventeen filesystem-only
+documentation sanity checks pass; the Git-based source-path check remains part of final acceptance.
+The prepared inventory contains 449 outputs from 88 shared and 70 Portal TypeScript owners.
+Before/after quality-failure screenshots were reviewed. Evidence is under
+`artifacts/section1/governance/`, with gate logs beside it. Governance conversion acceptance is complete;
+final whole-change lanes and §1.1 delivery/index acceptance remain open.
+
+**Admin role validation (2026-10-08):** Before-fix regressions proved that unknown roles left persisted
+Local, LDAP, and tenant accounts. Creation and updates now reject unknown roles before mutation.
+New accounts, role grants, and audit/outbox records commit together; injected audit-write failures
+roll back creation. Receipts report canonical assigned roles and an empty list for unassigned users.
+Shared tenants can create equal usernames and edit one account's role without affecting the other.
+The related 268-test server regression and the seven native governance/admin journeys pass.
+Evidence is under `artifacts/section1/governance/` and the adjacent `admin-role-*` logs.
+The three handwritten Portal page conversions remain open.
+
+**Admin users progress (2026-10-08):** The users panel has strict controller, API, and response-validation
+owners backed by reflected C# user, role-catalog, and bulk-status contracts. Initial loading now starts
+after its state is initialized. Role choices come from the server; unrelated profile edits preserve
+unassigned and multiple roles. Editor writes use the opened version, and a following password reset
+uses the profile receipt's version. Mutation responses must confirm the requested identity and fields;
+password resets require HTTP 204. Duplicate writes, superseded reads, discarded drafts, and unconfirmed
+outcomes have focused coverage. Nine sandbox checks pass, including role-catalog recovery that keeps
+drafts and disposal that clears passwords and rejects late rendering. The native server journey verifies actual
+stewardship grants, profile/password persistence, audited resets, bulk status changes, and a rejected
+stale edit that keeps its draft. The broader regression passed 196 checks; the corrected native wait and
+all-story fixture mount check subsequently passed together. The related 196 server checks pass, including
+role catalog authorization, service-identity limits, tenant identity, and optimistic concurrency.
+Final users-panel, native admin/publish, and all-story fixture acceptance passes 12 checks. The publish
+journey waits for its destination folder to arrive, covering a catalog-response race exposed during
+acceptance. Seventeen filesystem-only documentation checks pass; the Git-based source-path check
+remains part of final acceptance. All 93 discovered consumer checks pass. Type/lint gates and the
+flaky-wait audit are clean.
+Evidence is under `artifacts/section1/admin/` and
+the adjacent `admin-users-*` logs. Remaining admin panels and its page composition still need conversion;
+final whole-change lanes and §1.1 delivery/index acceptance remain open.
+
+**Admin groups and membership progress (2026-10-08):** The controller, API, and response validators
+now have strict TypeScript owners. C# member catalogs carry the group ID and version from the same
+database snapshot as their rows. Named mutation receipts account for changed and skipped users and
+per-group deletion results. Editors retain opened versions; picker writes preserve rejected selections,
+and the user finder supports server pagination. Late reads and confirmations keep their original scope;
+duplicate writes, discarded drafts, disposal, and explicit recovery from unconfirmed outcomes have
+focused coverage. The selected member panel refreshes after a rename or confirmed deletion.
+Ten group sandbox checks pass, including both reproduced defects, and the native Portal journey verifies
+membership persistence, removal, stale-edit rejection, renaming, and deletion. The combined users/groups
+and publish regression passes 22 checks; the separate all-story fixture mount check also passes.
+All 200 related server checks and 94 discovered consumer checks pass. Browser type/lint gates are clean.
+Evidence is under `artifacts/section1/admin/` and the adjacent `admin-groups-*` logs. Folders/ACL,
+reports/publish, audit, subscriptions/parameters, settings, and the full admin page composition remain
+open, along with the Orchestrator/home conversions, final whole-change lanes, and §1.1 acceptance.
+
+**Admin folders and permissions progress (2026-10-09):** The controller, API, and response validators
+now have strict TypeScript owners. The complete nested hierarchy is displayed and available to parent
+pickers, which exclude an edited folder and its descendants. The grant editor is functional; permission
+names and authority ranks come from C#, preserving `Author = 3` and `Manage = 2` storage values.
+ACL catalogs carry their folder identity and version from the same database snapshot as their rows;
+grant/revoke receipts identify the folder, group, permission where applicable, and advanced version.
+Opened editors retain their versions. Rejected grants preserve selections, late reads/confirmations
+retain their scope, and duplicate writes and disposed controllers are guarded. Unconfirmed outcomes
+require successful explicit refresh, including cascading deletion of the selected child. A confirmed
+grant refresh enables retry with the confirmed snapshot; ordinary refresh retains opened versions.
+The four original defects were reproduced before implementation and corrected screenshots reviewed.
+Sixteen folder sandbox checks and the native Portal journey pass. The journey verifies hierarchy,
+numeric permission persistence, grant/revoke audit records, stale-edit rejection, renaming, and cascade
+deletion. The combined users/groups/folders, critical journey, and all-story fixture run passes 40
+checks. All 114 related server checks, including tenant and role isolation for the ACL catalog, and
+95 discovered consumer checks pass. Browser type/lint, asset verification, scoped C# formatting, and
+the flaky-wait audit are clean; 17 filesystem-based documentation sanity checks pass.
+Evidence is under `artifacts/section1/admin/` and the adjacent `admin-folders-*` logs. At that
+checkpoint, reports/publish, audit, subscriptions/parameters, settings, and full admin composition
+were open, along with the Orchestrator/home conversions, final lanes, and §1.1 acceptance.
+
+**Admin reports and publication progress (2026-10-09):** Strict TypeScript controller, API, and
+response validators own the report catalog, publication drafts, destination folders, validation,
+and script picker. C# declarations supply the named admin report catalog and validation/publication
+contracts. Opened versions survive refreshes; superseded reads and late writes cannot replace newer
+results, close a new draft, or retarget it. Accepted publications retain their confirmed identity
+when the draft changes during the write. Matching completed receipts are required; unconfirmed
+outcomes require successful explicit refresh, and unconfirmed publication cannot be retried as
+a duplicate. The script picker supports filtering during reads, retry, and keyboard selection.
+CatalogOnly exposes Studio actions without script paths; Disabled hides publication controls.
+The original four defects were reproduced before implementation and corrected screenshots reviewed.
+Twenty-two report sandbox checks pass. The native Portal journey verifies keyboard script selection,
+inline folder creation, validation/publication, persisted edits, retained conflict drafts, and cascade
+deletion that disables active subscriptions. The combined admin, critical report journey, and all-story
+fixture run passes 63 checks without skips. All 87 selected server/contract checks and 96 discovered
+consumer checks pass; browser type/lint, asset verification, scoped C# formatting, and the flaky-wait
+audit are clean. Seventeen filesystem-based documentation sanity checks pass. Evidence is under
+`artifacts/section1/admin/` and adjacent `admin-reports-*` logs.
+At that checkpoint, audit, subscriptions/parameters, settings, full admin composition, Orchestrator/home
+conversions, final whole-change lanes, and §1.1 delivery/index acceptance remained open.
+
+**Admin audit progress (2026-10-09):** Strict TypeScript controller, API, and response validators own
+audit browsing and CSV downloads through the reflected `PagedResult<AuditLogDto>` contract. The server
+retains events with no account, missing accounts, and accounts outside the tenant without exposing a
+foreign username. Count/page reads share a transaction; timestamp ties sort by event ID and page bounds
+are clamped safely. The shared pager reaches all pages, including the eleventh page in the 525-row fixture.
+Failed or malformed catalogs clear old evidence; filter changes, disposal, and identity changes discard
+late work. CSV uses authenticated token refresh, validates status/content type/body, prevents duplicate
+downloads, and releases object URLs. The existing 10,000-entry limit is visible and verified against
+10,001 actual server rows. Untrusted detail text is escaped.
+The original three browser defects and server actor-retention defect were reproduced before the fixes;
+corrected sandbox screenshots were reviewed. Fifteen audit sandbox checks and the native Portal journey
+pass. Native acceptance verifies known/missing account names, persisted paging order, actual CSV download
+content, export audit recording, and a real token refresh. The combined admin, critical report journey,
+and all-story fixture run passes 79 checks without skips. All 119 selected server/contract/outbox checks
+and 97 discovered consumer checks pass. Browser type/lint, prepared asset verification, scoped C# formatting,
+and the flaky-wait audit are clean; 17 filesystem-based documentation sanity checks pass. Evidence is
+under `artifacts/section1/admin/` and adjacent `admin-audit-*` logs. Subscriptions/parameters, settings,
+full admin composition, Orchestrator/home conversions, final whole-change lanes, and §1.1 delivery/index
+acceptance remain open.
+
+**Admin subscriptions progress (2026-10-09):** Strict controller, parameter-editor, API, and response
+owners use reflected C# subscription, parameter, history, and named bulk-status contracts. The three
+production-page sandbox reproductions are fixed: late parameter/history responses cannot replace a
+newer dialog, and a save captures its original target/version/values without re-fetching definitions.
+The Finance draft now sends `@Region=East` and preserves the newer Operations draft. Required values,
+definition-read failures, cleared overrides, conflicts, duplicate saves, partial bulk results, and
+uncertain receipts have focused acceptance. Explicit refresh checks the exact affected ID even outside
+the current page/filter; an in-dialog refresh action preserves the draft during recovery.
+Seventeen sandbox checks and the native journey pass. Native acceptance verifies paging, persisted values,
+empty override clearing, pause state, real and empty trigger history, deletion, and audit records. A native failure
+reproduction proved unavailable scheduler history was returned as an empty success; it now returns
+sanitized HTTP 503. Encryption maintenance resolves live EF names, fixing generator-host startup after
+the snake_case migration. The combined admin/critical-journey/sandbox regression passes 95 browser checks;
+the final subscription subset passes 18, with strengthened native real-history acceptance also passing.
+The affected subscription/tenant/identity/audit/contract server lane passes 134 checks. All 98 discovered
+consumer checks pass; browser type/lint gates report zero findings and asset verification passes.
+Seventeen filesystem documentation checks pass after replacing a hard-coded checkout depth with
+solution-marker discovery for isolated build layouts. Before/after screenshots were reviewed; evidence
+is in `admin-subscriptions-*.log` and matching TRX/screenshots under `artifacts/section1/` and
+`artifacts/section1/admin/`. Settings, admin page composition, Orchestrator/home conversions, final
+whole-change lanes, and §1.1 delivery/index acceptance remain open.
+
+**Admin settings and composition progress (2026-10-09):** Strict TypeScript owners now compose the
+admin page and handle settings, authenticated requests, and complete reflected response contracts.
+Five browser reproductions exposed late reads overwriting drafts, saves erasing the other form's edits,
+and failed connection-status reads being presented as confirmed offline results. The fixes preserve
+newer drafts, read each form independently, and require explicit refresh after an unconfirmed write.
+Accepted branding invalidates older public reads. Tab changes load each owner once; leaving the page
+disposes every mounted controller and prevents later mounts.
+
+Five server reproductions exposed lost keys, clears reverting after restart, partial branding changes,
+and failed disk writes being published as active settings. Settings now initialize asynchronously,
+persist atomically before publishing an immutable snapshot, preserve null keys, and honor explicit
+clears across restart. Proxy requests capture the destination and key from the same snapshot.
+Focused settings/composition acceptance passes 20 browser checks; the affected server lane passes
+49 checks. The broader admin/sandbox/critical-journey rerun passes 131 checks without skips after
+scoping an ambiguous dataset delete selector to the dataset table.
+All 100 discovered consumer checks pass, type/lint gates report zero findings, and read-only asset
+verification passes. Reviewed screenshots, TRX files, and logs are under `artifacts/section1/admin/`
+and the adjacent `admin-settings-*` / `admin-composition-*` logs. Settings persistence and the staged
+C# formatting hook were committed as `db632ea1c`; its isolated index archive passed 11 server checks.
+The proxy snapshot fix was committed as `1308aee3e`; its exact staged-tree archive passed 39 server checks.
+The Orchestrator/home conversions, final whole-change lanes, and §1.1 delivery/index acceptance remain open.
 
 Designer and Studio page controllers now have strict TypeScript owners, typed authoring-response
 validators, and catalog persistence callbacks. Designer retains the original script for generation
@@ -266,19 +551,40 @@ Work through the preparation and verification tasks below before the source-cont
 JavaScript, tooling, canonical vendor assets, and generator inputs under source control. JavaScript
 remains part of the published products. Remaining handwritten JavaScript migration is tracked in §1.
 
-**Readiness:** Preparation and preliminary source-only checks are implemented. The last prepared ownership
-inventory records 428 outputs from 88 shared and 49 Portal TypeScript modules, the offline bundle,
-and host copies. Refresh this inventory after further source edits. Git cleanup remains pending the
-complete delivery-path checks below. Refresh the earlier snapshot evidence against the final source
-state before untracking; migration of every remaining handwritten Portal module is not a prerequisite
+**Decision:** Implement this cleanup for v0.21.0. The TypeScript migration makes generated JavaScript
+eligible for removal from source control; the delivery checks below determine when each output is
+ready. Keep outputs tracked until their retained inputs, preparation workflow, and packaged consumers
+have passed acceptance. Published JavaScript must continue to be generated and shipped.
+
+**Ready to start:** Yes. Ownership, preparation, and delivery verification can proceed now. The Git
+cutover is ready only when the required checks below pass against the same candidate. Completing a
+TypeScript conversion does not by itself close that output's build, package, or runtime acceptance.
+
+**Readiness (2026-10-09):** Preparation and preliminary source-only checks are implemented. The current
+prepared inventory contains 472 outputs from 88 shared and 93 Portal TypeScript owners, including
+the offline bundle and host copies. Governance read, mutation, dialog, and native-host acceptance
+have passed. This inventory does not complete source-control acceptance: the earlier
+source-only build and packaged-host evidence covered 403 outputs and must be refreshed against
+the final candidate. Refresh the inventory and evidence after further source edits.
+Git cleanup remains pending the complete delivery-path checks below. Refresh the earlier snapshot
+evidence against the final source state before untracking; migration of every remaining handwritten Portal module is not a prerequisite
 for removing verified generated outputs.
+
+The v0.21.0 cleanup can proceed through the implementation and verification tasks below. The decision
+to remove outputs from Git depends on their reproducibility and delivery evidence, not just on the
+TypeScript migration milestone. Two Portal page conversion acceptance items remain open in §1.
+The handwritten Orchestrator and catalog/home page modules still need TypeScript owners; admin
+composition and settings now have strict owners and focused/native acceptance.
+The separately generated API validator remains a retained input until its own generation path passes
+the ownership and bootstrap checks below.
 
 **Implementation order:**
 
-1. Finish the ownership audit, preparation entry point, generator bootstrap, and build/gate integration.
+1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
+   safe obsolete-output cleanup, and build/gate integration.
 2. Verify every supported delivery path from source-only inputs, including final packages and runtime checks.
-3. Add precise ignore rules and untrack only the verified outputs. Include every required source input
-   in the same reviewable change.
+3. Review the exact removal plan, add precise ignore rules, and untrack only the verified outputs.
+   Include every required source input in the same reviewable change.
 4. Repeat acceptance from fresh Git checkouts and source archives of that change. Verify repeat
    preparation leaves Git clean and the ownership gate rejects re-tracked outputs before closing §1.1.
 
@@ -291,8 +597,8 @@ does not close build, package, runtime, or Git-index acceptance.
   development/test entry points, source archives, containers, release ZIPs, MSI/DEB/DMG installers,
   and platform-targeted VSIX packages. Derive the required platforms from the release workflows:
   Windows x64, Linux x64, macOS arm64, and macOS x64 when shipped. For each path, record preparation,
-  build/package commands, runtime checks, candidate source state, and evidence. A skipped or unavailable
-  platform check remains open unless that artifact is explicitly removed from the release scope.
+  build/package commands, runtime checks, candidate source state, owner, blockers, and evidence. A skipped
+  or unavailable platform check remains open unless that artifact is explicitly removed from the release scope.
 - [ ] **Inventory generated outputs and their owners.** Identify TypeScript emits, the offline runtime
   bundle, and generated host copies for Portal, ReportPlayer, WorkstationEditor, and VS Code. Distinguish
   handwritten JavaScript, build/test scripts, vendor libraries, and C#-generated browser contracts; retain
@@ -306,16 +612,69 @@ does not close build, package, runtime, or Git-index acceptance.
   input or a prepared output; a complete output inventory alone does not prove consumer coverage.
   Ensure newly added owners, generators, declarations, configuration, and lockfiles enter source control
   before producing the clean clones or source archives used for final acceptance.
+  Before removing an output from the index, check for intentional local edits to that file. Move any
+  required change into its canonical owner and regenerate; do not discard work during the cleanup.
+- [ ] **Reject ownership conflicts before writing assets.** Preflight the complete compiler, bundle,
+  and host-copy output set before preparation overwrites or removes files. Reject duplicate owners,
+  case-only collisions, and a generated target that is also a retained handwritten or vendor input.
+  Exercise a new TypeScript owner whose output path already contains an authored file, and a shared
+  host copy colliding with a Portal-owned module. Report the conflicting owners and preserve both
+  inputs and the last prepared assets on failure. Reconcile intentional local output edits with their
+  owners before cutover preparation; a generated banner alone is not permission to overwrite them.
 - [ ] **Define and implement one asset preparation entry point.** Use the pinned, locked toolchain to
   compile TypeScript, create the offline bundle, and sync host assets in dependency order. Document the
   Node.js/npm prerequisites and dependency-install command. Make missing tools and compilation failures
   stop preparation with actionable errors; preserve license banners and deterministic LF output.
+  Record supported Node.js, npm, and TypeScript versions. Verify repeat preparation from different
+  checkout locations produces the same assets without embedding machine paths or timestamps.
+  Validate the running toolchain against the supported versions and locked dependencies before writing
+  outputs. Exercise an unsupported Node.js version and a missing or mismatched local compiler; fail
+  with the restore command instead of using a globally installed compiler or downloading a fallback.
+- [ ] **Verify checkout paths and working directories.** Exercise the documented preparation, verification,
+  build, and package entry points from checkout paths containing spaces and non-ASCII characters on
+  Windows and Linux. Check each entry point's working-directory contract; resolve repository paths from
+  the script location or fail with an explicit instruction to run from the repository root. Verify
+  shell arguments, manifest paths, and MSBuild resource discovery preserve the actual paths, and compare
+  generated bytes with the ordinary-checkout result. Keep generated assets free of absolute machine paths.
+- [ ] **Verify generation after dependency restore with network access disabled.** From source-only
+  inputs, install the locked build dependencies through the documented restore step, then disable
+  network access and prepare every required asset. Preparation must use the restored toolchain and
+  retained vendor inputs without downloading compilers, libraries, or browser assets. Repeat generation
+  and compare output hashes. Keep this separate from fresh-cache restore evidence so cached packages
+  cannot hide an undeclared preparation dependency. Record which restore and packaging steps need
+  network access in the delivery matrix.
+- [ ] **Verify preparation freshness covers every required input.** Audit the preparation manifest and
+  .NET verifier together. Fingerprint TypeScript owners, retained JavaScript/vendor/CSS inputs, declarations,
+  generated route/schema contracts, compiler configuration, generator code, and dependency lockfiles.
+  Include transitive generator helpers and the build/package configuration that selects assets, such as
+  embedded-resource declarations, static-content rules, and VSIX file lists. Audit preparation freshness
+  separately from package freshness so a current browser manifest cannot certify an older assembled package.
+  Changes to any of these inputs must invalidate the prepared state even when existing output bytes
+  have not changed. Test each input category, added/removed inputs, and a modified output; ordinary
+  read-only verification must reject stale preparation without repairing it. Determine output ownership
+  from source paths and generator rules; a generated-file banner alone must not allow an authored input
+  to escape verification or be selected for removal from Git.
+  Audit `scripts/lib/browser-asset-inputs.cjs`: its current banner-based exclusions must not omit
+  retained inputs from watch or concurrent-edit detection. Cover an authored input containing a
+  generated-looking banner and verify that changing it still invalidates preparation.
 - [ ] **Verify route, DTO, and schema generator bootstrap.** Exercise the C# browser-contract and Studio
   route generators, plus the Portal API-schema validator generator, with browser outputs absent. Resolve
   any cycle where building a generator consumes assets that require its new contracts to compile.
   Document the supported dependency order and any narrowly scoped bootstrap bypass; ordinary builds
   must continue enforcing asset verification. Keep generated source contracts tracked until their own
   source-only generation and checks are covered.
+  Exercise generator-host startup and database-initialization failures as well as invalid contracts.
+  A failed generator must return failure and must not certify partially updated declarations or routes.
+  Validate the complete generated contract set against both registered hosts before preparing assets;
+  passing individual generator tests does not close a failed bootstrap run.
+- [ ] **Verify source-only module resolution.** With every inventoried browser output absent, compile
+  the retained TypeScript owners and their mixed JavaScript dependencies using the supported compiler
+  configuration. Preserve relative `.js` import specifiers and public exports. Cover Portal imports of
+  shared modules before host copies exist, dynamic and side-effect imports, and exact import casing.
+  Repeat with stale generated implementations present: an error in a TypeScript owner must still fail
+  compilation, and the old JavaScript must never shadow its owner. Reject missing imports before writing
+  outputs. After preparation, run the existing type/lint and consumer gates without relaxing strictness
+  or adding baseline entries.
 - [ ] **Make generation work with no existing outputs.** Create missing host directories, validate import
   closures, and remove obsolete generated files after source renames/deletions without touching handwritten
   or vendor inputs. Cover clean generation, repeat-run stability, collisions, missing imports, stale outputs,
@@ -324,14 +683,44 @@ does not close build, package, runtime, or Git-index acceptance.
   test modules and scratch files from synchronization, ownership inventories, build discovery, and packaging.
   Cover failures during bundling and host copying as well as compilation; a retry must restore a complete,
   consistent asset set before builds can consume it.
+- [ ] **Verify the offline bundle's complete module closure.** Reconcile `RUNTIME_PARTS` in
+  `scripts/sync-assets.js` with the runtime entry's transitive imports and discovered TypeScript owners.
+  Exercise a newly added runtime dependency omitted from the bundle list, a removed part, and emitted
+  syntax unsupported by the existing concatenator. Preparation must reject each case before certifying
+  assets. Preserve public exports and module-initialization behavior, and run the resulting offline
+  snapshot with networking disabled. Keep the existing bundle path and browser URLs.
+- [ ] **Verify obsolete-output cleanup preserves retained inputs.** Audit deletion in
+  `scripts/compile-browser.mjs` and `scripts/sync-assets.js`; both currently use generated banners to
+  identify obsolete files. Require validated ownership before deleting an output. A handwritten or
+  vendor file containing a generated-looking banner must survive preparation. Resolve cleanup paths
+  within the intended output roots, reject traversal and symlink/junction escapes, and handle path
+  separators and casing consistently on Windows and Linux. Exercise a stale or malformed ownership
+  inventory, an output path becoming authored input, and source rename/delete recovery. Preview any
+  unresolved files for review instead of guessing that they are safe to remove.
 - [ ] **Integrate local build and publish entry points.** Establish the supported fresh-checkout workflow
   for CLI and IDE builds, debug scripts, direct project/solution builds, and publish commands. Ensure assets
   exist before MSBuild discovers static files or embeds resources, including the offline snapshot bundle.
+  Cover direct `dotnet test`, `dotnet run`, and `dotnet watch` entry points, IDE launch, and VS Code tasks;
+  any path that skips preparation must fail clearly when required assets are absent or stale. Verify
+  watch/restart uses newly prepared assets and does not keep serving a previous compilation after an error.
   Handle incremental and parallel builds without racing shared writes; cover competing preparation/check
   processes, interrupted-process lock recovery, and source edits during preparation. Fail clearly when
   preparation is missing or stale instead of producing an incomplete application. Verify missing outputs, changed sources,
   newly added sources, and stale bundles trigger the expected failure or regeneration. Update the current
   no-Node-in-.NET-build policy if the chosen integration changes it.
+  With existing `bin/` and `obj/` directories, add, rename, and delete a browser module, prepare again,
+  then rebuild and republish. Verify static-web-asset metadata and embedded resources include the current
+  asset set, removed modules are absent, and unchanged build caches cannot retain an older bundle.
+  Exercise IDE design-time builds separately: `Directory.Build.targets` currently skips verification
+  when `DesignTimeBuild=true`. Verify an IDE opened before preparation discovers newly generated
+  assets on the subsequent real build and launch; design-time success must not certify runtime assets.
+- [ ] **Verify acceptance paths that skip a build.** Audit supported `-NoBuild`/`--no-build` test,
+  run, smoke, and publish paths. Checking current preparation alone does not prove that reused assemblies,
+  embedded resources, copied static assets, or publish folders belong to the same candidate. Build once,
+  change an owner and prepare again without rebuilding, then exercise each affected path. Require a
+  rebuild or reject stale compiled artifacts before recording release acceptance; identify the exact
+  artifacts exercised in the evidence. Cover source-only startup with missing binaries and supported
+  `--no-restore` paths after the documented locked restore, with actionable failure instructions.
 - [ ] **Integrate CI, release, and container preparation.** Audit every affected workflow/job, manual
   validation template, release script, installer/native-package path, and Docker build stage. Install the
   pinned toolchain and generate assets before checks/build/publish; ensure checkout filters, Docker contexts,
@@ -344,16 +733,58 @@ does not close build, package, runtime, or Git-index acceptance.
   jobs for each shipped architecture; Windows/Linux evidence does not close those checks.
   Invalidate cached assets/manifests when sources, generators, configuration, or lockfiles change; test
   cache hits and misses so a stale manifest cannot certify outputs from a different source state.
+  Exercise artifact transfers between jobs in a different checkout directory. Verify ignored outputs
+  survive the explicit artifact file list and match the producing candidate's hashes. Recreate or
+  validate preparation manifests for the receiving checkout; reject missing assets, changed inputs,
+  and a manifest whose paths or hashes describe another job's working tree.
 - [ ] **Make package scripts reproducible and fail fast.** Audit PowerShell and shell versions of
   `build-vsix`, `publish-vsix`, and affected release scripts. Use locked dependency installs for the
   compiler, extension, and React UI, and propagate failures from preparation, builds, publishes, and
   packaging. Scope cleanup to verified package-output paths and processes started by the script.
   A failed stage must not leave a package that appears successful or reuse stale binaries/assets.
+  Restore the compiler before preparation on a fresh checkout. Replace unlocked `npm install` steps
+  in `scripts/build-vsix.ps1`, `scripts/build-vsix.sh`, and `scripts/publish-vsix.sh` with lockfile-based
+  installs; verify all variants build the same required assets from source-only inputs. Invoke the
+  lockfile-installed VSIX packager without an automatic `npx` download fallback. Rebuild the React UI
+  or verify it against its current inputs even when `ui/dist` already exists; test a changed UI source
+  with an old `dist` directory so `scripts/publish-vsix.ps1` cannot package stale UI assets.
+  Inject failures at restore, asset preparation, UI/extension compilation, tool publish, and VSIX assembly.
+  Each variant must return a nonzero exit status, preserve the last accepted package, and leave no new
+  artifact that appears complete. Use temporary assembly directories and guaranteed cleanup; restore
+  the caller's working directory and environment, and never stop unrelated application processes.
+- [ ] **Verify package version and architecture consistency.** Derive the release version and target
+  architecture from the supported release inputs, and reject missing or inconsistent values. Remove
+  the hard-coded version in `scripts/build-vsix.ps1` and the `0.0.0` fallback in
+  `scripts/build-vsix.sh`. Verify macOS x64 and arm64 selection instead of treating every Darwin host
+  as arm64. Check the extension manifest, bundled tools, VSIX target metadata, and package filename
+  against the requested version and platform in every shipped variant.
 - [ ] **Integrate VS Code and UI sandbox workflows.** Ensure extension compile/package and sandbox
   startup/watch paths work without tracked generated files. Verify the VSIX includes the runtime/designer
   import closure and development reloads use the latest successful compilation. Exercise added, renamed,
   and deleted sources in watch mode, failure followed by recovery, and edits made while preparation runs.
   Confirm watch shutdown releases its preparation lock and leaves no temporary assets in host folders.
+  Cover the extension's `npm run watch` and development-host launch tasks explicitly: the current watch
+  command only watches extension TypeScript. Establish an asset watcher or documented companion process
+  that prepares shared and Portal dependencies before the webview reloads. Verify a dependency-only
+  edit, a newly added module, and compiler failure/recovery through the actual development webview.
+- [ ] **Verify sandbox reload refreshes imported dependencies.** `tools/ui-sandbox/util.js` currently
+  adds a cache-busting query to the entry module; its static imports can remain cached. Make the
+  supported reload workflow load changed rendering, validation, and controller dependencies after
+  successful preparation. Exercise a dependency-only TypeScript edit without changing its entry
+  module, verify the new behavior in the mounted story, and cover compilation failure followed by
+  recovery. An entry-module request with a new query string alone does not satisfy this task.
+- [ ] **Verify recovery after cleaning generated files.** In an isolated checkout, exercise `dotnet clean`
+  and removal of inventoried outputs or preparation manifests, then restore dependencies and prepare again
+  through the documented workflow. Confirm missing files cannot be masked by cached build output and
+  repeat preparation restores the complete asset set without changing tracked inputs. Document how Git
+  cleanup affects ignored assets, dependencies, and manifests, with a preview and targeted cleanup
+  commands; preserve authored files and local source edits. Cover IDE and sandbox startup after cleanup.
+- [ ] **Maintain precise generated-output ignore rules.** Derive the ignored paths from the verified
+  ownership inventory, or provide a checked update command that keeps the rules in sync with it. Cover
+  new TypeScript modules and host copies, source renames/deletions, and an output path becoming an authored
+  input again. Reject broad rules that hide handwritten JavaScript, tooling, vendor sources, declarations,
+  or lockfiles. Verify ignore behavior with Git as well as the inventory; adding a new module must not
+  require someone to remember an unverified parallel list. Apply the rules only at the verified cutover.
 - [ ] **Adapt gates to generated, ignored outputs.** Update asset drift checks, pre-push/pre-release gates,
   browser type/lint checks, and tests that read JavaScript from disk to run after preparation. Continue
   checking deterministic output and host parity, detect missing/stale assets, and prevent generated files
@@ -364,6 +795,15 @@ does not close build, package, runtime, or Git-index acceptance.
   file so precise ignore rules cannot silently fall behind the ownership inventory. Keep type/lint baselines empty.
   Commit checks must inspect staged ownership/configuration so unrelated unstaged changes cannot mask
   a missing input or generated file in the proposed change. CI must enforce the resulting tracked tree.
+- [ ] **Verify source-analysis coverage after untracking outputs.** Audit CodeQL exclusions and tools
+  that discover files through Git or JavaScript-only patterns. Ensure they still inspect retained
+  Portal and shared-runtime TypeScript, remaining handwritten JavaScript, and relevant generator inputs.
+  Replace exclusions that hide an entire source project with exclusions for verified delivery outputs
+  where appropriate. Record the analyzed source set after cleanup; ignored compiled JavaScript must
+  not silently remove its authored implementation from security or source-quality checks.
+  In `.github/workflows/codeql.yml`, audit the whole `ETL-SQL.ReportRuntime` exclusion so its
+  `Resources/TypeScript/` owners are analyzed. Audit the blanket `wwwroot/js` and `scripts` exclusions
+  while handwritten Portal modules and relevant generator inputs remain there.
 - [ ] **Keep source-only preparation covered in CI.** Run an isolated source-only generation check with
   all inventoried outputs absent, then exercise the prepared assets through the existing consumer gates.
   Include this check when TypeScript sources, generators, asset configuration, or lockfiles change.
@@ -375,6 +815,9 @@ does not close build, package, runtime, or Git-index acceptance.
   type/lint gates, and sync check; generate again and verify stable output. Include source rename/delete,
   case-sensitive import resolution, and missing-output recovery checks. Compare generated bytes across
   platforms and record commands and results. Exercise this source-only state before untracking outputs.
+  Construct acceptance checkouts from the proposed retained tracked inputs. Do not copy additional
+  owners, declarations, tools, or lockfiles from the developer's working tree to make them pass;
+  untracked local inputs must not hide an incomplete source-control removal plan.
 - [ ] **Verify source-archive builds.** Extract the supported release source archives outside the
   checkout, with no `.git` directory or generated outputs. Verify they contain every required owner,
   contract, generator, configuration file, and lockfile. Run the documented preparation and affected
@@ -391,6 +834,17 @@ does not close build, package, runtime, or Git-index acceptance.
   Exercise the complete VSIX with its bundled CLI/LSP/report tools in an actual VS Code webview; an
   asset-only archive inspection does not establish this. Record the source state, platform/toolchain,
   commands, package hashes, and test results so each required host and delivery path has reviewable evidence.
+  For HTTP hosts and webviews, verify required asset requests return the expected prepared bytes and
+  usable content types, with no HTML fallback or CSP rejection. Exercise case-sensitive URLs and a
+  deliberately missing module so the runtime check detects a broken import closure, not just a successful
+  host health probe. Confirm the offline viewer loads its embedded runtime without network requests.
+- [ ] **Verify installed upgrades deliver the current assets.** Extend the release checklist's existing
+  upgrade lanes with browser-asset checks: install v0.20.0, upgrade through each supported delivery path,
+  and verify the installed JavaScript, CSS, and embedded bundle match the candidate package. Cover removed
+  or renamed modules, existing browser caches, and VS Code extension updates; reopen the report/designer
+  journeys and confirm the current import closure loads. Use the documented rollback or reinstall path
+  and verify that revision's own assets. Preserve configuration and user data, and require no Node.js
+  installation or checkout during these runtime checks. Link the upgrade evidence in the delivery matrix.
 - [ ] **Verify the published asset boundary.** Inspect the actual publish folders, installers, container
   images, and VSIX to confirm generated JavaScript and required canonical assets are included even when
   Git ignores them. Ensure TypeScript sources, declaration files, development source maps, temporary test
@@ -406,6 +860,28 @@ does not close build, package, runtime, or Git-index acceptance.
   file-discovery rules so ignored outputs and bundled vendor components remain represented. Generate
   hashes and attestations after preparation and package assembly; any later asset change must invalidate
   that evidence. Preserve required license banners and reconcile the third-party inventory with what ships.
+  Audit signing, installer assembly, and upload steps for implicit rebuilds or asset regeneration. Compare
+  the assets in the final distributed artifact with the accepted candidate; regenerate checksums and
+  attestations after any step that changes the artifact bytes.
+- [ ] **Run behavior checks against the final cutover candidate.** Run the affected Portal and browser
+  lanes, UI sandbox stories, report runtime/offline checks, VS Code extension and React UI checks, and
+  discovered consumer checks against the same source state used for package acceptance. Include strict
+  type/lint gates and asset verification. Preserve public module URLs, exports, and report behavior;
+  investigate any changed outcome before untracking outputs. Refresh results after source, generator,
+  or package changes instead of relying on earlier migration snapshots.
+- [ ] **Keep acceptance tests from contaminating candidate assets.** Audit the discovered consumer
+  checks and generator failure fixtures for writes to browser sources, outputs, and manifests. Prefer
+  isolated fixture trees. Serialize any check that temporarily changes the acceptance checkout with
+  builds, browser tests, preparation, and packaging that read it. Verify cleanup on success and failure,
+  then rerun read-only asset verification and compare source/output hashes with the candidate before
+  recording acceptance or assembling packages. Temporary modules, partial fixtures, and a manifest
+  produced during a test must not become release inputs or certify the restored candidate.
+- [ ] **Produce the exact source-control removal plan.** Generate a read-only report from the final
+  ownership inventory and current Git index. List each proposed removal, its retained owner or generator,
+  regeneration command, and delivery-path evidence; list the inputs that must remain tracked. Include
+  the precise ignore changes and flag modified outputs for reconciliation with their owners. Verify the
+  report excludes handwritten tooling and vendor inputs, preserves local files, and does not rewrite
+  release tags or history. Recompute the plan if its source state or ownership inventory changes.
 - [ ] **Untrack only reproducible generated assets.** After the source-only build and packaged-runtime checks
   pass, add precise ignore rules and remove the identified outputs from the Git index while retaining locally
   generated files. Preserve canonical CSS, maps, vendor assets, source files, and notices; remove duplicated
@@ -413,10 +889,16 @@ does not close build, package, runtime, or Git-index acceptance.
   Verify the indexed changes contain only the intended outputs, then repeat preparation and gates from a
   fresh checkout of the resulting source state. Confirm a second generation leaves Git clean and that the
   ownership gate rejects accidentally retracked outputs, including outputs from newly migrated modules.
+  Apply the cleanup to the v0.21.0 tree; preserve released tags and repository history.
 - [ ] **Verify existing-clone and branch-switch behavior.** Exercise updating a v0.20.0 clone to the
   source-only layout and switching between revisions with tracked and ignored outputs. Document when
   preparation must run, verify stale outputs/manifests cannot pass the build gate, and preserve local
   source edits. Cleanup must use the ownership inventory and must not delete handwritten or vendor inputs.
+  Cover switches that replace ignored outputs with tracked files, including overwrite conflicts; provide
+  recovery commands that remove only verified outputs after preserving any intentional local changes.
+  Exercise rollback to the previous release's tracked-asset layout and a return to the source-only
+  layout. Each revision must build with its own supported preparation workflow; newer ignored files
+  and manifests must not override or certify the older revision's assets.
 - [ ] **Update contributor and release documentation.** Align `AGENTS.md`, asset/build standards, onboarding,
   sandbox/extension instructions, architecture docs, and release guidance with source/output ownership and
   preparation commands. Reconcile `ROADMAP.md` and remaining migration status; record verified completion
@@ -426,6 +908,14 @@ does not close build, package, runtime, or Git-index acceptance.
   required by published products.
   Document recovery after interrupted preparation and rollback of the source-control transition;
   regeneration must preserve local source edits and must never certify stale outputs as current.
+  Show the edit-owner → prepare → verify workflow explicitly. Remove instructions that ask contributors
+  to maintain generated JavaScript or fix drift in host copies; retain instructions for authored tooling
+  and vendor inputs. Explain that ignored delivery files still belong in published packages.
+- [ ] **Confirm cleanup completion from the resulting tracked tree.** Reconcile the delivery matrix
+  with every preceding task and link its passing evidence. Record the exact source revision and final
+  ownership inventory, confirm required inputs are tracked and verified outputs are absent from the
+  index, and verify fresh-clone/archive preparation and packaged runtime checks. Close this work only
+  after repeat generation leaves Git clean; keep unfinished handwritten-source conversions open in §1.
 
 ---
 
