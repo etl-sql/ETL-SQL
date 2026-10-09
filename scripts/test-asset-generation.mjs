@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import synchronizer from './sync-assets.js';
 import { watchBrowser } from './compile-browser.mjs';
+import assetInputs from './lib/browser-asset-inputs.cjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tempBase = fs.existsSync(path.join(repo, 'scratch')) ? path.join(repo, 'scratch') : os.tmpdir();
@@ -56,6 +57,18 @@ try {
         'scripts/typecheck/package.json', 'scripts/typecheck/package-lock.json']) {
         write(path.join(root, input), fs.readFileSync(path.join(repo, input)));
     }
+    // Keep this fixture inventory independent of the collector: omitting a selector or contract
+    // generator from production must fail the regression instead of silently shrinking coverage.
+    const configurationInputs = ['Directory.Build.props', 'scripts/generate-portal-browser-contract.mjs',
+        'src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj', 'src/ETL-SQL.ReportRuntime/ETL-SQL.ReportRuntime.csproj',
+        'src/ETL-SQL.ReportPlayer/ETL-SQL.ReportPlayer.csproj', 'src/ETL-SQL.WorkstationEditor/ETL-SQL.WorkstationEditor.csproj',
+        'src/ETL-SQL.Portal/ETL-SQL.Portal.csproj', 'src/etl-sql-vscode/.vscodeignore',
+        'src/etl-sql-vscode/package.json', 'src/etl-sql-vscode/ui/package.json', 'src/etl-sql-vscode/ui/vite.config.ts',
+        'src/ETL-SQL.Portal/BrowserContracts/critical-api-contracts.json',
+        ...['BrowserContractsGenerator', 'BrowserContractsGeneratorTests', 'StudioBrowserContractsGenerator',
+            'StudioBrowserContractsGeneratorTests'].map(name => `tests/ETL-SQL.Portal.Tests/${name}.cs`)];
+    for (const input of [...configurationInputs, 'src/ETL-SQL.Portal/wwwroot/css/portal.css',
+        'src/ETL-SQL.Portal/wwwroot/index.html']) write(path.join(root, input), fs.readFileSync(path.join(repo, input)));
     write(path.join(root, 'ETL-SQL.ReportRuntime.proj'), '<Project><Import Project="Directory.Build.targets" /></Project>');
     verifyBuild(/Browser assets are not prepared/);
     // Copy only authored assets. This models a checkout with no compiler, bundle, or host output.
@@ -151,6 +164,67 @@ try {
     assert.equal(fs.existsSync(path.join(root, '.browser-assets.lock')), false);
     assertPreserved(toolchainSnapshot);
     console.log('Browser toolchain: unsupported Node, missing/mismatched restore, lock drift and invalid compiler preserve all assets.');
+    const freshnessSnapshot = outputSnapshot();
+    const freshSignature = assetInputs.browserInputSignature(root);
+    const freshnessInputs = [
+        'scripts/lib/browser-toolchain.cjs', 'scripts/lib/browser-asset-inputs.cjs',
+        'tsconfig.browser-build.json', 'scripts/typecheck/package.json', 'scripts/typecheck/package-lock.json',
+        'scripts/typecheck/.npmrc', 'Directory.Build.props', 'Directory.Build.targets',
+        ...configurationInputs.filter(input => /(?:\.csproj|\.vscodeignore|vite\.config\.ts|Generator(?:Tests)?\.cs|BrowserContracts.*\.json)$/.test(input)),
+        'src/etl-sql-vscode/package.json', 'src/etl-sql-vscode/ui/package.json',
+        'scripts/generate-portal-browser-contract.mjs',
+        'types/etlsql-contracts.generated.d.ts', 'src/ETL-SQL.Portal/wwwroot/css/portal.css',
+        'src/ETL-SQL.Portal/wwwroot/index.html', `${sharedRel}/report-runtime.css`,
+    ].filter(input => fs.existsSync(path.join(root, input)));
+    for (const relative of [...new Set(freshnessInputs)]) {
+        const file = path.join(root, relative), original = fs.readFileSync(file);
+        // Whitespace changes fingerprint an input without changing any emitted implementation.
+        fs.appendFileSync(file, '\n');
+        assert.notEqual(assetInputs.browserInputSignature(root), freshSignature, `Signature missed ${relative}`);
+        verifyBuild(/Prepared browser asset is stale/);
+        if (['Directory.Build.props', 'src/ETL-SQL.Portal/wwwroot/css/portal.css'].includes(relative))
+            await assert.rejects(generate(true), /manifest missing or stale/);
+        assertPreserved(freshnessSnapshot);
+        fs.writeFileSync(file, original);
+    }
+    const retainedInputs = ['scripts/lib/freshness-probe.cjs',
+        'src/ETL-SQL.Portal/BrowserContracts/freshness-probe.json',
+        'src/ETL-SQL.Portal/wwwroot/css/freshness-probe.css'];
+    for (const relative of retainedInputs) {
+        write(path.join(root, relative), relative.endsWith('.json') ? '{}\n' : '/* retained freshness probe */\n');
+        verifyBuild(/Browser sources have not been prepared/);
+        await assert.rejects(generate(true), /manifest missing or stale/);
+        assertPreserved(freshnessSnapshot);
+        fs.unlinkSync(path.join(root, relative));
+    }
+    write(path.join(root, retainedInputs[0]), 'module.exports = "first";\n');
+    await generate();
+    const helperSnapshot = outputSnapshot();
+    fs.appendFileSync(path.join(root, retainedInputs[0]), '\n// changed transitive helper\n');
+    verifyBuild(/Prepared browser asset is stale/);
+    await assert.rejects(generate(true), /manifest missing or stale/);
+    assertPreserved(helperSnapshot);
+    fs.unlinkSync(path.join(root, retainedInputs[0]));
+    verifyBuild(/Prepared browser asset is missing/);
+    await assert.rejects(generate(true), /manifest missing or stale/);
+    assertPreserved(helperSnapshot);
+    await generate();
+    assertPreserved(freshnessSnapshot);
+    const optionalSelector = path.join(root, 'src/etl-sql-vscode/.vscodeignore');
+    if (fs.existsSync(optionalSelector)) {
+        const selectorBytes = fs.readFileSync(optionalSelector);
+        fs.unlinkSync(optionalSelector);
+        verifyBuild(/Prepared browser asset is missing/);
+        await generate();
+        verifyBuild();
+        write(optionalSelector, selectorBytes);
+        verifyBuild(/Browser sources have not been prepared/);
+        await assert.rejects(generate(true), /manifest missing or stale/);
+        await generate();
+        assertPreserved(freshnessSnapshot);
+    }
+    verifyBuild();
+    console.log('Asset freshness: retained styles/markup, compiler and contract generators, helpers, build/package selectors, dependency metadata, and added/removed inputs reject stale preparation without repair.');
     const beforeBootstrap = outputSnapshot();
     const earlierPragma = '*/\n// @ts-nocheck — generated implementation; check the TypeScript owner.\n';
     for (const relative of first.generatedAssets) {

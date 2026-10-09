@@ -2,7 +2,8 @@ const fs = require('fs').promises;
 const path = require('path');
 const { Script } = require('vm');
 const { createHash } = require('crypto');
-const { browserInputSignature, browserFiles, prepareOutputs, safeAssetPath } = require('./lib/browser-asset-inputs.cjs');
+const { browserInputSignature, browserFiles, browserSourceFiles, browserPreparationFiles,
+    prepareOutputs, safeAssetPath } = require('./lib/browser-asset-inputs.cjs');
 const { loadBrowserCompiler } = require('./lib/browser-toolchain.cjs');
 
 const defaultRoot = path.resolve(__dirname, '..');
@@ -252,30 +253,8 @@ async function syncAssetsCore({ root, toolchain, check, quiet, compiler }) {
     }
 
     async function writeOrCheckBuildManifest(preparedInputs) {
-        const inputs = new Set(expectedTargets);
+        const inputs = new Set([...expectedTargets, ...browserSourceFiles(repoRoot), ...browserPreparationFiles(repoRoot)]);
         inputs.add(path.join(repoRoot, 'artifacts/browser-assets.json'));
-        const sourceGroups = [
-            ['src/ETL-SQL.ReportRuntime/Resources/TypeScript', 'src/ETL-SQL.ReportRuntime/Resources/Shared'],
-            ['src/ETL-SQL.Portal/BrowserSources', 'src/ETL-SQL.Portal/wwwroot/js'],
-        ];
-        for (const [sourceRel, outputRel] of sourceGroups) {
-            const sourceDir = path.join(repoRoot, sourceRel);
-            for (const input of await walk(sourceDir)) {
-                inputs.add(input);
-                if (input.endsWith('.ts') && !input.endsWith('.d.ts'))
-                    inputs.add(path.join(repoRoot, outputRel, path.relative(sourceDir, input).replace(/\.ts$/, '.js')));
-            }
-        }
-        for (const input of await walk(sharedDir)) inputs.add(input);
-        for (const input of await walk(portalJsDir)) inputs.add(input);
-        for (const input of await walk(path.join(repoRoot, 'types'))) inputs.add(input);
-        for (const rel of ['scripts/compile-browser.mjs', 'scripts/sync-assets.js', 'tsconfig.browser-build.json',
-            'scripts/lib/browser-asset-inputs.cjs',
-            'scripts/lib/browser-toolchain.cjs', 'scripts/typecheck/.npmrc',
-            'scripts/typecheck/package.json', 'scripts/typecheck/package-lock.json']) {
-            const input = path.join(repoRoot, rel);
-            if (await existsAsync(input)) inputs.add(input);
-        }
         const xml = value => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
         const entries = [];
         for (const input of [...inputs].sort()) {
@@ -398,7 +377,7 @@ async function syncAssetsCore({ root, toolchain, check, quiet, compiler }) {
                 console.error(`  - ${item}`);
             }
             console.warn(`\nRun node .\\scripts\\sync-assets.js to refresh host copies.`);
-            throw new Error('Shared report asset verification failed.');
+            throw new Error(`Shared report asset verification failed. ${drift.join('; ')}`);
         }
 
         log(`\n${modeLabel} Complete.`);

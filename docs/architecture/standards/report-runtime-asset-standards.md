@@ -50,6 +50,13 @@ broken compiler fails with `npm ci --prefix scripts/typecheck`; no global compil
 is used during preparation. Restore needs the package registry or a populated npm cache; generation
 uses only restored dependencies and retained assets.
 
+Freshness covers the retained browser inputs, Portal markup/styles/images, generator and contract
+code, compiler configuration/locks, and host asset-selection files. Keep generator helpers under
+`scripts/lib` so added or removed helpers enter both Node and .NET verification. A changed input
+invalidates preparation even when emitted JavaScript is unchanged. Read-only checks preserve the
+prepared files and report the missing, added, or stale input. The preparation manifest describes
+current source assets; assembled packages need their separate build and runtime acceptance.
+
 1. **Synchronize Assets**:
    Run the sync script from the repository root:
    ```powershell

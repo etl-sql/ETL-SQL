@@ -18,6 +18,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Detect changed or added browser generator helpers, host asset-selection files, and retained Portal
+  markup/styles in read-only asset and MSBuild verification. Preserve prepared files on stale checks.
 - Reject unsupported Node.js and missing, mismatched, or broken restored TypeScript compilers before
   preparing browser assets. Enforce the supported Node.js/npm versions during dependency restore.
 - Preflight browser compiler, offline bundle, and host-copy outputs before writing assets. Preserve

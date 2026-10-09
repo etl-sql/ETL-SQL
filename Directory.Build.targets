@@ -17,7 +17,35 @@
     <Error Condition="!Exists('%(_BrowserPreparedAsset.Identity)')"
            Text="Prepared browser asset is missing: %(_BrowserPreparedAsset.Identity). Run node scripts/sync-assets.js before building." />
     <ItemGroup>
-      <_BrowserCurrentSource Include="$(BrowserAssetRoot)src/ETL-SQL.ReportRuntime/Resources/TypeScript/**/*.ts;$(BrowserAssetRoot)src/ETL-SQL.Portal/BrowserSources/**/*.ts;$(BrowserAssetRoot)types/**/*.d.ts;$(BrowserAssetRoot)src/ETL-SQL.ReportRuntime/Resources/Shared/**/*;$(BrowserAssetRoot)src/ETL-SQL.Portal/wwwroot/js/**/*" Exclude="$(BrowserAssetRoot)**/*.__test-*.mjs" />
+      <_BrowserCurrentSource Include="$(BrowserAssetRoot)src/ETL-SQL.ReportRuntime/Resources/TypeScript/**/*;
+                                     $(BrowserAssetRoot)src/ETL-SQL.Portal/BrowserSources/**/*;
+                                     $(BrowserAssetRoot)types/**/*;
+                                     $(BrowserAssetRoot)src/ETL-SQL.ReportRuntime/Resources/Shared/**/*;
+                                     $(BrowserAssetRoot)src/ETL-SQL.Portal/wwwroot/**/*;
+                                     $(BrowserAssetRoot)scripts/lib/**/*.cjs;$(BrowserAssetRoot)scripts/lib/**/*.mjs;
+                                     $(BrowserAssetRoot)scripts/lib/**/*.js;$(BrowserAssetRoot)scripts/lib/**/*.json;
+                                     $(BrowserAssetRoot)src/ETL-SQL.Portal/BrowserContracts/**/*.json;
+                                     $(BrowserAssetRoot)tests/ETL-SQL.Portal.Tests/*BrowserContractsGenerator.cs;
+                                     $(BrowserAssetRoot)tests/ETL-SQL.Portal.Tests/*BrowserContractsGeneratorTests.cs"
+                             Exclude="$(BrowserAssetRoot)**/*.__test-*.mjs" />
+      <_BrowserInputConfiguration Include="$(BrowserAssetRoot)scripts/compile-browser.mjs;
+                                          $(BrowserAssetRoot)scripts/sync-assets.js;
+                                          $(BrowserAssetRoot)scripts/generate-portal-browser-contract.mjs;
+                                          $(BrowserAssetRoot)tsconfig.browser-build.json;
+                                          $(BrowserAssetRoot)scripts/typecheck/package.json;
+                                          $(BrowserAssetRoot)scripts/typecheck/package-lock.json;
+                                          $(BrowserAssetRoot)scripts/typecheck/.npmrc;
+                                          $(BrowserAssetRoot)Directory.Build.props;$(BrowserAssetRoot)Directory.Build.targets;
+                                          $(BrowserAssetRoot)src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj;
+                                          $(BrowserAssetRoot)src/ETL-SQL.ReportRuntime/ETL-SQL.ReportRuntime.csproj;
+                                          $(BrowserAssetRoot)src/ETL-SQL.ReportPlayer/ETL-SQL.ReportPlayer.csproj;
+                                          $(BrowserAssetRoot)src/ETL-SQL.WorkstationEditor/ETL-SQL.WorkstationEditor.csproj;
+                                          $(BrowserAssetRoot)src/ETL-SQL.Portal/ETL-SQL.Portal.csproj;
+                                          $(BrowserAssetRoot)src/etl-sql-vscode/.vscodeignore;
+                                          $(BrowserAssetRoot)src/etl-sql-vscode/package.json;
+                                          $(BrowserAssetRoot)src/etl-sql-vscode/ui/package.json;
+                                          $(BrowserAssetRoot)src/etl-sql-vscode/ui/vite.config.ts" />
+      <_BrowserCurrentSource Include="@(_BrowserInputConfiguration)" Condition="Exists('%(_BrowserInputConfiguration.Identity)')" />
       <_BrowserUnpreparedSource Include="@(_BrowserCurrentSource)" Exclude="@(_BrowserPreparedAsset)" />
     </ItemGroup>
     <Error Condition="'@(_BrowserUnpreparedSource)' != ''"

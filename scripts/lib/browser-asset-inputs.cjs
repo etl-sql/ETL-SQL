@@ -176,6 +176,33 @@ function browserFiles(dir) {
     });
 }
 
+function browserSourceFiles(root) {
+    // Portal markup, styles, and images are retained build inputs alongside its module sources.
+    return [surfaces[0][0], surfaces[0][1], surfaces[1][0],
+        'src/ETL-SQL.Portal/wwwroot', 'types'].flatMap(relative => browserFiles(safeAssetPath(root, relative)));
+}
+
+function browserPreparationFiles(root) {
+    const fixed = ['scripts/compile-browser.mjs', 'scripts/sync-assets.js',
+        'scripts/generate-portal-browser-contract.mjs', 'tsconfig.browser-build.json',
+        'scripts/typecheck/package.json', 'scripts/typecheck/package-lock.json', 'scripts/typecheck/.npmrc',
+        'Directory.Build.props', 'Directory.Build.targets',
+        ...['Reporting', 'ReportRuntime', 'ReportPlayer', 'WorkstationEditor', 'Portal']
+            .map(project => `src/ETL-SQL.${project}/ETL-SQL.${project}.csproj`),
+        'src/etl-sql-vscode/.vscodeignore', 'src/etl-sql-vscode/package.json',
+        'src/etl-sql-vscode/ui/package.json', 'src/etl-sql-vscode/ui/vite.config.ts'];
+    const inputs = fixed.map(relative => safeAssetPath(root, relative)).filter(file => fs.existsSync(file));
+    // Generator helpers belong here so adding/removing a transitive helper cannot escape freshness
+    // checks. Do not infer input ownership from a comment or generated-looking banner.
+    inputs.push(...browserFiles(safeAssetPath(root, 'scripts/lib')).filter(file => /\.(?:cjs|mjs|js|json)$/.test(file)));
+    inputs.push(...browserFiles(safeAssetPath(root, 'src/ETL-SQL.Portal/BrowserContracts')).filter(file => file.endsWith('.json')));
+    const tests = safeAssetPath(root, 'tests/ETL-SQL.Portal.Tests');
+    if (fs.existsSync(tests)) inputs.push(...fs.readdirSync(tests)
+        .filter(name => /BrowserContractsGenerator(?:Tests)?\.cs$/.test(name))
+        .map(name => safeAssetPath(root, `tests/ETL-SQL.Portal.Tests/${name}`)));
+    return inputs;
+}
+
 // Outputs change during preparation. Only authored inputs belong in its consistency check.
 function browserInputSignature(root, plannedOutputs = []) {
     for (const [source, output] of surfaces) {
@@ -202,16 +229,7 @@ function browserInputSignature(root, plannedOutputs = []) {
         // without a stored output hash cannot authorize removal or hide an authored input.
         if (fs.existsSync(path.join(root, owner.source))) outputs.add(path.resolve(root, owner.path));
     }
-    const inputs = surfaces.flatMap(([source, output]) =>
-        [...browserFiles(path.join(root, source)), ...browserFiles(path.join(root, output))])
-        .concat(browserFiles(path.join(root, 'types')));
-    for (const relative of ['scripts/compile-browser.mjs', 'scripts/sync-assets.js',
-        'scripts/lib/browser-asset-inputs.cjs', 'tsconfig.browser-build.json',
-        'scripts/lib/browser-toolchain.cjs', 'scripts/typecheck/.npmrc',
-        'scripts/typecheck/package.json', 'scripts/typecheck/package-lock.json']) {
-        const file = path.join(root, relative);
-        if (fs.existsSync(file)) inputs.push(file);
-    }
+    const inputs = [...browserSourceFiles(root), ...browserPreparationFiles(root)];
     const signature = createHash('sha256');
     for (const file of [...new Set(inputs)].sort()) {
         if (outputs.has(path.resolve(file))) continue;
@@ -222,4 +240,4 @@ function browserInputSignature(root, plannedOutputs = []) {
 }
 
 module.exports = { browserFiles, browserInputSignature, isTemporaryBrowserModule,
-    readOwnership, prepareOutputs, safeAssetPath, portalTarget };
+    browserSourceFiles, browserPreparationFiles, readOwnership, prepareOutputs, safeAssetPath, portalTarget };

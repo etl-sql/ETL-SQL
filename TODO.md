@@ -598,6 +598,14 @@ engines; preparation never downloads a fallback compiler. Actual Node.js 24.14.0
 all 474 prepared files, including the inventory and manifest. The complete preparation-entry-point
 task remains open until its final candidate and delivery evidence is refreshed.
 
+Freshness verification now fingerprints retained Portal markup/styles/images, generator helpers in
+`scripts/lib`, contract schemas and generators, and the host build/package selectors alongside the
+compiler inputs. Before-fix probes showed a changed transitive helper, ReportRuntime project file,
+and Portal style passing both asset and MSBuild checks; all three now fail read-only verification
+without changing prepared files. The full freshness task remains open for contract bootstrap,
+package freshness, and final candidate acceptance. Evidence is under
+`artifacts/section1/freshness-before.log` and `freshness-after.log`.
+
 1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
    safe obsolete-output cleanup, and build/gate integration.
 2. Verify every supported delivery path from source-only inputs, including final packages and runtime checks.
