@@ -1,7 +1,7 @@
 // Exercise the real sync command in an isolated tree, including its failure paths.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +32,8 @@ try {
     copyFileSync(path.join(repo, 'scripts/compile-browser.mjs'), path.join(work, 'scripts/compile-browser.mjs'));
     mkdirSync(path.join(work, 'scripts/lib'));
     copyFileSync(path.join(repo, 'scripts/lib/browser-asset-inputs.cjs'), path.join(work, 'scripts/lib/browser-asset-inputs.cjs'));
+    copyFileSync(path.join(repo, 'scripts/lib/browser-toolchain.cjs'), path.join(work, 'scripts/lib/browser-toolchain.cjs'));
+    cpSync(path.join(repo, 'scripts/typecheck'), path.join(work, 'scripts/typecheck'), { recursive: true, filter: () => true });
     mkdirSync(path.join(shared, 'designer'));
     // The sync validates each host's import closure even when only bundle syntax is under test.
     writeFileSync(path.join(shared, 'designer/designer.js'), 'export const designer = {};\n');

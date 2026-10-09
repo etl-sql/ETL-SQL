@@ -52,6 +52,7 @@ try {
     fs.copyFileSync(path.join(repo, 'tsconfig.browser-build.json'), path.join(root, 'tsconfig.browser-build.json'));
     fs.copyFileSync(path.join(repo, 'Directory.Build.targets'), path.join(root, 'Directory.Build.targets'));
     for (const input of ['scripts/compile-browser.mjs', 'scripts/sync-assets.js', 'scripts/lib/browser-asset-inputs.cjs',
+        'scripts/lib/browser-toolchain.cjs', 'scripts/typecheck/.npmrc',
         'scripts/typecheck/package.json', 'scripts/typecheck/package-lock.json']) {
         write(path.join(root, input), fs.readFileSync(path.join(repo, input)));
     }
@@ -103,6 +104,53 @@ try {
         for (const [relative, content] of snapshot)
             assert.deepEqual(fs.readFileSync(path.join(root, relative)), content, `Failed preflight changed ${relative}`);
     };
+    // Toolchain failures must happen before acquiring the preparation lock or touching delivered
+    // assets. Use a separate fake restore; never corrupt the checkout's working compiler.
+    const toolchainFixture = path.join(root, 'toolchain-fixture');
+    const toolchainDirectory = path.join(toolchainFixture, 'scripts/typecheck');
+    const toolchainSnapshot = outputSnapshot();
+    const rejectToolchain = async pattern => {
+        await assert.rejects(() => synchronizer.syncAssets({ root, toolchain: toolchainFixture, quiet: true }), pattern);
+        await assert.rejects(() => watchBrowser({ root, toolchain: toolchainFixture }), pattern);
+        assert.equal(fs.existsSync(path.join(root, '.browser-assets.lock')), false);
+        assertPreserved(toolchainSnapshot);
+    };
+    await rejectToolchain(/Missing or invalid package.json.*npm ci/);
+    for (const name of ['package.json', 'package-lock.json'])
+        write(path.join(toolchainDirectory, name), fs.readFileSync(path.join(repo, 'scripts/typecheck', name)));
+    await rejectToolchain(/Missing or invalid node_modules\/\.package-lock.json.*npm ci/);
+    const installedLock = fs.readFileSync(path.join(repo, 'scripts/typecheck/node_modules/.package-lock.json'));
+    write(path.join(toolchainDirectory, 'node_modules/.package-lock.json'), installedLock);
+    const installedPackage = JSON.parse(fs.readFileSync(path.join(repo, 'scripts/typecheck/node_modules/typescript/package.json')));
+    write(path.join(toolchainDirectory, 'node_modules/typescript/package.json'), JSON.stringify({ ...installedPackage, version: '0.0.0' }));
+    await rejectToolchain(/restored TypeScript compiler does not match.*npm ci/);
+    write(path.join(toolchainDirectory, 'node_modules/typescript/package.json'), JSON.stringify(installedPackage));
+    const wrongIntegrity = JSON.parse(installedLock);
+    wrongIntegrity.packages['node_modules/typescript'].integrity = 'sha512-wrong';
+    write(path.join(toolchainDirectory, 'node_modules/.package-lock.json'), JSON.stringify(wrongIntegrity));
+    await rejectToolchain(/restored TypeScript compiler does not match.*npm ci/);
+    write(path.join(toolchainDirectory, 'node_modules/.package-lock.json'), installedLock);
+    await rejectToolchain(/local TypeScript compiler cannot be loaded.*npm ci/);
+    write(path.join(toolchainDirectory, 'node_modules/typescript/lib/typescript.js'), 'module.exports = { version: "0.0.0" };\n');
+    await rejectToolchain(/loaded TypeScript compiler does not match.*npm ci/);
+    const changedLock = JSON.parse(fs.readFileSync(path.join(toolchainDirectory, 'package-lock.json')));
+    changedLock.packages['node_modules/typescript'].version = '0.0.0';
+    write(path.join(toolchainDirectory, 'package-lock.json'), JSON.stringify(changedLock));
+    await rejectToolchain(/package.json and package-lock.json disagree.*npm ci/);
+    fs.rmSync(toolchainFixture, { recursive: true, force: true });
+    // Override only the reported runtime version in this child, exercising the production guard
+    // portably even when CI has no second Node installation.
+    const unsupported = spawnSync(process.execPath, ['-e', `
+        Object.defineProperty(process.versions, 'node', { value: '24.0.0' });
+        require(process.argv[1]).syncAssets({ root: process.argv[2], toolchain: process.argv[3], quiet: true })
+            .catch(error => { console.error(error.message); process.exitCode = 1; });
+    `, path.join(repo, 'scripts/sync-assets.js'), root, repo], { encoding: 'utf8' });
+    assert.ifError(unsupported.error);
+    assert.notEqual(unsupported.status, 0);
+    assert.match(unsupported.stderr, /Unsupported Node.js 24.0.0.*npm ci/);
+    assert.equal(fs.existsSync(path.join(root, '.browser-assets.lock')), false);
+    assertPreserved(toolchainSnapshot);
+    console.log('Browser toolchain: unsupported Node, missing/mismatched restore, lock drift and invalid compiler preserve all assets.');
     const beforeBootstrap = outputSnapshot();
     const earlierPragma = '*/\n// @ts-nocheck — generated implementation; check the TypeScript owner.\n';
     for (const relative of first.generatedAssets) {

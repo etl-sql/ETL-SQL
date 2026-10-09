@@ -15,7 +15,8 @@ src/ETL-SQL.ReportRuntime/Resources/Shared/
 - **Rule**: Edit authored JavaScript, styles, and vendor assets here. Shared runtime and
   designer modules are authored under `Resources/TypeScript/`; their corresponding JavaScript here is
   generated. Follow the generated banner to its source.
-- **Strictly Prohibited**: Never edit files directly inside the generated target directories of host applications. Any direct edits in host directories will be flagged as drift and overwritten by the asset synchronizer.
+- **Strictly Prohibited**: Never edit generated files directly in host directories. Preparation rejects
+  locally changed output bytes; move the intended change into its canonical owner and regenerate.
 
 ---
 
@@ -36,7 +37,18 @@ After modifying files inside the canonical `Shared` directory, you must run the 
 
 For migrated modules, edit `Resources/TypeScript/` instead. Install the pinned compiler once with
 `npm ci --prefix scripts/typecheck`. Sync compiles TypeScript before bundling and copying assets;
-check mode fails on stale compilation without writing files. .NET builds consume checked-in assets.
+check mode fails on stale compilation without writing files. Prepare assets before invoking a .NET
+build or publish, including builds started from an IDE. `Directory.Build.targets` verifies the
+prepared SHA-256 manifest without invoking Node. Missing assets, changed sources, and newly added
+sources fail with the preparation command before the product can ship an incomplete asset set.
+
+The supported preparation toolchain is Node.js 22.x, npm 10.x, and the exact TypeScript version in
+`scripts/typecheck/package.json` and its lockfile (currently 6.0.3). Restore enforces the Node/npm
+engines. Sync, standalone compilation, and the watcher verify Node and the restored compiler's
+version, lock metadata, and loaded implementation before writing assets. A missing, mismatched, or
+broken compiler fails with `npm ci --prefix scripts/typecheck`; no global compiler or download fallback
+is used during preparation. Restore needs the package registry or a populated npm cache; generation
+uses only restored dependencies and retained assets.
 
 1. **Synchronize Assets**:
    Run the sync script from the repository root:

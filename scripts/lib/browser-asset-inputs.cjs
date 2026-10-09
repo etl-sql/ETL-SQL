@@ -207,6 +207,7 @@ function browserInputSignature(root, plannedOutputs = []) {
         .concat(browserFiles(path.join(root, 'types')));
     for (const relative of ['scripts/compile-browser.mjs', 'scripts/sync-assets.js',
         'scripts/lib/browser-asset-inputs.cjs', 'tsconfig.browser-build.json',
+        'scripts/lib/browser-toolchain.cjs', 'scripts/typecheck/.npmrc',
         'scripts/typecheck/package.json', 'scripts/typecheck/package-lock.json']) {
         const file = path.join(root, relative);
         if (fs.existsSync(file)) inputs.push(file);

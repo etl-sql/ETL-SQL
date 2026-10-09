@@ -3,10 +3,12 @@ const path = require('path');
 const { Script } = require('vm');
 const { createHash } = require('crypto');
 const { browserInputSignature, browserFiles, prepareOutputs, safeAssetPath } = require('./lib/browser-asset-inputs.cjs');
+const { loadBrowserCompiler } = require('./lib/browser-toolchain.cjs');
 
 const defaultRoot = path.resolve(__dirname, '..');
 
 async function syncAssets({ root = defaultRoot, toolchain = defaultRoot, check = false, quiet = false, compiler } = {}) {
+    loadBrowserCompiler(toolchain);
     const lockPath = safeAssetPath(root, '.browser-assets.lock');
     let lock;
     try {
@@ -269,6 +271,7 @@ async function syncAssetsCore({ root, toolchain, check, quiet, compiler }) {
         for (const input of await walk(path.join(repoRoot, 'types'))) inputs.add(input);
         for (const rel of ['scripts/compile-browser.mjs', 'scripts/sync-assets.js', 'tsconfig.browser-build.json',
             'scripts/lib/browser-asset-inputs.cjs',
+            'scripts/lib/browser-toolchain.cjs', 'scripts/typecheck/.npmrc',
             'scripts/typecheck/package.json', 'scripts/typecheck/package-lock.json']) {
             const input = path.join(repoRoot, rel);
             if (await existsAsync(input)) inputs.add(input);

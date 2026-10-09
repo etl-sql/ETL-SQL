@@ -18,6 +18,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Reject unsupported Node.js and missing, mismatched, or broken restored TypeScript compilers before
+  preparing browser assets. Enforce the supported Node.js/npm versions during dependency restore.
 - Preflight browser compiler, offline bundle, and host-copy outputs before writing assets. Preserve
   local edits and require validated output paths and previous hashes for obsolete-file cleanup.
 

@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
 import assetInputs from './lib/browser-asset-inputs.cjs';
+import toolchainTools from './lib/browser-toolchain.cjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const marker = '/* GENERATED TYPESCRIPT OUTPUT - DO NOT EDIT.';
@@ -15,6 +15,7 @@ const key = p => path.resolve(p).replaceAll('\\', '/');
 
 // root/toolchain parameters let regression tests exercise the real compiler in an isolated tree.
 export function compileBrowser({ root = repo, check = false, toolchain = repo, plan = false } = {}) {
+    const ts = toolchainTools.loadBrowserCompiler(toolchain);
     const ownership = new Map();
     const outputOwners = new Map();
     const groups = surfaces.map(([source, output]) => {
@@ -56,10 +57,6 @@ export function compileBrowser({ root = repo, check = false, toolchain = repo, p
         return { outputs: 0, removed: orphans.length, generatedFiles: [], owners: [], plannedOutputs: [], orphans };
     }
 
-    const require = createRequire(import.meta.url);
-    const compilerPath = path.join(toolchain, 'scripts/typecheck/node_modules/typescript');
-    if (!fs.existsSync(compilerPath)) throw new Error('Browser compiler missing. Run npm ci --prefix scripts/typecheck');
-    const ts = require(compilerPath);
     const config = ts.readConfigFile(path.join(root, 'tsconfig.browser-build.json'), ts.sys.readFile);
     if (config.error) throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, '\n'));
     const converted = ts.convertCompilerOptionsFromJson(config.config.compilerOptions, root);
@@ -122,6 +119,7 @@ export function compileBrowser({ root = repo, check = false, toolchain = repo, p
 }
 
 export async function watchBrowser({ root = repo, toolchain = repo, intervalMs = 500, onResult = () => {} } = {}) {
+    toolchainTools.loadBrowserCompiler(toolchain);
     const { default: synchronizer } = await import('./sync-assets.js');
     const inputSignature = () => assetInputs.browserInputSignature(root);
     const outputSignature = () => surfaces.flatMap(([, output]) => files(path.join(root, output)))

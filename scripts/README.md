@@ -329,7 +329,8 @@ The scripts update `Directory.Build.props`, the VS Code extension manifest and l
 
 ## 4. Web Asset Synchronization
 
-Use Node.js 22, as pinned in CI and container build stages. From a fresh checkout, prepare assets
+Use Node.js 22.x and npm 10.x, as pinned in the browser toolchain's package engines. TypeScript is
+locked to 6.0.3. From a fresh checkout, prepare assets
 before .NET build/test/publish, an IDE build, extension packaging, or the UI sandbox:
 
 ```powershell
@@ -337,6 +338,12 @@ npm ci --prefix scripts/typecheck
 node scripts\sync-assets.js
 node scripts\sync-assets.js -Check
 ```
+
+Restore enforces those Node/npm versions. Preparation, standalone compilation, and the watcher check
+the running Node version and the local compiler against the package manifest, lockfile, and restored
+dependency metadata before writing assets. Missing, mismatched, or broken compilers fail with the
+restore command. Preparation uses the restored compiler without invoking npm or downloading tools.
+
 Shared runtime/designer modules are authored under `src/ETL-SQL.ReportRuntime/Resources/TypeScript/`;
 migrated Portal modules live under `src/ETL-SQL.Portal/BrowserSources/`. Canonical styles, maps, and
 vendor inputs remain under `Resources/Shared/`. Never edit compiled or synced outputs directly.

@@ -583,10 +583,20 @@ the ownership and bootstrap checks below.
 Ownership preflight now computes compiler emits, the offline bundle, and host copies before mutation.
 The version-2 inventory stores output hashes. Fresh byte-identical outputs can be adopted; replacing
 or deleting other existing bytes requires a matching previous ownership hash. Generated-looking banners do not
-authorize cleanup or exclude retained input changes from watch detection. Windows compiler, bundle,
-and full generator regressions passed, including local-edit preservation, conflicts, malformed paths,
-junctions, source rename/delete recovery, and watcher recovery. Evidence is under
-`artifacts/section1/ownership-*.log`. Linux and final candidate acceptance remain open.
+authorize cleanup or exclude retained input changes from watch detection. Windows and Ubuntu compiler,
+bundle, and full generator regressions passed, including local-edit preservation, conflicts, malformed
+paths, junctions, source rename/delete recovery, and watcher recovery. The tooling checkpoint's exact
+staged tree produced 379 byte-identical outputs on both platforms with Node.js 22.23.3; this covers
+the tracked shared owners. The working-tree consumer gate passed all 100 checks, with zero type/lint
+findings. Evidence is under `artifacts/section1/ownership-*.log` and `ownership-index-proof.json`.
+Final candidate build, package, runtime, and source-control acceptance remain open.
+
+Toolchain validation now requires Node.js 22.x, npm 10.x for restore, and the exact locked TypeScript
+compiler. Preparation, standalone compilation, and watcher startup reject unsupported Node or a
+missing, mismatched, or broken local compiler before writing assets. Restore uses strict package
+engines; preparation never downloads a fallback compiler. Actual Node.js 24.14.0 failures preserved
+all 474 prepared files, including the inventory and manifest. The complete preparation-entry-point
+task remains open until its final candidate and delivery evidence is refreshed.
 
 1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
    safe obsolete-output cleanup, and build/gate integration.

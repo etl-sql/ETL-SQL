@@ -23,6 +23,8 @@ try {
     const leaf = path.join(output, 'leaf.js');
     const expected = fs.readFileSync(leaf, 'utf8');
     const legacy = fs.readFileSync(path.join(output, 'legacy.js'), 'utf8');
+    assert.throws(() => compileBrowser({ root, toolchain: root }), /Browser toolchain:.*npm ci/);
+    assert.equal(fs.readFileSync(leaf, 'utf8'), expected, 'Standalone compilation must validate its restored toolchain before writing.');
     compile(true);
     const earlierFormat = expected.replace('*/\n// @ts-nocheck — generated implementation; check the TypeScript owner.\n', '*/\n');
     const bootstrapInventory = path.join(root, 'artifacts/browser-assets.json');
