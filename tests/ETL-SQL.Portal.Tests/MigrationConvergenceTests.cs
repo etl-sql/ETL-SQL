@@ -221,6 +221,9 @@ public sealed class MigrationConvergenceTests : IDisposable
         // with the unified job boundary. No installation exists to roll, so the contract guards
         // nothing here.
         "_DropDatasetJobs",
+        // Database schema standardization to snake_case naming per TODO #12. Renames all
+        // legacy PascalCase tables and columns to snake_case across SQLite and PostgreSQL.
+        "_StandardizeSnakeCaseNaming",
     ];
 
     private static bool IsRollingContractViolation(MigrationOperation operation, out string reason)

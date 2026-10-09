@@ -77,7 +77,7 @@ public sealed class DedicatedTenantBackupRestoreTests : IDisposable
             $"Data Source={Path.Combine(restoreRoot, "etlsql.db")}");
         await restored.OpenAsync();
         await using var job = restored.CreateCommand();
-        job.CommandText = "SELECT IsEnabled, LeaseOwner, LeaseExpiresAt, LeaseFenceToken, TenantId FROM Jobs WHERE Name = 'nightly';";
+        job.CommandText = "SELECT is_enabled, lease_owner, lease_expires_at, lease_fence_token, tenant_id FROM jobs WHERE name = 'nightly';";
         await using var reader = await job.ExecuteReaderAsync();
         Assert.True(await reader.ReadAsync());
         Assert.Equal(0L, reader.GetInt64(0));
@@ -89,7 +89,7 @@ public sealed class DedicatedTenantBackupRestoreTests : IDisposable
 
         await using var admissions = restored.CreateCommand();
         admissions.CommandText =
-            "SELECT AdmissionId, State, LeaseOwner, LeaseExpiresUtc, ReconciliationReason FROM SandboxAdmissions ORDER BY AdmissionId;";
+            "SELECT admission_id, state, lease_owner, lease_expires_utc, reconciliation_reason FROM sandbox_admissions ORDER BY admission_id;";
         await using var admissionReader = await admissions.ExecuteReaderAsync();
         Assert.True(await admissionReader.ReadAsync());
         Assert.Equal("active-at-backup", admissionReader.GetString(0));
@@ -111,7 +111,7 @@ public sealed class DedicatedTenantBackupRestoreTests : IDisposable
         {
             await connection.OpenAsync();
             await using var command = connection.CreateCommand();
-            command.CommandText = "UPDATE Jobs SET TenantId = 'tenant-beta' WHERE Name = 'nightly';";
+            command.CommandText = "UPDATE jobs SET tenant_id = 'tenant-beta' WHERE name = 'nightly';";
             await command.ExecuteNonQueryAsync();
         }
         SqliteConnection.ClearAllPools();

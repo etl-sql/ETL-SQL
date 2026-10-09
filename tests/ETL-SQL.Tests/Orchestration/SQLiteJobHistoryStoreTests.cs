@@ -907,6 +907,17 @@ namespace ETL_SQL.Tests.Orchestration
                     await _coordinator.ArriveAsync();
                 return columns;
             }
+
+            public Task<HashSet<string>> GetTableNamesAsync(
+                DbConnection connection,
+                CancellationToken ct = default) =>
+                _inner.GetTableNamesAsync(connection, ct);
+
+            public Task<List<string>> GetExactColumnNamesAsync(
+                DbConnection connection,
+                string table,
+                CancellationToken ct = default) =>
+                _inner.GetExactColumnNamesAsync(connection, table, ct);
         }
 
         [Fact]

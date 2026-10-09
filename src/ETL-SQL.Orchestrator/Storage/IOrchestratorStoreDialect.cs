@@ -46,6 +46,12 @@ namespace ETL_SQL.Orchestrator.Storage
         /// <c>information_schema.columns</c>.</summary>
         Task<HashSet<string>> GetColumnNamesAsync(DbConnection connection, string table, CancellationToken ct = default);
 
+        /// <summary>Returns existing table names in exact casing.</summary>
+        Task<HashSet<string>> GetTableNamesAsync(DbConnection connection, CancellationToken ct = default);
+
+        /// <summary>Returns existing column names of <paramref name="table"/> in exact casing.</summary>
+        Task<List<string>> GetExactColumnNamesAsync(DbConnection connection, string table, CancellationToken ct = default);
+
         /// <summary>
         /// Turns an INSERT (without trailing semicolon) into one that yields the generated identity as a
         /// scalar. SQLite appends <c>; SELECT last_insert_rowid();</c>; PostgreSQL appends

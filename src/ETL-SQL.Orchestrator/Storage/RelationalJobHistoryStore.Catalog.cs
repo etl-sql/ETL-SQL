@@ -38,17 +38,17 @@ namespace ETL_SQL.Orchestrator.Storage
             // until it is adopted, and adoption is an explicit audited act rather than a side effect
             // of whoever edited it next.
             command.CommandText = @"
-                INSERT INTO Schedules (Id, Name, Cron, TimeZone, IsEnabled, DisplayName, Description, Options, CreatedBy, ModifiedBy, TenantId)
+                INSERT INTO schedules (id, name, cron, time_zone, is_enabled, display_name, description, options, created_by, modified_by, tenant_id)
                 VALUES (@id, @name, @cron, @timeZone, @isEnabled, @displayName, @description, @options, @createdBy, @modifiedBy, @tenantId)
-                ON CONFLICT(TenantId, Name) DO UPDATE SET
-                    Cron        = excluded.Cron,
-                    TimeZone    = excluded.TimeZone,
-                    IsEnabled   = excluded.IsEnabled,
-                    DisplayName = excluded.DisplayName,
-                    Description = excluded.Description,
-                    Options     = excluded.Options,
-                    ModifiedBy  = excluded.ModifiedBy,
-                    Version     = Schedules.Version + 1;";
+                ON CONFLICT(tenant_id, name) DO UPDATE SET
+                    cron        = excluded.cron,
+                    time_zone    = excluded.time_zone,
+                    is_enabled   = excluded.is_enabled,
+                    display_name = excluded.display_name,
+                    description = excluded.description,
+                    options     = excluded.options,
+                    modified_by  = excluded.modified_by,
+                    version     = schedules.version + 1;";
             command.AddParam("@id", NewOrExistingId(schedule.Id));
             command.AddParam("@name", schedule.Name);
             command.AddParam("@tenantId", TenantKey(schedule.TenantId));
@@ -71,7 +71,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText =
-                "SELECT * FROM Schedules WHERE TenantId = @tenant AND Name = @name COLLATE NOCASE;";
+                "SELECT * FROM schedules WHERE tenant_id = @tenant AND name = @name COLLATE NOCASE;";
             command.AddParam("@tenant", TenantKey(tenantId));
             command.AddParam("@name", name);
             using var reader = await command.ExecuteReaderAsync();
@@ -86,7 +86,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM Schedules WHERE Id = @id;";
+            command.CommandText = "SELECT * FROM schedules WHERE id = @id;";
             command.AddParam("@id", scheduleId);
             using var reader = await command.ExecuteReaderAsync();
             return await reader.ReadAsync() ? ReadSchedule(reader) : null;
@@ -99,7 +99,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM Schedules ORDER BY Name LIMIT @limit OFFSET @offset;";
+            command.CommandText = "SELECT * FROM schedules ORDER BY name LIMIT @limit OFFSET @offset;";
             command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
             command.AddParam("@offset", Math.Max(0, offset));
 
@@ -121,9 +121,9 @@ namespace ETL_SQL.Orchestrator.Storage
             // found by id — the link table no longer stores names at all.
             var blockers = await ReadLinkedJobNamesAsync(
                 connection, transaction,
-                @"SELECT j.Name FROM JobSchedules js
-                  INNER JOIN Jobs j ON j.Id = js.JobId
-                  WHERE js.ScheduleId = @id;", scheduleId);
+                @"SELECT j.name FROM job_schedules js
+                  INNER JOIN jobs j ON j.id = js.job_id
+                  WHERE js.schedule_id = @id;", scheduleId);
             if (blockers.Count > 0)
             {
                 transaction.Rollback();
@@ -132,7 +132,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var delete = connection.CreateCommand();
             delete.Transaction = transaction;
-            delete.CommandText = "DELETE FROM Schedules WHERE Id = @id;";
+            delete.CommandText = "DELETE FROM schedules WHERE id = @id;";
             delete.AddParam("@id", scheduleId);
             await delete.ExecuteNonQueryAsync();
 
@@ -141,21 +141,21 @@ namespace ETL_SQL.Orchestrator.Storage
         }
 
         public Task<bool> SetScheduleEnabledAsync(ScheduleId scheduleId, bool isEnabled) =>
-            SetEnabledAsync("Schedules", scheduleId.Require(), isEnabled);
+            SetEnabledAsync("schedules", scheduleId.Require(), isEnabled);
 
         private static ScheduleDefinition ReadSchedule(DbDataReader reader) => new(
-            reader.GetString(reader.GetOrdinal("Name")),
-            reader.GetString(reader.GetOrdinal("Cron")),
-            reader.GetString(reader.GetOrdinal("TimeZone")),
-            reader.GetInt32(reader.GetOrdinal("IsEnabled")) == 1,
-            ReadOptionalString(reader, "DisplayName"),
-            ReadOptionalString(reader, "Description"),
-            ReadOptionalString(reader, "Options"),
-            ReadOptionalString(reader, "CreatedBy"),
-            ReadOptionalString(reader, "ModifiedBy"),
-            reader.GetInt64(reader.GetOrdinal("Version")),
-            TenantOrNull(ReadOptionalString(reader, "TenantId")),
-            ScheduleId.From(ReadOptionalString(reader, "Id")));
+            reader.GetString(reader.GetOrdinal("name")),
+            reader.GetString(reader.GetOrdinal("cron")),
+            reader.GetString(reader.GetOrdinal("time_zone")),
+            reader.GetInt32(reader.GetOrdinal("is_enabled")) == 1,
+            ReadOptionalString(reader, "display_name"),
+            ReadOptionalString(reader, "description"),
+            ReadOptionalString(reader, "options"),
+            ReadOptionalString(reader, "created_by"),
+            ReadOptionalString(reader, "modified_by"),
+            reader.GetInt64(reader.GetOrdinal("version")),
+            TenantOrNull(ReadOptionalString(reader, "tenant_id")),
+            ScheduleId.From(ReadOptionalString(reader, "id")));
 
         // ── Notifications ─────────────────────────────────────────────────────────
 
@@ -167,17 +167,17 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                INSERT INTO Notifications (Id, Name, ConnectionName, Recipient, IsEnabled, DisplayName, Description, Options, CreatedBy, ModifiedBy, TenantId)
+                INSERT INTO notifications (id, name, connection_name, recipient, is_enabled, display_name, description, options, created_by, modified_by, tenant_id)
                 VALUES (@id, @name, @connectionName, @recipient, @isEnabled, @displayName, @description, @options, @createdBy, @modifiedBy, @tenantId)
-                ON CONFLICT(TenantId, Name) DO UPDATE SET
-                    ConnectionName = excluded.ConnectionName,
-                    Recipient      = excluded.Recipient,
-                    IsEnabled      = excluded.IsEnabled,
-                    DisplayName    = excluded.DisplayName,
-                    Description    = excluded.Description,
-                    Options        = excluded.Options,
-                    ModifiedBy     = excluded.ModifiedBy,
-                    Version        = Notifications.Version + 1;";
+                ON CONFLICT(tenant_id, name) DO UPDATE SET
+                    connection_name = excluded.connection_name,
+                    recipient      = excluded.recipient,
+                    is_enabled      = excluded.is_enabled,
+                    display_name    = excluded.display_name,
+                    description    = excluded.description,
+                    options        = excluded.options,
+                    modified_by     = excluded.modified_by,
+                    version        = notifications.version + 1;";
             command.AddParam("@id", NewOrExistingId(notification.Id));
             command.AddParam("@name", notification.Name);
             command.AddParam("@tenantId", TenantKey(notification.TenantId));
@@ -200,7 +200,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText =
-                "SELECT * FROM Notifications WHERE TenantId = @tenant AND Name = @name COLLATE NOCASE;";
+                "SELECT * FROM notifications WHERE tenant_id = @tenant AND name = @name COLLATE NOCASE;";
             command.AddParam("@tenant", TenantKey(tenantId));
             command.AddParam("@name", name);
             using var reader = await command.ExecuteReaderAsync();
@@ -215,7 +215,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM Notifications WHERE Id = @id;";
+            command.CommandText = "SELECT * FROM notifications WHERE id = @id;";
             command.AddParam("@id", notificationId);
             using var reader = await command.ExecuteReaderAsync();
             return await reader.ReadAsync() ? ReadNotification(reader) : null;
@@ -228,7 +228,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM Notifications ORDER BY Name LIMIT @limit OFFSET @offset;";
+            command.CommandText = "SELECT * FROM notifications ORDER BY name LIMIT @limit OFFSET @offset;";
             command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
             command.AddParam("@offset", Math.Max(0, offset));
 
@@ -248,9 +248,9 @@ namespace ETL_SQL.Orchestrator.Storage
 
             var blockers = await ReadLinkedJobNamesAsync(
                 connection, transaction,
-                @"SELECT DISTINCT j.Name FROM JobNotifications jn
-                   INNER JOIN Jobs j ON j.Id = jn.JobId
-                   WHERE jn.NotificationId = @id;", notificationId);
+                @"SELECT DISTINCT j.name FROM job_notifications jn
+                   INNER JOIN jobs j ON j.id = jn.job_id
+                   WHERE jn.notification_id = @id;", notificationId);
             if (blockers.Count > 0)
             {
                 transaction.Rollback();
@@ -259,7 +259,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var delete = connection.CreateCommand();
             delete.Transaction = transaction;
-            delete.CommandText = "DELETE FROM Notifications WHERE Id = @id;";
+            delete.CommandText = "DELETE FROM notifications WHERE id = @id;";
             delete.AddParam("@id", notificationId);
             await delete.ExecuteNonQueryAsync();
 
@@ -268,21 +268,21 @@ namespace ETL_SQL.Orchestrator.Storage
         }
 
         public Task<bool> SetNotificationEnabledAsync(NotificationId notificationId, bool isEnabled) =>
-            SetEnabledAsync("Notifications", notificationId.Require(), isEnabled);
+            SetEnabledAsync("notifications", notificationId.Require(), isEnabled);
 
         private static NotificationDefinition ReadNotification(DbDataReader reader) => new(
-            reader.GetString(reader.GetOrdinal("Name")),
-            reader.GetString(reader.GetOrdinal("ConnectionName")),
-            ReadOptionalString(reader, "Recipient"),
-            reader.GetInt32(reader.GetOrdinal("IsEnabled")) == 1,
-            ReadOptionalString(reader, "DisplayName"),
-            ReadOptionalString(reader, "Description"),
-            ReadOptionalString(reader, "Options"),
-            ReadOptionalString(reader, "CreatedBy"),
-            ReadOptionalString(reader, "ModifiedBy"),
-            reader.GetInt64(reader.GetOrdinal("Version")),
-            TenantOrNull(ReadOptionalString(reader, "TenantId")),
-            NotificationId.From(ReadOptionalString(reader, "Id")));
+            reader.GetString(reader.GetOrdinal("name")),
+            reader.GetString(reader.GetOrdinal("connection_name")),
+            ReadOptionalString(reader, "recipient"),
+            reader.GetInt32(reader.GetOrdinal("is_enabled")) == 1,
+            ReadOptionalString(reader, "display_name"),
+            ReadOptionalString(reader, "description"),
+            ReadOptionalString(reader, "options"),
+            ReadOptionalString(reader, "created_by"),
+            ReadOptionalString(reader, "modified_by"),
+            reader.GetInt64(reader.GetOrdinal("version")),
+            TenantOrNull(ReadOptionalString(reader, "tenant_id")),
+            NotificationId.From(ReadOptionalString(reader, "id")));
 
         // ── Job ↔ Schedule ────────────────────────────────────────────────────────
 
@@ -298,9 +298,9 @@ namespace ETL_SQL.Orchestrator.Storage
             // state of a link that is already armed and firing.
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                INSERT INTO JobSchedules (JobId, ScheduleId, LastRun, NextRun)
+                INSERT INTO job_schedules (job_id, schedule_id, last_run, next_run)
                 VALUES (@jobId, @scheduleId, NULL, @nextRun)
-                ON CONFLICT(JobId, ScheduleId) DO NOTHING;";
+                ON CONFLICT(job_id, schedule_id) DO NOTHING;";
             command.AddParam("@jobId", jobId);
             command.AddParam("@scheduleId", scheduleId);
             command.AddParam("@nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
@@ -317,7 +317,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                DELETE FROM JobSchedules WHERE JobId = @jobId AND ScheduleId = @scheduleId;";
+                DELETE FROM job_schedules WHERE job_id = @jobId AND schedule_id = @scheduleId;";
             command.AddParam("@jobId", jobId);
             command.AddParam("@scheduleId", scheduleId);
             return await command.ExecuteNonQueryAsync() > 0;
@@ -334,14 +334,14 @@ namespace ETL_SQL.Orchestrator.Storage
             // have a schedule called 'nightly', and a link belongs to exactly one of them.
             using var command = connection.CreateCommand();
             var select = @"
-                SELECT js.JobId, js.ScheduleId, js.LastRun, js.NextRun,
-                       j.Name AS JobName, s.Name AS ScheduleName
-                FROM JobSchedules js
-                INNER JOIN Jobs j ON j.Id = js.JobId
-                INNER JOIN Schedules s ON s.Id = js.ScheduleId ";
+                SELECT js.job_id, js.schedule_id, js.last_run, js.next_run,
+                       j.name AS job_name, s.name AS schedule_name
+                FROM job_schedules js
+                INNER JOIN jobs j ON j.id = js.job_id
+                INNER JOIN schedules s ON s.id = js.schedule_id ";
             command.CommandText = jobId is null
-                ? select + "ORDER BY j.Name, s.Name;"
-                : select + "WHERE js.JobId = @jobId ORDER BY s.Name;";
+                ? select + "ORDER BY j.name, s.name;"
+                : select + "WHERE js.job_id = @jobId ORDER BY s.name;";
             if (jobId is not null) command.AddParam("@jobId", jobId);
 
             var results = new List<JobScheduleLink>();
@@ -349,12 +349,12 @@ namespace ETL_SQL.Orchestrator.Storage
             while (await reader.ReadAsync())
             {
                 results.Add(new JobScheduleLink(
-                    JobId.From(reader.GetString(reader.GetOrdinal("JobId"))),
-                    ScheduleId.From(reader.GetString(reader.GetOrdinal("ScheduleId"))),
-                    ParseOptionalTimestamp(reader, "LastRun"),
-                    ParseOptionalTimestamp(reader, "NextRun"),
-                    ReadOptionalString(reader, "JobName"),
-                    ReadOptionalString(reader, "ScheduleName")));
+                    JobId.From(reader.GetString(reader.GetOrdinal("job_id"))),
+                    ScheduleId.From(reader.GetString(reader.GetOrdinal("schedule_id"))),
+                    ParseOptionalTimestamp(reader, "last_run"),
+                    ParseOptionalTimestamp(reader, "next_run"),
+                    ReadOptionalString(reader, "job_name"),
+                    ReadOptionalString(reader, "schedule_name")));
             }
             return results;
         }
@@ -369,8 +369,8 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                UPDATE JobSchedules SET LastRun = @lastRun, NextRun = @nextRun
-                WHERE JobId = @jobId AND ScheduleId = @scheduleId;";
+                UPDATE job_schedules SET last_run = @lastRun, next_run = @nextRun
+                WHERE job_id = @jobId AND schedule_id = @scheduleId;";
             command.AddParam("@lastRun", lastRun.ToString("O"));
             command.AddParam("@nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
             command.AddParam("@jobId", jobId);
@@ -388,8 +388,8 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                UPDATE JobSchedules SET NextRun = @nextRun
-                WHERE JobId = @jobId AND ScheduleId = @scheduleId;";
+                UPDATE job_schedules SET next_run = @nextRun
+                WHERE job_id = @jobId AND schedule_id = @scheduleId;";
             command.AddParam("@nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
             command.AddParam("@jobId", jobId);
             command.AddParam("@scheduleId", scheduleId);
@@ -408,13 +408,13 @@ namespace ETL_SQL.Orchestrator.Storage
             // NextRun IS NOT NULL is deliberate — see IJobCatalogStore for why "no next occurrence"
             // must not mean "run now".
             command.CommandText = @"
-                SELECT DISTINCT j.* FROM Jobs j
-                JOIN JobSchedules js ON js.JobId = j.Id
-                JOIN Schedules s ON s.Id = js.ScheduleId
-                WHERE j.IsEnabled = 1
-                  AND s.IsEnabled = 1
-                  AND js.NextRun IS NOT NULL
-                  AND js.NextRun <= @now;";
+                SELECT DISTINCT j.* FROM jobs j
+                JOIN job_schedules js ON js.job_id = j.id
+                JOIN schedules s ON s.id = js.schedule_id
+                WHERE j.is_enabled = 1
+                  AND s.is_enabled = 1
+                  AND js.next_run IS NOT NULL
+                  AND js.next_run <= @now;";
             command.AddParam("@now", nowUtc.ToString("O"));
 
             var jobs = new List<JobDefinition>();
@@ -442,9 +442,9 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                INSERT INTO JobNotifications (JobId, NotificationId, TriggerCondition)
+                INSERT INTO job_notifications (job_id, notification_id, trigger_condition)
                 VALUES (@jobId, @notificationId, @trigger)
-                ON CONFLICT(JobId, NotificationId, TriggerCondition) DO NOTHING;";
+                ON CONFLICT(job_id, notification_id, trigger_condition) DO NOTHING;";
             command.AddParam("@jobId", jobId);
             command.AddParam("@notificationId", notificationId);
             command.AddParam("@trigger", trigger.ToString());
@@ -461,9 +461,9 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                DELETE FROM JobNotifications
-                WHERE JobId = @jobId AND NotificationId = @notificationId
-                  AND TriggerCondition = @trigger COLLATE NOCASE;";
+                DELETE FROM job_notifications
+                WHERE job_id = @jobId AND notification_id = @notificationId
+                  AND trigger_condition = @trigger COLLATE NOCASE;";
             command.AddParam("@jobId", jobId);
             command.AddParam("@notificationId", notificationId);
             command.AddParam("@trigger", trigger.ToString());
@@ -479,29 +479,29 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             var select = @"
-                SELECT jn.JobId, jn.NotificationId, jn.TriggerCondition,
-                       j.Name AS JobName, n.Name AS NotificationName
-                FROM JobNotifications jn
-                INNER JOIN Jobs j ON j.Id = jn.JobId
-                INNER JOIN Notifications n ON n.Id = jn.NotificationId ";
+                SELECT jn.job_id, jn.notification_id, jn.trigger_condition,
+                       j.name AS job_name, n.name AS notification_name
+                FROM job_notifications jn
+                INNER JOIN jobs j ON j.id = jn.job_id
+                INNER JOIN notifications n ON n.id = jn.notification_id ";
             command.CommandText = jobId is null
-                ? select + "ORDER BY j.Name, n.Name, jn.TriggerCondition;"
-                : select + "WHERE jn.JobId = @jobId ORDER BY n.Name, jn.TriggerCondition;";
+                ? select + "ORDER BY j.name, n.name, jn.trigger_condition;"
+                : select + "WHERE jn.job_id = @jobId ORDER BY n.name, jn.trigger_condition;";
             if (jobId is not null) command.AddParam("@jobId", jobId);
 
             var results = new List<JobNotificationLink>();
             using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
-                var raw = reader.GetString(reader.GetOrdinal("TriggerCondition"));
+                var raw = reader.GetString(reader.GetOrdinal("trigger_condition"));
                 if (!Enum.TryParse<NotificationTrigger>(raw, ignoreCase: true, out var trigger))
                     continue;
                 results.Add(new JobNotificationLink(
-                    JobId.From(reader.GetString(reader.GetOrdinal("JobId"))),
-                    NotificationId.From(reader.GetString(reader.GetOrdinal("NotificationId"))),
+                    JobId.From(reader.GetString(reader.GetOrdinal("job_id"))),
+                    NotificationId.From(reader.GetString(reader.GetOrdinal("notification_id"))),
                     trigger,
-                    ReadOptionalString(reader, "JobName"),
-                    ReadOptionalString(reader, "NotificationName")));
+                    ReadOptionalString(reader, "job_name"),
+                    ReadOptionalString(reader, "notification_name")));
             }
             return results;
         }
@@ -520,8 +520,8 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT TriggerCondition FROM JobNotifications
-                WHERE JobId = @jobId AND NotificationId = @notificationId;";
+                SELECT trigger_condition FROM job_notifications
+                WHERE job_id = @jobId AND notification_id = @notificationId;";
             command.AddParam("@jobId", jobId);
             command.AddParam("@notificationId", notificationId);
 
@@ -546,8 +546,8 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             // The table name is a compile-time literal from this class, never caller input.
             command.CommandText = $@"
-                UPDATE {table} SET IsEnabled = @isEnabled, Version = Version + 1
-                WHERE Id = @id;";
+                UPDATE {table} SET is_enabled = @isEnabled, version = version + 1
+                WHERE id = @id;";
             command.AddParam("@isEnabled", isEnabled ? 1 : 0);
             command.AddParam("@id", objectId);
             return await command.ExecuteNonQueryAsync() > 0;
@@ -582,8 +582,8 @@ namespace ETL_SQL.Orchestrator.Storage
         {
             foreach (var sql in new[]
                      {
-                         "DELETE FROM JobSchedules WHERE JobId = @id;",
-                         "DELETE FROM JobNotifications WHERE JobId = @id;"
+                         "DELETE FROM job_schedules WHERE job_id = @id;",
+                         "DELETE FROM job_notifications WHERE job_id = @id;"
                      })
             {
                 using var command = connection.CreateCommand();

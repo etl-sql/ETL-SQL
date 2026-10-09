@@ -22,16 +22,16 @@ public sealed class RelationalTenantMeteringLedger(
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = @"
-            INSERT INTO TenantMeteringLedger (
-                TenantId, SourceEventId, Source, WorkloadClass, ConnectorClass, Status,
-                Rows, BytesRead, BytesWritten, SandboxCpuMilliseconds, SandboxPeakMemoryBytes,
-                SandboxIoReadBytes, SandboxIoWriteBytes, GatewayIngressBytes, GatewayEgressBytes,
-                StorageBytes, ConcurrencyUnits, DurationMilliseconds, RecordedAtUtc)
+            INSERT INTO tenant_metering_ledger (
+                tenant_id, source_event_id, source, workload_class, connector_class, status,
+                rows, bytes_read, bytes_written, sandbox_cpu_milliseconds, sandbox_peak_memory_bytes,
+                sandbox_io_read_bytes, sandbox_io_write_bytes, gateway_ingress_bytes, gateway_egress_bytes,
+                storage_bytes, concurrency_units, duration_milliseconds, recorded_at_utc)
             VALUES (
                 @tenant, @event, @source, @workload, @connector, @status,
                 @rows, @bytesRead, @bytesWritten, @cpu, @memory, @ioRead, @ioWrite,
                 @gatewayIn, @gatewayOut, @storage, @concurrency, @duration, @recorded)
-            ON CONFLICT (TenantId, Source, SourceEventId) DO NOTHING;";
+            ON CONFLICT (tenant_id, source, source_event_id) DO NOTHING;";
         Add(command, "@tenant", tenant.Tenant.Value);
         Add(command, "@event", usage.SourceEventId);
         Add(command, "@source", usage.Source.ToString());
@@ -67,14 +67,14 @@ public sealed class RelationalTenantMeteringLedger(
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = @"
-            SELECT Id, TenantId, SourceEventId, Source, WorkloadClass, ConnectorClass, Status,
-                   Rows, BytesRead, BytesWritten, SandboxCpuMilliseconds, SandboxPeakMemoryBytes,
-                   SandboxIoReadBytes, SandboxIoWriteBytes, GatewayIngressBytes, GatewayEgressBytes,
-                   StorageBytes, ConcurrencyUnits, DurationMilliseconds, RecordedAtUtc
-              FROM TenantMeteringLedger
-             WHERE TenantId = @tenant" +
-            (fromUtc is null ? string.Empty : " AND RecordedAtUtc >= @from") + @"
-             ORDER BY RecordedAtUtc DESC, Id DESC
+            SELECT id, tenant_id, source_event_id, source, workload_class, connector_class, status,
+                   rows, bytes_read, bytes_written, sandbox_cpu_milliseconds, sandbox_peak_memory_bytes,
+                   sandbox_io_read_bytes, sandbox_io_write_bytes, gateway_ingress_bytes, gateway_egress_bytes,
+                   storage_bytes, concurrency_units, duration_milliseconds, recorded_at_utc
+              FROM tenant_metering_ledger
+             WHERE tenant_id = @tenant" +
+            (fromUtc is null ? string.Empty : " AND recorded_at_utc >= @from") + @"
+             ORDER BY recorded_at_utc DESC, id DESC
              LIMIT @limit;";
         Add(command, "@tenant", tenant.Tenant.Value);
         if (fromUtc is not null)
@@ -95,33 +95,36 @@ public sealed class RelationalTenantMeteringLedger(
             if (_initialized) return;
             await using var connection = dialect.CreateConnection();
             await connection.OpenAsync(cancellationToken);
+
+            await MigrateLegacyTableAsync(connection, cancellationToken);
+
             await using var command = connection.CreateCommand();
             command.CommandText = $@"
-                CREATE TABLE IF NOT EXISTS TenantMeteringLedger (
-                    Id {dialect.AutoIncrementPrimaryKey},
-                    TenantId TEXT NOT NULL,
-                    SourceEventId TEXT NOT NULL,
-                    Source TEXT NOT NULL,
-                    WorkloadClass TEXT NOT NULL,
-                    ConnectorClass TEXT NOT NULL,
-                    Status TEXT NOT NULL,
-                    Rows {dialect.Int64Type} NOT NULL,
-                    BytesRead {dialect.Int64Type} NOT NULL,
-                    BytesWritten {dialect.Int64Type} NOT NULL,
-                    SandboxCpuMilliseconds {dialect.Int64Type} NOT NULL,
-                    SandboxPeakMemoryBytes {dialect.Int64Type} NOT NULL,
-                    SandboxIoReadBytes {dialect.Int64Type} NOT NULL,
-                    SandboxIoWriteBytes {dialect.Int64Type} NOT NULL,
-                    GatewayIngressBytes {dialect.Int64Type} NOT NULL,
-                    GatewayEgressBytes {dialect.Int64Type} NOT NULL,
-                    StorageBytes {dialect.Int64Type} NOT NULL,
-                    ConcurrencyUnits INTEGER NOT NULL,
-                    DurationMilliseconds {dialect.Int64Type} NOT NULL,
-                    RecordedAtUtc TEXT NOT NULL,
-                    UNIQUE (TenantId, Source, SourceEventId)
+                CREATE TABLE IF NOT EXISTS tenant_metering_ledger (
+                    id {dialect.AutoIncrementPrimaryKey},
+                    tenant_id TEXT NOT NULL,
+                    source_event_id TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    workload_class TEXT NOT NULL,
+                    connector_class TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    rows {dialect.Int64Type} NOT NULL,
+                    bytes_read {dialect.Int64Type} NOT NULL,
+                    bytes_written {dialect.Int64Type} NOT NULL,
+                    sandbox_cpu_milliseconds {dialect.Int64Type} NOT NULL,
+                    sandbox_peak_memory_bytes {dialect.Int64Type} NOT NULL,
+                    sandbox_io_read_bytes {dialect.Int64Type} NOT NULL,
+                    sandbox_io_write_bytes {dialect.Int64Type} NOT NULL,
+                    gateway_ingress_bytes {dialect.Int64Type} NOT NULL,
+                    gateway_egress_bytes {dialect.Int64Type} NOT NULL,
+                    storage_bytes {dialect.Int64Type} NOT NULL,
+                    concurrency_units INTEGER NOT NULL,
+                    duration_milliseconds {dialect.Int64Type} NOT NULL,
+                    recorded_at_utc TEXT NOT NULL,
+                    UNIQUE (tenant_id, source, source_event_id)
                 );
                 CREATE INDEX IF NOT EXISTS idx_tenant_metering_time
-                    ON TenantMeteringLedger (TenantId, RecordedAtUtc DESC);";
+                    ON tenant_metering_ledger (tenant_id, recorded_at_utc DESC);";
             await command.ExecuteNonQueryAsync(cancellationToken);
             _initialized = true;
         }
@@ -130,6 +133,9 @@ public sealed class RelationalTenantMeteringLedger(
             _initializeGate.Release();
         }
     }
+
+    private Task MigrateLegacyTableAsync(DbConnection connection, CancellationToken ct) =>
+        OrchestratorSchemaMigration.MigrateLegacyTableAsync(dialect, connection, "TenantMeteringLedger", "tenant_metering_ledger", ct);
 
     private static TenantMeteringRecord Read(DbDataReader reader)
     {

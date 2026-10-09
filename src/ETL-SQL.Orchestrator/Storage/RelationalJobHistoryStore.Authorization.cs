@@ -24,9 +24,9 @@ public partial class RelationalJobHistoryStore
 
     private static string ObjectTable(OrchestratorObjectKind objectKind) => objectKind switch
     {
-        OrchestratorObjectKind.Job => "Jobs",
-        OrchestratorObjectKind.Schedule => "Schedules",
-        OrchestratorObjectKind.Notification => "Notifications",
+        OrchestratorObjectKind.Job => "jobs",
+        OrchestratorObjectKind.Schedule => "schedules",
+        OrchestratorObjectKind.Notification => "notifications",
         _ => throw new ArgumentOutOfRangeException(nameof(objectKind))
     };
 
@@ -44,8 +44,8 @@ public partial class RelationalJobHistoryStore
         // The tenant is part of the lookup, not a filter applied afterwards: a name alone does not
         // identify an object once two tenants may each own one.
         command.CommandText = $@"
-            SELECT Id FROM {ObjectTable(objectKind)}
-            WHERE TenantId = @tenant AND Name = @name COLLATE NOCASE
+            SELECT id FROM {ObjectTable(objectKind)}
+            WHERE tenant_id = @tenant AND name = @name COLLATE NOCASE
             LIMIT 1;";
         command.AddParam("@tenant", TenantKey(tenantId));
         command.AddParam("@name", objectName);
@@ -63,10 +63,10 @@ public partial class RelationalJobHistoryStore
         await connection.OpenAsync(cancellationToken);
         using var command = connection.CreateCommand();
         command.CommandText = @"
-            SELECT ObjectId, ObjectKind, PrincipalKind, PrincipalId, Permission, GrantedBy, Version
-            FROM OrchestratorObjectAcls
-            WHERE ObjectId = @objectId
-            ORDER BY PrincipalKind, PrincipalId;";
+            SELECT object_id, object_kind, principal_kind, principal_id, permission, granted_by, version
+            FROM orchestrator_object_acls
+            WHERE object_id = @objectId
+            ORDER BY principal_kind, principal_id;";
         command.AddParam("@objectId", objectId);
 
         var grants = new List<OrchestratorObjectGrant>();
@@ -97,13 +97,13 @@ public partial class RelationalJobHistoryStore
         await connection.OpenAsync(cancellationToken);
         using var command = connection.CreateCommand();
         command.CommandText = @"
-            INSERT INTO OrchestratorObjectAcls
-                (ObjectId, ObjectKind, PrincipalKind, PrincipalId, Permission, GrantedBy, Version)
+            INSERT INTO orchestrator_object_acls
+                (object_id, object_kind, principal_kind, principal_id, permission, granted_by, version)
             VALUES (@objectId, @kind, @principalKind, @principalId, @permission, @grantedBy, 1)
-            ON CONFLICT(ObjectId, PrincipalKind, PrincipalId) DO UPDATE SET
-                Permission = excluded.Permission,
-                GrantedBy = excluded.GrantedBy,
-                Version = OrchestratorObjectAcls.Version + 1;";
+            ON CONFLICT(object_id, principal_kind, principal_id) DO UPDATE SET
+                permission = excluded.permission,
+                granted_by = excluded.granted_by,
+                version = orchestrator_object_acls.version + 1;";
         command.AddParam("@objectId", grant.ObjectId);
         command.AddParam("@kind", grant.ObjectKind.ToString());
         command.AddParam("@principalKind", grant.PrincipalKind.ToString());
@@ -125,9 +125,9 @@ public partial class RelationalJobHistoryStore
         await connection.OpenAsync(cancellationToken);
         using var command = connection.CreateCommand();
         command.CommandText = @"
-            DELETE FROM OrchestratorObjectAcls
-            WHERE ObjectId = @objectId
-              AND PrincipalKind = @principalKind AND PrincipalId = @principalId;";
+            DELETE FROM orchestrator_object_acls
+            WHERE object_id = @objectId
+              AND principal_kind = @principalKind AND principal_id = @principalId;";
         command.AddParam("@objectId", objectId);
         command.AddParam("@principalKind", principalKind.ToString());
         command.AddParam("@principalId", principalId);
@@ -143,7 +143,7 @@ public partial class RelationalJobHistoryStore
         using var connection = _dialect.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         using var command = connection.CreateCommand();
-        command.CommandText = "DELETE FROM OrchestratorObjectAcls WHERE ObjectId = @objectId;";
+        command.CommandText = "DELETE FROM orchestrator_object_acls WHERE object_id = @objectId;";
         command.AddParam("@objectId", objectId);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -167,9 +167,9 @@ public partial class RelationalJobHistoryStore
             // definition saved with a blank attribution writes an empty string. Treating only one of
             // them as unowned would leave a class of objects that no adoption pass ever reaches.
             command.CommandText = $@"
-                SELECT Id, Name, TenantId FROM {ObjectTable(objectKind)}
-                WHERE TenantId = @tenant AND (CreatedBy IS NULL OR TRIM(CreatedBy) = '')
-                ORDER BY Name;";
+                SELECT id, name, tenant_id FROM {ObjectTable(objectKind)}
+                WHERE tenant_id = @tenant AND (created_by IS NULL OR TRIM(created_by) = '')
+                ORDER BY name;";
             command.AddParam("@tenant", TenantKey(tenantId));
 
             using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -199,7 +199,7 @@ public partial class RelationalJobHistoryStore
         // resolved the id within its own tenant. Version is deliberately left alone: it is the
         // definition's optimistic-concurrency token, and reassigning an owner does not invalidate an
         // edit that someone is part-way through composing.
-        command.CommandText = $"UPDATE {ObjectTable(objectKind)} SET CreatedBy = @owner WHERE Id = @id;";
+        command.CommandText = $"UPDATE {ObjectTable(objectKind)} SET created_by = @owner WHERE id = @id;";
         command.AddParam("@owner", ownerPrincipalKey);
         command.AddParam("@id", objectId);
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;

@@ -1,4 +1,4 @@
-﻿# STANDARDS Reference
+# STANDARDS Reference
 
 [« Back to parent](../README.md)
 
@@ -6,6 +6,7 @@
 | :--- | :--- |
 | [Breaking Change Standards](breaking-change-standards.md) | This document establishes the official protocol and safety guidelines for introducing any breaking changes to the **ETL-SQL** engine. |
 | [Connector Certification Matrix](connector-certification-matrix.md) | **ETL-SQL 0.8.0 — Last reviewed: 2026-05-29** |
+| [Database Schema Standards](database-schema-standards.md) | Naming conventions, migration policies, and architectural boundaries for internal relational databases. |
 | [ETL-SQL Connectors Engineering Standards](connectors-standards.md) | **Applies to ETL-SQL 0.7.0 — Established with the IConnector / IDataSource / IDatabaseSource architecture** |
 | [ETL-SQL Deployment Profile Standards](deployment-profile-standards.md) | This standard defines the current support and evidence contract for Solo / Workstation, Team / SME, Enterprise / Corporate, and SaaS / Multi-Organi... |
 | [Engine Coding Standards](engine-coding-standards.md) | This document establishes the official coding standards and architectural principles for developers contributing to the C# source code of the **ETL... |

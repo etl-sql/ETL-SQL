@@ -206,13 +206,13 @@ public sealed class RelationalSandboxAdmissionLedger(
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            INSERT INTO SandboxAdmissions
-                (AdmissionId, TenantId, PoolId, TenantWeight, MaxConcurrentAttempts,
-                 MaxQueuedAttempts, State, FenceToken, EnqueuedUtc, UpdatedUtc)
+            INSERT INTO sandbox_admissions
+                (admission_id, tenant_id, pool_id, tenant_weight, max_concurrent_attempts,
+                 max_queued_attempts, state, fence_token, enqueued_utc, updated_utc)
             VALUES
                 (@id, @tenant, @pool, @weight, @maxActive, @maxQueued,
                  'Queued', 0, @now, @now)
-            ON CONFLICT (AdmissionId) DO NOTHING;
+            ON CONFLICT (admission_id) DO NOTHING;
             """;
         command.AddParam("@id", admissionId);
         command.AddParam("@tenant", tenant.Tenant.Value);
@@ -236,8 +236,8 @@ public sealed class RelationalSandboxAdmissionLedger(
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT COUNT(*) FROM SandboxAdmissions
-             WHERE PoolId = @pool AND TenantId = @tenant AND State = 'Queued';
+            SELECT COUNT(*) FROM sandbox_admissions
+             WHERE pool_id = @pool AND tenant_id = @tenant AND state = 'Queued';
             """;
         command.AddParam("@pool", poolId);
         command.AddParam("@tenant", tenantId);
@@ -298,10 +298,10 @@ public sealed class RelationalSandboxAdmissionLedger(
         await using var update = connection.CreateCommand();
         update.Transaction = transaction;
         update.CommandText = """
-            UPDATE SandboxAdmissions
-               SET State = 'Active', LeaseOwner = @owner, LeaseExpiresUtc = @expires,
-                   FenceToken = FenceToken + 1, UpdatedUtc = @now, ReconciliationReason = NULL
-             WHERE AdmissionId = @id AND State = 'Queued';
+            UPDATE sandbox_admissions
+               SET state = 'Active', lease_owner = @owner, lease_expires_utc = @expires,
+                   fence_token = fence_token + 1, updated_utc = @now, reconciliation_reason = NULL
+             WHERE admission_id = @id AND state = 'Queued';
             """;
         update.AddParam("@id", admissionId);
         update.AddParam("@owner", leaseOwner);
@@ -315,7 +315,7 @@ public sealed class RelationalSandboxAdmissionLedger(
 
         await using var read = connection.CreateCommand();
         read.Transaction = transaction;
-        read.CommandText = "SELECT FenceToken FROM SandboxAdmissions WHERE AdmissionId = @id;";
+        read.CommandText = "SELECT fence_token FROM sandbox_admissions WHERE admission_id = @id;";
         read.AddParam("@id", admissionId);
         var token = Convert.ToInt64(await read.ExecuteScalarAsync(cancellationToken));
         await transaction.CommitAsync(cancellationToken);
@@ -335,10 +335,10 @@ public sealed class RelationalSandboxAdmissionLedger(
         var now = DateTimeOffset.UtcNow;
         return await ExecuteOwnedUpdateAsync(
             """
-            UPDATE SandboxAdmissions
-               SET LeaseExpiresUtc = @expires, UpdatedUtc = @now
-             WHERE AdmissionId = @id AND State = 'Active'
-               AND LeaseOwner = @owner AND FenceToken = @fence;
+            UPDATE sandbox_admissions
+               SET lease_expires_utc = @expires, updated_utc = @now
+             WHERE admission_id = @id AND state = 'Active'
+               AND lease_owner = @owner AND fence_token = @fence;
             """,
             admissionId, leaseOwner, fenceToken, now, now.Add(leaseDuration), null, cancellationToken);
     }
@@ -368,11 +368,11 @@ public sealed class RelationalSandboxAdmissionLedger(
         await EnsureInitializedAsync(cancellationToken);
         return await ExecuteOwnedUpdateAsync(
             """
-            UPDATE SandboxAdmissions
-               SET State = 'Retained', LeaseOwner = NULL, LeaseExpiresUtc = NULL,
-                   UpdatedUtc = @now, ReconciliationReason = @reason
-             WHERE AdmissionId = @id AND State = 'Active'
-               AND LeaseOwner = @owner AND FenceToken = @fence;
+            UPDATE sandbox_admissions
+               SET state = 'Retained', lease_owner = NULL, lease_expires_utc = NULL,
+                   updated_utc = @now, reconciliation_reason = @reason
+             WHERE admission_id = @id AND state = 'Active'
+               AND lease_owner = @owner AND fence_token = @fence;
             """,
             admissionId, leaseOwner, fenceToken, DateTimeOffset.UtcNow, null, reason, cancellationToken);
     }
@@ -388,10 +388,10 @@ public sealed class RelationalSandboxAdmissionLedger(
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            UPDATE SandboxAdmissions
-               SET State = 'Retained', LeaseOwner = NULL, LeaseExpiresUtc = NULL,
-                   UpdatedUtc = @now, ReconciliationReason = @reason
-             WHERE State = 'Active' AND LeaseExpiresUtc <= @now;
+            UPDATE sandbox_admissions
+               SET state = 'Retained', lease_owner = NULL, lease_expires_utc = NULL,
+                   updated_utc = @now, reconciliation_reason = @reason
+             WHERE state = 'Active' AND lease_expires_utc <= @now;
             """;
         command.AddParam("@now", now.ToString("O"));
         command.AddParam("@reason", reason);
@@ -420,7 +420,7 @@ public sealed class RelationalSandboxAdmissionLedger(
         await using var connection = dialect.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT * FROM SandboxAdmissions WHERE AdmissionId = @id;";
+        command.CommandText = "SELECT * FROM sandbox_admissions WHERE admission_id = @id;";
         command.AddParam("@id", admissionId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadEntry(reader) : null;
@@ -436,9 +436,9 @@ public sealed class RelationalSandboxAdmissionLedger(
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            UPDATE SandboxAdmissions
-               SET State = 'Cancelled', UpdatedUtc = @now
-             WHERE AdmissionId = @id AND State = 'Queued';
+            UPDATE sandbox_admissions
+               SET state = 'Cancelled', updated_utc = @now
+             WHERE admission_id = @id AND state = 'Queued';
             """;
         command.AddParam("@id", admissionId);
         command.AddParam("@now", DateTimeOffset.UtcNow.ToString("O"));
@@ -460,10 +460,10 @@ public sealed class RelationalSandboxAdmissionLedger(
         // A never-claimed row is measured from when it was enqueued, so an admission whose node died
         // between enqueue and its first poll is reclaimed on the same horizon as one abandoned later.
         command.CommandText = """
-            UPDATE SandboxAdmissions
-               SET State = 'Cancelled', UpdatedUtc = @now, ReconciliationReason = @reason
-             WHERE State = 'Queued'
-               AND COALESCE(ClaimHeartbeatUtc, EnqueuedUtc) <= @abandoned;
+            UPDATE sandbox_admissions
+               SET state = 'Cancelled', updated_utc = @now, reconciliation_reason = @reason
+             WHERE state = 'Queued'
+               AND COALESCE(claim_heartbeat_utc, enqueued_utc) <= @abandoned;
             """;
         command.AddParam("@now", now.ToString("O"));
         command.AddParam("@reason", reason);
@@ -481,9 +481,9 @@ public sealed class RelationalSandboxAdmissionLedger(
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT * FROM SandboxAdmissions
-             WHERE PoolId = @pool AND State IN ('Queued', 'Active', 'Retained')
-             ORDER BY Sequence;
+            SELECT * FROM sandbox_admissions
+             WHERE pool_id = @pool AND state IN ('Queued', 'Active', 'Retained')
+             ORDER BY sequence;
             """;
         command.AddParam("@pool", poolId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -503,13 +503,13 @@ public sealed class RelationalSandboxAdmissionLedger(
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT Sequence, AdmissionId, TenantId, PoolId, TenantWeight,
-                   MaxConcurrentAttempts, MaxQueuedAttempts, State, LeaseOwner,
-                   LeaseExpiresUtc, FenceToken, EnqueuedUtc, UpdatedUtc, ReconciliationReason,
-                   ClaimedByNode, ClaimHeartbeatUtc
-              FROM SandboxAdmissions
-             WHERE TenantId = @tenant AND State IN ('Queued', 'Active', 'Retained')
-             ORDER BY Sequence;
+            SELECT sequence, admission_id, tenant_id, pool_id, tenant_weight,
+                   max_concurrent_attempts, max_queued_attempts, state, lease_owner,
+                   lease_expires_utc, fence_token, enqueued_utc, updated_utc, reconciliation_reason,
+                   claimed_by_node, claim_heartbeat_utc
+              FROM sandbox_admissions
+             WHERE tenant_id = @tenant AND state IN ('Queued', 'Active', 'Retained')
+             ORDER BY sequence;
             """;
         command.AddParam("@tenant", tenantId);
         var values = new List<SandboxAdmissionLedgerEntry>();
@@ -528,10 +528,10 @@ public sealed class RelationalSandboxAdmissionLedger(
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            UPDATE SandboxAdmissions
-               SET State = 'Cancelled', UpdatedUtc = @now,
-                   ReconciliationReason = 'TenantLifecycleFence'
-             WHERE TenantId = @tenant AND State = 'Queued';
+            UPDATE sandbox_admissions
+               SET state = 'Cancelled', updated_utc = @now,
+                   reconciliation_reason = 'TenantLifecycleFence'
+             WHERE tenant_id = @tenant AND state = 'Queued';
             """;
         command.AddParam("@tenant", tenantId);
         command.AddParam("@now", DateTimeOffset.UtcNow.ToString("O"));
@@ -550,16 +550,16 @@ public sealed class RelationalSandboxAdmissionLedger(
         await using var deleteAdmissions = connection.CreateCommand();
         deleteAdmissions.Transaction = transaction;
         deleteAdmissions.CommandText = """
-            DELETE FROM SandboxAdmissions
-             WHERE TenantId = @tenant AND State IN ('Completed', 'Cancelled');
+            DELETE FROM sandbox_admissions
+             WHERE tenant_id = @tenant AND state IN ('Completed', 'Cancelled');
             """;
         deleteAdmissions.AddParam("@tenant", tenantId);
         var deleted = await deleteAdmissions.ExecuteNonQueryAsync(cancellationToken);
         await using var deleteCapacity = connection.CreateCommand();
         deleteCapacity.Transaction = transaction;
         deleteCapacity.CommandText = """
-            DELETE FROM SandboxAdmissionTenantCapacity
-             WHERE TenantId = @tenant AND ActiveCount = 0;
+            DELETE FROM sandbox_admission_tenant_capacity
+             WHERE tenant_id = @tenant AND active_count = 0;
             """;
         deleteCapacity.AddParam("@tenant", tenantId);
         await deleteCapacity.ExecuteNonQueryAsync(cancellationToken);
@@ -603,41 +603,43 @@ public sealed class RelationalSandboxAdmissionLedger(
                     lockHeld = true;
                 }
 
+                await MigrateLegacyTablesAsync(connection, cancellationToken);
+
                 await using var create = connection.CreateCommand();
                 create.CommandText = $"""
-                    CREATE TABLE IF NOT EXISTS SandboxAdmissions (
-                        Sequence                 {dialect.AutoIncrementPrimaryKey},
-                        AdmissionId              TEXT NOT NULL UNIQUE,
-                        TenantId                 TEXT NOT NULL,
-                        PoolId                   TEXT NOT NULL,
-                        TenantWeight             INTEGER NOT NULL,
-                        MaxConcurrentAttempts    INTEGER NOT NULL,
-                        MaxQueuedAttempts        INTEGER NOT NULL,
-                        State                    TEXT NOT NULL,
-                        LeaseOwner               TEXT NULL,
-                        LeaseExpiresUtc          TEXT NULL,
-                        FenceToken               {dialect.Int64Type} NOT NULL DEFAULT 0,
-                        EnqueuedUtc               TEXT NOT NULL,
-                        UpdatedUtc                TEXT NOT NULL,
-                        ReconciliationReason     TEXT NULL,
-                        ClaimedByNode            TEXT NULL,
-                        ClaimHeartbeatUtc        TEXT NULL
+                    CREATE TABLE IF NOT EXISTS sandbox_admissions (
+                        sequence                 {dialect.AutoIncrementPrimaryKey},
+                        admission_id              TEXT NOT NULL UNIQUE,
+                        tenant_id                 TEXT NOT NULL,
+                        pool_id                   TEXT NOT NULL,
+                        tenant_weight             INTEGER NOT NULL,
+                        max_concurrent_attempts    INTEGER NOT NULL,
+                        max_queued_attempts        INTEGER NOT NULL,
+                        state                    TEXT NOT NULL,
+                        lease_owner               TEXT NULL,
+                        lease_expires_utc          TEXT NULL,
+                        fence_token               {dialect.Int64Type} NOT NULL DEFAULT 0,
+                        enqueued_utc               TEXT NOT NULL,
+                        updated_utc                TEXT NOT NULL,
+                        reconciliation_reason     TEXT NULL,
+                        claimed_by_node            TEXT NULL,
+                        claim_heartbeat_utc        TEXT NULL
                     );
-                    CREATE INDEX IF NOT EXISTS IX_SandboxAdmissions_PoolStateSequence
-                        ON SandboxAdmissions (PoolId, State, Sequence);
-                    CREATE INDEX IF NOT EXISTS IX_SandboxAdmissions_TenantState
-                        ON SandboxAdmissions (TenantId, State);
-                    CREATE TABLE IF NOT EXISTS SandboxAdmissionPools (
-                        PoolId       TEXT PRIMARY KEY,
-                        ActiveCount  INTEGER NOT NULL DEFAULT 0,
-                        VirtualBase  {dialect.Int64Type} NOT NULL DEFAULT 0
+                    CREATE INDEX IF NOT EXISTS ix_sandbox_admissions_pool_state_sequence
+                        ON sandbox_admissions (pool_id, state, sequence);
+                    CREATE INDEX IF NOT EXISTS ix_sandbox_admissions_tenant_state
+                        ON sandbox_admissions (tenant_id, state);
+                    CREATE TABLE IF NOT EXISTS sandbox_admission_pools (
+                        pool_id       TEXT PRIMARY KEY,
+                        active_count  INTEGER NOT NULL DEFAULT 0,
+                        virtual_base  {dialect.Int64Type} NOT NULL DEFAULT 0
                     );
-                    CREATE TABLE IF NOT EXISTS SandboxAdmissionTenantCapacity (
-                        PoolId       TEXT NOT NULL,
-                        TenantId     TEXT NOT NULL,
-                        ActiveCount  INTEGER NOT NULL DEFAULT 0,
-                        VirtualTime  {dialect.Int64Type} NOT NULL DEFAULT 0,
-                        PRIMARY KEY (PoolId, TenantId)
+                    CREATE TABLE IF NOT EXISTS sandbox_admission_tenant_capacity (
+                        pool_id       TEXT NOT NULL,
+                        tenant_id     TEXT NOT NULL,
+                        active_count  INTEGER NOT NULL DEFAULT 0,
+                        virtual_time  {dialect.Int64Type} NOT NULL DEFAULT 0,
+                        PRIMARY KEY (pool_id, tenant_id)
                     );
                     """;
                 await create.ExecuteNonQueryAsync(cancellationToken);
@@ -665,15 +667,22 @@ public sealed class RelationalSandboxAdmissionLedger(
     /// database simply has no claims and no accumulated virtual time, so every queued row starts
     /// unclaimed and every tenant starts level.
     /// </summary>
+    private async Task MigrateLegacyTablesAsync(DbConnection connection, CancellationToken ct)
+    {
+        await OrchestratorSchemaMigration.MigrateLegacyTableAsync(dialect, connection, "SandboxAdmissions", "sandbox_admissions", ct);
+        await OrchestratorSchemaMigration.MigrateLegacyTableAsync(dialect, connection, "SandboxAdmissionPools", "sandbox_admission_pools", ct);
+        await OrchestratorSchemaMigration.MigrateLegacyTableAsync(dialect, connection, "SandboxAdmissionTenantCapacity", "sandbox_admission_tenant_capacity", ct);
+    }
+
     private async Task AddFairSelectionColumnsAsync(
         DbConnection connection,
         CancellationToken cancellationToken)
     {
-        await AddColumnIfMissingAsync("SandboxAdmissions", "ClaimedByNode", "TEXT NULL");
-        await AddColumnIfMissingAsync("SandboxAdmissions", "ClaimHeartbeatUtc", "TEXT NULL");
-        await AddColumnIfMissingAsync("SandboxAdmissionPools", "VirtualBase", $"{dialect.Int64Type} NOT NULL DEFAULT 0");
+        await AddColumnIfMissingAsync("sandbox_admissions", "claimed_by_node", "TEXT NULL");
+        await AddColumnIfMissingAsync("sandbox_admissions", "claim_heartbeat_utc", "TEXT NULL");
+        await AddColumnIfMissingAsync("sandbox_admission_pools", "virtual_base", $"{dialect.Int64Type} NOT NULL DEFAULT 0");
         await AddColumnIfMissingAsync(
-            "SandboxAdmissionTenantCapacity", "VirtualTime", $"{dialect.Int64Type} NOT NULL DEFAULT 0");
+            "sandbox_admission_tenant_capacity", "virtual_time", $"{dialect.Int64Type} NOT NULL DEFAULT 0");
         return;
 
         async Task AddColumnIfMissingAsync(string table, string column, string definition)
@@ -727,7 +736,7 @@ public sealed class RelationalSandboxAdmissionLedger(
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText =
-            "SELECT * FROM SandboxAdmissions WHERE AdmissionId = @id AND State = @state;";
+            "SELECT * FROM sandbox_admissions WHERE admission_id = @id AND state = @state;";
         command.AddParam("@id", admissionId);
         command.AddParam("@state", expectedState);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -748,9 +757,9 @@ public sealed class RelationalSandboxAdmissionLedger(
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            UPDATE SandboxAdmissions
-               SET ClaimedByNode = @owner, ClaimHeartbeatUtc = @now
-             WHERE AdmissionId = @id AND State = 'Queued';
+            UPDATE sandbox_admissions
+               SET claimed_by_node = @owner, claim_heartbeat_utc = @now
+             WHERE admission_id = @id AND state = 'Queued';
             """;
         command.AddParam("@id", admissionId);
         command.AddParam("@owner", leaseOwner);
@@ -804,14 +813,14 @@ public sealed class RelationalSandboxAdmissionLedger(
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT a.AdmissionId, a.TenantId, a.Sequence, a.TenantWeight, a.MaxConcurrentAttempts,
-                   COALESCE(c.ActiveCount, 0), COALESCE(c.VirtualTime, 0)
-              FROM SandboxAdmissions a
-              LEFT JOIN SandboxAdmissionTenantCapacity c
-                     ON c.PoolId = a.PoolId AND c.TenantId = a.TenantId
-             WHERE a.PoolId = @pool AND a.State = 'Queued'
-               AND (a.ClaimHeartbeatUtc >= @fresh OR a.AdmissionId = @requested)
-             ORDER BY a.Sequence;
+            SELECT a.admission_id, a.tenant_id, a.sequence, a.tenant_weight, a.max_concurrent_attempts,
+                   COALESCE(c.active_count, 0), COALESCE(c.virtual_time, 0)
+              FROM sandbox_admissions a
+              LEFT JOIN sandbox_admission_tenant_capacity c
+                     ON c.pool_id = a.pool_id AND c.tenant_id = a.tenant_id
+             WHERE a.pool_id = @pool AND a.state = 'Queued'
+               AND (a.claim_heartbeat_utc >= @fresh OR a.admission_id = @requested)
+             ORDER BY a.sequence;
             """;
         command.AddParam("@pool", poolId);
         command.AddParam("@fresh", now.Subtract(_claimFreshness).ToString("O"));
@@ -867,9 +876,9 @@ public sealed class RelationalSandboxAdmissionLedger(
         {
             chargeTenant.Transaction = transaction;
             chargeTenant.CommandText = """
-                UPDATE SandboxAdmissionTenantCapacity
-                   SET VirtualTime = @charged
-                 WHERE PoolId = @pool AND TenantId = @tenant;
+                UPDATE sandbox_admission_tenant_capacity
+                   SET virtual_time = @charged
+                 WHERE pool_id = @pool AND tenant_id = @tenant;
                 """;
             chargeTenant.AddParam("@charged", winner.EffectiveVirtualTime + VirtualTimeScale / winner.TenantWeight);
             chargeTenant.AddParam("@pool", winner.PoolId);
@@ -881,9 +890,9 @@ public sealed class RelationalSandboxAdmissionLedger(
         await using var advanceBase = connection.CreateCommand();
         advanceBase.Transaction = transaction;
         advanceBase.CommandText = """
-            UPDATE SandboxAdmissionPools
-               SET VirtualBase = @base
-             WHERE PoolId = @pool AND VirtualBase < @base;
+            UPDATE sandbox_admission_pools
+               SET virtual_base = @base
+             WHERE pool_id = @pool AND virtual_base < @base;
             """;
         advanceBase.AddParam("@base", winner.EffectiveVirtualTime);
         advanceBase.AddParam("@pool", winner.PoolId);
@@ -898,7 +907,7 @@ public sealed class RelationalSandboxAdmissionLedger(
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = "SELECT VirtualBase FROM SandboxAdmissionPools WHERE PoolId = @pool;";
+        command.CommandText = "SELECT virtual_base FROM sandbox_admission_pools WHERE pool_id = @pool;";
         command.AddParam("@pool", poolId);
         var value = await command.ExecuteScalarAsync(cancellationToken);
         return value is null or DBNull ? 0 : Convert.ToInt64(value);
@@ -918,9 +927,9 @@ public sealed class RelationalSandboxAdmissionLedger(
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            UPDATE SandboxAdmissionPools
-               SET VirtualBase = VirtualBase
-             WHERE PoolId = @pool;
+            UPDATE sandbox_admission_pools
+               SET virtual_base = virtual_base
+             WHERE pool_id = @pool;
             """;
         command.AddParam("@pool", poolId);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -935,9 +944,9 @@ public sealed class RelationalSandboxAdmissionLedger(
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            INSERT INTO SandboxAdmissionPools (PoolId, ActiveCount)
+            INSERT INTO sandbox_admission_pools (pool_id, active_count)
             VALUES (@pool, 0)
-            ON CONFLICT (PoolId) DO NOTHING;
+            ON CONFLICT (pool_id) DO NOTHING;
             """;
         command.AddParam("@pool", poolId);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -973,9 +982,9 @@ public sealed class RelationalSandboxAdmissionLedger(
         {
             reservePool.Transaction = transaction;
             reservePool.CommandText = """
-                UPDATE SandboxAdmissionPools
-                   SET ActiveCount = ActiveCount + 1
-                 WHERE PoolId = @pool AND ActiveCount < @capacity;
+                UPDATE sandbox_admission_pools
+                   SET active_count = active_count + 1
+                 WHERE pool_id = @pool AND active_count < @capacity;
                 """;
             reservePool.AddParam("@pool", poolId);
             reservePool.AddParam("@capacity", poolCapacity);
@@ -987,9 +996,9 @@ public sealed class RelationalSandboxAdmissionLedger(
         {
             ensureTenant.Transaction = transaction;
             ensureTenant.CommandText = """
-                INSERT INTO SandboxAdmissionTenantCapacity (PoolId, TenantId, ActiveCount)
+                INSERT INTO sandbox_admission_tenant_capacity (pool_id, tenant_id, active_count)
                 VALUES (@pool, @tenant, 0)
-                ON CONFLICT (PoolId, TenantId) DO NOTHING;
+                ON CONFLICT (pool_id, tenant_id) DO NOTHING;
                 """;
             ensureTenant.AddParam("@pool", poolId);
             ensureTenant.AddParam("@tenant", tenantId);
@@ -999,9 +1008,9 @@ public sealed class RelationalSandboxAdmissionLedger(
         await using var reserveTenant = connection.CreateCommand();
         reserveTenant.Transaction = transaction;
         reserveTenant.CommandText = """
-            UPDATE SandboxAdmissionTenantCapacity
-               SET ActiveCount = ActiveCount + 1
-             WHERE PoolId = @pool AND TenantId = @tenant AND ActiveCount < @capacity;
+            UPDATE sandbox_admission_tenant_capacity
+               SET active_count = active_count + 1
+             WHERE pool_id = @pool AND tenant_id = @tenant AND active_count < @capacity;
             """;
         reserveTenant.AddParam("@pool", poolId);
         reserveTenant.AddParam("@tenant", tenantId);
@@ -1034,11 +1043,11 @@ public sealed class RelationalSandboxAdmissionLedger(
         {
             transition.Transaction = transaction;
             transition.CommandText = $"""
-                UPDATE SandboxAdmissions
-                   SET State = @target, LeaseOwner = NULL, LeaseExpiresUtc = NULL,
-                       UpdatedUtc = @now{(clearReason ? ", ReconciliationReason = NULL" : string.Empty)}
-                 WHERE AdmissionId = @id AND State = @expected AND FenceToken = @fence
-                       {(leaseOwner is null ? string.Empty : "AND LeaseOwner = @owner")};
+                UPDATE sandbox_admissions
+                   SET state = @target, lease_owner = NULL, lease_expires_utc = NULL,
+                       updated_utc = @now{(clearReason ? ", reconciliation_reason = NULL" : string.Empty)}
+                 WHERE admission_id = @id AND state = @expected AND fence_token = @fence
+                       {(leaseOwner is null ? string.Empty : "AND lease_owner = @owner")};
                 """;
             transition.AddParam("@target", targetState);
             transition.AddParam("@now", DateTimeOffset.UtcNow.ToString("O"));
@@ -1057,9 +1066,9 @@ public sealed class RelationalSandboxAdmissionLedger(
         {
             releasePool.Transaction = transaction;
             releasePool.CommandText = """
-                UPDATE SandboxAdmissionPools
-                   SET ActiveCount = ActiveCount - 1
-                 WHERE PoolId = @pool AND ActiveCount > 0;
+                UPDATE sandbox_admission_pools
+                   SET active_count = active_count - 1
+                 WHERE pool_id = @pool AND active_count > 0;
                 """;
             releasePool.AddParam("@pool", entry.PoolId);
             if (await releasePool.ExecuteNonQueryAsync(cancellationToken) != 1)
@@ -1070,9 +1079,9 @@ public sealed class RelationalSandboxAdmissionLedger(
         {
             releaseTenant.Transaction = transaction;
             releaseTenant.CommandText = """
-                UPDATE SandboxAdmissionTenantCapacity
-                   SET ActiveCount = ActiveCount - 1
-                 WHERE PoolId = @pool AND TenantId = @tenant AND ActiveCount > 0;
+                UPDATE sandbox_admission_tenant_capacity
+                   SET active_count = active_count - 1
+                 WHERE pool_id = @pool AND tenant_id = @tenant AND active_count > 0;
                 """;
             releaseTenant.AddParam("@pool", entry.PoolId);
             releaseTenant.AddParam("@tenant", entry.TenantId);
@@ -1085,22 +1094,22 @@ public sealed class RelationalSandboxAdmissionLedger(
     }
 
     private static SandboxAdmissionLedgerEntry ReadEntry(DbDataReader reader) => new(
-        Convert.ToInt64(reader.GetValue(reader.GetOrdinal("Sequence"))),
-        reader.GetString(reader.GetOrdinal("AdmissionId")),
-        reader.GetString(reader.GetOrdinal("TenantId")),
-        reader.GetString(reader.GetOrdinal("PoolId")),
-        reader.GetInt32(reader.GetOrdinal("TenantWeight")),
-        reader.GetInt32(reader.GetOrdinal("MaxConcurrentAttempts")),
-        reader.GetInt32(reader.GetOrdinal("MaxQueuedAttempts")),
-        Enum.Parse<SandboxAdmissionState>(reader.GetString(reader.GetOrdinal("State")), true),
-        ReadNullableString(reader, "LeaseOwner"),
-        ReadNullableDateTimeOffset(reader, "LeaseExpiresUtc"),
-        reader.GetInt64(reader.GetOrdinal("FenceToken")),
-        DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("EnqueuedUtc"))),
-        DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("UpdatedUtc"))),
-        ReadNullableString(reader, "ReconciliationReason"),
-        ReadNullableString(reader, "ClaimedByNode"),
-        ReadNullableDateTimeOffset(reader, "ClaimHeartbeatUtc"));
+        Convert.ToInt64(reader.GetValue(reader.GetOrdinal("sequence"))),
+        reader.GetString(reader.GetOrdinal("admission_id")),
+        reader.GetString(reader.GetOrdinal("tenant_id")),
+        reader.GetString(reader.GetOrdinal("pool_id")),
+        reader.GetInt32(reader.GetOrdinal("tenant_weight")),
+        reader.GetInt32(reader.GetOrdinal("max_concurrent_attempts")),
+        reader.GetInt32(reader.GetOrdinal("max_queued_attempts")),
+        Enum.Parse<SandboxAdmissionState>(reader.GetString(reader.GetOrdinal("state")), true),
+        ReadNullableString(reader, "lease_owner"),
+        ReadNullableDateTimeOffset(reader, "lease_expires_utc"),
+        reader.GetInt64(reader.GetOrdinal("fence_token")),
+        DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("enqueued_utc"))),
+        DateTimeOffset.Parse(reader.GetString(reader.GetOrdinal("updated_utc"))),
+        ReadNullableString(reader, "reconciliation_reason"),
+        ReadNullableString(reader, "claimed_by_node"),
+        ReadNullableDateTimeOffset(reader, "claim_heartbeat_utc"));
 
     private static string? ReadNullableString(DbDataReader reader, string name)
     {

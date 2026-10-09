@@ -9,6 +9,7 @@ using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
 
@@ -63,6 +64,57 @@ namespace ETL_SQL.Tests.Orchestration
 
         private static JobDefinition Job(string name, bool enabled = true) =>
             new(name, "RUN SCRIPT 'x.etlsql';", 1, "DAY", "06:00", null, null, enabled);
+
+        [Fact]
+        public async Task ScheduledActivity_UsesTenantIdentityOffsetHistoryAndLeaseFencingOnPostgres()
+        {
+            var store = NewStore();
+            await store.InitializeAsync();
+            await store.SaveJobAsync(Job("same-name") with { TenantId = "tenant-a" });
+            await store.SaveJobAsync(Job("same-name") with { TenantId = "tenant-b" });
+            var alpha = (await store.GetJobAsync("tenant-a", "same-name"))!;
+            var beta = (await store.GetJobAsync("tenant-b", "same-name"))!;
+            var token = (await store.AcquireJobLeaseAsync(alpha.Id, "owner-a", TimeSpan.FromDays(3650)))!.Value;
+            Assert.True(await store.TrySetScheduledJobRunStateAsync(alpha.Id, "owner-a", token, ScheduledJobRunState.Queued));
+            var alphaHistory = await store.LogJobStartAsync(alpha.Id);
+            var betaHistory = await store.LogJobStartAsync(beta.Id);
+            await using var connection = new NpgsqlConnection(_pg.GetConnectionString());
+            await connection.OpenAsync();
+            await using (var command = connection.CreateCommand())
+            {
+                command.CommandText = """
+                    UPDATE job_history SET status = 'SUCCESS', end_time = '2026-10-06T20:00:00-04:00' WHERE id = @alpha;
+                    UPDATE job_history SET status = 'FAILURE', end_time = '2026-10-07T01:00:00Z' WHERE id = @beta;
+                    """;
+                command.Parameters.AddWithValue("alpha", alphaHistory);
+                command.Parameters.AddWithValue("beta", betaHistory);
+                await command.ExecuteNonQueryAsync();
+            }
+            var asOf = DateTimeOffset.Parse("2026-10-07T12:00:00Z");
+            var result = Assert.Single(await store.GetScheduledJobActivityAsync("tenant-a", asOf));
+            Assert.Equal(alpha.Id, result.Job.Id);
+            Assert.Equal(ScheduledJobRunState.Queued, result.RunState);
+            Assert.True(result.CompletedToday);
+            Assert.False(result.FailedToday);
+            Assert.True(Assert.Single(await store.GetScheduledJobActivityAsync("tenant-b", asOf)).FailedToday);
+            Assert.True(await store.TrySetScheduledJobRunStateAsync(alpha.Id, "owner-a", token, ScheduledJobRunState.Running));
+            Assert.False(await store.TrySetScheduledJobRunStateAsync(alpha.Id, "stranger", token, ScheduledJobRunState.Idle));
+            await using (var expire = connection.CreateCommand())
+            {
+                expire.CommandText = "UPDATE jobs SET lease_expires_at = '2000-01-01T00:00:00.0000000Z' WHERE id = @id";
+                expire.Parameters.AddWithValue("id", alpha.Id.Value);
+                await expire.ExecuteNonQueryAsync();
+            }
+            Assert.Equal(ScheduledJobRunState.Idle,
+                Assert.Single(await store.GetScheduledJobActivityAsync("tenant-a", asOf)).RunState);
+            var next = (await store.AcquireJobLeaseAsync(alpha.Id, "owner-b", TimeSpan.FromDays(3650)))!.Value;
+            Assert.True(next > token);
+            Assert.False(await store.TrySetScheduledJobRunStateAsync(alpha.Id, "owner-a", token, ScheduledJobRunState.Running));
+            Assert.True(await store.TrySetScheduledJobRunStateAsync(alpha.Id, "owner-b", next, ScheduledJobRunState.Queued));
+            await store.ReleaseJobLeaseAsync(alpha.Id, "owner-a");
+            Assert.Equal(ScheduledJobRunState.Queued,
+                Assert.Single(await store.GetScheduledJobActivityAsync("tenant-a", asOf)).RunState);
+        }
 
         [Fact]
         public async Task SaveAndGet_IsCaseInsensitive_OnPostgres()

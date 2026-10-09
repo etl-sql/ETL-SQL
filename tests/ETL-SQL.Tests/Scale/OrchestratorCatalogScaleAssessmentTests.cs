@@ -40,11 +40,11 @@ public sealed class OrchestratorCatalogScaleAssessmentTests
             Assert.Empty(firstPage.Select(job => job.Name).Intersect(secondPage.Select(job => job.Name)));
 
             Assert.Contains("idx_jobs_sched", await QueryPlanAsync(path,
-                "SELECT * FROM Jobs WHERE IsEnabled = 1 AND (NextRun IS NULL OR NextRun <= '9999')"));
+                "SELECT * FROM jobs WHERE is_enabled = 1 AND (next_run IS NULL OR next_run <= '9999')"));
             Assert.Contains("idx_jh_start", await QueryPlanAsync(path,
-                "SELECT * FROM JobHistory ORDER BY StartTime DESC LIMIT 100"));
+                "SELECT * FROM job_history ORDER BY start_time DESC LIMIT 100"));
             Assert.Contains("idx_jh_end", await QueryPlanAsync(path,
-                "SELECT * FROM JobHistory WHERE EndTime > '0000' AND EndTime <= '9999' ORDER BY EndTime, Id LIMIT 100"));
+                "SELECT * FROM job_history WHERE end_time > '0000' AND end_time <= '9999' ORDER BY end_time, id LIMIT 100"));
         }
         finally
         {
@@ -69,7 +69,7 @@ public sealed class OrchestratorCatalogScaleAssessmentTests
             // point of this assessment is that those queries stay indexed, and a row with no identity
             // would not be reachable by the query being measured.
             var jobId = Guid.NewGuid().ToString("N");
-            job.CommandText = "INSERT INTO Jobs (Id, Name, Script, Interval, Unit, NextRun, IsEnabled) VALUES ($id, $name, 'SELECT 1;', 1, 'HOUR', $next, 1)";
+            job.CommandText = "INSERT INTO jobs (id, name, script, interval, unit, next_run, is_enabled) VALUES ($id, $name, 'SELECT 1;', 1, 'HOUR', $next, 1)";
             job.Parameters.AddWithValue("$id", jobId);
             job.Parameters.AddWithValue("$name", $"job-{i:D4}");
             job.Parameters.AddWithValue("$next", now.AddMinutes(-1).ToString("O"));
@@ -77,7 +77,7 @@ public sealed class OrchestratorCatalogScaleAssessmentTests
 
             await using var history = connection.CreateCommand();
             history.Transaction = transaction;
-            history.CommandText = "INSERT INTO JobHistory (JobId, JobName, StartTime, EndTime, Status) VALUES ($id, $name, $start, $end, 'SUCCESS')";
+            history.CommandText = "INSERT INTO job_history (job_id, job_name, start_time, end_time, status) VALUES ($id, $name, $start, $end, 'SUCCESS')";
             history.Parameters.AddWithValue("$id", jobId);
             history.Parameters.AddWithValue("$name", $"job-{i:D4}");
             history.Parameters.AddWithValue("$start", now.AddMinutes(-2).AddTicks(i).ToString("O"));

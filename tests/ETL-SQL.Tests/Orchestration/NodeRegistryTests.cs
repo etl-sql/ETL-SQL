@@ -95,7 +95,7 @@ namespace ETL_SQL.Tests.Orchestration
             await connection.OpenAsync();
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = "UPDATE Nodes SET ExpiresAt = @expires WHERE NodeId = @id;";
+                command.CommandText = "UPDATE nodes SET expires_at = @expires WHERE node_id = @id;";
                 command.AddParam("@expires", databaseUtc.AddSeconds(-1).ToString("O"));
                 command.AddParam("@id", "skew-node");
                 await command.ExecuteNonQueryAsync();
@@ -370,6 +370,17 @@ namespace ETL_SQL.Tests.Orchestration
                 string table,
                 CancellationToken ct = default) =>
                 _inner.GetColumnNamesAsync(connection, table, ct);
+
+            public Task<HashSet<string>> GetTableNamesAsync(
+                DbConnection connection,
+                CancellationToken ct = default) =>
+                _inner.GetTableNamesAsync(connection, ct);
+
+            public Task<List<string>> GetExactColumnNamesAsync(
+                DbConnection connection,
+                string table,
+                CancellationToken ct = default) =>
+                _inner.GetExactColumnNamesAsync(connection, table, ct);
 
             public string InsertReturningId(string insertWithoutSemicolon, string idColumn) =>
                 _inner.InsertReturningId(insertWithoutSemicolon, idColumn);

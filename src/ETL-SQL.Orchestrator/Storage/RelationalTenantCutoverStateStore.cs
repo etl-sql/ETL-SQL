@@ -58,11 +58,11 @@ public partial class RelationalJobHistoryStore
                 await using var insert = connection.CreateCommand();
                 insert.Transaction = transaction;
                 insert.CommandText = @"
-                    INSERT INTO TenantPortabilityCutovers
-                        (TenantId, OperationId, Authority, FenceEpoch, SourceSchedulesEnabled,
-                         TargetSchedulesEnabled, SourceActiveExecutions, UpdatedAtUtc, Version)
+                    INSERT INTO tenant_portability_cutovers
+                        (tenant_id, operation_id, authority, fence_epoch, source_schedules_enabled,
+                         target_schedules_enabled, source_active_executions, updated_at_utc, version)
                     VALUES (@tenant, @operation, @authority, @fence, @source, @target, @active, @now, 1)
-                    ON CONFLICT (TenantId) DO NOTHING;";
+                    ON CONFLICT (tenant_id) DO NOTHING;";
                 AddCutoverParameters(insert, next, sourceActive: next.SourceActiveExecutions);
                 var inserted = await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -97,11 +97,11 @@ public partial class RelationalJobHistoryStore
             await using var update = connection.CreateCommand();
             update.Transaction = transaction;
             update.CommandText = @"
-                UPDATE TenantPortabilityCutovers
-                   SET OperationId = @operation, Authority = @authority, FenceEpoch = @fence,
-                       SourceSchedulesEnabled = @source, TargetSchedulesEnabled = @target,
-                       SourceActiveExecutions = @active, UpdatedAtUtc = @now, Version = Version + 1
-                 WHERE TenantId = @tenant AND Version = @expectedVersion;";
+                UPDATE tenant_portability_cutovers
+                   SET operation_id = @operation, authority = @authority, fence_epoch = @fence,
+                       source_schedules_enabled = @source, target_schedules_enabled = @target,
+                       source_active_executions = @active, updated_at_utc = @now, version = version + 1
+                 WHERE tenant_id = @tenant AND version = @expectedVersion;";
             AddCutoverParameters(update, next, active);
             update.AddParam("@expectedVersion", expected.Version);
             var won = await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
@@ -123,9 +123,9 @@ public partial class RelationalJobHistoryStore
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = @"
-            SELECT OperationId, Authority, FenceEpoch, SourceSchedulesEnabled,
-                   TargetSchedulesEnabled, SourceActiveExecutions, UpdatedAtUtc, Version
-              FROM TenantPortabilityCutovers WHERE TenantId = @tenant;";
+            SELECT operation_id, authority, fence_epoch, source_schedules_enabled,
+                   target_schedules_enabled, source_active_executions, updated_at_utc, version
+              FROM tenant_portability_cutovers WHERE tenant_id = @tenant;";
         command.AddParam("@tenant", tenantId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
         if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return null;
@@ -148,10 +148,10 @@ public partial class RelationalJobHistoryStore
         {
             remember.Transaction = transaction;
             remember.CommandText = @"
-                INSERT INTO TenantPortabilityFencedJobs (TenantId, OperationId, JobName)
-                SELECT @tenant, @operation, Name FROM Jobs
-                 WHERE TenantId = @tenant AND IsEnabled = 1
-                ON CONFLICT (TenantId, OperationId, JobName) DO NOTHING;";
+                INSERT INTO tenant_portability_fenced_jobs (tenant_id, operation_id, job_name)
+                SELECT @tenant, @operation, name FROM jobs
+                 WHERE tenant_id = @tenant AND is_enabled = 1
+                ON CONFLICT (tenant_id, operation_id, job_name) DO NOTHING;";
             remember.AddParam("@tenant", next.TenantId);
             remember.AddParam("@operation", next.OperationId);
             await remember.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -159,8 +159,8 @@ public partial class RelationalJobHistoryStore
         await using var disable = connection.CreateCommand();
         disable.Transaction = transaction;
         disable.CommandText = @"
-            UPDATE Jobs SET IsEnabled = 0, Version = Version + 1, ModifiedBy = @operation
-             WHERE TenantId = @tenant AND IsEnabled = 1;";
+            UPDATE jobs SET is_enabled = 0, version = version + 1, modified_by = @operation
+             WHERE tenant_id = @tenant AND is_enabled = 1;";
         disable.AddParam("@tenant", next.TenantId);
         disable.AddParam("@operation", next.OperationId);
         await disable.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -173,9 +173,9 @@ public partial class RelationalJobHistoryStore
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = @"
-            SELECT COUNT(*) FROM Jobs
-             WHERE TenantId = @tenant AND LeaseOwner IS NOT NULL
-               AND LeaseExpiresAt IS NOT NULL AND LeaseExpiresAt > @now;";
+            SELECT COUNT(*) FROM jobs
+             WHERE tenant_id = @tenant AND lease_owner IS NOT NULL
+               AND lease_expires_at IS NOT NULL AND lease_expires_at > @now;";
         command.AddParam("@tenant", tenantId);
         command.AddParam("@now", now.UtcDateTime.ToString("O"));
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false));

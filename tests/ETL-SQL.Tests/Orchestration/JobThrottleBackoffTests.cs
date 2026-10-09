@@ -38,7 +38,7 @@ public class JobThrottleBackoffTests
             }.ToString());
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT COUNT(*) FROM ThrottleSlots;";
+            command.CommandText = "SELECT COUNT(*) FROM throttle_slots;";
             Assert.Equal(0L, await command.ExecuteScalarAsync());
         }
         finally

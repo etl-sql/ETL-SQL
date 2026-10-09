@@ -47,13 +47,14 @@ public class SharedBackupSurfaceInventoryTests
     public void OrchestratorTablesMustBeClassified()
     {
         var tables = new[] {
-            "ThrottleSlots", "SandboxAdmissions", "SandboxAdmissionPools", "SandboxAdmissionTenantCapacity",
-            "TenantMeteringLedger", "Jobs", "Schedules", "Notifications", "JobSchedules", "JobNotifications",
-            "OrchestratorObjectAcls", "JobHistory", "JobColumnMetrics", "JobDataQualityFailures", "JobStatementMetrics",
-            "TenantUsageRecords", "SharedTenantControlPlanes", "SharedTenantLifecycleOperations",
-            "SharedTenantLifecycleFencedJobs", "BundleVersions", "BundleFiles", "BundleDependencies",
-            "LineageHistory", "Nodes", "WriteEpochs", "ClusterLocks", "JobState", "HostMetrics",
-            "JobHistoryDaily", "HostMetricsDaily"
+            "throttle_slots", "sandbox_admissions", "sandbox_admission_pools", "sandbox_admission_tenant_capacity",
+            "tenant_metering_ledger", "jobs", "schedules", "notifications", "job_schedules", "job_notifications",
+            "orchestrator_object_acls", "job_history", "job_column_metrics", "job_data_quality_failures", "job_statement_metrics",
+            "tenant_usage_records", "shared_tenant_control_planes", "shared_tenant_lifecycle_operations",
+            "shared_tenant_lifecycle_fenced_jobs", "tenant_portability_cutovers", "tenant_portability_fenced_jobs",
+            "bundle_versions", "bundle_files", "bundle_dependencies",
+            "lineage_history", "nodes", "write_epochs", "cluster_locks", "job_state", "host_metrics",
+            "job_history_daily", "host_metrics_daily"
         };
 
         var classifiedSurfaces = SharedBackupSurfaceInventory.Surfaces

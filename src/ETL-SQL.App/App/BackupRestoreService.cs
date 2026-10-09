@@ -294,8 +294,8 @@ namespace ETL_SQL.App
             string orchestratorDb,
             string expectedTenant)
         {
-            await RejectForeignTenantRowsAsync(orchestratorDb, "Jobs", expectedTenant);
-            await RejectForeignTenantRowsAsync(portalDb, "SharedTenantResources", expectedTenant);
+            await RejectForeignTenantRowsAsync(orchestratorDb, "jobs", expectedTenant);
+            await RejectForeignTenantRowsAsync(portalDb, "shared_tenant_resources", expectedTenant);
         }
 
         private static async Task RejectForeignTenantRowsAsync(
@@ -308,22 +308,23 @@ namespace ETL_SQL.App
 
             await using var connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly");
             await connection.OpenAsync();
-            await using var tableExists = connection.CreateCommand();
-            tableExists.CommandText =
-                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = @table;";
-            tableExists.Parameters.AddWithValue("@table", table);
-            if (Convert.ToInt64(await tableExists.ExecuteScalarAsync()) == 0)
+            var resolvedTable = await ResolveSqliteTableAsync(connection, null, table);
+            if (resolvedTable is null)
+                return;
+
+            var tenantCol = await ResolveSqliteColumnAsync(connection, null, resolvedTable, "tenant_id");
+            if (tenantCol is null)
                 return;
 
             await using var command = connection.CreateCommand();
-            command.CommandText = $"SELECT DISTINCT TenantId FROM [{table}] WHERE TenantId IS NOT NULL AND TRIM(TenantId) <> '';";
+            command.CommandText = $"SELECT DISTINCT [{tenantCol}] FROM [{resolvedTable}] WHERE [{tenantCol}] IS NOT NULL AND TRIM([{tenantCol}]) <> '';";
             await using var reader = await command.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {
                 var actual = TenantId.FromTrustedSource(reader.GetString(0)).Value;
                 if (!string.Equals(actual, expectedTenant, StringComparison.Ordinal))
                     throw new InvalidDataException(
-                        $"Dedicated backup refused: {table} contains state for tenant '{actual}', not host tenant '{expectedTenant}'.");
+                        $"Dedicated backup refused: {resolvedTable} contains state for tenant '{actual}', not host tenant '{expectedTenant}'.");
             }
         }
 
@@ -656,39 +657,94 @@ namespace ETL_SQL.App
             await using var connection = new SqliteConnection($"Data Source={databasePath}");
             await connection.OpenAsync();
             await using var transaction = await connection.BeginTransactionAsync();
-            if (await SqliteTableExistsAsync(connection, transaction, "Jobs"))
+            var jobsTable = await ResolveSqliteTableAsync(connection, transaction, "jobs");
+            if (jobsTable is not null)
             {
+                var isEnabled = await ResolveSqliteColumnAsync(connection, transaction, jobsTable, "is_enabled") ?? "is_enabled";
+                var leaseOwner = await ResolveSqliteColumnAsync(connection, transaction, jobsTable, "lease_owner") ?? "lease_owner";
+                var leaseExpiresAt = await ResolveSqliteColumnAsync(connection, transaction, jobsTable, "lease_expires_at") ?? "lease_expires_at";
+                var leaseFenceToken = await ResolveSqliteColumnAsync(connection, transaction, jobsTable, "lease_fence_token") ?? "lease_fence_token";
                 await using var jobs = connection.CreateCommand();
                 jobs.Transaction = (SqliteTransaction)transaction;
-                jobs.CommandText = """
-                    UPDATE Jobs
-                       SET IsEnabled = 0,
-                           LeaseOwner = NULL,
-                           LeaseExpiresAt = NULL,
-                           LeaseFenceToken = LeaseFenceToken + 1;
+                jobs.CommandText = $"""
+                    UPDATE [{jobsTable}]
+                       SET [{isEnabled}] = 0,
+                           [{leaseOwner}] = NULL,
+                           [{leaseExpiresAt}] = NULL,
+                           [{leaseFenceToken}] = [{leaseFenceToken}] + 1;
                     """;
                 await jobs.ExecuteNonQueryAsync();
             }
 
-            if (await SqliteTableExistsAsync(connection, transaction, "SandboxAdmissions"))
+            var admissionsTable = await ResolveSqliteTableAsync(connection, transaction, "sandbox_admissions");
+            if (admissionsTable is not null)
             {
+                var state = await ResolveSqliteColumnAsync(connection, transaction, admissionsTable, "state") ?? "state";
+                var leaseOwner = await ResolveSqliteColumnAsync(connection, transaction, admissionsTable, "lease_owner") ?? "lease_owner";
+                var leaseExpiresUtc = await ResolveSqliteColumnAsync(connection, transaction, admissionsTable, "lease_expires_utc") ?? "lease_expires_utc";
+                var fenceToken = await ResolveSqliteColumnAsync(connection, transaction, admissionsTable, "fence_token") ?? "fence_token";
+                var updatedUtc = await ResolveSqliteColumnAsync(connection, transaction, admissionsTable, "updated_utc") ?? "updated_utc";
+                var reconciliationReason = await ResolveSqliteColumnAsync(connection, transaction, admissionsTable, "reconciliation_reason") ?? "reconciliation_reason";
+
                 await using var admissions = connection.CreateCommand();
                 admissions.Transaction = (SqliteTransaction)transaction;
-                admissions.CommandText = """
-                    UPDATE SandboxAdmissions
-                       SET State = CASE WHEN State = 'Active' THEN 'Retained' ELSE 'Cancelled' END,
-                           LeaseOwner = NULL,
-                           LeaseExpiresUtc = NULL,
-                           FenceToken = FenceToken + 1,
-                           UpdatedUtc = @now,
-                           ReconciliationReason = 'Restored archive requires environment reconciliation'
-                     WHERE State IN ('Queued', 'Active');
+                admissions.CommandText = $"""
+                    UPDATE [{admissionsTable}]
+                       SET [{state}] = CASE WHEN [{state}] = 'Active' THEN 'Retained' ELSE 'Cancelled' END,
+                           [{leaseOwner}] = NULL,
+                           [{leaseExpiresUtc}] = NULL,
+                           [{fenceToken}] = [{fenceToken}] + 1,
+                           [{updatedUtc}] = @now,
+                           [{reconciliationReason}] = 'Restored archive requires environment reconciliation'
+                     WHERE [{state}] IN ('Queued', 'Active');
                     """;
                 admissions.Parameters.AddWithValue("@now", DateTimeOffset.UtcNow.ToString("O"));
                 await admissions.ExecuteNonQueryAsync();
             }
             await transaction.CommitAsync();
             SqliteConnection.ClearAllPools();
+        }
+
+        private static async Task<string?> ResolveSqliteTableAsync(
+            SqliteConnection connection,
+            System.Data.Common.DbTransaction? transaction,
+            string preferredName)
+        {
+            await using var command = connection.CreateCommand();
+            if (transaction is not null) command.Transaction = (SqliteTransaction)transaction;
+            command.CommandText =
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND (name = @preferred OR name = @pascal OR lower(name) = lower(@preferred)) LIMIT 1;";
+            command.Parameters.AddWithValue("@preferred", preferredName);
+            command.Parameters.AddWithValue("@pascal", preferredName.Replace("_", ""));
+            return (string?)await command.ExecuteScalarAsync();
+        }
+
+        private static async Task<string?> ResolveSqliteColumnAsync(
+            SqliteConnection connection,
+            System.Data.Common.DbTransaction? transaction,
+            string table,
+            string preferredName)
+        {
+            await using var command = connection.CreateCommand();
+            if (transaction is not null) command.Transaction = (SqliteTransaction)transaction;
+            command.CommandText = $"PRAGMA table_info([{table}]);";
+            await using var reader = await command.ExecuteReaderAsync();
+            string? fallback = null;
+            while (await reader.ReadAsync())
+            {
+                var col = reader.GetString(1);
+                if (string.Equals(col, preferredName, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (string.Equals(col, preferredName, StringComparison.Ordinal))
+                        return col;
+                    fallback = col;
+                }
+                else if (string.Equals(col.Replace("_", ""), preferredName.Replace("_", ""), StringComparison.OrdinalIgnoreCase))
+                {
+                    fallback ??= col;
+                }
+            }
+            return fallback;
         }
 
         private static async Task<bool> SqliteTableExistsAsync(
@@ -699,8 +755,9 @@ namespace ETL_SQL.App
             await using var command = connection.CreateCommand();
             command.Transaction = (SqliteTransaction)transaction;
             command.CommandText =
-                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = @table;";
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND (name = @table OR name = lower(@table) OR name = @snake) COLLATE NOCASE;";
             command.Parameters.AddWithValue("@table", table);
+            command.Parameters.AddWithValue("@snake", DatabaseNamingConvention.ToSnakeCase(table));
             return Convert.ToInt64(await command.ExecuteScalarAsync()) > 0;
         }
 

@@ -45,18 +45,18 @@ public class ShowLocksStatementHandler : IStatementHandler
         using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = @"
-                CREATE TABLE IF NOT EXISTS ThrottleSlots (
-                    Id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ProcessId   INTEGER NOT NULL,
-                    JobName     TEXT    NOT NULL,
-                    AcquiredAt  TEXT    NOT NULL,
-                    MachineName TEXT    DEFAULT ''
+                CREATE TABLE IF NOT EXISTS throttle_slots (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    process_id   INTEGER NOT NULL,
+                    job_name     TEXT    NOT NULL,
+                    acquired_at  TEXT    NOT NULL,
+                    machine_name TEXT    DEFAULT ''
                 );";
             await cmd.ExecuteNonQueryAsync();
 
             try
             {
-                cmd.CommandText = "ALTER TABLE ThrottleSlots ADD COLUMN MachineName TEXT DEFAULT '';";
+                cmd.CommandText = "ALTER TABLE throttle_slots ADD COLUMN machine_name TEXT DEFAULT '';";
                 await cmd.ExecuteNonQueryAsync();
             }
             catch (SqliteException ex) when (ex.SqliteErrorCode == 1)
@@ -67,7 +67,7 @@ public class ShowLocksStatementHandler : IStatementHandler
 
         using (var cmd = conn.CreateCommand())
         {
-            cmd.CommandText = "SELECT Id, ProcessId, JobName, AcquiredAt, MachineName FROM ThrottleSlots ORDER BY AcquiredAt DESC;";
+            cmd.CommandText = "SELECT id, process_id, job_name, acquired_at, machine_name FROM throttle_slots ORDER BY acquired_at DESC;";
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
             {

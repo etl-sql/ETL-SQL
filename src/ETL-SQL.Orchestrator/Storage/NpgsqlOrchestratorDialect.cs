@@ -49,6 +49,29 @@ namespace ETL_SQL.Orchestrator.Storage
             return columns;
         }
 
+        public async Task<HashSet<string>> GetTableNamesAsync(DbConnection connection, CancellationToken ct = default)
+        {
+            var tables = new HashSet<string>(System.StringComparer.Ordinal);
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema();";
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) tables.Add(reader.GetString(0));
+            return tables;
+        }
+
+        public async Task<List<string>> GetExactColumnNamesAsync(DbConnection connection, string table, CancellationToken ct = default)
+        {
+            var columns = new List<string>();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText =
+                "SELECT column_name FROM information_schema.columns " +
+                "WHERE table_schema = current_schema() AND lower(table_name) = lower(@table);";
+            cmd.AddParam("@table", table);
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) columns.Add(reader.GetString(0));
+            return columns;
+        }
+
         public string InsertReturningId(string insertWithoutSemicolon, string idColumn) =>
             insertWithoutSemicolon + " RETURNING " + idColumn + ";";
     }

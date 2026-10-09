@@ -91,20 +91,22 @@ namespace ETL_SQL.Orchestrator.Execution
                 using var conn = _dialect.CreateConnection();
                 await conn.OpenAsync();
                 using var cmd = conn.CreateCommand();
+                await OrchestratorSchemaMigration.MigrateLegacyTableAsync(_dialect, conn, "ThrottleSlots", "throttle_slots");
+
                 cmd.CommandText = $@"
-                    CREATE TABLE IF NOT EXISTS ThrottleSlots (
-                        Id          {_dialect.AutoIncrementPrimaryKey},
-                        ProcessId   INTEGER NOT NULL,
-                        JobName     TEXT    NOT NULL,
-                        AcquiredAt  TEXT    NOT NULL,
-                        MachineName TEXT    DEFAULT ''
+                    CREATE TABLE IF NOT EXISTS throttle_slots (
+                        id          {_dialect.AutoIncrementPrimaryKey},
+                        process_id   INTEGER NOT NULL,
+                        job_name     TEXT    NOT NULL,
+                        acquired_at  TEXT    NOT NULL,
+                        machine_name TEXT    DEFAULT ''
                     );";
                 await cmd.ExecuteNonQueryAsync();
 
-                var columns = await _dialect.GetColumnNamesAsync(conn, "ThrottleSlots");
-                if (!columns.Contains("MachineName"))
+                var columns = await _dialect.GetColumnNamesAsync(conn, "throttle_slots");
+                if (!columns.Contains("machine_name"))
                 {
-                    cmd.CommandText = "ALTER TABLE ThrottleSlots ADD COLUMN MachineName TEXT DEFAULT '';";
+                    cmd.CommandText = "ALTER TABLE throttle_slots ADD COLUMN machine_name TEXT DEFAULT '';";
                     await cmd.ExecuteNonQueryAsync();
                 }
 
@@ -166,7 +168,7 @@ namespace ETL_SQL.Orchestrator.Execution
             {
                 using var countCmd = conn.CreateCommand();
                 countCmd.Transaction = tx;
-                countCmd.CommandText = "SELECT COUNT(*) FROM ThrottleSlots;";
+                countCmd.CommandText = "SELECT COUNT(*) FROM throttle_slots;";
                 var count = Convert.ToInt32(await countCmd.ExecuteScalarAsync());
 
                 if (count >= _maxConcurrent)
@@ -178,8 +180,8 @@ namespace ETL_SQL.Orchestrator.Execution
                 using var insertCmd = conn.CreateCommand();
                 insertCmd.Transaction = tx;
                 insertCmd.CommandText = _dialect.InsertReturningId(@"
-                    INSERT INTO ThrottleSlots (ProcessId, JobName, AcquiredAt, MachineName)
-                    VALUES (@pid, @job, @at, @machine)", "Id");
+                    INSERT INTO throttle_slots (process_id, job_name, acquired_at, machine_name)
+                    VALUES (@pid, @job, @at, @machine)", "id");
                 insertCmd.AddParam("@pid", _pid);
                 insertCmd.AddParam("@job", jobName);
                 insertCmd.AddParam("@at", DateTime.UtcNow.ToString("O"));
@@ -214,7 +216,7 @@ namespace ETL_SQL.Orchestrator.Execution
         {
             using (var expired = conn.CreateCommand())
             {
-                expired.CommandText = "DELETE FROM ThrottleSlots WHERE MachineName != @machine AND AcquiredAt < @cutoff;";
+                expired.CommandText = "DELETE FROM throttle_slots WHERE machine_name != @machine AND acquired_at < @cutoff;";
                 expired.AddParam("@machine", Environment.MachineName);
                 expired.AddParam("@cutoff", DateTime.UtcNow.Subtract(_slotLease).ToString("O"));
                 await expired.ExecuteNonQueryAsync();
@@ -223,7 +225,7 @@ namespace ETL_SQL.Orchestrator.Execution
             var pids = new List<int>();
             using (var cmd = conn.CreateCommand())
             {
-                cmd.CommandText = "SELECT DISTINCT ProcessId FROM ThrottleSlots WHERE ProcessId != @own AND (MachineName = @machine OR MachineName IS NULL OR MachineName = '');";
+                cmd.CommandText = "SELECT DISTINCT process_id FROM throttle_slots WHERE process_id != @own AND (machine_name = @machine OR machine_name IS NULL OR machine_name = '');";
                 cmd.AddParam("@own", _pid);
                 cmd.AddParam("@machine", Environment.MachineName);
                 using var r = await cmd.ExecuteReaderAsync();
@@ -251,7 +253,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 {
                     using var del = conn.CreateCommand();
                     del.Transaction = tx;
-                    del.CommandText = "DELETE FROM ThrottleSlots WHERE ProcessId = @pid AND (MachineName = @machine OR MachineName IS NULL OR MachineName = '');";
+                    del.CommandText = "DELETE FROM throttle_slots WHERE process_id = @pid AND (machine_name = @machine OR machine_name IS NULL OR machine_name = '');";
                     del.AddParam("@pid", pid);
                     del.AddParam("@machine", Environment.MachineName);
                     await del.ExecuteNonQueryAsync();
@@ -276,7 +278,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 using var conn = _dialect.CreateConnection();
                 await conn.OpenAsync().ConfigureAwait(false);
                 using var cmd = conn.CreateCommand();
-                cmd.CommandText = "DELETE FROM ThrottleSlots WHERE Id = @id;";
+                cmd.CommandText = "DELETE FROM throttle_slots WHERE id = @id;";
                 cmd.AddParam("@id", slotId);
                 await cmd.ExecuteNonQueryAsync().ConfigureAwait(false);
             }
@@ -296,7 +298,7 @@ namespace ETL_SQL.Orchestrator.Execution
             using var conn = _dialect.CreateConnection();
             await conn.OpenAsync(cancellationToken);
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "UPDATE ThrottleSlots SET AcquiredAt = @at WHERE Id = @id;";
+            cmd.CommandText = "UPDATE throttle_slots SET acquired_at = @at WHERE id = @id;";
             cmd.AddParam("@at", DateTime.UtcNow.ToString("O"));
             cmd.AddParam("@id", slotId);
             await cmd.ExecuteNonQueryAsync(cancellationToken);

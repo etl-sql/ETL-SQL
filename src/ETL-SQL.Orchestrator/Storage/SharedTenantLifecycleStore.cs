@@ -90,9 +90,9 @@ public partial class RelationalJobHistoryStore
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = @"
-            SELECT TenantId, State, ActiveRelease, MaxConcurrentJobs, MaxStorageMb,
-                   MaxReportSessions, FenceEpoch, UpdatedAtUtc, DeletedAtUtc, Version
-              FROM SharedTenantControlPlanes ORDER BY TenantId;";
+            SELECT tenant_id, state, active_release, max_concurrent_jobs, max_storage_mb,
+                   max_report_sessions, fence_epoch, updated_at_utc, deleted_at_utc, version
+              FROM shared_tenant_control_planes ORDER BY tenant_id;";
         var states = new List<SharedTenantControlPlaneState>();
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
@@ -179,9 +179,9 @@ public partial class RelationalJobHistoryStore
         {
             insert.Transaction = transaction;
             insert.CommandText = @"
-                INSERT INTO SharedTenantControlPlanes
-                    (TenantId, State, ActiveRelease, MaxConcurrentJobs, MaxStorageMb,
-                     MaxReportSessions, FenceEpoch, CreatedAtUtc, UpdatedAtUtc, Version)
+                INSERT INTO shared_tenant_control_planes
+                    (tenant_id, state, active_release, max_concurrent_jobs, max_storage_mb,
+                     max_report_sessions, fence_epoch, created_at_utc, updated_at_utc, version)
                 VALUES (@tenant, 'Active', @release, @jobs, @storage, @reports, 1, @now, @now, 1);";
             AddCommand(insert, command, tenantId);
             await insert.ExecuteNonQueryAsync(cancellationToken);
@@ -214,12 +214,12 @@ public partial class RelationalJobHistoryStore
         {
             update.Transaction = transaction;
             update.CommandText = @"
-                UPDATE SharedTenantControlPlanes
-                   SET State = 'Active', ActiveRelease = @release,
-                       MaxConcurrentJobs = @jobs, MaxStorageMb = @storage,
-                       MaxReportSessions = @reports, UpdatedAtUtc = @now,
-                       Version = Version + 1
-                 WHERE TenantId = @tenant AND State = 'Upgrading';";
+                UPDATE shared_tenant_control_planes
+                   SET state = 'Active', active_release = @release,
+                       max_concurrent_jobs = @jobs, max_storage_mb = @storage,
+                       max_report_sessions = @reports, updated_at_utc = @now,
+                       version = version + 1
+                 WHERE tenant_id = @tenant AND state = 'Upgrading';";
             AddCommand(update, command, tenantId);
             if (await update.ExecuteNonQueryAsync(cancellationToken) != 1)
                 throw new InvalidOperationException("Shared tenant upgrade lost its lifecycle fence.");
@@ -258,10 +258,10 @@ public partial class RelationalJobHistoryStore
         {
             update.Transaction = transaction;
             update.CommandText = @"
-                UPDATE SharedTenantControlPlanes
-                   SET State = 'Deleted', DeletedAtUtc = @now, UpdatedAtUtc = @now,
-                       FenceEpoch = FenceEpoch + 1, Version = Version + 1
-                 WHERE TenantId = @tenant AND State = 'Deleting';";
+                UPDATE shared_tenant_control_planes
+                   SET state = 'Deleted', deleted_at_utc = @now, updated_at_utc = @now,
+                       fence_epoch = fence_epoch + 1, version = version + 1
+                 WHERE tenant_id = @tenant AND state = 'Deleting';";
             update.AddParam("@tenant", tenantId);
             update.AddParam("@now", command.NowUtc.ToString("O"));
             if (await update.ExecuteNonQueryAsync(cancellationToken) != 1)
@@ -316,9 +316,9 @@ public partial class RelationalJobHistoryStore
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = @"
-            SELECT TenantId, Kind, PlatformOperator, AuthorizationReference, TargetRelease,
-                   TargetMaxConcurrentJobs, TargetMaxStorageMb, TargetMaxReportSessions, Status
-              FROM SharedTenantLifecycleOperations WHERE OperationId = @operation;";
+            SELECT tenant_id, kind, platform_operator, authorization_reference, target_release,
+                   target_max_concurrent_jobs, target_max_storage_mb, target_max_report_sessions, status
+              FROM shared_tenant_lifecycle_operations WHERE operation_id = @operation;";
         command.AddParam("@operation", operationId);
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return null;
@@ -336,10 +336,10 @@ public partial class RelationalJobHistoryStore
         await using var insert = connection.CreateCommand();
         insert.Transaction = transaction;
         insert.CommandText = @"
-            INSERT INTO SharedTenantLifecycleOperations
-                (OperationId, TenantId, Kind, Status, PlatformOperator, AuthorizationReference,
-                 TargetRelease, TargetMaxConcurrentJobs, TargetMaxStorageMb,
-                 TargetMaxReportSessions, StartedAtUtc, UpdatedAtUtc)
+            INSERT INTO shared_tenant_lifecycle_operations
+                (operation_id, tenant_id, kind, status, platform_operator, authorization_reference,
+                 target_release, target_max_concurrent_jobs, target_max_storage_mb,
+                 target_max_report_sessions, started_at_utc, updated_at_utc)
             VALUES (@operation, @tenant, @kind, 'Started', @operator, @authorization,
                     @release, @jobs, @storage, @reports, @now, @now);";
         insert.AddParam("@operation", command.OperationId);
@@ -358,11 +358,11 @@ public partial class RelationalJobHistoryStore
         {
             fenceState.Transaction = transaction;
             fenceState.CommandText = @"
-                UPDATE SharedTenantControlPlanes
-                   SET State = @state,
-                       FenceEpoch = CASE WHEN State = 'Active' THEN FenceEpoch + 1 ELSE FenceEpoch END,
-                       UpdatedAtUtc = @now, Version = Version + 1
-                 WHERE TenantId = @tenant AND State IN ('Active', @state);";
+                UPDATE shared_tenant_control_planes
+                   SET state = @state,
+                       fence_epoch = CASE WHEN state = 'Active' THEN fence_epoch + 1 ELSE fence_epoch END,
+                       updated_at_utc = @now, version = version + 1
+                 WHERE tenant_id = @tenant AND state IN ('Active', @state);";
             fenceState.AddParam("@state", state);
             fenceState.AddParam("@tenant", tenantId);
             fenceState.AddParam("@now", command.NowUtc.ToString("O"));
@@ -373,10 +373,10 @@ public partial class RelationalJobHistoryStore
         {
             remember.Transaction = transaction;
             remember.CommandText = @"
-                INSERT INTO SharedTenantLifecycleFencedJobs (OperationId, TenantId, JobName)
-                SELECT @operation, @tenant, Name FROM Jobs
-                 WHERE TenantId = @tenant AND IsEnabled = 1
-                ON CONFLICT (OperationId, JobName) DO NOTHING;";
+                INSERT INTO shared_tenant_lifecycle_fenced_jobs (operation_id, tenant_id, job_name)
+                SELECT @operation, @tenant, name FROM jobs
+                 WHERE tenant_id = @tenant AND is_enabled = 1
+                ON CONFLICT (operation_id, job_name) DO NOTHING;";
             remember.AddParam("@operation", command.OperationId);
             remember.AddParam("@tenant", tenantId);
             await remember.ExecuteNonQueryAsync(ct);
@@ -384,8 +384,8 @@ public partial class RelationalJobHistoryStore
         await using var disable = connection.CreateCommand();
         disable.Transaction = transaction;
         disable.CommandText = @"
-            UPDATE Jobs SET IsEnabled = 0, Version = Version + 1, ModifiedBy = @operator
-             WHERE TenantId = @tenant AND IsEnabled = 1;";
+            UPDATE jobs SET is_enabled = 0, version = version + 1, modified_by = @operator
+             WHERE tenant_id = @tenant AND is_enabled = 1;";
         disable.AddParam("@operator", command.PlatformOperator);
         disable.AddParam("@tenant", tenantId);
         await disable.ExecuteNonQueryAsync(ct);
@@ -398,9 +398,9 @@ public partial class RelationalJobHistoryStore
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = @"
-            SELECT COUNT(*) FROM Jobs
-             WHERE TenantId = @tenant AND LeaseOwner IS NOT NULL
-               AND LeaseExpiresAt IS NOT NULL AND LeaseExpiresAt > @now;";
+            SELECT COUNT(*) FROM jobs
+             WHERE tenant_id = @tenant AND lease_owner IS NOT NULL
+               AND lease_expires_at IS NOT NULL AND lease_expires_at > @now;";
         command.AddParam("@tenant", tenantId);
         command.AddParam("@now", now.UtcDateTime.ToString("O"));
         return Convert.ToInt32(await command.ExecuteScalarAsync(ct));
@@ -413,10 +413,10 @@ public partial class RelationalJobHistoryStore
         await using var restore = connection.CreateCommand();
         restore.Transaction = transaction;
         restore.CommandText = @"
-            UPDATE Jobs SET IsEnabled = 1, Version = Version + 1
-             WHERE TenantId = @tenant AND Name IN
-                   (SELECT JobName FROM SharedTenantLifecycleFencedJobs
-                     WHERE OperationId = @operation AND TenantId = @tenant);";
+            UPDATE jobs SET is_enabled = 1, version = version + 1
+             WHERE tenant_id = @tenant AND name IN
+                   (SELECT job_name FROM shared_tenant_lifecycle_fenced_jobs
+                     WHERE operation_id = @operation AND tenant_id = @tenant);";
         restore.AddParam("@tenant", tenantId);
         restore.AddParam("@operation", operationId);
         await restore.ExecuteNonQueryAsync(ct);
@@ -431,23 +431,23 @@ public partial class RelationalJobHistoryStore
         // unrecoverable loss in the one operation that must not overreach.
         foreach (var sql in new[]
         {
-            "DELETE FROM JobColumnMetrics WHERE TenantId = @tenant;",
-            "DELETE FROM JobDataQualityFailures WHERE TenantId = @tenant;",
-            "DELETE FROM JobStatementMetrics WHERE TenantId = @tenant;",
+            "DELETE FROM job_column_metrics WHERE tenant_id = @tenant;",
+            "DELETE FROM job_data_quality_failures WHERE tenant_id = @tenant;",
+            "DELETE FROM job_statement_metrics WHERE tenant_id = @tenant;",
             // History and its rollup carry the tenant directly: they outlive the job, so a join
             // through Jobs would strand the rows of an already-dropped job in the tenant's partition.
-            "DELETE FROM JobHistoryDaily WHERE TenantId = @tenant;",
-            "DELETE FROM JobHistory WHERE TenantId = @tenant;",
-            "DELETE FROM OrchestratorObjectAcls WHERE ObjectId IN (SELECT Id FROM Jobs WHERE TenantId = @tenant);",
-            "DELETE FROM OrchestratorObjectAcls WHERE ObjectId IN (SELECT Id FROM Schedules WHERE TenantId = @tenant);",
-            "DELETE FROM OrchestratorObjectAcls WHERE ObjectId IN (SELECT Id FROM Notifications WHERE TenantId = @tenant);",
-            "DELETE FROM JobState WHERE JobId IN (SELECT Id FROM Jobs WHERE TenantId = @tenant);",
-            "DELETE FROM JobSchedules WHERE JobId IN (SELECT Id FROM Jobs WHERE TenantId = @tenant);",
-            "DELETE FROM JobNotifications WHERE JobId IN (SELECT Id FROM Jobs WHERE TenantId = @tenant);",
-            "DELETE FROM TenantUsageRecords WHERE TenantId = @tenant;",
-            "DELETE FROM Schedules WHERE TenantId = @tenant;",
-            "DELETE FROM Notifications WHERE TenantId = @tenant;",
-            "DELETE FROM Jobs WHERE TenantId = @tenant;"
+            "DELETE FROM job_history_daily WHERE tenant_id = @tenant;",
+            "DELETE FROM job_history WHERE tenant_id = @tenant;",
+            "DELETE FROM orchestrator_object_acls WHERE object_id IN (SELECT id FROM jobs WHERE tenant_id = @tenant);",
+            "DELETE FROM orchestrator_object_acls WHERE object_id IN (SELECT id FROM schedules WHERE tenant_id = @tenant);",
+            "DELETE FROM orchestrator_object_acls WHERE object_id IN (SELECT id FROM notifications WHERE tenant_id = @tenant);",
+            "DELETE FROM job_state WHERE job_id IN (SELECT id FROM jobs WHERE tenant_id = @tenant);",
+            "DELETE FROM job_schedules WHERE job_id IN (SELECT id FROM jobs WHERE tenant_id = @tenant);",
+            "DELETE FROM job_notifications WHERE job_id IN (SELECT id FROM jobs WHERE tenant_id = @tenant);",
+            "DELETE FROM tenant_usage_records WHERE tenant_id = @tenant;",
+            "DELETE FROM schedules WHERE tenant_id = @tenant;",
+            "DELETE FROM notifications WHERE tenant_id = @tenant;",
+            "DELETE FROM jobs WHERE tenant_id = @tenant;"
         })
         {
             await using var command = connection.CreateCommand();
@@ -465,9 +465,9 @@ public partial class RelationalJobHistoryStore
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = @"
-            UPDATE SharedTenantLifecycleOperations
-               SET Status = 'Completed', UpdatedAtUtc = @now, CompletedAtUtc = @now
-             WHERE OperationId = @operation;";
+            UPDATE shared_tenant_lifecycle_operations
+               SET status = 'Completed', updated_at_utc = @now, completed_at_utc = @now
+             WHERE operation_id = @operation;";
         command.AddParam("@operation", operationId);
         command.AddParam("@now", now.ToString("O"));
         await command.ExecuteNonQueryAsync(ct);
@@ -479,9 +479,9 @@ public partial class RelationalJobHistoryStore
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = @"
-            SELECT TenantId, State, ActiveRelease, MaxConcurrentJobs, MaxStorageMb,
-                   MaxReportSessions, FenceEpoch, UpdatedAtUtc, DeletedAtUtc, Version
-              FROM SharedTenantControlPlanes WHERE TenantId = @tenant;";
+            SELECT tenant_id, state, active_release, max_concurrent_jobs, max_storage_mb,
+                   max_report_sessions, fence_epoch, updated_at_utc, deleted_at_utc, version
+              FROM shared_tenant_control_planes WHERE tenant_id = @tenant;";
         command.AddParam("@tenant", tenantId);
         await using var reader = await command.ExecuteReaderAsync(ct);
         if (!await reader.ReadAsync(ct)) return null;

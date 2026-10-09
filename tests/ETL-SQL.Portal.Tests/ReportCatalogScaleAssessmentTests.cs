@@ -46,7 +46,7 @@ public sealed class ReportCatalogScaleAssessmentTests
 
             Assert.Equal(Math.Min(100, reportCount), page.Count);
             Assert.Empty(db.ChangeTracker.Entries());
-            Assert.Contains("IX_Reports_FolderId", await QueryPlanAsync(path, folder.Id));
+            Assert.Contains("ix_reports_folder_id", await QueryPlanAsync(path, folder.Id), StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -62,7 +62,7 @@ public sealed class ReportCatalogScaleAssessmentTests
         await using var connection = new SqliteConnection($"Data Source={path}");
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
-        command.CommandText = "EXPLAIN QUERY PLAN SELECT Id, Name FROM Reports WHERE FolderId = $folder AND IsDeleted = 0 ORDER BY Name LIMIT 100";
+        command.CommandText = "EXPLAIN QUERY PLAN SELECT id, name FROM reports WHERE folder_id = $folder AND is_deleted = 0 ORDER BY name LIMIT 100";
         command.Parameters.AddWithValue("$folder", folderId);
         var lines = new List<string>();
         await using var reader = await command.ExecuteReaderAsync();

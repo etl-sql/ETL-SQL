@@ -1,3 +1,4 @@
+using ETL_SQL.Common;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -209,7 +210,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.TenantId).HasMaxLength(128);
             e.HasIndex(x => new { x.TenantId, x.ReportId, x.Kind })
                 .IsUnique()
-                .HasFilter("\"Kind\" = 'Refresh' AND \"Status\" IN ('Pending', 'Running')");
+                .HasFilter("\"kind\" = 'Refresh' AND \"status\" IN ('Pending', 'Running')");
             e.HasIndex(x => new { x.TenantId, x.CompletedAt });
         });
 
@@ -268,7 +269,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         {
             e.HasIndex(x => new { x.RequesterUserId, x.ReportId })
                 .IsUnique()
-                .HasFilter("\"Status\" = 'Pending'");
+                .HasFilter("\"status\" = 'Pending'");
             e.Property(x => x.Status).HasMaxLength(32);
             e.Property(x => x.Reason).HasMaxLength(1000);
             e.Property(x => x.DecisionReason).HasMaxLength(1000);
@@ -283,10 +284,10 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         {
             e.HasIndex(x => new { x.ReportId, x.UserId })
                 .IsUnique()
-                .HasFilter("\"UserId\" IS NOT NULL");
+                .HasFilter("\"user_id\" IS NOT NULL");
             e.HasIndex(x => new { x.ReportId, x.GroupId })
                 .IsUnique()
-                .HasFilter("\"GroupId\" IS NOT NULL");
+                .HasFilter("\"group_id\" IS NOT NULL");
             e.HasOne(x => x.Report).WithMany(r => r.Acls).HasForeignKey(x => x.ReportId)
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId)
@@ -579,7 +580,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.PrincipalKey).HasMaxLength(64);
             e.HasIndex(x => x.PrincipalKey)
                 .IsUnique()
-                .HasFilter("\"PrincipalKey\" IS NOT NULL");
+                .HasFilter("\"principal_key\" IS NOT NULL");
         });
 
         builder.Entity<PortalUser>(e =>
@@ -589,7 +590,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.PrincipalKey).HasMaxLength(64);
             e.HasIndex(x => x.PrincipalKey)
                 .IsUnique()
-                .HasFilter("\"PrincipalKey\" IS NOT NULL");
+                .HasFilter("\"principal_key\" IS NOT NULL");
             // ASP.NET Identity's default global username index is incompatible with a shared store.
             // Preserve its lookup index but move uniqueness to the tenant-qualified key.
             e.HasIndex(x => x.NormalizedUserName)
@@ -597,7 +598,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
                 .IsUnique(false);
             e.HasIndex(x => new { x.TenantId, x.NormalizedUserName })
                 .IsUnique()
-                .HasFilter("\"NormalizedUserName\" IS NOT NULL");
+                .HasFilter("\"normalized_user_name\" IS NOT NULL");
             // Federated accounts are looked up by their immutable provider subject.
             e.HasIndex(x => new { x.TenantId, x.Provider, x.ExternalIssuer, x.ExternalSubject })
                 .IsUnique();
@@ -651,5 +652,55 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(x => new { x.DatasetId, x.UserId }).IsUnique();
         });
+
+        ApplySnakeCaseConventions(builder);
+    }
+
+    private static void ApplySnakeCaseConventions(ModelBuilder builder)
+    {
+        foreach (var entity in builder.Model.GetEntityTypes())
+        {
+            var tableName = entity.GetTableName();
+            if (!string.IsNullOrEmpty(tableName))
+            {
+                entity.SetTableName(DatabaseNamingConvention.ToSnakeCase(tableName));
+            }
+
+            foreach (var property in entity.GetProperties())
+            {
+                var columnName = property.GetDefaultColumnName() ?? property.Name;
+                if (!string.IsNullOrEmpty(columnName))
+                {
+                    property.SetColumnName(DatabaseNamingConvention.ToSnakeCase(columnName));
+                }
+            }
+
+            foreach (var key in entity.GetKeys())
+            {
+                var keyName = key.GetName();
+                if (!string.IsNullOrEmpty(keyName))
+                {
+                    key.SetName(DatabaseNamingConvention.ToSnakeCase(keyName));
+                }
+            }
+
+            foreach (var fk in entity.GetForeignKeys())
+            {
+                var fkName = fk.GetConstraintName();
+                if (!string.IsNullOrEmpty(fkName))
+                {
+                    fk.SetConstraintName(DatabaseNamingConvention.ToSnakeCase(fkName));
+                }
+            }
+
+            foreach (var index in entity.GetIndexes())
+            {
+                var indexName = index.GetDatabaseName();
+                if (!string.IsNullOrEmpty(indexName))
+                {
+                    index.SetDatabaseName(DatabaseNamingConvention.ToSnakeCase(indexName));
+                }
+            }
+        }
     }
 }

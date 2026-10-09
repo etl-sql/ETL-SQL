@@ -106,10 +106,10 @@ namespace ETL_SQL.Tests.Orchestration
             await using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={_dbPath}"))
             {
                 await connection.OpenAsync();
-                foreach (var column in new[] { "RowsQuarantined", "RowsWarned", "DataQualityFailures" })
+                foreach (var column in new[] { "rows_quarantined", "rows_warned", "data_quality_failures" })
                 {
                     using var drop = connection.CreateCommand();
-                    drop.CommandText = $"ALTER TABLE JobHistory DROP COLUMN {column};";
+                    drop.CommandText = $"ALTER TABLE job_history DROP COLUMN {column};";
                     await drop.ExecuteNonQueryAsync();
                 }
             }

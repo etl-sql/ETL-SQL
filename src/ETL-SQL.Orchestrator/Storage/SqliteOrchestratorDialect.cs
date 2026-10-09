@@ -56,6 +56,26 @@ namespace ETL_SQL.Orchestrator.Storage
             return columns;
         }
 
+        public async Task<HashSet<string>> GetTableNamesAsync(DbConnection connection, CancellationToken ct = default)
+        {
+            var tables = new HashSet<string>(System.StringComparer.Ordinal);
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table';";
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) tables.Add(reader.GetString(0));
+            return tables;
+        }
+
+        public async Task<List<string>> GetExactColumnNamesAsync(DbConnection connection, string table, CancellationToken ct = default)
+        {
+            var columns = new List<string>();
+            using var cmd = connection.CreateCommand();
+            cmd.CommandText = $"PRAGMA table_info(\"{table.Replace("\"", "\"\"")}\");";
+            using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) columns.Add(reader.GetString(1));
+            return columns;
+        }
+
         public string InsertReturningId(string insertWithoutSemicolon, string idColumn) =>
             insertWithoutSemicolon + "; SELECT last_insert_rowid();";
     }

@@ -39,6 +39,45 @@ namespace ETL_SQL.Orchestrator.Storage
             await InitializeAsync();
         }
 
+        private static readonly (string OldName, string NewName)[] LegacyTables =
+        [
+            ("Jobs", "jobs"),
+            ("Schedules", "schedules"),
+            ("Notifications", "notifications"),
+            ("JobSchedules", "job_schedules"),
+            ("JobNotifications", "job_notifications"),
+            ("OrchestratorObjectAcls", "orchestrator_object_acls"),
+            ("JobHistory", "job_history"),
+            ("JobColumnMetrics", "job_column_metrics"),
+            ("JobDataQualityFailures", "job_data_quality_failures"),
+            ("JobStatementMetrics", "job_statement_metrics"),
+            ("TenantUsageRecords", "tenant_usage_records"),
+            ("SharedTenantControlPlanes", "shared_tenant_control_planes"),
+            ("SharedTenantLifecycleOperations", "shared_tenant_lifecycle_operations"),
+            ("SharedTenantLifecycleFencedJobs", "shared_tenant_lifecycle_fenced_jobs"),
+            ("TenantPortabilityCutovers", "tenant_portability_cutovers"),
+            ("TenantPortabilityFencedJobs", "tenant_portability_fenced_jobs"),
+            ("BundleVersions", "bundle_versions"),
+            ("BundleFiles", "bundle_files"),
+            ("BundleDependencies", "bundle_dependencies"),
+            ("LineageHistory", "lineage_history"),
+            ("Nodes", "nodes"),
+            ("WriteEpochs", "write_epochs"),
+            ("ClusterLocks", "cluster_locks"),
+            ("JobState", "job_state"),
+            ("HostMetrics", "host_metrics"),
+            ("JobHistoryDaily", "job_history_daily"),
+            ("HostMetricsDaily", "host_metrics_daily"),
+        ];
+
+        private async Task MigrateLegacySchemaAsync(DbConnection connection)
+        {
+            foreach (var (oldName, newName) in LegacyTables)
+            {
+                await OrchestratorSchemaMigration.MigrateLegacyTableAsync(_dialect, connection, oldName, newName);
+            }
+        }
+
         /// <summary>Initializes the SQLite database and creates the necessary tables if they don't exist.</summary>
         public async Task InitializeAsync()
         {
@@ -71,80 +110,81 @@ namespace ETL_SQL.Orchestrator.Storage
                     // COLLATE NOCASE is placed before the constraints because PostgreSQL requires that
                     // order; SQLite accepts either.
                     var createJobsTable = @"
-                CREATE TABLE IF NOT EXISTS Jobs (
-                    Id TEXT NOT NULL PRIMARY KEY,
-                    Name TEXT COLLATE NOCASE NOT NULL,
-                    Script TEXT NOT NULL,
-                    Interval INTEGER NOT NULL,
-                    Unit TEXT NOT NULL,
-                    AtTime TEXT,
-                    LastRun TEXT,
-                    NextRun TEXT,
-                    IsEnabled INTEGER NOT NULL DEFAULT 1,
-                    MaxRetries INTEGER NOT NULL DEFAULT 0,
-                    RetryDelaySeconds INTEGER NOT NULL DEFAULT 30,
-                    Version INTEGER NOT NULL DEFAULT 1,
-                    LeaseFenceToken INTEGER NOT NULL DEFAULT 0,
-                    JobType TEXT NOT NULL DEFAULT 'Script',
-                    TargetPath TEXT,
-                    DisplayName TEXT,
-                    Description TEXT,
-                    Options TEXT,
-                    CreatedBy TEXT,
-                    ModifiedBy TEXT,
-                    TenantId TEXT NOT NULL DEFAULT '',
-                    UNIQUE (TenantId, Name)
+                CREATE TABLE IF NOT EXISTS jobs (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    name TEXT COLLATE NOCASE NOT NULL,
+                    script TEXT NOT NULL,
+                    interval INTEGER NOT NULL,
+                    unit TEXT NOT NULL,
+                    at_time TEXT,
+                    last_run TEXT,
+                    next_run TEXT,
+                    is_enabled INTEGER NOT NULL DEFAULT 1,
+                    max_retries INTEGER NOT NULL DEFAULT 0,
+                    retry_delay_seconds INTEGER NOT NULL DEFAULT 30,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    lease_fence_token INTEGER NOT NULL DEFAULT 0,
+                    run_state TEXT NOT NULL DEFAULT 'Idle',
+                    job_type TEXT NOT NULL DEFAULT 'Script',
+                    target_path TEXT,
+                    display_name TEXT,
+                    description TEXT,
+                    options TEXT,
+                    created_by TEXT,
+                    modified_by TEXT,
+                    tenant_id TEXT NOT NULL DEFAULT '',
+                    UNIQUE (tenant_id, name)
                 );";
 
                     // Schedules, notifications, and their attachments to jobs. The Orchestrator is the
                     // system of record for all three: it runs the jobs, so it holds the trigger,
                     // computes the next run, and dispatches the outcome.
                     var createCatalogTables = @"
-                CREATE TABLE IF NOT EXISTS Schedules (
-                    Id TEXT NOT NULL PRIMARY KEY,
-                    Name TEXT COLLATE NOCASE NOT NULL,
-                    Cron TEXT NOT NULL,
-                    TimeZone TEXT NOT NULL DEFAULT 'UTC',
-                    IsEnabled INTEGER NOT NULL DEFAULT 1,
-                    DisplayName TEXT,
-                    Description TEXT,
-                    Options TEXT,
-                    CreatedBy TEXT,
-                    ModifiedBy TEXT,
-                    Version INTEGER NOT NULL DEFAULT 1,
-                    TenantId TEXT NOT NULL DEFAULT '',
-                    UNIQUE (TenantId, Name)
+                CREATE TABLE IF NOT EXISTS schedules (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    name TEXT COLLATE NOCASE NOT NULL,
+                    cron TEXT NOT NULL,
+                    time_zone TEXT NOT NULL DEFAULT 'UTC',
+                    is_enabled INTEGER NOT NULL DEFAULT 1,
+                    display_name TEXT,
+                    description TEXT,
+                    options TEXT,
+                    created_by TEXT,
+                    modified_by TEXT,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    tenant_id TEXT NOT NULL DEFAULT '',
+                    UNIQUE (tenant_id, name)
                 );
-                CREATE TABLE IF NOT EXISTS Notifications (
-                    Id TEXT NOT NULL PRIMARY KEY,
-                    Name TEXT COLLATE NOCASE NOT NULL,
-                    ConnectionName TEXT NOT NULL,
-                    Recipient TEXT,
-                    IsEnabled INTEGER NOT NULL DEFAULT 1,
-                    DisplayName TEXT,
-                    Description TEXT,
-                    Options TEXT,
-                    CreatedBy TEXT,
-                    ModifiedBy TEXT,
-                    Version INTEGER NOT NULL DEFAULT 1,
-                    TenantId TEXT NOT NULL DEFAULT '',
-                    UNIQUE (TenantId, Name)
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    name TEXT COLLATE NOCASE NOT NULL,
+                    connection_name TEXT NOT NULL,
+                    recipient TEXT,
+                    is_enabled INTEGER NOT NULL DEFAULT 1,
+                    display_name TEXT,
+                    description TEXT,
+                    options TEXT,
+                    created_by TEXT,
+                    modified_by TEXT,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    tenant_id TEXT NOT NULL DEFAULT '',
+                    UNIQUE (tenant_id, name)
                 );
-                CREATE TABLE IF NOT EXISTS JobSchedules (
-                    JobId TEXT NOT NULL,
-                    ScheduleId TEXT NOT NULL,
-                    LastRun TEXT,
-                    NextRun TEXT,
-                    PRIMARY KEY (JobId, ScheduleId)
+                CREATE TABLE IF NOT EXISTS job_schedules (
+                    job_id TEXT NOT NULL,
+                    schedule_id TEXT NOT NULL,
+                    last_run TEXT,
+                    next_run TEXT,
+                    PRIMARY KEY (job_id, schedule_id)
                 );
-                CREATE INDEX IF NOT EXISTS idx_js_schedule ON JobSchedules(ScheduleId);
-                CREATE TABLE IF NOT EXISTS JobNotifications (
-                    JobId TEXT NOT NULL,
-                    NotificationId TEXT NOT NULL,
-                    TriggerCondition TEXT NOT NULL,
-                    PRIMARY KEY (JobId, NotificationId, TriggerCondition)
+                CREATE INDEX IF NOT EXISTS idx_js_schedule ON job_schedules(schedule_id);
+                CREATE TABLE IF NOT EXISTS job_notifications (
+                    job_id TEXT NOT NULL,
+                    notification_id TEXT NOT NULL,
+                    trigger_condition TEXT NOT NULL,
+                    PRIMARY KEY (job_id, notification_id, trigger_condition)
                 );
-                CREATE INDEX IF NOT EXISTS idx_jn_notification ON JobNotifications(NotificationId);";
+                CREATE INDEX IF NOT EXISTS idx_jn_notification ON job_notifications(notification_id);";
 
                     // Grants hang off the object's surrogate Id, which is what makes them tenant-safe:
                     // resolving a name to an Id already required the caller's tenant, so a grant can
@@ -152,34 +192,34 @@ namespace ETL_SQL.Orchestrator.Storage
                     // a later object of the same name starts with no grants at all. ObjectKind is
                     // retained for audit and administration listings, not for lookup.
                     var createObjectAclTable = @"
-                CREATE TABLE IF NOT EXISTS OrchestratorObjectAcls (
-                    ObjectId TEXT NOT NULL,
-                    ObjectKind TEXT NOT NULL,
-                    PrincipalKind TEXT NOT NULL,
-                    PrincipalId TEXT NOT NULL,
-                    Permission TEXT NOT NULL,
-                    GrantedBy TEXT NOT NULL,
-                    Version INTEGER NOT NULL DEFAULT 1,
-                    PRIMARY KEY (ObjectId, PrincipalKind, PrincipalId)
+                CREATE TABLE IF NOT EXISTS orchestrator_object_acls (
+                    object_id TEXT NOT NULL,
+                    object_kind TEXT NOT NULL,
+                    principal_kind TEXT NOT NULL,
+                    principal_id TEXT NOT NULL,
+                    permission TEXT NOT NULL,
+                    granted_by TEXT NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1,
+                    PRIMARY KEY (object_id, principal_kind, principal_id)
                 );
                 CREATE INDEX IF NOT EXISTS idx_ooa_principal
-                    ON OrchestratorObjectAcls(PrincipalKind, PrincipalId, ObjectKind);";
+                    ON orchestrator_object_acls(principal_kind, principal_id, object_kind);";
 
                     // JobId scopes the row; JobName is retained denormalized so history stays readable
                     // after its job is dropped, and so a run's name at the time it ran survives a later
                     // object of the same name. TenantId is carried directly rather than joined through
                     // Jobs because retention prunes history long after the job may be gone.
                     var createHistoryTable = @"
-                CREATE TABLE IF NOT EXISTS JobHistory (
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    JobId TEXT NOT NULL DEFAULT '',
-                    TenantId TEXT NOT NULL DEFAULT '',
-                    JobName TEXT NOT NULL,
-                    StartTime TEXT NOT NULL,
-                    EndTime TEXT,
-                    Status TEXT NOT NULL,
-                    ErrorMessage TEXT,
-                    RowsProcessed INTEGER DEFAULT 0
+                CREATE TABLE IF NOT EXISTS job_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL DEFAULT '',
+                    tenant_id TEXT NOT NULL DEFAULT '',
+                    job_name TEXT NOT NULL,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT,
+                    status TEXT NOT NULL,
+                    error_message TEXT,
+                    rows_processed INTEGER DEFAULT 0
                 );";
                     // The index over (TenantId, JobId) is created after the column migrations rather
                     // than here: CREATE TABLE IF NOT EXISTS leaves an existing table alone, so on a
@@ -187,239 +227,239 @@ namespace ETL_SQL.Orchestrator.Storage
                     // indexing them fails before the migration that adds them has run.
 
                     var createColumnMetricsTable = @"
-                CREATE TABLE IF NOT EXISTS JobColumnMetrics (
-                    JobHistoryId INTEGER NOT NULL,
-                    TenantId TEXT NOT NULL DEFAULT '',
-                    TargetTable TEXT NOT NULL DEFAULT '',
-                    ColumnName TEXT NOT NULL,
-                    TotalRows INTEGER NOT NULL,
-                    NullRows INTEGER NOT NULL,
-                    MaxTimestampUtc TEXT,
-                    PRIMARY KEY (JobHistoryId, TargetTable, ColumnName)
+                CREATE TABLE IF NOT EXISTS job_column_metrics (
+                    job_history_id INTEGER NOT NULL,
+                    tenant_id TEXT NOT NULL DEFAULT '',
+                    target_table TEXT NOT NULL DEFAULT '',
+                    column_name TEXT NOT NULL,
+                    total_rows INTEGER NOT NULL,
+                    null_rows INTEGER NOT NULL,
+                    max_timestamp_utc TEXT,
+                    PRIMARY KEY (job_history_id, target_table, column_name)
                 );";
 
                     var createDataQualityFailuresTable = @"
-                CREATE TABLE IF NOT EXISTS JobDataQualityFailures (
-                    JobHistoryId INTEGER NOT NULL,
-                    TenantId TEXT NOT NULL DEFAULT '',
-                    TargetTable TEXT NOT NULL DEFAULT '',
-                    ColumnName TEXT NOT NULL,
-                    RuleText TEXT NOT NULL,
-                    Action TEXT NOT NULL,
-                    FailureCount INTEGER NOT NULL,
-                    Owner TEXT,
-                    PRIMARY KEY (JobHistoryId, TargetTable, ColumnName, RuleText, Action)
+                CREATE TABLE IF NOT EXISTS job_data_quality_failures (
+                    job_history_id INTEGER NOT NULL,
+                    tenant_id TEXT NOT NULL DEFAULT '',
+                    target_table TEXT NOT NULL DEFAULT '',
+                    column_name TEXT NOT NULL,
+                    rule_text TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    failure_count INTEGER NOT NULL,
+                    owner TEXT,
+                    PRIMARY KEY (job_history_id, target_table, column_name, rule_text, action)
                 );
-                CREATE INDEX IF NOT EXISTS idx_dqf_history ON JobDataQualityFailures(JobHistoryId);";
+                CREATE INDEX IF NOT EXISTS idx_dqf_history ON job_data_quality_failures(job_history_id);";
 
                     var createStatementMetricsTable = @"
-                CREATE TABLE IF NOT EXISTS JobStatementMetrics (
-                    JobHistoryId INTEGER NOT NULL,
-                    TenantId TEXT NOT NULL DEFAULT '',
-                    Ordinal INTEGER NOT NULL,
-                    Statement TEXT NOT NULL,
-                    DurationMs INTEGER NOT NULL,
-                    RowsProcessed INTEGER NOT NULL,
-                    CpuTimeMs INTEGER NOT NULL,
-                    SpilledBytes INTEGER NOT NULL,
-                    SpillReadBytes INTEGER NOT NULL,
-                    Partitions INTEGER NOT NULL,
-                    QueueWaitMs INTEGER NOT NULL,
-                    LockWaitMs INTEGER NOT NULL,
-                    IndexUsed TEXT,
-                    DqRowsValidated INTEGER NOT NULL,
-                    DqRowsQuarantined INTEGER NOT NULL,
-                    DqRowsWarned INTEGER NOT NULL,
-                    DqValidationMs INTEGER NOT NULL,
-                    Failed INTEGER NOT NULL,
-                    PRIMARY KEY (JobHistoryId, Ordinal)
+                CREATE TABLE IF NOT EXISTS job_statement_metrics (
+                    job_history_id INTEGER NOT NULL,
+                    tenant_id TEXT NOT NULL DEFAULT '',
+                    ordinal INTEGER NOT NULL,
+                    statement TEXT NOT NULL,
+                    duration_ms INTEGER NOT NULL,
+                    rows_processed INTEGER NOT NULL,
+                    cpu_time_ms INTEGER NOT NULL,
+                    spilled_bytes INTEGER NOT NULL,
+                    spill_read_bytes INTEGER NOT NULL,
+                    partitions INTEGER NOT NULL,
+                    queue_wait_ms INTEGER NOT NULL,
+                    lock_wait_ms INTEGER NOT NULL,
+                    index_used TEXT,
+                    dq_rows_validated INTEGER NOT NULL,
+                    dq_rows_quarantined INTEGER NOT NULL,
+                    dq_rows_warned INTEGER NOT NULL,
+                    dq_validation_ms INTEGER NOT NULL,
+                    failed INTEGER NOT NULL,
+                    PRIMARY KEY (job_history_id, ordinal)
                 );
-                CREATE INDEX IF NOT EXISTS idx_jsm_history ON JobStatementMetrics(JobHistoryId);";
+                CREATE INDEX IF NOT EXISTS idx_jsm_history ON job_statement_metrics(job_history_id);";
 
                     var createTenantUsageTable = @"
-                CREATE TABLE IF NOT EXISTS TenantUsageRecords (
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    TenantId TEXT NOT NULL,
-                    JobHistoryId INTEGER NOT NULL,
-                    WorkloadKind TEXT NOT NULL,
-                    Status TEXT NOT NULL,
-                    RowsProcessed INTEGER NOT NULL,
-                    PeakMemoryBytes INTEGER NOT NULL,
-                    CpuTimeSeconds REAL NOT NULL,
-                    DurationMs INTEGER NOT NULL,
-                    RecordedAtUtc TEXT NOT NULL,
-                    UNIQUE (TenantId, JobHistoryId)
+                CREATE TABLE IF NOT EXISTS tenant_usage_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id TEXT NOT NULL,
+                    job_history_id INTEGER NOT NULL,
+                    workload_kind TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    rows_processed INTEGER NOT NULL,
+                    peak_memory_bytes INTEGER NOT NULL,
+                    cpu_time_seconds REAL NOT NULL,
+                    duration_ms INTEGER NOT NULL,
+                    recorded_at_utc TEXT NOT NULL,
+                    UNIQUE (tenant_id, job_history_id)
                 );
                 CREATE INDEX IF NOT EXISTS idx_tur_tenant_time
-                    ON TenantUsageRecords(TenantId, RecordedAtUtc DESC);";
+                    ON tenant_usage_records(tenant_id, recorded_at_utc DESC);";
 
                     var createSharedTenantLifecycleTables = @"
-                CREATE TABLE IF NOT EXISTS SharedTenantControlPlanes (
-                    TenantId TEXT PRIMARY KEY,
-                    State TEXT NOT NULL,
-                    ActiveRelease TEXT NOT NULL,
-                    MaxConcurrentJobs INTEGER NOT NULL,
-                    MaxStorageMb INTEGER NOT NULL,
-                    MaxReportSessions INTEGER NOT NULL,
-                    FenceEpoch INTEGER NOT NULL DEFAULT 1,
-                    CreatedAtUtc TEXT NOT NULL,
-                    UpdatedAtUtc TEXT NOT NULL,
-                    DeletedAtUtc TEXT,
-                    Version INTEGER NOT NULL DEFAULT 1
+                CREATE TABLE IF NOT EXISTS shared_tenant_control_planes (
+                    tenant_id TEXT PRIMARY KEY,
+                    state TEXT NOT NULL,
+                    active_release TEXT NOT NULL,
+                    max_concurrent_jobs INTEGER NOT NULL,
+                    max_storage_mb INTEGER NOT NULL,
+                    max_report_sessions INTEGER NOT NULL,
+                    fence_epoch INTEGER NOT NULL DEFAULT 1,
+                    created_at_utc TEXT NOT NULL,
+                    updated_at_utc TEXT NOT NULL,
+                    deleted_at_utc TEXT,
+                    version INTEGER NOT NULL DEFAULT 1
                 );
                 CREATE INDEX IF NOT EXISTS idx_stcp_state
-                    ON SharedTenantControlPlanes(State);
-                CREATE TABLE IF NOT EXISTS SharedTenantLifecycleOperations (
-                    OperationId TEXT PRIMARY KEY,
-                    TenantId TEXT NOT NULL,
-                    Kind TEXT NOT NULL,
-                    Status TEXT NOT NULL,
-                    PlatformOperator TEXT NOT NULL,
-                    AuthorizationReference TEXT NOT NULL,
-                    TargetRelease TEXT,
-                    TargetMaxConcurrentJobs INTEGER,
-                    TargetMaxStorageMb INTEGER,
-                    TargetMaxReportSessions INTEGER,
-                    StartedAtUtc TEXT NOT NULL,
-                    UpdatedAtUtc TEXT NOT NULL,
-                    CompletedAtUtc TEXT,
-                    UNIQUE (Kind, AuthorizationReference)
+                    ON shared_tenant_control_planes(state);
+                CREATE TABLE IF NOT EXISTS shared_tenant_lifecycle_operations (
+                    operation_id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    platform_operator TEXT NOT NULL,
+                    authorization_reference TEXT NOT NULL,
+                    target_release TEXT,
+                    target_max_concurrent_jobs INTEGER,
+                    target_max_storage_mb INTEGER,
+                    target_max_report_sessions INTEGER,
+                    started_at_utc TEXT NOT NULL,
+                    updated_at_utc TEXT NOT NULL,
+                    completed_at_utc TEXT,
+                    UNIQUE (kind, authorization_reference)
                 );
                 CREATE INDEX IF NOT EXISTS idx_stlo_tenant_status
-                    ON SharedTenantLifecycleOperations(TenantId, Status);
-                CREATE TABLE IF NOT EXISTS SharedTenantLifecycleFencedJobs (
-                    OperationId TEXT NOT NULL,
-                    TenantId TEXT NOT NULL,
-                    JobName TEXT COLLATE NOCASE NOT NULL,
-                    PRIMARY KEY (OperationId, JobName)
+                    ON shared_tenant_lifecycle_operations(tenant_id, status);
+                CREATE TABLE IF NOT EXISTS shared_tenant_lifecycle_fenced_jobs (
+                    operation_id TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL,
+                    job_name TEXT COLLATE NOCASE NOT NULL,
+                    PRIMARY KEY (operation_id, job_name)
                 );
-                CREATE TABLE IF NOT EXISTS TenantPortabilityCutovers (
-                    TenantId TEXT PRIMARY KEY,
-                    OperationId TEXT NOT NULL,
-                    Authority TEXT NOT NULL,
-                    FenceEpoch INTEGER NOT NULL,
-                    SourceSchedulesEnabled INTEGER NOT NULL,
-                    TargetSchedulesEnabled INTEGER NOT NULL,
-                    SourceActiveExecutions INTEGER NOT NULL,
-                    UpdatedAtUtc TEXT NOT NULL,
-                    Version INTEGER NOT NULL DEFAULT 1
+                CREATE TABLE IF NOT EXISTS tenant_portability_cutovers (
+                    tenant_id TEXT PRIMARY KEY,
+                    operation_id TEXT NOT NULL,
+                    authority TEXT NOT NULL,
+                    fence_epoch INTEGER NOT NULL,
+                    source_schedules_enabled INTEGER NOT NULL,
+                    target_schedules_enabled INTEGER NOT NULL,
+                    source_active_executions INTEGER NOT NULL,
+                    updated_at_utc TEXT NOT NULL,
+                    version INTEGER NOT NULL DEFAULT 1
                 );
-                CREATE TABLE IF NOT EXISTS TenantPortabilityFencedJobs (
-                    TenantId TEXT NOT NULL,
-                    OperationId TEXT NOT NULL,
-                    JobName TEXT COLLATE NOCASE NOT NULL,
-                    PRIMARY KEY (TenantId, OperationId, JobName)
+                CREATE TABLE IF NOT EXISTS tenant_portability_fenced_jobs (
+                    tenant_id TEXT NOT NULL,
+                    operation_id TEXT NOT NULL,
+                    job_name TEXT COLLATE NOCASE NOT NULL,
+                    PRIMARY KEY (tenant_id, operation_id, job_name)
                 );";
 
                     // Bundle identity is (TenantId, BundleName, Version). Without the tenant, one
                     // tenant's publish becomes another tenant's `bundle://` resolution and its pinned
                     // latest version — a supply-chain crossing, not merely a disclosure.
                     var createBundleTables = @"
-                CREATE TABLE IF NOT EXISTS BundleVersions (
-                    TenantId TEXT NOT NULL DEFAULT '',
-                    BundleName TEXT NOT NULL,
-                    Version INTEGER NOT NULL,
-                    EntryPath TEXT NOT NULL,
-                    ContentHash TEXT NOT NULL,
-                    PublishedAt TEXT NOT NULL,
-                    Publisher TEXT,
-                    Description TEXT,
-                    EncryptionMode TEXT NOT NULL DEFAULT 'MACHINE',
-                    EncryptionMetadata TEXT,
-                    PRIMARY KEY (TenantId, BundleName, Version)
+                CREATE TABLE IF NOT EXISTS bundle_versions (
+                    tenant_id TEXT NOT NULL DEFAULT '',
+                    bundle_name TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    entry_path TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    published_at TEXT NOT NULL,
+                    publisher TEXT,
+                    description TEXT,
+                    encryption_mode TEXT NOT NULL DEFAULT 'MACHINE',
+                    encryption_metadata TEXT,
+                    PRIMARY KEY (tenant_id, bundle_name, version)
                 );
 
-                CREATE TABLE IF NOT EXISTS BundleFiles (
-                    TenantId TEXT NOT NULL DEFAULT '',
-                    BundleName TEXT NOT NULL,
-                    Version INTEGER NOT NULL,
-                    VirtualPath TEXT NOT NULL,
-                    Content TEXT NOT NULL,
-                    ContentHash TEXT NOT NULL,
-                    SizeBytes INTEGER NOT NULL,
-                    ContentType TEXT NOT NULL,
-                    PRIMARY KEY (TenantId, BundleName, Version, VirtualPath),
-                    FOREIGN KEY (TenantId, BundleName, Version) REFERENCES BundleVersions(TenantId, BundleName, Version)
+                CREATE TABLE IF NOT EXISTS bundle_files (
+                    tenant_id TEXT NOT NULL DEFAULT '',
+                    bundle_name TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    virtual_path TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    content_hash TEXT NOT NULL,
+                    size_bytes INTEGER NOT NULL,
+                    content_type TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, bundle_name, version, virtual_path),
+                    FOREIGN KEY (tenant_id, bundle_name, version) REFERENCES bundle_versions(tenant_id, bundle_name, version)
                 );
 
-                CREATE TABLE IF NOT EXISTS BundleDependencies (
-                    TenantId TEXT NOT NULL DEFAULT '',
-                    BundleName TEXT NOT NULL,
-                    Version INTEGER NOT NULL,
-                    FromPath TEXT NOT NULL,
-                    ToPath TEXT NOT NULL,
-                    PRIMARY KEY (TenantId, BundleName, Version, FromPath, ToPath),
-                    FOREIGN KEY (TenantId, BundleName, Version) REFERENCES BundleVersions(TenantId, BundleName, Version)
+                CREATE TABLE IF NOT EXISTS bundle_dependencies (
+                    tenant_id TEXT NOT NULL DEFAULT '',
+                    bundle_name TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    from_path TEXT NOT NULL,
+                    to_path TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, bundle_name, version, from_path, to_path),
+                    FOREIGN KEY (tenant_id, bundle_name, version) REFERENCES bundle_versions(tenant_id, bundle_name, version)
                 );";
 
                     var createLineageHistoryTable = @"
-                CREATE TABLE IF NOT EXISTS LineageHistory (
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    TenantId TEXT NOT NULL DEFAULT 'portal-host',
-                    RunAt TEXT NOT NULL,
-                    JobName TEXT,
-                    ScriptPath TEXT,
-                    TargetTable TEXT NOT NULL,
-                    TargetColumn TEXT,
-                    SourceTables TEXT NOT NULL DEFAULT '[]',
-                    SourceColumns TEXT NOT NULL DEFAULT '[]',
-                    Operation TEXT NOT NULL,
-                    Tags TEXT NOT NULL DEFAULT '{}',
-                    SourceFile TEXT,
-                    Line INTEGER NOT NULL DEFAULT 0,
-                    TransformationKind TEXT,
-                    TransformationExpression TEXT,
-                    FunctionsApplied TEXT NOT NULL DEFAULT '[]',
-                    DerivedFromDescriptions TEXT
+                CREATE TABLE IF NOT EXISTS lineage_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id TEXT NOT NULL DEFAULT 'portal-host',
+                    run_at TEXT NOT NULL,
+                    job_name TEXT,
+                    script_path TEXT,
+                    target_table TEXT NOT NULL,
+                    target_column TEXT,
+                    source_tables TEXT NOT NULL DEFAULT '[]',
+                    source_columns TEXT NOT NULL DEFAULT '[]',
+                    operation TEXT NOT NULL,
+                    tags TEXT NOT NULL DEFAULT '{}',
+                    source_file TEXT,
+                    line INTEGER NOT NULL DEFAULT 0,
+                    transformation_kind TEXT,
+                    transformation_expression TEXT,
+                    functions_applied TEXT NOT NULL DEFAULT '[]',
+                    derived_from_descriptions TEXT
                 );
-                CREATE INDEX IF NOT EXISTS idx_jobs_sched ON Jobs(IsEnabled, NextRun);
-                CREATE INDEX IF NOT EXISTS idx_jh_job_start ON JobHistory(JobName, StartTime);
-                CREATE INDEX IF NOT EXISTS idx_jh_start ON JobHistory(StartTime);
-                CREATE INDEX IF NOT EXISTS idx_jh_end ON JobHistory(EndTime);";
+                CREATE INDEX IF NOT EXISTS idx_jobs_sched ON jobs(is_enabled, next_run);
+                CREATE INDEX IF NOT EXISTS idx_jh_job_start ON job_history(job_name, start_time);
+                CREATE INDEX IF NOT EXISTS idx_jh_start ON job_history(start_time);
+                CREATE INDEX IF NOT EXISTS idx_jh_end ON job_history(end_time);";
 
                     // Cluster node registry (P1.7): one row per live Portal/Orchestrator process, kept fresh
                     // by a TTL heartbeat. NodeId is a process-unique generated id, so no NOCASE is needed.
                     var createNodesTable = @"
-                CREATE TABLE IF NOT EXISTS Nodes (
-                    NodeId TEXT PRIMARY KEY,
-                    Role TEXT NOT NULL,
-                    FirstSeenAt TEXT NOT NULL,
-                    LastHeartbeatAt TEXT NOT NULL,
-                    ExpiresAt TEXT NOT NULL,
-                    Metadata TEXT
+                CREATE TABLE IF NOT EXISTS nodes (
+                    node_id TEXT PRIMARY KEY,
+                    role TEXT NOT NULL,
+                    first_seen_at TEXT NOT NULL,
+                    last_heartbeat_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    metadata TEXT
                 );
-                CREATE INDEX IF NOT EXISTS idx_nodes_expires ON Nodes(ExpiresAt);";
+                CREATE INDEX IF NOT EXISTS idx_nodes_expires ON nodes(expires_at);";
 
                     // Write-epoch fencing for shared storage (P1.8): the highest fence token that has written
                     // each (Scope, EpochKey) resource, so a stale writer cannot overwrite a newer one.
                     var createWriteEpochsTable = @"
-                CREATE TABLE IF NOT EXISTS WriteEpochs (
-                    Scope TEXT NOT NULL,
-                    EpochKey TEXT NOT NULL,
-                    Epoch INTEGER NOT NULL,
-                    PRIMARY KEY (Scope, EpochKey)
+                CREATE TABLE IF NOT EXISTS write_epochs (
+                    scope TEXT NOT NULL,
+                    epoch_key TEXT NOT NULL,
+                    epoch INTEGER NOT NULL,
+                    PRIMARY KEY (scope, epoch_key)
                 );";
 
                     // Distributed locks / leader election (P1.9): one TTL-leased holder per named lock. Lives
                     // here (a CREATE-IF-NOT-EXISTS store) rather than the EF-migrated catalog so it exists
                     // before any node runs migrations.
                     var createClusterLocksTable = @"
-                CREATE TABLE IF NOT EXISTS ClusterLocks (
-                    LockName TEXT PRIMARY KEY,
-                    Owner TEXT NOT NULL,
-                    ExpiresAt TEXT NOT NULL
+                CREATE TABLE IF NOT EXISTS cluster_locks (
+                    lock_name TEXT PRIMARY KEY,
+                    owner TEXT NOT NULL,
+                    expires_at TEXT NOT NULL
                 );";
 
                     // Watermarks live here. Keyed on the job's surrogate Id rather than its name: two
                     // tenants running a job of the same name sharing one high-water mark would silently
                     // load the wrong rows, which nothing would report.
                     var createJobStateTable = @"
-                CREATE TABLE IF NOT EXISTS JobState (
-                    JobId TEXT NOT NULL,
-                    StateKey TEXT NOT NULL,
-                    StateValue TEXT,
-                    UpdatedAt TEXT NOT NULL,
-                    PRIMARY KEY (JobId, StateKey)
+                CREATE TABLE IF NOT EXISTS job_state (
+                    job_id TEXT NOT NULL,
+                    state_key TEXT NOT NULL,
+                    state_value TEXT,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (job_id, state_key)
                 );";
 
                     // Host-utilization time series (capacity planning): one row per sample per node.
@@ -432,49 +472,49 @@ namespace ETL_SQL.Orchestrator.Storage
                     // unbound sentinel and is honestly marked shared. Per-tenant metering comes from
                     // TenantUsageRecords, which measures the run rather than the host.
                     var createHostMetricsTable = @"
-                CREATE TABLE IF NOT EXISTS HostMetrics (
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    NodeId TEXT NOT NULL,
-                    NodeTenantId TEXT NOT NULL DEFAULT '',
-                    CapacityPool TEXT NOT NULL DEFAULT '',
-                    CapturedAt TEXT NOT NULL,
-                    MemoryLoadPercent REAL NOT NULL DEFAULT 0,
-                    ProcessCpuPercent REAL NOT NULL DEFAULT 0,
-                    HostCpuPercent REAL,
-                    StateDiskFreeBytes INTEGER NOT NULL DEFAULT 0,
-                    SpillDiskFreeBytes INTEGER NOT NULL DEFAULT 0
+                CREATE TABLE IF NOT EXISTS host_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    node_id TEXT NOT NULL,
+                    node_tenant_id TEXT NOT NULL DEFAULT '',
+                    capacity_pool TEXT NOT NULL DEFAULT '',
+                    captured_at TEXT NOT NULL,
+                    memory_load_percent REAL NOT NULL DEFAULT 0,
+                    process_cpu_percent REAL NOT NULL DEFAULT 0,
+                    host_cpu_percent REAL,
+                    state_disk_free_bytes INTEGER NOT NULL DEFAULT 0,
+                    spill_disk_free_bytes INTEGER NOT NULL DEFAULT 0
                 );
-                CREATE INDEX IF NOT EXISTS idx_hm_node_time ON HostMetrics(NodeId, CapturedAt);";
+                CREATE INDEX IF NOT EXISTS idx_hm_node_time ON host_metrics(node_id, captured_at);";
                     // The tenant index waits for the migration that adds NodeTenantId — see the note
                     // on the JobHistory index above.
 
                     // Daily roll-up tables (capacity trend that survives raw pruning). Day is 'yyyy-MM-dd'.
                     var createRollupTables = @"
-                CREATE TABLE IF NOT EXISTS JobHistoryDaily (
-                    Day TEXT NOT NULL,
-                    JobId TEXT NOT NULL,
-                    TenantId TEXT NOT NULL DEFAULT '',
-                    JobName TEXT NOT NULL,
-                    RunCount INTEGER NOT NULL DEFAULT 0,
-                    FailureCount INTEGER NOT NULL DEFAULT 0,
-                    TotalRows INTEGER NOT NULL DEFAULT 0,
-                    MaxPeakMemoryBytes INTEGER NOT NULL DEFAULT 0,
-                    PRIMARY KEY (Day, JobId)
+                CREATE TABLE IF NOT EXISTS job_history_daily (
+                    day TEXT NOT NULL,
+                    job_id TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL DEFAULT '',
+                    job_name TEXT NOT NULL,
+                    run_count INTEGER NOT NULL DEFAULT 0,
+                    failure_count INTEGER NOT NULL DEFAULT 0,
+                    total_rows INTEGER NOT NULL DEFAULT 0,
+                    max_peak_memory_bytes INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (day, job_id)
                 );
-                CREATE TABLE IF NOT EXISTS HostMetricsDaily (
-                    Day TEXT NOT NULL,
-                    NodeId TEXT NOT NULL,
-                    NodeTenantId TEXT NOT NULL DEFAULT '',
-                    CapacityPool TEXT NOT NULL DEFAULT '',
-                    AvgMemoryLoadPercent REAL NOT NULL DEFAULT 0,
-                    MaxMemoryLoadPercent REAL NOT NULL DEFAULT 0,
-                    AvgCpuPercent REAL NOT NULL DEFAULT 0,
-                    MaxCpuPercent REAL NOT NULL DEFAULT 0,
-                    MinStateDiskFreeBytes INTEGER NOT NULL DEFAULT 0,
-                    MinSpillDiskFreeBytes INTEGER NOT NULL DEFAULT 0,
-                    AvgHostCpuPercent REAL,
-                    MaxHostCpuPercent REAL,
-                    PRIMARY KEY (Day, NodeId)
+                CREATE TABLE IF NOT EXISTS host_metrics_daily (
+                    day TEXT NOT NULL,
+                    node_id TEXT NOT NULL,
+                    node_tenant_id TEXT NOT NULL DEFAULT '',
+                    capacity_pool TEXT NOT NULL DEFAULT '',
+                    avg_memory_load_percent REAL NOT NULL DEFAULT 0,
+                    max_memory_load_percent REAL NOT NULL DEFAULT 0,
+                    avg_cpu_percent REAL NOT NULL DEFAULT 0,
+                    max_cpu_percent REAL NOT NULL DEFAULT 0,
+                    min_state_disk_free_bytes INTEGER NOT NULL DEFAULT 0,
+                    min_spill_disk_free_bytes INTEGER NOT NULL DEFAULT 0,
+                    avg_host_cpu_percent REAL,
+                    max_host_cpu_percent REAL,
+                    PRIMARY KEY (day, node_id)
                 );";
 
                     var schema = createJobsTable + createCatalogTables + createObjectAclTable + createHistoryTable + createColumnMetricsTable
@@ -487,30 +527,31 @@ namespace ETL_SQL.Orchestrator.Storage
                     // COLLATE NOCASE indexes/queries resolve.
                     schema = schema.Replace("INTEGER PRIMARY KEY AUTOINCREMENT", _dialect.AutoIncrementPrimaryKey);
                     schema = schema
-                        .Replace("RowsProcessed INTEGER", $"RowsProcessed {_dialect.Int64Type}")
-                        .Replace("TotalRows INTEGER", $"TotalRows {_dialect.Int64Type}")
-                        .Replace("NullRows INTEGER", $"NullRows {_dialect.Int64Type}")
-                        .Replace("FailureCount INTEGER", $"FailureCount {_dialect.Int64Type}")
-                        .Replace("MaxPeakMemoryBytes INTEGER", $"MaxPeakMemoryBytes {_dialect.Int64Type}")
-                        .Replace("StateDiskFreeBytes INTEGER", $"StateDiskFreeBytes {_dialect.Int64Type}")
-                        .Replace("SpillDiskFreeBytes INTEGER", $"SpillDiskFreeBytes {_dialect.Int64Type}")
-                        .Replace("MinStateDiskFreeBytes INTEGER", $"MinStateDiskFreeBytes {_dialect.Int64Type}")
-                        .Replace("MinSpillDiskFreeBytes INTEGER", $"MinSpillDiskFreeBytes {_dialect.Int64Type}")
+                        .Replace("rows_processed INTEGER", $"rows_processed {_dialect.Int64Type}")
+                        .Replace("total_rows INTEGER", $"total_rows {_dialect.Int64Type}")
+                        .Replace("null_rows INTEGER", $"null_rows {_dialect.Int64Type}")
+                        .Replace("failure_count INTEGER", $"failure_count {_dialect.Int64Type}")
+                        .Replace("max_peak_memory_bytes INTEGER", $"max_peak_memory_bytes {_dialect.Int64Type}")
+                        .Replace("state_disk_free_bytes INTEGER", $"state_disk_free_bytes {_dialect.Int64Type}")
+                        .Replace("spill_disk_free_bytes INTEGER", $"spill_disk_free_bytes {_dialect.Int64Type}")
+                        .Replace("min_state_disk_free_bytes INTEGER", $"min_state_disk_free_bytes {_dialect.Int64Type}")
+                        .Replace("min_spill_disk_free_bytes INTEGER", $"min_spill_disk_free_bytes {_dialect.Int64Type}")
                         // Statement metrics: durations and byte counters must be 64-bit on
                         // PostgreSQL too, where INTEGER is 32-bit and a spill byte count overflows.
-                        .Replace("DurationMs INTEGER", $"DurationMs {_dialect.Int64Type}")
-                        .Replace("CpuTimeMs INTEGER", $"CpuTimeMs {_dialect.Int64Type}")
-                        .Replace("SpilledBytes INTEGER", $"SpilledBytes {_dialect.Int64Type}")
-                        .Replace("SpillReadBytes INTEGER", $"SpillReadBytes {_dialect.Int64Type}")
-                        .Replace("QueueWaitMs INTEGER", $"QueueWaitMs {_dialect.Int64Type}")
-                        .Replace("LockWaitMs INTEGER", $"LockWaitMs {_dialect.Int64Type}")
-                        .Replace("DqRowsValidated INTEGER", $"DqRowsValidated {_dialect.Int64Type}")
-                        .Replace("DqRowsQuarantined INTEGER", $"DqRowsQuarantined {_dialect.Int64Type}")
-                        .Replace("DqRowsWarned INTEGER", $"DqRowsWarned {_dialect.Int64Type}")
-                        .Replace("DqValidationMs INTEGER", $"DqValidationMs {_dialect.Int64Type}")
-                        .Replace("PeakMemoryBytes INTEGER", $"PeakMemoryBytes {_dialect.Int64Type}");
+                        .Replace("duration_ms INTEGER", $"duration_ms {_dialect.Int64Type}")
+                        .Replace("cpu_time_ms INTEGER", $"cpu_time_ms {_dialect.Int64Type}")
+                        .Replace("spilled_bytes INTEGER", $"spilled_bytes {_dialect.Int64Type}")
+                        .Replace("spill_read_bytes INTEGER", $"spill_read_bytes {_dialect.Int64Type}")
+                        .Replace("queue_wait_ms INTEGER", $"queue_wait_ms {_dialect.Int64Type}")
+                        .Replace("lock_wait_ms INTEGER", $"lock_wait_ms {_dialect.Int64Type}")
+                        .Replace("dq_rows_validated INTEGER", $"dq_rows_validated {_dialect.Int64Type}")
+                        .Replace("dq_rows_quarantined INTEGER", $"dq_rows_quarantined {_dialect.Int64Type}")
+                        .Replace("dq_rows_warned INTEGER", $"dq_rows_warned {_dialect.Int64Type}")
+                        .Replace("dq_validation_ms INTEGER", $"dq_validation_ms {_dialect.Int64Type}")
+                        .Replace("peak_memory_bytes INTEGER", $"peak_memory_bytes {_dialect.Int64Type}");
 
                     await EnsureCollationExistsAsync(connection);
+                    await MigrateLegacySchemaAsync(connection);
 
                     using var command = connection.CreateCommand();
                     command.CommandText = schema;
@@ -527,10 +568,13 @@ namespace ETL_SQL.Orchestrator.Storage
                     // Indexes over migrated columns, once those columns are guaranteed to exist.
                     await ExecuteOptionalSqlAsync(
                         connection,
-                        "CREATE INDEX IF NOT EXISTS idx_jh_tenant_job ON JobHistory(TenantId, JobId, StartTime);");
+                        "CREATE INDEX IF NOT EXISTS idx_jh_tenant_job ON job_history(tenant_id, job_id, start_time);");
                     await ExecuteOptionalSqlAsync(
                         connection,
-                        "CREATE INDEX IF NOT EXISTS idx_hm_tenant_time ON HostMetrics(NodeTenantId, CapturedAt);");
+                        "CREATE INDEX IF NOT EXISTS idx_jh_tenant_job_end ON job_history(tenant_id, job_id, end_time);");
+                    await ExecuteOptionalSqlAsync(
+                        connection,
+                        "CREATE INDEX IF NOT EXISTS idx_hm_tenant_time ON host_metrics(node_tenant_id, captured_at);");
                 }
                 finally
                 {
@@ -622,35 +666,36 @@ namespace ETL_SQL.Orchestrator.Storage
 
         private async Task EnsureJobColumnsExist(DbConnection connection)
         {
-            var columns = await _dialect.GetColumnNamesAsync(connection, "Jobs");
+            var columns = await _dialect.GetColumnNamesAsync(connection, "jobs");
 
             // A Jobs table with no Id predates surrogate object identity, when a job's name was its
             // primary key. That cannot be migrated by adding columns: the identity has to become the
             // key and the name has to become unique per tenant instead of globally. Refuse here, with
             // the remedy, rather than letting it surface later as "no such column: j.Id" from
             // whichever query happened to run first.
-            if (columns.Count > 0 && !columns.Contains("Id"))
+            if (columns.Count > 0 && !columns.Contains("id"))
                 throw new InvalidOperationException(
                     "This orchestrator database predates surrogate job identity and cannot be " +
                     "upgraded in place. No release shipped with data in this schema, so the remedy " +
                     "is to delete the database file and let it be recreated.");
 
-            await AddColumnIfMissingAsync(connection, columns, "Jobs", "MaxRetries", "MaxRetries INTEGER NOT NULL DEFAULT 0");
-            await AddColumnIfMissingAsync(connection, columns, "Jobs", "RetryDelaySeconds", "RetryDelaySeconds INTEGER NOT NULL DEFAULT 30");
-            await AddColumnIfMissingAsync(connection, columns, "Jobs", "ScriptHash", "ScriptHash TEXT");
-            await AddColumnIfMissingAsync(connection, columns, "Jobs", "HashPolicy", "HashPolicy TEXT NOT NULL DEFAULT 'Warn'");
-            await AddColumnIfMissingAsync(connection, columns, "Jobs", "LeaseOwner", "LeaseOwner TEXT");
-            await AddColumnIfMissingAsync(connection, columns, "Jobs", "LeaseExpiresAt", "LeaseExpiresAt TEXT");
-            await AddColumnIfMissingAsync(connection, columns, "Jobs", "LeaseFenceToken", "LeaseFenceToken INTEGER NOT NULL DEFAULT 0");
-            await AddColumnIfMissingAsync(connection, columns, "Jobs", "Version", "Version INTEGER NOT NULL DEFAULT 1");
+            await AddColumnIfMissingAsync(connection, columns, "jobs", "max_retries", "max_retries INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(connection, columns, "jobs", "retry_delay_seconds", "retry_delay_seconds INTEGER NOT NULL DEFAULT 30");
+            await AddColumnIfMissingAsync(connection, columns, "jobs", "script_hash", "script_hash TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "jobs", "hash_policy", "hash_policy TEXT NOT NULL DEFAULT 'Warn'");
+            await AddColumnIfMissingAsync(connection, columns, "jobs", "lease_owner", "lease_owner TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "jobs", "lease_expires_at", "lease_expires_at TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "jobs", "lease_fence_token", "lease_fence_token INTEGER NOT NULL DEFAULT 0");
+            await AddColumnIfMissingAsync(connection, columns, "jobs", "run_state", "run_state TEXT NOT NULL DEFAULT 'Idle'");
+            await AddColumnIfMissingAsync(connection, columns, "jobs", "version", "version INTEGER NOT NULL DEFAULT 1");
 
             // Unified job/schedule/notification model. A job now names what it acts on rather than
             // carrying an inline script body, and carries the human-facing label that lets its Name
             // stay a stable machine identity.
-            await AddColumnIfMissingAsync(connection, columns, "Jobs", "JobType", "JobType TEXT NOT NULL DEFAULT 'Script'");
+            await AddColumnIfMissingAsync(connection, columns, "jobs", "job_type", "job_type TEXT NOT NULL DEFAULT 'Script'");
 
-            foreach (var column in new[] { "TargetPath", "DisplayName", "Description", "Options", "CreatedBy", "ModifiedBy", "TenantId" })
-                await AddColumnIfMissingAsync(connection, columns, "Jobs", column, $"{column} TEXT");
+            foreach (var column in new[] { "target_path", "display_name", "description", "options", "created_by", "modified_by", "tenant_id" })
+                await AddColumnIfMissingAsync(connection, columns, "jobs", column, $"{column} TEXT");
         }
 
         private async Task EnsureHostMetricsColumnsExist(DbConnection connection)
@@ -659,91 +704,91 @@ namespace ETL_SQL.Orchestrator.Storage
             // describe which tenant a *node* is dedicated to, not which tenant a sample belongs to —
             // a Shared node's gauges do not decompose by tenant, and an empty binding says exactly
             // that rather than misattributing capacity.
-            var columns = await _dialect.GetColumnNamesAsync(connection, "HostMetrics");
+            var columns = await _dialect.GetColumnNamesAsync(connection, "host_metrics");
             await AddColumnIfMissingAsync(
-                connection, columns, "HostMetrics", "NodeTenantId", "NodeTenantId TEXT NOT NULL DEFAULT ''");
+                connection, columns, "host_metrics", "node_tenant_id", "node_tenant_id TEXT NOT NULL DEFAULT ''");
             await AddColumnIfMissingAsync(
-                connection, columns, "HostMetrics", "CapacityPool", "CapacityPool TEXT NOT NULL DEFAULT ''");
+                connection, columns, "host_metrics", "capacity_pool", "capacity_pool TEXT NOT NULL DEFAULT ''");
         }
 
         private async Task EnsureHostMetricsDailyColumnsExist(DbConnection connection)
         {
             // Whole-host CPU joined the daily roll-up after the table first shipped; upgrade
             // existing databases in place (nullable REAL — no backfill possible for pruned raw rows).
-            var columns = await _dialect.GetColumnNamesAsync(connection, "HostMetricsDaily");
+            var columns = await _dialect.GetColumnNamesAsync(connection, "host_metrics_daily");
 
-            await AddColumnIfMissingAsync(connection, columns, "HostMetricsDaily", "AvgHostCpuPercent", "AvgHostCpuPercent REAL");
-            await AddColumnIfMissingAsync(connection, columns, "HostMetricsDaily", "MaxHostCpuPercent", "MaxHostCpuPercent REAL");
+            await AddColumnIfMissingAsync(connection, columns, "host_metrics_daily", "avg_host_cpu_percent", "avg_host_cpu_percent REAL");
+            await AddColumnIfMissingAsync(connection, columns, "host_metrics_daily", "max_host_cpu_percent", "max_host_cpu_percent REAL");
         }
 
         private async Task EnsureHistoryColumnsExist(DbConnection connection)
         {
-            var columns = await _dialect.GetColumnNamesAsync(connection, "JobHistory");
+            var columns = await _dialect.GetColumnNamesAsync(connection, "job_history");
 
             // Identity and tenant, matching the CREATE defaults. The empty default is meaningful in
             // both: '' is an ad-hoc run with no job, and '' is the unbound (Solo) tenant. Rows in a
             // table written by an earlier build of this schema are exactly that — unbound runs whose
             // job binding was never recorded — so the default states the truth rather than guessing.
-            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "JobId", "JobId TEXT NOT NULL DEFAULT ''");
-            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "TenantId", "TenantId TEXT NOT NULL DEFAULT ''");
+            await AddColumnIfMissingAsync(connection, columns, "job_history", "job_id", "job_id TEXT NOT NULL DEFAULT ''");
+            await AddColumnIfMissingAsync(connection, columns, "job_history", "tenant_id", "tenant_id TEXT NOT NULL DEFAULT ''");
 
-            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "PeakMemoryBytes", "PeakMemoryBytes INTEGER DEFAULT 0");
-            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "CpuTimeSeconds", "CpuTimeSeconds REAL DEFAULT 0");
-            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "ScriptHashAtRunTime", "ScriptHashAtRunTime TEXT");
-            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "HashMatched", "HashMatched INTEGER");
+            await AddColumnIfMissingAsync(connection, columns, "job_history", "peak_memory_bytes", "peak_memory_bytes INTEGER DEFAULT 0");
+            await AddColumnIfMissingAsync(connection, columns, "job_history", "cpu_time_seconds", "cpu_time_seconds REAL DEFAULT 0");
+            await AddColumnIfMissingAsync(connection, columns, "job_history", "script_hash_at_run_time", "script_hash_at_run_time TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "job_history", "hash_matched", "hash_matched INTEGER");
 
             // Data-quality outcomes per run (rolling-expand safe: additive, defaulted).
-            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "RowsQuarantined", "RowsQuarantined INTEGER DEFAULT 0");
-            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "RowsWarned", "RowsWarned INTEGER DEFAULT 0");
+            await AddColumnIfMissingAsync(connection, columns, "job_history", "rows_quarantined", "rows_quarantined INTEGER DEFAULT 0");
+            await AddColumnIfMissingAsync(connection, columns, "job_history", "rows_warned", "rows_warned INTEGER DEFAULT 0");
 
             // Compact "column:rule=count;..." payload — counts only, never sample values.
-            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "DataQualityFailures", "DataQualityFailures TEXT");
-            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "SessionId", "SessionId TEXT");
-            await AddColumnIfMissingAsync(connection, columns, "JobHistory", "CheckpointLabel", "CheckpointLabel TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "job_history", "data_quality_failures", "data_quality_failures TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "job_history", "session_id", "session_id TEXT");
+            await AddColumnIfMissingAsync(connection, columns, "job_history", "checkpoint_label", "checkpoint_label TEXT");
         }
 
         private async Task EnsureColumnMetricColumnsExist(DbConnection connection)
         {
-            var columns = await _dialect.GetColumnNamesAsync(connection, "JobColumnMetrics");
-            await AddColumnIfMissingAsync(connection, columns, "JobColumnMetrics", "MaxTimestampUtc", "MaxTimestampUtc TEXT");
+            var columns = await _dialect.GetColumnNamesAsync(connection, "job_column_metrics");
+            await AddColumnIfMissingAsync(connection, columns, "job_column_metrics", "max_timestamp_utc", "max_timestamp_utc TEXT");
 
             // The tenant of the run these measurements belong to, carried directly as
             // SharedBackupSurfaceInventory declares. It is copied from JobHistory at insert rather
             // than passed in by the caller, so it cannot disagree with the run it describes; the
             // reason to hold it at all is that backup, restore and tenant deletion then take a
             // predicate on this table instead of a join that a future query could forget.
-            foreach (var table in new[] { "JobColumnMetrics", "JobDataQualityFailures", "JobStatementMetrics" })
+            foreach (var table in new[] { "job_column_metrics", "job_data_quality_failures", "job_statement_metrics" })
             {
                 var tableColumns = await _dialect.GetColumnNamesAsync(connection, table);
                 await AddColumnIfMissingAsync(
-                    connection, tableColumns, table, "TenantId", "TenantId TEXT NOT NULL DEFAULT ''");
+                    connection, tableColumns, table, "tenant_id", "tenant_id TEXT NOT NULL DEFAULT ''");
             }
         }
 
         private async Task EnsureLineageHistoryColumnsExist(DbConnection connection)
         {
-            var columns = await _dialect.GetColumnNamesAsync(connection, "LineageHistory");
+            var columns = await _dialect.GetColumnNamesAsync(connection, "lineage_history");
 
             async Task AddColumn(string name, string ddl)
             {
-                await AddColumnIfMissingAsync(connection, columns, "LineageHistory", name, ddl);
+                await AddColumnIfMissingAsync(connection, columns, "lineage_history", name, ddl);
             }
 
             // SourceColumns predates this migration on new installs but may be
             // missing on databases created before it was added to the schema.
-            await AddColumn("SourceColumns", "SourceColumns TEXT NOT NULL DEFAULT '[]'");
-            await AddColumn("TenantId", "TenantId TEXT NOT NULL DEFAULT 'portal-host'");
-            await AddColumn("TransformationKind", "TransformationKind TEXT");
-            await AddColumn("TransformationExpression", "TransformationExpression TEXT");
-            await AddColumn("FunctionsApplied", "FunctionsApplied TEXT NOT NULL DEFAULT '[]'");
-            await AddColumn("DerivedFromDescriptions", "DerivedFromDescriptions TEXT");
+            await AddColumn("source_columns", "source_columns TEXT NOT NULL DEFAULT '[]'");
+            await AddColumn("tenant_id", "tenant_id TEXT NOT NULL DEFAULT 'portal-host'");
+            await AddColumn("transformation_kind", "transformation_kind TEXT");
+            await AddColumn("transformation_expression", "transformation_expression TEXT");
+            await AddColumn("functions_applied", "functions_applied TEXT NOT NULL DEFAULT '[]'");
+            await AddColumn("derived_from_descriptions", "derived_from_descriptions TEXT");
 
             using var indexes = connection.CreateCommand();
             indexes.CommandText = @"
                 CREATE INDEX IF NOT EXISTS idx_lh_tenant_target
-                    ON LineageHistory(TenantId, TargetTable COLLATE NOCASE);
+                    ON lineage_history(tenant_id, target_table COLLATE NOCASE);
                 CREATE INDEX IF NOT EXISTS idx_lh_tenant_runAt
-                    ON LineageHistory(TenantId, RunAt);";
+                    ON lineage_history(tenant_id, run_at);";
             await indexes.ExecuteNonQueryAsync();
         }
 
@@ -760,27 +805,27 @@ namespace ETL_SQL.Orchestrator.Storage
             // conflict with it, so it can never rewrite that row. Id is set on insert only and never
             // updated, so an object keeps its identity — and its grants — across re-saves.
             var sql = @"
-                INSERT INTO Jobs (Id, Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds, ScriptHash, HashPolicy, JobType, TargetPath, DisplayName, Description, Options, CreatedBy, ModifiedBy, TenantId)
+                INSERT INTO jobs (id, name, script, interval, unit, at_time, last_run, next_run, is_enabled, max_retries, retry_delay_seconds, script_hash, hash_policy, job_type, target_path, display_name, description, options, created_by, modified_by, tenant_id)
                 VALUES (@id, @name, @script, @interval, @unit, @atTime, @lastRun, @nextRun, @isEnabled, @maxRetries, @retryDelay, @scriptHash, @hashPolicy, @jobType, @targetPath, @displayName, @description, @options, @createdBy, @modifiedBy, @tenantId)
-                ON CONFLICT(TenantId, Name) DO UPDATE SET
-                    Script            = excluded.Script,
-                    Interval          = excluded.Interval,
-                    Unit              = excluded.Unit,
-                    AtTime            = excluded.AtTime,
-                    LastRun           = excluded.LastRun,
-                    NextRun           = excluded.NextRun,
-                    IsEnabled         = excluded.IsEnabled,
-                    MaxRetries        = excluded.MaxRetries,
-                    RetryDelaySeconds = excluded.RetryDelaySeconds,
-                    ScriptHash        = excluded.ScriptHash,
-                    HashPolicy        = excluded.HashPolicy,
-                    JobType           = excluded.JobType,
-                    TargetPath        = excluded.TargetPath,
-                    DisplayName       = excluded.DisplayName,
-                    Description       = excluded.Description,
-                    Options           = excluded.Options,
-                    ModifiedBy        = excluded.ModifiedBy,
-                    Version           = Jobs.Version + 1;";
+                ON CONFLICT(tenant_id, name) DO UPDATE SET
+                    script            = excluded.script,
+                    interval          = excluded.interval,
+                    unit              = excluded.unit,
+                    at_time            = excluded.at_time,
+                    last_run           = excluded.last_run,
+                    next_run           = excluded.next_run,
+                    is_enabled         = excluded.is_enabled,
+                    max_retries        = excluded.max_retries,
+                    retry_delay_seconds = excluded.retry_delay_seconds,
+                    script_hash        = excluded.script_hash,
+                    hash_policy        = excluded.hash_policy,
+                    job_type           = excluded.job_type,
+                    target_path        = excluded.target_path,
+                    display_name       = excluded.display_name,
+                    description       = excluded.description,
+                    options           = excluded.options,
+                    modified_by        = excluded.modified_by,
+                    version           = jobs.version + 1;";
 
             using var command = connection.CreateCommand();
             command.CommandText = sql;
@@ -807,26 +852,26 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                UPDATE Jobs SET
-                    Script = @script,
-                    Interval = @interval,
-                    Unit = @unit,
-                    AtTime = @atTime,
-                    LastRun = @lastRun,
-                    NextRun = @nextRun,
-                    IsEnabled = @isEnabled,
-                    MaxRetries = @maxRetries,
-                    RetryDelaySeconds = @retryDelay,
-                    ScriptHash = @scriptHash,
-                    HashPolicy = @hashPolicy,
-                    JobType = @jobType,
-                    TargetPath = @targetPath,
-                    DisplayName = @displayName,
-                    Description = @description,
-                    Options = @options,
-                    ModifiedBy = @modifiedBy,
-                    Version = Version + 1
-                WHERE Id = @id AND Version = @expectedVersion;";
+                UPDATE jobs SET
+                    script = @script,
+                    interval = @interval,
+                    unit = @unit,
+                    at_time = @atTime,
+                    last_run = @lastRun,
+                    next_run = @nextRun,
+                    is_enabled = @isEnabled,
+                    max_retries = @maxRetries,
+                    retry_delay_seconds = @retryDelay,
+                    script_hash = @scriptHash,
+                    hash_policy = @hashPolicy,
+                    job_type = @jobType,
+                    target_path = @targetPath,
+                    display_name = @displayName,
+                    description = @description,
+                    options = @options,
+                    modified_by = @modifiedBy,
+                    version = version + 1
+                WHERE id = @id AND version = @expectedVersion;";
             AddJobParameters(command, job);
             command.AddParam("@expectedVersion", expectedVersion);
             return await command.ExecuteNonQueryAsync() == 1;
@@ -896,19 +941,20 @@ namespace ETL_SQL.Orchestrator.Storage
             // owner that resumes after a partition.
             using var claim = connection.CreateCommand();
             claim.CommandText = @"
-                UPDATE Jobs SET LeaseOwner = @owner, LeaseExpiresAt = @expires, LeaseFenceToken = LeaseFenceToken + 1
-                WHERE Id = @id
-                  AND IsEnabled = 1
-                  AND (LeaseOwner IS NULL OR LeaseExpiresAt IS NULL OR LeaseExpiresAt <= @now)
+                UPDATE jobs SET lease_owner = @owner, lease_expires_at = @expires, lease_fence_token = lease_fence_token + 1,
+                                run_state = 'Idle'
+                WHERE id = @id
+                  AND is_enabled = 1
+                  AND (lease_owner IS NULL OR lease_expires_at IS NULL OR lease_expires_at <= @now)
                   AND NOT EXISTS (
-                      SELECT 1 FROM SharedTenantControlPlanes lifecycle
-                       WHERE lifecycle.TenantId = Jobs.TenantId
-                         AND lifecycle.State <> 'Active')
+                      SELECT 1 FROM shared_tenant_control_planes lifecycle
+                       WHERE lifecycle.tenant_id = jobs.tenant_id
+                         AND lifecycle.state <> 'Active')
                   AND NOT EXISTS (
-                      SELECT 1 FROM TenantPortabilityCutovers portability
-                       WHERE portability.TenantId = Jobs.TenantId
-                         AND (portability.Authority <> 'Source'
-                              OR portability.SourceSchedulesEnabled = 0));";
+                      SELECT 1 FROM tenant_portability_cutovers portability
+                       WHERE portability.tenant_id = jobs.tenant_id
+                         AND (portability.authority <> 'Source'
+                              OR portability.source_schedules_enabled = 0));";
             claim.AddParam("@owner", owner);
             claim.AddParam("@expires", now.Add(duration).ToString("O"));
             claim.AddParam("@id", jobId);
@@ -919,7 +965,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
             // We now own the row; read back the token we were granted.
             using var read = connection.CreateCommand();
-            read.CommandText = "SELECT LeaseFenceToken FROM Jobs WHERE Id = @id AND LeaseOwner = @owner;";
+            read.CommandText = "SELECT lease_fence_token FROM jobs WHERE id = @id AND lease_owner = @owner;";
             read.AddParam("@id", jobId);
             read.AddParam("@owner", owner);
             var token = await read.ExecuteScalarAsync();
@@ -934,7 +980,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT LeaseFenceToken FROM Jobs WHERE Id = @id;";
+            command.CommandText = "SELECT lease_fence_token FROM jobs WHERE id = @id;";
             command.AddParam("@id", jobId);
             var current = await command.ExecuteScalarAsync();
             // A token is valid only if it is the latest issued — a newer acquisition would have advanced
@@ -954,8 +1000,8 @@ namespace ETL_SQL.Orchestrator.Storage
             // owner (token unchanged). If a newer owner has acquired the lease, the token moved and this
             // UPDATE matches zero rows — the stale writer is fenced out.
             command.CommandText = @"
-                UPDATE Jobs SET LastRun = @lastRun, NextRun = @nextRun
-                WHERE Id = @id AND LeaseFenceToken = @token;";
+                UPDATE jobs SET last_run = @lastRun, next_run = @nextRun
+                WHERE id = @id AND lease_fence_token = @token;";
             command.AddParam("@lastRun", lastRun.ToString("O"));
             command.AddParam("@nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
             command.AddParam("@id", jobId);
@@ -973,8 +1019,8 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                UPDATE Jobs SET LeaseExpiresAt = @expires
-                WHERE Id = @id AND LeaseOwner = @owner;";
+                UPDATE jobs SET lease_expires_at = @expires
+                WHERE id = @id AND lease_owner = @owner;";
             command.AddParam("@expires", DateTime.UtcNow.Add(duration).ToString("O"));
             command.AddParam("@id", jobId);
             command.AddParam("@owner", owner);
@@ -991,8 +1037,8 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                UPDATE Jobs SET LeaseOwner = NULL, LeaseExpiresAt = NULL
-                WHERE Id = @id AND LeaseOwner = @owner;";
+                UPDATE jobs SET lease_owner = NULL, lease_expires_at = NULL, run_state = 'Idle'
+                WHERE id = @id AND lease_owner = @owner;";
             command.AddParam("@id", jobId);
             command.AddParam("@owner", owner);
 
@@ -1013,13 +1059,13 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             // Upsert: a renewal preserves FirstSeenAt (only excluded.* for the mutable columns).
             command.CommandText = @"
-                INSERT INTO Nodes (NodeId, Role, FirstSeenAt, LastHeartbeatAt, ExpiresAt, Metadata)
+                INSERT INTO nodes (node_id, role, first_seen_at, last_heartbeat_at, expires_at, metadata)
                 VALUES (@id, @role, @now, @now, @expires, @meta)
-                ON CONFLICT(NodeId) DO UPDATE SET
-                    Role            = excluded.Role,
-                    LastHeartbeatAt = excluded.LastHeartbeatAt,
-                    ExpiresAt       = excluded.ExpiresAt,
-                    Metadata        = excluded.Metadata;";
+                ON CONFLICT(node_id) DO UPDATE SET
+                    role            = excluded.role,
+                    last_heartbeat_at = excluded.last_heartbeat_at,
+                    expires_at       = excluded.expires_at,
+                    metadata        = excluded.metadata;";
             command.AddParam("@id", nodeId);
             command.AddParam("@role", role);
             command.AddParam("@now", now.ToString("O"));
@@ -1037,8 +1083,8 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT NodeId, Role, FirstSeenAt, LastHeartbeatAt, ExpiresAt, Metadata
-                FROM Nodes WHERE ExpiresAt > @now ORDER BY Role, NodeId;";
+                SELECT node_id, role, first_seen_at, last_heartbeat_at, expires_at, metadata
+                FROM nodes WHERE expires_at > @now ORDER BY role, node_id;";
             command.AddParam("@now", (await GetDatabaseUtcNowAsync(connection)).ToString("O"));
             return await ReadNodesAsync(command);
         }
@@ -1051,8 +1097,8 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT NodeId, Role, FirstSeenAt, LastHeartbeatAt, ExpiresAt, Metadata
-                FROM Nodes ORDER BY Role, NodeId;";
+                SELECT node_id, role, first_seen_at, last_heartbeat_at, expires_at, metadata
+                FROM nodes ORDER BY role, node_id;";
             return await ReadNodesAsync(command);
         }
 
@@ -1063,7 +1109,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM Nodes WHERE NodeId = @id;";
+            command.CommandText = "DELETE FROM nodes WHERE node_id = @id;";
             command.AddParam("@id", nodeId);
             await command.ExecuteNonQueryAsync();
         }
@@ -1075,7 +1121,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM Nodes WHERE ExpiresAt <= @now;";
+            command.CommandText = "DELETE FROM nodes WHERE expires_at <= @now;";
             command.AddParam("@now", (await GetDatabaseUtcNowAsync(connection)).ToString("O"));
             return await command.ExecuteNonQueryAsync();
         }
@@ -1128,9 +1174,9 @@ namespace ETL_SQL.Orchestrator.Storage
             // least the stored epoch, so a stale (lower) token leaves the row untouched and affects zero
             // rows. The conditional ON CONFLICT ... WHERE is supported by both SQLite and PostgreSQL.
             command.CommandText = @"
-                INSERT INTO WriteEpochs (Scope, EpochKey, Epoch) VALUES (@scope, @key, @token)
-                ON CONFLICT(Scope, EpochKey) DO UPDATE SET Epoch = excluded.Epoch
-                    WHERE excluded.Epoch >= WriteEpochs.Epoch;";
+                INSERT INTO write_epochs (scope, epoch_key, epoch) VALUES (@scope, @key, @token)
+                ON CONFLICT(scope, epoch_key) DO UPDATE SET epoch = excluded.epoch
+                    WHERE excluded.epoch >= write_epochs.epoch;";
             command.AddParam("@scope", scope);
             command.AddParam("@key", key);
             command.AddParam("@token", token);
@@ -1145,7 +1191,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT Epoch FROM WriteEpochs WHERE Scope = @scope AND EpochKey = @key;";
+            command.CommandText = "SELECT epoch FROM write_epochs WHERE scope = @scope AND epoch_key = @key;";
             command.AddParam("@scope", scope);
             command.AddParam("@key", key);
             var epoch = await command.ExecuteScalarAsync();
@@ -1165,9 +1211,9 @@ namespace ETL_SQL.Orchestrator.Storage
             // Claim on insert (free lock) or on conflict only when the existing lease has expired or we
             // already own it. A live lock held by another owner leaves the row untouched (zero rows).
             command.CommandText = @"
-                INSERT INTO ClusterLocks (LockName, Owner, ExpiresAt) VALUES (@name, @owner, @expires)
-                ON CONFLICT(LockName) DO UPDATE SET Owner = excluded.Owner, ExpiresAt = excluded.ExpiresAt
-                    WHERE ClusterLocks.ExpiresAt <= @now OR ClusterLocks.Owner = excluded.Owner;";
+                INSERT INTO cluster_locks (lock_name, owner, expires_at) VALUES (@name, @owner, @expires)
+                ON CONFLICT(lock_name) DO UPDATE SET owner = excluded.owner, expires_at = excluded.expires_at
+                    WHERE cluster_locks.expires_at <= @now OR cluster_locks.owner = excluded.owner;";
             command.AddParam("@name", lockName);
             command.AddParam("@owner", owner);
             command.AddParam("@expires", now.Add(ttl).ToString("O"));
@@ -1184,8 +1230,8 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                UPDATE ClusterLocks SET ExpiresAt = @expires
-                WHERE LockName = @name AND Owner = @owner;";
+                UPDATE cluster_locks SET expires_at = @expires
+                WHERE lock_name = @name AND owner = @owner;";
             command.AddParam("@expires", DateTime.UtcNow.Add(ttl).ToString("O"));
             command.AddParam("@name", lockName);
             command.AddParam("@owner", owner);
@@ -1200,7 +1246,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM ClusterLocks WHERE LockName = @name AND Owner = @owner;";
+            command.CommandText = "DELETE FROM cluster_locks WHERE lock_name = @name AND owner = @owner;";
             command.AddParam("@name", lockName);
             command.AddParam("@owner", owner);
             await command.ExecuteNonQueryAsync();
@@ -1213,7 +1259,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT Owner FROM ClusterLocks WHERE LockName = @name AND ExpiresAt > @now;";
+            command.CommandText = "SELECT owner FROM cluster_locks WHERE lock_name = @name AND expires_at > @now;";
             command.AddParam("@name", lockName);
             command.AddParam("@now", DateTime.UtcNow.ToString("O"));
             var holder = await command.ExecuteScalarAsync();
@@ -1226,7 +1272,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
-            var sql = "SELECT * FROM Jobs WHERE IsEnabled = 1;";
+            var sql = "SELECT * FROM jobs WHERE is_enabled = 1;";
             using var command = connection.CreateCommand();
             command.CommandText = sql;
 
@@ -1252,10 +1298,10 @@ namespace ETL_SQL.Orchestrator.Storage
             // this path — so without the exclusion a link-scheduled job would fire on every tick.
             // This whole branch goes away once CREATE JOB stops producing interval jobs.
             command.CommandText = @"
-                SELECT * FROM Jobs
-                WHERE IsEnabled = 1
-                  AND (NextRun IS NULL OR NextRun <= @now)
-                  AND NOT EXISTS (SELECT 1 FROM JobSchedules js WHERE js.JobId = Jobs.Id);";
+                SELECT * FROM jobs
+                WHERE is_enabled = 1
+                  AND (next_run IS NULL OR next_run <= @now)
+                  AND NOT EXISTS (SELECT 1 FROM job_schedules js WHERE js.job_id = jobs.id);";
             command.AddParam("@now", now.ToString("O"));
 
             var jobs = new List<JobDefinition>();
@@ -1274,7 +1320,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM Jobs;";
+            command.CommandText = "SELECT * FROM jobs;";
 
             var jobs = new List<JobDefinition>();
             using var reader = await command.ExecuteReaderAsync();
@@ -1292,7 +1338,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM Jobs ORDER BY Name LIMIT @limit OFFSET @offset;";
+            command.CommandText = "SELECT * FROM jobs ORDER BY name LIMIT @limit OFFSET @offset;";
             command.AddParam("@limit", Math.Clamp(limit, 1, 1000));
             command.AddParam("@offset", Math.Max(0, offset));
 
@@ -1310,7 +1356,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText =
-                "SELECT * FROM Jobs WHERE TenantId = @tenant AND Name = @name COLLATE NOCASE LIMIT 1;";
+                "SELECT * FROM jobs WHERE tenant_id = @tenant AND name = @name COLLATE NOCASE LIMIT 1;";
             command.AddParam("@tenant", TenantKey(tenantId));
             command.AddParam("@name", name);
 
@@ -1329,7 +1375,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM Jobs WHERE Id = @id LIMIT 1;";
+            command.CommandText = "SELECT * FROM jobs WHERE id = @id LIMIT 1;";
             command.AddParam("@id", jobId);
 
             using var reader = await command.ExecuteReaderAsync();
@@ -1338,35 +1384,35 @@ namespace ETL_SQL.Orchestrator.Storage
 
         private static JobDefinition ReadJob(DbDataReader reader)
         {
-            var lastRunOrdinal = reader.GetOrdinal("LastRun");
-            var nextRunOrdinal = reader.GetOrdinal("NextRun");
-            var atTimeOrdinal = reader.GetOrdinal("AtTime");
-            var scriptHashOrdinal = reader.GetOrdinal("ScriptHash");
-            var hashPolicyOrdinal = reader.GetOrdinal("HashPolicy");
-            var versionOrdinal = reader.GetOrdinal("Version");
+            var lastRunOrdinal = reader.GetOrdinal("last_run");
+            var nextRunOrdinal = reader.GetOrdinal("next_run");
+            var atTimeOrdinal = reader.GetOrdinal("at_time");
+            var scriptHashOrdinal = reader.GetOrdinal("script_hash");
+            var hashPolicyOrdinal = reader.GetOrdinal("hash_policy");
+            var versionOrdinal = reader.GetOrdinal("version");
             return new JobDefinition(
-                reader.GetString(reader.GetOrdinal("Name")),
-                reader.GetString(reader.GetOrdinal("Script")),
-                reader.GetInt32(reader.GetOrdinal("Interval")),
-                reader.GetString(reader.GetOrdinal("Unit")),
+                reader.GetString(reader.GetOrdinal("name")),
+                reader.GetString(reader.GetOrdinal("script")),
+                reader.GetInt32(reader.GetOrdinal("interval")),
+                reader.GetString(reader.GetOrdinal("unit")),
                 reader.IsDBNull(atTimeOrdinal) ? null : reader.GetString(atTimeOrdinal),
                 reader.IsDBNull(lastRunOrdinal) ? null : DateTime.Parse(reader.GetString(lastRunOrdinal)),
                 reader.IsDBNull(nextRunOrdinal) ? null : DateTime.Parse(reader.GetString(nextRunOrdinal)),
-                reader.GetInt32(reader.GetOrdinal("IsEnabled")) == 1,
-                reader.GetInt32(reader.GetOrdinal("MaxRetries")),
-                reader.GetInt32(reader.GetOrdinal("RetryDelaySeconds")),
+                reader.GetInt32(reader.GetOrdinal("is_enabled")) == 1,
+                reader.GetInt32(reader.GetOrdinal("max_retries")),
+                reader.GetInt32(reader.GetOrdinal("retry_delay_seconds")),
                 reader.IsDBNull(scriptHashOrdinal) ? null : reader.GetString(scriptHashOrdinal),
                 reader.IsDBNull(hashPolicyOrdinal) ? "Warn" : reader.GetString(hashPolicyOrdinal),
                 reader.GetInt64(versionOrdinal),
                 ReadJobType(reader),
-                ReadOptionalString(reader, "TargetPath"),
-                ReadOptionalString(reader, "DisplayName"),
-                ReadOptionalString(reader, "Description"),
-                ReadOptionalString(reader, "Options"),
-                ReadOptionalString(reader, "CreatedBy"),
-                ReadOptionalString(reader, "ModifiedBy"),
-                TenantOrNull(ReadOptionalString(reader, "TenantId")),
-                JobId.From(ReadOptionalString(reader, "Id")));
+                ReadOptionalString(reader, "target_path"),
+                ReadOptionalString(reader, "display_name"),
+                ReadOptionalString(reader, "description"),
+                ReadOptionalString(reader, "options"),
+                ReadOptionalString(reader, "created_by"),
+                ReadOptionalString(reader, "modified_by"),
+                TenantOrNull(ReadOptionalString(reader, "tenant_id")),
+                JobId.From(ReadOptionalString(reader, "id")));
         }
 
         /// <summary>
@@ -1376,7 +1422,7 @@ namespace ETL_SQL.Orchestrator.Storage
         /// </summary>
         private static JobTargetKind ReadJobType(DbDataReader reader)
         {
-            var raw = ReadOptionalString(reader, "JobType");
+            var raw = ReadOptionalString(reader, "job_type");
             return Enum.TryParse<JobTargetKind>(raw, ignoreCase: true, out var kind) ? kind : JobTargetKind.Script;
         }
 
@@ -1390,35 +1436,35 @@ namespace ETL_SQL.Orchestrator.Storage
             using var transaction = connection.BeginTransaction();
             try
             {
-                var sql1 = "DELETE FROM Jobs WHERE Id = @id;";
+                var sql1 = "DELETE FROM jobs WHERE id = @id;";
                 using var command1 = connection.CreateCommand();
                 command1.CommandText = sql1;
                 command1.Transaction = transaction;
                 command1.AddParam("@id", jobId);
                 await command1.ExecuteNonQueryAsync();
 
-                var sqlMetrics = "DELETE FROM JobColumnMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobId = @id);";
+                var sqlMetrics = "DELETE FROM job_column_metrics WHERE job_history_id IN (SELECT id FROM job_history WHERE job_id = @id);";
                 using var commandMetrics = connection.CreateCommand();
                 commandMetrics.CommandText = sqlMetrics;
                 commandMetrics.Transaction = transaction;
                 commandMetrics.AddParam("@id", jobId);
                 await commandMetrics.ExecuteNonQueryAsync();
 
-                var sqlFailures = "DELETE FROM JobDataQualityFailures WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobId = @id);";
+                var sqlFailures = "DELETE FROM job_data_quality_failures WHERE job_history_id IN (SELECT id FROM job_history WHERE job_id = @id);";
                 using var commandFailures = connection.CreateCommand();
                 commandFailures.CommandText = sqlFailures;
                 commandFailures.Transaction = transaction;
                 commandFailures.AddParam("@id", jobId);
                 await commandFailures.ExecuteNonQueryAsync();
 
-                var sqlStatements = "DELETE FROM JobStatementMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobId = @id);";
+                var sqlStatements = "DELETE FROM job_statement_metrics WHERE job_history_id IN (SELECT id FROM job_history WHERE job_id = @id);";
                 using var commandStatements = connection.CreateCommand();
                 commandStatements.CommandText = sqlStatements;
                 commandStatements.Transaction = transaction;
                 commandStatements.AddParam("@id", jobId);
                 await commandStatements.ExecuteNonQueryAsync();
 
-                var sql2 = "DELETE FROM JobHistory WHERE JobId = @id;";
+                var sql2 = "DELETE FROM job_history WHERE job_id = @id;";
                 using var command2 = connection.CreateCommand();
                 command2.CommandText = sql2;
                 command2.Transaction = transaction;
@@ -1448,7 +1494,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var deleteJob = connection.CreateCommand();
             deleteJob.Transaction = transaction;
-            deleteJob.CommandText = "DELETE FROM Jobs WHERE Id = @id AND Version = @version;";
+            deleteJob.CommandText = "DELETE FROM jobs WHERE id = @id AND version = @version;";
             deleteJob.AddParam("@id", jobId);
             deleteJob.AddParam("@version", expectedVersion);
             if (await deleteJob.ExecuteNonQueryAsync() != 1)
@@ -1459,25 +1505,25 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var deleteMetrics = connection.CreateCommand();
             deleteMetrics.Transaction = transaction;
-            deleteMetrics.CommandText = "DELETE FROM JobColumnMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobId = @id);";
+            deleteMetrics.CommandText = "DELETE FROM job_column_metrics WHERE job_history_id IN (SELECT id FROM job_history WHERE job_id = @id);";
             deleteMetrics.AddParam("@id", jobId);
             await deleteMetrics.ExecuteNonQueryAsync();
 
             using var deleteFailures = connection.CreateCommand();
             deleteFailures.Transaction = transaction;
-            deleteFailures.CommandText = "DELETE FROM JobDataQualityFailures WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobId = @id);";
+            deleteFailures.CommandText = "DELETE FROM job_data_quality_failures WHERE job_history_id IN (SELECT id FROM job_history WHERE job_id = @id);";
             deleteFailures.AddParam("@id", jobId);
             await deleteFailures.ExecuteNonQueryAsync();
 
             using var deleteStatements = connection.CreateCommand();
             deleteStatements.Transaction = transaction;
-            deleteStatements.CommandText = "DELETE FROM JobStatementMetrics WHERE JobHistoryId IN (SELECT Id FROM JobHistory WHERE JobId = @id);";
+            deleteStatements.CommandText = "DELETE FROM job_statement_metrics WHERE job_history_id IN (SELECT id FROM job_history WHERE job_id = @id);";
             deleteStatements.AddParam("@id", jobId);
             await deleteStatements.ExecuteNonQueryAsync();
 
             using var deleteHistory = connection.CreateCommand();
             deleteHistory.Transaction = transaction;
-            deleteHistory.CommandText = "DELETE FROM JobHistory WHERE JobId = @id;";
+            deleteHistory.CommandText = "DELETE FROM job_history WHERE job_id = @id;";
             deleteHistory.AddParam("@id", jobId);
             await deleteHistory.ExecuteNonQueryAsync();
 
@@ -1494,7 +1540,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
-            var sql = "UPDATE Jobs SET LastRun = @lastRun, NextRun = @nextRun WHERE Id = @id;";
+            var sql = "UPDATE jobs SET last_run = @lastRun, next_run = @nextRun WHERE id = @id;";
             using var command = connection.CreateCommand();
             command.CommandText = sql;
             command.AddParam("@id", jobId);
@@ -1514,8 +1560,8 @@ namespace ETL_SQL.Orchestrator.Storage
             // job, and a run must record the name it actually ran under even if that name is later
             // taken by a different object.
             var sql = _dialect.InsertReturningId(
-                @"INSERT INTO JobHistory (JobId, TenantId, JobName, StartTime, Status)
-                  SELECT j.Id, j.TenantId, j.Name, @start, 'RUNNING' FROM Jobs j WHERE j.Id = @id", "Id");
+                @"INSERT INTO job_history (job_id, tenant_id, job_name, start_time, status)
+                  SELECT j.id, j.tenant_id, j.name, @start, 'RUNNING' FROM jobs j WHERE j.id = @id", "id");
             using var command = connection.CreateCommand();
             command.CommandText = sql;
             command.AddParam("@id", jobId);
@@ -1540,8 +1586,8 @@ namespace ETL_SQL.Orchestrator.Storage
             // No job binding: this run is not a job. JobId stays the empty sentinel so the row can
             // never be mistaken for — or joined to — a real job's history.
             var sql = _dialect.InsertReturningId(
-                @"INSERT INTO JobHistory (JobId, TenantId, JobName, StartTime, Status)
-                  VALUES ('', @tenant, @label, @start, 'RUNNING')", "Id");
+                @"INSERT INTO job_history (job_id, tenant_id, job_name, start_time, status)
+                  VALUES ('', @tenant, @label, @start, 'RUNNING')", "id");
             using var command = connection.CreateCommand();
             command.CommandText = sql;
             command.AddParam("@tenant", TenantKey(tenantId));
@@ -1556,7 +1602,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
-            var sql = "UPDATE JobHistory SET EndTime = @end, Status = @status, ErrorMessage = @err, RowsProcessed = @rows, PeakMemoryBytes = @mem, CpuTimeSeconds = @cpu, ScriptHashAtRunTime = @hash, HashMatched = @matched, RowsQuarantined = @quarantined, RowsWarned = @warned, DataQualityFailures = @dqfail WHERE Id = @id;";
+            var sql = "UPDATE job_history SET end_time = @end, status = @status, error_message = @err, rows_processed = @rows, peak_memory_bytes = @mem, cpu_time_seconds = @cpu, script_hash_at_run_time = @hash, hash_matched = @matched, rows_quarantined = @quarantined, rows_warned = @warned, data_quality_failures = @dqfail WHERE id = @id;";
             using var command = connection.CreateCommand();
             command.CommandText = sql;
             command.AddParam("@id", entryId);
@@ -1581,7 +1627,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
-            command.CommandText = "UPDATE JobHistory SET SessionId = @session, CheckpointLabel = @label WHERE Id = @id;";
+            command.CommandText = "UPDATE job_history SET session_id = @session, checkpoint_label = @label WHERE id = @id;";
             command.AddParam("@id", entryId);
             command.AddParam("@session", (object?)sessionId ?? DBNull.Value);
             command.AddParam("@label", (object?)checkpointLabel ?? DBNull.Value);
@@ -1597,10 +1643,10 @@ namespace ETL_SQL.Orchestrator.Storage
             using (var existing = connection.CreateCommand())
             {
                 existing.CommandText = @"
-                    SELECT Id FROM JobHistory
-                    WHERE JobName = @name COLLATE NOCASE AND StartTime = @start
-                      AND ((EndTime IS NULL AND @end IS NULL) OR EndTime = @end)
-                    ORDER BY Id LIMIT 1;";
+                    SELECT id FROM job_history
+                    WHERE job_name = @name COLLATE NOCASE AND start_time = @start
+                      AND ((end_time IS NULL AND @end IS NULL) OR end_time = @end)
+                    ORDER BY id LIMIT 1;";
                 existing.AddParam("@name", entry.JobName);
                 existing.AddParam("@start", entry.StartTime.ToString("O"));
                 existing.AddParam("@end", entry.EndTime.HasValue ? entry.EndTime.Value.ToString("O") : DBNull.Value);
@@ -1610,13 +1656,13 @@ namespace ETL_SQL.Orchestrator.Storage
             }
 
             var sql = _dialect.InsertReturningId(@"
-                INSERT INTO JobHistory
-                    (JobName, StartTime, EndTime, Status, ErrorMessage, RowsProcessed,
-                     PeakMemoryBytes, CpuTimeSeconds, ScriptHashAtRunTime, HashMatched,
-                     RowsQuarantined, RowsWarned, DataQualityFailures, SessionId, CheckpointLabel)
+                INSERT INTO job_history
+                    (job_name, start_time, end_time, status, error_message, rows_processed,
+                     peak_memory_bytes, cpu_time_seconds, script_hash_at_run_time, hash_matched,
+                     rows_quarantined, rows_warned, data_quality_failures, session_id, checkpoint_label)
                 VALUES
                     (@name, @start, @end, @status, @error, @rows,
-                     @memory, @cpu, @hash, @matched, @quarantined, @warned, @failures, @session, @checkpoint)", "Id");
+                     @memory, @cpu, @hash, @matched, @quarantined, @warned, @failures, @session, @checkpoint)", "id");
             using var insert = connection.CreateCommand();
             insert.CommandText = sql;
             insert.AddParam("@name", entry.JobName);
@@ -1650,12 +1696,12 @@ namespace ETL_SQL.Orchestrator.Storage
             {
                 using var command = connection.CreateCommand();
                 command.CommandText = @"
-                    INSERT INTO JobColumnMetrics (JobHistoryId, TenantId, TargetTable, ColumnName, TotalRows, NullRows, MaxTimestampUtc)
-                    VALUES (@historyId, COALESCE((SELECT TenantId FROM JobHistory WHERE Id = @historyId), ''), @target, @column, @total, @nulls, @maxTimestamp)
-                    ON CONFLICT (JobHistoryId, TargetTable, ColumnName) DO UPDATE SET
-                        TotalRows = excluded.TotalRows,
-                        NullRows = excluded.NullRows,
-                        MaxTimestampUtc = excluded.MaxTimestampUtc;";
+                    INSERT INTO job_column_metrics (job_history_id, tenant_id, target_table, column_name, total_rows, null_rows, max_timestamp_utc)
+                    VALUES (@historyId, COALESCE((SELECT tenant_id FROM job_history WHERE id = @historyId), ''), @target, @column, @total, @nulls, @maxTimestamp)
+                    ON CONFLICT (job_history_id, target_table, column_name) DO UPDATE SET
+                        total_rows = excluded.total_rows,
+                        null_rows = excluded.null_rows,
+                        max_timestamp_utc = excluded.max_timestamp_utc;";
                 command.AddParam("@historyId", entryId);
                 var target = string.IsNullOrWhiteSpace(metric.TargetTable)
                     ? null
@@ -1686,16 +1732,16 @@ namespace ETL_SQL.Orchestrator.Storage
                 var statement = rows[ordinal];
                 using var command = connection.CreateCommand();
                 command.CommandText = @"
-                    INSERT INTO JobStatementMetrics (
-                        JobHistoryId, TenantId, Ordinal, Statement, DurationMs, RowsProcessed, CpuTimeMs,
-                        SpilledBytes, SpillReadBytes, Partitions, QueueWaitMs, LockWaitMs, IndexUsed,
-                        DqRowsValidated, DqRowsQuarantined, DqRowsWarned, DqValidationMs, Failed)
+                    INSERT INTO job_statement_metrics (
+                        job_history_id, tenant_id, ordinal, statement, duration_ms, rows_processed, cpu_time_ms,
+                        spilled_bytes, spill_read_bytes, partitions, queue_wait_ms, lock_wait_ms, index_used,
+                        dq_rows_validated, dq_rows_quarantined, dq_rows_warned, dq_validation_ms, failed)
                     VALUES (
-                        @historyId, COALESCE((SELECT TenantId FROM JobHistory WHERE Id = @historyId), ''),
+                        @historyId, COALESCE((SELECT tenant_id FROM job_history WHERE id = @historyId), ''),
                         @ordinal, @statement, @duration, @rows, @cpu,
                         @spilled, @spillRead, @partitions, @queueWait, @lockWait, @indexUsed,
                         @dqValidated, @dqQuarantined, @dqWarned, @dqMs, @failed)
-                    ON CONFLICT (JobHistoryId, Ordinal) DO NOTHING;";
+                    ON CONFLICT (job_history_id, ordinal) DO NOTHING;";
                 command.AddParam("@historyId", entryId);
                 command.AddParam("@ordinal", ordinal);
                 // Normalized upstream by StatementMetricsPayload.From; never raw statement text.
@@ -1731,11 +1777,11 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                INSERT INTO TenantUsageRecords (
-                    TenantId, JobHistoryId, WorkloadKind, Status, RowsProcessed,
-                    PeakMemoryBytes, CpuTimeSeconds, DurationMs, RecordedAtUtc)
+                INSERT INTO tenant_usage_records (
+                    tenant_id, job_history_id, workload_kind, status, rows_processed,
+                    peak_memory_bytes, cpu_time_seconds, duration_ms, recorded_at_utc)
                 VALUES (@tenant, @historyId, @kind, @status, @rows, @memory, @cpu, @duration, @recorded)
-                ON CONFLICT (TenantId, JobHistoryId) DO NOTHING;";
+                ON CONFLICT (tenant_id, job_history_id) DO NOTHING;";
             command.AddParam("@tenant", tenant);
             command.AddParam("@historyId", usage.JobHistoryId);
             command.AddParam("@kind", usage.WorkloadKind);
@@ -1758,12 +1804,12 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT Id, TenantId, JobHistoryId, WorkloadKind, Status, RowsProcessed,
-                       PeakMemoryBytes, CpuTimeSeconds, DurationMs, RecordedAtUtc
-                FROM TenantUsageRecords
-                WHERE TenantId = @tenant
-                  AND (@fromUtc IS NULL OR RecordedAtUtc >= @fromUtc)
-                ORDER BY RecordedAtUtc DESC, Id DESC
+                SELECT id, tenant_id, job_history_id, workload_kind, status, rows_processed,
+                       peak_memory_bytes, cpu_time_seconds, duration_ms, recorded_at_utc
+                FROM tenant_usage_records
+                WHERE tenant_id = @tenant
+                  AND (@fromUtc IS NULL OR recorded_at_utc >= @fromUtc)
+                ORDER BY recorded_at_utc DESC, id DESC
                 LIMIT @limit;";
             command.AddParam("@tenant", tenant);
             command.AddParam("@fromUtc", fromUtc.HasValue
@@ -1797,13 +1843,13 @@ namespace ETL_SQL.Orchestrator.Storage
             using (var command = connection.CreateCommand())
             {
                 command.CommandText = @"
-                    DELETE FROM JobStatementMetrics
-                    WHERE JobHistoryId IN (
-                        SELECT h.Id FROM JobHistory h
-                        WHERE h.Status <> 'RUNNING' AND h.StartTime < @successCutoff
+                    DELETE FROM job_statement_metrics
+                    WHERE job_history_id IN (
+                        SELECT h.id FROM job_history h
+                        WHERE h.status <> 'RUNNING' AND h.start_time < @successCutoff
                           AND NOT EXISTS (
-                              SELECT 1 FROM JobStatementMetrics m
-                              WHERE m.JobHistoryId = h.Id AND m.Failed <> 0
+                              SELECT 1 FROM job_statement_metrics m
+                              WHERE m.job_history_id = h.id AND m.failed <> 0
                           )
                     );";
                 command.AddParam("@successCutoff", DateTime.Now.Subtract(successMaxAge).ToString("O"));
@@ -1813,13 +1859,13 @@ namespace ETL_SQL.Orchestrator.Storage
             using (var command = connection.CreateCommand())
             {
                 command.CommandText = @"
-                    DELETE FROM JobStatementMetrics
-                    WHERE JobHistoryId IN (
-                        SELECT h.Id FROM JobHistory h
-                        WHERE h.Status <> 'RUNNING' AND h.StartTime < @failedCutoff
+                    DELETE FROM job_statement_metrics
+                    WHERE job_history_id IN (
+                        SELECT h.id FROM job_history h
+                        WHERE h.status <> 'RUNNING' AND h.start_time < @failedCutoff
                           AND EXISTS (
-                              SELECT 1 FROM JobStatementMetrics m
-                              WHERE m.JobHistoryId = h.Id AND m.Failed <> 0
+                              SELECT 1 FROM job_statement_metrics m
+                              WHERE m.job_history_id = h.id AND m.failed <> 0
                           )
                     );";
                 command.AddParam("@failedCutoff", DateTime.Now.Subtract(failedMaxAge).ToString("O"));
@@ -1838,12 +1884,12 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT Statement, DurationMs, RowsProcessed, CpuTimeMs, SpilledBytes, SpillReadBytes,
-                       Partitions, QueueWaitMs, LockWaitMs, IndexUsed,
-                       DqRowsValidated, DqRowsQuarantined, DqRowsWarned, DqValidationMs, Failed
-                FROM JobStatementMetrics
-                WHERE JobHistoryId = @historyId
-                ORDER BY Ordinal;";
+                SELECT statement, duration_ms, rows_processed, cpu_time_ms, spilled_bytes, spill_read_bytes,
+                       partitions, queue_wait_ms, lock_wait_ms, index_used,
+                       dq_rows_validated, dq_rows_quarantined, dq_rows_warned, dq_validation_ms, failed
+                FROM job_statement_metrics
+                WHERE job_history_id = @historyId
+                ORDER BY ordinal;";
             command.AddParam("@historyId", entryId);
 
             var result = new List<ETL_SQL.Core.Profiling.StatementMetricsPayload>();
@@ -1885,12 +1931,12 @@ namespace ETL_SQL.Orchestrator.Storage
             {
                 using var command = connection.CreateCommand();
                 command.CommandText = @"
-                    INSERT INTO JobDataQualityFailures
-                        (JobHistoryId, TenantId, TargetTable, ColumnName, RuleText, Action, FailureCount, Owner)
-                    VALUES (@historyId, COALESCE((SELECT TenantId FROM JobHistory WHERE Id = @historyId), ''), @target, @column, @rule, @action, @count, @owner)
-                    ON CONFLICT (JobHistoryId, TargetTable, ColumnName, RuleText, Action) DO UPDATE SET
-                        FailureCount = excluded.FailureCount,
-                        Owner = excluded.Owner;";
+                    INSERT INTO job_data_quality_failures
+                        (job_history_id, tenant_id, target_table, column_name, rule_text, action, failure_count, owner)
+                    VALUES (@historyId, COALESCE((SELECT tenant_id FROM job_history WHERE id = @historyId), ''), @target, @column, @rule, @action, @count, @owner)
+                    ON CONFLICT (job_history_id, target_table, column_name, rule_text, action) DO UPDATE SET
+                        failure_count = excluded.failure_count,
+                        owner = excluded.owner;";
                 command.AddParam("@historyId", entryId);
                 command.AddParam("@target", string.IsNullOrWhiteSpace(failure.TargetTable)
                     ? "" : failure.TargetTable.Trim().TrimStart('#'));
@@ -1910,14 +1956,14 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT h.Id, h.JobName, h.StartTime, h.EndTime, h.Status,
-                       m.Ordinal, m.Statement, m.DurationMs, m.RowsProcessed, m.CpuTimeMs,
-                       m.SpilledBytes, m.SpillReadBytes, m.Partitions, m.QueueWaitMs, m.LockWaitMs,
-                       m.IndexUsed, m.DqRowsValidated, m.DqRowsQuarantined, m.DqRowsWarned,
-                       m.DqValidationMs, m.Failed
-                FROM JobStatementMetrics m
-                INNER JOIN JobHistory h ON h.Id = m.JobHistoryId
-                ORDER BY h.StartTime DESC, h.Id DESC, m.Ordinal
+                SELECT h.id, h.job_name, h.start_time, h.end_time, h.status,
+                       m.ordinal, m.statement, m.duration_ms, m.rows_processed, m.cpu_time_ms,
+                       m.spilled_bytes, m.spill_read_bytes, m.partitions, m.queue_wait_ms, m.lock_wait_ms,
+                       m.index_used, m.dq_rows_validated, m.dq_rows_quarantined, m.dq_rows_warned,
+                       m.dq_validation_ms, m.failed
+                FROM job_statement_metrics m
+                INNER JOIN job_history h ON h.id = m.job_history_id
+                ORDER BY h.start_time DESC, h.id DESC, m.ordinal
                 LIMIT @limit;";
             command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
 
@@ -1961,11 +2007,11 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT h.Id, h.JobName, h.StartTime, h.EndTime, h.Status,
-                       f.TargetTable, f.ColumnName, f.RuleText, f.Action, f.FailureCount, f.Owner
-                FROM JobDataQualityFailures f
-                INNER JOIN JobHistory h ON h.Id = f.JobHistoryId
-                ORDER BY h.StartTime DESC, h.Id DESC, f.TargetTable, f.ColumnName, f.RuleText, f.Action
+                SELECT h.id, h.job_name, h.start_time, h.end_time, h.status,
+                       f.target_table, f.column_name, f.rule_text, f.action, f.failure_count, f.owner
+                FROM job_data_quality_failures f
+                INNER JOIN job_history h ON h.id = f.job_history_id
+                ORDER BY h.start_time DESC, h.id DESC, f.target_table, f.column_name, f.rule_text, f.action
                 LIMIT @limit;";
             command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
 
@@ -1996,12 +2042,12 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT h.Id, h.JobName, h.StartTime, h.EndTime, h.Status,
-                       f.TargetTable, f.ColumnName, f.RuleText, f.Action, f.FailureCount, f.Owner
-                FROM JobDataQualityFailures f
-                INNER JOIN JobHistory h ON h.Id = f.JobHistoryId
-                WHERE h.JobName = @jobName COLLATE NOCASE
-                ORDER BY h.StartTime DESC, h.Id DESC, f.TargetTable, f.ColumnName, f.RuleText, f.Action
+                SELECT h.id, h.job_name, h.start_time, h.end_time, h.status,
+                       f.target_table, f.column_name, f.rule_text, f.action, f.failure_count, f.owner
+                FROM job_data_quality_failures f
+                INNER JOIN job_history h ON h.id = f.job_history_id
+                WHERE h.job_name = @jobName COLLATE NOCASE
+                ORDER BY h.start_time DESC, h.id DESC, f.target_table, f.column_name, f.rule_text, f.action
                 LIMIT @limit;";
             command.AddParam("@jobName", jobName);
             command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
@@ -2027,12 +2073,12 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT h.Id, h.JobName, h.StartTime, h.EndTime, h.Status,
-                       f.TargetTable, f.ColumnName, f.RuleText, f.Action, f.FailureCount, f.Owner
-                FROM JobDataQualityFailures f
-                INNER JOIN JobHistory h ON h.Id = f.JobHistoryId
-                WHERE h.Id = @historyId
-                ORDER BY f.TargetTable, f.ColumnName, f.RuleText, f.Action
+                SELECT h.id, h.job_name, h.start_time, h.end_time, h.status,
+                       f.target_table, f.column_name, f.rule_text, f.action, f.failure_count, f.owner
+                FROM job_data_quality_failures f
+                INNER JOIN job_history h ON h.id = f.job_history_id
+                WHERE h.id = @historyId
+                ORDER BY f.target_table, f.column_name, f.rule_text, f.action
                 LIMIT @limit;";
             command.AddParam("@historyId", entryId);
             command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
@@ -2058,12 +2104,12 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT h.Id, h.JobName, h.StartTime, h.EndTime, h.Status,
-                       h.RowsProcessed, h.RowsWarned, h.RowsQuarantined, h.ErrorMessage,
-                       (SELECT COUNT(*) FROM JobDataQualityFailures f WHERE f.JobHistoryId = h.Id) AS FailedRuleCount,
-                       (SELECT MAX(m.MaxTimestampUtc) FROM JobColumnMetrics m WHERE m.JobHistoryId = h.Id) AS FreshestValueUtc
-                FROM JobHistory h
-                ORDER BY h.StartTime DESC, h.Id DESC
+                SELECT h.id, h.job_name, h.start_time, h.end_time, h.status,
+                       h.rows_processed, h.rows_warned, h.rows_quarantined, h.error_message,
+                       (SELECT COUNT(*) FROM job_data_quality_failures f WHERE f.job_history_id = h.id) AS FailedRuleCount,
+                       (SELECT MAX(m.max_timestamp_utc) FROM job_column_metrics m WHERE m.job_history_id = h.id) AS FreshestValueUtc
+                FROM job_history h
+                ORDER BY h.start_time DESC, h.id DESC
                 LIMIT @limit;";
             command.AddParam("@limit", Math.Clamp(limit, 1, 10000));
 
@@ -2094,15 +2140,15 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                SELECT m.TargetTable, m.ColumnName, m.TotalRows, m.NullRows, m.MaxTimestampUtc
-                FROM JobColumnMetrics m
-                INNER JOIN JobHistory h ON h.Id = m.JobHistoryId
-                WHERE h.JobId = @job
-                  AND h.EndTime IS NOT NULL
-                  AND (UPPER(h.Status) = 'SUCCESS' OR UPPER(h.Status) = 'COMPLETED')
-                  AND m.ColumnName = @column COLLATE NOCASE
-                  AND (@target IS NULL OR m.TargetTable = @target COLLATE NOCASE)
-                ORDER BY h.EndTime DESC, h.StartTime DESC, h.Id DESC
+                SELECT m.target_table, m.column_name, m.total_rows, m.null_rows, m.max_timestamp_utc
+                FROM job_column_metrics m
+                INNER JOIN job_history h ON h.id = m.job_history_id
+                WHERE h.job_id = @job
+                  AND h.end_time IS NOT NULL
+                  AND (UPPER(h.status) = 'SUCCESS' OR UPPER(h.status) = 'COMPLETED')
+                  AND m.column_name = @column COLLATE NOCASE
+                  AND (@target IS NULL OR m.target_table = @target COLLATE NOCASE)
+                ORDER BY h.end_time DESC, h.start_time DESC, h.id DESC
                 LIMIT @limit;";
             command.AddParam("@job", jobIdRef.Require());
             command.AddParam("@column", columnName);
@@ -2135,9 +2181,9 @@ namespace ETL_SQL.Orchestrator.Storage
             using (var deleteMetrics = connection.CreateCommand())
             {
                 deleteMetrics.CommandText = @"
-                    DELETE FROM JobColumnMetrics
-                    WHERE JobHistoryId IN (
-                        SELECT Id FROM JobHistory WHERE Status <> 'RUNNING' AND StartTime < @cutoff
+                    DELETE FROM job_column_metrics
+                    WHERE job_history_id IN (
+                        SELECT id FROM job_history WHERE status <> 'RUNNING' AND start_time < @cutoff
                     );";
                 deleteMetrics.AddParam("@cutoff", cutoff);
                 await deleteMetrics.ExecuteNonQueryAsync();
@@ -2146,9 +2192,9 @@ namespace ETL_SQL.Orchestrator.Storage
             using (var deleteFailures = connection.CreateCommand())
             {
                 deleteFailures.CommandText = @"
-                    DELETE FROM JobDataQualityFailures
-                    WHERE JobHistoryId IN (
-                        SELECT Id FROM JobHistory WHERE Status <> 'RUNNING' AND StartTime < @cutoff
+                    DELETE FROM job_data_quality_failures
+                    WHERE job_history_id IN (
+                        SELECT id FROM job_history WHERE status <> 'RUNNING' AND start_time < @cutoff
                     );";
                 deleteFailures.AddParam("@cutoff", cutoff);
                 await deleteFailures.ExecuteNonQueryAsync();
@@ -2160,16 +2206,16 @@ namespace ETL_SQL.Orchestrator.Storage
                 // it belongs to. Orphaning it here is how the flight recorder would grow without
                 // bound on a 200-jobs-a-day estate.
                 deleteStatements.CommandText = @"
-                    DELETE FROM JobStatementMetrics
-                    WHERE JobHistoryId IN (
-                        SELECT Id FROM JobHistory WHERE Status <> 'RUNNING' AND StartTime < @cutoff
+                    DELETE FROM job_statement_metrics
+                    WHERE job_history_id IN (
+                        SELECT id FROM job_history WHERE status <> 'RUNNING' AND start_time < @cutoff
                     );";
                 deleteStatements.AddParam("@cutoff", cutoff);
                 await deleteStatements.ExecuteNonQueryAsync();
             }
 
             using var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM JobHistory WHERE Status <> 'RUNNING' AND StartTime < @cutoff;";
+            command.CommandText = "DELETE FROM job_history WHERE status <> 'RUNNING' AND start_time < @cutoff;";
             command.AddParam("@cutoff", cutoff);
             return await command.ExecuteNonQueryAsync();
         }
@@ -2183,9 +2229,9 @@ namespace ETL_SQL.Orchestrator.Storage
             var now = DateTime.Now;
             using var command = connection.CreateCommand();
             command.CommandText =
-                "UPDATE JobHistory SET Status = 'INTERRUPTED', EndTime = @end, " +
-                "ErrorMessage = 'No completion recorded within the maximum job runtime; the orchestrator likely restarted or the job was killed.' " +
-                "WHERE Status = 'RUNNING' AND StartTime < @cutoff;";
+                "UPDATE job_history SET status = 'INTERRUPTED', end_time = @end, " +
+                "error_message = 'No completion recorded within the maximum job runtime; the orchestrator likely restarted or the job was killed.' " +
+                "WHERE status = 'RUNNING' AND start_time < @cutoff;";
             command.AddParam("@end", now.ToString("O"));
             command.AddParam("@cutoff", now.Subtract(maxRuntime).ToString("O"));
             return await command.ExecuteNonQueryAsync();
@@ -2203,7 +2249,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText =
-                "INSERT INTO HostMetrics (NodeId, CapturedAt, MemoryLoadPercent, ProcessCpuPercent, HostCpuPercent, StateDiskFreeBytes, SpillDiskFreeBytes) " +
+                "INSERT INTO host_metrics (node_id, captured_at, memory_load_percent, process_cpu_percent, host_cpu_percent, state_disk_free_bytes, spill_disk_free_bytes) " +
                 "VALUES (@node, @at, @mem, @cpu, @hostcpu, @state, @spill);";
             command.AddParam("@node", sample.NodeId);
             command.AddParam("@at", sample.CapturedAt.ToUniversalTime().ToString("O"));
@@ -2222,10 +2268,10 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            var sql = "SELECT NodeId, CapturedAt, MemoryLoadPercent, ProcessCpuPercent, HostCpuPercent, StateDiskFreeBytes, SpillDiskFreeBytes " +
-                      "FROM HostMetrics WHERE CapturedAt >= @since ";
-            if (!string.IsNullOrEmpty(nodeId)) { sql += "AND NodeId = @node "; command.AddParam("@node", nodeId); }
-            sql += "ORDER BY CapturedAt DESC LIMIT @limit;";
+            var sql = "SELECT node_id, captured_at, memory_load_percent, process_cpu_percent, host_cpu_percent, state_disk_free_bytes, spill_disk_free_bytes " +
+                      "FROM host_metrics WHERE captured_at >= @since ";
+            if (!string.IsNullOrEmpty(nodeId)) { sql += "AND node_id = @node "; command.AddParam("@node", nodeId); }
+            sql += "ORDER BY captured_at DESC LIMIT @limit;";
             command.CommandText = sql;
             command.AddParam("@since", since.ToUniversalTime().ToString("O"));
             command.AddParam("@limit", limit);
@@ -2253,7 +2299,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM HostMetrics WHERE CapturedAt < @cutoff;";
+            command.CommandText = "DELETE FROM host_metrics WHERE captured_at < @cutoff;";
             command.AddParam("@cutoff", DateTime.UtcNow.Subtract(maxAge).ToString("O"));
             return await command.ExecuteNonQueryAsync();
         }
@@ -2273,7 +2319,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using (var del = connection.CreateCommand())
             {
                 del.Transaction = tx;
-                del.CommandText = "DELETE FROM JobHistoryDaily WHERE Day IN (SELECT DISTINCT substr(StartTime,1,10) FROM JobHistory WHERE Status <> 'RUNNING');";
+                del.CommandText = "DELETE FROM job_history_daily WHERE day IN (SELECT DISTINCT substr(start_time,1,10) FROM job_history WHERE status <> 'RUNNING');";
                 await del.ExecuteNonQueryAsync();
             }
             int written;
@@ -2286,11 +2332,11 @@ namespace ETL_SQL.Orchestrator.Storage
                 // Ad-hoc script runs (JobId '') are excluded — they are not jobs, so they have no
                 // per-job trend, and the table's key could not hold them anyway.
                 ins.CommandText =
-                    "INSERT INTO JobHistoryDaily (Day, JobId, TenantId, JobName, RunCount, FailureCount, TotalRows, MaxPeakMemoryBytes) " +
-                    "SELECT substr(StartTime,1,10), JobId, MAX(TenantId), MAX(JobName), COUNT(*), " +
-                    "SUM(CASE WHEN Status <> 'SUCCESS' THEN 1 ELSE 0 END), SUM(RowsProcessed), MAX(PeakMemoryBytes) " +
-                    "FROM JobHistory WHERE Status <> 'RUNNING' AND JobId <> '' " +
-                    "GROUP BY substr(StartTime,1,10), JobId;";
+                    "INSERT INTO job_history_daily (day, job_id, tenant_id, job_name, run_count, failure_count, total_rows, max_peak_memory_bytes) " +
+                    "SELECT substr(start_time,1,10), job_id, MAX(tenant_id), MAX(job_name), COUNT(*), " +
+                    "SUM(CASE WHEN status <> 'SUCCESS' THEN 1 ELSE 0 END), SUM(rows_processed), MAX(peak_memory_bytes) " +
+                    "FROM job_history WHERE status <> 'RUNNING' AND job_id <> '' " +
+                    "GROUP BY substr(start_time,1,10), job_id;";
                 written = await ins.ExecuteNonQueryAsync();
             }
             tx.Commit();
@@ -2304,9 +2350,9 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
-            var sql = "SELECT Day, JobName, RunCount, FailureCount, TotalRows, MaxPeakMemoryBytes FROM JobHistoryDaily WHERE Day >= @since ";
-            if (!string.IsNullOrEmpty(jobId)) { sql += "AND JobId = @job "; command.AddParam("@job", jobId); }
-            sql += "ORDER BY Day DESC, JobName LIMIT @limit;";
+            var sql = "SELECT day, job_name, run_count, failure_count, total_rows, max_peak_memory_bytes FROM job_history_daily WHERE day >= @since ";
+            if (!string.IsNullOrEmpty(jobId)) { sql += "AND job_id = @job "; command.AddParam("@job", jobId); }
+            sql += "ORDER BY day DESC, job_name LIMIT @limit;";
             command.CommandText = sql;
             command.AddParam("@since", sinceDay.ToString("yyyy-MM-dd"));
             command.AddParam("@limit", limit);
@@ -2326,7 +2372,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM JobHistoryDaily WHERE Day < @cutoff;";
+            command.CommandText = "DELETE FROM job_history_daily WHERE day < @cutoff;";
             command.AddParam("@cutoff", DateTime.UtcNow.Subtract(maxAge).ToString("yyyy-MM-dd"));
             return await command.ExecuteNonQueryAsync();
         }
@@ -2341,7 +2387,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using (var del = connection.CreateCommand())
             {
                 del.Transaction = tx;
-                del.CommandText = "DELETE FROM HostMetricsDaily WHERE Day IN (SELECT DISTINCT substr(CapturedAt,1,10) FROM HostMetrics);";
+                del.CommandText = "DELETE FROM host_metrics_daily WHERE day IN (SELECT DISTINCT substr(captured_at,1,10) FROM host_metrics);";
                 await del.ExecuteNonQueryAsync();
             }
             int written;
@@ -2351,11 +2397,11 @@ namespace ETL_SQL.Orchestrator.Storage
                 // AVG/MAX ignore NULL HostCpuPercent samples (and yield NULL when no sample has one),
                 // so days recorded before the whole-host probe shipped roll up as NULL, not 0.
                 ins.CommandText =
-                    "INSERT INTO HostMetricsDaily (Day, NodeId, AvgMemoryLoadPercent, MaxMemoryLoadPercent, AvgCpuPercent, MaxCpuPercent, MinStateDiskFreeBytes, MinSpillDiskFreeBytes, AvgHostCpuPercent, MaxHostCpuPercent) " +
-                    "SELECT substr(CapturedAt,1,10), NodeId, AVG(MemoryLoadPercent), MAX(MemoryLoadPercent), " +
-                    "AVG(ProcessCpuPercent), MAX(ProcessCpuPercent), MIN(StateDiskFreeBytes), MIN(SpillDiskFreeBytes), " +
-                    "AVG(HostCpuPercent), MAX(HostCpuPercent) " +
-                    "FROM HostMetrics GROUP BY substr(CapturedAt,1,10), NodeId;";
+                    "INSERT INTO host_metrics_daily (day, node_id, avg_memory_load_percent, max_memory_load_percent, avg_cpu_percent, max_cpu_percent, min_state_disk_free_bytes, min_spill_disk_free_bytes, avg_host_cpu_percent, max_host_cpu_percent) " +
+                    "SELECT substr(captured_at,1,10), node_id, AVG(memory_load_percent), MAX(memory_load_percent), " +
+                    "AVG(process_cpu_percent), MAX(process_cpu_percent), MIN(state_disk_free_bytes), MIN(spill_disk_free_bytes), " +
+                    "AVG(host_cpu_percent), MAX(host_cpu_percent) " +
+                    "FROM host_metrics GROUP BY substr(captured_at,1,10), node_id;";
                 written = await ins.ExecuteNonQueryAsync();
             }
             tx.Commit();
@@ -2368,9 +2414,9 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
-            var sql = "SELECT Day, NodeId, AvgMemoryLoadPercent, MaxMemoryLoadPercent, AvgCpuPercent, MaxCpuPercent, MinStateDiskFreeBytes, MinSpillDiskFreeBytes, AvgHostCpuPercent, MaxHostCpuPercent FROM HostMetricsDaily WHERE Day >= @since ";
-            if (!string.IsNullOrEmpty(nodeId)) { sql += "AND NodeId = @node "; command.AddParam("@node", nodeId); }
-            sql += "ORDER BY Day DESC, NodeId LIMIT @limit;";
+            var sql = "SELECT day, node_id, avg_memory_load_percent, max_memory_load_percent, avg_cpu_percent, max_cpu_percent, min_state_disk_free_bytes, min_spill_disk_free_bytes, avg_host_cpu_percent, max_host_cpu_percent FROM host_metrics_daily WHERE day >= @since ";
+            if (!string.IsNullOrEmpty(nodeId)) { sql += "AND node_id = @node "; command.AddParam("@node", nodeId); }
+            sql += "ORDER BY day DESC, node_id LIMIT @limit;";
             command.CommandText = sql;
             command.AddParam("@since", sinceDay.ToString("yyyy-MM-dd"));
             command.AddParam("@limit", limit);
@@ -2393,7 +2439,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
-            command.CommandText = "DELETE FROM HostMetricsDaily WHERE Day < @cutoff;";
+            command.CommandText = "DELETE FROM host_metrics_daily WHERE day < @cutoff;";
             command.AddParam("@cutoff", DateTime.UtcNow.Subtract(maxAge).ToString("yyyy-MM-dd"));
             return await command.ExecuteNonQueryAsync();
         }
@@ -2405,9 +2451,9 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
-            var sql = "SELECT * FROM JobHistory ";
-            if (jobId != null) sql += "WHERE JobId = @jobId ";
-            sql += "ORDER BY StartTime DESC LIMIT @limit;";
+            var sql = "SELECT * FROM job_history ";
+            if (jobId != null) sql += "WHERE job_id = @jobId ";
+            sql += "ORDER BY start_time DESC LIMIT @limit;";
 
             using var command = connection.CreateCommand();
             command.CommandText = sql;
@@ -2433,8 +2479,8 @@ namespace ETL_SQL.Orchestrator.Storage
             // tenant predicate is what keeps it from reaching another tenant's job of the same name.
             using var command = connection.CreateCommand();
             command.CommandText =
-                "SELECT * FROM JobHistory WHERE TenantId = @tenant AND JobName = @name COLLATE NOCASE " +
-                "ORDER BY StartTime DESC LIMIT @limit;";
+                "SELECT * FROM job_history WHERE tenant_id = @tenant AND job_name = @name COLLATE NOCASE " +
+                "ORDER BY start_time DESC LIMIT @limit;";
             command.AddParam("@tenant", TenantKey(tenantId));
             command.AddParam("@name", jobName);
             command.AddParam("@limit", Math.Clamp(limit, 1, 1000));
@@ -2452,7 +2498,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM JobHistory WHERE Id = @historyId LIMIT 1;";
+            command.CommandText = "SELECT * FROM job_history WHERE id = @historyId LIMIT 1;";
             command.AddParam("@historyId", entryId);
             using var reader = await command.ExecuteReaderAsync();
             return await reader.ReadAsync() ? ReadHistoryEntry(reader) : null;
@@ -2466,8 +2512,8 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT * FROM JobHistory WHERE EndTime > @after AND EndTime <= @through " +
-                "ORDER BY EndTime, Id LIMIT @limit OFFSET @offset;";
+            command.CommandText = "SELECT * FROM job_history WHERE end_time > @after AND end_time <= @through " +
+                "ORDER BY end_time, id LIMIT @limit OFFSET @offset;";
             // JobHistory is currently persisted with DateTime.Now, including the local UTC offset.
             // Compare using the same representation; parsing at the API boundary still returns
             // absolute instants. A future schema migration can normalize the column itself to UTC.
@@ -2488,24 +2534,24 @@ namespace ETL_SQL.Orchestrator.Storage
         // Positional reads had silently shifted: JobName returned the job's id, and StartTime
         // returned the tenant, which surfaced only because an empty string will not parse as a date.
         private static JobHistoryEntry ReadHistoryEntry(DbDataReader reader) => new(
-            reader.GetInt64(reader.GetOrdinal("Id")),
-            reader.GetString(reader.GetOrdinal("JobName")),
-            DateTime.Parse(reader.GetString(reader.GetOrdinal("StartTime"))),
-            ReadOptionalDateTime(reader, "EndTime"),
-            reader.GetString(reader.GetOrdinal("Status")),
-            ReadOptionalString(reader, "ErrorMessage"),
-            ReadOptionalInt64(reader, "RowsProcessed"),
-            ReadOptionalInt64(reader, "PeakMemoryBytes"),
-            ReadOptionalDouble(reader, "CpuTimeSeconds"),
-            ReadOptionalString(reader, "ScriptHashAtRunTime"),
-            ReadOptionalBool(reader, "HashMatched"),
-            ReadOptionalInt64(reader, "RowsQuarantined"),
-            ReadOptionalInt64(reader, "RowsWarned"),
-            ReadOptionalString(reader, "DataQualityFailures"),
-            ReadOptionalString(reader, "SessionId"),
-            ReadOptionalString(reader, "CheckpointLabel"),
-            JobId.From(ReadOptionalString(reader, "JobId")),
-            ReadOptionalString(reader, "TenantId") is { Length: > 0 } tenant ? tenant : null);
+            reader.GetInt64(reader.GetOrdinal("id")),
+            reader.GetString(reader.GetOrdinal("job_name")),
+            DateTime.Parse(reader.GetString(reader.GetOrdinal("start_time"))),
+            ReadOptionalDateTime(reader, "end_time"),
+            reader.GetString(reader.GetOrdinal("status")),
+            ReadOptionalString(reader, "error_message"),
+            ReadOptionalInt64(reader, "rows_processed"),
+            ReadOptionalInt64(reader, "peak_memory_bytes"),
+            ReadOptionalDouble(reader, "cpu_time_seconds"),
+            ReadOptionalString(reader, "script_hash_at_run_time"),
+            ReadOptionalBool(reader, "hash_matched"),
+            ReadOptionalInt64(reader, "rows_quarantined"),
+            ReadOptionalInt64(reader, "rows_warned"),
+            ReadOptionalString(reader, "data_quality_failures"),
+            ReadOptionalString(reader, "session_id"),
+            ReadOptionalString(reader, "checkpoint_label"),
+            JobId.From(ReadOptionalString(reader, "job_id")),
+            ReadOptionalString(reader, "tenant_id") is { Length: > 0 } tenant ? tenant : null);
 
         private static DateTime? ReadOptionalDateTime(DbDataReader reader, string columnName)
         {
@@ -2580,7 +2626,7 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT StateValue FROM JobState WHERE JobId = @jobId AND StateKey = @key;";
+            command.CommandText = "SELECT state_value FROM job_state WHERE job_id = @jobId AND state_key = @key;";
             command.AddParam("@jobId", owner);
             command.AddParam("@key", key);
 
@@ -2596,10 +2642,10 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                INSERT INTO JobState (JobId, StateKey, StateValue, UpdatedAt)
+                INSERT INTO job_state (job_id, state_key, state_value, updated_at)
                 VALUES (@jobId, @key, @value, @updatedAt)
-                ON CONFLICT (JobId, StateKey)
-                DO UPDATE SET StateValue = EXCLUDED.StateValue, UpdatedAt = EXCLUDED.UpdatedAt;";
+                ON CONFLICT (job_id, state_key)
+                DO UPDATE SET state_value = EXCLUDED.state_value, updated_at = EXCLUDED.updated_at;";
 
             command.AddParam("@jobId", owner);
             command.AddParam("@key", key);
@@ -2622,11 +2668,11 @@ namespace ETL_SQL.Orchestrator.Storage
             // an opaque GUID in front of every `SHOW JOB STATE` reader. The join is inner: state whose
             // job is gone is not addressable state, and state is deleted with its job in any case.
             var sql = @"
-                SELECT j.Name, s.StateKey, s.StateValue, s.UpdatedAt
-                FROM JobState s
-                INNER JOIN Jobs j ON j.Id = s.JobId ";
-            if (!string.IsNullOrEmpty(jobId)) { sql += "WHERE s.JobId = @job "; command.AddParam("@job", jobId); }
-            sql += "ORDER BY j.Name, s.StateKey LIMIT @limit;";
+                SELECT j.name, s.state_key, s.state_value, s.updated_at
+                FROM job_state s
+                INNER JOIN jobs j ON j.id = s.job_id ";
+            if (!string.IsNullOrEmpty(jobId)) { sql += "WHERE s.job_id = @job "; command.AddParam("@job", jobId); }
+            sql += "ORDER BY j.name, s.state_key LIMIT @limit;";
             command.CommandText = sql;
             command.AddParam("@limit", limit);
 
@@ -2660,8 +2706,8 @@ namespace ETL_SQL.Orchestrator.Storage
                 {
                     cmd.Transaction = transaction;
                     cmd.CommandText = @"
-                        INSERT INTO BundleVersions
-                            (BundleName, Version, EntryPath, ContentHash, PublishedAt, Publisher, Description, EncryptionMode, EncryptionMetadata)
+                        INSERT INTO bundle_versions
+                            (bundle_name, version, entry_path, content_hash, published_at, publisher, description, encryption_mode, encryption_metadata)
                         VALUES
                             (@bundle, @version, @entry, @hash, @published, @publisher, @description, @mode, @metadata);";
                     cmd.AddParam("@bundle", request.BundleName);
@@ -2681,8 +2727,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     using var cmd = connection.CreateCommand();
                     cmd.Transaction = transaction;
                     cmd.CommandText = @"
-                        INSERT INTO BundleFiles
-                            (BundleName, Version, VirtualPath, Content, ContentHash, SizeBytes, ContentType)
+                        INSERT INTO bundle_files
+                            (bundle_name, version, virtual_path, content, content_hash, size_bytes, content_type)
                         VALUES
                             (@bundle, @version, @path, @content, @hash, @size, @type);";
                     cmd.AddParam("@bundle", request.BundleName);
@@ -2700,8 +2746,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     using var cmd = connection.CreateCommand();
                     cmd.Transaction = transaction;
                     cmd.CommandText = @"
-                        INSERT INTO BundleDependencies
-                            (BundleName, Version, FromPath, ToPath)
+                        INSERT INTO bundle_dependencies
+                            (bundle_name, version, from_path, to_path)
                         VALUES
                             (@bundle, @version, @from, @to)
                         ON CONFLICT DO NOTHING;";
@@ -2716,12 +2762,12 @@ namespace ETL_SQL.Orchestrator.Storage
                 {
                     gcFiles.Transaction = transaction;
                     gcFiles.CommandText = @"
-                        DELETE FROM BundleFiles
-                        WHERE BundleName = @bundle
-                          AND Version NOT IN (
-                              SELECT Version FROM BundleVersions
-                              WHERE BundleName = @bundle
-                              ORDER BY Version DESC
+                        DELETE FROM bundle_files
+                        WHERE bundle_name = @bundle
+                          AND version NOT IN (
+                              SELECT version FROM bundle_versions
+                              WHERE bundle_name = @bundle
+                              ORDER BY version DESC
                               LIMIT 5
                           );";
                     gcFiles.AddParam("@bundle", request.BundleName);
@@ -2732,12 +2778,12 @@ namespace ETL_SQL.Orchestrator.Storage
                 {
                     gcDeps.Transaction = transaction;
                     gcDeps.CommandText = @"
-                        DELETE FROM BundleDependencies
-                        WHERE BundleName = @bundle
-                          AND Version NOT IN (
-                              SELECT Version FROM BundleVersions
-                              WHERE BundleName = @bundle
-                              ORDER BY Version DESC
+                        DELETE FROM bundle_dependencies
+                        WHERE bundle_name = @bundle
+                          AND version NOT IN (
+                              SELECT version FROM bundle_versions
+                              WHERE bundle_name = @bundle
+                              ORDER BY version DESC
                               LIMIT 5
                           );";
                     gcDeps.AddParam("@bundle", request.BundleName);
@@ -2748,12 +2794,12 @@ namespace ETL_SQL.Orchestrator.Storage
                 {
                     gcVersions.Transaction = transaction;
                     gcVersions.CommandText = @"
-                        DELETE FROM BundleVersions
-                        WHERE BundleName = @bundle
-                          AND Version NOT IN (
-                              SELECT Version FROM BundleVersions
-                              WHERE BundleName = @bundle
-                              ORDER BY Version DESC
+                        DELETE FROM bundle_versions
+                        WHERE bundle_name = @bundle
+                          AND version NOT IN (
+                              SELECT version FROM bundle_versions
+                              WHERE bundle_name = @bundle
+                              ORDER BY version DESC
                               LIMIT 5
                           );";
                     gcVersions.AddParam("@bundle", request.BundleName);
@@ -2829,9 +2875,9 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT BundleName, Version, EntryPath, ContentHash, PublishedAt, Publisher, Description
-                                FROM BundleVersions WHERE BundleName = @bundle COLLATE NOCASE
-                                ORDER BY Version DESC LIMIT 1;";
+            cmd.CommandText = @"SELECT bundle_name, version, entry_path, content_hash, published_at, publisher, description
+                                FROM bundle_versions WHERE bundle_name = @bundle COLLATE NOCASE
+                                ORDER BY version DESC LIMIT 1;";
             cmd.AddParam("@bundle", bundleName);
             using var reader = await cmd.ExecuteReaderAsync();
             return await reader.ReadAsync() ? ReadBundleVersion(reader) : null;
@@ -2843,8 +2889,8 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT BundleName, Version, EntryPath, ContentHash, PublishedAt, Publisher, Description
-                                FROM BundleVersions WHERE BundleName = @bundle COLLATE NOCASE AND Version = @version LIMIT 1;";
+            cmd.CommandText = @"SELECT bundle_name, version, entry_path, content_hash, published_at, publisher, description
+                                FROM bundle_versions WHERE bundle_name = @bundle COLLATE NOCASE AND Version = @version LIMIT 1;";
             cmd.AddParam("@bundle", bundleName);
             cmd.AddParam("@version", version);
             using var reader = await cmd.ExecuteReaderAsync();
@@ -2857,9 +2903,9 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT BundleName, Version, VirtualPath, Content, ContentHash, SizeBytes, ContentType
-                                FROM BundleFiles
-                                WHERE BundleName = @bundle COLLATE NOCASE AND Version = @version AND VirtualPath = @path COLLATE NOCASE
+            cmd.CommandText = @"SELECT bundle_name, version, virtual_path, content, content_hash, size_bytes, content_type
+                                FROM bundle_files
+                                WHERE bundle_name = @bundle COLLATE NOCASE AND version = @version AND virtual_path = @path COLLATE NOCASE
                                 LIMIT 1;";
             cmd.AddParam("@bundle", bundleName);
             cmd.AddParam("@version", version);
@@ -2874,12 +2920,12 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT bv.BundleName, bv.Version, bv.EntryPath, bv.ContentHash, bv.PublishedAt, bv.Publisher, bv.Description
-                                FROM BundleVersions bv
+            cmd.CommandText = @"SELECT bv.bundle_name, bv.version, bv.entry_path, bv.content_hash, bv.published_at, bv.publisher, bv.description
+                                FROM bundle_versions bv
                                 INNER JOIN (
-                                    SELECT BundleName, MAX(Version) AS Version FROM BundleVersions GROUP BY BundleName
-                                ) latest ON latest.BundleName = bv.BundleName AND latest.Version = bv.Version
-                                ORDER BY bv.BundleName COLLATE NOCASE;";
+                                    SELECT bundle_name, MAX(version) AS Version FROM bundle_versions GROUP BY bundle_name
+                                ) latest ON latest.bundle_name = bv.bundle_name AND latest.Version = bv.version
+                                ORDER BY bv.bundle_name COLLATE NOCASE;";
             return await ReadBundleVersionsAsync(cmd);
         }
 
@@ -2889,9 +2935,9 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT BundleName, Version, EntryPath, ContentHash, PublishedAt, Publisher, Description
-                                FROM BundleVersions WHERE BundleName = @bundle COLLATE NOCASE
-                                ORDER BY Version DESC;";
+            cmd.CommandText = @"SELECT bundle_name, version, entry_path, content_hash, published_at, publisher, description
+                                FROM bundle_versions WHERE bundle_name = @bundle COLLATE NOCASE
+                                ORDER BY version DESC;";
             cmd.AddParam("@bundle", bundleName);
             return await ReadBundleVersionsAsync(cmd);
         }
@@ -2902,9 +2948,9 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT BundleName, Version, VirtualPath, Content, ContentHash, SizeBytes, ContentType
-                                FROM BundleFiles WHERE BundleName = @bundle COLLATE NOCASE AND Version = @version
-                                ORDER BY VirtualPath COLLATE NOCASE;";
+            cmd.CommandText = @"SELECT bundle_name, version, virtual_path, content, content_hash, size_bytes, content_type
+                                FROM bundle_files WHERE bundle_name = @bundle COLLATE NOCASE AND version = @version
+                                ORDER BY virtual_path COLLATE NOCASE;";
             cmd.AddParam("@bundle", bundleName);
             cmd.AddParam("@version", version);
             var files = new List<BundleFileInfo>();
@@ -2919,9 +2965,9 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = @"SELECT BundleName, Version, FromPath, ToPath
-                                FROM BundleDependencies WHERE BundleName = @bundle COLLATE NOCASE AND Version = @version
-                                ORDER BY FromPath COLLATE NOCASE, ToPath COLLATE NOCASE;";
+            cmd.CommandText = @"SELECT bundle_name, version, from_path, to_path
+                                FROM bundle_dependencies WHERE bundle_name = @bundle COLLATE NOCASE AND version = @version
+                                ORDER BY from_path COLLATE NOCASE, to_path COLLATE NOCASE;";
             cmd.AddParam("@bundle", bundleName);
             cmd.AddParam("@version", version);
             var deps = new List<BundleDependencyInfo>();
@@ -2998,9 +3044,9 @@ namespace ETL_SQL.Orchestrator.Storage
                     using var cmd = connection.CreateCommand();
                     cmd.Transaction = transaction;
                     cmd.CommandText = @"
-                        INSERT INTO LineageHistory
-                            (TenantId, RunAt, JobName, ScriptPath, TargetTable, TargetColumn, SourceTables, SourceColumns, Operation, Tags, SourceFile, Line,
-                             TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions)
+                        INSERT INTO lineage_history
+                            (tenant_id, run_at, job_name, script_path, target_table, target_column, source_tables, source_columns, operation, tags, source_file, line,
+                             transformation_kind, transformation_expression, functions_applied, derived_from_descriptions)
                         VALUES
                             (@tenant, @runAt, @job, @script, @target, @col, @sources, @srcCols, @op, @tags, @file, @line,
                              @tkind, @texpr, @fns, @derived);";
@@ -3049,12 +3095,12 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
-                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
-                FROM LineageHistory
-                WHERE (@tenant IS NULL OR TenantId = @tenant) AND TargetTable = @table COLLATE NOCASE
-                ORDER BY RunAt DESC, Id DESC
+                SELECT id, run_at, job_name, script_path, target_table, target_column,
+                       source_tables, operation, tags, source_file, line,
+                       source_columns, transformation_kind, transformation_expression, functions_applied, derived_from_descriptions, tenant_id
+                FROM lineage_history
+                WHERE (@tenant IS NULL OR tenant_id = @tenant) AND target_table = @table COLLATE NOCASE
+                ORDER BY run_at DESC, id DESC
                 LIMIT @limit;";
             cmd.AddParam("@table", tableName);
             cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
@@ -3096,19 +3142,19 @@ namespace ETL_SQL.Orchestrator.Storage
             cmd.AddParam("@limit", limitPerTable);
             cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
             cmd.CommandText = $@"
-                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
+                SELECT id, run_at, job_name, script_path, target_table, target_column,
+                       source_tables, operation, tags, source_file, line,
+                       source_columns, transformation_kind, transformation_expression, functions_applied, derived_from_descriptions, tenant_id
                 FROM (
                     SELECT *, ROW_NUMBER() OVER (
-                        PARTITION BY TargetTable COLLATE NOCASE
-                        ORDER BY RunAt DESC, Id DESC) AS _rn
-                    FROM LineageHistory
-                    WHERE (@tenant IS NULL OR TenantId = @tenant)
-                      AND TargetTable COLLATE NOCASE IN ({string.Join(", ", paramNames)})
+                        PARTITION BY target_table COLLATE NOCASE
+                        ORDER BY run_at DESC, id DESC) AS _rn
+                    FROM lineage_history
+                    WHERE (@tenant IS NULL OR tenant_id = @tenant)
+                      AND target_table COLLATE NOCASE IN ({string.Join(", ", paramNames)})
                 )
                 WHERE _rn <= @limit
-                ORDER BY RunAt DESC, Id DESC;";
+                ORDER BY run_at DESC, id DESC;";
             return await ReadLineageHistoryAsync(cmd);
         }
 
@@ -3134,12 +3180,12 @@ namespace ETL_SQL.Orchestrator.Storage
                 ? $"%\"{tagKey}\"%"
                 : $"%\"{tagKey}\":\"{tagValue}\"%";
             cmd.CommandText = @"
-                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
-                FROM LineageHistory
-                WHERE (@tenant IS NULL OR TenantId = @tenant) AND Tags LIKE @pattern
-                ORDER BY RunAt DESC, Id DESC
+                SELECT id, run_at, job_name, script_path, target_table, target_column,
+                       source_tables, operation, tags, source_file, line,
+                       source_columns, transformation_kind, transformation_expression, functions_applied, derived_from_descriptions, tenant_id
+                FROM lineage_history
+                WHERE (@tenant IS NULL OR tenant_id = @tenant) AND tags LIKE @pattern
+                ORDER BY run_at DESC, id DESC
                 LIMIT @limit;";
             cmd.AddParam("@pattern", pattern);
             cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
@@ -3173,12 +3219,12 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
-                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
-                FROM LineageHistory
-                WHERE (@tenant IS NULL OR TenantId = @tenant)
-                ORDER BY RunAt DESC, Id DESC
+                SELECT id, run_at, job_name, script_path, target_table, target_column,
+                       source_tables, operation, tags, source_file, line,
+                       source_columns, transformation_kind, transformation_expression, functions_applied, derived_from_descriptions, tenant_id
+                FROM lineage_history
+                WHERE (@tenant IS NULL OR tenant_id = @tenant)
+                ORDER BY run_at DESC, id DESC
                 LIMIT @scanLimit;";
             cmd.AddParam("@scanLimit", Math.Max(limit * 20, limit));
             cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
@@ -3230,12 +3276,12 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
-                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
-                FROM LineageHistory
-                WHERE (@tenant IS NULL OR TenantId = @tenant)
-                ORDER BY RunAt DESC, Id DESC
+                SELECT id, run_at, job_name, script_path, target_table, target_column,
+                       source_tables, operation, tags, source_file, line,
+                       source_columns, transformation_kind, transformation_expression, functions_applied, derived_from_descriptions, tenant_id
+                FROM lineage_history
+                WHERE (@tenant IS NULL OR tenant_id = @tenant)
+                ORDER BY run_at DESC, id DESC
                 LIMIT @limit;";
             cmd.AddParam("@limit", Math.Clamp(limit, 1, 10000));
             cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
@@ -3260,12 +3306,12 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
-                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
-                FROM LineageHistory
-                WHERE (@tenant IS NULL OR TenantId = @tenant) AND JobName = @jobName COLLATE NOCASE
-                ORDER BY RunAt DESC, Id DESC
+                SELECT id, run_at, job_name, script_path, target_table, target_column,
+                       source_tables, operation, tags, source_file, line,
+                       source_columns, transformation_kind, transformation_expression, functions_applied, derived_from_descriptions, tenant_id
+                FROM lineage_history
+                WHERE (@tenant IS NULL OR tenant_id = @tenant) AND job_name = @jobName COLLATE NOCASE
+                ORDER BY run_at DESC, id DESC
                 LIMIT @limit;";
             cmd.AddParam("@jobName", jobName);
             cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
@@ -3291,12 +3337,12 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
-                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
-                FROM LineageHistory
-                WHERE (@tenant IS NULL OR TenantId = @tenant) AND SourceTables LIKE @pattern
-                ORDER BY RunAt DESC, Id DESC
+                SELECT id, run_at, job_name, script_path, target_table, target_column,
+                       source_tables, operation, tags, source_file, line,
+                       source_columns, transformation_kind, transformation_expression, functions_applied, derived_from_descriptions, tenant_id
+                FROM lineage_history
+                WHERE (@tenant IS NULL OR tenant_id = @tenant) AND source_tables LIKE @pattern
+                ORDER BY run_at DESC, id DESC
                 LIMIT @scanLimit;";
             cmd.AddParam("@pattern", $"%\"{sourceName}\"%");
             cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);
@@ -3326,14 +3372,14 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
-                SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
-                       SourceTables, Operation, Tags, SourceFile, Line,
-                       SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions, TenantId
-                FROM LineageHistory
-                WHERE (@tenant IS NULL OR TenantId = @tenant)
-                  AND (SourceFile = @sourceFile COLLATE NOCASE
-                   OR ScriptPath = @sourceFile COLLATE NOCASE)
-                ORDER BY RunAt DESC, Id DESC
+                SELECT id, run_at, job_name, script_path, target_table, target_column,
+                       source_tables, operation, tags, source_file, line,
+                       source_columns, transformation_kind, transformation_expression, functions_applied, derived_from_descriptions, tenant_id
+                FROM lineage_history
+                WHERE (@tenant IS NULL OR tenant_id = @tenant)
+                  AND (source_file = @sourceFile COLLATE NOCASE
+                   OR script_path = @sourceFile COLLATE NOCASE)
+                ORDER BY run_at DESC, id DESC
                 LIMIT @limit;";
             cmd.AddParam("@sourceFile", sourceFile);
             cmd.AddParam("@tenant", (object?)tenantId ?? DBNull.Value);

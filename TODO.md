@@ -1121,14 +1121,14 @@ Found while shipping v0.19.0. None blocked that release; all cost time or credib
 
 Standardize all internal SQL tables and column names across ETL-SQL subsystem databases to `snake_case` naming conventions, matching the engine's virtual/catalog tables (`eng.*`) and session SQLite tables (`security_events`, `variables`). Portal and Orchestrator persistence layers are internal infrastructure and will be migrated to `snake_case`.
 
-- [ ] **Configure EF Core snake_case naming convention in Portal.**
+- [x] **Configure EF Core snake_case naming convention in Portal.**
   - Configure `PortalDbContext` (in `src/ETL-SQL.Portal.Data/PortalDbContext.cs` or EF Core naming conventions) to map entity names and properties to `snake_case` table and column names (`studio_recovery_drafts`, `reports`, `report_id`, `created_at`, etc.).
   - Update or generate database migrations (`src/ETL-SQL.Portal.Data/Migrations/` and `src/ETL-SQL.Portal.Migrations.Postgres/Migrations/`) to apply the renamed tables, columns, foreign keys, and indexes for SQLite and PostgreSQL providers.
   - Verify that Portal API endpoints, repositories, and Studio recovery drafts continue to function across database providers.
-- [ ] **Standardize Orchestrator database storage schema to snake_case.**
+- [x] **Standardize Orchestrator database storage schema to snake_case.**
   - Migrate `RelationalJobHistoryStore.cs` / `SQLiteJobHistoryStore.cs` (and PostgreSQL store dialects under `src/ETL-SQL.Orchestrator/Storage/`) DDL schemas and raw SQL queries from `PascalCase` (`JobHistory`, `JobSchedules`, `JobId`, `StartTime`) to `snake_case` (`job_history`, `job_schedules`, `job_id`, `start_time`).
   - Provide automated schema migration or bootstrap logic for SQLite/PostgreSQL Orchestrator databases so upgrade paths transition cleanly without manual intervention.
   - Verify job scheduling, job execution history recording, metric queries, and Orchestrator API integration tests pass against the updated schema.
-- [ ] **Audit and align internal catalog & temporary table documentation.**
+- [x] **Audit and align internal catalog & temporary table documentation.**
   - Confirm all internal virtual tables (`eng.metrics`, `eng.security_events`, `eng.columns`, `eng.jobs`, etc.) adhere strictly to the `snake_case` table and column standard.
   - Document the unified database schema naming standard in `docs/architecture/standards/`, ensuring clear distinction between engine/internal tables (`snake_case`) and external target tables (which respect user-specified names).
