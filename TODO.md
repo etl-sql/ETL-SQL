@@ -580,6 +580,14 @@ the ownership and bootstrap checks below.
 
 **Implementation order:**
 
+Ownership preflight now computes compiler emits, the offline bundle, and host copies before mutation.
+The version-2 inventory stores output hashes. Fresh byte-identical outputs can be adopted; replacing
+or deleting other existing bytes requires a matching previous ownership hash. Generated-looking banners do not
+authorize cleanup or exclude retained input changes from watch detection. Windows compiler, bundle,
+and full generator regressions passed, including local-edit preservation, conflicts, malformed paths,
+junctions, source rename/delete recovery, and watcher recovery. Evidence is under
+`artifacts/section1/ownership-*.log`. Linux and final candidate acceptance remain open.
+
 1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
    safe obsolete-output cleanup, and build/gate integration.
 2. Verify every supported delivery path from source-only inputs, including final packages and runtime checks.
@@ -654,8 +662,8 @@ does not close build, package, runtime, or Git-index acceptance.
   read-only verification must reject stale preparation without repairing it. Determine output ownership
   from source paths and generator rules; a generated-file banner alone must not allow an authored input
   to escape verification or be selected for removal from Git.
-  Audit `scripts/lib/browser-asset-inputs.cjs`: its current banner-based exclusions must not omit
-  retained inputs from watch or concurrent-edit detection. Cover an authored input containing a
+  Keep `scripts/lib/browser-asset-inputs.cjs` exclusions tied to generator paths and validated ownership;
+  retained inputs must remain in watch and concurrent-edit detection. Cover an authored input containing a
   generated-looking banner and verify that changing it still invalidates preparation.
 - [ ] **Verify route, DTO, and schema generator bootstrap.** Exercise the C# browser-contract and Studio
   route generators, plus the Portal API-schema validator generator, with browser outputs absent. Resolve
@@ -690,8 +698,8 @@ does not close build, package, runtime, or Git-index acceptance.
   assets. Preserve public exports and module-initialization behavior, and run the resulting offline
   snapshot with networking disabled. Keep the existing bundle path and browser URLs.
 - [ ] **Verify obsolete-output cleanup preserves retained inputs.** Audit deletion in
-  `scripts/compile-browser.mjs` and `scripts/sync-assets.js`; both currently use generated banners to
-  identify obsolete files. Require validated ownership before deleting an output. A handwritten or
+  `scripts/compile-browser.mjs` and `scripts/sync-assets.js`. Require validated paths, owners, and prior
+  output hashes before deleting an output. A handwritten or
   vendor file containing a generated-looking banner must survive preparation. Resolve cleanup paths
   within the intended output roots, reject traversal and symlink/junction escapes, and handle path
   separators and casing consistently on Windows and Linux. Exercise a stale or malformed ownership

@@ -85,6 +85,18 @@ its `.ts` file. Its old `.js` path becomes checked-in generated output, with a b
 the TypeScript source. Shared host copies and `report-runtime.bundle.js` remain checked-in outputs.
 Portal's generated shared copies must never become Portal-owned TypeScript inputs.
 
+Preparation emits into memory, validates the offline bundle and host import closures, then preflights
+the complete output set before writing files. `artifacts/browser-assets.json` version 2 stores each
+output's generator/source and SHA-256 hash. Existing outputs are adopted only when byte-identical to
+fresh generation, or replaced/deleted when their previous validated hash still matches. An output
+with local edits stops preparation; preserve the intended change in its canonical owner first.
+Version-1 inventories support exact-byte bootstrap, not deletion. The earlier TypeScript format without
+the generated implementation pragma is reproduced from the current owner for that comparison; source
+or body differences still fail. Unverified obsolete inventory entries require review before bootstrap.
+Unowned files remain retained inputs,
+even when their contents include a generated-looking banner. Ownership paths must follow the compiler,
+bundle, and host-routing rules; traversal, duplicate/case-only owners, and symlink/junction escapes fail.
+
 Keep `.ts` sources outside served asset directories. Do not emit source maps or declarations in
 generated browser output: no `.map`, `.d.ts`, or `sourceMappingURL` is shipped. Source-level debugging can be added
 later with an explicit development-only map delivery decision. Preserve copyright/license comments,

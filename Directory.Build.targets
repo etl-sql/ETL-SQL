@@ -1,0 +1,31 @@
+<Project>
+  <PropertyGroup>
+    <BrowserAssetRoot>$(MSBuildThisFileDirectory)</BrowserAssetRoot>
+    <BrowserAssetManifest>$(BrowserAssetRoot)artifacts/browser-assets.props</BrowserAssetManifest>
+    <RequiresBrowserAssets Condition="'$(MSBuildProjectName)' == 'ETL-SQL.Reporting' Or '$(MSBuildProjectName)' == 'ETL-SQL.ReportRuntime' Or '$(MSBuildProjectName)' == 'ETL-SQL.ReportPlayer' Or '$(MSBuildProjectName)' == 'ETL-SQL.WorkstationEditor' Or '$(MSBuildProjectName)' == 'ETL-SQL.Portal'">true</RequiresBrowserAssets>
+  </PropertyGroup>
+
+  <Import Project="$(BrowserAssetManifest)" Condition="'$(RequiresBrowserAssets)' == 'true' And Exists('$(BrowserAssetManifest)')" />
+
+  <!-- Preparation runs before invoking MSBuild, so the SDK discovers every generated static file.
+       Builds only verify: no network access, Node invocation, or competing writes across projects. -->
+  <Target Name="VerifyPreparedBrowserAssets" BeforeTargets="PrepareForBuild" Condition="'$(RequiresBrowserAssets)' == 'true' And '$(DesignTimeBuild)' != 'true'">
+    <Error Condition="Exists('$(BrowserAssetRoot).browser-assets.lock')"
+           Text="Browser asset preparation is still running. Wait for it to finish before building." />
+    <Error Condition="!Exists('$(BrowserAssetManifest)') Or '@(_BrowserPreparedAsset)' == ''"
+           Text="Browser assets are not prepared. Run npm ci --prefix scripts/typecheck, then node scripts/sync-assets.js before dotnet build or publish." />
+    <Error Condition="!Exists('%(_BrowserPreparedAsset.Identity)')"
+           Text="Prepared browser asset is missing: %(_BrowserPreparedAsset.Identity). Run node scripts/sync-assets.js before building." />
+    <ItemGroup>
+      <_BrowserCurrentSource Include="$(BrowserAssetRoot)src/ETL-SQL.ReportRuntime/Resources/TypeScript/**/*.ts;$(BrowserAssetRoot)src/ETL-SQL.Portal/BrowserSources/**/*.ts;$(BrowserAssetRoot)types/**/*.d.ts;$(BrowserAssetRoot)src/ETL-SQL.ReportRuntime/Resources/Shared/**/*;$(BrowserAssetRoot)src/ETL-SQL.Portal/wwwroot/js/**/*" Exclude="$(BrowserAssetRoot)**/*.__test-*.mjs" />
+      <_BrowserUnpreparedSource Include="@(_BrowserCurrentSource)" Exclude="@(_BrowserPreparedAsset)" />
+    </ItemGroup>
+    <Error Condition="'@(_BrowserUnpreparedSource)' != ''"
+           Text="Browser sources have not been prepared: @(_BrowserUnpreparedSource). Run node scripts/sync-assets.js before building." />
+    <GetFileHash Files="@(_BrowserPreparedAsset)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_VerifiedBrowserAsset" />
+    </GetFileHash>
+    <Error Condition="'%(_VerifiedBrowserAsset.FileHash)' != '%(_VerifiedBrowserAsset.ExpectedHash)'"
+           Text="Prepared browser asset is stale: %(_VerifiedBrowserAsset.Identity). Run node scripts/sync-assets.js before building." />
+  </Target>
+</Project>

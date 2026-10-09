@@ -18,6 +18,9 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Preflight browser compiler, offline bundle, and host-copy outputs before writing assets. Preserve
+  local edits and require validated output paths and previous hashes for obsolete-file cleanup.
+
 - Reload the sandbox's complete browser module graph while preserving its selected story, fixture,
   and theme. Dispose the previous story before reload and preserve valid delivery files after a compiler error.
 - Capture each proxied Orchestrator request's destination and key together so concurrent settings

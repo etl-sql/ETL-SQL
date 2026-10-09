@@ -13,6 +13,8 @@
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Consumer tests use temporary module siblings; they are never product assets. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/*.__test-*.mjs</DefaultItemExcludes>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
     <SignAssembly>true</SignAssembly>
