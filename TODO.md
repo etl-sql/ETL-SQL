@@ -147,6 +147,11 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
   editor/chart/listener disposal. Verify back/forward restoration and native Portal/service journeys.
 - [ ] Catalog/home page composition (`pages/index.js`).
 
+**Portal startup compatibility (2026-10-09):** PII maintenance now resolves tables, keys, and columns
+from the live EF model. It no longer queries the removed PascalCase table names after the schema
+migration. Four SQLite regressions cover all eight encrypted fields, quoted mapped identifiers,
+idempotent reruns, and independent key rings. Final native Portal and whole-candidate gates remain open.
+
 **Orchestrator activity storage:** The Core contract and relational-store implementation provide
 lease-fenced run state and tenant-scoped, distinct-job UTC-day outcome membership. Thirteen focused
 SQLite checks pass, covering identity reuse, time offsets, expired/reclaimed leases, cancellation,

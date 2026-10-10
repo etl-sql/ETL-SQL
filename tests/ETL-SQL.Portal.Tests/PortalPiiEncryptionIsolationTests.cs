@@ -80,7 +80,7 @@ public sealed class PortalPiiEncryptionIsolationTests : IDisposable
             await connection.OpenAsync();
 
         await using DbCommand command = connection.CreateCommand();
-        command.CommandText = "SELECT \"Email\" FROM \"AspNetUsers\" WHERE \"UserName\" = 'shared_user'";
+        command.CommandText = "SELECT \"email\" FROM \"asp_net_users\" WHERE \"user_name\" = 'shared_user'";
         return (string)(await command.ExecuteScalarAsync())!;
     }
 

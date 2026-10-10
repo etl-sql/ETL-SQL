@@ -1,6 +1,7 @@
 using System.Data;
 using ETL_SQL.Portal.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace ETL_SQL.Portal.Services;
 
@@ -8,17 +9,37 @@ public static class PiiColumnEncryptionMaintenance
 {
     private sealed record ColumnSpec(string Table, string KeyColumn, string Column);
 
-    private static readonly ColumnSpec[] Columns =
+    private static readonly (Type EntityType, string Property)[] Properties =
     [
-        new("AspNetUsers", "Id", "Email"),
-        new("AspNetUsers", "Id", "NormalizedEmail"),
-        new("AspNetUsers", "Id", "FirstName"),
-        new("AspNetUsers", "Id", "LastName"),
-        new("AspNetUsers", "Id", "PhoneNumber"),
-        new("Subscriptions", "Id", "Recipients"),
-        new("ReportAlerts", "Id", "Recipient"),
-        new("SubscriptionDeliveries", "Id", "Recipients")
+        (typeof(PortalUser), nameof(PortalUser.Email)),
+        (typeof(PortalUser), nameof(PortalUser.NormalizedEmail)),
+        (typeof(PortalUser), nameof(PortalUser.FirstName)),
+        (typeof(PortalUser), nameof(PortalUser.LastName)),
+        (typeof(PortalUser), nameof(PortalUser.PhoneNumber)),
+        (typeof(Subscription), nameof(Subscription.Recipients)),
+        (typeof(ReportAlert), nameof(ReportAlert.Recipient)),
+        (typeof(SubscriptionDelivery), nameof(SubscriptionDelivery.Recipients))
     ];
+
+    private static ColumnSpec ResolveColumn(PortalDbContext db, Type type, string propertyName)
+    {
+        var entity = db.Model.FindEntityType(type)
+            ?? throw new InvalidOperationException($"PII entity mapping is missing: {type.Name}.");
+        var table = StoreObjectIdentifier.Create(entity, StoreObjectType.Table)
+            ?? throw new InvalidOperationException($"PII table mapping is missing: {type.Name}.");
+        var key = entity.FindPrimaryKey()?.Properties.Single()
+            ?? throw new InvalidOperationException($"PII key mapping is missing: {type.Name}.");
+        var column = entity.FindProperty(propertyName)?.GetColumnName(table)
+            ?? throw new InvalidOperationException($"PII property mapping is missing: {type.Name}.{propertyName}.");
+        var keyColumn = key.GetColumnName(table)
+            ?? throw new InvalidOperationException($"PII key column mapping is missing: {type.Name}.");
+        var tableName = QuoteIdentifier(table.Name);
+        if (table.Schema is not null) tableName = QuoteIdentifier(table.Schema) + "." + tableName;
+        return new ColumnSpec(tableName, QuoteIdentifier(keyColumn), QuoteIdentifier(column));
+    }
+
+    // Both Portal catalog providers (SQLite and PostgreSQL) use SQL double-quoted identifiers.
+    private static string QuoteIdentifier(string name) => "\"" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
 
     public static async Task<int> EncryptExistingPlaintextAsync(
         PortalDbContext db,
@@ -35,8 +56,9 @@ public static class PiiColumnEncryptionMaintenance
         {
             var updated = 0;
             await using var transaction = await connection.BeginTransactionAsync(ct);
-            foreach (var column in Columns)
+            foreach (var (entityType, property) in Properties)
             {
+                var column = ResolveColumn(db, entityType, property);
                 var rows = await ReadColumnAsync(connection, transaction, column, ct);
                 foreach (var (id, storedValue) in rows)
                 {
@@ -79,8 +101,8 @@ public static class PiiColumnEncryptionMaintenance
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText =
-            $"SELECT \"{column.KeyColumn}\", \"{column.Column}\" FROM \"{column.Table}\" " +
-            $"WHERE \"{column.Column}\" IS NOT NULL AND \"{column.Column}\" <> ''";
+            $"SELECT {column.KeyColumn}, {column.Column} FROM {column.Table} " +
+            $"WHERE {column.Column} IS NOT NULL AND {column.Column} <> ''";
 
         var rows = new List<(long, string?)>();
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -101,7 +123,7 @@ public static class PiiColumnEncryptionMaintenance
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText =
-            $"UPDATE \"{column.Table}\" SET \"{column.Column}\" = @value WHERE \"{column.KeyColumn}\" = @id";
+            $"UPDATE {column.Table} SET {column.Column} = @value WHERE {column.KeyColumn} = @id";
 
         var valueParameter = command.CreateParameter();
         valueParameter.ParameterName = "@value";

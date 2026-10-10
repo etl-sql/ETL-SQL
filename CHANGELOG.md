@@ -21,6 +21,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Resolve startup PII maintenance table and column names from the live EF mappings so encryption
+  maintenance continues after the snake_case schema migration.
 - Restore the locked browser compiler and prepare assets before CI/release/certification build
   steps. Keep release-tag validation before dependency restore and run all consumer checks in CI.
 - Add lease-fenced scheduled-job activity storage contracts and a tenant-scoped, distinct-job

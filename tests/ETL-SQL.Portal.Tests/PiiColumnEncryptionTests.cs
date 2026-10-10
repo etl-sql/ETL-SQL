@@ -92,7 +92,7 @@ public sealed class PiiColumnEncryptionTests : IDisposable
         {
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT Email, FirstName, LastName, PhoneNumber FROM AspNetUsers WHERE UserName = 'test_user_pii'";
+            command.CommandText = "SELECT email, first_name, last_name, phone_number FROM asp_net_users WHERE user_name = 'test_user_pii'";
             using var reader = await command.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
 
@@ -149,26 +149,41 @@ public sealed class PiiColumnEncryptionTests : IDisposable
         db.Users.Add(user);
         db.Folders.Add(new Folder { Id = 1, Name = "Root", Path = "/" });
         db.Reports.Add(new Report { Id = 1, Name = "Legacy Report", ScriptPath = "legacy.etlsql", FolderId = 1, CreatedBy = 1 });
-        db.Subscriptions.Add(new Subscription { ReportId = 1, UserId = 1, Recipients = "encrypted-sub@example.com", SmtpAlias = "smtp" });
+        var subscription = new Subscription { ReportId = 1, UserId = 1, Recipients = "encrypted-sub@example.com", SmtpAlias = "smtp" };
+        db.Subscriptions.Add(subscription);
         db.ReportAlerts.Add(new ReportAlert { ReportId = 1, OwnerId = 1, Name = "Legacy Alert", Recipient = "encrypted-alert@example.com" });
         await db.SaveChangesAsync();
 
+        db.SubscriptionDeliveries.Add(new SubscriptionDelivery
+        {
+            SubscriptionId = subscription.Id,
+            DeliveryId = "delivery-pii-maintenance",
+            TriggerKey = "manual:pii-maintenance",
+            RecipientKey = "pii-maintenance-recipient",
+            Recipients = "encrypted-delivery@example.com"
+        });
+        await db.SaveChangesAsync();
+
         await db.Database.ExecuteSqlRawAsync("""
-            UPDATE "AspNetUsers"
-            SET "Email" = 'legacy@example.com',
-                "NormalizedEmail" = 'LEGACY@EXAMPLE.COM',
-                "FirstName" = 'Legacy',
-                "LastName" = 'Person',
-                "PhoneNumber" = '555-0111'
-            WHERE "UserName" = 'legacy_user';
+            UPDATE "asp_net_users"
+            SET "email" = 'legacy@example.com',
+                "normalized_email" = 'LEGACY@EXAMPLE.COM',
+                "first_name" = 'Legacy',
+                "last_name" = 'Person',
+                "phone_number" = '555-0111'
+            WHERE "user_name" = 'legacy_user';
             """);
         await db.Database.ExecuteSqlRawAsync("""
-            UPDATE "Subscriptions"
-            SET "Recipients" = 'legacy-sub@example.com';
+            UPDATE "subscriptions"
+            SET "recipients" = 'legacy-sub@example.com';
             """);
         await db.Database.ExecuteSqlRawAsync("""
-            UPDATE "ReportAlerts"
-            SET "Recipient" = 'legacy-alert@example.com';
+            UPDATE "report_alerts"
+            SET "recipient" = 'legacy-alert@example.com';
+            """);
+        await db.Database.ExecuteSqlRawAsync("""
+            UPDATE "subscription_deliveries"
+            SET "recipients" = 'legacy-delivery@example.com';
             """);
 
         var updated = await PiiColumnEncryptionMaintenance.EncryptExistingPlaintextAsync(
@@ -176,7 +191,9 @@ public sealed class PiiColumnEncryptionTests : IDisposable
             _protector,
             NullLogger.Instance);
 
-        Assert.True(updated >= 7);
+        Assert.Equal(8, updated);
+        Assert.Equal(0, await PiiColumnEncryptionMaintenance.EncryptExistingPlaintextAsync(
+            db, _protector, NullLogger.Instance));
 
         await using (var command = db.Database.GetDbConnection().CreateCommand())
         {
@@ -184,11 +201,12 @@ public sealed class PiiColumnEncryptionTests : IDisposable
                 await command.Connection.OpenAsync();
 
             command.CommandText = """
-                SELECT u."Email", u."FirstName", s."Recipients", a."Recipient"
-                FROM "AspNetUsers" u
-                CROSS JOIN "Subscriptions" s
-                CROSS JOIN "ReportAlerts" a
-                WHERE u."UserName" = 'legacy_user'
+                SELECT u."email", u."first_name", s."recipients", a."recipient", d."recipients"
+                FROM "asp_net_users" u
+                CROSS JOIN "subscriptions" s
+                CROSS JOIN "report_alerts" a
+                CROSS JOIN "subscription_deliveries" d
+                WHERE u."user_name" = 'legacy_user'
                 """;
             await using var reader = await command.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
@@ -196,6 +214,7 @@ public sealed class PiiColumnEncryptionTests : IDisposable
             Assert.StartsWith("dp:", reader.GetString(1), StringComparison.Ordinal);
             Assert.StartsWith("dp:", reader.GetString(2), StringComparison.Ordinal);
             Assert.StartsWith("dp:", reader.GetString(3), StringComparison.Ordinal);
+            Assert.StartsWith("dp:", reader.GetString(4), StringComparison.Ordinal);
         }
 
         await using var dbRead = new PortalDbContext(options);
@@ -206,5 +225,40 @@ public sealed class PiiColumnEncryptionTests : IDisposable
         Assert.Equal("555-0111", readUser.PhoneNumber);
         Assert.Equal("legacy-sub@example.com", (await dbRead.Subscriptions.SingleAsync()).Recipients);
         Assert.Equal("legacy-alert@example.com", (await dbRead.ReportAlerts.SingleAsync()).Recipient);
+        Assert.Equal("legacy-delivery@example.com", (await dbRead.SubscriptionDeliveries.SingleAsync()).Recipients);
+    }
+
+    [Fact]
+    public async Task Maintenance_UsesMappedTableKeyAndColumnNamesWithQuotedIdentifiers()
+    {
+        var options = new DbContextOptionsBuilder<PortalDbContext>()
+            .UseSqlite($"Data Source={Path.Combine(_scratch, "renamed.db")}")
+            .UsePortalEncryption(_protector)
+            .Options;
+        await using var db = new RenamedPiiContext(options);
+        await db.Database.EnsureCreatedAsync();
+        db.Users.Add(new PortalUser { UserName = "mapped_user", Email = "initial@example.com" });
+        await db.SaveChangesAsync();
+        await db.Database.ExecuteSqlRawAsync(""""
+            UPDATE "PII ""Users""" SET "Mail ""Address""" = 'mapped@example.com';
+            """");
+
+        Assert.Equal(1, await PiiColumnEncryptionMaintenance.EncryptExistingPlaintextAsync(
+            db, _protector, NullLogger.Instance));
+        Assert.Equal(0, await PiiColumnEncryptionMaintenance.EncryptExistingPlaintextAsync(
+            db, _protector, NullLogger.Instance));
+        db.ChangeTracker.Clear();
+        Assert.Equal("mapped@example.com", (await db.Users.SingleAsync()).Email);
+    }
+
+    private sealed class RenamedPiiContext(DbContextOptions<PortalDbContext> options) : PortalDbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder builder)
+        {
+            base.OnModelCreating(builder);
+            builder.Entity<PortalUser>().ToTable("PII \"Users\"");
+            builder.Entity<PortalUser>().Property(user => user.Id).HasColumnName("User \"Key\"");
+            builder.Entity<PortalUser>().Property(user => user.Email).HasColumnName("Mail \"Address\"");
+        }
     }
 }
