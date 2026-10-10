@@ -188,5 +188,20 @@ class load and shared background-service state from its startup/shutdown observa
   focused dialect/suggestion run passed 30 tests, including both restoration regressions.
 
 
+- **v0.21.0 — green slices are not a green lane.** The first full Portal and browser runs after a
+  schema rename found 21 and 3 failures behind per-slice evidence that was all passing. Three of
+  the shapes do not announce themselves as naming errors: a command interceptor matching the old
+  `INSERT INTO` text never fires, so its test fails as a 10-second timeout; an assertion over
+  captured SQL fails as an empty collection; and a Playwright route glob written for a replaced
+  URL stops intercepting, so a failure-state test exercises the success path. After a rename,
+  search the tests for raw SQL, interceptor string matches, and route globs before reading a
+  timeout as load.
+
+  One browser failure remains open:
+  `AdminSubscriptionsPageTests.Subscriptions_ParametersPagingStatusAndDeletePersistThroughTheNativePage`
+  timed out waiting for a page-one row after clicking Previous in the full lane (once in one run)
+  and passes alone. The cause is not established; do not add a retry before it is.
+
+
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
 diagnostics belong in generated evidence, not a new release-specific tracking file.

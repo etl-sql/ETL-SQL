@@ -47,8 +47,9 @@ public sealed class AdminPanelFailureStateTests(PortalAdminFixture fixture)
         await OpenAclAsync(page, first);
         var firstMarkup = await page.Locator("#aclTableWrap").InnerHTMLAsync();
 
-        // Now break only the ACL read, and open the other folder's permissions.
-        await page.RouteAsync("**/api/folders/*/acl", route => route.AbortAsync());
+        // Now break only the ACL read, and open the other folder's permissions. The panel reads
+        // the versioned catalog; a glob for the bare /acl route would leave that read working.
+        await page.RouteAsync("**/api/folders/*/acl/catalog", route => route.AbortAsync());
         await OpenAclAsync(page, second);
         await page.WaitForTimeoutAsync(600);
 
