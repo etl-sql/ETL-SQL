@@ -166,6 +166,15 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
   service's own `/management/stop` checks only the API key; a job created in shared-schedule mode
   still also sends its inline interval; and the panel has not been reviewed visually.
 - [ ] Catalog/home page composition (`pages/index.js`).
+  Reader subscriptions now have strict owners (2026-10-11): `reader-subscriptions.ts` and its view
+  module reuse the administrator page's subscription client, validators, and parameter editor, whose
+  field rows moved to `subscription-parameter-fields.ts`. The production page now runs in the sandbox
+  (`reader-page` story) against a subscription service fixture. Nineteen sandbox checks
+  (mutation-tested) and the reader subscription consumer check pass.
+  Remaining in `pages/index.js` (1,520 lines): the report viewer with run/poll and its structure,
+  export, dependency, and history dialogs; the library (folder tree, lists, search, favorites,
+  recently viewed); and the page owner with hash routing and governance mounting. The run dialog
+  still uses the page's own parameter-field helpers.
 
 **Whole-tree lane check (2026-10-10):** The first full runs against the complete change found the
 lanes red. Portal.Tests failed 21 of 1,535: the snake_case migration could not be applied on

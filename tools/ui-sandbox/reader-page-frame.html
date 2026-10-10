@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Catalog page sandbox frame</title></head>
+<body>
+<script type="module">
+  import { mountReaderPageFrame } from './stories/reader-page.story.js';
+  await mountReaderPageFrame(new URLSearchParams(location.search).get('fixture') || 'healthy');
+</script>
+</body>
+</html>

@@ -5,6 +5,7 @@
 // @ts-nocheck — generated implementation; check the TypeScript owner.
 import { adminSubscriptionsApi } from './admin-subscriptions-api.js';
 import { asError } from './http-error.js';
+import { readParameterDraft, renderParameterInputs } from './subscription-parameter-fields.js';
 export function createSubscriptionParameterEditor(doc, alive, canWrite, saveDraft) {
     function element(id, kind) {
         const value = doc.getElementById(id);
@@ -57,61 +58,9 @@ export function createSubscriptionParameterEditor(doc, alive, canWrite, saveDraf
             const definitions = await adminSubscriptionsApi.parameters(subscription.reportId, pending.signal);
             if (!current(opened))
                 return;
-            fields.replaceChildren();
-            inputs = [];
+            inputs = renderParameterInputs(doc, fields, definitions, values, `subscription-parameter-${opened}`, listeners.signal);
             if (!definitions.length)
                 fields.textContent = 'This report has no input parameters.';
-            definitions.forEach((parameter, index) => {
-                const row = doc.createElement('div');
-                row.className = 'param-row';
-                const heading = doc.createElement('div');
-                heading.className = 'param-heading';
-                const input = doc.createElement('input');
-                input.className = 'param-input';
-                input.type = 'text';
-                input.id = `subscription-parameter-${opened}-${index}`;
-                input.value = Object.hasOwn(values, parameter.name) ? values[parameter.name] : parameter.default ?? '';
-                const label = doc.createElement('label');
-                label.className = 'param-label';
-                label.htmlFor = input.id;
-                label.textContent = parameter.name;
-                const type = doc.createElement('span');
-                type.className = 'param-type';
-                type.textContent = parameter.type;
-                const requirement = doc.createElement('span');
-                requirement.className = parameter.required ? 'required-marker' : 'optional-marker';
-                requirement.textContent = parameter.required ? 'Required' : 'Optional';
-                input.setAttribute('aria-required', String(parameter.required));
-                heading.append(label, type, requirement);
-                row.append(heading);
-                if (parameter.description) {
-                    const hint = doc.createElement('div');
-                    hint.className = 'param-hint';
-                    hint.id = `${input.id}-hint`;
-                    hint.textContent = parameter.description;
-                    input.setAttribute('aria-describedby', hint.id);
-                    row.append(hint);
-                }
-                row.append(input);
-                fields.append(row);
-                inputs.push({ parameter, input });
-                if (parameter.type.toUpperCase() === 'RELDATE') {
-                    input.placeholder = 'e.g. D-1, M-1, Y-1';
-                    const picks = doc.createElement('div');
-                    picks.className = 'reldate-quickpicks';
-                    ['D-0', 'D-1', 'D-7', 'D-30', 'M-1', 'M-3', 'Y-1'].forEach(value => {
-                        const button = doc.createElement('button');
-                        button.type = 'button';
-                        button.textContent = value === 'D-0' ? 'Today' : value;
-                        button.addEventListener('click', () => { if (current(opened)) {
-                            input.value = value;
-                            input.focus();
-                        } }, { signal: listeners.signal });
-                        picks.append(button);
-                    });
-                    row.append(picks);
-                }
-            });
             inputs[0]?.input.focus();
         }
         catch (failure) {
@@ -130,20 +79,16 @@ export function createSubscriptionParameterEditor(doc, alive, canWrite, saveDraf
     async function submit() {
         if (!alive() || !visible() || !canWrite() || !target || !inputs)
             return;
-        const opened = sequence, snapshot = { ...target }, entries = [];
+        const opened = sequence, snapshot = { ...target };
         error.classList.remove('show');
-        for (const { parameter, input } of inputs) {
-            const value = input.value.trim();
-            if (!value && parameter.required && !parameter.default?.trim()) {
-                message(`${parameter.name} requires a value.`);
-                input.focus();
-                return;
-            }
-            if (value)
-                entries.push([parameter.name, value]);
+        const draft = readParameterDraft(inputs);
+        if ('missing' in draft) {
+            message(`${draft.missing.parameter.name} requires a value.`);
+            draft.missing.input.focus();
+            return;
         }
         // Capture the complete draft before a write or any other asynchronous work begins.
-        await saveDraft(snapshot, Object.fromEntries(entries), () => { if (current(opened))
+        await saveDraft(snapshot, { ...draft.values }, () => { if (current(opened))
             close(); }, value => { if (current(opened))
             message(value); });
     }

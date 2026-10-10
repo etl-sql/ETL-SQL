@@ -83,6 +83,16 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Report unavailable Orchestrator schedule and notification catalogs as unavailable. A failed or
   refused read returned an empty list, so the page showed "No shared schedules defined yet" and a
   count of zero. The Portal now answers 503 or 403, and the page clears stale rows and counts.
+- Require a report's parameters before a reader can subscribe to it. When the parameter definitions
+  could not be read, the Subscribe dialog hid the section and created the subscription without
+  them, and the parameter editor fell back to free-text fields. Both now say the definitions are
+  unavailable and do not save. A dialog opened for one report can no longer show another's parameters.
+- Confirm a reader's pause, resume, delete, and parameter changes by receipt against the loaded
+  version, one change per subscription at a time, and say when an outcome is unconfirmed. A failed
+  subscription list shows the reason and a retry instead of a generic message, and a list read that
+  finishes after the reader moved to another view no longer replaces that view.
+- Offer only the Link format when no delivery connection can be used. A failed connection read left
+  an "Error loading connections" option that could still be submitted.
 - Restrict stopping the Orchestrator service from the Portal to administrators, and confirm the
   service's answer. The route accepted any Orchestrator role, including read-only viewers, and
   answered "Stop signal sent" whatever the service replied. The page's Stop button, which had no

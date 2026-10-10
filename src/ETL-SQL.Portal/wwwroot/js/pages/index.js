@@ -5,8 +5,8 @@
  * the linters and the parse check can all see. Behaviour is unchanged.
  */
 
-import { adminApi, auth, authApi, catalogApi, dataQualityApi, foldersApi, governanceApi, reportsApi, studioApi, subscriptionsApi } from '../api.js';
-import { renderSubscriptionHistory } from '../subscription-history-ui.js';
+import { adminApi, auth, authApi, catalogApi, dataQualityApi, foldersApi, governanceApi, reportsApi, studioApi } from '../api.js';
+import { createReaderSubscriptions } from '../reader-subscriptions.js';
 import { applyPortalBranding, initTheme } from '../branding.js';
 import { lineageRowsToCsv, renderDependencies, renderLineageRow } from '../lineage-ui.js';
 import { createLineageCatalog } from '../lineage-catalog.js';
@@ -178,8 +178,6 @@ async function init() {
     });
   });
 
-  wireSubscribeModal();
-  wireEditParamsModal();
   await loadFolderTree();
   openReportHashView();
 }
@@ -274,6 +272,8 @@ function openReportHashView() {
 }
 
 function setSidebarViewActive(view, govMode = 'quarantine') {
+  // Any other view owns the main area now; a subscription read still in flight must not repaint it.
+  if (view !== 'subscriptions') readerSubscriptions.leave();
   const isGov = ['governance', 'lineage', 'quarantine'].includes(view) ||
                 view.startsWith('governance/') || view.startsWith('lineage/');
 
@@ -926,6 +926,7 @@ function timeAgo(value) {
 
 // ── Report viewer ──────────────────────────────────────────────────────────────
 async function openReport(id, isPushState = true, initialPage = null) {
+  readerSubscriptions.leave();
   currentReportId = id;
   if (initialPage) currentActivePage = initialPage;
   if (isPushState) {
@@ -1407,295 +1408,21 @@ document.addEventListener('keydown', e => {
   if (openModal) /** @type {HTMLElement} */ (openModal).style.display = 'none';
 });
 
-// ── Subscribe modal ────────────────────────────────────────────────────────────
-let _subReportId = null;
-let _subParams   = [];    // ReportParameterDto[]
-
-async function openSubscribeModal(reportId) {
-  _subReportId = reportId;
-  _subParams   = [];
-
-  // Reset form
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('sub-name')).value     = '';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('sub-schedule')).value = 'Daily';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('sub-attime')).value   = '';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('sub-format')).value   = 'PDF';
-  /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('sub-email')).value    = '';
-  document.getElementById('sub-error').textContent = '';
-  document.getElementById('sub-error').classList.remove('show');
-  document.getElementById('sub-params-section').style.display = 'none';
-  document.getElementById('sub-params-fields').innerHTML = '';
-
-  // Load SMTP aliases into dropdown
-  const $smtp = document.getElementById('sub-smtp');
-  try {
-    const aliases = await subscriptionsApi.smtpAliases();
-    $smtp.innerHTML = aliases.length
-      ? aliases.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')
-      : '<option value="">No SMTP connections configured</option>';
-  } catch {
-    $smtp.innerHTML = '<option value="">Error loading connections</option>';
+// ── Subscriptions ─────────────────────────────────────────────────────────────
+const readerSubscriptions = createReaderSubscriptions({
+  root: document,
+  notify: (message, options) => { ETLSQLFeedback.notify(message, options); },
+  confirm: (message, options) => ETLSQLFeedback.confirm(message, options),
+  entered: () => {
+    clearFolderSelection();
+    setSidebarViewActive('subscriptions');
+    currentFolderId = null;
+    currentFolderName = 'My Subscriptions';
   }
-
-  // Fetch report INPUT parameters
-  try {
-    _subParams = await reportsApi.getParameters(reportId);
-    if (_subParams.length) {
-      document.getElementById('sub-params-section').style.display = '';
-      renderParamFields('sub-params-fields', _subParams, {});
-    }
-  } catch { /* parameters section stays hidden */ }
-
-  document.getElementById('subscribeModal').style.display = 'flex';
-}
-
-function wireSubscribeModal() {
-  // Toggle SMTP group visibility based on format
-  document.getElementById('sub-format').addEventListener('change', function() {
-    document.getElementById('sub-smtp-group').style.display =
-      /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (this).value === 'Link' ? 'none' : '';
-  });
-
-  document.getElementById('sub-cancelBtn').addEventListener('click', () => {
-    document.getElementById('subscribeModal').style.display = 'none';
-  });
-
-  document.getElementById('sub-saveBtn').addEventListener('click', async () => {
-    const $err = document.getElementById('sub-error');
-    $err.classList.remove('show');
-
-    const format = /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('sub-format')).value;
-    const smtp   = format !== 'Link' ? /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('sub-smtp')).value : null;
-
-    // Collect parameters from dynamic fields
-    const validation = validateParamFields('sub-params-fields');
-    if (!validation.ok) {
-      $err.textContent = 'Complete the required report parameters before creating the subscription.';
-      $err.classList.add('show');
-      return;
-    }
-    const parameters = validation.values;
-
-    const body = {
-      reportId:       _subReportId,
-      name:           /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('sub-name')).value.trim() || null,
-      schedule:       /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('sub-schedule')).value,
-      format,
-      smtpAlias:      smtp || null,
-      recipientEmail: /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('sub-email')).value.trim() || null,
-      atTime:         /** @type {HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement} */ (document.getElementById('sub-attime')).value || null,
-      parameters:     Object.keys(parameters).length ? parameters : null
-    };
-
-    try {
-      await subscriptionsApi.create(body);
-      document.getElementById('subscribeModal').style.display = 'none';
-      ETLSQLFeedback.notify('Future deliveries are now scheduled.', { title: 'Subscription created', tone: 'success', auditAction: 'subscription.create' });
-    } catch (err) {
-      $err.textContent = err.message || 'Failed to create subscription.';
-      $err.classList.add('show');
-    }
-  });
-}
-
-// ── My Subscriptions view ──────────────────────────────────────────────────────
-async function showMySubscriptions() {
-  clearFolderSelection();
-  setSidebarViewActive('subscriptions');
-  currentFolderId = null;
-  currentFolderName = 'My Subscriptions';
-  const $main = document.getElementById('mainContent');
-  $main.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading subscriptions…</span></div>`;
-
-  try {
-    const subs = await subscriptionsApi.list();
-    mySubscriptions = subs;
-    renderMySubscriptions(subs);
-  } catch {
-    $main.innerHTML = `
-      <div class="empty-state empty-state-panel empty-state-error">
-        <div class="empty-state-icon empty-state-icon-alert" aria-hidden="true"></div>
-        <h2>Subscriptions did not load</h2>
-        <p>Refresh the page or try again after checking the portal connection.</p>
-      </div>`;
-  }
-}
-
-let mySubscriptions = [];
-
-function renderMySubscriptions(subs) {
-  const $main = document.getElementById('mainContent');
-  const activeCount = subs.filter(s => s.isActive).length;
-  const rows = subs.map(s => `
-    <tr>
-      <td>
-        <div class="sub-name">${esc(s.name || s.reportName)}</div>
-        <div class="sub-report">${esc(s.reportName)}</div>
-      </td>
-      <td>
-        <span class="sub-format">${esc(s.format)}</span>
-        <div class="sub-report">${esc(s.recipients || (s.format === 'Link' ? 'Portal link' : 'Profile email'))}</div>
-      </td>
-      <td>
-        <div>${esc(s.schedule || (s.deliverOnRefresh ? 'On refresh' : 'Manual'))}</div>
-        <div class="sub-report">Next: ${esc(formatOptionalDate(s.nextRunAt))}</div>
-      </td>
-      <td class="text-sm text-muted">${esc(s.parameterSummary || 'Default parameters')}</td>
-      <td>
-        <span class="chip ${s.isActive ? 'chip-active' : 'chip-inactive'}">${s.isActive ? 'Active' : 'Paused'}</span>
-        ${s.failCount ? `<div class="sub-warning">${s.failCount} failed send${s.failCount === 1 ? '' : 's'}</div>` : `<div class="sub-report">Last: ${esc(formatOptionalDate(s.lastSentAt))}</div>`}
-      </td>
-      <td>
-        <div class="table-actions">
-          <button class="btn btn-outline btn-sm" data-action="edit-params" data-id="${s.id}"
-                  data-report-id="${s.reportId}" data-name="${escAttr(s.name || s.reportName)}"
-                  data-params='${escAttr(JSON.stringify(s.parameters || {}))}'>
-            Edit Params
-          </button>
-          <button class="btn btn-outline btn-sm" data-action="history" data-id="${s.id}"
-                  data-name="${escAttr(s.name || s.reportName)}">History</button>
-          <button class="btn btn-outline btn-sm" data-action="toggle" data-id="${s.id}"
-                  data-active="${s.isActive}">${s.isActive ? 'Pause' : 'Resume'}</button>
-          <button class="btn btn-outline btn-sm btn-danger-soft" data-action="delete" data-id="${s.id}">Delete</button>
-        </div>
-      </td>
-    </tr>`).join('');
-
-  $main.innerHTML = `
-    <div class="library-toolbar">
-      <div class="library-title">
-        <span class="library-kicker">Delivery</span>
-        <h2>My Subscriptions</h2>
-      </div>
-      <span class="badge badge-ok">${activeCount} active</span>
-      <span class="badge badge-refresh">${subs.length} total</span>
-      <div class="library-toolbar-spacer"></div>
-      <button class="btn btn-outline" id="refreshSubscriptionsBtn" type="button">Refresh</button>
-    </div>
-    <div class="subs-table-wrap">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Subscription</th><th>Delivery</th><th>Schedule</th>
-            <th>Parameters</th><th>Status</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>${rows || `<tr><td colspan="6">
-          <div class="empty-state empty-state-table">
-            <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
-            <h2>No subscriptions yet</h2>
-            <p>Open a report and choose Subscribe to schedule delivery.</p>
-          </div>
-        </td></tr>`}</tbody>
-      </table>
-    </div>`;
-
-  document.getElementById('refreshSubscriptionsBtn')?.addEventListener('click', () => showMySubscriptions());
-  $main.querySelectorAll('[data-action]').forEach(btn => {
-    btn.addEventListener('click', () => handleSubAction(btn));
-  });
-}
-
-async function handleSubAction(btn) {
-  const id     = +btn.dataset.id;
-  const action = btn.dataset.action;
-  if (action === 'delete') {
-    if (!await ETLSQLFeedback.confirm('Delete this subscription?', { title: 'Delete subscription', impact: 'This stops future deliveries but does not remove generated report snapshots.', confirmLabel: 'Delete subscription', danger: true, auditAction: 'subscription.delete' })) return;
-    const subscription = mySubscriptions.find(x => x.id === id);
-    try { await subscriptionsApi.delete(id, subscription?.version); showMySubscriptions(); }
-    catch (err) { ETLSQLFeedback.notify(err.message, { title: 'Subscription not deleted', tone: 'error' }); }
-  } else if (action === 'toggle') {
-    const isActive = btn.dataset.active === 'true';
-    const subscription = mySubscriptions.find(x => x.id === id);
-    try { await subscriptionsApi.update(id, { isActive: !isActive }, subscription?.version); showMySubscriptions(); }
-    catch (err) { ETLSQLFeedback.notify(err.message, { title: 'Subscription not updated', tone: 'error' }); }
-  } else if (action === 'history') {
-    showSubscriptionHistory(id, btn.dataset.name);
-  } else if (action === 'edit-params') {
-    const currentParams = JSON.parse(btn.dataset.params || '{}');
-    const reportId      = +btn.dataset.reportId;
-    const label         = btn.dataset.name;
-    const subscription = mySubscriptions.find(x => x.id === id);
-    openEditParamsModal(id, reportId, label, currentParams, subscription?.version, () => showMySubscriptions());
-  }
-}
-
-async function showSubscriptionHistory(id, name) {
-  const $modal = document.getElementById('subscriptionHistoryModal');
-  const $body = document.getElementById('subscriptionHistoryBody');
-  document.getElementById('subscriptionHistoryTitle').textContent = `${name || 'Subscription'} Delivery History`;
-  $modal.style.display = 'flex';
-  $body.innerHTML = '<div class="loading-state"><span class="spinner"></span><span>Loading delivery history…</span></div>';
-  try {
-    const history = await subscriptionsApi.history(id);
-    $body.innerHTML = renderSubscriptionHistory(history, {
-      esc,
-      formatDate: value => value ? new Date(value).toLocaleString() : '—',
-    });
-  } catch (err) {
-    $body.innerHTML = `<div class="empty-state">Failed to load delivery history: ${esc(err.message)}</div>`;
-  }
-}
-
-document.getElementById('subscriptionHistoryCloseBtn').addEventListener('click', () => {
-  document.getElementById('subscriptionHistoryModal').style.display = 'none';
 });
-
-// ── Edit Parameters modal ─────────────────────────────────────────────────────
-let _epSubId      = null;
-let _epParams     = [];
-let _epOnSaved    = null;
-let _epVersion    = null;
-
-async function openEditParamsModal(subId, reportId, label, currentValues, version, onSaved) {
-  _epSubId   = subId;
-  _epParams  = [];
-  _epOnSaved = onSaved;
-  _epVersion = version;
-
-  document.getElementById('ep-subtitle').textContent = label;
-  document.getElementById('ep-error').textContent    = '';
-  document.getElementById('ep-error').classList.remove('show');
-  document.getElementById('ep-fields').innerHTML = '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading parameters…</span></div>';
-  document.getElementById('editParamsModal').style.display = 'flex';
-
-  try {
-    _epParams = await reportsApi.getParameters(reportId);
-  } catch { _epParams = []; }
-
-  if (!_epParams.length) {
-    // Fall back to editing existing params as plain key-value pairs
-    _epParams = Object.keys(currentValues).map(k => ({ name: k, type: 'TEXT', default: currentValues[k], required: false, description: null }));
-  }
-
-  renderParamFields('ep-fields', _epParams, currentValues);
-}
-
-function wireEditParamsModal() {
-  document.getElementById('ep-cancelBtn').addEventListener('click', () => {
-    document.getElementById('editParamsModal').style.display = 'none';
-  });
-  document.getElementById('ep-saveBtn').addEventListener('click', async () => {
-    const $err = document.getElementById('ep-error');
-    $err.classList.remove('show');
-    const validation = validateParamFields('ep-fields');
-    if (!validation.ok) {
-      $err.textContent = 'Complete the required report parameters before saving.';
-      $err.classList.add('show');
-      return;
-    }
-    const parameters = validation.values;
-    try {
-      await subscriptionsApi.update(_epSubId, { parameters: Object.keys(parameters).length ? parameters : null }, _epVersion);
-      document.getElementById('editParamsModal').style.display = 'none';
-      _epOnSaved?.();
-    } catch (err) {
-      $err.textContent = err.message || 'Failed to save parameters.';
-      $err.classList.add('show');
-    }
-  });
-}
-
+window.addEventListener('pagehide', () => readerSubscriptions.dispose(), { once: true });
+function openSubscribeModal(reportId) { void readerSubscriptions.subscribe(reportId); }
+function showMySubscriptions() { void readerSubscriptions.show(); }
 // ── Parameter field rendering helpers ─────────────────────────────────────────
 const RELDATE_PICKS = ['Today', 'D-1', 'D-7', 'D-30', 'M-1', 'M-3', 'Y-1'];
 
@@ -1780,10 +1507,6 @@ function validateParamFields(containerId) {
     ok = ok && !missing;
   });
   return { ok, values };
-}
-
-function formatOptionalDate(value) {
-  return value ? new Date(value).toLocaleString() : 'Not scheduled';
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────────────

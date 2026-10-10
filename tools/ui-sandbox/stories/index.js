@@ -2,6 +2,7 @@
 import scriptEditor from './script-editor.story.js';
 import orchestratorActivity from './orchestrator-activity.story.js';
 import orchestratorPage from './orchestrator-page.story.js';
+import readerPage from './reader-page.story.js';
 import scriptEditorUnified from './script-editor-unified.story.js';
 import designer from './designer.story.js';
 import constrainedHtmlRuntime from './constrained-html-runtime.story.js';
@@ -60,6 +61,7 @@ const categoryDefaults = {
   'admin-catalog': 'Admin & Fleet',
   'admin-page': 'Admin & Fleet',
   'subscription-history': 'Admin & Fleet',
+  'reader-page': 'Admin & Fleet',
 
   // Control Plane & SaaS
   'control-plane-dashboard': 'Control Plane & SaaS',
@@ -125,6 +127,7 @@ export const rawStories = [
   orchestratorAdmin,
   orchestratorActivity,
   orchestratorPage,
+  readerPage,
   portalOperationalCharts,
   orchestratorRunOverrides,
   orchestratorCheckpointResume,
