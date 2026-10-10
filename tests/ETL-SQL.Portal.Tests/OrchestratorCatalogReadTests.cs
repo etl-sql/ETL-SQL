@@ -115,6 +115,37 @@ public sealed class OrchestratorCatalogReadTests(OrchestratorGrantAdministration
         Assert.Equal(message, (await response.Content.ReadFromJsonAsync<JsonObject>())!["error"]!.GetValue<string>());
     }
 
+    [Fact]
+    public async Task OnlyAnAdministratorMayAskTheServiceToStop()
+    {
+        // The fixture's service is shared, so only the refusals are exercised against it.
+        foreach (var token in new[] { fixture.ManagerToken, fixture.ViewerToken })
+        {
+            using var refused = await fixture.SendAsync(HttpMethod.Post, "/api/orchestrator/service/stop", token);
+            Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        }
+        using var schedules = await fixture.SendAsync(HttpMethod.Get, "/api/orchestrator/schedules", fixture.AdminToken);
+        Assert.Equal(HttpStatusCode.OK, schedules.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.OK, HttpStatusCode.OK)]
+    [InlineData(HttpStatusCode.Forbidden, HttpStatusCode.Forbidden)]
+    [InlineData(HttpStatusCode.InternalServerError, HttpStatusCode.InternalServerError)]
+    public async Task AStopRequestIsConfirmedOnlyWhenTheServiceAcceptsIt(HttpStatusCode service, HttpStatusCode expected)
+    {
+        using var portal = new FailingOrchestratorFactory(service);
+        using var client = portal.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/orchestrator/service/stop");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await AdminTokenAsync(client));
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(expected, response.StatusCode);
+        var body = (await response.Content.ReadFromJsonAsync<JsonObject>())!;
+        Assert.Equal(expected == HttpStatusCode.OK, body["message"] is not null);
+        Assert.Equal(expected != HttpStatusCode.OK, body["error"] is not null);
+    }
+
     private static async Task<HttpResponseMessage> GetAsync(HttpClient client, string token, string catalog)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/orchestrator/{catalog}");

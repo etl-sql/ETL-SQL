@@ -813,11 +813,19 @@ public class OrchestratorController(
 
     // ── Service control ───────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Asks the Orchestrator service to stop. Administrators only: the controller's policy also
+    /// admits read-only viewers, and stopping the scheduler halts every tenant job on the host.
+    /// </summary>
     [HttpPost("service/stop")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> StopService()
     {
         using var resp = await proxy.StopServiceAsync();
         if (resp == null) return StatusCode(503, new { Error = "Orchestrator service unavailable." });
+        if (!resp.IsSuccessStatusCode)
+            return StatusCode((int)resp.StatusCode, new { Error = "The Orchestrator service refused the stop request." });
+        await audit.LogAsync(CurrentUserId, "OrchestratorServiceStopRequested", "OrchestratorService", "orchestrator", null);
         return Ok(new { Message = "Stop signal sent. Service will restart if managed by OS supervisor." });
     }
 }
