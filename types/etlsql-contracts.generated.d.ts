@@ -1131,6 +1131,21 @@ interface JobDataQualityFailure {
     owner?: string | null;
 }
 
+interface JobDataQualityStatus {
+    runId: string;
+    jobName?: string | null;
+    startTime: string;
+    endTime?: string | null;
+    status: string;
+    rowsProcessed: number;
+    rowsWarned: number;
+    rowsQuarantined: number;
+    failedRuleCount: number;
+    freshestValueUtc?: string | null;
+    freshnessState: string;
+    errorSummary?: string | null;
+}
+
 interface JobDefinition {
     name: string;
     script: string;
@@ -1181,6 +1196,32 @@ interface JobDefinitionDto {
     id: string | null;
 }
 
+interface JobDependencyChainDto {
+    jobName: string;
+    nodes: JobDependencyNodeDto[];
+    edges: JobDependencyEdgeDto[];
+    upstream: string[];
+    downstream: string[];
+    sharedSchedules: string[];
+}
+
+interface JobDependencyEdgeDto {
+    from: string;
+    to: string;
+    type: string;
+    detail: string;
+}
+
+interface JobDependencyNodeDto {
+    id: string;
+    name: string;
+    displayName?: string | null;
+    isEnabled: boolean;
+    lastRun?: string | null;
+    nextRun?: string | null;
+    isCurrent: boolean;
+}
+
 interface JobHistoryEntry {
     id: number;
     jobName: string;
@@ -1200,6 +1241,42 @@ interface JobHistoryEntry {
     jobId: string | null;
     tenantId?: string | null;
     hasResumeSession: boolean;
+}
+
+interface JobHistoryEntryDto {
+    id: number;
+    jobName: string;
+    startTime: string;
+    endTime?: string | null;
+    status: string;
+    errorMessage?: string | null;
+    rowsProcessed: number;
+    peakMemoryBytes: number;
+    cpuTimeSeconds: number;
+    scriptHashAtRunTime?: string | null;
+    hashMatched?: boolean | null;
+    rowsQuarantined: number;
+    rowsWarned: number;
+    dataQualityFailures?: string | null;
+    checkpointLabel?: string | null;
+    hasResumeSession: boolean;
+}
+
+interface JobNotificationLinkDto {
+    jobId: string | null;
+    notificationId: string | null;
+    trigger: string;
+    jobName?: string | null;
+    notificationName?: string | null;
+}
+
+interface JobScheduleLinkDto {
+    jobId: string | null;
+    scheduleId: string | null;
+    lastRun?: string | null;
+    nextRun?: string | null;
+    jobName?: string | null;
+    scheduleName?: string | null;
 }
 
 interface JobStateEntryDto {

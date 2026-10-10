@@ -83,6 +83,22 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Report unavailable Orchestrator schedule and notification catalogs as unavailable. A failed or
   refused read returned an empty list, so the page showed "No shared schedules defined yet" and a
   count of zero. The Portal now answers 503 or 403, and the page clears stale rows and counts.
+- Make the Orchestrator job Access panel work. It called its renderer with the wrong arguments
+  and wired buttons the renderer never emitted, so it showed an exception message and grants and
+  ownership could not be administered from the page. Grant, revoke, and owner changes are now
+  confirmed by status, and a refused grant list explains the refusal.
+- Make "Save script" on the Orchestrator job panel work. The editor was created asynchronously
+  and never awaited, so saving threw on click. A save now sends the loaded job version and adopts
+  the new one, so a second save in the same session is not rejected as stale.
+- Keep one job's detail from being drawn under another job. Schedules, notifications, watermarks,
+  history, grants, and tab content belong to the opening that requested them; selecting another
+  job, closing the panel, or leaving the page discards responses still in flight.
+- Report a job's data quality from its latest run. The panel labelled one arbitrary run's counts
+  as totals, showed zeros when a source failed, read fields the service does not send, and showed
+  a "Stewardship Coverage" value that was always "Active". Each source now reports its own failure.
+- Confirm attach, detach, watermark, and resume requests by status before announcing them, and
+  show the service's reason when one is refused. An attach dialog whose catalog cannot be read
+  says so instead of offering an empty list.
 - Report a failed Orchestrator job detail read as unavailable, refused, or missing. Run history,
   attached schedules and notifications, and watermarks answered an empty list when the service
   did not answer, so a job appeared to have no runs and nothing attached.

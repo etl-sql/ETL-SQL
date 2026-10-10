@@ -148,11 +148,19 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
   a reused dialog, and a skipped test dispatch is no longer announced as sent. Eighteen sandbox
   checks (mutation-tested), nine server checks, and the catalog response consumer check pass.
   Schedule and notification writes still carry no version; the service does not accept one.
-  Finish the page owner, validated detail read contracts (linked schedules/notifications, state,
-  history, dependencies, quality, audit, access), authorization exits, attach/detach/state/ACL
-  writes, the create-job dialog, service controls (Stop/Restart have no handlers), script-save
-  version refresh, stale detail/tab reads, and complete editor/chart/listener disposal. Verify
-  back/forward restoration and native Portal/service journeys.
+  The job detail panel now has a strict owner and response validators (2026-10-10). Detail reads
+  answer 503/403/404 instead of an empty list. Each section belongs to the opening that requested
+  it; attach/detach, watermark, grant/owner, resume, and script-save writes are confirmed by status,
+  and script save adopts the new version. Three controls that had never worked are fixed: the
+  Access panel (wrong renderer arguments and button ids), Save script (un-awaited async editor),
+  and the quality tab (wrong fields, fabricated totals). Seventeen sandbox checks (mutation-tested),
+  fifteen server read checks, and the detail response consumer check pass.
+  Remaining: the page owner itself (pages/orchestrator.js is 660 lines of checked JavaScript:
+  auth guard, view switching, Gantt/calendar timeline, create-job dialog, triage and activity
+  wiring), the create-job dialog's read/write contracts (it swallows a failed shared-schedule
+  attach), service controls (Stop/Restart have no handlers; the unowned-objects dialog is not
+  wired), authorization exits, back/forward restoration, and native Portal/service journeys for
+  the catalogs and detail panel.
 - [ ] Catalog/home page composition (`pages/index.js`).
 
 **Whole-tree lane check (2026-10-10):** The first full runs against the complete change found the

@@ -17,6 +17,77 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
     { id: 'notification-1', name: 'oncall_chat', connectionName: 'chat_hook', recipient: null, isEnabled: true,
       displayName: null, description: null, createdBy: 'user:operator', version: 4 }
   ];
+  // Detail state is kept per job so a response drawn under the wrong job is visible as wrong.
+  const details = {
+    daily_sales: {
+      schedules: [{ jobId: 'job-0', scheduleId: 'schedule-0', scheduleName: 'nightly_utc', jobName: 'daily_sales', lastRun: null, nextRun: '2026-10-10T02:00:00Z' }],
+      notifications: [{ jobId: 'job-0', notificationId: 'notification-0', notificationName: 'ops_mail', jobName: 'daily_sales', trigger: 'Failure' }],
+      state: [{ jobName: 'daily_sales', stateKey: 'last_order_id', stateValue: '100520', updatedAt: '2026-10-09T11:00:00Z' }],
+      history: [
+        { id: 42, jobName: 'daily_sales', startTime: '2026-10-09T02:00:00Z', endTime: '2026-10-09T02:00:41Z', status: 'Failed', errorMessage: 'Timeout',
+          rowsProcessed: 1200, peakMemoryBytes: 0, cpuTimeSeconds: 0, rowsQuarantined: 0, rowsWarned: 0, checkpointLabel: 'load_orders', hasResumeSession: true },
+        { id: 41, jobName: 'daily_sales', startTime: '2026-10-08T02:00:00Z', endTime: '2026-10-08T02:00:30Z', status: 'Success', errorMessage: null,
+          rowsProcessed: 5000, peakMemoryBytes: 0, cpuTimeSeconds: 0, rowsQuarantined: 0, rowsWarned: 0, checkpointLabel: null, hasResumeSession: false }
+      ],
+      grants: [{ objectId: 'job-0', objectKind: 'JOB', principalKind: 'GROUP', principalId: 'finance-ops', permission: 'EXECUTE', grantedBy: 'user:operator', version: 1 }]
+    },
+    hourly_orders: { schedules: [], notifications: [], state: [], history: [], grants: [] }
+  };
+  const detailWaiters = [];
+  let detailPausedFor = null;
+  async function detailRoute(path, method, init) {
+    const parts = path.split('/').map(decodeURIComponent);
+    const authorization = parts[3] === 'authorization';
+    const name = authorization ? parts[5] : parts[4], kind = authorization ? 'grants' : parts[5];
+    const detail = details[name];
+    if (method === 'GET') {
+      if (detailPausedFor === name) await new Promise(resolve => detailWaiters.push(resolve));
+      if (!detail) return json({ error: 'The job no longer exists.' }, 404);
+      if (failure === 'detail-unavailable') return json({ error: 'Orchestrator job details are temporarily unavailable. Please retry.' }, 503);
+      if (failure === 'detail-denied' && authorization) return new Response(null, { status: 403 });
+      if (failure === 'detail-malformed') return json([{ unexpected: true }]);
+      if (kind === 'dag') return json({ nodes: [], edges: [] });
+      if (kind === 'audit') return json([{ id: 1, tenantId: 'portal-host', actorType: 'User', actorId: 'operator', action: 'JobScriptEdited',
+        resourceType: 'Job', resourceId: name, timestamp: '2026-10-09T10:00:00Z', detail: `edited ${name}`, outboxMessages: [] }]);
+      if (kind === 'dependencies') return json({ jobName: name, upstream: name === 'daily_sales' ? ['hourly_orders'] : [], downstream: [], sharedSchedules: [],
+        nodes: jobs.filter(job => job.name === name || name === 'daily_sales').map(job => ({ id: job.name, name: job.name, displayName: null,
+          isEnabled: job.isEnabled, lastRun: null, nextRun: null, isCurrent: job.name === name })),
+        edges: name === 'daily_sales' ? [{ from: 'hourly_orders', to: 'daily_sales', type: 'Data', detail: 'Writes orders' }] : [] });
+      return json(detail[kind] ?? []);
+    }
+    if (paused) await new Promise(resolve => pending.push(resolve));
+    if (failure === 'denied') return new Response(null, { status: 403 });
+    if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
+    if (failure === 'unexpected') return new Response(null, { status: 206 });
+    const body = typeof init.body === 'string' ? JSON.parse(init.body) : {};
+    if (authorization) {
+      if (parts[6] === 'owner') {
+        jobs.find(job => job.name === name).createdBy = `${body.principalKind.toLowerCase()}:${body.principalId}`;
+        return json({ kind: 'JOB', name, owner: body.principalId });
+      }
+      const [principalKind, principalId] = [parts[6], parts[7]];
+      detail.grants = detail.grants.filter(grant => !(grant.principalKind === principalKind && grant.principalId === principalId));
+      if (method === 'DELETE') return new Response(null, { status: 204 });
+      detail.grants.push({ objectId: name, objectKind: 'JOB', principalKind, principalId, permission: body.permission, grantedBy: 'user:sandbox-admin', version: 1 });
+      return json(detail.grants.at(-1));
+    }
+    const target = parts[6];
+    if (kind === 'schedules') {
+      if (method === 'POST' && !schedules.some(item => item.name === target)) return relayed(`Schedule '${target}' not found.`, 404);
+      detail.schedules = detail.schedules.filter(link => link.scheduleName !== target);
+      if (method === 'POST') detail.schedules.push({ jobId: name, scheduleId: target, scheduleName: target, jobName: name, lastRun: null, nextRun: null });
+      return json(method === 'POST' ? { attached: true } : { detached: true });
+    }
+    if (kind === 'notifications') {
+      const trigger = method === 'POST' ? body.trigger : new URL(path + (init.query || ''), location.href).searchParams.get('trigger');
+      detail.notifications = detail.notifications.filter(link => !(link.notificationName === target && (!trigger || link.trigger === trigger)));
+      if (method === 'POST') detail.notifications.push({ jobId: name, notificationId: target, notificationName: target, jobName: name, trigger });
+      return json(method === 'POST' ? { attached: true } : { detached: true });
+    }
+    detail.state = detail.state.filter(entry => entry.stateKey !== target);
+    if (method === 'PUT') detail.state.push({ jobName: name, stateKey: target, stateValue: body.value, updatedAt: '2026-10-10T09:00:00Z' });
+    return json({ key: target });
+  }
   const calls = [], pending = [], pendingReads = [];
   let failure = fixtureId, paused = false, readsPaused = false, dispatchOutcome = 'delivered';
   // The Portal relays a refused service write as a JSON string holding the service's JSON.
@@ -66,6 +137,8 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
     pauseReads() { readsPaused = true; }, releaseReads() { readsPaused = false; pendingReads.splice(0).forEach(resolve => resolve()); },
     get pendingReads() { return pendingReads.length; },
     setDispatch(value) { dispatchOutcome = value; },
+    pauseDetail(name) { detailPausedFor = name; }, releaseDetail() { detailPausedFor = null; detailWaiters.splice(0).forEach(resolve => resolve()); },
+    get pendingDetailReads() { return detailWaiters.length; },
     async fetch(input, init = {}) {
       const url = new URL(input instanceof Request ? input.url : String(input), location.href);
       const path = url.pathname, method = init.method || 'GET';
@@ -88,8 +161,19 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       }
       if (path === '/api/orchestrator/triage') return json({ generatedAt: '2026-10-09T12:00:00Z', lookbackHours: 24,
         failureCount: 0, incidentCount: 0, runningCount: 0, missedCount: 0, truncated: false, incidents: [], running: [], missed: [] });
-      if (/\/jobs\/[^/]+\/(history|schedules|notifications|state)$/.test(path)) return json([]);
-      if (/\/authorization\/Job\//.test(path)) return json([]);
+      if (/^\/api\/orchestrator\/jobs\/[^/]+\/(history|schedules|notifications|state|dag|audit|dependencies)(\/|$)/.test(path)
+        || path.startsWith('/api/orchestrator/authorization/Job/')) return detailRoute(path, method, { ...init, query: url.search });
+      if (/^\/api\/orchestrator\/runs\/\d+\/resume$/.test(path)) {
+        if (paused) await new Promise(resolve => pending.push(resolve));
+        return failure === 'failed' ? json({ error: 'Resume failed: the checkpoint session expired.' }, 409) : new Response(null, { status: 202 });
+      }
+      if (path === '/api/orchestrator/data-quality/status') return failure === 'quality-unavailable' ? json({ error: 'Quality status is unavailable.' }, 503)
+        : json([{ runId: '42', jobName: 'daily_sales', startTime: '2026-10-09T02:00:00Z', endTime: null, status: 'Failed', rowsProcessed: 1200,
+          rowsWarned: 7, rowsQuarantined: 3, failedRuleCount: 1, freshestValueUtc: null, freshnessState: 'Fresh', errorSummary: null },
+        { runId: '9', jobName: 'hourly_orders', startTime: '2026-10-09T03:00:00Z', endTime: null, status: 'Success', rowsProcessed: 10,
+          rowsWarned: 99, rowsQuarantined: 99, failedRuleCount: 9, freshestValueUtc: null, freshnessState: 'Stale', errorSummary: null }]);
+      if (path === '/api/orchestrator/data-quality/failures') return json([{ runId: 42, jobName: 'daily_sales', startTime: '2026-10-09T02:00:00Z', endTime: null,
+        status: 'Failed', targetTable: 'orders', columnName: 'amount', rule: 'NOT NULL', action: 'QUARANTINE', failureCount: 3, owner: null }]);
       const catalog = /^\/api\/orchestrator\/(schedules|notifications)(\/|$)/.exec(path);
       if (catalog) return catalogRoute(catalog[1], catalog[1] === 'schedules' ? schedules : notifications, path, method, init);
       if (/\/(scripts|bundles)$/.test(path) && method === 'GET') return json([]);
