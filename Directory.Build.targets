@@ -7,9 +7,16 @@
 
   <Import Project="$(BrowserAssetManifest)" Condition="'$(RequiresBrowserAssets)' == 'true' And Exists('$(BrowserAssetManifest)')" />
 
+  <Target Name="RejectBrowserContractBootstrapPublishing" BeforeTargets="Publish"
+          Condition="'$(BootstrapBrowserContracts)' == 'true'">
+    <Error Text="Browser contract bootstrap assemblies cannot be published. Prepare browser assets and build without BootstrapBrowserContracts." />
+  </Target>
+
   <!-- Preparation runs before invoking MSBuild, so the SDK discovers every generated static file.
        Builds only verify: no network access, Node invocation, or competing writes across projects. -->
   <Target Name="VerifyPreparedBrowserAssets" BeforeTargets="PrepareForBuild" Condition="'$(RequiresBrowserAssets)' == 'true' And '$(DesignTimeBuild)' != 'true'">
+    <Error Condition="Exists('$(BrowserAssetRoot)artifacts/browser-contracts-transaction.json')"
+           Text="Browser contracts need recovery. Run node scripts/generate-browser-contracts.mjs --recover before building." />
     <Error Condition="Exists('$(BrowserAssetRoot).browser-assets.lock')"
            Text="Browser asset preparation is still running. Wait for it to finish before building." />
     <Error Condition="!Exists('$(BrowserAssetManifest)') Or '@(_BrowserPreparedAsset)' == ''"
@@ -31,6 +38,7 @@
       <_BrowserInputConfiguration Include="$(BrowserAssetRoot)scripts/compile-browser.mjs;
                                           $(BrowserAssetRoot)scripts/sync-assets.js;
                                           $(BrowserAssetRoot)scripts/generate-portal-browser-contract.mjs;
+                                          $(BrowserAssetRoot)scripts/generate-browser-contracts.mjs;
                                           $(BrowserAssetRoot)tsconfig.browser-build.json;
                                           $(BrowserAssetRoot)scripts/typecheck/package.json;
                                           $(BrowserAssetRoot)scripts/typecheck/package-lock.json;

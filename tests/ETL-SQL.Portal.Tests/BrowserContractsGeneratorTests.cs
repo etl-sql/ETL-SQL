@@ -32,6 +32,7 @@ public sealed class BrowserContractsGeneratorTests
 
         if (Environment.GetEnvironmentVariable("ETLSQL_UPDATE_BROWSER_CONTRACTS") == "1")
         {
+            path = BrowserContractsGeneratorStaging.OutputPath(RepoRoot(), "types/etlsql-contracts.generated.d.ts");
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, expected);
             return;
@@ -39,15 +40,13 @@ public sealed class BrowserContractsGeneratorTests
 
         Assert.True(File.Exists(path),
             $"{path} is missing. Generate it with: "
-            + "ETLSQL_UPDATE_BROWSER_CONTRACTS=1 dotnet test tests/ETL-SQL.Portal.Tests "
-            + "--filter FullyQualifiedName~BrowserContractsGeneratorTests");
+            + "node scripts/generate-browser-contracts.mjs");
 
         var actual = File.ReadAllText(path).ReplaceLineEndings("\n");
         Assert.True(expected == actual,
             "types/etlsql-contracts.generated.d.ts is out of date with the C# DTOs and enums it is "
             + "generated from. The browser type gate is therefore checking a shape the server no "
-            + "longer sends. Regenerate with: ETLSQL_UPDATE_BROWSER_CONTRACTS=1 dotnet test "
-            + "tests/ETL-SQL.Portal.Tests --filter FullyQualifiedName~BrowserContractsGeneratorTests");
+            + "longer sends. Regenerate with: node scripts/generate-browser-contracts.mjs");
     }
 
     /// <summary>

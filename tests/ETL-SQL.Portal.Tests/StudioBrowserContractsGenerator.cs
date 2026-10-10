@@ -64,8 +64,7 @@ internal static class StudioBrowserContractsGenerator
              *
              * GENERATED FILE - DO NOT EDIT.
              * Source: named Studio endpoints registered by Portal and WorkstationEditor.
-             * Regenerate: ETLSQL_UPDATE_BROWSER_CONTRACTS=1 dotnet test tests/ETL-SQL.Portal.Tests
-             *   --filter FullyQualifiedName~BrowserContractsGeneratorTests
+             * Regenerate: node scripts/generate-browser-contracts.mjs
              * Then run node scripts/sync-assets.js.
              */
 

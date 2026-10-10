@@ -8,14 +8,14 @@
  * Source: src/ETL-SQL.ReportRuntime/Resources/TypeScript/designer/studio-routes.generated.ts
  * Run: node scripts/sync-assets.js
  */
+// @ts-nocheck — generated implementation; check the TypeScript owner.
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.
  *
  * GENERATED FILE - DO NOT EDIT.
  * Source: named Studio endpoints registered by Portal and WorkstationEditor.
- * Regenerate: ETLSQL_UPDATE_BROWSER_CONTRACTS=1 dotnet test tests/ETL-SQL.Portal.Tests
- *   --filter FullyQualifiedName~BrowserContractsGeneratorTests
+ * Regenerate: node scripts/generate-browser-contracts.mjs
  * Then run node scripts/sync-assets.js.
  */
 export const STUDIO_ROUTES = Object.freeze({

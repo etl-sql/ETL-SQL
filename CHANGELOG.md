@@ -21,6 +21,8 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ### Fixed
 
+- Generate browser DTO, route, and API contracts as a staged set. Reject stopped generator hosts,
+  preserve contracts on failure, and recover interrupted promotion before asset consumers proceed.
 - Prepare browser assets before pre-push formatting and on every pre-release resume. Block
   cached consumers after failed prerequisites and fingerprint dirty source contents with UTF-8 paths.
 - Prepare browser assets before smoke and test-lane runs. In no-build mode, reject stale

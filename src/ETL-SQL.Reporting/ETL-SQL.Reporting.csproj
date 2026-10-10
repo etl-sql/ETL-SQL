@@ -29,13 +29,17 @@
     <!-- Browser runtime, inlined verbatim into the self-contained offline snapshot viewer
          (OfflineSnapshotViewer). Embedded rather than read from disk so the exporter works from a
          published CLI, where no wwwroot exists. -->
-    <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\report-runtime.bundle.js">
+    <!-- Contract bootstrap inspects DTOs/endpoints without rendering reports. Its isolated,
+         non-publishable assemblies must not depend on JavaScript that needs the new contracts. -->
+    <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\report-runtime.bundle.js"
+                      Condition="'$(BootstrapBrowserContracts)' != 'true'">
       <LogicalName>runtime.report-runtime.js</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\report-runtime.css">
       <LogicalName>runtime.report-runtime.css</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\feedback.js">
+    <EmbeddedResource Include="..\ETL-SQL.ReportRuntime\Resources\Shared\feedback.js"
+                      Condition="'$(BootstrapBrowserContracts)' != 'true'">
       <LogicalName>runtime.feedback.js</LogicalName>
     </EmbeddedResource>
   </ItemGroup>

@@ -662,6 +662,21 @@ fail against the old scripts. Ubuntu resume/content-hash probes pass. Evidence i
 `artifacts/section1/release-entrypoints-index-tests.log`, `release-entrypoints-before.log`, and
 `release-entrypoints-linux-proof.log`.
 
+Contract generation now stages the DTO declarations, registered-host Studio routes, and API-schema
+validator as one set. A stopped Portal host cannot certify routes; the desktop host must start too.
+The isolated bootstrap build omits generated JavaScript resources and cannot be published. Ordinary
+Reporting builds still embed the runtime bundle and feedback module. Failures preserve tracked
+contracts; interrupted promotion blocks preparation, compilation, and MSBuild until guarded recovery.
+Windows and Ubuntu source-only archive checks pass with all 380 delivery outputs and all three
+contracts absent. All 380 generated outputs are byte-identical across platforms. Eight generator
+checks pass without skips on each platform. Real startup-validation and corrupt-database probes fail
+without promoting contracts; interruption, invalid-contract, concurrent-edit, rollback, and recovery
+checks pass. Disposable bootstrap binaries are removed after runs while staged contracts and TRX
+results remain. The working-tree consumer gate passes all 101 checks; browser type/lint gates
+report zero findings. Final candidate bootstrap, delivery, and source-control acceptance remain open.
+Evidence is under `artifacts/section1/contracts-bootstrap-index-*.log` and
+`contracts-bootstrap-linux-evidence/`.
+
 1. Finish the ownership audit, preparation entry point, generator bootstrap, freshness verification,
    safe obsolete-output cleanup, and build/gate integration.
 2. Verify every supported delivery path from source-only inputs, including final packages and runtime checks.

@@ -130,6 +130,7 @@ async function verifyGeneration(configurationInputs) {
         ...configurationInputs.filter(input => /(?:\.csproj|\.vscodeignore|vite\.config\.ts|Generator(?:Tests)?\.cs|BrowserContracts.*\.json)$/.test(input)),
         'src/etl-sql-vscode/package.json', 'src/etl-sql-vscode/ui/package.json',
         'scripts/generate-portal-browser-contract.mjs',
+        'scripts/generate-browser-contracts.mjs',
         'types/etlsql-contracts.generated.d.ts', 'src/ETL-SQL.Portal/wwwroot/css/portal.css',
         'src/ETL-SQL.Portal/wwwroot/index.html', `${sharedRel}/report-runtime.css`,
     ].filter(input => fs.existsSync(path.join(root, input)));
@@ -439,7 +440,7 @@ try {
     }
     // Keep this fixture inventory independent of the collector: omitting a selector or contract
     // generator from production must fail the regression instead of silently shrinking coverage.
-    const configurationInputs = ['Directory.Build.props', 'scripts/generate-portal-browser-contract.mjs',
+    const configurationInputs = ['Directory.Build.props', 'scripts/generate-portal-browser-contract.mjs', 'scripts/generate-browser-contracts.mjs',
         'src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj', 'src/ETL-SQL.ReportRuntime/ETL-SQL.ReportRuntime.csproj',
         'src/ETL-SQL.ReportPlayer/ETL-SQL.ReportPlayer.csproj', 'src/ETL-SQL.WorkstationEditor/ETL-SQL.WorkstationEditor.csproj',
         'src/ETL-SQL.Portal/ETL-SQL.Portal.csproj', 'src/etl-sql-vscode/.vscodeignore',

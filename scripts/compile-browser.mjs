@@ -16,6 +16,8 @@ const key = p => path.resolve(p).replaceAll('\\', '/');
 // root/toolchain parameters let regression tests exercise the real compiler in an isolated tree.
 export function compileBrowser({ root = repo, check = false, toolchain = repo, plan = false } = {}) {
     const ts = toolchainTools.loadBrowserCompiler(toolchain);
+    if (fs.existsSync(assetInputs.safeAssetPath(root, 'artifacts/browser-contracts-transaction.json')))
+        throw new Error('Browser contracts need recovery. Run node scripts/generate-browser-contracts.mjs --recover before compilation.');
     const ownership = new Map();
     const outputOwners = new Map();
     const groups = surfaces.map(([source, output]) => {

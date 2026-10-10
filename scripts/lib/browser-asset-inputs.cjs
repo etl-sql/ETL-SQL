@@ -184,7 +184,7 @@ function browserSourceFiles(root) {
 
 function browserPreparationFiles(root) {
     const fixed = ['scripts/compile-browser.mjs', 'scripts/sync-assets.js',
-        'scripts/generate-portal-browser-contract.mjs', 'tsconfig.browser-build.json',
+        'scripts/generate-portal-browser-contract.mjs', 'scripts/generate-browser-contracts.mjs', 'tsconfig.browser-build.json',
         'scripts/typecheck/package.json', 'scripts/typecheck/package-lock.json', 'scripts/typecheck/.npmrc',
         'Directory.Build.props', 'Directory.Build.targets',
         ...['Reporting', 'ReportRuntime', 'ReportPlayer', 'WorkstationEditor', 'Portal']

@@ -10,6 +10,10 @@ const defaultRoot = path.resolve(__dirname, '..');
 
 async function syncAssets({ root = defaultRoot, toolchain = defaultRoot, check = false, quiet = false, compiler } = {}) {
     loadBrowserCompiler(toolchain);
+    if (await fs.stat(safeAssetPath(root, 'artifacts/browser-contracts-transaction.json')).then(() => true, error => {
+        if (error.code === 'ENOENT') return false;
+        throw error;
+    })) throw new Error('Browser contracts need recovery. Run node scripts/generate-browser-contracts.mjs --recover before preparation.');
     const lockPath = safeAssetPath(root, '.browser-assets.lock');
     let lock;
     try {
@@ -17,7 +21,8 @@ async function syncAssets({ root = defaultRoot, toolchain = defaultRoot, check =
     } catch (error) {
         if (error.code !== 'EEXIST') throw error;
         throw new Error('Browser asset preparation or verification is already running. Wait for it to finish. '
-            + 'If that process was interrupted, remove .browser-assets.lock after confirming it has stopped, then rerun node scripts/sync-assets.js.');
+            + 'If that process was interrupted, first recover any browser contract transaction with node scripts/generate-browser-contracts.mjs --recover. '
+            + 'Otherwise remove .browser-assets.lock after confirming it has stopped, then rerun node scripts/sync-assets.js.');
     }
     try {
         await lock.writeFile(`${process.pid}\n`);

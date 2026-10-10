@@ -79,8 +79,7 @@ internal static class BrowserContractsGenerator
              *
              * The C# types the browser code talks to, as TypeScript declarations. Regenerate with:
              *
-             *   ETLSQL_UPDATE_BROWSER_CONTRACTS=1 dotnet test tests/ETL-SQL.Portal.Tests \
-             *     --filter FullyQualifiedName~BrowserContractsGeneratorTests
+             *   node scripts/generate-browser-contracts.mjs
              *
              * Source of truth: the records and enums themselves, read by reflection in
              * tests/ETL-SQL.Portal.Tests/BrowserContractsGenerator.cs. Editing this file by hand
