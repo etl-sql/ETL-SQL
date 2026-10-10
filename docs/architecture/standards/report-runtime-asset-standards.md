@@ -383,7 +383,7 @@ Two things follow, and any future footprint claim has to respect both:
 
 `src/ETL-SQL.Portal/BrowserSources/native-charts.ts` owns the compiled
 `wwwroot/js/native-charts.js` classic script. It is a Portal-owned internal-UI adapter driving the orchestrator page's
-Gantt, sparkline, and dependency-graph views. Keeping it separate is deliberate: see
+sparkline and dependency-graph views. Keeping it separate is deliberate: see
 [Portal UI](../portal-ui.md#native-chartsjs-ownership-boundary).
 
 The boundary, restated so nobody has to infer it:

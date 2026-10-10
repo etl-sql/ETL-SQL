@@ -461,7 +461,7 @@ export function createJobDetail(options) {
         if (tab === 'flow') {
             const host = box('jobDagContainer');
             host.innerHTML = loading('Loading flow…');
-            void section(host, 'The job flow', opened => read(`${job(name)}/dag`, opened), dag => { host.replaceChildren(); options.renderDag(host, dag, { height: 360 }); });
+            void section(host, 'The job flow', opened => read(`${job(name)}/dag`, opened), dag => { host.replaceChildren(); options.renderDag(host, dag); });
         }
         else if (tab === 'audit') {
             const host = box('auditLogWrap');

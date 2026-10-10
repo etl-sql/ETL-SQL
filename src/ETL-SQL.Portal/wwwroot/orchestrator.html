@@ -248,7 +248,18 @@
       color: var(--portal-text);
       word-break: break-all;
     }
-  .orch-link-list { display: flex; flex-direction: column; gap: 4px; }
+  .orch-day-strip { display: flex; flex-direction: column; gap: 4px; padding: 8px 16px 4px; font-size: .82em; }
+    .orch-day-axis { display: flex; justify-content: space-between; margin-left: 168px; color: var(--portal-muted); font-size: .9em; }
+    .orch-day-row { display: flex; align-items: center; gap: 8px; }
+    .orch-day-name { flex: 0 0 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .orch-day-track { position: relative; flex: 1; height: 24px; border-radius: 4px;
+      background: repeating-linear-gradient(to right, var(--portal-surface-subtle) 0 calc(25% - 1px), var(--portal-border-soft) calc(25% - 1px) 25%); }
+    .orch-day-run { position: absolute; top: 2px; height: 20px; padding: 0 6px; border: 0; border-radius: 3px; cursor: pointer;
+      background: var(--portal-accent); color: #fff; font-size: .9em; white-space: nowrap; }
+    .orch-day-run.disabled-job { background: var(--portal-muted); }
+    .orch-day-run:focus-visible { outline: 2px solid var(--portal-text); outline-offset: 1px; }
+    .orch-day-empty { padding: 16px; color: var(--portal-muted); font-size: .85em; }
+    .orch-link-list { display: flex; flex-direction: column; gap: 4px; }
     .orch-link-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 8px; font-size: .8em;
       background: var(--portal-surface-subtle); border: 1px solid var(--portal-border-soft); border-radius: 4px; }
     .orch-link-row .btn { padding: 2px 6px; font-size: .92em; }
@@ -308,7 +319,6 @@
             <span class="orch-status-dot" id="statusDot"></span>
             <span id="statusLabel">Checking…</span>
             <button class="btn btn-sm btn-outline" id="refreshJobsBtn" title="Reload jobs">↻ Refresh</button>
-            <button class="btn btn-sm btn-outline" id="restartBtn" style="display:none">Restart</button>
             <button class="btn btn-sm btn-outline" id="stopBtn" style="display:none" title="Graceful stop — service restarts if OS-managed">Stop</button>
           </div>
           <button class="orch-stat-chip orch-stat-button running" id="activeFilterBtn" type="button" title="Show active jobs">
@@ -371,7 +381,7 @@
             </div>
           </div>
           <div id="timelineGanttWrap">
-            <div id="ganttChart" style="height:220px;"></div>
+            <div id="ganttChart"></div>
             <p style="font-size:.75em;color:var(--portal-muted);padding:0 16px 12px;margin:0;">
               Bars show next scheduled run time. Width represents average historical duration (minimum 5 min shown).
               Click a bar or table row to view details.

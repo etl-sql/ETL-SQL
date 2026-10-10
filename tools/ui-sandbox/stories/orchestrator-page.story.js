@@ -5,6 +5,9 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
     isEnabled: true, maxRetries: 0, retryDelaySeconds: 30, hashPolicy: 'Warn',
     version: 3, jobType: 0, createdBy: 'user:operator', lastRun: null, nextRun: null
   }));
+  // One job is due later today (local time), so the day strip has a run to place.
+  const dueToday = new Date(); dueToday.setHours(18, 30, 0, 0);
+  jobs[0].nextRun = dueToday.toISOString();
   let schedules = [
     { id: 'schedule-0', name: 'nightly_utc', cron: '0 2 * * *', timeZone: 'UTC', isEnabled: true,
       displayName: 'Nightly (UTC)', description: 'Warehouse refresh', createdBy: 'user:operator', version: 2 },
@@ -72,6 +75,7 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
       return json(detail.grants.at(-1));
     }
     const target = parts[6];
+    if (kind === 'schedules' && failure === 'attach-refused') return new Response(null, { status: 403 });
     if (kind === 'schedules') {
       if (method === 'POST' && !schedules.some(item => item.name === target)) return relayed(`Schedule '${target}' not found.`, 404);
       detail.schedules = detail.schedules.filter(link => link.scheduleName !== target);
@@ -176,7 +180,25 @@ export function makeOrchestratorPageSandbox(fixtureId = 'healthy') {
         status: 'Failed', targetTable: 'orders', columnName: 'amount', rule: 'NOT NULL', action: 'QUARANTINE', failureCount: 3, owner: null }]);
       const catalog = /^\/api\/orchestrator\/(schedules|notifications)(\/|$)/.exec(path);
       if (catalog) return catalogRoute(catalog[1], catalog[1] === 'schedules' ? schedules : notifications, path, method, init);
-      if (/\/(scripts|bundles)$/.test(path) && method === 'GET') return json([]);
+      if (path === '/api/orchestrator/scripts') return failure === 'pickers-unavailable' ? json({ error: 'Script unavailable.' }, 503)
+        : json({ files: ['etl/daily_sales.etlsql', 'etl/hourly_orders.etlsql'] });
+      if (path === '/api/orchestrator/bundles') return json([{ bundleName: 'sales_bundle', version: 1 }, { bundleName: 'sales_bundle', version: 2 }]);
+      if (path === '/api/orchestrator/service/stop') {
+        if (paused) await new Promise(resolve => pending.push(resolve));
+        return failure === 'failed' ? json({ error: 'The Orchestrator service refused the stop request.' }, 500)
+          : failure === 'denied' ? new Response(null, { status: 403 }) : json({ message: 'Stop signal sent.' });
+      }
+      if (path === '/api/orchestrator/jobs' && method === 'POST') {
+        if (paused) await new Promise(resolve => pending.push(resolve));
+        const body = JSON.parse(init.body);
+        if (failure === 'failed') return json({ error: 'Orchestrator service unavailable.' }, 503);
+        if (jobs.some(item => item.name === body.name)) return relayed(`Job '${body.name}' already exists.`, 409);
+        jobs.push({ id: `job-${jobs.length}`, name: body.name, script: '', interval: body.interval, unit: body.unit, isEnabled: true,
+          maxRetries: body.maxRetries, retryDelaySeconds: body.retryDelaySeconds, hashPolicy: body.hashPolicy, version: 1, jobType: 0,
+          targetPath: body.targetPath, displayName: body.displayName, createdBy: 'user:sandbox-admin', lastRun: null, nextRun: null });
+        details[body.name] = { schedules: [], notifications: [], state: [], history: [], grants: [] };
+        return new Response(null, { status: 201 });
+      }
       if (path.startsWith('/api/orchestrator/') && method !== 'GET') {
         if (paused) await new Promise(resolve => pending.push(resolve));
         if (failure === 'denied') return json({ error: 'Job management is denied.' }, 403);
@@ -204,7 +226,8 @@ export async function mountOrchestratorPageFrame(fixtureId) {
   const html = await fetch('/src/ETL-SQL.Portal/wwwroot/orchestrator.html').then(response => response.text());
   document.documentElement.innerHTML = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')
     .replace(/(href|src)="\/(css|js|designer)\//g, '$1="/src/ETL-SQL.Portal/wwwroot/$2/');
-  const payload = { sub: '1', unique_name: 'sandbox-admin', role: 'Admin', exp: 4102444800 };
+  const role = new URLSearchParams(location.search).get('role') || 'Admin';
+  const payload = { sub: '1', unique_name: 'sandbox-admin', role, exp: 4102444800 };
   sessionStorage.setItem('etlsql_token', 'sandbox.' + btoa(JSON.stringify(payload)) + '.sandbox');
   sessionStorage.removeItem('etlsql_refresh');
   window.__orchestratorMock = makeOrchestratorPageSandbox(fixtureId);

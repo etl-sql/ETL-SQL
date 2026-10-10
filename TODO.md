@@ -155,12 +155,16 @@ alongside §1.1; they do not authorize untracking handwritten JavaScript.
   Access panel (wrong renderer arguments and button ids), Save script (un-awaited async editor),
   and the quality tab (wrong fields, fabricated totals). Seventeen sandbox checks (mutation-tested),
   fifteen server read checks, and the detail response consumer check pass.
-  Remaining: the page owner itself (pages/orchestrator.js is 660 lines of checked JavaScript:
-  auth guard, view switching, Gantt/calendar timeline, create-job dialog, triage and activity
-  wiring), the create-job dialog's read/write contracts (it swallows a failed shared-schedule
-  attach), service controls (Stop/Restart have no handlers; the unowned-objects dialog is not
-  wired), authorization exits, back/forward restoration, and native Portal/service journeys for
-  the catalogs and detail panel.
+  The page owner is now `BrowserSources/pages/orchestrator.ts` (2026-10-10); no handwritten
+  Orchestrator JavaScript remains. Role exits return before anything else runs, the create-job
+  dialog and day timeline have strict owners, Stop is administrator-only at the Portal and confirmed,
+  every owner is disposed on page hide, and a back/forward-cache restore reloads the page. Ten
+  page-owner sandbox checks (mutation-tested) and the page-owner consumer check pass.
+  Remaining before this item closes: native Portal/service journeys for the catalogs, detail panel,
+  and create dialog (coverage so far is the production page against the sandbox service fixture);
+  the unowned-objects dialog in `orchestrator.html` has no opener and is not wired; the Orchestrator
+  service's own `/management/stop` checks only the API key; a job created in shared-schedule mode
+  still also sends its inline interval; and the panel has not been reviewed visually.
 - [ ] Catalog/home page composition (`pages/index.js`).
 
 **Whole-tree lane check (2026-10-10):** The first full runs against the complete change found the

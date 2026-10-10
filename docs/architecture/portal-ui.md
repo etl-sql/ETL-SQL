@@ -170,8 +170,9 @@ All copies are written by `node scripts/sync-assets.js`. It computes the VS Code
 
 ### DAG Visualization — native SVG graph
 
-The Portal uses its small dependency-free `native-charts.js` adapter for internal Gantt, sparkline,
-and dependency-graph views. It handles deterministic SVG nodes, links, labels, and click events.
+The Portal uses its small dependency-free `native-charts.js` adapter for internal sparkline
+and dependency-graph views. The Orchestrator's day timeline is plain markup: the adapter draws value
+bars and node graphs and has no time axis. It handles deterministic SVG nodes, links, labels, and click events.
 
 #### `native-charts.js` ownership boundary
 

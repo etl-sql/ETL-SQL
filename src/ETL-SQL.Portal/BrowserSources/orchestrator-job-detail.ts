@@ -1,4 +1,5 @@
 import { asError } from './http-error.js';
+import type { ApiRequestOptions } from './portal-http.js';
 import { escHtml, fmtDt, renderJobAuditTrail, renderWatermarksTable } from './orchestrator-admin-ui.js';
 import { accessPanelHtml, ownerLabel } from './orchestrator-acl-ui.js';
 import { jobVersion, requireMutationStatus } from './orchestrator-job-actions.js';
@@ -21,16 +22,15 @@ type Job = Pick<JobDefinition, 'name' | 'script' | 'interval' | 'unit' | 'atTime
 type Tab = 'details' | 'flow' | 'deps' | 'quality' | 'audit';
 interface Chart { setOption(option: unknown, replace?: boolean): void; dispose(): void }
 interface Editor { getValue(): string; dispose(): void }
-interface FetchInit { method?: string; body?: unknown; headers?: Record<string, string>; signal?: AbortSignal; cache?: RequestCache }
 
 export interface JobDetailOptions {
     root: Document;
     isAdmin: boolean;
-    fetch(url: string, init?: FetchInit): Promise<Response>;
+    fetch(url: string, init?: ApiRequestOptions): Promise<Response>;
     notify(message: string, failed?: boolean): void;
     confirm(message: string, options: Parameters<EtlSqlFeedback['confirm']>[1]): Promise<boolean>;
     charts: { init(element: HTMLElement): Chart };
-    renderDag(container: HTMLElement, dag: unknown, options: { height: number }): void;
+    renderDag(container: HTMLElement, dag: unknown): void;
     /** The editor loads its language support before it exists, so creation is asynchronous. */
     createEditor(host: HTMLElement, options: { value: string; onChange(value: string): void }): Promise<Editor>;
     /** Reloads the job list and resolves to the job as the service now reports it. */
@@ -453,7 +453,7 @@ export function createJobDetail(options: JobDetailOptions) {
             const host = box('jobDagContainer');
             host.innerHTML = loading('Loading flow…');
             void section(host, 'The job flow', opened => read(`${job(name)}/dag`, opened),
-                dag => { host.replaceChildren(); options.renderDag(host, dag, { height: 360 }); });
+                dag => { host.replaceChildren(); options.renderDag(host, dag); });
         } else if (tab === 'audit') {
             const host = box('auditLogWrap');
             host.innerHTML = loading('Loading audit trail…');

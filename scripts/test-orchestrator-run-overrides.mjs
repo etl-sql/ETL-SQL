@@ -9,7 +9,7 @@ const { parseJobRunOverrides } = await import('../src/ETL-SQL.Portal/wwwroot/js/
 assert.match(portal, /id="runJobModal"/);
 assert.match(portal, /The saved job is not edited/);
 assert.match(readPortalPageModule('orchestrator'), /createJobRunDialog\(/);
-assert.match(readPortalPageModule('orchestrator'), /trigger: api\.trigger/);
+assert.match(readPortalPageModule('orchestrator'), /\/trigger`, \{ method: 'POST', body: \{ variables \}/);
 assert.match(portal, /body: \{ variables \}/);
 assert.match(portal, /Override names—not values—are written to the audit trail/);
 assert.deepEqual({ ...parseJobRunOverrides([{ name: ' start_date ', value: '2026-10-01' },

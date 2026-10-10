@@ -83,6 +83,18 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Report unavailable Orchestrator schedule and notification catalogs as unavailable. A failed or
   refused read returned an empty list, so the page showed "No shared schedules defined yet" and a
   count of zero. The Portal now answers 503 or 403, and the page clears stale rows and counts.
+- Restrict stopping the Orchestrator service from the Portal to administrators, and confirm the
+  service's answer. The route accepted any Orchestrator role, including read-only viewers, and
+  answered "Stop signal sent" whatever the service replied. The page's Stop button, which had no
+  handler, now asks for confirmation; the Restart button, which had no operation behind it, is removed.
+- Show today's schedule on the Orchestrator page. The 24-hour timeline was drawn through a chart
+  renderer with no time axis, so every bar had zero height and clicking did nothing. It is now a
+  keyboard-reachable strip with one row per job due today.
+- Stop the Orchestrator page from loading for someone who may not use it. A signed-out or
+  unauthorized visitor was redirected while the rest of the page kept running and calling the API.
+- Report a job that was created without its shared schedule. The create dialog swallowed a failed
+  attach and announced only "created". It also lists each published bundle once with its newest
+  version instead of "v1", and says which picker could not be read.
 - Make the Orchestrator job Access panel work. It called its renderer with the wrong arguments
   and wired buttons the renderer never emitted, so it showed an exception message and grants and
   ownership could not be administered from the page. Grant, revoke, and owner changes are now

@@ -13,8 +13,8 @@
  *   - Authored in Portal BrowserSources and compiled to wwwroot/js. NOT in
  *     ETL-SQL.ReportRuntime/Resources/Shared/, NOT copied to report hosts, NOT in the
  *     Report-SQL capability matrix.
- *   - NOT a PlotPlan consumer, and must not become one. It draws the orchestrator page's Gantt,
- *     sparkline, and dependency-graph views only.
+ *   - NOT a PlotPlan consumer, and must not become one. It draws the orchestrator page's
+ *     sparkline and dependency-graph views only; the day timeline is plain markup.
  *   - Zero third-party dependencies. No import, no require, no remote URL.
  *
  * Gates: docs/architecture/standards/report-runtime-asset-standards.md section 7, asserted by

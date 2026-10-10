@@ -201,6 +201,10 @@ class load and shared background-service state from its startup/shutdown observa
   `AdminSubscriptionsPageTests.Subscriptions_ParametersPagingStatusAndDeletePersistThroughTheNativePage`
   timed out waiting for a page-one row after clicking Previous in the full lane (once in one run)
   and passes alone. The cause is not established; do not add a retry before it is.
+  `StudioStewardshipJourneyTests.Certifies_TheStewardshipFixLoop` did the same once in a later
+  full run: a 30-second wait for the tagged table's row, passing alone and in the two runs before it.
+  Two different journeys timing out once each across three full runs points at lane load, not at
+  either page, but neither has been reproduced.
 
 
 Future timing incidents belong in this document only when they add a reusable lesson. Per-run
